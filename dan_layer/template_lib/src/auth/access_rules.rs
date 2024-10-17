@@ -6,7 +6,7 @@ use tari_template_abi::rust::collections::BTreeMap;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
-use crate::models::{ComponentAddress, NonFungibleAddress, ResourceAddress, TemplateAddress};
+use crate::models::{ComponentAddress, NonFungibleAddress, NonFungibleId, ObjectKey, ResourceAddress, TemplateAddress};
 
 /// Represents the types of possible access control rules over a component method or resource
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -279,4 +279,47 @@ impl Default for ResourceAccessRules {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[macro_export]
+macro_rules! rules {
+    // RuleRequirement
+    (resource($x: expr)) => {
+        RuleRequirement::Resource($x)
+    };
+    (non_fungible($x: expr)) => {
+        RuleRequirement::NonFungibleAddress($x)
+    };
+    (component($x: expr)) => {
+        RuleRequirement::ScopedToComponent($x)
+    };
+    (template($x: expr)) => {
+        RuleRequirement::ScopedToTemplate($x)
+    };
+
+    ($x: expr) => {
+        println!("Hello, {}", $x);
+    };
+}
+
+#[test]
+fn macro_test() {
+    rules!("Hello");
+
+    // RuleRequirement
+    let address = ResourceAddress::new(ObjectKey::default());
+    let foo = rules!( resource(address) );
+    eprintln!("{:?}", foo);
+
+    let address = ComponentAddress::new(ObjectKey::default());
+    let foo = rules!( component(address) );
+    eprintln!("{:?}", foo);
+
+    let address = NonFungibleAddress::new(ResourceAddress::new(ObjectKey::default()), NonFungibleId::from_u32(0));
+    let foo = rules!( non_fungible(address) );
+    eprintln!("{:?}", foo);
+
+    let address = TemplateAddress::default();
+    let foo = rules!( template(address) );
+    eprintln!("{:?}", foo);
 }
