@@ -1191,20 +1191,9 @@ dependencies = [
 
 [[package]]
 name = "cargo_toml"
-version = "0.11.8"
+version = "0.20.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e72c3ff59e3b7d24630206bb63a73af65da4ed5df1f76ee84dfafb9fee2ba60e"
-dependencies = [
- "serde",
- "serde_derive",
- "toml 0.5.11",
-]
-
-[[package]]
-name = "cargo_toml"
-version = "0.20.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad639525b1c67b6a298f378417b060fbc04618bea559482a8484381cce27d965"
+checksum = "88da5a13c620b4ca0078845707ea9c3faf11edbc3ffd8497d11d686211cd1ac0"
 dependencies = [
  "serde",
  "toml 0.8.15",
@@ -5432,7 +5421,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "strum",
+ "strum 0.22.0",
  "tari_common",
  "tari_common_types",
  "tari_comms",
@@ -5501,7 +5490,7 @@ dependencies = [
  "rustyline",
  "rustyline-derive",
  "serde",
- "strum",
+ "strum 0.22.0",
  "tari_common",
  "tari_common_types",
  "tari_comms",
@@ -5555,8 +5544,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "strum",
- "strum_macros",
+ "strum 0.22.0",
+ "strum_macros 0.22.0",
  "tari_common",
  "tari_common_sqlite",
  "tari_common_types",
@@ -8491,8 +8480,14 @@ version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7ac893c7d471c8a21f31cfe213ec4f6d9afeed25537c772e08ef3f005f8729e"
 dependencies = [
- "strum_macros",
+ "strum_macros 0.22.0",
 ]
+
+[[package]]
+name = "strum"
+version = "0.26.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
 
 [[package]]
 name = "strum_macros"
@@ -8504,6 +8499,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.26.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 2.0.72",
 ]
 
 [[package]]
@@ -8748,7 +8756,7 @@ source = "git+https://github.com/tari-project/tari.git?branch=feature-dan2#35573
 dependencies = [
  "anyhow",
  "blake2",
- "cargo_toml 0.20.4",
+ "cargo_toml",
  "config",
  "dirs-next 1.0.2",
  "git2",
@@ -8800,8 +8808,8 @@ dependencies = [
  "primitive-types",
  "rand",
  "serde",
- "strum",
- "strum_macros",
+ "strum 0.22.0",
+ "strum_macros 0.22.0",
  "tari_common",
  "tari_crypto",
  "tari_utilities",
@@ -8990,8 +8998,8 @@ dependencies = [
  "serde_repr",
  "sha2",
  "sha3",
- "strum",
- "strum_macros",
+ "strum 0.22.0",
+ "strum_macros 0.22.0",
  "tari-tiny-keccak",
  "tari_common",
  "tari_common_sqlite",
@@ -9122,7 +9130,7 @@ version = "0.7.0"
 dependencies = [
  "anyhow",
  "blake2",
- "cargo_toml 0.11.8",
+ "cargo_toml",
  "d3ne",
  "env_logger 0.10.2",
  "indexmap 2.5.0",
@@ -9180,6 +9188,8 @@ dependencies = [
  "log",
  "rand",
  "serde",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
  "tari_common",
  "tari_common_types",
  "tari_core",
@@ -9549,8 +9559,8 @@ dependencies = [
  "log",
  "rand",
  "serde",
- "strum",
- "strum_macros",
+ "strum 0.22.0",
+ "strum_macros 0.22.0",
  "subtle",
  "tari_common_sqlite",
  "tari_common_types",

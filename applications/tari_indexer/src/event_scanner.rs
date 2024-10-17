@@ -22,6 +22,7 @@
 
 use std::{collections::HashMap, str::FromStr};
 
+use anyhow::anyhow;
 use futures::StreamExt;
 use log::*;
 use tari_bor::decode;
@@ -402,7 +403,7 @@ impl EventScanner {
 
         match PayloadResultStatus::try_from(response.status) {
             Ok(PayloadResultStatus::Finalized) => {
-                let proto_decision = tari_dan_p2p::proto::consensus::Decision::try_from(response.final_decision)?;
+                let proto_decision = response.final_decision.ok_or(anyhow!("Missing final decision!"))?;
                 let final_decision = proto_decision.try_into()?;
                 if let Decision::Commit = final_decision {
                     Ok(Some(response.execution_result)

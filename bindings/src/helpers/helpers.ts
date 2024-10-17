@@ -89,6 +89,24 @@ export function rejectReasonToString(reason: RejectReason | null): string {
   if ("FeesNotPaid" in reason) {
     return `FeesNotPaid(${reason.FeesNotPaid})`;
   }
+  if ("ForeignShardGroupDecidedToAbort" in reason) {
+    return `ForeignShardGroupDecidedToAbort(shard group ${reason.ForeignShardGroupDecidedToAbort.start_shard}-${reason.ForeignShardGroupDecidedToAbort.end_shard})`;
+  }
+  if ("InvalidTransaction" in reason) {
+    return `InvalidTransaction(${reason.InvalidTransaction})`;
+  }
+  if ("ExecutionFailure" in reason) {
+    return `ExecutionFailure(${reason.ExecutionFailure})`;
+  }
+  if ("OneOrMoreInputsNotFound" in reason) {
+    return `OneOrMoreInputsNotFound(${reason.OneOrMoreInputsNotFound})`;
+  }
+  if ("FailedToLockInputs" in reason) {
+    return `FailedToLockInputs(${reason.FailedToLockInputs})`;
+  }
+  if ("FailedToLockOutputs" in reason) {
+    return `FailedToLockOutputs(${reason.FailedToLockOutputs})`;
+  }
   console.error("Unknown reason", reason);
   return "Unknown";
 }

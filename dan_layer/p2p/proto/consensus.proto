@@ -144,7 +144,29 @@ message TransactionAtom {
   LeaderFee leader_fee = 6;
 }
 
-enum Decision {
+message Decision {
+  DecisionResult result = 1;
+  DecisionReason reason = 2;
+}
+
+enum DecisionReason {
+  NONE = 0;
+  TRANSACTION_ATOM_MUST_BE_ABORT = 1;
+  TRANSACTION_ATOM_MUST_BE_COMMIT = 2;
+  INPUT_LOCK_CONFLICT = 3;
+  LOCK_INPUTS_FAILED = 4;
+  LOCK_OUTPUTS_FAILED = 5;
+  LOCK_INPUTS_OUTPUTS_FAILED = 6;
+  LEADER_PROPOSAL_VS_LOCAL_DECISION_MISMATCH = 7;
+  INVALID_TRANSACTION = 8;
+  EXECUTION_FAILURE = 9;
+  ONE_OR_MORE_INPUTS_NOT_FOUND = 10;
+  FOREIGN_SHARD_GROUP_DECIDED_TO_ABORT = 11;
+  FEES_NOT_PAID = 12;
+  EARLY_ABORT = 13;
+}
+
+enum DecisionResult {
   UNKNOWN = 0;
   COMMIT = 1;
   ABORT = 2;

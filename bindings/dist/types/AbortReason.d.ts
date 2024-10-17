@@ -1,0 +1,1 @@
+export type AbortReason = "None" | "TransactionAtomMustBeAbort" | "TransactionAtomMustBeCommit" | "InputLockConflict" | "LockInputsFailed" | "LockOutputsFailed" | "LockInputsOutputsFailed" | "LeaderProposalVsLocalDecisionMismatch" | "InvalidTransaction" | "ExecutionFailure" | "OneOrMoreInputsNotFound" | "ForeignShardGroupDecidedToAbort" | "FeesNotPaid" | "EarlyAbort";

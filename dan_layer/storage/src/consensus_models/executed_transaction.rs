@@ -15,6 +15,7 @@ use tari_transaction::{Transaction, TransactionId};
 
 use crate::{
     consensus_models::{
+        AbortReason,
         BlockId,
         BlockTransactionExecution,
         Decision,
@@ -85,8 +86,8 @@ impl ExecutedTransaction {
             return decision;
         }
 
-        if self.abort_reason.is_some() {
-            return Decision::Abort;
+        if let Some(reject_reason) = &self.abort_reason {
+            return Decision::Abort(AbortReason::from(reject_reason));
         }
 
         self.original_decision()
