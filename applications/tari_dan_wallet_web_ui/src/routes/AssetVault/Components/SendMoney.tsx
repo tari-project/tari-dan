@@ -44,7 +44,7 @@ import {
 } from "@tari-project/typescript-bindings";
 import InputLabel from "@mui/material/InputLabel";
 
-const XTR2 = "resource_01010101010101010101010101010101010101010101010101010101";
+const XTR2 = "resource_0101010101010101010101010101010101010101010101010101010101010101";
 
 export default function SendMoney() {
   const [open, setOpen] = useState(false);
