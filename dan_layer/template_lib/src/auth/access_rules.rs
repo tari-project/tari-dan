@@ -6,7 +6,7 @@ use tari_template_abi::rust::collections::BTreeMap;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
-use crate::models::{ComponentAddress, NonFungibleAddress, NonFungibleId, ObjectKey, ResourceAddress, TemplateAddress};
+use crate::{crypto::RistrettoPublicKeyBytes, models::{ComponentAddress, NonFungibleAddress, NonFungibleId, ObjectKey, ResourceAddress, TemplateAddress}};
 
 /// Represents the types of possible access control rules over a component method or resource
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -284,53 +284,32 @@ impl Default for ResourceAccessRules {
 #[macro_export]
 macro_rules! rules {
     (allow_all) => {
-        AccessRule::AllowAll()
+        AccessRule::AllowAll
     };
     (deny_all) => {
-        AccessRule::DenyAll()
+        AccessRule::DenyAll
     };
 
     (resource($x: expr)) => {
-        AccessRule::Restricted(
-            RestrictedAccessRule::Require(
-                RequireRule::Require(
-                    RuleRequirement::Resource($x)
-                )
-            )
-        )     
+        rules! { @access_rule (RuleRequirement::Resource($x)) }  
     };
     (non_fungible($x: expr)) => {
-        AccessRule::Restricted(
-            RestrictedAccessRule::Require(
-                RequireRule::Require(
-                    RuleRequirement::NonFungibleAddress($x)
-                )
-            )
-        )
+        rules! { @access_rule (RuleRequirement::NonFungibleAddress($x)) }  
     };
     (component($x: expr)) => {
-        AccessRule::Restricted(
-            RestrictedAccessRule::Require(
-                RequireRule::Require(
-                    RuleRequirement::ScopedToComponent($x)
-                )
-            )
-        )
+        rules! { @access_rule (RuleRequirement::ScopedToComponent($x)) }  
     };
     (template($x: expr)) => {
+        rules! { @access_rule (RuleRequirement::ScopedToTemplate($x)) }  
+    };
+
+    (@access_rule ($x: expr)) => {
         AccessRule::Restricted(
             RestrictedAccessRule::Require(
                 RequireRule::Require(
-                    RuleRequirement::ScopedToTemplate($x)
+                    $x
                 )
             )
         )
     };
-}
-
-#[test]
-fn macro_test() {
-    let resource_address = ResourceAddress::new(ObjectKey::default());
-    let foo = rules!( resource(resource_address) );
-    eprintln!("{:?}", foo);
 }
