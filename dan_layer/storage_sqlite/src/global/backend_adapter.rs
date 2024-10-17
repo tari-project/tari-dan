@@ -536,6 +536,46 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         Ok(committees)
     }
 
+    fn validator_nodes_get_all_committees(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        epoch: Epoch,
+        sidechain_id: Option<&PublicKey>,
+    ) -> Result<HashMap<ShardGroup, Committee<Self::Addr>>, Self::Error> {
+        use crate::global::schema::{committees, validator_nodes};
+
+        let db_sidechain_id = sidechain_id.map(|id| id.as_bytes()).unwrap_or(&[0u8; 32]);
+        let results = committees::table
+            .inner_join(validator_nodes::table.on(committees::validator_node_id.eq(validator_nodes::id)))
+            .select((
+                committees::shard_start,
+                committees::shard_end,
+                validator_nodes::address,
+                validator_nodes::public_key,
+            ))
+            .filter(committees::epoch.le(epoch.as_u64() as i64))
+            .filter(validator_nodes::sidechain_id.eq(db_sidechain_id))
+            .load::<(i32, i32, String, Vec<u8>)>(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "validator_nodes_get_committees".to_string(),
+            })?;
+
+        let mut committees = HashMap::new();
+        for (shard_start, shard_end, address, public_key) in results {
+            let addr = DbValidatorNode::try_parse_address(&address)?;
+            let pk = PublicKey::from_canonical_bytes(&public_key)
+                .map_err(|_| SqliteStorageError::MalformedDbData("Invalid public key".to_string()))?;
+            committees
+                .entry(ShardGroup::new(shard_start as u32, shard_end as u32))
+                .or_insert_with(Committee::empty)
+                .members
+                .push((addr, pk));
+        }
+
+        Ok(committees)
+    }
+
     fn validator_nodes_set_committee_shard(
         &self,
         tx: &mut Self::DbTransaction<'_>,

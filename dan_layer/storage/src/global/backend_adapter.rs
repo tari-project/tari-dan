@@ -155,6 +155,13 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         sidechain_id: Option<&PublicKey>,
     ) -> Result<HashMap<ShardGroup, Committee<Self::Addr>>, Self::Error>;
 
+    fn validator_nodes_get_all_committees(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        epoch: Epoch,
+        sidechain_id: Option<&PublicKey>,
+    ) -> Result<HashMap<ShardGroup, Committee<Self::Addr>>, Self::Error>;
+
     fn insert_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error>;
     fn get_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: u64) -> Result<Option<DbEpoch>, Self::Error>;
 

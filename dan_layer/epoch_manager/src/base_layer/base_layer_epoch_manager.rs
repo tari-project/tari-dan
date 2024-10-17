@@ -20,9 +20,12 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{cmp, collections::HashMap, mem, num::NonZeroU32};
-
+use crate::{base_layer::config::EpochManagerConfig, error::EpochManagerError, EpochManagerEvent};
 use log::*;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+use std::sync::Arc;
+use std::{cmp, collections::HashMap, mem, num::NonZeroU32};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::{blocks::BlockHeader, transactions::transaction_components::ValidatorNodeRegistration};
@@ -36,16 +39,15 @@ use tari_dan_common_types::{
     SubstateAddress,
 };
 use tari_dan_storage::global::{models::ValidatorNode, DbBaseLayerBlockInfo, DbEpoch, GlobalDb, MetadataKey};
+use tari_dan_storage_sqlite::error::SqliteStorageError;
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_utilities::{byte_array::ByteArray, hex::Hex};
-use tokio::sync::{broadcast, oneshot};
-
-use crate::{base_layer::config::EpochManagerConfig, error::EpochManagerError, EpochManagerEvent};
+use tokio::sync::{broadcast, oneshot, Mutex};
 
 const LOG_TARGET: &str = "tari::dan::epoch_manager::base_layer";
 
 pub struct BaseLayerEpochManager<TGlobalStore, TBaseNodeClient> {
-    global_db: GlobalDb<TGlobalStore>,
+    global_db: Arc<GlobalDb<TGlobalStore>>,
     base_node_client: TBaseNodeClient,
     config: EpochManagerConfig,
     current_epoch: Epoch,
@@ -70,7 +72,7 @@ BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
         node_public_key: PublicKey,
     ) -> Self {
         Self {
-            global_db,
+            global_db: Arc::new(global_db),
             base_node_client,
             config,
             current_epoch: Epoch(0),
@@ -125,42 +127,67 @@ BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
         // persist the epoch data including the validator node set
         self.insert_current_epoch(epoch, epoch_header)?;
         self.update_base_layer_consensus_constants(base_layer_constants)?;
-        self.assign_validators_for_epoch(epoch, 2)?; // TODO: use value from `base_layer_constants`
+        self.assign_validators_for_epoch(epoch)?;
 
         Ok(())
     }
 
     /// Assigns validators for the given epoch (makes them active) from the database.
     /// Max number of validators must be passed to limit the number of validators to make active in the given epoch.
-    fn assign_validators_for_epoch(&mut self, epoch: Epoch, max_validators_to_activate: usize) -> Result<(), EpochManagerError> {
+    fn assign_validators_for_epoch(&mut self, epoch: Epoch) -> Result<(), EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_nodes = self.global_db.validator_nodes(&mut tx);
 
-        // TODO: fix logic
-        // TODO: collect all vns from `committees` table and exclude them from list
         let vns = validator_nodes.get_all_within_epoch(epoch, self.config.validator_node_sidechain_id.as_ref())?;
 
+        // // collect all validator nodes from previous epoch from committees
+        // let previous_epoch = if epoch.as_u64() > 0 {
+        //     Epoch::from(epoch.as_u64() - 1)
+        // } else {
+        //     Epoch::from(0)
+        // };
+        // let already_active_vn_addresses: Vec<String> = validator_nodes
+        //     .get_committees(previous_epoch, self.config.validator_node_sidechain_id.as_ref())?
+        //     .values()
+        //     .flat_map(|committee| {
+        //         committee.members.iter().map(|(address, _)| address.to_string()).collect::<Vec<String>>()
+        //     })
+        //     .collect();
+        //
+        // info!(target: LOG_TARGET, "ALREADY ACTIVE VNS: {:?}", already_active_vn_addresses);
+        //
         let num_committees = calculate_num_committees(vns.len() as u64, self.config.committee_size);
+        //
+        // let inactive_vns = vns.iter()
+        //     .filter(|vn| !already_active_vn_addresses.contains(&vn.address.to_string()));
+        // let active_vns = vns.iter()
+        //     .filter(|vn| already_active_vn_addresses.contains(&vn.address.to_string()));
+        //
+        // info!(target: LOG_TARGET, "INACTIVE VNS: {:?}", inactive_vns);
+        //
+        // // merge inactive and previously active set of validator nodes
+        // let mut selected_vns: Vec<ValidatorNode<TAddr>> = inactive_vns.take(max_validators_to_activate).cloned().collect();
+        // selected_vns.append(&mut active_vns.cloned().collect::<Vec<ValidatorNode<TAddr>>>());
 
         // activate validator nodes by adding to committees
-        let mut activated_validators = vec![];
-        for vn in vns.iter().take(max_validators_to_activate) {
+        // let mut activated_validators = vec![];
+        for vn in &vns {
             validator_nodes.set_committee_shard(
                 vn.shard_key,
                 vn.shard_key.to_shard_group(self.config.num_preshards, num_committees),
                 self.config.validator_node_sidechain_id.as_ref(),
                 epoch,
             )?;
-            activated_validators.push(vn.address.to_string());
+            // activated_validators.push(vn.address.to_string());
         }
 
         // updating all other non-activated, but registered validators' start/end epoch
-        validator_nodes.increment_vn_start_end_epochs(
-            vns.iter()
-                .filter(|vn| !activated_validators.contains(&vn.address.to_string()))
-                .map(|vn| vn.address.to_string())
-                .collect()
-        )?;
+        // validator_nodes.increment_vn_start_end_epochs(
+        //     vns.iter()
+        //         .filter(|vn| !activated_validators.contains(&vn.address.to_string()))
+        //         .map(|vn| vn.address.to_string())
+        //         .collect()
+        // )?;
 
         tx.commit()?;
         if let Some(vn) = vns.iter().find(|vn| vn.public_key == self.node_public_key) {
@@ -171,6 +198,15 @@ BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
         }
 
         Ok(())
+    }
+
+    pub async fn base_layer_consensus_constants(
+        &self,
+    ) -> Result<&BaseLayerConsensusConstants, EpochManagerError> {
+        Ok(self
+            .base_layer_consensus_constants
+            .as_ref()
+            .expect("update_base_layer_consensus_constants did not set constants"))
     }
 
     pub async fn get_base_layer_consensus_constants(
@@ -210,13 +246,24 @@ BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
                 actual: registration.sidechain_id().map(|v| v.to_hex()),
             });
         }
-        let constants = self.get_base_layer_consensus_constants().await?;
-        let next_epoch = constants.height_to_epoch(block_height) + Epoch(1);
-        let next_epoch_height = constants.epoch_to_height(next_epoch);
+
+        let constants = self.base_layer_consensus_constants().await?;
+        let mut next_epoch = constants.height_to_epoch(block_height) + Epoch(1);
         let validator_node_expiry = constants.validator_node_registration_expiry;
 
-        let shard_key = self
-            .base_node_client
+        let mut tx = self.global_db.create_transaction()?;
+        let mut validator_nodes = self.global_db.validator_nodes(&mut tx);
+        
+        let max_vns_registered_in_epoch = 5; // TODO: this must come from Layer 2 consensus constants
+        // TODO: check if its okay or only count the number of vns registered in a specific epoch
+        let next_epoch_vn_count = validator_nodes.count(next_epoch, registration.sidechain_id())?;
+        if next_epoch_vn_count == max_vns_registered_in_epoch {
+            next_epoch += Epoch(1);
+        }
+
+        let next_epoch_height = constants.epoch_to_height(next_epoch);
+
+        let shard_key = self.base_node_client
             .get_shard_key(next_epoch_height, registration.public_key())
             .await?
             .ok_or_else(|| EpochManagerError::ShardKeyNotFound {
@@ -224,9 +271,11 @@ BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
                 block_height,
             })?;
 
-        let mut tx = self.global_db.create_transaction()?;
         info!(target: LOG_TARGET, "Registering validator node for epoch {}", next_epoch);
-        self.global_db.validator_nodes(&mut tx).insert_validator_node(
+
+        // let mut tx = self.global_db.create_transaction()?;
+        // self.global_db.validator_nodes(&mut tx).insert_validator_node(
+        validator_nodes.insert_validator_node(
             TAddr::derive_from_public_key(registration.public_key()),
             registration.public_key().clone(),
             shard_key,
