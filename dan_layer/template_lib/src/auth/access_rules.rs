@@ -283,43 +283,54 @@ impl Default for ResourceAccessRules {
 
 #[macro_export]
 macro_rules! rules {
-    // RuleRequirement
-    (resource($x: expr)) => {
-        RuleRequirement::Resource($x)
+    (allow_all) => {
+        AccessRule::AllowAll()
     };
-    (non_fungible($x: expr)) => {
-        RuleRequirement::NonFungibleAddress($x)
-    };
-    (component($x: expr)) => {
-        RuleRequirement::ScopedToComponent($x)
-    };
-    (template($x: expr)) => {
-        RuleRequirement::ScopedToTemplate($x)
+    (deny_all) => {
+        AccessRule::DenyAll()
     };
 
-    ($x: expr) => {
-        println!("Hello, {}", $x);
+    (resource($x: expr)) => {
+        AccessRule::Restricted(
+            RestrictedAccessRule::Require(
+                RequireRule::Require(
+                    RuleRequirement::Resource($x)
+                )
+            )
+        )     
+    };
+    (non_fungible($x: expr)) => {
+        AccessRule::Restricted(
+            RestrictedAccessRule::Require(
+                RequireRule::Require(
+                    RuleRequirement::NonFungibleAddress($x)
+                )
+            )
+        )
+    };
+    (component($x: expr)) => {
+        AccessRule::Restricted(
+            RestrictedAccessRule::Require(
+                RequireRule::Require(
+                    RuleRequirement::ScopedToComponent($x)
+                )
+            )
+        )
+    };
+    (template($x: expr)) => {
+        AccessRule::Restricted(
+            RestrictedAccessRule::Require(
+                RequireRule::Require(
+                    RuleRequirement::ScopedToTemplate($x)
+                )
+            )
+        )
     };
 }
 
 #[test]
 fn macro_test() {
-    rules!("Hello");
-
-    // RuleRequirement
-    let address = ResourceAddress::new(ObjectKey::default());
-    let foo = rules!( resource(address) );
-    eprintln!("{:?}", foo);
-
-    let address = ComponentAddress::new(ObjectKey::default());
-    let foo = rules!( component(address) );
-    eprintln!("{:?}", foo);
-
-    let address = NonFungibleAddress::new(ResourceAddress::new(ObjectKey::default()), NonFungibleId::from_u32(0));
-    let foo = rules!( non_fungible(address) );
-    eprintln!("{:?}", foo);
-
-    let address = TemplateAddress::default();
-    let foo = rules!( template(address) );
+    let resource_address = ResourceAddress::new(ObjectKey::default());
+    let foo = rules!( resource(resource_address) );
     eprintln!("{:?}", foo);
 }
