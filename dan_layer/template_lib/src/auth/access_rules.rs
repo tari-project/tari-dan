@@ -307,3 +307,56 @@ macro_rules! rule {
         AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require($x)))
     };
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{crypto::RistrettoPublicKeyBytes, models::ObjectKey};
+
+    #[test]
+    fn it_builds_correct_access_rules() {
+        // allow all
+        let rule = rule!(allow_all);
+        assert_eq!(rule, AccessRule::AllowAll);
+
+        // deny all
+        let rule = rule!(deny_all);
+        assert_eq!(rule, AccessRule::DenyAll);
+
+        // restricted to resource address
+        let resource_address = ResourceAddress::new(ObjectKey::default());
+        let rule = rule!(resource(resource_address));
+        assert_eq!(
+            rule,
+            access_rule_from_requirement(RuleRequirement::Resource(resource_address))
+        );
+
+        // restricted to component
+        let component_address = ComponentAddress::new(ObjectKey::default());
+        let rule = rule!(component(component_address));
+        assert_eq!(
+            rule,
+            access_rule_from_requirement(RuleRequirement::ScopedToComponent(component_address))
+        );
+
+        // restricted to template
+        let template_address = TemplateAddress::default();
+        let rule = rule!(template(template_address));
+        assert_eq!(
+            rule,
+            access_rule_from_requirement(RuleRequirement::ScopedToTemplate(template_address))
+        );
+
+        // restricted to non fungible
+        let non_fungible_address = NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::default());
+        let rule = rule!(non_fungible(non_fungible_address.clone()));
+        assert_eq!(
+            rule,
+            access_rule_from_requirement(RuleRequirement::NonFungibleAddress(non_fungible_address))
+        );
+    }
+
+    fn access_rule_from_requirement(requirement: RuleRequirement) -> AccessRule {
+        AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(requirement)))
+    }
+}

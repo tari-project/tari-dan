@@ -42,7 +42,6 @@ pub use crate::{
     info,
     invoke_args,
     log,
-    rule,
     models::{
         AddressAllocation,
         Amount,
@@ -64,6 +63,7 @@ pub use crate::{
     },
     rand,
     resource::{ResourceBuilder, ResourceManager, ResourceType},
+    rule,
     template::{BuiltinTemplate, TemplateManager},
     warn,
 };
