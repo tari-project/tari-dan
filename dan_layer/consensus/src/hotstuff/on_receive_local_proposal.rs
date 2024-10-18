@@ -613,7 +613,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 block_description: candidate_block.to_string(),
                 justify_block: candidate_block.justify().as_leaf_block(),
             }
-                .into());
+            .into());
         };
 
         if justify_block.height() != candidate_block.justify().block_height() {
@@ -662,7 +662,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     justify_block_height: justify_block.height(),
                     candidate_block_height: candidate_block.height(),
                 }
-                    .into());
+                .into());
             };
 
             if candidate_block.parent() != last_dummy.id() {

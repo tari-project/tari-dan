@@ -46,13 +46,13 @@ mod account_template {
 
             let access_rules = access_rules.unwrap_or(
                 AccessRules::new()
-                    .add_method_rule("balance", AccessRule::AllowAll)
-                    .add_method_rule("get_balances", AccessRule::AllowAll)
-                    .add_method_rule("deposit", AccessRule::AllowAll)
-                    .add_method_rule("deposit_all", AccessRule::AllowAll)
-                    .add_method_rule("get_non_fungible_ids", AccessRule::AllowAll)
+                    .add_method_rule("balance", rule!(allow_all))
+                    .add_method_rule("get_balances", rule!(allow_all))
+                    .add_method_rule("deposit", rule!(allow_all))
+                    .add_method_rule("deposit_all", rule!(allow_all))
+                    .add_method_rule("get_non_fungible_ids", rule!(allow_all))
                     // By defaul, only the owner of the token will be able to withdraw funds from the account
-                    .default(AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(public_key_token.into()))))
+                    .default(rule!(non_fungible(public_key_token)))
             );
 
             // add the funds from the (optional) bucket

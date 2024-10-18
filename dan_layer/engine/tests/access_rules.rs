@@ -28,6 +28,8 @@ use tari_template_test_tooling::{
 use tari_transaction::Transaction;
 
 mod component_access_rules {
+    use tari_template_lib::rules;
+
     use super::*;
 
     #[test]
@@ -147,12 +149,7 @@ mod component_access_rules {
             Transaction::builder()
                 .call_method(component_address, "set_component_access_rules", args![
                     ComponentAccessRules::new()
-                        .add_method_rule(
-                            "set_value",
-                            AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(
-                                user_proof.clone().into()
-                            )))
-                        )
+                        .add_method_rule("set_value", rule!(non_fungible(user_proof.clone())))
                         .default(AccessRule::DenyAll)
                 ])
                 .sign(&owner_key)
@@ -228,6 +225,7 @@ mod component_access_rules {
 
 mod resource_access_rules {
     use tari_dan_engine::runtime::LockError;
+    use tari_template_lib::rules;
 
     use super::*;
 
@@ -290,9 +288,7 @@ mod resource_access_rules {
         test.execute_expect_success(
             Transaction::builder()
                 .call_method(component_address, "set_tokens_access_rules", args![
-                    ResourceAccessRules::new().withdrawable(AccessRule::Restricted(RestrictedAccessRule::Require(
-                        RequireRule::Require(user_proof.clone().into())
-                    )))
+                    ResourceAccessRules::new().withdrawable(rule!(non_fungible(user_proof.clone())))
                 ])
                 .sign(&owner_key)
                 .build(),
@@ -330,9 +326,7 @@ mod resource_access_rules {
                     // Component
                     ComponentAccessRules::new().default(AccessRule::AllowAll),
                     // Resource
-                    ResourceAccessRules::new().withdrawable(AccessRule::Restricted(RestrictedAccessRule::Require(
-                        RequireRule::Require(user_proof.clone().into())
-                    ))),
+                    ResourceAccessRules::new().withdrawable(rule!(non_fungible(user_proof.clone()))),
                     // Badge recall rule
                     AccessRule::DenyAll
                 ])

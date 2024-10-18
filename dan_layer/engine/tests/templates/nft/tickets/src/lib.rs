@@ -53,7 +53,7 @@ mod tickets {
             let resource_address = ResourceBuilder::non_fungible().with_token_symbol("tix")
                 // The event description is common for all tickets
                 .add_metadata("event", event_description)
-                .mintable(AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(owner.into()))))
+                .mintable(rule!(non_fungible(owner)))
                 .build();
 
             // Mint the initial tickets
