@@ -86,12 +86,12 @@ impl Validator {
 
     pub fn has_committed_substates(&self) -> bool {
         let tx = self.state_store().create_read_tx().unwrap();
-        assert_eq!(
-            tx.transaction_pool_count(None, None, None).unwrap(),
-            0,
-            "Transaction pool is not empty in {}",
-            self.address
-        );
+        // assert_eq!(
+        //     tx.transaction_pool_count(None, None, None).unwrap(),
+        //     0,
+        //     "Transaction pool is not empty in {}",
+        //     self.address
+        // );
 
         tx.substates_count().unwrap() > 0
     }

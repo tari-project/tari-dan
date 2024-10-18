@@ -208,12 +208,8 @@ pub enum ProposalValidationError {
     },
     #[error("Problem converting values")]
     QCConversionError,
-    #[error("Validator {validator} is not in committee for shard {expected_shard}. Actual shard: {actual_shard}")]
-    ValidatorNotInCommittee {
-        validator: String,
-        expected_shard: String,
-        actual_shard: String,
-    },
+    #[error("Validator {validator} is not in the expected committee: {details}")]
+    ValidatorNotInCommittee { validator: String, details: String },
     #[error("Base layer block hash for block with height {proposed} too high, current height {current}")]
     BlockHeightTooHigh { proposed: u64, current: u64 },
     #[error("Base layer block hash for block with height {proposed} too small, current height {current}")]
@@ -250,5 +246,11 @@ pub enum ProposalValidationError {
         block_id: BlockId,
         expected_sidechain_id: RistrettoPublicKey,
         sidechain_id: RistrettoPublicKey,
+    },
+    #[error("Invalid epoch in block {block_id}. Expected: {current_epoch}, given: {block_epoch}")]
+    InvalidEpochInBlock {
+        block_id: BlockId,
+        block_epoch: Epoch,
+        current_epoch: Epoch,
     },
 }

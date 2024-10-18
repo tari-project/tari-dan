@@ -9,7 +9,12 @@ use std::{
 
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
-use tari_consensus::hotstuff::HotstuffEvent;
+use log::info;
+use tari_common::configuration::Network;
+use tari_consensus::{
+    consensus_constants::ConsensusConstants,
+    hotstuff::{HotstuffConfig, HotstuffEvent},
+};
 use tari_dan_common_types::{
     committee::Committee,
     shard::Shard,
@@ -201,8 +206,12 @@ impl Test {
             .collect()
     }
 
-    pub fn validators(&self) -> hash_map::Values<'_, TestAddress, Validator> {
+    pub fn validators_iter(&self) -> hash_map::Values<'_, TestAddress, Validator> {
         self.validators.values()
+    }
+
+    pub fn validators(&self) -> &HashMap<TestAddress, Validator> {
+        &self.validators
     }
 
     pub async fn on_hotstuff_event(&mut self) -> (TestAddress, HotstuffEvent) {
@@ -234,6 +243,11 @@ impl Test {
             } else {
                 self.on_hotstuff_event().await
             };
+            if self.network.is_offline(&address, self.num_committees).await {
+                log::info!("[{}] Ignoring event for offline node: {:?}", address, event);
+                continue;
+            }
+
             match event {
                 HotstuffEvent::BlockCommitted {
                     block_id,
@@ -272,6 +286,7 @@ impl Test {
     }
 
     pub async fn start_epoch(&mut self, epoch: Epoch) {
+        info!("🌟 Starting {epoch}");
         for validator in self.validators.values_mut() {
             // Fire off initial epoch change event so that the pacemaker starts
             validator.epoch_manager.set_current_epoch(epoch).await;
@@ -490,8 +505,9 @@ pub struct TestBuilder {
     sql_address: String,
     timeout: Option<Duration>,
     debug_sql_file: Option<String>,
-    block_time: Duration,
     message_filter: Option<MessageFilter>,
+    failure_nodes: Vec<TestAddress>,
+    config: HotstuffConfig,
 }
 
 impl TestBuilder {
@@ -500,9 +516,24 @@ impl TestBuilder {
             committees: HashMap::new(),
             sql_address: ":memory:".to_string(),
             timeout: Some(Duration::from_secs(10)),
-            block_time: Duration::from_secs(5),
             debug_sql_file: None,
             message_filter: None,
+            failure_nodes: Vec::new(),
+            config: HotstuffConfig {
+                network: Network::LocalNet,
+                sidechain_id: None,
+                consensus_constants: ConsensusConstants {
+                    base_layer_confirmations: 0,
+                    committee_size: 10,
+                    max_base_layer_blocks_ahead: 5,
+                    max_base_layer_blocks_behind: 5,
+                    num_preshards: TEST_NUM_PRESHARDS,
+                    pacemaker_block_time: Duration::from_secs(10),
+                    missed_proposal_suspend_threshold: 2,
+                    max_block_size: 500,
+                    fee_exhaust_divisor: 20,
+                },
+            },
         }
     }
 
@@ -543,13 +574,18 @@ impl TestBuilder {
         self
     }
 
+    pub fn add_failure_node<T: Into<TestAddress>>(mut self, node: T) -> Self {
+        self.failure_nodes.push(node.into());
+        self
+    }
+
     pub fn with_message_filter(mut self, message_filter: MessageFilter) -> Self {
         self.message_filter = Some(message_filter);
         self
     }
 
-    pub fn with_block_time(mut self, block_time: Duration) -> Self {
-        self.block_time = block_time;
+    pub fn modify_consensus_constants<F: FnOnce(&mut ConsensusConstants)>(mut self, f: F) -> Self {
+        f(&mut self.config.consensus_constants);
         self
     }
 
@@ -557,7 +593,8 @@ impl TestBuilder {
         leader_strategy: &RoundRobinLeaderStrategy,
         epoch_manager: &TestEpochManager,
         sql_address: String,
-        block_time: Duration,
+        config: HotstuffConfig,
+        failure_nodes: &[TestAddress],
         shutdown_signal: ShutdownSignal,
     ) -> (Vec<ValidatorChannels>, HashMap<TestAddress, Validator>) {
         let num_committees = epoch_manager.get_num_committees(Epoch(0)).await.unwrap();
@@ -565,13 +602,21 @@ impl TestBuilder {
             .all_validators()
             .await
             .into_iter()
+            // Dont start failed nodes
+            .filter(|(addr, _, _, pk, _, _, _)| {
+                if failure_nodes.contains(addr) {
+                    log::info!("❗️ {addr} {pk} is a failure node and will not be spawned");
+                    return false;
+                }
+                true
+            })
             .map(|(address, shard_group, shard_addr, _, _, _, _)| {
                 let sql_address = sql_address.replace("{}", &address.0);
                 let (sk, pk) = helpers::derive_keypair_from_address(&address);
 
                 let (channels, validator) = Validator::builder()
                     .with_sql_url(sql_address)
-                    .with_block_time(block_time)
+                    .with_config(config.clone())
                     .with_address_and_secret_key(address.clone(), sk)
                     .with_shard(shard_addr)
                     .with_shard_group(shard_group)
@@ -610,7 +655,8 @@ impl TestBuilder {
             &leader_strategy,
             &epoch_manager,
             self.sql_address,
-            self.block_time,
+            self.config,
+            &self.failure_nodes,
             shutdown.to_signal(),
         )
         .await;

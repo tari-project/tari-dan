@@ -1,12 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::time::Duration;
-
-use tari_common::configuration::Network;
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_consensus::{
-    consensus_constants::ConsensusConstants,
     hotstuff::{ConsensusCurrentState, ConsensusWorker, ConsensusWorkerContext, HotstuffConfig, HotstuffWorker},
     traits::hooks::NoopHooks,
 };
@@ -41,9 +37,9 @@ pub struct ValidatorBuilder {
     pub sql_url: String,
     pub leader_strategy: RoundRobinLeaderStrategy,
     pub num_committees: u32,
-    pub block_time: Duration,
     pub epoch_manager: Option<TestEpochManager>,
     pub transaction_executions: TestExecutionSpecStore,
+    pub config: Option<HotstuffConfig>,
 }
 
 impl ValidatorBuilder {
@@ -57,9 +53,9 @@ impl ValidatorBuilder {
             shard_group: ShardGroup::all_shards(TEST_NUM_PRESHARDS),
             sql_url: ":memory".to_string(),
             leader_strategy: RoundRobinLeaderStrategy::new(),
-            block_time: Duration::from_secs(5),
             epoch_manager: None,
             transaction_executions: TestExecutionSpecStore::new(),
+            config: None,
         }
     }
 
@@ -70,8 +66,8 @@ impl ValidatorBuilder {
         self
     }
 
-    pub fn with_block_time(&mut self, block_time: Duration) -> &mut Self {
-        self.block_time = block_time;
+    pub fn with_config(&mut self, config: HotstuffConfig) -> &mut Self {
+        self.config = Some(config);
         self
     }
 
@@ -135,19 +131,9 @@ impl ValidatorBuilder {
         let transaction_executor = TestBlockTransactionProcessor::new(self.transaction_executions.clone());
 
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
-            HotstuffConfig {
-                network: Network::LocalNet,
-                sidechain_id: None,
-                consensus_constants: ConsensusConstants {
-                    base_layer_confirmations: 0,
-                    committee_size: 0,
-                    max_base_layer_blocks_ahead: 5,
-                    max_base_layer_blocks_behind: 5,
-                    num_preshards: TEST_NUM_PRESHARDS,
-                    pacemaker_max_base_time: self.block_time,
-                    fee_exhaust_divisor: 0,
-                },
-            },
+            self.config
+                .clone()
+                .expect("No config given (use ValidatorBuilder::with_config)"),
             self.address.clone(),
             inbound_messaging,
             outbound_messaging,

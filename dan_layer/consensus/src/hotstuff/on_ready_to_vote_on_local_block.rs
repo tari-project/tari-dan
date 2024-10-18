@@ -24,6 +24,7 @@ use tari_dan_storage::{
         Decision,
         ForeignProposalAtom,
         ForeignProposalStatus,
+        HighQc,
         LastExecuted,
         LastVoted,
         LockedBlock,
@@ -39,6 +40,7 @@ use tari_dan_storage::{
         TransactionPoolStage,
         TransactionRecord,
         ValidBlock,
+        ValidatorConsensusStats,
     },
     StateStore,
 };
@@ -73,7 +75,6 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_ready_to_vote_on_lo
 pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     local_validator_pk: RistrettoPublicKey,
     config: HotstuffConfig,
-    store: TConsensusSpec::StateStore,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     tx_events: broadcast::Sender<HotstuffEvent>,
     transaction_manager: ConsensusTransactionManager<TConsensusSpec::TransactionExecutor, TConsensusSpec::StateStore>,
@@ -85,7 +86,6 @@ where TConsensusSpec: ConsensusSpec
     pub fn new(
         local_validator_pk: RistrettoPublicKey,
         config: HotstuffConfig,
-        store: TConsensusSpec::StateStore,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_events: broadcast::Sender<HotstuffEvent>,
         transaction_manager: ConsensusTransactionManager<
@@ -96,7 +96,6 @@ where TConsensusSpec: ConsensusSpec
         Self {
             local_validator_pk,
             config,
-            store,
             transaction_pool,
             tx_events,
             transaction_manager,
@@ -105,6 +104,7 @@ where TConsensusSpec: ConsensusSpec
 
     pub fn handle(
         &mut self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         valid_block: &ValidBlock,
         local_committee_info: &CommitteeInfo,
         can_propose_epoch_end: bool,
@@ -119,75 +119,79 @@ where TConsensusSpec: ConsensusSpec
             valid_block,
         );
 
-        let block_decision = self.store.with_write_tx(|tx| {
-            if self.should_vote(tx, valid_block.block())? {
-                let mut justified_block = valid_block.justify().get_block(&**tx)?;
-                // This comes before decide so that all evidence can be in place before LocalPrepare and LocalAccept
-                if !justified_block.is_justified() {
-                    self.process_newly_justified_block(tx, &justified_block, local_committee_info, change_set)?;
-                    justified_block.set_as_justified(tx)?;
-                }
-
-                self.decide_what_to_vote(
-                    tx,
-                    valid_block.block(),
-                    local_committee_info,
-                    can_propose_epoch_end,
-                    &foreign_committee_infos,
-                    change_set,
-                )?;
-            } else {
-                change_set.no_vote(NoVoteReason::ShouldNotVote);
+        if self.should_vote(tx, valid_block.block())? {
+            let mut justified_block = valid_block.justify().get_block(&**tx)?;
+            // This comes before decide so that all evidence can be in place before LocalPrepare and LocalAccept
+            if !justified_block.is_justified() {
+                self.process_newly_justified_block(tx, &justified_block, local_committee_info, change_set)?;
+                justified_block.set_as_justified(tx)?;
             }
 
-            let mut locked_blocks = Vec::new();
-            let mut finalized_transactions = Vec::new();
-            let mut end_of_epoch = None;
-
-            if change_set.is_accept() {
-                // Update nodes
-                valid_block.block().update_nodes(
-                    tx,
-                    |tx, _prev_locked, block, justify_qc| {
-                        if !block.is_dummy() {
-                            locked_blocks.push((block.clone(), justify_qc.clone()));
-                        }
-                        self.on_lock_block(tx, block)
-                    },
-                    |tx, last_exec, commit_block| {
-                        let committed = self.on_commit(tx, last_exec, commit_block, local_committee_info)?;
-                        if commit_block.is_epoch_end() {
-                            end_of_epoch = Some(commit_block.epoch());
-                        }
-                        if !committed.is_empty() {
-                            finalized_transactions.push(committed);
-                        }
-                        Ok(())
-                    },
-                )?;
-
-                valid_block.block().as_last_voted().set(tx)?;
-            }
-
-            let quorum_decision = change_set.quorum_decision();
-            info!(
-                target: LOG_TARGET,
-                "✅ Saving changeset for Local block {} decision {:?}, change set: {}",
+            self.decide_what_to_vote(
+                tx,
                 valid_block.block(),
-                quorum_decision,
-                change_set
-            );
-            change_set.save(tx)?;
+                local_committee_info,
+                can_propose_epoch_end,
+                &foreign_committee_infos,
+                change_set,
+            )?;
+        } else {
+            change_set.no_vote(NoVoteReason::AlreadyVotedAtHeight);
+        }
 
-            Ok::<_, HotStuffError>(BlockDecision {
-                quorum_decision,
-                locked_blocks,
-                finalized_transactions,
-                end_of_epoch,
-            })
-        })?;
+        let mut locked_blocks = Vec::new();
+        let mut finalized_transactions = Vec::new();
+        let mut end_of_epoch = None;
+        let mut maybe_high_qc = None;
 
-        Ok(block_decision)
+        if change_set.is_accept() {
+            // Update nodes
+            let high_qc = valid_block.block().update_nodes(
+                tx,
+                |tx, _prev_locked, block, justify_qc| {
+                    if !block.is_dummy() {
+                        locked_blocks.push((block.clone(), justify_qc.clone()));
+                    }
+                    self.on_lock_block(tx, block)
+                },
+                |tx, last_exec, commit_block| {
+                    let committed = self.on_commit(tx, last_exec, commit_block, local_committee_info)?;
+                    if commit_block.is_epoch_end() {
+                        end_of_epoch = Some(commit_block.epoch());
+                    }
+                    if !committed.is_empty() {
+                        finalized_transactions.push(committed);
+                    }
+                    Ok(())
+                },
+            )?;
+
+            maybe_high_qc = Some(high_qc);
+
+            valid_block.block().as_last_voted().set(tx)?;
+        }
+
+        let quorum_decision = change_set.quorum_decision();
+        info!(
+            target: LOG_TARGET,
+            "✅ Saving changeset for Local block {} decision {:?}, change set: {}",
+            valid_block.block(),
+            quorum_decision,
+            change_set
+        );
+        change_set.save(tx)?;
+
+        let high_qc = maybe_high_qc
+            .map(Ok)
+            .unwrap_or_else(|| HighQc::get(&**tx, valid_block.epoch()))?;
+
+        Ok(BlockDecision {
+            quorum_decision,
+            locked_blocks,
+            finalized_transactions,
+            end_of_epoch,
+            high_qc,
+        })
     }
 
     fn process_newly_justified_block(
@@ -301,6 +305,7 @@ where TConsensusSpec: ConsensusSpec
             PendingSubstateStore::new(tx, *block.parent(), self.config.consensus_constants.num_preshards);
         let mut total_leader_fee = 0;
         let locked_block = LockedBlock::get(tx, block.epoch())?;
+        let mut suspended_in_this_block_count = 0u64;
 
         for cmd in block.commands() {
             match cmd {
@@ -433,6 +438,85 @@ where TConsensusSpec: ConsensusSpec
                         proposed_block_change_set.no_vote(reason);
                         return Ok(());
                     }
+                },
+                Command::SuspendNode(atom) => {
+                    if ValidatorConsensusStats::is_node_suspended(tx, block.id(), &atom.public_key)? {
+                        warn!(
+                            target: LOG_TARGET,
+                            "❌ NO VOTE: {}", NoVoteReason::NodeAlreadySuspended
+                        );
+
+                        proposed_block_change_set.no_vote(NoVoteReason::ShouldNotSuspendNode);
+                        return Ok(());
+                    }
+
+                    let num_suspended = ValidatorConsensusStats::count_number_suspended_nodes(tx)?;
+                    let max_allowed_to_suspend = u64::from(local_committee_info.quorum_threshold())
+                        .saturating_sub(num_suspended)
+                        .saturating_sub(suspended_in_this_block_count);
+                    if max_allowed_to_suspend == 0 {
+                        warn!(
+                            target: LOG_TARGET,
+                            "❌ NO VOTE: {}", NoVoteReason::CannotSuspendNodeBelowQuorumThreshold
+                        );
+
+                        proposed_block_change_set.no_vote(NoVoteReason::ShouldNotSuspendNode);
+                        return Ok(());
+                    }
+                    suspended_in_this_block_count += 1;
+
+                    let stats = ValidatorConsensusStats::get_by_public_key(tx, block.epoch(), &atom.public_key)?;
+                    if stats.missed_proposals < self.config.consensus_constants.missed_proposal_suspend_threshold {
+                        warn!(
+                            target: LOG_TARGET,
+                            "❌ NO VOTE: {} (actual missed count: {}, threshold: {})", NoVoteReason::ShouldNotSuspendNode, stats.missed_proposals, self.config.consensus_constants.missed_proposal_suspend_threshold
+                        );
+
+                        proposed_block_change_set.no_vote(NoVoteReason::ShouldNotSuspendNode);
+                        return Ok(());
+                    }
+
+                    info!(
+                        target: LOG_TARGET,
+                        "🐢 Suspending node: {} with missed count {}",
+                        atom.public_key,
+                        stats.missed_proposals
+                    );
+                    proposed_block_change_set.add_suspend_node(atom.public_key.clone());
+                },
+                Command::ResumeNode(atom) => {
+                    if !ValidatorConsensusStats::is_node_suspended(tx, block.id(), &atom.public_key)? {
+                        warn!(
+                            target: LOG_TARGET,
+                            "❌ NO VOTE: {}", NoVoteReason::NodeNotSuspended
+                        );
+
+                        proposed_block_change_set.no_vote(NoVoteReason::NodeNotSuspended);
+                        return Ok(());
+                    }
+
+                    let stats = ValidatorConsensusStats::get_by_public_key(tx, block.epoch(), &atom.public_key)?;
+                    if stats.missed_proposals > 0 {
+                        warn!(
+                            target: LOG_TARGET,
+                            "❌ NO VOTE: {}", NoVoteReason::ShouldNodeResumeNode
+                        );
+                        warn!(
+                            target: LOG_TARGET,
+                            "❌ NO VOTE: {} (actual missed count: {})", NoVoteReason::ShouldNodeResumeNode, stats.missed_proposals,
+                        );
+
+                        proposed_block_change_set.no_vote(NoVoteReason::ShouldNodeResumeNode);
+                        return Ok(());
+                    }
+                    suspended_in_this_block_count = suspended_in_this_block_count.saturating_sub(1);
+
+                    info!(
+                        target: LOG_TARGET,
+                        "🐇 Resume node: {}",
+                        atom.public_key,
+                    );
+                    proposed_block_change_set.add_resume_node(atom.public_key.clone());
                 },
                 Command::EndEpoch => {
                     if !can_propose_epoch_end {
@@ -1668,6 +1752,8 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
     ) -> Result<Vec<TransactionPoolRecord>, HotStuffError> {
         if block.is_dummy() {
+            block.increment_leader_failure_count(tx)?;
+
             // Nothing to do here for empty dummy blocks. Just mark the block as committed.
             block.commit_diff(tx, BlockDiff::empty(*block.id()))?;
             return Ok(vec![]);
@@ -1686,6 +1772,10 @@ where TConsensusSpec: ConsensusSpec
 
         for atom in block.all_confidential_output_mints() {
             atom.delete(tx)?;
+        }
+
+        for atom in block.all_resume_nodes() {
+            atom.delete_suspended_node(tx)?;
         }
 
         // NOTE: this must happen before we commit the substate diff because the state transitions use this version
@@ -1723,6 +1813,9 @@ where TConsensusSpec: ConsensusSpec
                 block,
             );
         }
+
+        block.justify().update_participation_shares(tx)?;
+        block.clear_leader_failure_count(tx)?;
 
         Ok(finalized_transactions)
     }

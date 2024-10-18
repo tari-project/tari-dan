@@ -27,6 +27,7 @@ use tari_dan_storage::{
         PendingShardStateTreeDiff,
         QuorumCertificate,
         SubstateChange,
+        ValidatorConsensusStats,
         VersionedStateHashTreeDiff,
     },
     StateStoreReadTransaction,
@@ -47,14 +48,16 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::common";
 
 /// Calculates the dummy block required to reach the new height and returns the last dummy block (parent for next
-/// proposal).
+/// proposal). Generates dummy blocks from from_height to new_height _exclusive_.
 pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: LeaderStrategy<TAddr>>(
+    from_height: NodeHeight,
+    new_height: NodeHeight,
     network: Network,
     epoch: Epoch,
     shard_group: ShardGroup,
-    high_qc: &QuorumCertificate,
+    parent_block_id: BlockId,
+    qc: &QuorumCertificate,
     parent_merkle_root: FixedHash,
-    new_height: NodeHeight,
     leader_strategy: &TLeaderStrategy,
     local_committee: &Committee<TAddr>,
     parent_timestamp: u64,
@@ -63,12 +66,14 @@ pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: Leade
 ) -> Option<LeafBlock> {
     let mut dummy = None;
     with_dummy_blocks(
+        from_height,
+        new_height,
         network,
         epoch,
         shard_group,
-        high_qc,
+        parent_block_id,
+        qc,
         parent_merkle_root,
-        new_height,
         leader_strategy,
         local_committee,
         parent_timestamp,
@@ -83,14 +88,16 @@ pub fn calculate_last_dummy_block<TAddr: NodeAddressable, TLeaderStrategy: Leade
     dummy
 }
 
-pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStrategy<TAddr>>(
+fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStrategy<TAddr>>(
+    from_height: NodeHeight,
+    new_height: NodeHeight,
     network: Network,
     epoch: Epoch,
     shard_group: ShardGroup,
-    high_qc: &QuorumCertificate,
+    parent_block_id: BlockId,
+    qc: &QuorumCertificate,
     expected_parent_block_id: &BlockId,
     parent_merkle_root: FixedHash,
-    new_height: NodeHeight,
     leader_strategy: &TLeaderStrategy,
     local_committee: &Committee<TAddr>,
     parent_timestamp: u64,
@@ -99,12 +106,14 @@ pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStr
 ) -> Vec<Block> {
     let mut dummies = Vec::new();
     with_dummy_blocks(
+        from_height,
+        new_height,
         network,
         epoch,
         shard_group,
-        high_qc,
+        parent_block_id,
+        qc,
         parent_merkle_root,
-        new_height,
         leader_strategy,
         local_committee,
         parent_timestamp,
@@ -132,13 +141,15 @@ pub fn calculate_dummy_blocks_from_justify<TAddr: NodeAddressable, TLeaderStrate
     local_committee: &Committee<TAddr>,
 ) -> Vec<Block> {
     calculate_dummy_blocks(
+        justify_block.height(),
+        candidate_block.height(),
         candidate_block.network(),
         candidate_block.epoch(),
         candidate_block.shard_group(),
+        *candidate_block.justify().block_id(),
         candidate_block.justify(),
         candidate_block.parent(),
         *justify_block.merkle_root(),
-        candidate_block.height(),
         leader_strategy,
         local_committee,
         justify_block.timestamp(),
@@ -148,12 +159,14 @@ pub fn calculate_dummy_blocks_from_justify<TAddr: NodeAddressable, TLeaderStrate
 }
 
 fn with_dummy_blocks<TAddr, TLeaderStrategy, F>(
+    mut current_height: NodeHeight,
+    new_height: NodeHeight,
     network: Network,
     epoch: Epoch,
     shard_group: ShardGroup,
-    high_qc: &QuorumCertificate,
+    mut parent_block_id: BlockId,
+    qc: &QuorumCertificate,
     parent_merkle_root: FixedHash,
-    new_height: NodeHeight,
     leader_strategy: &TLeaderStrategy,
     local_committee: &Committee<TAddr>,
     parent_timestamp: u64,
@@ -165,8 +178,6 @@ fn with_dummy_blocks<TAddr, TLeaderStrategy, F>(
     TLeaderStrategy: LeaderStrategy<TAddr>,
     F: FnMut(Block) -> ControlFlow<()>,
 {
-    let mut parent_block = high_qc.as_leaf_block();
-    let mut current_height = high_qc.block_height();
     if current_height >= new_height {
         error!(
             target: LOG_TARGET,
@@ -185,18 +196,18 @@ fn with_dummy_blocks<TAddr, TLeaderStrategy, F>(
         new_height,
     );
     loop {
+        current_height += NodeHeight(1);
         if current_height == new_height {
             break;
         }
-        current_height += NodeHeight(1);
-        let leader = leader_strategy.get_leader_public_key(local_committee, current_height);
+        let (_, leader) = leader_strategy.get_leader(local_committee, current_height);
 
         let dummy_block = Block::dummy_block(
             network,
-            *parent_block.block_id(),
+            parent_block_id,
             leader.clone(),
             current_height,
-            high_qc.clone(),
+            qc.clone(),
             epoch,
             shard_group,
             parent_merkle_root,
@@ -209,7 +220,7 @@ fn with_dummy_blocks<TAddr, TLeaderStrategy, F>(
             "🍼 new dummy block: {}",
             dummy_block,
         );
-        parent_block = dummy_block.as_leaf_block();
+        parent_block_id = *dummy_block.id();
 
         if callback(dummy_block).is_break() {
             break;
@@ -248,7 +259,7 @@ where
     let mut blocks = Block::get_last_n_in_epoch(&**tx, 3, epoch)?;
     if blocks.is_empty() {
         return Err(HotStuffError::StorageError(StorageError::NotFound {
-            item: "Block::get_last_n_in_epoch".to_string(),
+            item: "Block::get_last_n_in_epoch",
             key: epoch.to_string(),
         }));
     }
@@ -292,4 +303,33 @@ pub(crate) fn filter_diff_for_committee(committee_info: &CommitteeInfo, diff: &S
                 .cloned(),
         );
     filtered_diff
+}
+
+pub(crate) fn get_next_block_height_and_leader<
+    'a,
+    TTx: StateStoreReadTransaction,
+    TLeaderStrategy: LeaderStrategy<TAddr>,
+    TAddr: NodeAddressable,
+>(
+    tx: &TTx,
+    committee: &'a Committee<TAddr>,
+    leader_strategy: &TLeaderStrategy,
+    block_id: &BlockId,
+    height: NodeHeight,
+) -> Result<(NodeHeight, &'a TAddr, usize), HotStuffError> {
+    let mut num_skipped = 0;
+    let mut next_height = height;
+    let (mut leader_addr, mut leader_pk) = leader_strategy.get_leader_for_next_height(committee, next_height);
+
+    while ValidatorConsensusStats::is_node_suspended(tx, block_id, leader_pk)? {
+        debug!(target: LOG_TARGET, "Validator {} suspended for next height {}. Checking next validator", leader_addr, next_height + NodeHeight(1));
+        next_height += NodeHeight(1);
+        num_skipped += 1;
+        let (addr, pk) = leader_strategy.get_leader_for_next_height(committee, next_height);
+        leader_addr = addr;
+        leader_pk = pk;
+    }
+    debug!(target: LOG_TARGET, "Validator {} selected as next leader at height {}", leader_addr, next_height);
+
+    Ok((next_height, leader_addr, num_skipped))
 }

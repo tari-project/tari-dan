@@ -31,6 +31,7 @@ use tari_transaction::Transaction;
 
 use crate::support::{
     build_transaction_from,
+    helpers,
     logging::setup_logger,
     ExecuteSpec,
     Test,
@@ -45,6 +46,52 @@ async fn single_transaction() {
     setup_logger();
     let mut test = Test::builder().add_committee(0, vec!["1"]).start().await;
     // First get transaction in the mempool
+    let (tx1, _, _) = test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
+    test.start_epoch(Epoch(1)).await;
+
+    loop {
+        test.on_block_committed().await;
+
+        if test.is_transaction_pool_empty() {
+            break;
+        }
+        let leaf = test.get_validator(&TestAddress::new("1")).get_leaf_block();
+        if leaf.height >= NodeHeight(10) {
+            panic!("Not all transaction committed after {} blocks", leaf.height);
+        }
+    }
+
+    test.assert_all_validators_at_same_height().await;
+    test.assert_all_validators_committed();
+
+    // Assert all LocalOnly
+    test.get_validator(&TestAddress::new("1"))
+        .state_store
+        .with_read_tx(|tx| {
+            let mut block = tx.blocks_get_tip(Epoch(1), test.get_validator(&TestAddress::new("1")).shard_group)?;
+            loop {
+                block = block.get_parent(tx)?;
+                if block.id().is_zero() {
+                    break;
+                }
+
+                for cmd in block.commands() {
+                    assert!(matches!(cmd, Command::LocalOnly(_)));
+                }
+            }
+            Ok::<_, HotStuffError>(())
+        })
+        .unwrap();
+    test.assert_all_validators_have_decision(tx1.id(), Decision::Commit)
+        .await;
+
+    test.assert_clean_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn single_transaction_multi_vn() {
+    setup_logger();
+    let mut test = Test::builder().add_committee(0, vec!["1", "2"]).start().await;
     let (tx1, _, _) = test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
     test.start_epoch(Epoch(1)).await;
 
@@ -475,7 +522,6 @@ async fn multishard_local_inputs_foreign_outputs() {
     test.assert_clean_shutdown().await;
 }
 
-#[ignore = "FIXME: This test is flaky"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn multishard_local_inputs_and_outputs_foreign_outputs() {
     setup_logger();
@@ -871,7 +917,11 @@ async fn leader_failure_node_goes_down() {
     let mut test = Test::builder()
         // Allow enough time for leader failures
         .with_test_timeout(Duration::from_secs(60))
-        .with_block_time(Duration::from_secs(2))
+        .modify_consensus_constants(|config_mut| {
+            // Prevent suspends
+            config_mut.missed_proposal_suspend_threshold = 10;
+            config_mut.pacemaker_block_time = Duration::from_secs(2);
+        })
         .add_committee(0, vec!["1", "2", "3", "4", "5"])
         .start()
         .await;
@@ -900,7 +950,7 @@ async fn leader_failure_node_goes_down() {
             test.wait_for_pool_count(TestVnDestination::All, 1).await;
         }
 
-        if test.validators().filter(|vn| vn.address != failure_node).all(|v| {
+        if test.validators_iter().filter(|vn| vn.address != failure_node).all(|v| {
             let c = v.get_transaction_pool_count();
             log::info!("{} has {} transactions in pool", v.address, c);
             c == 0
@@ -916,9 +966,96 @@ async fn leader_failure_node_goes_down() {
     test.assert_all_validators_at_same_height_except(&[failure_node.clone()])
         .await;
 
-    test.validators().filter(|vn| vn.address != failure_node).for_each(|v| {
-        assert!(v.has_committed_substates(), "Validator {} did not commit", v.address);
-    });
+    test.validators_iter()
+        .filter(|vn| vn.address != failure_node)
+        .for_each(|v| {
+            assert!(v.has_committed_substates(), "Validator {} did not commit", v.address);
+        });
+
+    log::info!("total messages sent: {}", test.network().total_messages_sent());
+    test.assert_clean_shutdown_except(&[failure_node]).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn leader_failure_node_goes_down_and_gets_suspended() {
+    setup_logger();
+    let failure_node = TestAddress::new("4");
+
+    let mut test = Test::builder()
+        // Allow enough time for leader failures
+        .with_test_timeout(Duration::from_secs(30))
+        .modify_consensus_constants(|config_mut| {
+            // The node will be suspended after one missed proposal
+            config_mut.missed_proposal_suspend_threshold = 2;
+            config_mut.pacemaker_block_time = Duration::from_secs(5);
+        })
+        .add_committee(0, vec!["1", "2", "3", "4", "5"])
+        .add_failure_node(failure_node.clone())
+        .start()
+        .await;
+
+    for _ in 0..10 {
+        test.send_transaction_to_all(Decision::Commit, 1, 2, 1).await;
+    }
+
+    // Take the VN offline - if we do it in the loop below, all transactions may have already been finalized (local
+    // only) by committed block 1
+    log::info!("😴 {failure_node} is offline");
+    test.network()
+        .go_offline(TestVnDestination::Address(failure_node.clone()))
+        .await;
+
+    test.start_epoch(Epoch(1)).await;
+
+    loop {
+        let (_, _, _, committed_height) = test.on_block_committed().await;
+
+        // Takes missed_proposal_suspend_threshold * 5 + 3 blocks for nodes to suspend. So we need to keep the
+        // transactions coming to speed up this test.
+        if committed_height >= NodeHeight(1) && committed_height < NodeHeight(20) {
+            // This allows a few more leader failures to occur
+            test.send_transaction_to_all(Decision::Commit, 1, 2, 1).await;
+            // test.wait_for_pool_count(TestVnDestination::All, 1).await;
+        }
+
+        // if test.validators_iter().filter(|vn| vn.address != failure_node).all(|v| {
+        //     let c = v.get_transaction_pool_count();
+        //     log::info!("{} has {} transactions in pool", v.address, c);
+        //     c == 0
+        // }) {
+        //     break;
+        // }
+
+        if committed_height >= NodeHeight(20) {
+            break;
+            // panic!("Not all transaction committed after {} blocks", committed_height);
+        }
+    }
+
+    test.assert_all_validators_at_same_height_except(&[failure_node.clone()])
+        .await;
+
+    test.validators_iter()
+        .filter(|vn| vn.address != failure_node)
+        .for_each(|v| {
+            assert!(v.has_committed_substates(), "Validator {} did not commit", v.address);
+        });
+
+    let (_, suspended_public_key) = helpers::derive_keypair_from_address(&failure_node);
+    test.validators()
+        .get(&TestAddress::new("1"))
+        .unwrap()
+        .state_store()
+        .with_read_tx(|tx| {
+            let leaf = tx.leaf_block_get(Epoch(1))?;
+            assert!(
+                tx.suspended_nodes_is_suspended(leaf.block_id(), &suspended_public_key)
+                    .unwrap(),
+                "{failure_node} is not suspended"
+            );
+            Ok::<_, HotStuffError>(())
+        })
+        .unwrap();
 
     log::info!("total messages sent: {}", test.network().total_messages_sent());
     test.assert_clean_shutdown_except(&[failure_node]).await;

@@ -47,3 +47,15 @@ impl DerivableFromPublicKey for TestAddress {
         true
     }
 }
+
+impl From<String> for TestAddress {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for TestAddress {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
+    }
+}

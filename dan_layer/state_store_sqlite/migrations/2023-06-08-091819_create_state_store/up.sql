@@ -1,11 +1,13 @@
 create table quorum_certificates
 (
-    id          integer   not null primary key AUTOINCREMENT,
-    qc_id       text      not NULL,
-    block_id    text      not NULL,
-    shard_group integer   not NULL,
-    json        text      not NULL,
-    created_at  timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id                  integer   not null primary key AUTOINCREMENT,
+    qc_id               text      not NULL,
+    block_id            text      not NULL,
+    epoch               bigint    not NULL,
+    shard_group         integer   not NULL,
+    json                text      not NULL,
+    is_shares_processed boolean   not NULL default '0',
+    created_at          timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- fetching by qc_id is a very common operation
@@ -501,6 +503,34 @@ CREATE TABLE state_transitions
 );
 CREATE UNIQUE INDEX state_transitions_shard_seq on state_transitions (shard, seq);
 CREATE INDEX state_transitions_epoch on state_transitions (epoch);
+
+CREATE TABLE validator_epoch_stats
+(
+    id                   integer   not NULL primary key AUTOINCREMENT,
+    epoch                bigint    not NULL,
+    public_key           text      not NULL,
+    participation_shares bigint    not NULL DEFAULT '0',
+    missed_proposals     bigint    not NULL DEFAULT '0',
+    created_at           timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX participation_shares_uniq_idx_epoch_public_key on validator_epoch_stats (epoch, public_key);
+
+CREATE TABLE suspended_nodes
+(
+    id                        integer   not NULL primary key AUTOINCREMENT,
+    epoch                     bigint    not NULL,
+    public_key                text      not NULL,
+    suspended_in_block        text      not NULL,
+    suspended_in_block_height bigint    not NULL,
+    resumed_in_block          text      NULL,
+    resumed_in_block_height   bigint    NULL,
+    created_at                timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX suspended_nodes_uniq_idx_epoch_public_key on suspended_nodes (epoch, public_key);
+CREATE INDEX suspended_nodes_idx_suspended_in_block on suspended_nodes (suspended_in_block);
+CREATE INDEX suspended_nodes_idx_unsuspended_in_block on suspended_nodes (resumed_in_block);
 
 CREATE TABLE diagnostics_no_votes
 (

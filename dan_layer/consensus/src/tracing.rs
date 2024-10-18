@@ -11,6 +11,7 @@ pub struct TraceTimer {
     context: &'static str,
     level: log::Level,
     iterations: Option<usize>,
+    excessive_threshold: u128,
 }
 
 impl TraceTimer {
@@ -21,7 +22,13 @@ impl TraceTimer {
             context,
             level,
             iterations: None,
+            excessive_threshold: 1000,
         }
+    }
+
+    pub fn with_excessive_threshold(mut self, excessive_threshold: u128) -> Self {
+        self.excessive_threshold = excessive_threshold;
+        self
     }
 
     pub fn with_iterations(mut self, iterations: usize) -> Self {
@@ -45,7 +52,7 @@ impl TraceTimer {
 impl Drop for TraceTimer {
     fn drop(&mut self) {
         let elapsed = self.start.elapsed();
-        if elapsed.as_secs() >= 1 {
+        if elapsed.as_millis() >= self.excessive_threshold {
             if let Some(iterations) = self.iterations {
                 let avg = elapsed.as_millis() as f64 / iterations as f64;
                 warn!(target: self.log_target, "⏲️ EXCESSIVE: {} took {:.2?} for {} iterations (avg: {:.0?}ms)", self.context, elapsed, iterations, avg);

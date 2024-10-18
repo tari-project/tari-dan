@@ -9,6 +9,7 @@ use std::{
 
 use indexmap::IndexMap;
 use log::*;
+use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, ShardGroup};
 use tari_dan_storage::{
     consensus_models::{
@@ -18,6 +19,7 @@ use tari_dan_storage::{
         BlockTransactionExecution,
         BurntUtxo,
         ForeignProposal,
+        HighQc,
         LeafBlock,
         LockedBlock,
         NoVoteReason,
@@ -33,6 +35,7 @@ use tari_dan_storage::{
         TransactionPoolError,
         TransactionPoolRecord,
         TransactionPoolStatusUpdate,
+        ValidatorConsensusStats,
         VersionedStateHashTreeDiff,
     },
     StateStoreReadTransaction,
@@ -52,6 +55,7 @@ const MEM_MAX_SUBSTATE_LOCK_SIZE: usize = 100000;
 const MEM_MAX_TRANSACTION_CHANGE_SIZE: usize = 1000;
 const MEM_MAX_PROPOSED_FOREIGN_PROPOSALS_SIZE: usize = 1000;
 const MEM_MAX_PROPOSED_UTXO_MINTS_SIZE: usize = 1000;
+const MEM_MAX_SUSPEND_CHANGE_SIZE: usize = 10;
 
 #[derive(Debug, Clone)]
 pub struct BlockDecision {
@@ -61,6 +65,7 @@ pub struct BlockDecision {
     pub locked_blocks: Vec<(Block, QuorumCertificate)>,
     pub finalized_transactions: Vec<Vec<TransactionPoolRecord>>,
     pub end_of_epoch: Option<Epoch>,
+    pub high_qc: HighQc,
 }
 
 impl BlockDecision {
@@ -80,6 +85,8 @@ pub struct ProposedBlockChangeSet {
     proposed_foreign_proposals: Vec<BlockId>,
     proposed_utxo_mints: Vec<SubstateId>,
     no_vote_reason: Option<NoVoteReason>,
+    suspend_nodes: Vec<PublicKey>,
+    resume_nodes: Vec<PublicKey>,
 }
 
 impl ProposedBlockChangeSet {
@@ -94,6 +101,8 @@ impl ProposedBlockChangeSet {
             proposed_foreign_proposals: Vec::new(),
             proposed_utxo_mints: Vec::new(),
             no_vote_reason: None,
+            suspend_nodes: Vec::new(),
+            resume_nodes: Vec::new(),
         }
     }
 
@@ -172,6 +181,10 @@ impl ProposedBlockChangeSet {
             );
             self.proposed_utxo_mints.shrink_to(MEM_MAX_PROPOSED_UTXO_MINTS_SIZE);
         }
+        self.suspend_nodes.clear();
+        if self.suspend_nodes.capacity() > MEM_MAX_SUSPEND_CHANGE_SIZE {
+            self.suspend_nodes.shrink_to(MEM_MAX_SUSPEND_CHANGE_SIZE);
+        }
         self.no_vote_reason = None;
     }
 
@@ -213,6 +226,16 @@ impl ProposedBlockChangeSet {
         if let Some(update) = self.transaction_changes.get(tx_rec_mut.transaction_id()) {
             update.apply_update(tx_rec_mut);
         }
+    }
+
+    pub fn add_suspend_node(&mut self, public_key: PublicKey) -> &mut Self {
+        self.suspend_nodes.push(public_key);
+        self
+    }
+
+    pub fn add_resume_node(&mut self, public_key: PublicKey) -> &mut Self {
+        self.resume_nodes.push(public_key);
+        self
     }
 
     #[allow(clippy::mutable_key_type)]
@@ -369,6 +392,14 @@ impl ProposedBlockChangeSet {
 
         for mint in &self.proposed_utxo_mints {
             BurntUtxo::set_proposed_in_block(tx, mint, &self.block.block_id)?
+        }
+
+        for node in &self.suspend_nodes {
+            ValidatorConsensusStats::suspend_node(tx, node, self.block.block_id)?
+        }
+
+        for node in &self.resume_nodes {
+            ValidatorConsensusStats::resume_node(tx, node, self.block.block_id)?
         }
 
         Ok(())

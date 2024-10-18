@@ -17,3 +17,27 @@ impl<TAddr: NodeAddressable> LeaderStrategy<TAddr> for RoundRobinLeaderStrategy 
         (height.as_u64() % committee.members.len() as u64) as u32
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use tari_common_types::types::PublicKey;
+
+    use super::*;
+
+    fn new_member(seed: &'static str) -> (String, PublicKey) {
+        (seed.to_string(), PublicKey::new_generator(seed).unwrap())
+    }
+
+    #[test]
+    fn it_selects_leader_based_on_height() {
+        let strategy = RoundRobinLeaderStrategy::new();
+        let committee = Committee::from_iter([new_member("1"), new_member("2"), new_member("3")]);
+
+        let (addr, _) = strategy.get_leader(&committee, NodeHeight(1));
+        assert_eq!(addr, "2");
+        let (addr, _) = strategy.get_leader(&committee, NodeHeight(2));
+        assert_eq!(addr, "3");
+        let (addr, _) = strategy.get_leader(&committee, NodeHeight(3));
+        assert_eq!(addr, "1");
+    }
+}

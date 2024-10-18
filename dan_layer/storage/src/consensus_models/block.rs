@@ -5,6 +5,7 @@ use std::{
     collections::{BTreeSet, HashSet},
     fmt::{Debug, Display, Formatter},
     hash::Hash,
+    iter,
     ops::{Deref, RangeInclusive},
 };
 
@@ -40,15 +41,18 @@ use super::{
     ForeignProposal,
     ForeignProposalAtom,
     ForeignSendCounters,
+    HighQc,
     MintConfidentialOutputAtom,
     PendingShardStateTreeDiff,
     QuorumCertificate,
+    ResumeNodeAtom,
     SubstateChange,
     SubstateDestroyedProof,
     SubstatePledge,
     SubstateRecord,
     TransactionAtom,
     ValidatorSchnorrSignature,
+    ValidatorStatsUpdate,
 };
 use crate::{
     consensus_models::{
@@ -409,6 +413,10 @@ impl Block {
         self.commands.iter().filter_map(|c| c.foreign_proposal())
     }
 
+    pub fn all_resume_nodes(&self) -> impl Iterator<Item = &ResumeNodeAtom> + '_ {
+        self.commands.iter().filter_map(|c| c.resume_node())
+    }
+
     pub fn all_confidential_output_mints(&self) -> impl Iterator<Item = &MintConfidentialOutputAtom> + '_ {
         self.commands.iter().filter_map(|c| c.mint_confidential_output())
     }
@@ -620,11 +628,8 @@ impl Block {
         block_id: &BlockId,
     ) -> Result<bool, StorageError> {
         // TODO: consider optimising
-        let is_justified = Self::get(tx, block_id)
-            .optional()?
-            .map(|b| b.is_justified())
-            .unwrap_or(false);
-        Ok(is_justified)
+        let b = Self::get(tx, block_id)?;
+        Ok(b.is_justified)
     }
 
     pub fn record_exists<TTx: StateStoreReadTransaction + ?Sized>(
@@ -822,7 +827,7 @@ impl Block {
     pub fn get_parent<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<Block, StorageError> {
         if self.id.is_zero() && self.parent.is_zero() {
             return Err(StorageError::NotFound {
-                item: "Block parent".to_string(),
+                item: "Block parent",
                 key: self.parent.to_string(),
             });
         }
@@ -870,7 +875,7 @@ impl Block {
         let (found, missing) = TransactionRecord::get_any(tx, tx_ids)?;
         if !missing.is_empty() {
             return Err(StorageError::NotFound {
-                item: "Transaction".to_string(),
+                item: "Transaction",
                 key: missing
                     .into_iter()
                     .map(|id| id.to_string())
@@ -933,7 +938,7 @@ impl Block {
         tx: &mut TTx,
         mut on_lock_block: TFnOnLock,
         mut on_commit: TFnOnCommit,
-    ) -> Result<Self, E>
+    ) -> Result<HighQc, E>
     where
         TTx: StateStoreWriteTransaction + Deref + ?Sized,
         TTx::Target: StateStoreReadTransaction,
@@ -941,7 +946,7 @@ impl Block {
         TFnOnCommit: FnMut(&mut TTx, &LastExecuted, &Block) -> Result<(), E>,
         E: From<StorageError>,
     {
-        self.justify().update_high_qc(tx)?;
+        let high_qc = self.justify().update_high_qc(tx)?;
 
         // b'' <- b*.justify.node i.e. the (possibly new) justified block
         let justified_node = self.justify().get_block(&**tx)?;
@@ -950,7 +955,7 @@ impl Block {
         let prepared_node = justified_node.justify().get_block(&**tx)?;
 
         if prepared_node.is_genesis() {
-            return Ok(justified_node);
+            return Ok(high_qc);
         }
 
         let current_locked = LockedBlock::get(&**tx, self.epoch)?;
@@ -970,7 +975,7 @@ impl Block {
         if justified_node.parent() == prepared_node.id() && prepared_node.parent() == commit_node {
             debug!(
                 target: LOG_TARGET,
-                "✅ Node {} {} forms a 3-chain b'' = {}, b' = {}, b = {}",
+                "✅ Block {} {} forms a 3-chain b'' = {}, b' = {}, b = {}",
                 self.height(),
                 self.id(),
                 justified_node.id(),
@@ -980,7 +985,7 @@ impl Block {
 
             // Commit prepare_node (b)
             if commit_node.is_zero() {
-                return Ok(justified_node);
+                return Ok(high_qc);
             }
             let prepare_node = Block::get(&**tx, commit_node)?;
             let last_executed = LastExecuted::get(&**tx)?;
@@ -989,7 +994,7 @@ impl Block {
         } else {
             debug!(
                 target: LOG_TARGET,
-                "Node {} {} DOES NOT form a 3-chain b'' = {}, b' = {}, b = {}, b* = {}",
+                "Block {} {} DOES NOT form a 3-chain b'' = {}, b' = {}, b = {}, b* = {}",
                 self.height(),
                 self.id(),
                 justified_node.id(),
@@ -999,7 +1004,7 @@ impl Block {
             );
         }
 
-        Ok(justified_node)
+        Ok(high_qc)
     }
 
     /// safeNode predicate (https://arxiv.org/pdf/1803.05069v6.pdf)
@@ -1098,6 +1103,30 @@ impl Block {
         tx: &TTx,
     ) -> Result<Vec<ForeignProposal>, StorageError> {
         ForeignProposal::get_any(tx, self.all_foreign_proposals().map(|p| &p.block_id))
+    }
+
+    pub fn increment_leader_failure_count<TTx: StateStoreWriteTransaction>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<(), StorageError> {
+        tx.validator_epoch_stats_updates(
+            self.epoch(),
+            iter::once(
+                ValidatorStatsUpdate::new(self.proposed_by())
+                    .add_missed_proposal()
+                    .set_max_missed_proposals_cap(5),
+            ),
+        )
+    }
+
+    pub fn clear_leader_failure_count<TTx: StateStoreWriteTransaction>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<(), StorageError> {
+        tx.validator_epoch_stats_updates(
+            self.epoch(),
+            iter::once(ValidatorStatsUpdate::new(self.proposed_by()).reset_missed_proposals()),
+        )
     }
 }
 
