@@ -1,4 +1,4 @@
-//  Copyright 2022. The Tari Project
+//  Copyright 2024. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,39 +20,45 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import {Avatar, Chip} from "@mui/material";
-import {IoBandageOutline, IoCheckmarkOutline, IoCloseOutline, IoHourglassOutline} from "react-icons/io5";
+import { Dialog, DialogTitle } from "@mui/material";
+import IconButton from "@mui/material/IconButton";
+import DialogContent from "@mui/material/DialogContent";
+import CloseIcon from "@mui/icons-material/Close";
+import Box from "@mui/material/Box";
+import theme from "../theme/theme";
+import { renderJson } from "../utils/helpers";
 
-interface StatusChipProps {
-    status: "Commit" | "Abort" | "Pending" | "Dummy";
-    showTitle?: boolean;
+interface JsonDialogProps {
+  open: boolean;
+  data: object,
+  onClose: () => void;
 }
 
-const colorList: Record<string, string> = {
-    Commit: "#5F9C91",
-    Pending: "#ECA86A",
-    Abort: "#DB7E7E",
-    Dummy: "#C0C0C0",
-};
+function JsonDialog(props: JsonDialogProps) {
 
-const iconList: Record<string, JSX.Element> = {
-    Commit: <IoCheckmarkOutline style={{height: 14, width: 14}} color="#FFF"/>,
-    Pending: <IoHourglassOutline style={{height: 14, width: 14}} color="#FFF"/>,
-    Abort: <IoCloseOutline style={{height: 14, width: 14}} color="#FFF"/>,
-    Dummy: <IoBandageOutline style={{height: 14, width: 14}} color="#FFF"/>,
-};
-
-export default function StatusChip({status, showTitle = true}: StatusChipProps) {
-    if (!showTitle) {
-        return <Avatar sx={{bgcolor: colorList[status], height: 22, width: 22}}>{iconList[status]}</Avatar>;
-    } else {
-        return (
-            <Chip
-                avatar={<Avatar sx={{bgcolor: colorList[status]}}>{iconList[status]}</Avatar>}
-                label={status}
-                style={{color: colorList[status], borderColor: colorList[status]}}
-                variant="outlined"
-            />
-        );
-    }
+  return (
+    <Dialog open={props.open} onClose={props.onClose} fullWidth={true} maxWidth="lg">
+      <Box sx={{ paddingX: 4, borderRadius: 4 }}>
+        <Box>
+          <DialogTitle sx={{ display: "flex", justifyContent: "right" }}>
+            <IconButton onClick={props.onClose}>
+              <CloseIcon />
+            </IconButton>
+          </DialogTitle>
+        </Box>
+        <DialogContent>
+          <Box
+            sx={{
+              padding: "2rem",
+              background: theme.palette.background.paper,
+            }}
+          >
+            {renderJson(props.data)}
+          </Box>
+        </DialogContent>
+      </Box>
+    </Dialog>
+  );
 }
+
+export default JsonDialog;

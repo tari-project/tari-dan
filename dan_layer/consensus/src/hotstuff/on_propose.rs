@@ -21,6 +21,7 @@ use tari_dan_common_types::{
 };
 use tari_dan_storage::{
     consensus_models::{
+        AbortReason,
         Block,
         BlockId,
         BlockTransactionExecution,
@@ -694,7 +695,7 @@ where TConsensusSpec: ConsensusSpec
                     "⚠️ Transaction is LOCAL-ONLY EARLY ABORT, proposing LocalOnly({}, ABORT)",
                     tx_rec.transaction_id(),
                 );
-                tx_rec.set_local_decision(Decision::Abort);
+                tx_rec.set_local_decision(Decision::Abort(AbortReason::EarlyAbort));
 
                 info!(
                     target: LOG_TARGET,
@@ -734,7 +735,8 @@ where TConsensusSpec: ConsensusSpec
                                 .update(&multishard.to_initial_evidence(local_committee_info));
                         }
                     },
-                    Decision::Abort => {
+                    Decision::Abort(reason) => {
+                        warn!(target: LOG_TARGET, "Prepare transaction abort: {reason:?}");
                         // CASE: The transaction was ABORTed due to a lock conflict
                         let execution = multishard.into_execution().expect("Abort must have execution");
                         tx_rec.update_from_execution(

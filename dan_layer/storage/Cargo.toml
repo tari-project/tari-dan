@@ -29,6 +29,8 @@ thiserror = { workspace = true }
 serde = { workspace = true, default-features = true }
 time = { workspace = true, features = ["serde"] }
 ts-rs = { workspace = true, optional = true }
+strum = "0.26.3"
+strum_macros = "0.26.4"
 
 [features]
 ts = ["ts-rs"]

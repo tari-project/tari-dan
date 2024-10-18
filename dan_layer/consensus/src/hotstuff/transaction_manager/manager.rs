@@ -271,10 +271,11 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                             lock_status,
                         ))
                     },
-                    Decision::Abort => {
+                    Decision::Abort(reason) => {
                         // CASE: Multishard transaction, but all inputs are local, and we're aborting
                         // All outputs are local, and we're aborting, so this is a local-only transaction since no
                         // outputs need to be created
+                        warn!(target: LOG_TARGET, "⚠️ PREPARE: Aborted: {reason:?}");
                         Ok(PreparedTransaction::new_local_early_abort(execution))
                     },
                 }
