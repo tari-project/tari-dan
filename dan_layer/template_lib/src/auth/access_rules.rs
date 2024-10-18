@@ -309,33 +309,45 @@ macro_rules! rule {
 }
 
 #[macro_export]
-macro_rules! require_rule {
+macro_rules! restricted_access_rule {
     (any_of($($tail:tt)*)) => {
-        RequireRule::AnyOf(build_vec!($($tail)*))
+        RestrictedAccessRule::AnyOf(build_restricted_vec!($($tail)*))
     };
     (all_of($($tail:tt)*)) => {
-        RequireRule::AllOf(build_vec!($($tail)*))
+        RestrictedAccessRule::AllOf(build_restricted_vec!($($tail)*))
     };
     ($a:ident($b:expr)) => {
-        RequireRule::Require(rule_requirement!($a($b)));
+        RestrictedAccessRule::Require(require_rule!($a($b)));
     };
 }
 
+#[macro_export]
+macro_rules! require_rule {
+    (any_of($($tail:tt)*)) => {
+        RequireRule::AnyOf(build_requirement_vec!($($tail)*))
+    };
+    (all_of($($tail:tt)*)) => {
+        RequireRule::AllOf(build_requirement_vec!($($tail)*))
+    };
+    ($a:ident($b:expr)) => {
+        RequireRule::Require(rule_requirement!($a($b)))
+    };
+}
 
 /// Utility macro for building multiple instruction arguments
 #[macro_export]
-macro_rules! build_vec {
+macro_rules! build_requirement_vec {
     () => (Vec::new());
 
     ($a:ident($b:expr), $($tail:tt)*) => {{
         let mut items = Vec::with_capacity(1 + $crate::__expr_counter!($($tail)*));
-        $crate::__build_vec_inner!(@ { items } $a($b), $($tail)*);
+        $crate::__build_requirement_vec_inner!(@ { items } $a($b), $($tail)*);
         items
     }};
 
     ($a:ident($b:expr) $(,)?) => {{
         let mut items = Vec::new();
-        $crate::__build_vec_inner!(@ { items } $a($b),);
+        $crate::__build_requirement_vec_inner!(@ { items } $a($b),);
         items
     }};
 }
@@ -343,16 +355,46 @@ macro_rules! build_vec {
 /// Low-level macro for building vecs. Not intended for general
 /// usage.
 #[macro_export]
-macro_rules! __build_vec_inner {
+macro_rules! __build_requirement_vec_inner {
     (@ { $this:ident } $a:ident($e:expr), $($tail:tt)*) => {
         $crate::args::__push(&mut $this, rule_requirement!($a($e)));
-        $crate::__build_vec_inner!(@ { $this } $($tail)*);
+        $crate::__build_requirement_vec_inner!(@ {$this } $($tail)*);
     };
     (@ { $this:ident } $a:ident($e:expr) $(,)*) => {
         $crate::args::__push(&mut $this, rule_requirement!($a($e)));
     };
-    
-    (@ { $this:ident } $(,)?) => { };
+}
+
+
+/// Utility macro for building multiple instruction arguments
+#[macro_export]
+macro_rules! build_restricted_vec {
+    () => (Vec::new());
+
+    ($a:ident($b:expr), $($tail:tt)*) => {{
+        let mut items = Vec::with_capacity(1 + $crate::__expr_counter!($($tail)*));
+        $crate::__build_restricted_vec_inner!(@ { items } $a($b), $($tail)*);
+        items
+    }};
+
+    ($a:ident($b:expr) $(,)?) => {{
+        let mut items = Vec::new();
+        $crate::__build_restricted_vec_inner!(@ { items } $a($b),);
+        items
+    }};
+}
+
+/// Low-level macro for building vecs. Not intended for general
+/// usage.
+#[macro_export]
+macro_rules! __build_restricted_vec_inner {
+    (@ { $this:ident } $a:ident($e:expr), $($tail:tt)*) => {
+        $crate::args::__push(&mut $this, restricted_access_rule!($a($e)));
+        $crate::__build_restricted_vec_inner!(@ {$this } $($tail)*);
+    };
+    (@ { $this:ident } $a:ident($e:expr) $(,)*) => {
+        $crate::args::__push(&mut $this, restricted_access_rule!($a($e)));
+    };
 }
 
 #[macro_export]
@@ -386,13 +428,15 @@ mod tests {
     use crate::{crypto::RistrettoPublicKeyBytes, models::ObjectKey};
 
     #[test]
-    fn build_vec_test() {
+    fn build_vec_test() {    
         let resource_address = ResourceAddress::new(ObjectKey::default());
         let component_address = ComponentAddress::new(ObjectKey::default());
+        /*
         let foo = build_vec!(component(component_address), resource(resource_address));
         eprintln!("{:?}", foo);
         let foo = build_vec!(component(component_address));
         eprintln!("{:?}", foo);
+         */
 
 
         let foo = require_rule!(any_of(component(component_address), resource(resource_address)));
@@ -400,6 +444,10 @@ mod tests {
         let foo = require_rule!(all_of(component(component_address), resource(resource_address)));
         eprintln!("{:?}", foo);
         let foo = require_rule!(component(component_address));
+        eprintln!("{:?}", foo);
+
+
+        let foo = restricted_access_rule!(any_of(component(component_address), resource(resource_address)));
         eprintln!("{:?}", foo);
     }
 
