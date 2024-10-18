@@ -21,8 +21,10 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use crate::{base_layer::config::EpochManagerConfig, error::EpochManagerError, EpochManagerEvent};
+use log::__private_api::loc;
 use log::*;
 use std::cell::{Cell, RefCell};
+use std::ops::DerefMut;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::{cmp, collections::HashMap, mem, num::NonZeroU32};
@@ -235,6 +237,13 @@ BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
         Ok(())
     }
 
+    fn validator_nodes_count(&self, next_epoch: Epoch, sidechain_id: Option<&PublicKey>) -> Result<u64, EpochManagerError> {
+        let mut tx = self.global_db.create_transaction()?;
+        let result = self.global_db.validator_nodes(&mut tx).count_by_epoch(next_epoch, sidechain_id)?;
+        tx.commit()?;
+        Ok(result)
+    }
+
     pub async fn add_validator_node_registration(
         &mut self,
         block_height: u64,
@@ -251,14 +260,13 @@ BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
         let mut next_epoch = constants.height_to_epoch(block_height) + Epoch(1);
         let validator_node_expiry = constants.validator_node_registration_expiry;
 
-        let mut tx = self.global_db.create_transaction()?;
-        let mut validator_nodes = self.global_db.validator_nodes(&mut tx);
-        
-        let max_vns_registered_in_epoch = 5; // TODO: this must come from Layer 2 consensus constants
-        // TODO: check if its okay or only count the number of vns registered in a specific epoch
-        let next_epoch_vn_count = validator_nodes.count(next_epoch, registration.sidechain_id())?;
-        if next_epoch_vn_count == max_vns_registered_in_epoch {
+        let max_vns_registered_in_epoch = 10; // TODO: this must come from Layer 2 consensus constants
+
+        // find the next available epoch
+        let mut next_epoch_vn_count = self.validator_nodes_count(next_epoch, registration.sidechain_id())?;
+        while next_epoch_vn_count == max_vns_registered_in_epoch {
             next_epoch += Epoch(1);
+            next_epoch_vn_count = self.validator_nodes_count(next_epoch, registration.sidechain_id())?;
         }
 
         let next_epoch_height = constants.epoch_to_height(next_epoch);
@@ -273,9 +281,8 @@ BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
 
         info!(target: LOG_TARGET, "Registering validator node for epoch {}", next_epoch);
 
-        // let mut tx = self.global_db.create_transaction()?;
-        // self.global_db.validator_nodes(&mut tx).insert_validator_node(
-        validator_nodes.insert_validator_node(
+        let mut tx = self.global_db.create_transaction()?;
+        self.global_db.validator_nodes(&mut tx).insert_validator_node(
             TAddr::derive_from_public_key(registration.public_key()),
             registration.public_key().clone(),
             shard_key,

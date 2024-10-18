@@ -469,6 +469,28 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         Ok(count.cnt as u64)
     }
 
+    fn validator_nodes_count_by_start_epoch(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        epoch: Epoch,
+        sidechain_id: Option<&PublicKey>,
+    ) -> Result<u64, Self::Error> {
+        let db_sidechain_id = sidechain_id.map(|id| id.as_bytes()).unwrap_or(&[0u8; 32]);
+
+        let count = sql_query(
+            "SELECT COUNT(distinct public_key) as cnt FROM validator_nodes WHERE start_epoch = ? AND sidechain_id = ?",
+        )
+            .bind::<BigInt, _>(epoch.as_u64() as i64)
+            .bind::<diesel::sql_types::Binary, _>(db_sidechain_id)
+            .get_result::<Count>(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "count_validator_nodes_by_start_epoch".to_string(),
+            })?;
+
+        Ok(count.cnt as u64)
+    }
+
     fn validator_nodes_count_for_shard_group(
         &self,
         tx: &mut Self::DbTransaction<'_>,
@@ -845,24 +867,6 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             Some(bmt) => Ok(Some(serde_json::from_slice(&bmt.bmt)?)),
             None => Ok(None),
         }
-    }
-
-    fn increment_vn_start_end_epochs(&self, tx: &mut Self::DbTransaction<'_>, vn_addresses: Vec<String>) -> Result<(), Self::Error> {
-        use crate::global::schema::validator_nodes;
-
-        let _ = diesel::update(validator_nodes::table)
-            .filter(validator_nodes::address.eq_any(vn_addresses.clone()))
-            .set((
-                validator_nodes::start_epoch.eq(validator_nodes::start_epoch + 1),
-                validator_nodes::end_epoch.eq(validator_nodes::end_epoch + 1)
-            ))
-            .execute(tx.connection())
-            .map_err(|source| SqliteStorageError::DieselError {
-                source,
-                operation: format!("increment_vn_start_end_epochs({:?})", vn_addresses),
-            })?;
-
-        Ok(())
     }
 }
 

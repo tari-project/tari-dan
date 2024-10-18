@@ -116,6 +116,12 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
     ) -> Result<u64, Self::Error>;
+    fn validator_nodes_count_by_start_epoch(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        epoch: Epoch,
+        sidechain_id: Option<&PublicKey>,
+    ) -> Result<u64, Self::Error>;
     fn validator_nodes_count_for_shard_group(
         &self,
         tx: &mut Self::DbTransaction<'_>,
@@ -187,10 +193,4 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         epoch: Epoch,
     ) -> Result<Option<ValidatorNodeBalancedMerkleTree>, Self::Error>;
-
-    fn increment_vn_start_end_epochs(
-        &self,
-        tx: &mut Self::DbTransaction<'_>,
-        vn_addresses: Vec<String>,
-    ) -> Result<(), Self::Error>;
 }
