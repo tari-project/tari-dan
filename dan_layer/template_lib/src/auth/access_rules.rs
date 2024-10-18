@@ -308,6 +308,19 @@ macro_rules! rule {
     };
 }
 
+#[macro_export]
+macro_rules! require_rule {
+    (any_of($($tail:tt)*)) => {
+        RequireRule::AnyOf(build_vec!($($tail)*))
+    };
+    (all_of($($tail:tt)*)) => {
+        RequireRule::AllOf(build_vec!($($tail)*))
+    };
+    ($a:ident($b:expr)) => {
+        RequireRule::Require(rule_requirement!($a($b)));
+    };
+}
+
 
 /// Utility macro for building multiple instruction arguments
 #[macro_export]
@@ -379,7 +392,15 @@ mod tests {
         let foo = build_vec!(component(component_address), resource(resource_address));
         eprintln!("{:?}", foo);
         let foo = build_vec!(component(component_address));
-        eprintln!("{:?}", foo)
+        eprintln!("{:?}", foo);
+
+
+        let foo = require_rule!(any_of(component(component_address), resource(resource_address)));
+        eprintln!("{:?}", foo);
+        let foo = require_rule!(all_of(component(component_address), resource(resource_address)));
+        eprintln!("{:?}", foo);
+        let foo = require_rule!(component(component_address));
+        eprintln!("{:?}", foo);
     }
 
     #[test]
