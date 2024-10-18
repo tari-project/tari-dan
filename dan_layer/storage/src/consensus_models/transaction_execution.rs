@@ -7,7 +7,7 @@ use tari_engine_types::commit_result::{ExecuteResult, RejectReason};
 use tari_transaction::TransactionId;
 
 use crate::{
-    consensus_models::{BlockId, Decision, VersionedSubstateIdLockIntent},
+    consensus_models::{AbortReason, BlockId, Decision, VersionedSubstateIdLockIntent},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -48,8 +48,8 @@ impl TransactionExecution {
     }
 
     pub fn decision(&self) -> Decision {
-        if self.abort_reason.is_some() {
-            return Decision::Abort;
+        if let Some(reject_reason) = &self.abort_reason {
+            return Decision::Abort(AbortReason::from(reject_reason));
         }
         Decision::from(&self.result.finalize.result)
     }

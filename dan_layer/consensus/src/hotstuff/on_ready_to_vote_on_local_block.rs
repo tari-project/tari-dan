@@ -15,6 +15,7 @@ use tari_dan_common_types::{
 };
 use tari_dan_storage::{
     consensus_models::{
+        AbortReason,
         Block,
         BlockDiff,
         BlockId,
@@ -643,7 +644,7 @@ where TConsensusSpec: ConsensusSpec
                         block,
                     );
                     return Ok(Some(NoVoteReason::DecisionDisagreement {
-                        local: Decision::Abort,
+                        local: Decision::Abort(AbortReason::LockInputsOutputsFailed),
                         remote: Decision::Commit,
                     }));
                 }
@@ -781,8 +782,9 @@ where TConsensusSpec: ConsensusSpec
                                 .update(&multishard.to_initial_evidence(local_committee_info));
                         }
                     },
-                    Decision::Abort => {
+                    Decision::Abort(reason) => {
                         // CASE: The transaction was ABORTed due to a lock conflict
+                        warn!(target: LOG_TARGET, "⚠️ Multi-shard prepared transaction aborted: {reason:?}");
                         let execution = multishard.into_execution().expect("Abort should have execution");
                         tx_rec.update_from_execution(
                             local_committee_info.num_preshards(),
@@ -983,7 +985,7 @@ where TConsensusSpec: ConsensusSpec
                             block,
                         );
                         return Ok(Some(NoVoteReason::DecisionDisagreement {
-                            local: Decision::Abort,
+                            local: Decision::Abort(AbortReason::LeaderProposalVsLocalDecisionMismatch),
                             remote: Decision::Commit,
                         }));
                     }
@@ -998,7 +1000,7 @@ where TConsensusSpec: ConsensusSpec
 
                     execution.set_abort_reason(RejectReason::FailedToLockOutputs(err.to_string()));
 
-                    tx_rec.set_local_decision(Decision::Abort);
+                    tx_rec.set_local_decision(Decision::Abort(AbortReason::LockOutputsFailed));
                     tx_rec.set_transaction_fee(0);
                     tx_rec.set_next_stage(TransactionPoolStage::AllPrepared)?;
 
@@ -1082,7 +1084,7 @@ where TConsensusSpec: ConsensusSpec
                 block.id(),
             );
             return Ok(Some(NoVoteReason::DecisionDisagreement {
-                local: Decision::Abort,
+                local: Decision::Abort(AbortReason::TransactionAtomMustBeAbort),
                 remote: Decision::Commit,
             }));
         }
@@ -1110,7 +1112,7 @@ where TConsensusSpec: ConsensusSpec
             );
             return Ok(Some(NoVoteReason::DecisionDisagreement {
                 local: Decision::Commit,
-                remote: Decision::Abort,
+                remote: Decision::Abort(AbortReason::LeaderProposalVsLocalDecisionMismatch),
             }));
         }
 
@@ -1271,7 +1273,7 @@ where TConsensusSpec: ConsensusSpec
             );
             return Ok(Some(NoVoteReason::DecisionDisagreement {
                 local: Decision::Commit,
-                remote: Decision::Abort,
+                remote: Decision::Abort(AbortReason::TransactionAtomMustBeCommit),
             }));
         }
 
@@ -1309,7 +1311,7 @@ where TConsensusSpec: ConsensusSpec
                 block,
             );
             return Ok(Some(NoVoteReason::DecisionDisagreement {
-                local: Decision::Abort,
+                local: Decision::Abort(AbortReason::LeaderProposalVsLocalDecisionMismatch),
                 remote: Decision::Commit,
             }));
         }
@@ -1400,7 +1402,7 @@ where TConsensusSpec: ConsensusSpec
                 block.id(),
             );
             return Ok(Some(NoVoteReason::DecisionDisagreement {
-                local: Decision::Abort,
+                local: Decision::Abort(AbortReason::TransactionAtomMustBeAbort),
                 remote: Decision::Commit,
             }));
         }
@@ -1443,7 +1445,7 @@ where TConsensusSpec: ConsensusSpec
             );
             return Ok(Some(NoVoteReason::DecisionDisagreement {
                 local: Decision::Commit,
-                remote: Decision::Abort,
+                remote: Decision::Abort(AbortReason::LeaderProposalVsLocalDecisionMismatch),
             }));
         }
 

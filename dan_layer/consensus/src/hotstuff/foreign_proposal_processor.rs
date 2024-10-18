@@ -493,7 +493,8 @@ fn validate_and_add_pledges(
                 pledges,
             );
         },
-        Decision::Abort => {
+        Decision::Abort(reason) => {
+            info!(target: LOG_TARGET, "⚠️ Remote decided ABORT({reason:?}) but provided pledges.");
             if block_pledge.contains(&atom.id) {
                 return Err(ProposalValidationError::ForeignInvalidPledge {
                     block_id: *foreign_block_id,

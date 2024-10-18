@@ -28,6 +28,8 @@ import App from "./App";
 import Connections from "./routes/Connections/Connections";
 import RecentTransactions from "./routes/RecentTransactions/RecentTransactions";
 import ErrorPage from "./routes/ErrorPage";
+import Events from "./routes/Events/Events";
+import Substates from "./routes/Substates/Substates";
 
 const router = createBrowserRouter([
   {
@@ -42,6 +44,14 @@ const router = createBrowserRouter([
       {
         path: "transactions",
         element: <RecentTransactions />,
+      },
+      {
+        path: "events",
+        element: <Events />,
+      },
+      {
+        path: "substates",
+        element: <Substates />,
       },
       {
         path: "app",

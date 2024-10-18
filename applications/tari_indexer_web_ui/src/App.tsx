@@ -25,6 +25,8 @@ import ValidatorNode from "./routes/VN/ValidatorNode";
 import Connections from "./routes/Connections/Connections";
 import RecentTransactions from "./routes/RecentTransactions/RecentTransactions";
 import NftGallery from "./routes/NftGallery/NftGallery";
+import Events from "./routes/Events/Events";
+import Substates from "./routes/Substates/Substates";
 import ErrorPage from "./routes/ErrorPage";
 import Layout from "./theme/LayoutMain";
 
@@ -50,6 +52,16 @@ export const breadcrumbRoutes = [
     dynamic: true,
   },
   {
+    label: "Events",
+    path: "/events",
+    dynamic: false,
+  },
+  {
+    label: "Substates",
+    path: "/substates",
+    dynamic: false,
+  },
+  {
     label: "Error",
     path: "*",
     dynamic: false,
@@ -64,6 +76,8 @@ export default function App() {
           <Route path="connections" element={<Connections />} />
           <Route path="nfts/:resourceAddress" element={<NftGallery />} />
           <Route path="transactions" element={<RecentTransactions />} />
+          <Route path="events" element={<Events />} />
+          <Route path="substates" element={<Substates />} />
           <Route path="*" element={<ErrorPage />} />
         </Route>
       </Routes>
