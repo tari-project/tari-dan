@@ -360,3 +360,79 @@ mod tests {
         AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(requirement)))
     }
 }
+
+
+
+#[macro_export]
+macro_rules! create_list {
+    ( $n:expr ) => {
+        {
+            let mut vec = Vec::new();
+            vec.push($n);
+            vec
+        }
+    };
+    ( $n:expr, $($tail:tt)*) => {
+        {
+            let mut vec = Vec::new();
+            vec.push($n);
+            let mut tail_vec = create_list!($($tail)*);
+            vec.append(&mut tail_vec);
+            vec
+        }
+    };
+}
+
+#[test]
+fn macro_list() {
+    let foo = create_list!("foo", "bar");
+    eprintln!("{:?}", foo)
+}
+
+/// Utility macro for building multiple instruction arguments
+#[macro_export]
+macro_rules! build_vec {
+    () => (Vec::new());
+
+    ($item:expr, $($tail:tt)*) => {{
+        let mut items = Vec::with_capacity(1 + $crate::__expr_counter!($($tail)*));
+        $crate::__build_vec_inner!(@ { items } $item, $($tail)*);
+        items
+    }};
+
+    ($item:expr $(,)?) => {{
+        let mut items = Vec::new();
+        $crate::__build_vec_inner!(@ { items } $item,);
+        items
+    }};
+}
+
+/// Low-level macro for building vecs. Not intended for general
+/// usage.
+#[macro_export]
+macro_rules! __build_vec_inner {
+    (@ { $this:ident } $e:expr, $($tail:tt)*) => {
+        $crate::args::__push(&mut $this, $e);
+        $crate::__build_vec_inner!(@ { $this } $($tail)*);
+    };
+
+    (@ { $this:ident } $e:expr $(,)*) => {
+        $crate::args::__push(&mut $this, $e);
+    };
+
+    (@ { $this:ident } $(,)?) => { };
+}
+
+// This is a workaround for a false positive for `clippy::vec_init_then_push` with this macro. We cannot ignore this
+// lint as expression attrs are experimental.
+#[allow(clippy::inline_always)]
+#[inline(always)]
+pub fn __push<T>(v: &mut Vec<T>, arg: T) {
+    v.push(arg);
+}
+
+#[test]
+fn build_vec_test() {
+    let foo = build_vec!("foo", "bar");
+    eprintln!("{:?}", foo)
+}
