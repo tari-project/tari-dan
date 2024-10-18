@@ -170,7 +170,7 @@ fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
         })
         .unwrap_or_else(|| std::env::current_dir().unwrap().join("data").join("swarm"));
 
-    fs::create_dir_all(&base_dir)?;
+    std::fs::create_dir_all(&base_dir)?;
 
     Ok(Config {
         skip_registration: false,
