@@ -331,39 +331,31 @@ macro_rules! build_vec {
 /// usage.
 #[macro_export]
 macro_rules! __build_vec_inner {
-    (@ { $this:ident } component($e:expr), $($tail:tt)*) => {
-        $crate::args::__push(&mut $this, RuleRequirement::ScopedToComponent($e));
+    (@ { $this:ident } $a:ident($e:expr), $($tail:tt)*) => {
+        $crate::args::__push(&mut $this, rule_requirement!($a($e)));
         $crate::__build_vec_inner!(@ { $this } $($tail)*);
     };
-    (@ { $this:ident } component($e:expr) $(,)*) => {
-        $crate::args::__push(&mut $this, RuleRequirement::ScopedToComponent($e));
-    };
-
-    (@ { $this:ident } resource($e:expr), $($tail:tt)*) => {
-        $crate::args::__push(&mut $this, RuleRequirement::Resource($e));
-        $crate::__build_vec_inner!(@ { $this } $($tail)*);
-    };
-    (@ { $this:ident } resource($e:expr) $(,)*) => {
-        $crate::args::__push(&mut $this, RuleRequirement::Resource($e));
-    };
-
-    (@ { $this:ident } non_fungible($e:expr), $($tail:tt)*) => {
-        $crate::args::__push(&mut $this, RuleRequirement::NonFungibleAddress($e));
-        $crate::__build_vec_inner!(@ { $this } $($tail)*);
-    };
-    (@ { $this:ident } non_fungible($e:expr) $(,)*) => {
-        $crate::args::__push(&mut $this, RuleRequirement::NonFungibleAddress($e));
-    };
-
-    (@ { $this:ident } template($e:expr), $($tail:tt)*) => {
-        $crate::args::__push(&mut $this, RuleRequirement::ScopedToTemplate($e));
-        $crate::__build_vec_inner!(@ { $this } $($tail)*);
-    };
-    (@ { $this:ident } template($e:expr) $(,)*) => {
-        $crate::args::__push(&mut $this, RuleRequirement::ScopedToTemplate($e));
+    (@ { $this:ident } $a:ident($e:expr) $(,)*) => {
+        $crate::args::__push(&mut $this, rule_requirement!($a($e)));
     };
     
     (@ { $this:ident } $(,)?) => { };
+}
+
+#[macro_export]
+macro_rules! rule_requirement {
+    (resource($x: expr)) => {
+        RuleRequirement::Resource($x)
+    };
+    (non_fungible($x: expr)) => {
+       RuleRequirement::NonFungibleAddress($x)
+    };
+    (component($x: expr)) => {
+        RuleRequirement::ScopedToComponent($x)
+    };
+    (template($x: expr)) => {
+        RuleRequirement::ScopedToTemplate($x)
+    };
 }
 
 // This is a workaround for a false positive for `clippy::vec_init_then_push` with this macro. We cannot ignore this
