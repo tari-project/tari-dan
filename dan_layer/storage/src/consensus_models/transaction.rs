@@ -18,6 +18,7 @@ use tari_transaction::{Transaction, TransactionId};
 
 use crate::{
     consensus_models::{
+        AbortReason,
         BlockId,
         Decision,
         ExecutedTransaction,
@@ -123,7 +124,7 @@ impl TransactionRecord {
 
     pub fn current_decision(&self) -> Decision {
         self.final_decision
-            .or_else(|| self.abort_reason.as_ref().map(|_| Decision::Abort))
+            .or_else(|| self.abort_reason.as_ref().map(|reason| Decision::Abort(AbortReason::from(reason))))
             .or_else(|| self.execution_decision())
             // We will choose to commit a transaction unless (1) we aborted it, (2) the execution has failed
             .unwrap_or(Decision::Commit)

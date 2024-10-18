@@ -207,12 +207,11 @@ impl<TMsg: MessageSpec> ValidatorNodeRpcClient for TariValidatorNodeRpcClient<TM
         match PayloadResultStatus::try_from(response.status) {
             Ok(PayloadResultStatus::Pending) => Ok(TransactionResultStatus::Pending),
             Ok(PayloadResultStatus::Finalized) => {
-                let proto_decision = proto::consensus::Decision::try_from(response.final_decision).map_err(|_| {
-                    ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
-                        "Invalid decision value {}",
-                        response.final_decision
-                    ))
-                })?;
+                let proto_decision = response
+                    .final_decision
+                    .ok_or(ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
+                        "Missing decision!"
+                    )))?;
                 let final_decision = proto_decision
                     .try_into()
                     .map_err(ValidatorNodeRpcClientError::InvalidResponse)?;

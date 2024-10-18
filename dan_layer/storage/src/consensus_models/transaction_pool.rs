@@ -383,7 +383,7 @@ impl TransactionPoolRecord {
             TransactionPoolStage::LocalAccepted => match self.current_decision() {
                 Decision::Commit => self.evidence.all_addresses_accepted(),
                 // If we have decided to abort, we can continue if all input addresses are justified
-                Decision::Abort => self.evidence.all_inputs_prepared(),
+                Decision::Abort(_) => self.evidence.all_inputs_prepared(),
             },
             TransactionPoolStage::AllAccepted |
             TransactionPoolStage::SomeAccepted |

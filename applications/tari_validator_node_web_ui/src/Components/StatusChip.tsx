@@ -20,40 +20,39 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { Chip, Avatar } from "@mui/material";
-import { IoCheckmarkOutline, IoHourglassOutline, IoCloseOutline, IoBandageOutline } from "react-icons/io5";
-import { Decision } from "@tari-project/typescript-bindings";
+import {Avatar, Chip} from "@mui/material";
+import {IoBandageOutline, IoCheckmarkOutline, IoCloseOutline, IoHourglassOutline} from "react-icons/io5";
 
 interface StatusChipProps {
-  status: Decision | "Commit" | "Pending" | "Dummy";
-  showTitle?: boolean;
+    status: "Commit" | "Abort" | "Pending" | "Dummy";
+    showTitle?: boolean;
 }
 
 const colorList: Record<string, string> = {
-  Commit: "#5F9C91",
-  Pending: "#ECA86A",
-  Abort: "#DB7E7E",
-  Dummy: "#C0C0C0",
+    Commit: "#5F9C91",
+    Pending: "#ECA86A",
+    Abort: "#DB7E7E",
+    Dummy: "#C0C0C0",
 };
 
 const iconList: Record<string, JSX.Element> = {
-  Commit: <IoCheckmarkOutline style={{ height: 14, width: 14 }} color="#FFF" />,
-  Pending: <IoHourglassOutline style={{ height: 14, width: 14 }} color="#FFF" />,
-  Abort: <IoCloseOutline style={{ height: 14, width: 14 }} color="#FFF" />,
-  Dummy: <IoBandageOutline style={{ height: 14, width: 14 }} color="#FFF" />,
+    Commit: <IoCheckmarkOutline style={{height: 14, width: 14}} color="#FFF"/>,
+    Pending: <IoHourglassOutline style={{height: 14, width: 14}} color="#FFF"/>,
+    Abort: <IoCloseOutline style={{height: 14, width: 14}} color="#FFF"/>,
+    Dummy: <IoBandageOutline style={{height: 14, width: 14}} color="#FFF"/>,
 };
 
-export default function StatusChip({ status, showTitle = true }: StatusChipProps) {
-  if (!showTitle) {
-    return <Avatar sx={{ bgcolor: colorList[status], height: 22, width: 22 }}>{iconList[status]}</Avatar>;
-  } else {
-    return (
-      <Chip
-        avatar={<Avatar sx={{ bgcolor: colorList[status] }}>{iconList[status]}</Avatar>}
-        label={status}
-        style={{ color: colorList[status], borderColor: colorList[status] }}
-        variant="outlined"
-      />
-    );
-  }
+export default function StatusChip({status, showTitle = true}: StatusChipProps) {
+    if (!showTitle) {
+        return <Avatar sx={{bgcolor: colorList[status], height: 22, width: 22}}>{iconList[status]}</Avatar>;
+    } else {
+        return (
+            <Chip
+                avatar={<Avatar sx={{bgcolor: colorList[status]}}>{iconList[status]}</Avatar>}
+                label={status}
+                style={{color: colorList[status], borderColor: colorList[status]}}
+                variant="outlined"
+            />
+        );
+    }
 }
