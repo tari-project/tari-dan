@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
+    env,
     io,
     path::{Path, PathBuf},
 };
@@ -169,6 +170,8 @@ impl ExecutableManager {
 fn cargo_build<P: AsRef<Path>>(working_dir: P, package: &str) -> io::Result<Child> {
     Command::new("cargo")
         .args(["build", "--release", "--bin", package])
+        // Ensure host environment vars are available
+        .envs(env::vars())
         .current_dir(working_dir)
         .kill_on_drop(true)
         .spawn()
