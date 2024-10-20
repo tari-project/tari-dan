@@ -297,10 +297,10 @@ macro_rules! rule {
 #[macro_export]
 macro_rules! __restricted_access_rule {
     (any_of($($tail:tt)*)) => {
-        RestrictedAccessRule::AnyOf($crate::__build_restricted_vec!($($tail)*))
+        RestrictedAccessRule::AnyOf($crate::__build_vec!(@ {__restricted_access_rule} $($tail)*))
     };
     (all_of($($tail:tt)*)) => {
-        RestrictedAccessRule::AllOf($crate::__build_restricted_vec!($($tail)*))
+        RestrictedAccessRule::AllOf($crate::__build_vec!(@ {__restricted_access_rule} $($tail)*))
     };
     ($a:ident($b:expr)) => {
         RestrictedAccessRule::Require($crate::__require_rule!($a($b)))
@@ -310,69 +310,13 @@ macro_rules! __restricted_access_rule {
 #[macro_export]
 macro_rules! __require_rule {
     (any_of($($tail:tt)*)) => {
-        RequireRule::AnyOf($crate::__build_requirement_vec!($($tail)*))
+        RequireRule::AnyOf($crate::__build_vec!(@ {__rule_requirement} $($tail)*))
     };
     (all_of($($tail:tt)*)) => {
-        RequireRule::AllOf($crate::__build_requirement_vec!($($tail)*))
+        RequireRule::AllOf($crate::__build_vec!(@ {__rule_requirement} $($tail)*))
     };
     ($a:ident($b:expr)) => {
         RequireRule::Require($crate::__rule_requirement!($a($b)))
-    };
-}
-
-#[macro_export]
-macro_rules! __build_requirement_vec {
-    () => (Vec::new());
-
-    ($a:ident($b:expr), $($tail:tt)*) => {{
-        let mut items = Vec::with_capacity(1 + $crate::__expr_counter!($($tail)*));
-        $crate::__build_requirement_vec_inner!(@ { items } $a($b), $($tail)*);
-        items
-    }};
-
-    ($a:ident($b:expr) $(,)?) => {{
-        let mut items = Vec::new();
-        $crate::__build_requirement_vec_inner!(@ { items } $a($b),);
-        items
-    }};
-}
-
-#[macro_export]
-macro_rules! __build_requirement_vec_inner {
-    (@ { $this:ident } $a:ident($e:expr), $($tail:tt)*) => {
-        $crate::args::__push(&mut $this, $crate::__rule_requirement!($a($e)));
-        $crate::__build_requirement_vec_inner!(@ {$this } $($tail)*);
-    };
-    (@ { $this:ident } $a:ident($e:expr) $(,)*) => {
-        $crate::args::__push(&mut $this, $crate::__rule_requirement!($a($e)));
-    };
-}
-
-#[macro_export]
-macro_rules! __build_restricted_vec {
-    () => (Vec::new());
-
-    ($a:ident($b:expr), $($tail:tt)*) => {{
-        let mut items = Vec::with_capacity(1 + $crate::__expr_counter!($($tail)*));
-        $crate::__build_restricted_vec_inner!(@ { items } $a($b), $($tail)*);
-        items
-    }};
-
-    ($a:ident($b:expr) $(,)?) => {{
-        let mut items = Vec::new();
-        $crate::__build_restricted_vec_inner!(@ { items } $a($b),);
-        items
-    }};
-}
-
-#[macro_export]
-macro_rules! __build_restricted_vec_inner {
-    (@ { $this:ident } $a:ident($e:expr), $($tail:tt)*) => {
-        $crate::args::__push(&mut $this, $crate::__restricted_access_rule!($a($e)));
-        $crate::__build_restricted_vec_inner!(@ {$this } $($tail)*);
-    };
-    (@ { $this:ident } $a:ident($e:expr) $(,)*) => {
-        $crate::args::__push(&mut $this, $crate::__restricted_access_rule!($a($e)));
     };
 }
 
@@ -389,6 +333,35 @@ macro_rules! __rule_requirement {
     };
     (template($x: expr)) => {
         RuleRequirement::ScopedToTemplate($x)
+    };
+}
+
+
+#[macro_export]
+macro_rules! __build_vec {
+    () => (Vec::new());
+
+    (@ {$item_fn:ident} $a:ident($b:expr), $($tail:tt)*) => {{
+        let mut items = Vec::with_capacity(1 + $crate::__expr_counter!($($tail)*));
+        $crate::__build_vec_inner!(@ { items, $item_fn } $a($b), $($tail)*);
+        items
+    }};
+
+    (@ {$item_fn:ident} $a:ident($b:expr) $(,)?) => {{
+        let mut items = Vec::new();
+        $crate::__build_vec_inner!(@ { items, $item_fn } $a($b),);
+        items
+    }};
+}
+
+#[macro_export]
+macro_rules! __build_vec_inner {
+    (@ { $this:ident, $item_fn:ident } $a:ident($e:expr), $($tail:tt)*) => {
+        $crate::args::__push(&mut $this, $crate::$item_fn!($a($e)));
+        $crate::__build_vec_inner!(@ {$this, $item_fn } $($tail)*);
+    };
+    (@ { $this:ident, $item_fn:ident } $a:ident($e:expr) $(,)*) => {
+        $crate::args::__push(&mut $this, $crate::$item_fn!($a($e)));
     };
 }
 
