@@ -226,7 +226,7 @@ mod component_access_rules {
 
 mod resource_access_rules {
     use tari_dan_engine::runtime::LockError;
-    use tari_template_lib::{rule};
+    use tari_template_lib::rule;
 
     use super::*;
 

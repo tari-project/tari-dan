@@ -9,7 +9,8 @@ use tari_template_lib::{
     auth::AccessRule,
     constants::XTR,
     models::{Amount, ComponentAddress, ResourceAddress},
-    prelude::AccessRules, rule,
+    prelude::AccessRules,
+    rule,
 };
 use tari_template_test_tooling::{
     support::assert_error::{assert_access_denied_for_action, assert_reject_reason},

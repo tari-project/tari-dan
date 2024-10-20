@@ -336,7 +336,6 @@ macro_rules! __rule_requirement {
     };
 }
 
-
 #[macro_export]
 macro_rules! __build_vec {
     () => (Vec::new());
@@ -417,8 +416,10 @@ mod tests {
         assert_eq!(
             rule,
             AccessRule::Restricted(RestrictedAccessRule::AnyOf(vec![
-                RestrictedAccessRule::Require(RequireRule::Require(RuleRequirement::ScopedToComponent(component_address))),
-                RestrictedAccessRule::Require(RequireRule::Require(RuleRequirement::Resource(resource_address))), 
+                RestrictedAccessRule::Require(RequireRule::Require(RuleRequirement::ScopedToComponent(
+                    component_address
+                ))),
+                RestrictedAccessRule::Require(RequireRule::Require(RuleRequirement::Resource(resource_address))),
             ]))
         );
 
@@ -426,8 +427,10 @@ mod tests {
         assert_eq!(
             rule,
             AccessRule::Restricted(RestrictedAccessRule::AllOf(vec![
-                RestrictedAccessRule::Require(RequireRule::Require(RuleRequirement::ScopedToComponent(component_address))),
-                RestrictedAccessRule::Require(RequireRule::Require(RuleRequirement::Resource(resource_address))), 
+                RestrictedAccessRule::Require(RequireRule::Require(RuleRequirement::ScopedToComponent(
+                    component_address
+                ))),
+                RestrictedAccessRule::Require(RequireRule::Require(RuleRequirement::Resource(resource_address))),
             ]))
         );
     }
