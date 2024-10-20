@@ -145,10 +145,10 @@ mod access_rules_template {
 
             let badge_resource = badges.resource_address();
             let tokens = ResourceBuilder::fungible()
-                .mintable(rule!(non_fungible(badge_resource)))
-                .burnable(rule!(non_fungible(badge_resource)))
-                .withdrawable(rule!(non_fungible(badge_resource)))
-                .depositable(rule!(non_fungible(badge_resource)))
+                .mintable(rule!(resource(badge_resource)))
+                .burnable(rule!(resource(badge_resource)))
+                .withdrawable(rule!(resource(badge_resource)))
+                .depositable(rule!(resource(badge_resource)))
                 .initial_supply(1000);
 
             Component::new(Self {
@@ -167,7 +167,7 @@ mod access_rules_template {
 
             let allocation = CallerContext::allocate_component_address(None);
             let tokens = ResourceBuilder::fungible()
-                .mintable(rule!(non_fungible(allocation.address())))
+                .mintable(rule!(component(*allocation.address())))
                 // Only access rules apply, this just makes the test simpler because we do not need to change the transaction signer
                 .with_owner_rule(OwnerRule::None)
                 .initial_supply(1000);
