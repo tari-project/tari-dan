@@ -6,7 +6,7 @@ use tari_template_abi::rust::collections::BTreeMap;
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
-use crate::{component, models::{ComponentAddress, NonFungibleAddress, ObjectKey, ResourceAddress, TemplateAddress}};
+use crate::models::{ComponentAddress, NonFungibleAddress, ResourceAddress, TemplateAddress};
 
 /// Represents the types of possible access control rules over a component method or resource
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -289,54 +289,39 @@ macro_rules! rule {
     (deny_all) => {
         AccessRule::DenyAll
     };
-
-    (resource($x: expr)) => {
-        rule! { @access_rule (RuleRequirement::Resource($x)) }
-    };
-    (non_fungible($x: expr)) => {
-        rule! { @access_rule (RuleRequirement::NonFungibleAddress($x)) }
-    };
-    (component($x: expr)) => {
-        rule! { @access_rule (RuleRequirement::ScopedToComponent($x)) }
-    };
-    (template($x: expr)) => {
-        rule! { @access_rule (RuleRequirement::ScopedToTemplate($x)) }
-    };
-
-    (@access_rule ($x: expr)) => {
-        AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require($x)))
+    ($($tail:tt)*) => {
+        AccessRule::Restricted($crate::__restricted_access_rule!($($tail)*))
     };
 }
 
 #[macro_export]
-macro_rules! restricted_access_rule {
+macro_rules! __restricted_access_rule {
     (any_of($($tail:tt)*)) => {
-        RestrictedAccessRule::AnyOf(build_restricted_vec!($($tail)*))
+        RestrictedAccessRule::AnyOf($crate::__build_restricted_vec!($($tail)*))
     };
     (all_of($($tail:tt)*)) => {
-        RestrictedAccessRule::AllOf(build_restricted_vec!($($tail)*))
+        RestrictedAccessRule::AllOf($crate::__build_restricted_vec!($($tail)*))
     };
     ($a:ident($b:expr)) => {
-        RestrictedAccessRule::Require(require_rule!($a($b)));
+        RestrictedAccessRule::Require($crate::__require_rule!($a($b)))
     };
 }
 
 #[macro_export]
-macro_rules! require_rule {
+macro_rules! __require_rule {
     (any_of($($tail:tt)*)) => {
-        RequireRule::AnyOf(build_requirement_vec!($($tail)*))
+        RequireRule::AnyOf($crate::__build_requirement_vec!($($tail)*))
     };
     (all_of($($tail:tt)*)) => {
-        RequireRule::AllOf(build_requirement_vec!($($tail)*))
+        RequireRule::AllOf($crate::__build_requirement_vec!($($tail)*))
     };
     ($a:ident($b:expr)) => {
-        RequireRule::Require(rule_requirement!($a($b)))
+        RequireRule::Require($crate::__rule_requirement!($a($b)))
     };
 }
 
-/// Utility macro for building multiple instruction arguments
 #[macro_export]
-macro_rules! build_requirement_vec {
+macro_rules! __build_requirement_vec {
     () => (Vec::new());
 
     ($a:ident($b:expr), $($tail:tt)*) => {{
@@ -352,23 +337,19 @@ macro_rules! build_requirement_vec {
     }};
 }
 
-/// Low-level macro for building vecs. Not intended for general
-/// usage.
 #[macro_export]
 macro_rules! __build_requirement_vec_inner {
     (@ { $this:ident } $a:ident($e:expr), $($tail:tt)*) => {
-        $crate::args::__push(&mut $this, rule_requirement!($a($e)));
+        $crate::args::__push(&mut $this, $crate::__rule_requirement!($a($e)));
         $crate::__build_requirement_vec_inner!(@ {$this } $($tail)*);
     };
     (@ { $this:ident } $a:ident($e:expr) $(,)*) => {
-        $crate::args::__push(&mut $this, rule_requirement!($a($e)));
+        $crate::args::__push(&mut $this, $crate::__rule_requirement!($a($e)));
     };
 }
 
-
-/// Utility macro for building multiple instruction arguments
 #[macro_export]
-macro_rules! build_restricted_vec {
+macro_rules! __build_restricted_vec {
     () => (Vec::new());
 
     ($a:ident($b:expr), $($tail:tt)*) => {{
@@ -384,21 +365,19 @@ macro_rules! build_restricted_vec {
     }};
 }
 
-/// Low-level macro for building vecs. Not intended for general
-/// usage.
 #[macro_export]
 macro_rules! __build_restricted_vec_inner {
     (@ { $this:ident } $a:ident($e:expr), $($tail:tt)*) => {
-        $crate::args::__push(&mut $this, restricted_access_rule!($a($e)));
+        $crate::args::__push(&mut $this, $crate::__restricted_access_rule!($a($e)));
         $crate::__build_restricted_vec_inner!(@ {$this } $($tail)*);
     };
     (@ { $this:ident } $a:ident($e:expr) $(,)*) => {
-        $crate::args::__push(&mut $this, restricted_access_rule!($a($e)));
+        $crate::args::__push(&mut $this, $crate::__restricted_access_rule!($a($e)));
     };
 }
 
 #[macro_export]
-macro_rules! rule_requirement {
+macro_rules! __rule_requirement {
     (resource($x: expr)) => {
         RuleRequirement::Resource($x)
     };
@@ -413,43 +392,10 @@ macro_rules! rule_requirement {
     };
 }
 
-// This is a workaround for a false positive for `clippy::vec_init_then_push` with this macro. We cannot ignore this
-// lint as expression attrs are experimental.
-#[allow(clippy::inline_always)]
-#[inline(always)]
-pub fn __push<T>(v: &mut Vec<T>, arg: T) {
-    v.push(arg);
-}
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{crypto::RistrettoPublicKeyBytes, models::ObjectKey};
-
-    #[test]
-    fn build_vec_test() {    
-        let resource_address = ResourceAddress::new(ObjectKey::default());
-        let component_address = ComponentAddress::new(ObjectKey::default());
-        /*
-        let foo = build_vec!(component(component_address), resource(resource_address));
-        eprintln!("{:?}", foo);
-        let foo = build_vec!(component(component_address));
-        eprintln!("{:?}", foo);
-         */
-
-
-        let foo = require_rule!(any_of(component(component_address), resource(resource_address)));
-        eprintln!("{:?}", foo);
-        let foo = require_rule!(all_of(component(component_address), resource(resource_address)));
-        eprintln!("{:?}", foo);
-        let foo = require_rule!(component(component_address));
-        eprintln!("{:?}", foo);
-
-
-        let foo = restricted_access_rule!(any_of(component(component_address), resource(resource_address)));
-        eprintln!("{:?}", foo);
-    }
 
     #[test]
     fn it_builds_correct_access_rules() {
@@ -491,6 +437,25 @@ mod tests {
         assert_eq!(
             rule,
             access_rule_from_requirement(RuleRequirement::NonFungibleAddress(non_fungible_address))
+        );
+
+        // composition of rules
+        let rule = rule!(any_of(component(component_address), resource(resource_address)));
+        assert_eq!(
+            rule,
+            AccessRule::Restricted(RestrictedAccessRule::AnyOf(vec![
+                RestrictedAccessRule::Require(RequireRule::Require(RuleRequirement::ScopedToComponent(component_address))),
+                RestrictedAccessRule::Require(RequireRule::Require(RuleRequirement::Resource(resource_address))), 
+            ]))
+        );
+
+        let rule = rule!(all_of(component(component_address), resource(resource_address)));
+        assert_eq!(
+            rule,
+            AccessRule::Restricted(RestrictedAccessRule::AllOf(vec![
+                RestrictedAccessRule::Require(RequireRule::Require(RuleRequirement::ScopedToComponent(component_address))),
+                RestrictedAccessRule::Require(RequireRule::Require(RuleRequirement::Resource(resource_address))), 
+            ]))
         );
     }
 
