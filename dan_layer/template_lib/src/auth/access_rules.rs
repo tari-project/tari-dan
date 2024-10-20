@@ -326,7 +326,7 @@ macro_rules! __rule_requirement {
         RuleRequirement::Resource($x)
     };
     (non_fungible($x: expr)) => {
-       RuleRequirement::NonFungibleAddress($x)
+        RuleRequirement::NonFungibleAddress($x)
     };
     (component($x: expr)) => {
         RuleRequirement::ScopedToComponent($x)

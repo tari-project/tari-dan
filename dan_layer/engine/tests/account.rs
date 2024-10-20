@@ -9,7 +9,7 @@ use tari_template_lib::{
     auth::AccessRule,
     constants::XTR,
     models::{Amount, ComponentAddress, ResourceAddress},
-    prelude::AccessRules,
+    prelude::AccessRules, rule,
 };
 use tari_template_test_tooling::{
     support::assert_error::{assert_access_denied_for_action, assert_reject_reason},
@@ -265,10 +265,10 @@ fn custom_access_rules() {
 
     let access_rules = AccessRules::new()
         .add_method_rule("balance", rule!(allow_all))
-        .add_method_rule("get_balances", rule!(allow_all)
-        .add_method_rule("deposit", rule!(allow_all)
-        .add_method_rule("deposit_all", rule!(allow_all)
-        .add_method_rule("get_non_fungible_ids", rule!(allow_all)
+        .add_method_rule("get_balances", rule!(allow_all))
+        .add_method_rule("deposit", rule!(allow_all))
+        .add_method_rule("deposit_all", rule!(allow_all))
+        .add_method_rule("get_non_fungible_ids", rule!(allow_all))
         // We are going to make it so anyone can withdraw
         .default(rule!(allow_all));
 

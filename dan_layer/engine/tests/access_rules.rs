@@ -14,6 +14,7 @@ use tari_template_lib::{
         ResourceAccessRules,
         ResourceAuthAction,
         RestrictedAccessRule,
+        RuleRequirement,
     },
     models::{Amount, ComponentAddress, Metadata, NonFungibleId, ResourceAddress, VaultId},
 };
@@ -28,7 +29,7 @@ use tari_template_test_tooling::{
 use tari_transaction::Transaction;
 
 mod component_access_rules {
-    use tari_template_lib::rules;
+    use tari_template_lib::rule;
 
     use super::*;
 
@@ -225,7 +226,7 @@ mod component_access_rules {
 
 mod resource_access_rules {
     use tari_dan_engine::runtime::LockError;
-    use tari_template_lib::rules;
+    use tari_template_lib::{rule};
 
     use super::*;
 
