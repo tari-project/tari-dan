@@ -151,37 +151,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
 
         let vns = validator_nodes.get_all_within_epoch(epoch, self.config.validator_node_sidechain_id.as_ref())?;
 
-        // // collect all validator nodes from previous epoch from committees
-        // let previous_epoch = if epoch.as_u64() > 0 {
-        //     Epoch::from(epoch.as_u64() - 1)
-        // } else {
-        //     Epoch::from(0)
-        // };
-        // let already_active_vn_addresses: Vec<String> = validator_nodes
-        //     .get_committees(previous_epoch, self.config.validator_node_sidechain_id.as_ref())?
-        //     .values()
-        //     .flat_map(|committee| {
-        //         committee.members.iter().map(|(address, _)| address.to_string()).collect::<Vec<String>>()
-        //     })
-        //     .collect();
-        //
-        // info!(target: LOG_TARGET, "ALREADY ACTIVE VNS: {:?}", already_active_vn_addresses);
-        //
         let num_committees = calculate_num_committees(vns.len() as u64, self.config.committee_size);
-        // let inactive_vns = vns.iter()
-        //     .filter(|vn| !already_active_vn_addresses.contains(&vn.address.to_string()));
-        // let active_vns = vns.iter()
-        //     .filter(|vn| already_active_vn_addresses.contains(&vn.address.to_string()));
-        //
-        // info!(target: LOG_TARGET, "INACTIVE VNS: {:?}", inactive_vns);
-        //
-        // // merge inactive and previously active set of validator nodes
-        // let mut selected_vns: Vec<ValidatorNode<TAddr>> =
-        // inactive_vns.take(max_validators_to_activate).cloned().collect(); selected_vns.append(&mut
-        // active_vns.cloned().collect::<Vec<ValidatorNode<TAddr>>>());
-
-        // activate validator nodes by adding to committees
-        // let mut activated_validators = vec![];
         for vn in &vns {
             validator_nodes.set_committee_shard(
                 vn.shard_key,
@@ -189,16 +159,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
                 self.config.validator_node_sidechain_id.as_ref(),
                 epoch,
             )?;
-            // activated_validators.push(vn.address.to_string());
         }
-
-        // updating all other non-activated, but registered validators' start/end epoch
-        // validator_nodes.increment_vn_start_end_epochs(
-        //     vns.iter()
-        //         .filter(|vn| !activated_validators.contains(&vn.address.to_string()))
-        //         .map(|vn| vn.address.to_string())
-        //         .collect()
-        // )?;
 
         tx.commit()?;
         if let Some(vn) = vns.iter().find(|vn| vn.public_key == self.node_public_key) {
