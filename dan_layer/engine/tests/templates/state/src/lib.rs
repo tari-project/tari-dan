@@ -33,14 +33,14 @@ mod state_template {
     impl State {
         pub fn new() -> Component<Self> {
             Component::new(Self { value: 0 })
-                .with_access_rules(AccessRules::new().default(AccessRule::AllowAll))
+                .with_access_rules(AccessRules::new().default(rule!(allow_all)))
                 .create()
         }
 
         pub fn create_multiple(n: u32) {
             (0..n).for_each(|i| {
                 Component::new(Self { value: i })
-                    .with_access_rules(AccessRules::new().default(AccessRule::AllowAll))
+                    .with_access_rules(AccessRules::new().default(rule!(allow_all)))
                     .create();
             });
         }
@@ -49,8 +49,8 @@ mod state_template {
             Component::new(Self { value: 0 })
                 .with_access_rules(
                     AccessRules::new()
-                        .add_method_rule("get", AccessRule::AllowAll)
-                        .default(AccessRule::DenyAll),
+                        .add_method_rule("get", rule!(allow_all))
+                        .default(rule!(deny_all)),
                 )
                 .create()
         }

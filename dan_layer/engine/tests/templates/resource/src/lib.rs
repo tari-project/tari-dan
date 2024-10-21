@@ -38,7 +38,7 @@ mod template {
             let non_fungible = ResourceBuilder::non_fungible()
                 .initial_supply([NonFungibleId::from_u64(1), NonFungibleId::from_u64(2)]);
             let confidential = ResourceBuilder::confidential()
-                .mintable(AccessRule::AllowAll)
+                .mintable(rule!(allow_all))
                 .initial_supply(ConfidentialOutputStatement::mint_revealed(1000));
 
             Component::new(Self {

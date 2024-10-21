@@ -46,8 +46,8 @@ mod sparkle_nft_template {
             ];
             let bucket = ResourceBuilder::non_fungible().with_token_symbol("SPKL")
                 // Allow minting and burning for tests
-                .mintable(AccessRule::AllowAll)
-                .burnable(AccessRule::AllowAll)
+                .mintable(rule!(allow_all))
+                .burnable(rule!(allow_all))
                 .initial_supply(tokens);
 
             Component::new(Self {
