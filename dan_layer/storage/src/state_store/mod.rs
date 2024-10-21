@@ -353,7 +353,11 @@ pub trait StateStoreReadTransaction: Sized {
     fn foreign_parked_blocks_exists(&self, block_id: &BlockId) -> Result<bool, StorageError>;
 
     // -------------------------------- ValidatorNodeStats -------------------------------- //
-    fn validator_epoch_stats_get(&self,epoch: Epoch, public_key: &PublicKey) -> Result<ValidatorConsensusStats, StorageError>;
+    fn validator_epoch_stats_get(
+        &self,
+        epoch: Epoch,
+        public_key: &PublicKey,
+    ) -> Result<ValidatorConsensusStats, StorageError>;
     fn validator_epoch_stats_get_nodes_to_suspend(
         &self,
         block_id: &BlockId,
