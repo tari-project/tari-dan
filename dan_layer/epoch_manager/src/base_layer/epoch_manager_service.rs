@@ -51,7 +51,7 @@ pub struct EpochManagerService<TAddr, TGlobalStore, TBaseNodeClient> {
 }
 
 impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
-EpochManagerService<TAddr, SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
+    EpochManagerService<TAddr, SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
 {
     pub fn spawn(
         config: EpochManagerConfig,
@@ -68,8 +68,8 @@ EpochManagerService<TAddr, SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
                 inner: BaseLayerEpochManager::new(config, global_db, base_node_client, tx.clone(), node_public_key),
                 events: tx,
             }
-                .run(shutdown)
-                .await?;
+            .run(shutdown)
+            .await?;
             Ok(())
         })
     }
@@ -108,13 +108,13 @@ EpochManagerService<TAddr, SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch()), context),
             EpochManagerRequest::CurrentBlockInfo { reply } => {
                 handle(reply, Ok(self.inner.current_block_info()), context)
-            }
+            },
             EpochManagerRequest::GetLastBlockOfTheEpoch { reply } => {
                 handle(reply, Ok(self.inner.last_block_of_current_epoch()), context)
-            }
+            },
             EpochManagerRequest::IsLastBlockOfTheEpoch { block_height, reply } => {
                 handle(reply, self.inner.is_last_block_of_epoch(block_height).await, context)
-            }
+            },
             EpochManagerRequest::GetValidatorNode { epoch, addr, reply } => handle(
                 reply,
                 self.inner.get_validator_node_by_address(epoch, &addr).and_then(|x| {
@@ -143,7 +143,7 @@ EpochManagerService<TAddr, SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
             ),
             EpochManagerRequest::GetManyValidatorNodes { query, reply } => {
                 handle(reply, self.inner.get_many_validator_nodes(query), context);
-            }
+            },
             EpochManagerRequest::AddBlockHash {
                 block_height,
                 block_hash,
@@ -154,27 +154,27 @@ EpochManagerService<TAddr, SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
                     self.inner.add_base_layer_block_info(block_height, block_hash),
                     context,
                 );
-            }
+            },
             EpochManagerRequest::UpdateEpoch {
                 block_height,
                 block_hash,
                 reply,
             } => {
                 handle(reply, self.inner.update_epoch(block_height, block_hash).await, context);
-            }
+            },
             EpochManagerRequest::LastRegistrationEpoch { reply } => {
                 handle(reply, self.inner.last_registration_epoch(), context)
-            }
+            },
 
             EpochManagerRequest::UpdateLastRegistrationEpoch { epoch, reply } => {
                 handle(reply, self.inner.update_last_registration_epoch(epoch), context);
-            }
+            },
             EpochManagerRequest::IsEpochValid { epoch, reply } => {
                 handle(reply, Ok(self.inner.is_epoch_valid(epoch)), context)
-            }
+            },
             EpochManagerRequest::GetCommittees { epoch, reply } => {
                 handle(reply, self.inner.get_committees(epoch), context);
-            }
+            },
             EpochManagerRequest::GetCommitteeInfoByAddress { epoch, address, reply } => handle(
                 reply,
                 self.inner.get_committee_info_by_validator_address(epoch, address),
@@ -190,35 +190,33 @@ EpochManagerService<TAddr, SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
                     self.inner.get_committee_for_substate(epoch, substate_address),
                     context,
                 );
-            }
+            },
             EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.subscribe()), context),
             EpochManagerRequest::GetValidatorNodesPerEpoch { epoch, reply } => {
                 handle(reply, self.inner.get_validator_nodes_per_epoch(epoch), context)
-            }
+            },
             EpochManagerRequest::AddValidatorNodeRegistration {
                 block_height,
                 registration,
                 value: _value,
                 reply,
-            } => {
-                handle(
-                    reply,
-                    self.inner
-                        .add_validator_node_registration(block_height, registration)
-                        .await,
-                    context,
-                )
-            }
+            } => handle(
+                reply,
+                self.inner
+                    .add_validator_node_registration(block_height, registration)
+                    .await,
+                context,
+            ),
             // TODO: This should be rather be a state machine event
             EpochManagerRequest::NotifyScanningComplete { reply } => {
                 handle(reply, self.inner.on_scanning_complete().await, context)
-            }
+            },
             EpochManagerRequest::WaitForInitialScanningToComplete { reply } => {
                 self.inner.add_notify_on_scanning_complete(reply);
-            }
+            },
             EpochManagerRequest::RemainingRegistrationEpochs { reply } => {
                 handle(reply, self.inner.remaining_registration_epochs().await, context)
-            }
+            },
             EpochManagerRequest::GetBaseLayerConsensusConstants { reply } => handle(
                 reply,
                 self.inner.get_base_layer_consensus_constants().await.cloned(),
@@ -226,7 +224,7 @@ EpochManagerService<TAddr, SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
             ),
             EpochManagerRequest::GetOurValidatorNode { epoch, reply } => {
                 handle(reply, self.inner.get_our_validator_node(epoch), context)
-            }
+            },
             EpochManagerRequest::GetCommitteeInfo {
                 epoch,
                 substate_address,
@@ -238,10 +236,10 @@ EpochManagerService<TAddr, SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
             ),
             EpochManagerRequest::GetLocalCommitteeInfo { epoch, reply } => {
                 handle(reply, self.inner.get_local_committee_info(epoch), context)
-            }
+            },
             EpochManagerRequest::GetNumCommittees { epoch, reply } => {
                 handle(reply, self.inner.get_num_committees(epoch), context)
-            }
+            },
             EpochManagerRequest::GetCommitteesForShardGroup {
                 epoch,
                 shard_group,
@@ -253,13 +251,13 @@ EpochManagerService<TAddr, SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
             ),
             EpochManagerRequest::GetFeeClaimPublicKey { reply } => {
                 handle(reply, self.inner.get_fee_claim_public_key(), context)
-            }
+            },
             EpochManagerRequest::SetFeeClaimPublicKey { public_key, reply } => {
                 handle(reply, self.inner.set_fee_claim_public_key(public_key), context)
-            }
+            },
             EpochManagerRequest::GetBaseLayerBlockHeight { hash, reply } => {
                 handle(reply, self.inner.get_base_layer_block_height(hash).await, context)
-            }
+            },
         }
     }
 }

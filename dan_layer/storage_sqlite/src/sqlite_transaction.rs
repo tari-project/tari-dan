@@ -28,7 +28,6 @@ use crate::error::SqliteStorageError;
 
 const _LOG_TARGET: &str = "tari::dan::storage::sqlite::transaction";
 
-
 pub struct SqliteTransaction<'a> {
     connection: MutexGuard<'a, SqliteConnection>, // TODO: use Arc<Mutex<SqliteConnection>> instead
     is_done: bool,

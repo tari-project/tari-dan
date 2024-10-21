@@ -20,17 +20,25 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::{base_layer::config::EpochManagerConfig, error::EpochManagerError, EpochManagerEvent};
-use log::__private_api::loc;
-use log::*;
-use std::cell::{Cell, RefCell};
-use std::ops::DerefMut;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::{cmp, collections::HashMap, mem, num::NonZeroU32};
+use std::{
+    cell::{Cell, RefCell},
+    cmp,
+    collections::HashMap,
+    mem,
+    num::NonZeroU32,
+    ops::DerefMut,
+    rc::Rc,
+    sync::Arc,
+};
+
+use log::{__private_api::loc, *};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_core::{blocks::BlockHeader, transactions::transaction_components::ValidatorNodeRegistration};
+use tari_core::{
+    blocks::BlockHeader,
+    consensus::ConsensusConstants,
+    transactions::transaction_components::ValidatorNodeRegistration,
+};
 use tari_dan_common_types::{
     committee::{Committee, CommitteeInfo},
     optional::Optional,
@@ -41,10 +49,11 @@ use tari_dan_common_types::{
     SubstateAddress,
 };
 use tari_dan_storage::global::{models::ValidatorNode, DbBaseLayerBlockInfo, DbEpoch, GlobalDb, MetadataKey};
-use tari_dan_storage_sqlite::error::SqliteStorageError;
-use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
+use tari_dan_storage_sqlite::{error::SqliteStorageError, global::SqliteGlobalDbAdapter};
 use tari_utilities::{byte_array::ByteArray, hex::Hex};
 use tokio::sync::{broadcast, oneshot, Mutex};
+
+use crate::{base_layer::config::EpochManagerConfig, error::EpochManagerError, EpochManagerEvent};
 
 const LOG_TARGET: &str = "tari::dan::epoch_manager::base_layer";
 
@@ -64,7 +73,7 @@ pub struct BaseLayerEpochManager<TGlobalStore, TBaseNodeClient> {
 }
 
 impl<TAddr: NodeAddressable + DerivableFromPublicKey>
-BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
+    BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
 {
     pub fn new(
         config: EpochManagerConfig,
@@ -159,7 +168,6 @@ BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
         // info!(target: LOG_TARGET, "ALREADY ACTIVE VNS: {:?}", already_active_vn_addresses);
         //
         let num_committees = calculate_num_committees(vns.len() as u64, self.config.committee_size);
-        //
         // let inactive_vns = vns.iter()
         //     .filter(|vn| !already_active_vn_addresses.contains(&vn.address.to_string()));
         // let active_vns = vns.iter()
@@ -168,8 +176,9 @@ BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
         // info!(target: LOG_TARGET, "INACTIVE VNS: {:?}", inactive_vns);
         //
         // // merge inactive and previously active set of validator nodes
-        // let mut selected_vns: Vec<ValidatorNode<TAddr>> = inactive_vns.take(max_validators_to_activate).cloned().collect();
-        // selected_vns.append(&mut active_vns.cloned().collect::<Vec<ValidatorNode<TAddr>>>());
+        // let mut selected_vns: Vec<ValidatorNode<TAddr>> =
+        // inactive_vns.take(max_validators_to_activate).cloned().collect(); selected_vns.append(&mut
+        // active_vns.cloned().collect::<Vec<ValidatorNode<TAddr>>>());
 
         // activate validator nodes by adding to committees
         // let mut activated_validators = vec![];
@@ -202,9 +211,7 @@ BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
         Ok(())
     }
 
-    pub async fn base_layer_consensus_constants(
-        &self,
-    ) -> Result<&BaseLayerConsensusConstants, EpochManagerError> {
+    pub async fn base_layer_consensus_constants(&self) -> Result<&BaseLayerConsensusConstants, EpochManagerError> {
         Ok(self
             .base_layer_consensus_constants
             .as_ref()
@@ -237,9 +244,16 @@ BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
         Ok(())
     }
 
-    fn validator_nodes_count(&self, next_epoch: Epoch, sidechain_id: Option<&PublicKey>) -> Result<u64, EpochManagerError> {
+    fn validator_nodes_count(
+        &self,
+        next_epoch: Epoch,
+        sidechain_id: Option<&PublicKey>,
+    ) -> Result<u64, EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
-        let result = self.global_db.validator_nodes(&mut tx).count_by_epoch(next_epoch, sidechain_id)?;
+        let result = self
+            .global_db
+            .validator_nodes(&mut tx)
+            .count_by_epoch(next_epoch, sidechain_id)?;
         tx.commit()?;
         Ok(result)
     }
@@ -260,18 +274,17 @@ BaseLayerEpochManager<SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
         let mut next_epoch = constants.height_to_epoch(block_height) + Epoch(1);
         let validator_node_expiry = constants.validator_node_registration_expiry;
 
-        let max_vns_registered_in_epoch = 10; // TODO: this must come from Layer 2 consensus constants
-
         // find the next available epoch
         let mut next_epoch_vn_count = self.validator_nodes_count(next_epoch, registration.sidechain_id())?;
-        while next_epoch_vn_count == max_vns_registered_in_epoch {
+        while next_epoch_vn_count == self.config.max_vns_per_epoch_activated {
             next_epoch += Epoch(1);
             next_epoch_vn_count = self.validator_nodes_count(next_epoch, registration.sidechain_id())?;
         }
 
         let next_epoch_height = constants.epoch_to_height(next_epoch);
 
-        let shard_key = self.base_node_client
+        let shard_key = self
+            .base_node_client
             .get_shard_key(next_epoch_height, registration.public_key())
             .await?
             .ok_or_else(|| EpochManagerError::ShardKeyNotFound {
