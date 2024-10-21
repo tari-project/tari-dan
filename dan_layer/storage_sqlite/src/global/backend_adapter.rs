@@ -1,4 +1,3 @@
-use std::ops::Add;
 //  Copyright 2022. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that
@@ -33,7 +32,6 @@ use std::{
 use diesel::{
     sql_query,
     sql_types::{BigInt, Bigint},
-    BoolExpressionMethods,
     ExpressionMethods,
     JoinOnDsl,
     NullableExpressionMethods,
@@ -41,7 +39,6 @@ use diesel::{
     QueryDsl,
     RunQueryDsl,
     SqliteConnection,
-    SqliteExpressionMethods,
 };
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 use serde::{de::DeserializeOwned, Serialize};

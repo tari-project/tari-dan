@@ -20,25 +20,12 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    cell::{Cell, RefCell},
-    cmp,
-    collections::HashMap,
-    mem,
-    num::NonZeroU32,
-    ops::DerefMut,
-    rc::Rc,
-    sync::Arc,
-};
+use std::{cmp, collections::HashMap, mem, num::NonZeroU32};
 
-use log::{__private_api::loc, *};
+use log::*;
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_core::{
-    blocks::BlockHeader,
-    consensus::ConsensusConstants,
-    transactions::transaction_components::ValidatorNodeRegistration,
-};
+use tari_core::{blocks::BlockHeader, transactions::transaction_components::ValidatorNodeRegistration};
 use tari_dan_common_types::{
     committee::{Committee, CommitteeInfo},
     optional::Optional,
@@ -49,16 +36,16 @@ use tari_dan_common_types::{
     SubstateAddress,
 };
 use tari_dan_storage::global::{models::ValidatorNode, DbBaseLayerBlockInfo, DbEpoch, GlobalDb, MetadataKey};
-use tari_dan_storage_sqlite::{error::SqliteStorageError, global::SqliteGlobalDbAdapter};
+use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_utilities::{byte_array::ByteArray, hex::Hex};
-use tokio::sync::{broadcast, oneshot, Mutex};
+use tokio::sync::{broadcast, oneshot};
 
 use crate::{base_layer::config::EpochManagerConfig, error::EpochManagerError, EpochManagerEvent};
 
 const LOG_TARGET: &str = "tari::dan::epoch_manager::base_layer";
 
 pub struct BaseLayerEpochManager<TGlobalStore, TBaseNodeClient> {
-    global_db: Arc<GlobalDb<TGlobalStore>>,
+    global_db: GlobalDb<TGlobalStore>,
     base_node_client: TBaseNodeClient,
     config: EpochManagerConfig,
     current_epoch: Epoch,
@@ -83,7 +70,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         node_public_key: PublicKey,
     ) -> Self {
         Self {
-            global_db: Arc::new(global_db),
+            global_db,
             base_node_client,
             config,
             current_epoch: Epoch(0),
