@@ -33,7 +33,13 @@ pub struct ConsensusConstants {
     pub max_base_layer_blocks_behind: u64,
     pub num_preshards: NumPreshards,
     pub pacemaker_block_time: Duration,
+    /// The number of missed proposals before a SuspendNode proposal is sent
     pub missed_proposal_suspend_threshold: u64,
+    /// The maximum number of missed proposals to count. If a peer is offline, gets suspended and comes online, their
+    /// missed proposal count is decremented for each block that they participate in. Once this reaches zero, the node
+    /// is considered online and will be reinstated. This cap essentially gives the maximum number of rounds until they
+    /// will be reinstated once they resume participation in consensus.
+    pub missed_proposal_count_cap: u64,
     pub max_block_size: usize,
     /// The value that fees are divided by to determine the amount of fees to burn. 0 means no fees are burned.
     pub fee_exhaust_divisor: u64,
@@ -48,7 +54,8 @@ impl ConsensusConstants {
             max_base_layer_blocks_behind: 5,
             num_preshards: NumPreshards::P256,
             pacemaker_block_time: Duration::from_secs(10),
-            missed_proposal_suspend_threshold: 2,
+            missed_proposal_suspend_threshold: 5,
+            missed_proposal_count_cap: 5,
             max_block_size: 500,
             fee_exhaust_divisor: 20, // 5%
         }

@@ -1108,13 +1108,14 @@ impl Block {
     pub fn increment_leader_failure_count<TTx: StateStoreWriteTransaction>(
         &self,
         tx: &mut TTx,
+        max_missed_proposal_cap: u64,
     ) -> Result<(), StorageError> {
         tx.validator_epoch_stats_updates(
             self.epoch(),
             iter::once(
                 ValidatorStatsUpdate::new(self.proposed_by())
                     .add_missed_proposal()
-                    .set_max_missed_proposals_cap(5),
+                    .set_max_missed_proposals_cap(max_missed_proposal_cap),
             ),
         )
     }

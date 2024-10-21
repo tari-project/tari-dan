@@ -1752,7 +1752,7 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
     ) -> Result<Vec<TransactionPoolRecord>, HotStuffError> {
         if block.is_dummy() {
-            block.increment_leader_failure_count(tx)?;
+            block.increment_leader_failure_count(tx, self.config.consensus_constants.missed_proposal_count_cap)?;
 
             // Nothing to do here for empty dummy blocks. Just mark the block as committed.
             block.commit_diff(tx, BlockDiff::empty(*block.id()))?;
