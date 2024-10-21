@@ -280,3 +280,162 @@ impl Default for ResourceAccessRules {
         Self::new()
     }
 }
+
+#[macro_export]
+macro_rules! rule {
+    (allow_all) => {
+        AccessRule::AllowAll
+    };
+    (deny_all) => {
+        AccessRule::DenyAll
+    };
+    ($($tail:tt)*) => {
+        AccessRule::Restricted($crate::__restricted_access_rule!($($tail)*))
+    };
+}
+
+#[macro_export]
+macro_rules! __restricted_access_rule {
+    (any_of($($tail:tt)*)) => {
+        RestrictedAccessRule::AnyOf($crate::__build_vec!(@ {__restricted_access_rule} $($tail)*))
+    };
+    (all_of($($tail:tt)*)) => {
+        RestrictedAccessRule::AllOf($crate::__build_vec!(@ {__restricted_access_rule} $($tail)*))
+    };
+    ($a:ident($b:expr)) => {
+        RestrictedAccessRule::Require($crate::__require_rule!($a($b)))
+    };
+}
+
+#[macro_export]
+macro_rules! __require_rule {
+    (any_of($($tail:tt)*)) => {
+        RequireRule::AnyOf($crate::__build_vec!(@ {__rule_requirement} $($tail)*))
+    };
+    (all_of($($tail:tt)*)) => {
+        RequireRule::AllOf($crate::__build_vec!(@ {__rule_requirement} $($tail)*))
+    };
+    ($a:ident($b:expr)) => {
+        RequireRule::Require($crate::__rule_requirement!($a($b)))
+    };
+}
+
+#[macro_export]
+macro_rules! __rule_requirement {
+    (resource($x: expr)) => {
+        RuleRequirement::Resource($x)
+    };
+    (non_fungible($x: expr)) => {
+        RuleRequirement::NonFungibleAddress($x)
+    };
+    (component($x: expr)) => {
+        RuleRequirement::ScopedToComponent($x)
+    };
+    (template($x: expr)) => {
+        RuleRequirement::ScopedToTemplate($x)
+    };
+}
+
+#[macro_export]
+macro_rules! __build_vec {
+    () => (Vec::new());
+
+    (@ {$item_fn:ident} $a:ident($b:expr), $($tail:tt)*) => {{
+        let mut items = Vec::with_capacity(1 + $crate::__expr_counter!($($tail)*));
+        $crate::__build_vec_inner!(@ { items, $item_fn } $a($b), $($tail)*);
+        items
+    }};
+
+    (@ {$item_fn:ident} $a:ident($b:expr) $(,)?) => {{
+        let mut items = Vec::new();
+        $crate::__build_vec_inner!(@ { items, $item_fn } $a($b),);
+        items
+    }};
+}
+
+#[macro_export]
+macro_rules! __build_vec_inner {
+    (@ { $this:ident, $item_fn:ident } $a:ident($e:expr), $($tail:tt)*) => {
+        $crate::args::__push(&mut $this, $crate::$item_fn!($a($e)));
+        $crate::__build_vec_inner!(@ {$this, $item_fn } $($tail)*);
+    };
+    (@ { $this:ident, $item_fn:ident } $a:ident($e:expr) $(,)*) => {
+        $crate::args::__push(&mut $this, $crate::$item_fn!($a($e)));
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{crypto::RistrettoPublicKeyBytes, models::ObjectKey};
+
+    #[test]
+    fn it_builds_correct_access_rules() {
+        // allow all
+        let rule = rule!(allow_all);
+        assert_eq!(rule, AccessRule::AllowAll);
+
+        // deny all
+        let rule = rule!(deny_all);
+        assert_eq!(rule, AccessRule::DenyAll);
+
+        // restricted to resource address
+        let resource_address = ResourceAddress::new(ObjectKey::default());
+        let rule = rule!(resource(resource_address));
+        assert_eq!(
+            rule,
+            access_rule_from_requirement(RuleRequirement::Resource(resource_address))
+        );
+
+        // restricted to component
+        let component_address = ComponentAddress::new(ObjectKey::default());
+        let rule = rule!(component(component_address));
+        assert_eq!(
+            rule,
+            access_rule_from_requirement(RuleRequirement::ScopedToComponent(component_address))
+        );
+
+        // restricted to template
+        let template_address = TemplateAddress::default();
+        let rule = rule!(template(template_address));
+        assert_eq!(
+            rule,
+            access_rule_from_requirement(RuleRequirement::ScopedToTemplate(template_address))
+        );
+
+        // restricted to non fungible
+        let non_fungible_address = NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::default());
+        let rule = rule!(non_fungible(non_fungible_address.clone()));
+        assert_eq!(
+            rule,
+            access_rule_from_requirement(RuleRequirement::NonFungibleAddress(non_fungible_address))
+        );
+
+        // composition of rules
+        let rule = rule!(any_of(component(component_address), resource(resource_address)));
+        assert_eq!(
+            rule,
+            AccessRule::Restricted(RestrictedAccessRule::AnyOf(vec![
+                RestrictedAccessRule::Require(RequireRule::Require(RuleRequirement::ScopedToComponent(
+                    component_address
+                ))),
+                RestrictedAccessRule::Require(RequireRule::Require(RuleRequirement::Resource(resource_address))),
+            ]))
+        );
+
+        let rule = rule!(all_of(component(component_address), resource(resource_address)));
+        assert_eq!(
+            rule,
+            AccessRule::Restricted(RestrictedAccessRule::AllOf(vec![
+                RestrictedAccessRule::Require(RequireRule::Require(RuleRequirement::ScopedToComponent(
+                    component_address
+                ))),
+                RestrictedAccessRule::Require(RequireRule::Require(RuleRequirement::Resource(resource_address))),
+            ]))
+        );
+    }
+
+    fn access_rule_from_requirement(requirement: RuleRequirement) -> AccessRule {
+        AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(requirement)))
+    }
+}

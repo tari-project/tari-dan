@@ -52,7 +52,7 @@ mod template {
                 ..Default::default()
             })
                 .with_access_rules(AccessRules::allow_all())
-                .with_owner_rule(OwnerRule::ByAccessRule(AccessRule::AllowAll))
+                .with_owner_rule(OwnerRule::ByAccessRule(rule!(allow_all)))
                 .create()
         }
 

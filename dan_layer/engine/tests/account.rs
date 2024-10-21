@@ -10,6 +10,7 @@ use tari_template_lib::{
     constants::XTR,
     models::{Amount, ComponentAddress, ResourceAddress},
     prelude::AccessRules,
+    rule,
 };
 use tari_template_test_tooling::{
     support::assert_error::{assert_access_denied_for_action, assert_reject_reason},
@@ -264,13 +265,13 @@ fn custom_access_rules() {
     let (owner_proof, public_key, secret_key) = template_test.create_owner_proof();
 
     let access_rules = AccessRules::new()
-        .add_method_rule("balance", AccessRule::AllowAll)
-        .add_method_rule("get_balances", AccessRule::AllowAll)
-        .add_method_rule("deposit", AccessRule::AllowAll)
-        .add_method_rule("deposit_all", AccessRule::AllowAll)
-        .add_method_rule("get_non_fungible_ids", AccessRule::AllowAll)
+        .add_method_rule("balance", rule!(allow_all))
+        .add_method_rule("get_balances", rule!(allow_all))
+        .add_method_rule("deposit", rule!(allow_all))
+        .add_method_rule("deposit_all", rule!(allow_all))
+        .add_method_rule("get_non_fungible_ids", rule!(allow_all))
         // We are going to make it so anyone can withdraw
-        .default(AccessRule::AllowAll);
+        .default(rule!(allow_all));
 
     let result = template_test.execute_expect_success(
         Transaction::builder()
