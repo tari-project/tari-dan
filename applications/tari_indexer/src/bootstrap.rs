@@ -125,6 +125,7 @@ pub async fn spawn_services(
                 .try_into()
                 .context("committee_size must be non-zero")?,
             validator_node_sidechain_id: config.indexer.sidechain_id.clone(),
+            max_vns_per_epoch_activated: consensus_constants.max_vns_per_epoch_activated,
         },
         global_db.clone(),
         base_node_client.clone(),

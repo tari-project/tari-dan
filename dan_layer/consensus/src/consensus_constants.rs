@@ -35,6 +35,9 @@ pub struct ConsensusConstants {
     pub pacemaker_max_base_time: Duration,
     /// The value that fees are divided by to determine the amount of fees to burn. 0 means no fees are burned.
     pub fee_exhaust_divisor: u64,
+    /// Maximum number of validator nodes to be activated in an epoch.
+    /// This is to give enough time to the network to catch up with new validator nodes and do syncing.
+    pub max_vns_per_epoch_activated: u64,
 }
 
 impl ConsensusConstants {
@@ -47,6 +50,7 @@ impl ConsensusConstants {
             num_preshards: NumPreshards::P256,
             pacemaker_max_base_time: Duration::from_secs(10),
             fee_exhaust_divisor: 20, // 5%
+            max_vns_per_epoch_activated: 50,
         }
     }
 }

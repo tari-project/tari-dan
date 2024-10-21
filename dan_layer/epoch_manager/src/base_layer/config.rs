@@ -12,4 +12,7 @@ pub struct EpochManagerConfig {
     pub committee_size: NonZeroU32,
     pub validator_node_sidechain_id: Option<PublicKey>,
     pub num_preshards: NumPreshards,
+    /// Maximum number of validator nodes to be activated in an epoch.
+    /// This is to give enough time to the network to catch up with new validator nodes and do syncing.
+    pub max_vns_per_epoch_activated: u64,
 }
