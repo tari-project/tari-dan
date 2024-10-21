@@ -224,7 +224,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
 
         // find the next available epoch
         let mut next_epoch_vn_count = self.validator_nodes_count(next_epoch, registration.sidechain_id())?;
-        while next_epoch_vn_count == self.config.max_vns_per_epoch_activated {
+        while next_epoch_vn_count >= self.config.max_vns_per_epoch_activated {
             next_epoch += Epoch(1);
             next_epoch_vn_count = self.validator_nodes_count(next_epoch, registration.sidechain_id())?;
         }
