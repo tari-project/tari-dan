@@ -146,6 +146,7 @@ impl ValidatorBuilder {
                     num_preshards: TEST_NUM_PRESHARDS,
                     pacemaker_max_base_time: self.block_time,
                     fee_exhaust_divisor: 0,
+                    max_vns_per_epoch_activated: 5,
                 },
             },
             self.address.clone(),
