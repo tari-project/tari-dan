@@ -51,10 +51,10 @@ async fn main() -> anyhow::Result<()> {
                 .canonicalize()
                 .context("Failed to canonicalize config_path")?;
             log::info!("Config file created at {}", config_path.display());
-        },
+        }
         Commands::Start(_) => {
             start(&cli).await?;
-        },
+        }
     }
     Ok(())
 }
@@ -185,6 +185,7 @@ fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
             instances,
             executables,
         },
+        auto_register_previous_templates: true,
     })
 }
 
@@ -241,7 +242,7 @@ async fn create_paths(config: &Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
+type BoxFuture<T> = Pin<Box<dyn Future<Output=T> + Send>>;
 
 fn exit_signal() -> anyhow::Result<BoxFuture<()>> {
     #[cfg(unix)]

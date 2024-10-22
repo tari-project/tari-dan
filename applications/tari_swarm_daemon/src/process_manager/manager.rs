@@ -1,16 +1,6 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, fs::File, path::PathBuf, time::Duration};
-
-use anyhow::{anyhow, Context};
-use log::info;
-use minotari_node_grpc_client::grpc;
-use tari_crypto::tari_utilities::ByteArray;
-use tari_engine_types::TemplateAddress;
-use tari_shutdown::ShutdownSignal;
-use tokio::{sync::mpsc, time::sleep};
-
 use crate::{
     config::{Config, InstanceType},
     process_manager::{
@@ -21,6 +11,19 @@ use crate::{
         TemplateData,
     },
 };
+use anyhow::{anyhow, Context};
+use log::info;
+use minotari_node_grpc_client::grpc;
+use std::str::FromStr;
+use std::{collections::HashMap, fs::File, path::PathBuf, time::Duration};
+use tari_common_types::types::FixedHash;
+use tari_crypto::tari_utilities::{hex, ByteArray};
+use tari_dan_engine::wasm::WasmModule;
+use tari_engine_types::{calculate_template_binary_hash, TemplateAddress};
+use tari_shutdown::ShutdownSignal;
+use tari_validator_node_client::types::{GetTemplateResponse, GetTemplatesRequest, GetTemplatesResponse, TemplateMetadata};
+use tokio::{sync::mpsc, time::sleep};
+use url::Url;
 
 pub struct ProcessManager {
     executable_manager: ExecutableManager,
@@ -28,6 +31,9 @@ pub struct ProcessManager {
     rx_request: mpsc::Receiver<ProcessManagerRequest>,
     shutdown_signal: ShutdownSignal,
     skip_registration: bool,
+    disable_template_auto_register: bool,
+    base_dir: PathBuf,
+    web_server_port: u16,
 }
 
 impl ProcessManager {
@@ -47,6 +53,9 @@ impl ProcessManager {
             ),
             rx_request,
             shutdown_signal,
+            disable_template_auto_register: !config.auto_register_previous_templates,
+            base_dir: config.base_dir.clone(),
+            web_server_port: config.webserver.bind_address.port(),
         };
         (this, ProcessManagerHandle::new(tx_request))
     }
@@ -73,7 +82,79 @@ impl ProcessManager {
                 .context("registering validator node via GRPC")?;
         }
 
+        if !self.disable_template_auto_register {
+            let registered_templates = self.registered_templates().await?;
+            let registered_template_hashes: Vec<FixedHash> = registered_templates.iter()
+                .map(|template_data| template_data.contents_hash)
+                .collect();
+            let fs_templates = self.file_system_templates().await?;
+            for template_data in fs_templates.iter()
+                .filter(|fs_template_data| {
+                    !registered_template_hashes.contains(&fs_template_data.contents_hash)
+                }) {
+                info!("🟡 Register missing template from local file system: {}", template_data.name);
+                self.register_template(TemplateData {
+                    name: template_data.name.clone(),
+                    version: template_data.version,
+                    contents_hash: template_data.contents_hash,
+                    contents_url: template_data.contents_url.clone(),
+                }).await?;
+            }
+        }
+
         Ok(())
+    }
+
+    async fn file_system_templates(&self) -> anyhow::Result<Vec<TemplateData>> {
+        let templates_dir = self.base_dir.join("templates");
+        let mut templates_dir_content = tokio::fs::read_dir(templates_dir).await?;
+        let mut result = vec![];
+        while let Some(dir_entry) = templates_dir_content.next_entry().await? {
+            if dir_entry.path().is_file() && dir_entry.path().ends_with(".wasm") {
+                let file_name = dir_entry.file_name();
+                let file_name = file_name.to_str().ok_or(anyhow!("Can't get file name!"))?;
+                let file_content = tokio::fs::read(dir_entry.path()).await?;
+                let loaded = WasmModule::load_template_from_code(file_content.as_slice())?;
+                let name = loaded.template_def().template_name().to_string();
+                let hash = calculate_template_binary_hash(&file_content);
+                result.push(TemplateData {
+                    name,
+                    version: 0,
+                    contents_hash: hash,
+                    contents_url: Url::parse(&format!(
+                        "http://localhost:{}/templates/{}",
+                        self.web_server_port,
+                        file_name
+                    ))?,
+                }
+                )
+            }
+        }
+
+        Ok(result)
+    }
+
+    async fn registered_templates(&self) -> anyhow::Result<Vec<TemplateData>> {
+        let process = self.instance_manager.validator_nodes().next().ok_or_else(|| {
+            anyhow!("No MinoTariConsoleWallet instances found. Please start a wallet before uploading a template")
+        })?;
+
+        let mut client = process.connect_client()?;
+        Ok(
+            client.get_active_templates(GetTemplatesRequest { limit: 10_000 }).await?
+                .templates
+                .iter()
+                .map(|metadata| {
+                    TemplateData {
+                        name: metadata.name.clone(),
+                        version: 0,
+                        contents_hash: FixedHash::try_from(metadata.binary_sha.as_slice())
+                            .unwrap_or_default(),
+                        contents_url: Url::from_str(metadata.url.as_str()).unwrap(),
+                    }
+                })
+                .collect()
+        )
     }
 
     fn check_instances_running(&mut self) -> anyhow::Result<()> {
@@ -160,7 +241,7 @@ impl ProcessManager {
                 if reply.send(result).is_err() {
                     log::warn!("Request cancelled before response could be sent")
                 }
-            },
+            }
             ListInstances { by_type, reply } => {
                 let instances = self
                     .instance_manager
@@ -172,7 +253,7 @@ impl ProcessManager {
                 if reply.send(Ok(instances)).is_err() {
                     log::warn!("Request cancelled before response could be sent")
                 }
-            },
+            }
             StartInstance { instance_id, reply } => {
                 let executable = {
                     let instance = self
@@ -190,37 +271,37 @@ impl ProcessManager {
                 if reply.send(result).is_err() {
                     log::warn!("Request cancelled before response could be sent")
                 }
-            },
+            }
             StopInstance { instance_id, reply } => {
                 let result = self.instance_manager.stop_instance(instance_id).await;
                 if reply.send(result).is_err() {
                     log::warn!("Request cancelled before response could be sent")
                 }
-            },
+            }
             DeleteInstanceData { instance_id, reply } => {
                 let result = self.instance_manager.delete_instance_data(instance_id).await;
                 if reply.send(result).is_err() {
                     log::warn!("Request cancelled before response could be sent")
                 }
-            },
+            }
             MineBlocks { blocks, reply } => {
                 let result = self.mine(blocks).await;
                 if reply.send(result).is_err() {
                     log::warn!("Request cancelled before response could be sent")
                 }
-            },
+            }
             RegisterTemplate { data, reply } => {
                 let result = self.register_template(data).await;
                 if reply.send(result).is_err() {
                     log::warn!("Request cancelled before response could be sent")
                 }
-            },
+            }
             RegisterValidatorNode { instance_id, reply } => {
                 let result = self.register_validator_node(instance_id).await;
                 if reply.send(result).is_err() {
                     log::warn!("Request cancelled before response could be sent")
                 }
-            },
+            }
             BurnFunds {
                 amount,
                 wallet_instance_id,
@@ -234,7 +315,7 @@ impl ProcessManager {
                 if reply.send(result).is_err() {
                     log::warn!("Request cancelled before response could be sent")
                 }
-            },
+            }
         }
 
         Ok(())
