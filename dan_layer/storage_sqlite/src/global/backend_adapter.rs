@@ -85,7 +85,7 @@ use crate::{
     SqliteTransaction,
 };
 
-sql_function! {
+define_sql_function! {
     #[sql_name = "COALESCE"]
     fn coalesce_bigint(x: diesel::sql_types::Nullable<Bigint>, y: BigInt) -> BigInt;
 }

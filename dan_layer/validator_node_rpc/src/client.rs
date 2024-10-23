@@ -50,7 +50,7 @@ pub trait ValidatorNodeRpcClient: Send + Sync {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum TransactionResultStatus {
     Pending,
-    Finalized(FinalizedResult),
+    Finalized(Box<FinalizedResult>),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -228,13 +228,13 @@ impl<TMsg: MessageSpec> ValidatorNodeRpcClient for TariValidatorNodeRpcClient<TM
                 let execution_time = Duration::from_millis(response.execution_time_ms);
                 let finalized_time = Duration::from_millis(response.finalized_time_ms);
 
-                Ok(TransactionResultStatus::Finalized(FinalizedResult {
+                Ok(TransactionResultStatus::Finalized(Box::new(FinalizedResult {
                     execute_result: execution_result,
                     final_decision,
                     execution_time,
                     finalized_time,
                     abort_details: Some(response.abort_details).filter(|s| s.is_empty()),
-                }))
+                })))
             },
             Err(_) => Err(ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
                 "Node returned invalid payload status {}",

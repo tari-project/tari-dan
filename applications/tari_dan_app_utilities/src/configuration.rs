@@ -1,7 +1,5 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
-// Copyright 2022 The Tari Project
-// SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
     fs,
@@ -9,7 +7,6 @@ use std::{
     io,
     io::Write,
     path::{Path, PathBuf},
-    str::FromStr,
 };
 
 use config::Config;
@@ -21,6 +18,7 @@ const LOG_TARGET: &str = "tari::application::configuration";
 /// Loads the configuration file from the specified path, or creates a new one with the embedded default presets if it
 /// does not. This also prompts the user.
 pub fn load_configuration<P: AsRef<Path>, TOverride: ConfigOverrideProvider>(
+    network_override: Option<Network>,
     config_path: P,
     create_if_not_exists: bool,
     overrides: &TOverride,
@@ -35,11 +33,12 @@ pub fn load_configuration<P: AsRef<Path>, TOverride: ConfigOverrideProvider>(
         write_config_to(&config_path, &sources)?;
     }
 
-    load_configuration_with_overrides(config_path, overrides)
+    load_configuration_with_overrides(network_override, config_path, overrides)
 }
 
 /// Loads the config at the given path applying all overrides.
 pub fn load_configuration_with_overrides<P: AsRef<Path>, TOverride: ConfigOverrideProvider>(
+    network_override: Option<Network>,
     config_path: P,
     overrides: &TOverride,
 ) -> Result<Config, ConfigError> {
@@ -57,27 +56,28 @@ pub fn load_configuration_with_overrides<P: AsRef<Path>, TOverride: ConfigOverri
                 .separator("__"),
         )
         .build()?;
+    // let network = match cfg.get_string("network") {
+    //     Ok(network) => {
+    //         Network::from_str(&network).map_err(|e| ConfigError::new("Invalid network", Some(e.to_string())))?
+    //     },
+    //     Err(config::ConfigError::NotFound(_)) => {
+    //         debug!(target: LOG_TARGET, "No network configuration found. Using default network '{}'.",
+    // Network::default());         Network::default()
+    //     },
+    //     Err(e) => {
+    //         return Err(ConfigError::new(
+    //             "Could not get network configuration",
+    //             Some(e.to_string()),
+    //         ));
+    //     },
+    // };
 
-    let mut network = match cfg.get_string("network") {
-        Ok(network) => {
-            Network::from_str(&network).map_err(|e| ConfigError::new("Invalid network", Some(e.to_string())))?
-        },
-        Err(config::ConfigError::NotFound(_)) => {
-            debug!(target: LOG_TARGET, "No network configuration found. Using default network '{}'.", Network::default());
-            Network::default()
-        },
-        Err(e) => {
-            return Err(ConfigError::new(
-                "Could not get network configuration",
-                Some(e.to_string()),
-            ));
-        },
-    };
+    let network = network_override.unwrap_or_default();
 
-    let overrides = overrides.get_config_property_overrides(&mut network);
-    if overrides.is_empty() {
-        return Ok(cfg);
-    }
+    let overrides = overrides.get_config_property_overrides(&network);
+    // if overrides.is_empty() {
+    //     return Ok(cfg);
+    // }
 
     let mut cfg = Config::builder().add_source(cfg);
     for (key, value) in overrides {
@@ -85,6 +85,9 @@ pub fn load_configuration_with_overrides<P: AsRef<Path>, TOverride: ConfigOverri
             .set_override(key.as_str(), value.as_str())
             .map_err(|ce| ConfigError::new("Could not override config property", Some(ce.to_string())))?;
     }
+    cfg = cfg
+        .set_override("network", network.to_string())
+        .map_err(|ce| ConfigError::new("Could not override config property", Some(ce.to_string())))?;
     let cfg = cfg
         .build()
         .map_err(|ce| ConfigError::new("Could not build config", Some(ce.to_string())))?;

@@ -188,7 +188,7 @@ impl ValidatorBuilder {
 
         let validator = Validator {
             address: self.address.clone(),
-            shard_address: self.shard_address,
+            _shard_address: self.shard_address,
             shard_group: self.shard_group,
             num_committees: self.num_committees,
             transaction_executions: self.transaction_executions.clone(),

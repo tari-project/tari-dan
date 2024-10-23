@@ -235,7 +235,7 @@ impl<TAddr: NodeAddressable + 'static> TemplateManagerService<TAddr> {
             TemplateType::Flow => DbTemplateType::Flow,
             TemplateType::Manifest => DbTemplateType::Manifest,
         };
-        let expected_binary_hash = FixedHash::try_from(template.registration.binary_sha.clone().into_vec())
+        let expected_binary_hash = FixedHash::try_from(template.registration.binary_sha.as_ref())
             .map_err(|_| TemplateManagerError::InvalidBaseLayerTemplate)?;
         self.manager.add_template(template)?;
         // We could queue this up much later, at which point we'd update to pending

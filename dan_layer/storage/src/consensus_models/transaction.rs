@@ -279,14 +279,11 @@ impl TransactionRecord {
         tx.transactions_get(tx_id)
     }
 
-    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &TTx,
-        tx_id: &TransactionId,
-    ) -> Result<bool, StorageError> {
+    pub fn exists<TTx: StateStoreReadTransaction>(tx: &TTx, tx_id: &TransactionId) -> Result<bool, StorageError> {
         tx.transactions_exists(tx_id)
     }
 
-    pub fn exists_any<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a TransactionId>>(
+    pub fn exists_any<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
         tx: &TTx,
         tx_ids: I,
     ) -> Result<bool, StorageError> {

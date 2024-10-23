@@ -496,8 +496,12 @@ where
                     info!(target: LOG_TARGET, "📡 Dcutr failed: peer={}, error={}", remote_peer_id, err);
                 },
             },
-            Identify(identify::Event::Received { peer_id, info }) => {
-                info!(target: LOG_TARGET, "👋 Received identify from {} with {} addresses", peer_id, info.listen_addrs.len());
+            Identify(identify::Event::Received {
+                peer_id,
+                info,
+                connection_id,
+            }) => {
+                info!(target: LOG_TARGET, "👋 Received identify from {} with {} addresses (id={connection_id})", peer_id, info.listen_addrs.len());
                 self.on_peer_identified(peer_id, info)?;
             },
             Identify(event) => {

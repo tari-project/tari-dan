@@ -1185,11 +1185,11 @@ impl<P: Clone> From<LeafNode<P>> for Node<P> {
 }
 
 impl<P: Clone> Node<P> {
-    /// Creates the [`Internal`](Node::Internal) variant.
-    #[cfg(any(test, feature = "fuzzing"))]
-    pub fn new_internal(children: Children) -> Self {
-        Node::Internal(InternalNode::new(children))
-    }
+    // /// Creates the [`Internal`](Node::Internal) variant.
+    // #[cfg(any(test, feature = "fuzzing"))]
+    // pub fn new_internal(children: Children) -> Self {
+    //     Node::Internal(InternalNode::new(children))
+    // }
 
     /// Creates the [`Leaf`](Node::Leaf) variant.
     pub fn new_leaf(leaf_key: LeafKey, value_hash: Hash, payload: P, version: Version) -> Self {

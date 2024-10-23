@@ -1,8 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::time::SystemTime;
-
 use tari_dan_wallet_sdk::models::{Account, NewAccountInfo, TransactionStatus};
 use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateId};
 use tari_template_lib::models::Amount;
@@ -15,7 +13,7 @@ pub enum WalletEvent {
     TransactionInvalid(TransactionInvalidEvent),
     AccountCreated(AccountCreatedEvent),
     AccountChanged(AccountChangedEvent),
-    AuthLoginRequest(AuthLoginRequestEvent),
+    AuthLoginRequest(#[allow(dead_code)] AuthLoginRequestEvent),
 }
 
 impl From<TransactionSubmittedEvent> for WalletEvent {
@@ -72,6 +70,7 @@ pub struct TransactionFinalizedEvent {
 #[derive(Debug, Clone)]
 pub struct AccountCreatedEvent {
     pub account: Account,
+    #[allow(dead_code)]
     pub created_by_tx: TransactionId,
 }
 
@@ -86,11 +85,7 @@ pub struct TransactionInvalidEvent {
     pub status: TransactionStatus,
     pub finalize: Option<FinalizeResult>,
     pub final_fee: Option<Amount>,
-    pub is_dry_run: bool,
 }
 
 #[derive(Debug, Clone)]
-pub struct AuthLoginRequestEvent {
-    pub auth_token: String,
-    pub valid_till: SystemTime,
-}
+pub struct AuthLoginRequestEvent;

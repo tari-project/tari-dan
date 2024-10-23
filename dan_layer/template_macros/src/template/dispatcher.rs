@@ -34,7 +34,7 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
 
     let output = quote! {
         #[no_mangle]
-        pub unsafe extern "C" fn #dispatcher_function_name(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
+        pub unsafe extern "C" fn #dispatcher_function_name(call_info: *mut u8, call_info_len: u32) -> *mut u8 {
             use ::tari_template_lib::template_dependencies::*;
             // include all use statements from the template module here as these may be used in the function arguments.
             #(
@@ -51,7 +51,7 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
                 panic!("call_info is null");
             }
 
-            let call_data = unsafe { Vec::from_raw_parts(call_info, call_info_len, call_info_len) };
+            let call_data = unsafe { Vec::from_raw_parts(call_info, call_info_len as usize, call_info_len as usize) };
             let call_info: CallInfo = decode_exact(&call_data).expect("Failed to decode CallArgs");
 
             init_context(&call_info);
@@ -177,8 +177,8 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
 
 fn replace_self_in_output(ast: &FunctionAst) -> Vec<Stmt> {
     let mut stmts: Vec<Stmt> = vec![];
-    match &ast.output_type {
-        Some(output_type) => match output_type {
+    if let Some(output_type) = &ast.output_type {
+        match output_type {
             TypeAst::Typed { type_path, .. } => {
                 if let Some(stmt) = replace_self_in_single_value(type_path) {
                     stmts.push(stmt);
@@ -188,8 +188,7 @@ fn replace_self_in_output(ast: &FunctionAst) -> Vec<Stmt> {
                 stmts.push(replace_self_in_tuple(type_tuple));
             },
             _ => todo!("replace_self_in_output only supports typed and tuple"),
-        },
-        None => {},
+        }
     }
 
     stmts

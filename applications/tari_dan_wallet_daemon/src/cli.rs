@@ -51,7 +51,7 @@ impl Cli {
 }
 
 impl ConfigOverrideProvider for Cli {
-    fn get_config_property_overrides(&self, network: &mut Network) -> Vec<(String, String)> {
+    fn get_config_property_overrides(&self, network: &Network) -> Vec<(String, String)> {
         let mut overrides = self.common.get_config_property_overrides(network);
         if let Some(json_rpc_address) = self.json_rpc_address {
             overrides.push((

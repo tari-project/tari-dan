@@ -5,7 +5,7 @@ use tari_common_types::types::FixedHash;
 use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_common_types::{Epoch, NodeHeight, VersionedSubstateIdError};
 use tari_dan_storage::{
-    consensus_models::{BlockError, BlockId, LeafBlock, LockedBlock, QuorumCertificate, TransactionPoolError},
+    consensus_models::{BlockError, BlockId, LeafBlock, LockedBlock, QcId, TransactionPoolError},
     StorageError,
 };
 use tari_epoch_manager::EpochManagerError;
@@ -188,12 +188,10 @@ pub enum ProposalValidationError {
     MissingSignature { block_id: BlockId, height: NodeHeight },
     #[error("Proposed block {block_id} {height} has invalid signature")]
     InvalidSignature { block_id: BlockId, height: NodeHeight },
-    #[error("QC is not valid: {qc}")]
-    QCisNotValid { qc: QuorumCertificate },
     #[error("QC has invalid signature: {qc}")]
-    QCInvalidSignature { qc: QuorumCertificate },
+    QCInvalidSignature { qc: QcId },
     #[error("Quorum was not reached: {qc}")]
-    QuorumWasNotReached { qc: QuorumCertificate },
+    QuorumWasNotReached { qc: QcId },
     #[error("Invalid network in block {block_id}: expected {expected_network}, given {block_network}")]
     InvalidNetwork {
         expected_network: String,

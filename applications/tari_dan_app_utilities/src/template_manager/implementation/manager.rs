@@ -20,12 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    collections::HashMap,
-    convert::{TryFrom, TryInto},
-    fs,
-    sync::Arc,
-};
+use std::{collections::HashMap, convert::TryFrom, fs, sync::Arc};
 
 use chrono::Utc;
 use log::*;
@@ -195,7 +190,7 @@ impl<TAddr: NodeAddressable> TemplateManager<TAddr> {
         let template = DbTemplate {
             template_name: template.template_name,
             template_address: template.template_address.into_array().into(),
-            expected_hash: template.registration.binary_sha.into_vec().try_into()?,
+            expected_hash: template.registration.binary_sha.as_ref().try_into()?,
             url: template.registration.binary_url.into_string(),
             height: template.mined_height,
             status: TemplateStatus::New,

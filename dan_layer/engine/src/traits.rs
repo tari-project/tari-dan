@@ -23,8 +23,13 @@
 use tari_engine_types::instruction_result::InstructionResult;
 use tari_template_abi::FunctionDef;
 
-pub trait Invokable {
+pub trait Invokable<S> {
     type Error;
 
-    fn invoke(&self, def: &FunctionDef, args: Vec<tari_bor::Value>) -> Result<InstructionResult, Self::Error>;
+    fn invoke(
+        &mut self,
+        store: &mut S,
+        def: &FunctionDef,
+        args: Vec<tari_bor::Value>,
+    ) -> Result<InstructionResult, Self::Error>;
 }

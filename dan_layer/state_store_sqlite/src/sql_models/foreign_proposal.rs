@@ -27,6 +27,7 @@ pub struct ForeignProposal {
     pub shard_group: i32,
     pub proposed_by: String,
     pub qc: String,
+    #[allow(dead_code)]
     pub command_count: i64,
     pub commands: String,
     pub total_leader_fee: i64,
@@ -38,6 +39,7 @@ pub struct ForeignProposal {
     pub justify_qc_id: String,
     pub block_pledge: String,
     pub proposed_in_block: Option<String>,
+    #[allow(dead_code)]
     pub proposed_in_block_height: Option<i64>,
     pub status: String,
     pub extra_data: Option<String>,

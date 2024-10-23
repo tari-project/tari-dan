@@ -408,9 +408,9 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 Ok(())
             },
             MessageValidationResult::Discard => Ok(()),
-            MessageValidationResult::Invalid { err, .. } => {
+            MessageValidationResult::Invalid { err, from, message } => {
                 self.hooks.on_error(&err);
-                error!(target: LOG_TARGET, "🚨 Invalid new message: {}", err);
+                error!(target: LOG_TARGET, "🚨 Invalid new message from {from}: {err} - {message}");
                 Ok(())
             },
         }

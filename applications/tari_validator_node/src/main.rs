@@ -66,7 +66,8 @@ async fn main() {
 async fn main_inner() -> Result<(), ExitError> {
     let cli = Cli::parse();
     let config_path = cli.common.config_path();
-    let cfg = load_configuration(config_path, true, &cli).map_err(|e| ExitError::new(ExitCode::ConfigError, e))?;
+    let cfg = load_configuration(cli.common.network, config_path, true, &cli)
+        .map_err(|e| ExitError::new(ExitCode::ConfigError, e))?;
     let config = ApplicationConfig::load_from(&cfg)?;
 
     // Remove the pid file if it exists

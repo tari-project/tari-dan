@@ -154,7 +154,7 @@ pub struct Claims {
     pub id: u64,
     pub name: String,
     pub permissions: JrpcPermissions,
-    pub exp: usize,
+    pub exp: u64,
 }
 
 // This is used when you request permission.
@@ -162,7 +162,7 @@ pub struct Claims {
 pub struct AuthClaims {
     id: u64,
     permissions: JrpcPermissions,
-    exp: usize,
+    exp: u64,
 }
 
 impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
@@ -187,20 +187,23 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
         &self,
         permissions: JrpcPermissions,
         duration: Option<Duration>,
-    ) -> Result<(String, SystemTime), JwtApiError> {
+    ) -> Result<(String, Duration), JwtApiError> {
         let id = self.get_index()?;
         let valid_till = SystemTime::now() + duration.unwrap_or(self.default_expiry);
+        let exp = valid_till
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| JwtApiError::InvalidExpiry)?;
         let my_claims = AuthClaims {
             id,
             permissions,
-            exp: valid_till.duration_since(UNIX_EPOCH).unwrap().as_secs() as usize,
+            exp: exp.as_secs(),
         };
         let auth_token = jsonwebtoken::encode(
             &Header::default(),
             &my_claims,
             &EncodingKey::from_secret(self.auth_secret_key.as_ref()),
         )?;
-        Ok((auth_token, valid_till))
+        Ok((auth_token, exp))
     }
 
     fn check_auth_token(&self, auth_token: &str) -> Result<AuthClaims, JwtApiError> {
@@ -305,4 +308,6 @@ pub enum JwtApiError {
     InsufficientPermissions { required: JrpcPermission },
     #[error("Token revoked")]
     TokenRevoked,
+    #[error("Invalid expiry")]
+    InvalidExpiry,
 }

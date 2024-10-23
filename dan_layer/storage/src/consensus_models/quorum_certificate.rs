@@ -160,39 +160,36 @@ impl QuorumCertificate {
 }
 
 impl QuorumCertificate {
-    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &TTx, qc_id: &QcId) -> Result<Self, StorageError> {
+    pub fn get<TTx: StateStoreReadTransaction>(tx: &TTx, qc_id: &QcId) -> Result<Self, StorageError> {
         tx.quorum_certificates_get(qc_id)
     }
 
-    pub fn get_all<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a QcId>>(
+    pub fn get_all<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a QcId>>(
         tx: &TTx,
         qc_ids: I,
     ) -> Result<Vec<Self>, StorageError> {
         tx.quorum_certificates_get_all(qc_ids)
     }
 
-    pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<Block, StorageError> {
+    pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<Block, StorageError> {
         Block::get(tx, &self.block_id)
     }
 
-    pub fn get_by_block_id<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &TTx,
-        block_id: &BlockId,
-    ) -> Result<Self, StorageError> {
+    pub fn get_by_block_id<TTx: StateStoreReadTransaction>(tx: &TTx, block_id: &BlockId) -> Result<Self, StorageError> {
         tx.quorum_certificates_get_by_block_id(block_id)
     }
 
-    pub fn insert<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn insert<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.quorum_certificates_insert(self)
     }
 
-    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<bool, StorageError> {
+    pub fn exists<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<bool, StorageError> {
         Ok(tx.quorum_certificates_get(&self.qc_id).optional()?.is_some())
     }
 
     pub fn check_high_qc<TTx>(&self, tx: &mut TTx) -> Result<(bool, HighQc), StorageError>
     where
-        TTx: StateStoreWriteTransaction + Deref + ?Sized,
+        TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
     {
         let Some(high_qc) = HighQc::get(&**tx, self.epoch).optional()? else {
@@ -208,7 +205,7 @@ impl QuorumCertificate {
 
     pub fn update_high_qc<TTx>(&self, tx: &mut TTx) -> Result<HighQc, StorageError>
     where
-        TTx: StateStoreWriteTransaction + Deref + ?Sized,
+        TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
     {
         let (is_new, high_qc) = self.check_high_qc(tx)?;
@@ -236,7 +233,7 @@ impl QuorumCertificate {
 
     pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>
     where
-        TTx: StateStoreWriteTransaction + Deref + ?Sized,
+        TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
     {
         if self.exists(&**tx)? {

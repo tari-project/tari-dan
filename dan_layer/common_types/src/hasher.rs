@@ -7,7 +7,7 @@ use blake2::{
     Blake2b,
 };
 use serde::Serialize;
-use tari_bor::encode_into;
+use tari_bor::encode_into_std_writer;
 use tari_common_types::types::FixedHash;
 use tari_crypto::hashing::DomainSeparation;
 
@@ -42,7 +42,7 @@ impl TariHasher {
         // encoding in infallible. However this should be the case. Since it is very unergonomic to return an
         // error in hash chain functions, and therefore all usages of the hasher, we assume all types implement
         // infallible encoding.
-        encode_into(data, &mut self.hash_writer()).expect("encoding failed")
+        encode_into_std_writer(data, &mut self.hash_writer()).expect("encoding failed")
     }
 
     pub fn chain<T: Serialize + ?Sized>(mut self, data: &T) -> Self {

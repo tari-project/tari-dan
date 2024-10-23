@@ -583,7 +583,7 @@ impl Block {
 }
 
 impl Block {
-    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &TTx, id: &BlockId) -> Result<Self, StorageError> {
+    pub fn get<TTx: StateStoreReadTransaction>(tx: &TTx, id: &BlockId) -> Result<Self, StorageError> {
         tx.blocks_get(id)
     }
 
@@ -599,7 +599,7 @@ impl Block {
         tx.blocks_get_all_between(epoch, shard_group, start_block_id, end_block_id, include_dummy_blocks)
     }
 
-    pub fn get_last_n_in_epoch<TTx: StateStoreReadTransaction + ?Sized>(
+    pub fn get_last_n_in_epoch<TTx: StateStoreReadTransaction>(
         tx: &TTx,
         n: usize,
         epoch: Epoch,
@@ -607,15 +607,15 @@ impl Block {
         tx.blocks_get_last_n_in_epoch(n, epoch)
     }
 
-    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<bool, StorageError> {
+    pub fn exists<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<bool, StorageError> {
         Self::record_exists(tx, self.id())
     }
 
-    pub fn parent_exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<bool, StorageError> {
+    pub fn parent_exists<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<bool, StorageError> {
         Self::record_exists(tx, self.parent())
     }
 
-    pub fn has_been_justified<TTx: StateStoreReadTransaction + ?Sized>(
+    pub fn has_been_justified<TTx: StateStoreReadTransaction>(
         tx: &TTx,
         block_id: &BlockId,
     ) -> Result<bool, StorageError> {
@@ -627,14 +627,11 @@ impl Block {
         Ok(is_justified)
     }
 
-    pub fn record_exists<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &TTx,
-        block_id: &BlockId,
-    ) -> Result<bool, StorageError> {
+    pub fn record_exists<TTx: StateStoreReadTransaction>(tx: &TTx, block_id: &BlockId) -> Result<bool, StorageError> {
         tx.blocks_exists(block_id)
     }
 
-    pub fn insert<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn insert<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.blocks_insert(self)
     }
 
@@ -819,7 +816,7 @@ impl Block {
         tx.blocks_is_ancestor(self.parent(), ancestor)
     }
 
-    pub fn get_parent<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<Block, StorageError> {
+    pub fn get_parent<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<Block, StorageError> {
         if self.id.is_zero() && self.parent.is_zero() {
             return Err(StorageError::NotFound {
                 item: "Block parent".to_string(),
@@ -935,7 +932,7 @@ impl Block {
         mut on_commit: TFnOnCommit,
     ) -> Result<Self, E>
     where
-        TTx: StateStoreWriteTransaction + Deref + ?Sized,
+        TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
         TFnOnLock: FnMut(&mut TTx, &LockedBlock, &Block, &QuorumCertificate) -> Result<(), E>,
         TFnOnCommit: FnMut(&mut TTx, &LastExecuted, &Block) -> Result<(), E>,
@@ -1033,7 +1030,7 @@ impl Block {
 
     pub fn save_foreign_send_counters<TTx>(&self, tx: &mut TTx) -> Result<(), StorageError>
     where
-        TTx: StateStoreWriteTransaction + Deref + ?Sized,
+        TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
     {
         let mut counters = ForeignSendCounters::get_or_default(&**tx, self.justify().block_id())?;
@@ -1197,7 +1194,7 @@ fn on_locked_block_recurse<TTx, F, E>(
     callback: &mut F,
 ) -> Result<(), E>
 where
-    TTx: StateStoreWriteTransaction + Deref + ?Sized,
+    TTx: StateStoreWriteTransaction + Deref,
     TTx::Target: StateStoreReadTransaction,
     E: From<StorageError>,
     F: FnMut(&mut TTx, &LockedBlock, &Block, &QuorumCertificate) -> Result<(), E>,
@@ -1217,7 +1214,7 @@ fn on_commit_block_recurse<TTx, F, E>(
     callback: &mut F,
 ) -> Result<(), E>
 where
-    TTx: StateStoreWriteTransaction + Deref + ?Sized,
+    TTx: StateStoreWriteTransaction + Deref,
     TTx::Target: StateStoreReadTransaction,
     E: From<StorageError>,
     F: FnMut(&mut TTx, &LastExecuted, &Block) -> Result<(), E>,

@@ -29,7 +29,6 @@ use std::{
     time::Duration,
 };
 
-use log::Level;
 use minotari_app_grpc::{
     authentication::ClientAuthenticationInterceptor,
     tari_rpc::{wallet_client::WalletClient, ConnectivityStatus, Empty, GetIdentityRequest, SetBaseNodeRequest},
@@ -249,10 +248,12 @@ pub fn run_wallet(runtime: Runtime, config: &mut ApplicationConfig, shutdown: &m
             base_path: data_dir_str,
             config: config_path.into_os_string().into_string().unwrap(),
             log_config: Some(log_config),
-            log_level: Some(Level::Debug),
+            log_path: None,
             config_property_overrides: vec![],
             network: None,
         },
+        spend_key: None,
+        view_private_key: None,
         password: None,
         change_password: false,
         recovery: false,

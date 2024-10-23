@@ -34,7 +34,7 @@ impl Vote {
 }
 
 impl Vote {
-    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<bool, StorageError> {
+    pub fn exists<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<bool, StorageError> {
         Ok(tx
             .votes_get_by_block_and_sender(&self.block_id, &self.sender_leaf_hash)
             .optional()?

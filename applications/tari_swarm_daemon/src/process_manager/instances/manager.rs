@@ -138,6 +138,7 @@ impl InstanceManager {
         let context = ProcessContext::new(
             instance_id,
             &executable.path,
+            &executable.env,
             base_path.clone(),
             self.network,
             listen_ip,

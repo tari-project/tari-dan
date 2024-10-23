@@ -106,7 +106,7 @@ use crate::{
     p2p::{
         create_tari_validator_node_rpc_service,
         services::{
-            consensus_gossip::{self, ConsensusGossipHandle},
+            consensus_gossip::{self},
             mempool::{self, MempoolHandle},
             messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging},
         },
@@ -377,12 +377,12 @@ pub async fn spawn_services(
         epoch_manager,
         template_manager: template_manager_service,
         consensus_handle,
-        global_db,
+        // global_db,
         state_store,
         dry_run_transaction_processor,
         handles,
-        validator_node_client_factory,
-        consensus_gossip_service,
+        // validator_node_client_factory,
+        // consensus_gossip_service,
     })
 }
 
@@ -431,10 +431,10 @@ pub struct Services {
     pub epoch_manager: EpochManagerHandle<PeerAddress>,
     pub template_manager: TemplateManagerHandle,
     pub consensus_handle: ConsensusHandle,
-    pub global_db: GlobalDb<SqliteGlobalDbAdapter<PeerAddress>>,
+    // pub global_db: GlobalDb<SqliteGlobalDbAdapter<PeerAddress>>,
     pub dry_run_transaction_processor: DryRunTransactionProcessor,
-    pub validator_node_client_factory: TariValidatorNodeRpcClientFactory,
-    pub consensus_gossip_service: ConsensusGossipHandle,
+    // pub validator_node_client_factory: TariValidatorNodeRpcClientFactory,
+    // pub consensus_gossip_service: ConsensusGossipHandle,
     pub state_store: SqliteStateStore<PeerAddress>,
 
     pub handles: Vec<JoinHandle<Result<(), anyhow::Error>>>,

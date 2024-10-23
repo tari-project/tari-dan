@@ -20,8 +20,14 @@ pub const TOPIC_DELIMITER: &str = "-";
 pub enum GossipSendError {
     #[error("Invalid token topic: {0}")]
     InvalidToken(String),
-    #[error("Send gossip error: {0}")]
-    SendError(#[from] mpsc::error::SendError<(PeerId, gossipsub::Message)>),
+    #[error("Inbound gossip channel closed")]
+    InboundGossipChannelClosed,
+}
+
+impl From<mpsc::error::SendError<(PeerId, gossipsub::Message)>> for GossipSendError {
+    fn from(_: mpsc::error::SendError<(PeerId, gossipsub::Message)>) -> Self {
+        Self::InboundGossipChannelClosed
+    }
 }
 
 pub fn spawn<TMsg>(

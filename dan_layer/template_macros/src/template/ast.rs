@@ -36,8 +36,6 @@ use syn::{
     ItemUse,
     Result,
     ReturnType,
-    Signature,
-    Stmt,
     TypePath,
     TypeTuple,
     UseTree,
@@ -140,9 +138,9 @@ impl TemplateAst {
                     name: m.sig.ident.to_string(),
                     input_types: Self::get_input_types(&m.sig.inputs),
                     output_type: Self::get_output_type_token(&m.sig.output),
-                    statements: Self::get_statements(m),
-                    is_constructor: Self::is_constructor(&m.sig),
-                    is_public: true,
+                    // statements: Self::get_statements(m),
+                    // is_constructor: Self::is_constructor(&m.sig),
+                    // is_public: true,
                 })
             },
             _ => todo!("get_function_from_item does not support anything other than methods"),
@@ -205,19 +203,19 @@ impl TemplateAst {
         }
     }
 
-    fn get_statements(method: &ImplItemMethod) -> Vec<Stmt> {
-        method.block.stmts.clone()
-    }
+    // fn get_statements(method: &ImplItemMethod) -> Vec<Stmt> {
+    //     method.block.stmts.clone()
+    // }
 
-    fn is_constructor(sig: &Signature) -> bool {
-        match &sig.output {
-            ReturnType::Default => false, // the function does not return anything
-            ReturnType::Type(_, t) => match t.as_ref() {
-                syn::Type::Path(type_path) => type_path.path.segments[0].ident == "Self",
-                _ => false,
-            },
-        }
-    }
+    // fn is_constructor(sig: &Signature) -> bool {
+    //     match &sig.output {
+    //         ReturnType::Default => false, // the function does not return anything
+    //         ReturnType::Type(_, t) => match t.as_ref() {
+    //             syn::Type::Path(type_path) => type_path.path.segments[0].ident == "Self",
+    //             _ => false,
+    //         },
+    //     }
+    // }
 
     fn is_public_function(item: &ImplItemMethod) -> bool {
         matches!(item.vis, syn::Visibility::Public(_))
@@ -228,9 +226,9 @@ pub struct FunctionAst {
     pub name: String,
     pub input_types: Vec<TypeAst>,
     pub output_type: Option<TypeAst>,
-    pub statements: Vec<Stmt>,
-    pub is_constructor: bool,
-    pub is_public: bool,
+    // pub statements: Vec<Stmt>,
+    // pub is_constructor: bool,
+    // pub is_public: bool,
 }
 
 impl FunctionAst {

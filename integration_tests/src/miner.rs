@@ -69,7 +69,7 @@ pub async fn mine_blocks(world: &mut TariWorld, miner_name: String, num_blocks: 
             .await
             .unwrap()
             .into_inner()
-            .address,
+            .one_sided_address,
     )
     .unwrap();
 
@@ -153,7 +153,7 @@ async fn create_block_template_with_coinbase(
         MicroMinotari::from(fee),
         MicroMinotari::from(reward),
         height,
-        &[],
+        &Default::default(),
         key_manager,
         script_key_id,
         wallet_payment_address,

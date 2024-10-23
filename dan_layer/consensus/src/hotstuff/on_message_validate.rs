@@ -4,7 +4,6 @@
 use std::collections::HashSet;
 
 use log::*;
-use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{committee::CommitteeInfo, Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, ForeignParkedProposal, ForeignProposal, TransactionRecord},
@@ -237,7 +236,6 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         Ok(MessageValidationResult::ParkedProposal {
             block_id: *proposal.block.id(),
             epoch: proposal.block.epoch(),
-            proposed_by: proposal.block.proposed_by().clone(),
             missing_txs: missing_tx_ids,
         })
     }
@@ -366,7 +364,6 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             Ok(MessageValidationResult::ParkedProposal {
                 block_id: *parked_block.block().id(),
                 epoch: parked_block.block().epoch(),
-                proposed_by: parked_block.block().proposed_by().clone(),
                 missing_txs: missing_tx_ids,
             })
         })
@@ -402,7 +399,6 @@ pub enum MessageValidationResult<TAddr> {
     ParkedProposal {
         block_id: BlockId,
         epoch: Epoch,
-        proposed_by: PublicKey,
         missing_txs: HashSet<TransactionId>,
     },
     Discard,

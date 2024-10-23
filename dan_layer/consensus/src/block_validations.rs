@@ -175,7 +175,7 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
     }
 
     if qc.signatures().is_empty() {
-        return Err(ProposalValidationError::QuorumWasNotReached { qc: qc.clone() }.into());
+        return Err(ProposalValidationError::QuorumWasNotReached { qc: *qc.id() }.into());
     }
 
     let mut vns = vec![];
@@ -200,7 +200,7 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
     for sign in qc.signatures() {
         let message = vote_signing_service.create_message(qc.block_id(), &qc.decision());
         if !sign.verify(message) {
-            return Err(ProposalValidationError::QCInvalidSignature { qc: qc.clone() }.into());
+            return Err(ProposalValidationError::QCInvalidSignature { qc: *qc.id() }.into());
         }
     }
     let committee_shard = epoch_manager
@@ -208,7 +208,7 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
             qc.epoch(),
             qc.signatures()
                 .first()
-                .ok_or::<HotStuffError>(ProposalValidationError::QuorumWasNotReached { qc: qc.clone() }.into())?
+                .ok_or::<HotStuffError>(ProposalValidationError::QuorumWasNotReached { qc: *qc.id() }.into())?
                 .public_key()
                 .clone(),
         )
@@ -217,7 +217,7 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
     if committee_shard.quorum_threshold() >
         u32::try_from(qc.signatures().len()).map_err(|_| ProposalValidationError::QCConversionError)?
     {
-        return Err(ProposalValidationError::QuorumWasNotReached { qc: qc.clone() }.into());
+        return Err(ProposalValidationError::QuorumWasNotReached { qc: *qc.id() }.into());
     }
     Ok(())
 }

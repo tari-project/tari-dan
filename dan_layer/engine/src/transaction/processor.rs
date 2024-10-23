@@ -490,7 +490,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             module_name: template.template_name().to_string(),
             component_scope,
             component_lock: component_lock.clone(),
-            arg_scope,
+            arg_scope: Box::new(arg_scope),
             entity_id: component.entity_id,
         })?;
 
@@ -519,9 +519,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         args: Vec<tari_bor::Value>,
     ) -> Result<InstructionResult, TransactionError> {
         let result = match module {
-            LoadedTemplate::Wasm(wasm_module) => {
-                let process = WasmProcess::start(wasm_module, runtime)?;
-                process.invoke(&function_def, args)?
+            LoadedTemplate::Wasm(loaded) => {
+                let mut store = loaded.create_store();
+                let mut process = WasmProcess::init(&mut store, loaded, runtime)?;
+                process.invoke(&mut store, &function_def, args)?
             },
             LoadedTemplate::Flow(flow_factory) => {
                 flow_factory.run_new_instance(

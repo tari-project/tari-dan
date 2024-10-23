@@ -135,16 +135,13 @@ where
     H: for<'a> JrpcHandler<'a, TReq, Response = TResp>,
 {
     let answer_id = value.get_answer_id();
-    let params = value.parse_params().map_err(|e| {
-        match &e.result {
-            JsonRpcAnswer::Result(_) => {
-                unreachable!("parse_params() error should not return a result")
-            },
-            JsonRpcAnswer::Error(e) => {
-                warn!(target: LOG_TARGET, "🌐 JSON-RPC params error: {}", e);
-            },
-        }
-        e
+    let params = value.parse_params().inspect_err(|e| match &e.result {
+        JsonRpcAnswer::Result(_) => {
+            unreachable!("parse_params() error should not return a result")
+        },
+        JsonRpcAnswer::Error(e) => {
+            warn!(target: LOG_TARGET, "🌐 JSON-RPC params error: {}", e);
+        },
     })?;
     let resp = handler
         .handle(&context, params)

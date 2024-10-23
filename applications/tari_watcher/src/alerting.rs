@@ -14,7 +14,7 @@ pub trait Alerting {
 
     // Statistics on the alerts sent
     // todo: expand granularity and types of stats
-    fn stats(&self) -> Result<u64>;
+    // fn stats(&self) -> Result<u64>;
 }
 
 pub struct MatterMostNotifier {
@@ -89,9 +89,9 @@ impl Alerting for MatterMostNotifier {
         Ok(())
     }
 
-    fn stats(&self) -> Result<u64> {
-        Ok(self.alerts_sent)
-    }
+    // fn stats(&self) -> Result<u64> {
+    //     Ok(self.alerts_sent)
+    // }
 }
 
 pub struct TelegramNotifier {
@@ -147,7 +147,7 @@ impl Alerting for TelegramNotifier {
         Ok(())
     }
 
-    fn stats(&self) -> Result<u64> {
-        Ok(self.alerts_sent)
-    }
+    // fn stats(&self) -> Result<u64> {
+    //     Ok(self.alerts_sent)
+    // }
 }

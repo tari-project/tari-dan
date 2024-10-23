@@ -20,11 +20,13 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
+use std::{fmt, fmt::Formatter, sync::Arc};
 
 use tari_template_abi::{FunctionDef, TemplateDef, ABI_TEMPLATE_DEF_GLOBAL_NAME};
 use wasmer::{
-    BaseTunables,
+    imports,
+    sys::BaseTunables,
+    AsStoreMut,
     CompilerConfig,
     Cranelift,
     CraneliftOptLevel,
@@ -32,16 +34,20 @@ use wasmer::{
     ExportError,
     Function,
     Instance,
+    NativeEngineExt,
+    Pages,
     Store,
-    Universal,
-    WasmerEnv,
+    Target,
+    TypedFunction,
+    WasmPtr,
 };
 
 use crate::{
     template::{LoadedTemplate, TemplateLoaderError, TemplateModuleLoader},
-    wasm::{environment::WasmEnv, metering, WasmExecutionError},
+    wasm::{environment::WasmEnv, limiting_tunable::LimitingTunables, metering, WasmExecutionError},
 };
 
+pub type MainFunction = TypedFunction<(WasmPtr<u8>, u32), WasmPtr<u8>>;
 #[derive(Debug, Clone)]
 pub struct WasmModule {
     code: Vec<u8>,
@@ -53,36 +59,46 @@ impl WasmModule {
     }
 
     pub fn load_template_from_code(code: &[u8]) -> Result<LoadedTemplate, TemplateLoaderError> {
-        let store = Self::create_store();
-        let module = wasmer::Module::new(&store, code)?;
+        let engine = Self::create_engine();
+        let module = wasmer::Module::new(&engine, code)?;
+        let mut store = Store::new(engine);
+
+        let imports = imports! {
+            "env" => {
+                "tari_engine" => Function::new_typed(&mut store, |_op: i32, _arg_ptr: i32, _arg_len: i32| 0i32),
+                "debug" => Function::new_typed(&mut store, |_arg_ptr: i32, _arg_len: i32| {  }),
+                "on_panic" => Function::new_typed(&mut store, |_msg_ptr: i32, _msg_len: i32, _line: i32, _col: i32| {  }),
+            }
+        };
+        let instance = Instance::new(&mut store, &module, &imports)?;
         let mut env = WasmEnv::new(());
-        fn stub(_env: &WasmEnv<()>, _op: i32, _arg_ptr: i32, _arg_len: i32) -> i32 {
-            0
-        }
+        let memory = instance.exports.get_memory("memory")?.clone();
+        env.set_memory(memory);
+        let template = env.load_abi(&mut store, &instance)?;
+        let main_fn = format!("{}_main", template.template_name());
+        validate_instance(&mut store, &instance, &main_fn)?;
 
-        let stub = Function::new_native_with_env(&store, env.clone(), stub);
-        let imports = env.create_resolver(&store, stub);
-        let instance = Instance::new(&module, &imports)?;
-        env.init_with_instance(&instance)?;
-        validate_instance(&instance)?;
-        validate_environment(&env)?;
+        let engine = store.engine().clone();
 
-        let template = initialize_and_load_template_abi(&instance, &env)?;
-        Ok(LoadedWasmTemplate::new(template, module, code.len()).into())
+        Ok(LoadedWasmTemplate::new(template, module, engine, code.len()).into())
     }
 
     pub fn code(&self) -> &[u8] {
         &self.code
     }
 
-    fn create_store() -> Store {
-        let mut cranelift = Cranelift::new();
-        cranelift.opt_level(CraneliftOptLevel::Speed).canonicalize_nans(true);
+    fn create_engine() -> Engine {
+        const MEMORY_PAGE_LIMIT: Pages = Pages(32); // 2MiB = 32 * 65,536
+        let base = BaseTunables::for_target(&Target::default());
+        let tunables = LimitingTunables::new(base, MEMORY_PAGE_LIMIT);
+        let mut compiler = Cranelift::new();
+        compiler.opt_level(CraneliftOptLevel::Speed).canonicalize_nans(true);
         // TODO: Configure metering limit
-        cranelift.push_middleware(Arc::new(metering::middleware(100_000_000)));
-        let engine = Universal::new(cranelift).engine();
-        let tunables = BaseTunables::for_target(engine.target());
-        Store::new_with_tunables(&engine, tunables)
+        compiler.push_middleware(Arc::new(metering::middleware(100_000_000)));
+        let mut engine = Engine::from(compiler);
+        engine.set_tunables(tunables);
+
+        engine
     }
 }
 
@@ -92,42 +108,34 @@ impl TemplateModuleLoader for WasmModule {
     }
 }
 
-fn initialize_and_load_template_abi<T: Clone + Send + Sync + 'static>(
-    instance: &Instance,
-    env: &WasmEnv<T>,
-) -> Result<TemplateDef, WasmExecutionError> {
-    let ptr = instance
-        .exports
-        .get_global(ABI_TEMPLATE_DEF_GLOBAL_NAME)?
-        .get()
-        .i32()
-        .ok_or(WasmExecutionError::ExportError(ExportError::IncompatibleType))?;
-    let ptr = u32::try_from(ptr).map_err(|_| WasmExecutionError::ExportError(ExportError::IncompatibleType))?;
-
-    // Load ABI from memory
-    let data = env.read_memory_with_embedded_len(ptr)?;
-    let decoded = tari_bor::decode(&data).map_err(WasmExecutionError::AbiDecodeError)?;
-    Ok(decoded)
-}
-
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct LoadedWasmTemplate {
     template_def: Arc<TemplateDef>,
     module: wasmer::Module,
+    engine: Engine,
     code_size: usize,
 }
 
 impl LoadedWasmTemplate {
-    pub fn new(template_def: TemplateDef, module: wasmer::Module, code_size: usize) -> Self {
+    pub fn new(template_def: TemplateDef, module: wasmer::Module, engine: Engine, code_size: usize) -> Self {
         Self {
             template_def: Arc::new(template_def),
             module,
+            engine,
             code_size,
         }
     }
 
     pub fn wasm_module(&self) -> &wasmer::Module {
         &self.module
+    }
+
+    pub fn engine(&self) -> &Engine {
+        &self.engine
+    }
+
+    pub fn create_store(&self) -> Store {
+        Store::new(self.engine.clone())
     }
 
     pub fn template_name(&self) -> &str {
@@ -147,23 +155,33 @@ impl LoadedWasmTemplate {
     }
 }
 
-fn validate_environment<T: Clone + Send + Sync + 'static>(env: &WasmEnv<T>) -> Result<(), WasmExecutionError> {
-    const MAX_MEM_SIZE: usize = 2 * 1024 * 1024;
-    let mem_size = env.mem_size();
-    if mem_size.bytes().0 > MAX_MEM_SIZE {
-        return Err(WasmExecutionError::MaxMemorySizeExceeded);
+impl fmt::Debug for LoadedWasmTemplate {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LoadedWasmTemplate")
+            .field("template_name", &self.template_name())
+            .field("code_size", &self.code_size())
+            .field("main", &"<main func>")
+            .field("module", &self.module)
+            .finish()
     }
-
-    Ok(())
 }
 
-fn validate_instance(instance: &Instance) -> Result<(), WasmExecutionError> {
+fn validate_instance<S: AsStoreMut>(
+    store: &mut S,
+    instance: &Instance,
+    main_fn: &str,
+) -> Result<(), WasmExecutionError> {
+    fn is_func_permitted(name: &str) -> bool {
+        name.ends_with("_main") || name == "tari_alloc" || name == "tari_free"
+    }
+
     // Enforce that only permitted functions are allowed
     let unexpected_abi_func = instance
         .exports
         .iter()
         .functions()
         .find(|(name, _)| !is_func_permitted(name));
+
     if let Some((name, _)) = unexpected_abi_func {
         return Err(WasmExecutionError::UnexpectedAbiFunction { name: name.to_string() });
     }
@@ -171,13 +189,12 @@ fn validate_instance(instance: &Instance) -> Result<(), WasmExecutionError> {
     instance
         .exports
         .get_global(ABI_TEMPLATE_DEF_GLOBAL_NAME)?
-        .get()
+        .get(store)
         .i32()
         .ok_or(WasmExecutionError::ExportError(ExportError::IncompatibleType))?;
 
-    Ok(())
-}
+    // Check that the main function exists
+    let _main: MainFunction = instance.exports.get_typed_function(store, main_fn)?;
 
-fn is_func_permitted(name: &str) -> bool {
-    name.ends_with("_main") || name == "tari_alloc" || name == "tari_free"
+    Ok(())
 }

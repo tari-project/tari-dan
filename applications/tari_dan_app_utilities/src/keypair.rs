@@ -57,7 +57,7 @@ struct KeyPairInner {
 /// - `identity_file` - Reference to file path
 /// - `public_address` - Network address of the base node
 /// - `create_id` - Only applies if the identity_file does not exist or is malformed. If true, a new identity will be
-/// created, otherwise the user will be prompted to create a new ID
+///   created, otherwise the user will be prompted to create a new ID
 /// - `peer_features` - Enables features of the base node
 ///
 /// # Return
