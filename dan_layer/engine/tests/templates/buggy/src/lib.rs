@@ -23,7 +23,7 @@
 
 use core::ptr;
 
-pub use tari_template_abi::{tari_alloc, tari_free};
+pub use tari_template_abi::tari_alloc;
 
 #[global_allocator]
 static ALLOC: lol_alloc::AssumeSingleThreaded<lol_alloc::FreeListAllocator> =
