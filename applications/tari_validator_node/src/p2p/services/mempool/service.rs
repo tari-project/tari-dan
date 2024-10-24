@@ -39,7 +39,10 @@ use super::metrics::PrometheusMempoolMetrics;
 use super::MempoolError;
 use crate::{
     consensus::ConsensusHandle,
-    p2p::services::mempool::{gossip::MempoolGossip, handle::MempoolRequest},
+    p2p::services::mempool::{
+        gossip::{IncomingMessage, MempoolGossip},
+        handle::MempoolRequest,
+    },
     transaction_validators::TransactionValidationError,
     validator::Validator,
 };
@@ -160,9 +163,14 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
 
     async fn handle_new_transaction_from_remote(
         &mut self,
-        result: Result<(PeerAddress, DanMessage, usize), MempoolError>,
+        result: Result<IncomingMessage, MempoolError>,
     ) -> Result<(), MempoolError> {
-        let (from, msg, num_pending) = result?;
+        let IncomingMessage {
+            address: from,
+            message: msg,
+            num_pending,
+            message_size,
+        } = result?;
         let DanMessage::NewTransaction(msg) = msg;
         let NewTransactionMessage { transaction } = *msg;
 
@@ -180,8 +188,9 @@ where TValidator: Validator<Transaction, Context = (), Error = TransactionValida
         }
         debug!(
             target: LOG_TARGET,
-            "Received NEW transaction from {}: {} {:?}",
+            "Received NEW transaction from {}: (size={}) {} {:?}",
             from,
+            message_size,
             transaction.id(),
             transaction
         );

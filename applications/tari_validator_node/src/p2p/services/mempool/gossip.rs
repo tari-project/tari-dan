@@ -72,10 +72,17 @@ impl MempoolGossip<PeerAddress> {
         }
     }
 
-    pub async fn next_message(&mut self) -> Option<Result<(PeerAddress, DanMessage, usize), MempoolError>> {
+    pub async fn next_message(&mut self) -> Option<Result<IncomingMessage, MempoolError>> {
         let (from, msg) = self.rx_gossip.recv().await?;
+        // Number of transactions still to receive
+        let num_pending = self.rx_gossip.len();
         match self.codec.decode(msg).await {
-            Ok((len, msg)) => Some(Ok((from.into(), msg, len))),
+            Ok((msg_len, msg)) => Some(Ok(IncomingMessage {
+                address: from.into(),
+                message: msg,
+                num_pending,
+                message_size: msg_len,
+            })),
             Err(e) => Some(Err(MempoolError::InvalidMessage(e.into()))),
         }
     }
@@ -186,4 +193,11 @@ fn shard_group_to_topic(shard_group: ShardGroup) -> String {
         shard_group.start().as_u32(),
         shard_group.end().as_u32()
     )
+}
+
+pub struct IncomingMessage {
+    pub address: PeerAddress,
+    pub message: DanMessage,
+    pub num_pending: usize,
+    pub message_size: usize,
 }
