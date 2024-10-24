@@ -145,7 +145,9 @@ impl ProcessManager {
     /// Loads all already registered templates.
     async fn registered_templates(&self) -> anyhow::Result<Vec<TemplateData>> {
         let process = self.instance_manager.validator_nodes().next().ok_or_else(|| {
-            anyhow!("No MinoTariConsoleWallet instances found. Please start a wallet before uploading a template")
+            anyhow!(
+                "No MinoTariConsoleWallet instances found. Please start a wallet before trying to get active templates"
+            )
         })?;
 
         let mut client = process.connect_client()?;
