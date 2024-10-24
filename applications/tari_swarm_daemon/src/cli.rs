@@ -71,6 +71,8 @@ pub struct Overrides {
     pub start_port: Option<u16>,
     #[clap(short = 'k', long)]
     pub skip_registration: bool,
+    #[clap(long)]
+    pub disable_template_auto_register: bool,
 }
 
 impl Overrides {
@@ -103,6 +105,10 @@ impl Overrides {
 
         if let Some(port) = self.start_port {
             config.start_port = port;
+        }
+
+        if self.disable_template_auto_register {
+            config.auto_register_previous_templates = false;
         }
 
         Ok(())

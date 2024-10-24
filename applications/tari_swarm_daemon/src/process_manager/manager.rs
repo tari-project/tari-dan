@@ -1,15 +1,19 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, fs::File, path::PathBuf, time::Duration};
+use std::{collections::HashMap, fs::File, path::PathBuf, str::FromStr, time::Duration};
 
 use anyhow::{anyhow, Context};
 use log::info;
 use minotari_node_grpc_client::grpc;
+use tari_common_types::types::FixedHash;
 use tari_crypto::tari_utilities::ByteArray;
-use tari_engine_types::TemplateAddress;
+use tari_dan_engine::wasm::WasmModule;
+use tari_engine_types::{calculate_template_binary_hash, TemplateAddress};
 use tari_shutdown::ShutdownSignal;
+use tari_validator_node_client::types::GetTemplatesRequest;
 use tokio::{sync::mpsc, time::sleep};
+use url::Url;
 
 use crate::{
     config::{Config, InstanceType},
@@ -28,6 +32,9 @@ pub struct ProcessManager {
     rx_request: mpsc::Receiver<ProcessManagerRequest>,
     shutdown_signal: ShutdownSignal,
     skip_registration: bool,
+    disable_template_auto_register: bool,
+    base_dir: PathBuf,
+    web_server_port: u16,
 }
 
 impl ProcessManager {
@@ -47,6 +54,9 @@ impl ProcessManager {
             ),
             rx_request,
             shutdown_signal,
+            disable_template_auto_register: !config.auto_register_previous_templates,
+            base_dir: config.base_dir.clone(),
+            web_server_port: config.webserver.bind_address.port(),
         };
         (this, ProcessManagerHandle::new(tx_request))
     }
@@ -73,7 +83,97 @@ impl ProcessManager {
                 .context("registering validator node via GRPC")?;
         }
 
+        if !self.disable_template_auto_register {
+            let registered_templates = self.registered_templates().await?;
+            let registered_template_names: Vec<String> = registered_templates
+                .iter()
+                .map(|template_data| format!("{}-{}", template_data.name, template_data.version))
+                .collect();
+            let fs_templates = self.file_system_templates().await?;
+            for template_data in fs_templates.iter().filter(|fs_template_data| {
+                !registered_template_names.contains(&format!("{}-{}", fs_template_data.name, fs_template_data.version))
+            }) {
+                info!(
+                    "🟡 Register missing template from local file system: {}",
+                    template_data.name
+                );
+                self.register_template(TemplateData {
+                    name: template_data.name.clone(),
+                    version: template_data.version,
+                    contents_hash: template_data.contents_hash,
+                    contents_url: template_data.contents_url.clone(),
+                })
+                .await?;
+            }
+        }
+
         Ok(())
+    }
+
+    /// Loads all the file system templates from the standard `<BASE_DIR>/templates` dir.
+    async fn file_system_templates(&self) -> anyhow::Result<Vec<TemplateData>> {
+        let templates_dir = self.base_dir.join("templates");
+        let mut templates_dir_content = tokio::fs::read_dir(templates_dir).await?;
+        let mut result = vec![];
+        while let Some(dir_entry) = templates_dir_content.next_entry().await? {
+            if dir_entry.path().is_file() {
+                if let Some(extension) = dir_entry.path().extension() {
+                    if extension == "wasm" {
+                        let file_name = dir_entry.file_name();
+                        let file_name = file_name.to_str().ok_or(anyhow!("Can't get file name!"))?;
+                        let file_content = tokio::fs::read(dir_entry.path()).await?;
+                        let loaded = WasmModule::load_template_from_code(file_content.as_slice())?;
+                        let name = loaded.template_def().template_name().to_string();
+                        let hash = calculate_template_binary_hash(&file_content);
+                        result.push(TemplateData {
+                            name,
+                            version: 0,
+                            contents_hash: hash,
+                            contents_url: Url::parse(&format!(
+                                "http://localhost:{}/templates/{}",
+                                self.web_server_port, file_name
+                            ))?,
+                        })
+                    }
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Loads all already registered templates.
+    async fn registered_templates(&self) -> anyhow::Result<Vec<TemplateData>> {
+        let process = self.instance_manager.validator_nodes().next().ok_or_else(|| {
+            anyhow!(
+                "No MinoTariConsoleWallet instances found. Please start a wallet before trying to get active templates"
+            )
+        })?;
+
+        let mut client = process.connect_client()?;
+        Ok(client
+            .get_active_templates(GetTemplatesRequest { limit: 10_000 })
+            .await?
+            .templates
+            .iter()
+            .map(|metadata| {
+                let url = if let Ok(url) = Url::from_str(metadata.url.as_str()) {
+                    url
+                } else {
+                    Url::parse(&format!(
+                        "http://localhost:{}/templates/{}",
+                        self.web_server_port, metadata.name
+                    ))
+                    .unwrap()
+                };
+                TemplateData {
+                    name: metadata.name.clone(),
+                    version: 0,
+                    contents_hash: FixedHash::try_from(metadata.binary_sha.as_slice()).unwrap_or_default(),
+                    contents_url: url,
+                }
+            })
+            .collect())
     }
 
     fn check_instances_running(&mut self) -> anyhow::Result<()> {

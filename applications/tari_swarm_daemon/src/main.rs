@@ -185,6 +185,7 @@ fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
             instances,
             executables,
         },
+        auto_register_previous_templates: true,
     })
 }
 

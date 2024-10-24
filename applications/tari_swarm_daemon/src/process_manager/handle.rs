@@ -61,6 +61,7 @@ pub enum ProcessManagerRequest {
     },
 }
 
+#[derive(Debug)]
 pub struct TemplateData {
     pub name: String,
     pub version: u32,
