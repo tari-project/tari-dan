@@ -28,8 +28,12 @@ pub struct Config {
     pub processes: ProcessesConfig,
     #[serde(default)]
     pub skip_registration: bool,
-    #[serde(default)]
+    #[serde(default = "default_as_true")]
     pub auto_register_previous_templates: bool,
+}
+
+fn default_as_true() -> bool {
+    true
 }
 
 impl Config {
