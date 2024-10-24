@@ -76,6 +76,7 @@ use tari_dan_storage::{
         TransactionPoolRecord,
         TransactionPoolStage,
         TransactionRecord,
+        ValidatorConsensusStats,
         VersionedSubstateIdLockIntent,
         Vote,
     },
@@ -86,7 +87,7 @@ use tari_dan_storage::{
 use tari_engine_types::substate::SubstateId;
 use tari_state_tree::{Node, NodeKey, TreeNode, Version};
 use tari_transaction::TransactionId;
-use tari_utilities::ByteArray;
+use tari_utilities::{hex::Hex, ByteArray};
 
 use crate::{
     error::SqliteStorageError,
@@ -246,6 +247,9 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
     }
 
     /// Returns the blocks from the start_block (inclusive) to the end_block (inclusive).
+    /// It is the callers responsibility to ensure that start/end block IDs exist and start block is before end block.
+    /// Failing this, the result if this function is undefined but typically results in an empty Vec or returning all
+    /// block ids from genesis.
     fn get_block_ids_between(
         &self,
         start_block: &BlockId,
@@ -336,20 +340,25 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a> SqliteState
         Ok(count as u64)
     }
 
-    pub(crate) fn get_commit_block_id(&self) -> Result<BlockId, StorageError> {
+    pub(crate) fn get_commit_block(&self) -> Result<LeafBlock, StorageError> {
         use crate::schema::blocks;
 
-        let block_id = blocks::table
-            .select(blocks::block_id)
+        let (block_id, height, epoch) = blocks::table
+            .select((blocks::block_id, blocks::height, blocks::epoch))
             .filter(blocks::is_committed.eq(true))
             .order_by(blocks::id.desc())
-            .first::<String>(self.connection())
+            .first::<(String, i64, i64)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "get_commit_block_id",
                 source: e,
             })?;
 
-        deserialize_hex_try_from(&block_id)
+        let block_id = deserialize_hex_try_from(&block_id)?;
+        Ok(LeafBlock {
+            block_id,
+            height: NodeHeight(height as u64),
+            epoch: Epoch(epoch as u64),
+        })
     }
 
     pub fn substates_count(&self) -> Result<u64, SqliteStorageError> {
@@ -585,7 +594,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
 
         if !self.blocks_exists(block_id)? {
             return Err(StorageError::NotFound {
-                item: "foreign_proposals_get_all_new: Block".to_string(),
+                item: "foreign_proposals_get_all_new: Block",
                 key: block_id.to_string(),
             });
         }
@@ -801,8 +810,8 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             });
         }
 
-        let commit_block = self.get_commit_block_id()?;
-        let block_ids = self.get_block_ids_between(&commit_block, from_block_id)?;
+        let commit_block = self.get_commit_block()?;
+        let block_ids = self.get_block_ids_between(commit_block.block_id(), from_block_id)?;
         let tx_id = serialize_hex(tx_id);
 
         let execution = transaction_executions::table
@@ -1439,8 +1448,8 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         substate_id: &SubstateId,
     ) -> Result<SubstateChange, StorageError> {
         use crate::schema::block_diffs;
-        let commit_block = self.get_commit_block_id()?;
-        let block_ids = self.get_block_ids_with_commands_between(&commit_block, block_id)?;
+        let commit_block = self.get_commit_block()?;
+        let block_ids = self.get_block_ids_with_commands_between(commit_block.block_id(), block_id)?;
 
         let diff = block_diffs::table
             .filter(block_diffs::block_id.eq_any(block_ids))
@@ -1952,7 +1961,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
 
         let Some(max_version) = max_version_and_destroyed.max_version else {
             return Err(StorageError::NotFound {
-                item: "Substate (substates_get_max_version_for_substate)".to_string(),
+                item: "Substate (substates_get_max_version_for_substate)",
                 key: substate_id.to_string(),
             });
         };
@@ -2168,16 +2177,16 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
 
         if !self.blocks_exists(block_id)? {
             return Err(StorageError::NotFound {
-                item: "pending_state_tree_diffs_get_all_up_to_commit_block: Block".to_string(),
+                item: "pending_state_tree_diffs_get_all_up_to_commit_block: Block",
                 key: block_id.to_string(),
             });
         }
 
         // Get the last committed block
-        let committed_block_id = self.get_commit_block_id()?;
+        let commit_block = self.get_commit_block()?;
 
         // Block may modify state with zero commands because the justify a block that changes state
-        let block_ids = self.get_block_ids_between(&committed_block_id, block_id)?;
+        let block_ids = self.get_block_ids_between(commit_block.block_id(), block_id)?;
 
         if block_ids.is_empty() {
             return Ok(HashMap::new());
@@ -2389,7 +2398,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
         use crate::schema::burnt_utxos;
         if !self.blocks_exists(leaf_block)? {
             return Err(StorageError::NotFound {
-                item: "Block".to_string(),
+                item: "Block",
                 key: leaf_block.to_string(),
             });
         }
@@ -2446,6 +2455,178 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx> StateStor
             })?;
 
         Ok(count > 0)
+    }
+
+    fn validator_epoch_stats_get(
+        &self,
+        epoch: Epoch,
+        public_key: &PublicKey,
+    ) -> Result<ValidatorConsensusStats, StorageError> {
+        use crate::schema::validator_epoch_stats;
+
+        let (participation_shares, missed_proposals) = validator_epoch_stats::table
+            .select((
+                validator_epoch_stats::participation_shares,
+                validator_epoch_stats::missed_proposals,
+            ))
+            .filter(validator_epoch_stats::public_key.eq(public_key.to_hex()))
+            .filter(validator_epoch_stats::epoch.eq(epoch.as_u64() as i64))
+            .get_result::<(i64, i64)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "validator_epoch_stats_get",
+                source: e,
+            })?;
+
+        Ok(ValidatorConsensusStats {
+            missed_proposals: missed_proposals
+                .try_into()
+                .map_err(|_| StorageError::DataInconsistency {
+                    details: "validator_epoch_stats_get: missed_proposals is negative".to_string(),
+                })?,
+            participation_shares: participation_shares
+                .try_into()
+                .map_err(|_| StorageError::DataInconsistency {
+                    details: "validator_epoch_stats_get: participation_shares is negative".to_string(),
+                })?,
+        })
+    }
+
+    fn validator_epoch_stats_get_nodes_to_suspend(
+        &self,
+        block_id: &BlockId,
+        min_missed_proposals: u64,
+        limit: usize,
+    ) -> Result<Vec<PublicKey>, StorageError> {
+        use crate::schema::{suspended_nodes, validator_epoch_stats};
+        if limit == 0 {
+            return Ok(vec![]);
+        }
+        let commit_block = self.get_commit_block()?;
+
+        let block_ids = self.get_block_ids_between(commit_block.block_id(), block_id)?;
+
+        let pks = validator_epoch_stats::table
+            .select(validator_epoch_stats::public_key)
+            .filter(
+                validator_epoch_stats::public_key.ne_all(
+                    suspended_nodes::table.select(suspended_nodes::public_key).filter(
+                        // Not already suspended in uncommitted blocks
+                        suspended_nodes::suspended_in_block
+                                .eq_any(block_ids)
+                                // Not suspended in committed blocks
+                                .or(suspended_nodes::suspended_in_block_height.lt(commit_block.height().as_u64() as i64)),
+                    ),
+                ),
+            )
+            .filter(validator_epoch_stats::missed_proposals.ge(min_missed_proposals as i64))
+            .filter(validator_epoch_stats::epoch.eq(commit_block.epoch().as_u64() as i64))
+            .limit(limit as i64)
+            .get_results::<String>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "validator_epoch_stats_get_nodes_to_suspend",
+                source: e,
+            })?;
+
+        pks.iter()
+            .map(|s| {
+                PublicKey::from_hex(s).map_err(|e| StorageError::DecodingError {
+                    operation: "validator_epoch_stats_get_nodes_to_suspend",
+                    item: "public key",
+                    details: format!("Failed to decode public key: {e}"),
+                })
+            })
+            .collect()
+    }
+
+    fn validator_epoch_stats_get_nodes_to_resume(
+        &self,
+        block_id: &BlockId,
+        limit: usize,
+    ) -> Result<Vec<PublicKey>, StorageError> {
+        use crate::schema::{suspended_nodes, validator_epoch_stats};
+        if limit == 0 {
+            return Ok(vec![]);
+        }
+
+        let commit_block = self.get_commit_block()?;
+
+        let block_ids = self.get_block_ids_between(commit_block.block_id(), block_id)?;
+
+        let pks = validator_epoch_stats::table
+            .select(validator_epoch_stats::public_key)
+            .filter(
+                // Must be suspended
+                validator_epoch_stats::public_key.eq_any(
+                    suspended_nodes::table.select(suspended_nodes::public_key).filter(
+                        suspended_nodes::resumed_in_block
+                            .ne_all(block_ids)
+                            .or(suspended_nodes::resumed_in_block_height.is_null())
+                            .or(suspended_nodes::resumed_in_block_height
+                                .lt(Some(commit_block.height().as_u64() as i64))),
+                    ),
+                ),
+            )
+            .filter(validator_epoch_stats::missed_proposals.eq(0i64))
+            .filter(validator_epoch_stats::epoch.eq(commit_block.epoch().as_u64() as i64))
+            .limit(limit as i64)
+            .get_results::<String>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "validator_epoch_stats_get_nodes_to_resume",
+                source: e,
+            })?;
+
+        pks.iter()
+            .map(|s| {
+                PublicKey::from_hex(s).map_err(|e| StorageError::DecodingError {
+                    operation: "validator_epoch_stats_get_nodes_to_resume",
+                    item: "public key",
+                    details: format!("Failed to decode public key: {e}"),
+                })
+            })
+            .collect()
+    }
+
+    fn suspended_nodes_is_suspended(&self, block_id: &BlockId, public_key: &PublicKey) -> Result<bool, StorageError> {
+        use crate::schema::suspended_nodes;
+
+        if !self.blocks_exists(block_id)? {
+            return Err(StorageError::QueryError {
+                reason: format!("block {} not found", block_id),
+            });
+        }
+
+        let commit_block = self.get_commit_block()?;
+        let block_ids = self.get_block_ids_between(commit_block.block_id(), block_id)?;
+
+        let count = suspended_nodes::table
+            .count()
+            .filter(suspended_nodes::public_key.eq(public_key.to_hex()))
+            .filter(
+                suspended_nodes::resumed_in_block
+                    .is_null()
+                    .or(suspended_nodes::resumed_in_block.ne_all(block_ids)),
+            )
+            .first::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "suspended_nodes_exists",
+                source: e,
+            })?;
+
+        Ok(count > 0)
+    }
+
+    fn suspended_nodes_count(&self) -> Result<u64, StorageError> {
+        use crate::schema::suspended_nodes;
+
+        let count = suspended_nodes::table
+            .count()
+            .first::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "suspended_nodes_exists",
+                source: e,
+            })?;
+
+        Ok(count as u64)
     }
 }
 

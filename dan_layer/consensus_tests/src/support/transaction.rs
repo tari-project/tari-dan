@@ -4,7 +4,6 @@
 use std::{iter, time::Duration};
 
 use tari_common_types::types::PrivateKey;
-use tari_dan_app_utilities::transaction_executor::ExecutionOutput;
 use tari_dan_common_types::SubstateRequirement;
 use tari_dan_storage::consensus_models::{Decision, TransactionRecord, VersionedSubstateIdLockIntent};
 use tari_engine_types::{
@@ -28,12 +27,12 @@ pub fn build_transaction_from(tx: Transaction, decision: Decision) -> Transactio
 }
 
 pub fn create_execution_result_for_transaction(
-    transaction: Transaction,
+    transaction: &Transaction,
     decision: Decision,
     fee: u64,
     resolved_inputs: &[VersionedSubstateIdLockIntent],
     resulting_outputs: &[VersionedSubstateIdLockIntent],
-) -> ExecutionOutput {
+) -> ExecuteResult {
     let result = if decision.is_commit() {
         let mut diff = SubstateDiff::new();
         for input in resolved_inputs.iter().filter(|input| input.lock_type().is_write()) {
@@ -109,7 +108,7 @@ pub fn create_execution_result_for_transaction(
         execution_time: Duration::from_secs(0),
     };
 
-    ExecutionOutput { transaction, result }
+    result
 }
 
 pub fn build_substate_id_for_committee(committee_no: u32, num_committees: u32) -> SubstateId {

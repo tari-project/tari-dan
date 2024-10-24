@@ -73,7 +73,7 @@ impl BlockDiff {
     pub fn remove<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         if Self::remove_any(tx, Some(self.block_id))? == 0 {
             return Err(StorageError::NotFound {
-                item: "BlockDiff (remove)".to_string(),
+                item: "BlockDiff (remove)",
                 key: self.block_id.to_string(),
             });
         }

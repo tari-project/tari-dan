@@ -123,6 +123,10 @@ impl<TAddr: PartialEq> Committee<TAddr> {
     pub fn into_public_keys(self) -> impl Iterator<Item = PublicKey> {
         self.members.into_iter().map(|(_, pk)| pk)
     }
+
+    pub fn contains_public_key(&self, public_key: &PublicKey) -> bool {
+        self.members.iter().any(|(_, pk)| pk == public_key)
+    }
 }
 
 impl<TAddr> IntoIterator for Committee<TAddr> {
@@ -190,7 +194,7 @@ impl CommitteeInfo {
         }
     }
 
-    /// Returns $n - f$ where n is the number of committee members and f is the tolerated failure nodes.
+    /// Returns $n - f$ (i.e $2f + 1$) where n is the number of committee members and f is the tolerated failure nodes.
     pub fn quorum_threshold(&self) -> u32 {
         self.num_shard_group_members - self.max_failures()
     }

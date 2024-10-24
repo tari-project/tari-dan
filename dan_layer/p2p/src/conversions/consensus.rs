@@ -62,10 +62,12 @@ use tari_dan_storage::consensus_models::{
     QcId,
     QuorumCertificate,
     QuorumDecision,
+    ResumeNodeAtom,
     SubstateDestroyed,
     SubstatePledge,
     SubstatePledges,
     SubstateRecord,
+    SuspendNodeAtom,
     TransactionAtom,
 };
 use tari_engine_types::substate::{SubstateId, SubstateValue};
@@ -137,7 +139,7 @@ impl From<&NewViewMessage> for proto::consensus::NewViewMessage {
     fn from(value: &NewViewMessage) -> Self {
         Self {
             high_qc: Some((&value.high_qc).into()),
-            new_height: value.new_height.0,
+            new_height: value.new_height.as_u64(),
             last_vote: value.last_vote.as_ref().map(|a| a.into()),
         }
     }
@@ -569,6 +571,8 @@ impl From<&Command> for proto::consensus::Command {
             Command::MintConfidentialOutput(atom) => {
                 proto::consensus::command::Command::MintConfidentialOutput(atom.into())
             },
+            Command::SuspendNode(atom) => proto::consensus::command::Command::SuspendNode(atom.into()),
+            Command::ResumeNode(atom) => proto::consensus::command::Command::ResumeNode(atom.into()),
             Command::EndEpoch => proto::consensus::command::Command::EndEpoch(true),
         };
 
@@ -596,6 +600,8 @@ impl TryFrom<proto::consensus::Command> for Command {
             proto::consensus::command::Command::MintConfidentialOutput(atom) => {
                 Command::MintConfidentialOutput(atom.try_into()?)
             },
+            proto::consensus::command::Command::SuspendNode(atom) => Command::SuspendNode(atom.try_into()?),
+            proto::consensus::command::Command::ResumeNode(atom) => Command::ResumeNode(atom.try_into()?),
             proto::consensus::command::Command::EndEpoch(_) => Command::EndEpoch,
         })
     }
@@ -629,6 +635,47 @@ impl TryFrom<proto::consensus::TransactionAtom> for TransactionAtom {
                 .try_into()?,
             transaction_fee: value.fee,
             leader_fee: value.leader_fee.map(TryInto::try_into).transpose()?,
+        })
+    }
+}
+
+// -------------------------------- SuspendNodeAtom -------------------------------- //
+
+impl From<&SuspendNodeAtom> for proto::consensus::SuspendNodeAtom {
+    fn from(value: &SuspendNodeAtom) -> Self {
+        Self {
+            public_key: value.public_key.as_bytes().to_vec(),
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::SuspendNodeAtom> for SuspendNodeAtom {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::SuspendNodeAtom) -> Result<Self, Self::Error> {
+        Ok(Self {
+            public_key: PublicKey::from_canonical_bytes(&value.public_key)
+                .map_err(|e| anyhow!("SuspendNodeAtom failed to decode public key: {e}"))?,
+        })
+    }
+}
+// -------------------------------- ResumeNodeAtom -------------------------------- //
+
+impl From<&ResumeNodeAtom> for proto::consensus::ResumeNodeAtom {
+    fn from(value: &ResumeNodeAtom) -> Self {
+        Self {
+            public_key: value.public_key.as_bytes().to_vec(),
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::ResumeNodeAtom> for ResumeNodeAtom {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::ResumeNodeAtom) -> Result<Self, Self::Error> {
+        Ok(Self {
+            public_key: PublicKey::from_canonical_bytes(&value.public_key)
+                .map_err(|e| anyhow!("ResumeNodeAtom failed to decode public key: {e}"))?,
         })
     }
 }

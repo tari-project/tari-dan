@@ -263,7 +263,7 @@ impl SubstateRecord {
         let (mut found, _) = Self::get_any_max_version(tx, iter::once(substate_id))?;
         let Some(found) = found.pop() else {
             return Err(StorageError::NotFound {
-                item: "SubstateRecord::get_latest".to_string(),
+                item: "SubstateRecord::get_latest",
                 key: substate_id.to_string(),
             });
         };

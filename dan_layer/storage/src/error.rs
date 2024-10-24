@@ -34,7 +34,7 @@ pub enum StorageError {
     #[error("Migration error: {reason}")]
     MigrationError { reason: String },
     #[error("Not found: item: {item}, key: {key}")]
-    NotFound { item: String, key: String },
+    NotFound { item: &'static str, key: String },
     #[error("Not found in operation {operation}: {source}")]
     NotFoundDbAdapter {
         operation: &'static str,

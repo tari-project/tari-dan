@@ -42,10 +42,13 @@ where TConsensusSpec: ConsensusSpec
             .check_and_collect_vote(from, current_epoch, message, local_committee_info)
             .await
         {
-            Ok(Some(new_qc)) => {
-                self.pacemaker
-                    .update_view(new_qc.epoch(), new_qc.block_height(), new_qc.block_height())
-                    .await?;
+            Ok(Some((_, high_qc))) => {
+                // HighQc from votes will trigger a view-change in the proposer
+                // self.pacemaker
+                //     .update_view(high_qc.epoch(), high_qc.block_height(), high_qc.block_height())
+                //     .await?;
+                // Reset the block time and leader timeouts
+                self.pacemaker.reset_leader_timeout(high_qc.block_height()).await?;
                 // If we reached quorum, trigger a check to see if we should propose
                 self.pacemaker.beat();
             },

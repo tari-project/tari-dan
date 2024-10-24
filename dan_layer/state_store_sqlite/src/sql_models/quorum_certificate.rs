@@ -12,8 +12,10 @@ pub struct QuorumCertificate {
     pub id: i32,
     pub qc_id: String,
     pub block_id: String,
+    pub epoch: i64,
     pub shard_group: i32,
     pub json: String,
+    pub is_shares_processed: bool,
     pub created_at: PrimitiveDateTime,
 }
 

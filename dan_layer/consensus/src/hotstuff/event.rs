@@ -14,8 +14,8 @@ pub enum HotstuffEvent {
     },
     #[error("Consensus failure: {message}")]
     Failure { message: String },
-    #[error("Leader timeout: new height {new_height}")]
-    LeaderTimeout { new_height: NodeHeight },
+    #[error("Leader timeout: height {height}")]
+    LeaderTimeout { height: NodeHeight },
     #[error("Block {block} has been parked ({num_missing_txs} missing, {num_awaiting_txs} awaiting execution)")]
     ProposedBlockParked {
         block: LeafBlock,

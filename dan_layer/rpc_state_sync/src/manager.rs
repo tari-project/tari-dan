@@ -110,6 +110,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             },
             Err(RpcError::RequestFailed(err)) if err.is_not_found() => Ok(None),
             Ok(GetCheckpointResponse { checkpoint: None }) => Ok(None),
+            Err(RpcError::RequestFailed(err)) if err.is_not_found() => Ok(None),
             Err(err) => Err(err.into()),
         }
     }

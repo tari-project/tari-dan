@@ -2,7 +2,6 @@
 //  SPDX-License-Identifier: BSD-3-Clause
 
 use tari_dan_common_types::{Epoch, NodeHeight};
-use tari_dan_storage::consensus_models::LeafBlock;
 use tokio::sync::mpsc;
 
 use crate::hotstuff::{
@@ -75,20 +74,12 @@ impl PaceMakerHandle {
     }
 
     /// Signal the pacemaker trigger a forced beat. If the pacemaker has not been started, this is a no-op
-    pub fn force_beat(&self, parent_block: LeafBlock) {
-        self.on_force_beat.beat(Some(parent_block));
-    }
-
-    pub fn force_beat_current_leaf(&self) {
-        self.on_force_beat.beat(None);
+    pub fn force_beat(&self, forced_height: NodeHeight) {
+        self.on_force_beat.beat(Some(forced_height));
     }
 
     pub fn get_on_beat(&self) -> OnBeat {
         self.on_beat.clone()
-    }
-
-    pub fn on_beat(&self) {
-        self.on_beat.beat()
     }
 
     pub fn get_on_force_beat(&self) -> OnForceBeat {
@@ -99,9 +90,11 @@ impl PaceMakerHandle {
         self.on_leader_timeout.clone()
     }
 
-    async fn reset_leader_timeout(&self, high_qc_height: Option<NodeHeight>) -> Result<(), HotStuffError> {
+    pub async fn reset_leader_timeout(&self, high_qc_height: NodeHeight) -> Result<(), HotStuffError> {
         self.sender
-            .send(PacemakerRequest::ResetLeaderTimeout { high_qc_height })
+            .send(PacemakerRequest::ResetLeaderTimeout {
+                high_qc_height: Some(high_qc_height),
+            })
             .await
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }
@@ -115,7 +108,7 @@ impl PaceMakerHandle {
     ) -> Result<(), HotStuffError> {
         // Update current height here to prevent possibility of race conditions
         self.current_view.update(epoch, last_seen_height);
-        self.reset_leader_timeout(Some(high_qc_height)).await
+        self.reset_leader_timeout(high_qc_height).await
     }
 
     /// Suspend leader failure trigger. This should be called when a proposal is being processed. No leader failure will
@@ -135,7 +128,8 @@ impl PaceMakerHandle {
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }
 
-    /// Reset the leader timeout. This should be called when a valid leader proposal is received.
+    /// Reset the leader timeout and set the view. In general, should not be used. This is used to reverse the view when
+    /// catching up (TODO: confirm is this is correct or if there is another way).
     pub async fn reset_view(
         &self,
         epoch: Epoch,
@@ -144,13 +138,13 @@ impl PaceMakerHandle {
     ) -> Result<(), HotStuffError> {
         // Update current height here to prevent possibility of race conditions
         self.current_view.reset(epoch, last_seen_height);
-        self.reset_leader_timeout(Some(high_qc_height)).await
+        self.reset_leader_timeout(high_qc_height).await
     }
 
     /// Reset the leader timeout. This should be called when an end of epoch proposal has been committed.
     pub async fn set_epoch(&self, epoch: Epoch) -> Result<(), HotStuffError> {
         self.current_view.reset(epoch, NodeHeight::zero());
-        self.reset_leader_timeout(Some(NodeHeight::zero())).await
+        self.reset_leader_timeout(NodeHeight::zero()).await
     }
 
     pub fn current_view(&self) -> &CurrentView {

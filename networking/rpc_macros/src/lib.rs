@@ -20,7 +20,7 @@ mod options;
 /// # use tari_rpc_framework::{Request, Streaming, Response, RpcStatus, RpcServer};
 /// use tari_comms::{framing, memsocket::MemorySocket};
 ///
-/// #[tari_rpc(protocol_name = b"/tari/greeting/1.0", server_struct = GreetingServer, client_struct = GreetingClient)]
+/// #[tari_rpc(protocol_name = "/tari/greeting/1.0", server_struct = GreetingServer, client_struct = GreetingClient)]
 /// pub trait GreetingRpc: Send + Sync + 'static {
 ///     #[rpc(method = 1)]
 ///     async fn say_hello(&self, request: Request<String>) -> Result<Response<String>, RpcStatus>;

@@ -7,6 +7,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use tari_common_types::types::PublicKey;
 use tari_dan_common_types::ShardGroup;
 use tari_engine_types::substate::SubstateId;
 use tari_transaction::TransactionId;
@@ -23,6 +24,7 @@ use super::{
 use crate::{
     consensus_models::{evidence::Evidence, Decision},
     StateStoreReadTransaction,
+    StateStoreWriteTransaction,
     StorageError,
 };
 
@@ -110,12 +112,16 @@ pub enum Command {
     // Validator node commands
     ForeignProposal(ForeignProposalAtom),
     MintConfidentialOutput(MintConfidentialOutputAtom),
+    SuspendNode(SuspendNodeAtom),
+    ResumeNode(ResumeNodeAtom),
     EndEpoch,
 }
 
 /// Defines the order in which commands should be processed in a block. "Smallest" comes first and "largest" comes last.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum CommandOrdering<'a> {
+    ResumeNode,
+    SuspendNode,
     /// Foreign proposals should come first in the block so that they are processed before commands
     ForeignProposal(ShardGroup, &'a BlockId),
     MintConfidentialOutput(&'a SubstateId),
@@ -134,7 +140,11 @@ impl Command {
             Command::AllAccept(tx) |
             Command::SomeAccept(tx) |
             Command::LocalOnly(tx) => Some(tx),
-            Command::ForeignProposal(_) | Command::MintConfidentialOutput(_) | Command::EndEpoch => None,
+            Command::ForeignProposal(_) |
+            Command::MintConfidentialOutput(_) |
+            Command::SuspendNode(_) |
+            Command::ResumeNode(_) |
+            Command::EndEpoch => None,
         }
     }
 
@@ -153,6 +163,8 @@ impl Command {
                 CommandOrdering::ForeignProposal(foreign_proposal.shard_group, &foreign_proposal.block_id)
             },
             Command::MintConfidentialOutput(mint) => CommandOrdering::MintConfidentialOutput(&mint.substate_id),
+            Command::SuspendNode(_) => CommandOrdering::SuspendNode,
+            Command::ResumeNode(_) => CommandOrdering::ResumeNode,
             Command::EndEpoch => CommandOrdering::EndEpoch,
         }
     }
@@ -195,6 +207,13 @@ impl Command {
     pub fn foreign_proposal(&self) -> Option<&ForeignProposalAtom> {
         match self {
             Command::ForeignProposal(tx) => Some(tx),
+            _ => None,
+        }
+    }
+
+    pub fn resume_node(&self) -> Option<&ResumeNodeAtom> {
+        match self {
+            Command::ResumeNode(atom) => Some(atom),
             _ => None,
         }
     }
@@ -276,8 +295,50 @@ impl Display for Command {
             Command::SomeAccept(tx) => write!(f, "SomeAccept({}, {})", tx.id, tx.decision),
             Command::ForeignProposal(fp) => write!(f, "ForeignProposal {}", fp.block_id),
             Command::MintConfidentialOutput(mint) => write!(f, "MintConfidentialOutput({})", mint.substate_id),
+            Command::SuspendNode(atom) => write!(f, "SuspendNode({atom})"),
+            Command::ResumeNode(atom) => write!(f, "ResumeNode({atom})"),
             Command::EndEpoch => write!(f, "EndEpoch"),
         }
+    }
+}
+
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SuspendNodeAtom {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub public_key: PublicKey,
+}
+
+impl Display for SuspendNodeAtom {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.public_key)
+    }
+}
+
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../bindings/src/types/")
+)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResumeNodeAtom {
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub public_key: PublicKey,
+}
+
+impl ResumeNodeAtom {
+    pub fn delete_suspended_node<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+        tx.suspended_nodes_delete(&self.public_key)
+    }
+}
+
+impl Display for ResumeNodeAtom {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.public_key)
     }
 }
 

@@ -6,7 +6,7 @@ use tari_common::configuration::Network;
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{committee::CommitteeInfo, optional::Optional, Epoch};
 use tari_dan_storage::{
-    consensus_models::{Block, QuorumCertificate, QuorumDecision, ValidatorSignature, Vote},
+    consensus_models::{Block, HighQc, QuorumCertificate, QuorumDecision, ValidatorSignature, Vote},
     global::models::ValidatorNode,
     StateStore,
 };
@@ -53,7 +53,7 @@ where TConsensusSpec: ConsensusSpec
         current_epoch: Epoch,
         message: VoteMessage,
         local_committee_info: &CommitteeInfo,
-    ) -> Result<Option<QuorumCertificate>, HotStuffError> {
+    ) -> Result<Option<(QuorumCertificate, HighQc)>, HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "check_and_collect_vote");
         debug!(
             target: LOG_TARGET,
@@ -63,8 +63,12 @@ where TConsensusSpec: ConsensusSpec
         self.validate_vote_message(current_epoch, &message)?;
         let sender_vn = self.check_eligibility(from, &message, local_committee_info).await?;
         let maybe_qc = self.collect_vote(message, local_committee_info, sender_vn)?;
-        if let Some(ref qc) = maybe_qc {
-            info!(target: LOG_TARGET, "🔥 New QC {}", qc);
+        if let Some((ref qc, ref high_qc)) = maybe_qc {
+            if qc.id() == high_qc.qc_id() {
+                info!(target: LOG_TARGET, "🔥 New HIGH {}", qc);
+            } else {
+                info!(target: LOG_TARGET, "❓️ New QC from votes {} but it is not the high qc {}", qc, high_qc);
+            }
         }
 
         Ok(maybe_qc)
@@ -107,7 +111,7 @@ where TConsensusSpec: ConsensusSpec
         message: VoteMessage,
         local_committee_info: &CommitteeInfo,
         sender_vn: ValidatorNode<TConsensusSpec::Addr>,
-    ) -> Result<Option<QuorumCertificate>, HotStuffError> {
+    ) -> Result<Option<(QuorumCertificate, HighQc)>, HotStuffError> {
         self.store.with_write_tx(|tx| {
             let sender_leaf_hash = sender_vn.get_node_hash(self.network);
 
@@ -199,9 +203,9 @@ where TConsensusSpec: ConsensusSpec
                 block,
             };
             let new_qc = create_qc(vote_data);
-            new_qc.update_high_qc(tx)?;
+            let high_qc = new_qc.update_high_qc(tx)?;
 
-            Ok(Some(new_qc))
+            Ok(Some((new_qc, high_qc)))
         })
     }
 
