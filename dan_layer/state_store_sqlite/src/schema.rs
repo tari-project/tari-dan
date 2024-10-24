@@ -327,8 +327,10 @@ diesel::table! {
         id -> Integer,
         qc_id -> Text,
         block_id -> Text,
+        epoch -> BigInt,
         shard_group -> Integer,
         json -> Text,
+        is_shares_processed -> Bool,
         created_at -> Timestamp,
     }
 }
@@ -401,6 +403,19 @@ diesel::table! {
         destroyed_by_shard -> Nullable<Integer>,
         created_at -> Timestamp,
         destroyed_at -> Nullable<Timestamp>,
+    }
+}
+
+diesel::table! {
+    suspended_nodes (id) {
+        id -> Integer,
+        epoch -> BigInt,
+        public_key -> Text,
+        suspended_in_block -> Text,
+        suspended_in_block_height -> BigInt,
+        resumed_in_block -> Nullable<Text>,
+        resumed_in_block_height -> Nullable<BigInt>,
+        created_at -> Timestamp,
     }
 }
 
@@ -506,6 +521,17 @@ diesel::table! {
 }
 
 diesel::table! {
+    validator_epoch_stats (id) {
+        id -> Integer,
+        epoch -> BigInt,
+        public_key -> Text,
+        participation_shares -> BigInt,
+        missed_proposals -> BigInt,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     votes (id) {
         id -> Integer,
         hash -> Text,
@@ -550,10 +576,12 @@ diesel::allow_tables_to_appear_in_same_query!(
     state_tree_shard_versions,
     substate_locks,
     substates,
+    suspended_nodes,
     transaction_executions,
     transaction_pool,
     transaction_pool_history,
     transaction_pool_state_updates,
     transactions,
+    validator_epoch_stats,
     votes,
 );

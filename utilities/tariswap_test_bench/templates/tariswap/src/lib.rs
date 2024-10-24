@@ -38,7 +38,7 @@ mod tariswap {
         // Initialises a new pool component for for the pool A - B
         // the fees is represented as a per-mil quantity (e.g. "1" represents "0.1%")
         pub fn new(a_addr: ResourceAddress, b_addr: ResourceAddress, fee: u16) -> Component<Self> {
-            // check that the the resource pair is correct
+            // check that the resource pair is correct
             assert!(a_addr != b_addr, "The resources of the pair must be different");
             Self::check_resource_is_fungible(a_addr);
             Self::check_resource_is_fungible(b_addr);

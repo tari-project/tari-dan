@@ -36,11 +36,10 @@ pub trait LeaderStrategy<TAddr> {
         }
     }
 
-    fn is_leader_for_next_block(
+    fn is_leader_for_next_height(
         &self,
         validator_addr: &TAddr,
         committee: &Committee<TAddr>,
-        // block: &BlockId,
         height: NodeHeight,
     ) -> bool
     where
@@ -49,19 +48,17 @@ pub trait LeaderStrategy<TAddr> {
         self.is_leader(validator_addr, committee, height + NodeHeight(1))
     }
 
-    fn get_leader<'b>(&self, committee: &'b Committee<TAddr>, height: NodeHeight) -> &'b TAddr {
+    fn get_leader<'b>(&self, committee: &'b Committee<TAddr>, height: NodeHeight) -> (&'b TAddr, &'b PublicKey) {
         let index = self.calculate_leader(committee, height);
-        let (addr, _) = committee.members.get(index as usize).unwrap();
-        addr
+        let (addr, pk) = committee.members.get(index as usize).unwrap();
+        (addr, pk)
     }
 
-    fn get_leader_public_key<'b>(&self, committee: &'b Committee<TAddr>, height: NodeHeight) -> &'b PublicKey {
-        let index = self.calculate_leader(committee, height);
-        let (_, public_key) = committee.members.get(index as usize).unwrap();
-        public_key
-    }
-
-    fn get_leader_for_next_block<'b>(&self, committee: &'b Committee<TAddr>, height: NodeHeight) -> &'b TAddr {
+    fn get_leader_for_next_height<'b>(
+        &self,
+        committee: &'b Committee<TAddr>,
+        height: NodeHeight,
+    ) -> (&'b TAddr, &'b PublicKey) {
         self.get_leader(committee, height + NodeHeight(1))
     }
 }

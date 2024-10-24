@@ -12,7 +12,7 @@ pub struct VoteMessage {
     pub epoch: Epoch,
     pub block_id: BlockId,
     /// The purported height of the block that this vote is for. This is informational only (on_inbound_message) and
-    /// should never be relied upon for any other purpose as it is not validated. The reason being that we may receive
+    /// should never be relied upon for any other purpose until it is validated. We may receive
     /// a vote before the block, and we don't retrospectively check the height of all the votes after the block is
     /// received.
     pub unverified_block_height: NodeHeight,

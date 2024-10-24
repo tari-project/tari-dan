@@ -4,12 +4,17 @@
 use std::collections::HashSet;
 
 use log::*;
-use tari_dan_common_types::{committee::CommitteeInfo, Epoch, NodeHeight};
+use tari_dan_common_types::{
+    committee::{Committee, CommitteeInfo},
+    Epoch,
+    NodeHeight,
+};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, ForeignParkedProposal, ForeignProposal, TransactionRecord},
     StateStore,
     StateStoreWriteTransaction,
 };
+use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::TransactionId;
 use tokio::sync::broadcast;
 
@@ -64,14 +69,14 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         &mut self,
         current_height: NodeHeight,
         local_committee_info: &CommitteeInfo,
+        local_committee: &Committee<TConsensusSpec::Addr>,
         from: TConsensusSpec::Addr,
         msg: HotstuffMessage,
     ) -> Result<MessageValidationResult<TConsensusSpec::Addr>, HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "on_message_validate");
         match msg {
             HotstuffMessage::Proposal(msg) => {
-                self.process_local_proposal(current_height, from, local_committee_info, msg)
-                    .await
+                self.process_local_proposal(current_height, from, local_committee_info, local_committee, msg)
             },
             HotstuffMessage::ForeignProposal(proposal) => {
                 self.process_foreign_proposal(local_committee_info, from, proposal)
@@ -124,11 +129,12 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         req_id
     }
 
-    async fn process_local_proposal(
+    fn process_local_proposal(
         &mut self,
         current_height: NodeHeight,
         from: TConsensusSpec::Addr,
         local_committee_info: &CommitteeInfo,
+        local_committee: &Committee<TConsensusSpec::Addr>,
         proposal: ProposalMessage,
     ) -> Result<MessageValidationResult<TConsensusSpec::Addr>, HotStuffError> {
         info!(
@@ -149,7 +155,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             return Ok(MessageValidationResult::Discard);
         }
 
-        if let Err(err) = self.check_proposal(&proposal.block).await {
+        if let Err(err) = self.check_proposal(&proposal.block, local_committee, local_committee_info) {
             return Ok(MessageValidationResult::Invalid {
                 from,
                 message: HotstuffMessage::Proposal(proposal),
@@ -158,7 +164,6 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         }
 
         self.handle_missing_transactions_local_block(from, local_committee_info, proposal)
-            .await
     }
 
     pub fn update_local_parked_blocks<'a, I: IntoIterator<Item = &'a TransactionId> + ExactSizeIterator>(
@@ -173,7 +178,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             let mut foreign_unparked_blocks = Vec::new();
             for transaction_id in transaction_ids {
                 if let Some((unparked_block, foreign_proposals)) =
-                    tx.missing_transactions_remove(current_height, transaction_id)?
+                    tx.missing_transactions_remove(current_height + NodeHeight(1), transaction_id)?
                 {
                     info!(target: LOG_TARGET, "♻️ all transactions for local block {unparked_block} are ready for consensus");
 
@@ -197,19 +202,23 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         })
     }
 
-    async fn check_proposal(&self, block: &Block) -> Result<(), HotStuffError> {
+    fn check_proposal(
+        &self,
+        block: &Block,
+        committee_for_block: &Committee<TConsensusSpec::Addr>,
+        committee_info: &CommitteeInfo,
+    ) -> Result<(), HotStuffError> {
         block_validations::check_proposal::<TConsensusSpec>(
             block,
-            &self.epoch_manager,
+            committee_info,
+            committee_for_block,
             &self.vote_signing_service,
             &self.leader_strategy,
             &self.config,
         )
-        .await?;
-        Ok(())
     }
 
-    async fn handle_missing_transactions_local_block(
+    fn handle_missing_transactions_local_block(
         &mut self,
         from: TConsensusSpec::Addr,
         local_committee_info: &CommitteeInfo,
@@ -307,7 +316,16 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             });
         }
 
-        if let Err(err) = self.check_proposal(&msg.block).await {
+        let committee = self
+            .epoch_manager
+            .get_committee_by_validator_public_key(msg.block.epoch(), msg.block.proposed_by().clone())
+            .await?;
+        let committee_info = self
+            .epoch_manager
+            .get_committee_info_by_validator_public_key(msg.block.epoch(), msg.block.proposed_by().clone())
+            .await?;
+
+        if let Err(err) = self.check_proposal(&msg.block, &committee, &committee_info) {
             return Ok(MessageValidationResult::Invalid {
                 from,
                 message: HotstuffMessage::ForeignProposal(msg),

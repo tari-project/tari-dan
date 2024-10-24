@@ -22,10 +22,6 @@ impl CurrentView {
         Self::default()
     }
 
-    pub(crate) fn set_next_height(&self) {
-        self.height.fetch_add(1, atomic::Ordering::SeqCst);
-    }
-
     pub fn get_epoch(&self) -> Epoch {
         self.epoch.load(atomic::Ordering::SeqCst).into()
     }
@@ -35,7 +31,7 @@ impl CurrentView {
     }
 
     /// Updates the height and epoch if they are greater than the current values.
-    pub(crate) fn update(&self, epoch: Epoch, height: NodeHeight) {
+    pub(crate) fn update(&self, epoch: Epoch, height: NodeHeight) -> bool {
         let current_epoch = self.get_epoch();
         let mut is_updated = false;
         if epoch > current_epoch {
@@ -49,8 +45,9 @@ impl CurrentView {
         }
 
         if is_updated {
-            info!(target: LOG_TARGET, "🧿 PACEMAKER: View updated to {self}");
+            info!(target: LOG_TARGET, "🧿 PACEMAKER: View updated from {current_epoch}/{current_height} to {self}");
         }
+        is_updated
     }
 
     /// Resets the height and epoch. Prefer update.

@@ -37,6 +37,7 @@ mod transaction_execution;
 mod transaction_pool;
 mod transaction_pool_status_update;
 mod validated_block;
+mod validator_stats;
 mod vote;
 mod vote_signature;
 
@@ -76,5 +77,6 @@ pub use transaction_execution::*;
 pub use transaction_pool::*;
 pub use transaction_pool_status_update::*;
 pub use validated_block::*;
+pub use validator_stats::*;
 pub use vote::*;
 pub use vote_signature::*;

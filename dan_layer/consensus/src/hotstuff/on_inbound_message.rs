@@ -80,11 +80,13 @@ impl<TConsensusSpec: ConsensusSpec> MessageBuffer<TConsensusSpec> {
         current_epoch: Epoch,
         current_height: NodeHeight,
     ) -> IncomingMessageResult<TConsensusSpec::Addr> {
+        // We listen for messages for the next view
+        let next_height = current_height + NodeHeight(1);
         // Clear buffer with lower (epoch, heights)
-        self.buffer = self.buffer.split_off(&(current_epoch, current_height));
+        self.buffer = self.buffer.split_off(&(current_epoch, next_height));
 
         // Check if message is in the buffer
-        if let Some(buffer) = self.buffer.get_mut(&(current_epoch, current_height)) {
+        if let Some(buffer) = self.buffer.get_mut(&(current_epoch, next_height)) {
             if let Some(msg_tuple) = buffer.pop_front() {
                 return Ok(Some(msg_tuple));
             }
@@ -94,16 +96,16 @@ impl<TConsensusSpec: ConsensusSpec> MessageBuffer<TConsensusSpec> {
             let (from, msg) = result?;
             match msg_epoch_and_height(&msg) {
                 // Discard old message
-                Some((e, h)) if e < current_epoch || h < current_height => {
-                    info!(target: LOG_TARGET, "Discard message {} is for previous view {}/{}. Current view {}/{}", msg, e, h, current_epoch,current_height);
+                Some((e, h)) if e < current_epoch || h < next_height => {
+                    info!(target: LOG_TARGET, "Discard message {} is for previous view {}/{}. Current view {}/{}", msg, e, h, current_epoch, next_height);
                     continue;
                 },
                 // Buffer message for future epoch/height
-                Some((epoch, height)) if epoch > current_epoch || height > current_height => {
+                Some((epoch, height)) if epoch > current_epoch || height > next_height => {
                     if msg.proposal().is_some() {
-                        info!(target: LOG_TARGET, "🦴Proposal {msg} is for future view (Current view: {current_epoch}, {current_height})");
+                        info!(target: LOG_TARGET, "🦴Proposal {msg} is for future view (Current view: {current_epoch}, {next_height})");
                     } else {
-                        info!(target: LOG_TARGET, "🦴Message {msg} is for future view (Current view: {current_epoch}, {current_height})");
+                        info!(target: LOG_TARGET, "🦴Message {msg} is for future view (Current view: {current_epoch}, {next_height})");
                     }
                     self.push_to_buffer(epoch, height, from, msg);
                     continue;
@@ -115,7 +117,7 @@ impl<TConsensusSpec: ConsensusSpec> MessageBuffer<TConsensusSpec> {
 
         info!(
             target: LOG_TARGET,
-            "Inbound messaging has terminated. Current view: {}/{}", current_epoch, current_height
+            "Inbound messaging has terminated. Current view: {}/{}", current_epoch, next_height
         );
         // Inbound messaging has terminated
         Ok(None)
@@ -148,7 +150,7 @@ pub struct NeedsSync<TAddr: NodeAddressable> {
 fn msg_epoch_and_height(msg: &HotstuffMessage) -> Option<EpochAndHeight> {
     match msg {
         HotstuffMessage::Proposal(msg) => Some((msg.block.epoch(), msg.block.height())),
-        // Votes for block 2 occur in view 3
+        // Votes for block v occur in view v + 1
         HotstuffMessage::Vote(msg) => Some((msg.epoch, msg.unverified_block_height.saturating_add(NodeHeight(1)))),
         _ => None,
     }

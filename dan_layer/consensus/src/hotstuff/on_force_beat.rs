@@ -3,13 +3,13 @@
 
 use std::sync::Arc;
 
-use tari_dan_storage::consensus_models::LeafBlock;
+use tari_dan_common_types::NodeHeight;
 use tokio::sync::watch;
 
 #[derive(Debug, Clone)]
 pub struct OnForceBeat {
-    receiver: watch::Receiver<Option<LeafBlock>>,
-    sender: Arc<watch::Sender<Option<LeafBlock>>>,
+    receiver: watch::Receiver<Option<NodeHeight>>,
+    sender: Arc<watch::Sender<Option<NodeHeight>>>,
 }
 
 impl OnForceBeat {
@@ -21,13 +21,13 @@ impl OnForceBeat {
         }
     }
 
-    pub async fn wait(&mut self) -> Option<LeafBlock> {
+    pub async fn wait(&mut self) -> Option<NodeHeight> {
         self.receiver.changed().await.expect("sender can never be dropped");
         *self.receiver.borrow()
     }
 
-    pub fn beat(&self, parent_block: Option<LeafBlock>) {
-        self.sender.send(parent_block).expect("receiver can never be dropped")
+    pub fn beat(&self, new_height: Option<NodeHeight>) {
+        self.sender.send(new_height).expect("receiver can never be dropped")
     }
 }
 

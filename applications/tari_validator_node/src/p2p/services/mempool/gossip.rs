@@ -155,6 +155,10 @@ impl MempoolGossip<PeerAddress> {
             ))
             .filter(|sg| exclude_shard_group.as_ref() != Some(sg) && sg != &local_shard_group)
             .collect::<HashSet<_>>();
+        // If the only shard group involved is the excluded one.
+        if shard_groups.is_empty() {
+            return Ok(());
+        }
 
         let msg = self
             .codec

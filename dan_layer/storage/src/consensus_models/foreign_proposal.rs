@@ -133,7 +133,7 @@ impl ForeignProposalAtom {
     pub fn get_proposal<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<ForeignProposal, StorageError> {
         let mut found = tx.foreign_proposals_get_any(Some(&self.block_id))?;
         let found = found.pop().ok_or_else(|| StorageError::NotFound {
-            item: "ForeignProposal".to_string(),
+            item: "ForeignProposal",
             key: self.block_id.to_string(),
         })?;
         Ok(found)

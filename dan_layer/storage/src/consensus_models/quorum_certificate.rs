@@ -16,7 +16,16 @@ use tari_dan_common_types::{
 };
 
 use crate::{
-    consensus_models::{Block, BlockId, HighQc, LastVoted, LeafBlock, QuorumDecision, ValidatorSignature},
+    consensus_models::{
+        Block,
+        BlockId,
+        HighQc,
+        LastVoted,
+        LeafBlock,
+        QuorumDecision,
+        ValidatorSignature,
+        ValidatorStatsUpdate,
+    },
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -43,6 +52,7 @@ pub struct QuorumCertificate {
     #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     leaf_hashes: Vec<FixedHash>,
     decision: QuorumDecision,
+    is_shares_processed: bool,
 }
 
 impl QuorumCertificate {
@@ -65,6 +75,7 @@ impl QuorumCertificate {
             signatures,
             leaf_hashes,
             decision,
+            is_shares_processed: false,
         };
         qc.qc_id = qc.calculate_id();
         qc
@@ -196,7 +207,7 @@ impl QuorumCertificate {
             // We haven't started the epoch
             return Ok((true, self.as_high_qc()));
         };
-        if high_qc.block_height() < self.block_height() {
+        if self.block_height() > high_qc.block_height() {
             return Ok((true, self.as_high_qc()));
         }
 
@@ -212,7 +223,7 @@ impl QuorumCertificate {
 
         info!(
             target: LOG_TARGET,
-            "🔥 {} HIGH_QC ({}, previous high QC: {} {})",
+            "🔥 {}HIGH_QC ({}, previous high QC: {} {})",
             if is_new { "NEW " } else { "" },
             self,
             high_qc.block_id(),
@@ -229,6 +240,27 @@ impl QuorumCertificate {
         high_qc.set(tx)?;
 
         Ok(high_qc)
+    }
+
+    pub fn update_participation_shares<TTx: StateStoreWriteTransaction>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<(), StorageError> {
+        if self.is_shares_processed {
+            return Ok(());
+        }
+
+        tx.validator_epoch_stats_updates(
+            self.epoch,
+            self.signatures.iter().map(|s| s.public_key()).map(|pk| {
+                ValidatorStatsUpdate::new(pk)
+                    .increment_participation_share()
+                    .decrement_missed_proposal()
+            }),
+        )?;
+        tx.quorum_certificates_set_shares_processed(&self.qc_id)?;
+
+        Ok(())
     }
 
     pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>
@@ -249,8 +281,8 @@ impl Display for QuorumCertificate {
         write!(
             f,
             "Qc(block: {} {}, qc_id: {}, epoch: {}, {} signatures)",
-            self.block_id,
             self.block_height,
+            self.block_id,
             self.qc_id,
             self.epoch,
             self.signatures.len()

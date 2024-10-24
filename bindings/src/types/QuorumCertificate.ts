@@ -14,4 +14,5 @@ export interface QuorumCertificate {
   signatures: Array<ValidatorSignature>;
   leaf_hashes: Array<string>;
   decision: QuorumDecision;
+  is_shares_processed: boolean;
 }

@@ -135,6 +135,12 @@ impl TestNetwork {
         self
     }
 
+    pub async fn is_offline(&self, address: &TestAddress, num_committees: u32) -> bool {
+        let read = self.offline_destinations.read().await;
+        read.iter()
+            .any(|d| d.is_for(address, ShardGroup::all_shards(TEST_NUM_PRESHARDS), num_committees))
+    }
+
     #[allow(dead_code)]
     pub async fn on_message(&mut self) -> Option<HotstuffMessage> {
         self._on_message.changed().await.unwrap();
@@ -347,14 +353,14 @@ impl TestNetworkWorker {
                 return;
             }
         }
-        log::debug!("✉️ Message {} from {} to {}", msg, from, to);
         if from != to &&
             self.is_offline_destination(&from, &to, ShardGroup::all_shards(TEST_NUM_PRESHARDS))
                 .await
         {
-            log::info!("🗑️ Discarding message {msg}. Leader {from} is offline");
+            log::info!("🗑️ Discarding message {msg} from {from}. Leader {to} is offline");
             return;
         }
+        log::debug!("✉️ Message {} sent from {} to {}", msg, from, to);
         self.on_message.send(Some(msg.clone())).unwrap();
         self.num_sent_messages
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);

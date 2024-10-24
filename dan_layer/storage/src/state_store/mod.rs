@@ -67,6 +67,8 @@ use crate::{
         TransactionPoolStage,
         TransactionPoolStatusUpdate,
         TransactionRecord,
+        ValidatorConsensusStats,
+        ValidatorStatsUpdate,
         VersionedStateHashTreeDiff,
         Vote,
     },
@@ -349,6 +351,27 @@ pub trait StateStoreReadTransaction: Sized {
 
     // -------------------------------- Foreign parked block -------------------------------- //
     fn foreign_parked_blocks_exists(&self, block_id: &BlockId) -> Result<bool, StorageError>;
+
+    // -------------------------------- ValidatorNodeStats -------------------------------- //
+    fn validator_epoch_stats_get(
+        &self,
+        epoch: Epoch,
+        public_key: &PublicKey,
+    ) -> Result<ValidatorConsensusStats, StorageError>;
+    fn validator_epoch_stats_get_nodes_to_suspend(
+        &self,
+        block_id: &BlockId,
+        min_missed_proposals: u64,
+        limit: usize,
+    ) -> Result<Vec<PublicKey>, StorageError>;
+    fn validator_epoch_stats_get_nodes_to_resume(
+        &self,
+        block_id: &BlockId,
+        limit: usize,
+    ) -> Result<Vec<PublicKey>, StorageError>;
+    // -------------------------------- SuspendedNodes -------------------------------- //
+    fn suspended_nodes_is_suspended(&self, block_id: &BlockId, public_key: &PublicKey) -> Result<bool, StorageError>;
+    fn suspended_nodes_count(&self) -> Result<u64, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -373,6 +396,7 @@ pub trait StateStoreWriteTransaction {
 
     // -------------------------------- QuorumCertificate -------------------------------- //
     fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate) -> Result<(), StorageError>;
+    fn quorum_certificates_set_shares_processed(&mut self, qc_id: &QcId) -> Result<(), StorageError>;
 
     // -------------------------------- Bookkeeping -------------------------------- //
     fn last_sent_vote_set(&mut self, last_sent_vote: &LastSentVote) -> Result<(), StorageError>;
@@ -468,7 +492,7 @@ pub trait StateStoreWriteTransaction {
 
     fn missing_transactions_remove(
         &mut self,
-        current_height: NodeHeight,
+        height: NodeHeight,
         transaction_id: &TransactionId,
     ) -> Result<Option<(Block, Vec<ForeignProposal>)>, StorageError>;
 
@@ -572,6 +596,27 @@ pub trait StateStoreWriteTransaction {
         block_id: &BlockId,
         conflicts: I,
     ) -> Result<(), StorageError>;
+
+    // -------------------------------- ParticipationShares -------------------------------- //
+    fn validator_epoch_stats_add_participation_share(&mut self, qc_id: &QcId) -> Result<(), StorageError>;
+    fn validator_epoch_stats_updates<'a, I: IntoIterator<Item = ValidatorStatsUpdate<'a>>>(
+        &mut self,
+        epoch: Epoch,
+        updates: I,
+    ) -> Result<(), StorageError>;
+
+    // -------------------------------- SuspendedNodes -------------------------------- //
+    fn suspended_nodes_insert(
+        &mut self,
+        public_key: &PublicKey,
+        suspended_in_block: BlockId,
+    ) -> Result<(), StorageError>;
+    fn suspended_nodes_mark_for_removal(
+        &mut self,
+        public_key: &PublicKey,
+        resumed_in_block: BlockId,
+    ) -> Result<(), StorageError>;
+    fn suspended_nodes_delete(&mut self, public_key: &PublicKey) -> Result<(), StorageError>;
 
     // -------------------------------- Diagnotics -------------------------------- //
     fn diagnostics_add_no_vote(&mut self, block_id: BlockId, reason: NoVoteReason) -> Result<(), StorageError>;

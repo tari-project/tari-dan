@@ -5,8 +5,8 @@ use crate::consensus_models::{Decision, TransactionPoolStage};
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum NoVoteReason {
-    #[error("The node should not vote")]
-    ShouldNotVote,
+    #[error("Already voted at this height. Not voting again.")]
+    AlreadyVotedAtHeight,
     #[error("Stage disagreement. Expected: {expected:?}, Actual: {stage:?}")]
     StageDisagreement {
         expected: TransactionPoolStage,
@@ -52,12 +52,22 @@ pub enum NoVoteReason {
     MerkleRootMismatch,
     #[error("Not all foreign input pledges are present")]
     NotAllForeignInputPledges,
+    #[error("Leader proposed to suspend a node that should not be suspended")]
+    ShouldNotSuspendNode,
+    #[error("Leader proposed to suspend a node but node is already suspended")]
+    NodeAlreadySuspended,
+    #[error("Leader proposed to resume a node but node is not suspended")]
+    NodeNotSuspended,
+    #[error("Leader proposed to suspend a node but it is not permitted to suspend more than f nodes")]
+    CannotSuspendNodeBelowQuorumThreshold,
+    #[error("Leader proposed to resume a node but the node should not be resumed")]
+    ShouldNodeResumeNode,
 }
 
 impl NoVoteReason {
     pub fn as_code_str(&self) -> &'static str {
         match self {
-            Self::ShouldNotVote => "ShouldNotVote",
+            Self::AlreadyVotedAtHeight => "ShouldNotVote",
             Self::StageDisagreement { .. } => "StageDisagreement",
             Self::TransactionNotInPool => "TransactionNotInPool",
             Self::DecisionDisagreement { .. } => "DecisionDisagreement",
@@ -79,6 +89,11 @@ impl NoVoteReason {
             Self::TotalLeaderFeeDisagreement => "TotalLeaderFeeDisagreement",
             Self::MerkleRootMismatch => "MerkleRootMismatch",
             Self::NotAllForeignInputPledges => "NotAllForeignInputPledges",
+            Self::ShouldNotSuspendNode => "ShouldNotSuspendNode",
+            Self::NodeAlreadySuspended => "NodeAlreadySuspended",
+            Self::NodeNotSuspended => "NodeNotSuspended",
+            Self::ShouldNodeResumeNode => "ShouldNodeResumeNode",
+            Self::CannotSuspendNodeBelowQuorumThreshold => "CannotSuspendNodeBelowQuorumThreshold",
         }
     }
 }

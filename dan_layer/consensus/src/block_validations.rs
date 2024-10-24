@@ -3,7 +3,11 @@
 
 use tari_common::configuration::Network;
 use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::ByteArray};
-use tari_dan_common_types::{committee::Committee, DerivableFromPublicKey, ExtraFieldKey};
+use tari_dan_common_types::{
+    committee::{Committee, CommitteeInfo},
+    DerivableFromPublicKey,
+    ExtraFieldKey,
+};
 use tari_dan_storage::consensus_models::Block;
 use tari_epoch_manager::EpochManagerReader;
 
@@ -12,9 +16,10 @@ use crate::{
     traits::{ConsensusSpec, LeaderStrategy, VoteSignatureService},
 };
 
-pub async fn check_proposal<TConsensusSpec: ConsensusSpec>(
+pub fn check_proposal<TConsensusSpec: ConsensusSpec>(
     block: &Block,
-    epoch_manager: &TConsensusSpec::EpochManager,
+    committee_info: &CommitteeInfo,
+    committee_for_block: &Committee<TConsensusSpec::Addr>,
     vote_signing_service: &TConsensusSpec::SignatureService,
     leader_strategy: &TConsensusSpec::LeaderStrategy,
     config: &HotstuffConfig,
@@ -26,12 +31,9 @@ pub async fn check_proposal<TConsensusSpec: ConsensusSpec>(
     check_network(block, config.network)?;
     check_sidechain_id(block, config)?;
     check_hash_and_height(block)?;
-    let committee_for_block = epoch_manager
-        .get_committee_by_validator_public_key(block.epoch(), block.proposed_by().clone())
-        .await?;
-    check_proposed_by_leader(leader_strategy, &committee_for_block, block)?;
+    check_proposed_by_leader(leader_strategy, committee_for_block, block)?;
     check_signature(block)?;
-    check_quorum_certificate::<TConsensusSpec>(block, vote_signing_service, epoch_manager).await?;
+    check_quorum_certificate::<TConsensusSpec>(block, committee_for_block, committee_info, vote_signing_service)?;
     Ok(())
 }
 
@@ -119,7 +121,7 @@ pub fn check_proposed_by_leader<TAddr: DerivableFromPublicKey, TLeaderStrategy: 
     local_committee: &Committee<TAddr>,
     candidate_block: &Block,
 ) -> Result<(), ProposalValidationError> {
-    let leader = leader_strategy.get_leader(local_committee, candidate_block.height());
+    let (leader, _) = leader_strategy.get_leader(local_committee, candidate_block.height());
     if !leader.eq_to_public_key(candidate_block.proposed_by()) {
         return Err(ProposalValidationError::NotLeader {
             proposed_by: candidate_block.proposed_by().to_string(),
@@ -154,10 +156,11 @@ pub fn check_signature(candidate_block: &Block) -> Result<(), ProposalValidation
     Ok(())
 }
 
-pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
+pub fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
     candidate_block: &Block,
+    committee: &Committee<TConsensusSpec::Addr>,
+    committee_info: &CommitteeInfo,
     vote_signing_service: &TConsensusSpec::SignatureService,
-    epoch_manager: &TConsensusSpec::EpochManager,
 ) -> Result<(), HotStuffError> {
     let qc = candidate_block.justify();
     if qc.is_zero() {
@@ -178,23 +181,18 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
         return Err(ProposalValidationError::QuorumWasNotReached { qc: *qc.id() }.into());
     }
 
-    let mut vns = vec![];
     for signature in qc.signatures() {
-        let vn = epoch_manager
-            .get_validator_node_by_public_key(qc.epoch(), signature.public_key().clone())
-            .await?;
-        let committee_info = epoch_manager
-            .get_committee_info_for_substate(qc.epoch(), vn.shard_key)
-            .await?;
-        if committee_info.shard_group() != qc.shard_group() {
+        if !committee.contains_public_key(signature.public_key()) {
             return Err(ProposalValidationError::ValidatorNotInCommittee {
                 validator: signature.public_key().to_string(),
-                expected_shard: qc.shard_group().to_string(),
-                actual_shard: committee_info.shard_group().to_string(),
+                details: format!(
+                    "QC signed with validator {} that is not in committee {}",
+                    signature.public_key(),
+                    committee_info.shard_group()
+                ),
             }
             .into());
         }
-        vns.push(vn.get_node_hash(candidate_block.network()));
     }
 
     for sign in qc.signatures() {
@@ -203,18 +201,8 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
             return Err(ProposalValidationError::QCInvalidSignature { qc: *qc.id() }.into());
         }
     }
-    let committee_shard = epoch_manager
-        .get_committee_info_by_validator_public_key(
-            qc.epoch(),
-            qc.signatures()
-                .first()
-                .ok_or::<HotStuffError>(ProposalValidationError::QuorumWasNotReached { qc: *qc.id() }.into())?
-                .public_key()
-                .clone(),
-        )
-        .await?;
 
-    if committee_shard.quorum_threshold() >
+    if committee_info.quorum_threshold() >
         u32::try_from(qc.signatures().len()).map_err(|_| ProposalValidationError::QCConversionError)?
     {
         return Err(ProposalValidationError::QuorumWasNotReached { qc: *qc.id() }.into());

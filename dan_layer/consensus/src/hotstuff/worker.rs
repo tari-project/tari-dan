@@ -7,7 +7,12 @@ use std::{
 };
 
 use log::*;
-use tari_dan_common_types::{committee::CommitteeInfo, Epoch, NodeHeight, ShardGroup};
+use tari_dan_common_types::{
+    committee::{Committee, CommitteeInfo},
+    Epoch,
+    NodeHeight,
+    ShardGroup,
+};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -26,7 +31,12 @@ use tari_shutdown::ShutdownSignal;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{broadcast, mpsc};
 
-use super::{config::HotstuffConfig, on_receive_new_transaction::OnReceiveNewTransaction, ProposalValidationError};
+use super::{
+    calculate_last_dummy_block,
+    config::HotstuffConfig,
+    on_receive_new_transaction::OnReceiveNewTransaction,
+    ProposalValidationError,
+};
 use crate::{
     hotstuff::{
         error::HotStuffError,
@@ -56,6 +66,7 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::worker";
 
 pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     local_validator_addr: TConsensusSpec::Addr,
+
     config: HotstuffConfig,
     hooks: TConsensusSpec::Hooks,
 
@@ -104,7 +115,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         shutdown: ShutdownSignal,
     ) -> Self {
         let (tx_missing_transactions, rx_missing_transactions) = mpsc::unbounded_channel();
-        let pacemaker = PaceMaker::new(config.consensus_constants.pacemaker_max_base_time);
+        let pacemaker = PaceMaker::new(config.consensus_constants.pacemaker_block_time);
         let vote_receiver = VoteCollector::new(
             config.network,
             state_store.clone(),
@@ -114,7 +125,8 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         let transaction_manager = ConsensusTransactionManager::new(transaction_executor.clone());
 
         Self {
-            local_validator_addr,
+            local_validator_addr: local_validator_addr.clone(),
+
             config: config.clone(),
             tx_events: tx_events.clone(),
             rx_new_transactions,
@@ -135,7 +147,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 state_store.clone(),
                 outbound_messaging.clone(),
                 leader_strategy.clone(),
-                epoch_manager.clone(),
+                pacemaker.clone_handle(),
             ),
             on_receive_local_proposal: OnReceiveLocalProposalHandler::new(
                 state_store.clone(),
@@ -157,10 +169,9 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             ),
             on_receive_vote: OnReceiveVoteHandler::new(pacemaker.clone_handle(), vote_receiver.clone()),
             on_receive_new_view: OnReceiveNewViewHandler::new(
-                config.network,
+                local_validator_addr,
                 state_store.clone(),
                 leader_strategy.clone(),
-                epoch_manager.clone(),
                 pacemaker.clone_handle(),
                 vote_receiver,
             ),
@@ -228,11 +239,16 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             .start(current_epoch, current_height, high_qc.block_height())
             .await?;
 
-        self.run(local_committee_info).await?;
+        let local_committee = self.epoch_manager.get_local_committee(current_epoch).await?;
+        self.run(local_committee_info, local_committee).await?;
         Ok(())
     }
 
-    async fn run(&mut self, mut local_committee_info: CommitteeInfo) -> Result<(), HotStuffError> {
+    async fn run(
+        &mut self,
+        mut local_committee_info: CommitteeInfo,
+        mut local_committee: Committee<TConsensusSpec::Addr>,
+    ) -> Result<(), HotStuffError> {
         // Spawn pacemaker if not spawned already
         if let Some(pm) = self.pacemaker_worker.take() {
             pm.spawn();
@@ -250,14 +266,13 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         let mut prev_epoch = current_epoch;
 
         loop {
-            let current_height = self.pacemaker.current_view().get_height() + NodeHeight(1);
+            let current_height = self.pacemaker.current_view().get_height();
             let current_epoch = self.pacemaker.current_view().get_epoch();
 
             // Need to update local committee info if the epoch has changed
-            // TODO: we should exit consensus when we change epochs to ensure that we are synced. When this is
-            // implemented, we will not need to do this.
             if prev_epoch != current_epoch {
                 local_committee_info = self.epoch_manager.get_local_committee_info(current_epoch).await?;
+                local_committee = self.epoch_manager.get_local_committee(current_epoch).await?;
                 prev_epoch = current_epoch;
             }
 
@@ -268,7 +283,8 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
 
             debug!(
                 target: LOG_TARGET,
-                "🔥 Current height #{}",
+                "🔥 {} Current height #{}",
+                self.local_validator_addr,
                 current_height.as_u64()
             );
 
@@ -277,29 +293,29 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                     self.on_epoch_manager_event(event).await?;
                 },
 
-                maybe_leaf_block = on_force_beat.wait() => {
-                    if let Err(e) = self.propose_if_leader(current_epoch, maybe_leaf_block, &local_committee_info).await {
+                forced_height = on_force_beat.wait() => {
+                    if let Err(e) = self.on_force_beat(current_epoch, forced_height, &local_committee_info, &local_committee).await {
                         self.on_failure("propose_if_leader", &e).await;
                         return Err(e);
                     }
                 },
 
                 _ = on_beat.wait() => {
-                    if let Err(e) = self.on_beat(current_epoch, &local_committee_info).await {
+                    if let Err(e) = self.on_beat(current_epoch,  &local_committee_info, &local_committee).await {
                         self.on_failure("on_beat", &e).await;
                         return Err(e);
                     }
                 },
 
                 Some((tx_id, pending)) = self.rx_new_transactions.recv() => {
-                    if let Err(err) = self.on_new_transaction(tx_id, pending, current_epoch, current_height, &local_committee_info).await {
+                    if let Err(err) = self.on_new_transaction(tx_id, pending, current_epoch, current_height, &local_committee_info, &local_committee).await {
                         self.hooks.on_error(&err);
                         error!(target: LOG_TARGET, "🚨Error handling new transaction: {}", err);
                     }
                 },
 
                 Some(result) = self.on_inbound_message.next_message(current_epoch, current_height) => {
-                    if let Err(e) = self.on_unvalidated_message(current_epoch, current_height, result, &local_committee_info).await {
+                    if let Err(e) = self.on_unvalidated_message(current_epoch, current_height, result, &local_committee_info, &local_committee).await {
                         self.on_failure("on_inbound_message", &e).await;
                         return Err(e);
                     }
@@ -310,14 +326,14 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 //       One suggestion is to refactor consensus to emit events (kinda like libp2p does) and handle those events.
                 //       This should be easy to reason about and avoid a large depth of async calls and "callback channels".
                 Some(batch) = self.rx_missing_transactions.recv() => {
-                    if let Err(err) = self.check_if_block_can_be_unparked(current_epoch, current_height, batch.iter(), &local_committee_info).await {
+                    if let Err(err) = self.check_if_block_can_be_unparked(current_epoch, current_height, batch.iter(), &local_committee_info, &local_committee).await {
                         self.hooks.on_error(&err);
                         error!(target: LOG_TARGET, "🚨Error handling missing transaction: {}", err);
                     }
                 },
 
-                new_height = on_leader_timeout.wait() => {
-                    if let Err(e) = self.on_leader_timeout(current_epoch, new_height).await {
+                _ = on_leader_timeout.wait() => {
+                    if let Err(e) = self.on_leader_timeout(current_epoch, current_height,  &local_committee).await {
                         self.on_failure("on_leader_timeout", &e).await;
                         return Err(e);
                     }
@@ -346,17 +362,25 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         current_height: NodeHeight,
         result: Result<(TConsensusSpec::Addr, HotstuffMessage), HotStuffError>,
         local_committee_info: &CommitteeInfo,
+        local_committee: &Committee<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         let (from, msg) = result?;
 
         match self
             .on_message_validate
-            .handle(current_height, local_committee_info, from.clone(), msg)
+            .handle(current_height, local_committee_info, local_committee, from.clone(), msg)
             .await?
         {
             MessageValidationResult::Ready { from, message: msg } => {
                 if let Err(e) = self
-                    .dispatch_hotstuff_message(current_epoch, from, msg, local_committee_info)
+                    .dispatch_hotstuff_message(
+                        current_epoch,
+                        current_height,
+                        from,
+                        msg,
+                        local_committee_info,
+                        local_committee,
+                    )
                     .await
                 {
                     self.on_failure("on_unvalidated_message -> dispatch_hotstuff_message", &e)
@@ -423,6 +447,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         current_epoch: Epoch,
         current_height: NodeHeight,
         local_committee_info: &CommitteeInfo,
+        local_committee: &Committee<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         let _timer = TraceTimer::info(LOG_TARGET, "on_new_transaction");
         let maybe_transaction = self.on_receive_new_transaction.try_sequence_transaction(
@@ -450,6 +475,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 current_height,
                 iter::once(transaction.id()),
                 local_committee_info,
+                local_committee,
             )
             .await?
         {
@@ -476,6 +502,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         current_height: NodeHeight,
         transaction_ids: I,
         local_committee_info: &CommitteeInfo,
+        local_committee: &Committee<TConsensusSpec::Addr>,
     ) -> Result<bool, HotStuffError> {
         let (local_proposals, foreign_proposals) = self
             .on_message_validate
@@ -492,7 +519,10 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         }
 
         for msg in local_proposals {
-            if let Err(e) = self.on_proposal_message(current_epoch, local_committee_info, msg).await {
+            if let Err(e) = self
+                .on_proposal_message(current_epoch, *local_committee_info, local_committee, msg)
+                .await
+            {
                 self.on_failure("check_if_block_can_be_unparked -> on_proposal_message", &e)
                     .await;
                 return Err(e);
@@ -569,14 +599,52 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         }
     }
 
-    async fn on_leader_timeout(&mut self, current_epoch: Epoch, new_height: NodeHeight) -> Result<(), HotStuffError> {
-        self.hooks.on_leader_timeout(new_height);
-        self.on_next_sync_view.handle(current_epoch, new_height).await?;
-        self.publish_event(HotstuffEvent::LeaderTimeout { new_height });
+    async fn on_leader_timeout(
+        &mut self,
+        current_epoch: Epoch,
+        current_height: NodeHeight,
+        local_committee: &Committee<TConsensusSpec::Addr>,
+    ) -> Result<(), HotStuffError> {
+        self.hooks.on_leader_timeout(current_height);
+        info!(target: LOG_TARGET, "⚠️ {} Leader failure: NEXTSYNCVIEW for epoch {} and current height {}", self.local_validator_addr, current_epoch, current_height);
+        self.on_next_sync_view
+            .handle(current_epoch, current_height, local_committee)
+            .await?;
+        self.publish_event(HotstuffEvent::LeaderTimeout { height: current_height });
         Ok(())
     }
 
-    async fn on_beat(&mut self, epoch: Epoch, local_committee_info: &CommitteeInfo) -> Result<(), HotStuffError> {
+    /// Called when it may be time to propose if this node is the leader for the current leaf block.
+    async fn on_beat(
+        &mut self,
+        epoch: Epoch,
+        local_committee_info: &CommitteeInfo,
+        local_committee: &Committee<TConsensusSpec::Addr>,
+    ) -> Result<(), HotStuffError> {
+        let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?;
+        let next_height = leaf_block.height() + NodeHeight(1);
+        if !self
+            .leader_strategy
+            .is_leader(&self.local_validator_addr, local_committee, next_height)
+        {
+            debug!(
+                target: LOG_TARGET,
+                "🔥 [on_beat] {} Not leader for height ({})",
+                self.local_validator_addr,
+                next_height,
+            );
+            return Ok(());
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "🔥 [on_beat] {} Local node is leader for height ({}), local_committee: {}",
+            self.local_validator_addr,
+            next_height,
+            local_committee
+                .len(),
+        );
+
         let propose_now = self.state_store.with_read_tx(|tx| {
             // Propose quickly if there are UTXOs to mint or transactions to propose
             let propose_now = ForeignProposal::has_unconfirmed(tx, epoch)? ||
@@ -595,52 +663,114 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             }
         }
 
-        self.propose_if_leader(epoch, None, local_committee_info).await?;
+        self.propose_now(epoch, next_height, local_committee_info, local_committee)
+            .await?;
 
         Ok(())
     }
 
-    async fn propose_if_leader(
+    /// Called when the block time expires (forced_height == None) or when NEWVIEW quorum is reached (forced_height ==
+    /// Some(_))
+    async fn on_force_beat(
         &mut self,
         epoch: Epoch,
-        leaf_block: Option<LeafBlock>,
+        forced_height: Option<NodeHeight>,
         local_committee_info: &CommitteeInfo,
+        local_committee: &Committee<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
-        let leaf_block = match leaf_block {
-            Some(leaf_block) => leaf_block,
-            None => self.state_store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?,
+        let next_height = match forced_height {
+            Some(height) => {
+                debug!(target: LOG_TARGET, "🔥 [force_beat] {} forced {height}", self.local_validator_addr);
+                height + NodeHeight(1)
+            },
+            None => {
+                let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?;
+                leaf_block.height() + NodeHeight(1)
+            },
         };
+        let is_leader = self
+            .leader_strategy
+            .is_leader(&self.local_validator_addr, local_committee, next_height);
 
-        let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
+        if !is_leader {
+            debug!(
+                target: LOG_TARGET,
+                "🔥 [force_beat] {} Not leader for next height ({}), local_committee: {}",
+                self.local_validator_addr,
+                next_height,
+                local_committee
+                    .len(),
+            );
+            return Ok(());
+        }
 
-        let is_leader = self.leader_strategy.is_leader_for_next_block(
-            &self.local_validator_addr,
-            &local_committee,
-            leaf_block.height,
-        );
         info!(
             target: LOG_TARGET,
-            "🔥 [on_beat{}] Is leader: {:?}, leaf_block: {}, local_committee: {}",
+            "🔥 [force_beat] {} Local node is leader for next height ({}), local_committee: {}",
             self.local_validator_addr,
-            is_leader,
-            leaf_block,
+            next_height,
             local_committee
                 .len(),
         );
-        if is_leader {
-            let current_epoch = self.epoch_manager.current_epoch().await?;
-            let propose_epoch_end = current_epoch > epoch;
 
-            self.on_propose
-                .handle(
-                    epoch,
-                    &local_committee,
-                    *local_committee_info,
-                    leaf_block,
-                    propose_epoch_end,
-                )
-                .await?;
+        self.propose_now(epoch, next_height, local_committee_info, local_committee)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn propose_now(
+        &mut self,
+        epoch: Epoch,
+        next_height: NodeHeight,
+        local_committee_info: &CommitteeInfo,
+        local_committee: &Committee<TConsensusSpec::Addr>,
+    ) -> Result<(), HotStuffError> {
+        let mut leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?;
+        if next_height > leaf_block.height + NodeHeight(1) {
+            let (high_qc, block) = self.state_store.with_read_tx(|tx| {
+                let high_qc = HighQc::get(tx, epoch)?.get_quorum_certificate(tx)?;
+                let block = leaf_block.get_block(tx)?;
+                Ok::<_, HotStuffError>((high_qc, block))
+            })?;
+
+            info!(
+                target: LOG_TARGET,
+                "⚠️ Next height is {next_height} but leaf_block is {leaf_block} due to leader failure. Proposing with dummy blocks to fill the gap.",
+            );
+
+            if let Some(dummy) = calculate_last_dummy_block(
+                leaf_block.height,
+                next_height,
+                self.config.network,
+                epoch,
+                block.shard_group(),
+                *block.id(),
+                &high_qc,
+                *block.merkle_root(),
+                &self.leader_strategy,
+                local_committee,
+                block.timestamp(),
+                block.base_layer_block_height(),
+                *block.base_layer_block_hash(),
+            ) {
+                leaf_block = dummy;
+            }
         }
+
+        let current_epoch = self.epoch_manager.current_epoch().await?;
+        let propose_epoch_end = current_epoch > epoch;
+
+        self.on_propose
+            .handle(
+                epoch,
+                next_height,
+                local_committee,
+                *local_committee_info,
+                leaf_block,
+                propose_epoch_end,
+            )
+            .await?;
 
         Ok(())
     }
@@ -648,9 +778,11 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     async fn dispatch_hotstuff_message(
         &mut self,
         current_epoch: Epoch,
+        current_height: NodeHeight,
         from: TConsensusSpec::Addr,
         msg: HotstuffMessage,
         local_committee_info: &CommitteeInfo,
+        local_committee: &Committee<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         // TODO: check the message comes from a local committee member (except foreign proposals which must come from a
         //       registered node)
@@ -658,12 +790,20 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             HotstuffMessage::NewView(message) => log_err(
                 "on_receive_new_view",
                 self.on_receive_new_view
-                    .handle(current_epoch, from, message, local_committee_info)
+                    .handle(
+                        current_epoch,
+                        current_height,
+                        from,
+                        message,
+                        local_committee_info,
+                        local_committee,
+                    )
                     .await,
             ),
             HotstuffMessage::Proposal(msg) => log_err(
                 "on_receive_local_proposal",
-                self.on_proposal_message(current_epoch, local_committee_info, msg).await,
+                self.on_proposal_message(current_epoch, *local_committee_info, local_committee, msg)
+                    .await,
             ),
             HotstuffMessage::ForeignProposal(msg) => log_err(
                 "on_receive_foreign_proposal",
@@ -703,14 +843,15 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     async fn on_proposal_message(
         &mut self,
         current_epoch: Epoch,
-        local_committee_info: &CommitteeInfo,
+        local_committee_info: CommitteeInfo,
+        local_committee: &Committee<TConsensusSpec::Addr>,
         msg: ProposalMessage,
     ) -> Result<(), HotStuffError> {
         let proposed_by = msg.block.proposed_by().clone();
         match log_err(
             "on_receive_local_proposal",
             self.on_receive_local_proposal
-                .handle(current_epoch, local_committee_info, msg)
+                .handle(current_epoch, local_committee_info, local_committee, msg)
                 .await,
         ) {
             Ok(_) => Ok(()),
