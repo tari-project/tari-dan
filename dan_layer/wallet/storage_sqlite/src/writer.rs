@@ -707,11 +707,11 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 .sender_public_nonce
                 .map(|nonce| PublicKey::from_hex(&nonce).unwrap()),
             encryption_secret_key_index: locked_output.encryption_secret_key_index as u64,
-            encrypted_data: EncryptedData::try_from(locked_output.encrypted_data.as_slice()).map_err(|_| {
+            encrypted_data: EncryptedData::try_from(locked_output.encrypted_data).map_err(|len| {
                 WalletStorageError::DecodingError {
                     operation: "outputs_lock_smallest_amount",
                     item: "encrypted data",
-                    details: "Corrupt db: invalid encrypted data".to_string(),
+                    details: format!("Corrupt db: invalid encrypted data length {len}"),
                 }
             })?,
             public_asset_tag: None,

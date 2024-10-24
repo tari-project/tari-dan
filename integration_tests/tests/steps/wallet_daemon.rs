@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use cucumber::{then, when};
 use integration_tests::{wallet_daemon_cli, TariWorld};
+use log::info;
 use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_template_lib::prelude::Amount;
@@ -231,6 +232,8 @@ async fn when_i_burn_funds_with_wallet_daemon(
         .await
         .unwrap();
     let public_key = account.public_key;
+    eprintln!("Burning funds using claim key {public_key}");
+    info!("Burning funds using claim key {public_key}");
 
     let wallet = world
         .wallets

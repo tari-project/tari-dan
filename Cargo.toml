@@ -121,6 +121,7 @@ minotari_wallet_grpc_client = { git = "https://github.com/tari-project/tari.git"
 tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_hashing = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_max_size = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 
 # avoid including default features so each crate can choose which ones to import
 tari_core = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", default-features = false }
@@ -322,3 +323,4 @@ minotari_node = { git = "https://github.com/sdbondi/tari.git", branch = "update-
 tari_metrics = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
 tari_libtor = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
 tari_hashing = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }
+tari_max_size = { git = "https://github.com/sdbondi/tari.git", branch = "update-feature-dan2" }

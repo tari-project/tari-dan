@@ -95,6 +95,7 @@ pub async fn run_validator_node(
     config: &ApplicationConfig,
     shutdown_signal: ShutdownSignal,
 ) -> Result<(), anyhow::Error> {
+    info!(target: LOG_TARGET, "Starting validator node on network {}", config.network);
     let keypair = setup_keypair_prompt(
         &config.validator_node.identity_file,
         !config.validator_node.dont_create_id,

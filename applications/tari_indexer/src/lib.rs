@@ -75,6 +75,7 @@ const LOG_TARGET: &str = "tari::indexer::app";
 
 #[allow(clippy::too_many_lines)]
 pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
+    info!(target: LOG_TARGET, "Starting indexer node on network {}", config.network);
     let keypair = setup_keypair_prompt(&config.indexer.identity_file, true)?;
 
     let db_factory = SqliteDbFactory::new(config.indexer.data_dir.clone());

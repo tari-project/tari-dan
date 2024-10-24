@@ -393,7 +393,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
                             output_hash,
                             output.commitment.as_public_key()
                         );
-                        self.register_burnt_utxo(&output, &block_info).await?;
+                        self.register_burnt_utxo(output, &block_info).await?;
                     },
                 }
             }
@@ -432,7 +432,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
 
     async fn register_burnt_utxo(
         &mut self,
-        output: &TransactionOutput,
+        output: TransactionOutput,
         block_info: &BlockInfo,
     ) -> Result<(), BaseLayerScannerError> {
         let substate_id = SubstateId::UnclaimedConfidentialOutput(
@@ -458,18 +458,16 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
             return Ok(());
         }
 
-        let encrypted_data_bytes = output.encrypted_data.as_bytes();
-        if encrypted_data_bytes.len() < EncryptedData::size() {
-            return Err(BaseLayerScannerError::InvalidSideChainUtxoResponse(
-                "Encrypted data is the incorrect size".to_string(),
-            ));
-        }
+        let encrypted_data_bytes = output.encrypted_data.into_byte_vec();
+        let encrypted_data = EncryptedData::try_from(encrypted_data_bytes).map_err(|len| {
+            BaseLayerScannerError::InvalidSideChainUtxoResponse(format!(
+                "Encrypted data incorrect length of bytes: {len}"
+            ))
+        })?;
 
         let substate = SubstateValue::UnclaimedConfidentialOutput(UnclaimedConfidentialOutput {
             commitment: output.commitment.clone(),
-            encrypted_data: EncryptedData::try_from(&encrypted_data_bytes[..EncryptedData::size()]).map_err(|_| {
-                BaseLayerScannerError::InvalidSideChainUtxoResponse("Encrypted data has too few bytes".to_string())
-            })?,
+            encrypted_data,
         });
 
         info!(

@@ -30,13 +30,6 @@ pub use walker::*;
 pub fn encode_with_len<T: Serialize>(val: &T) -> Vec<u8> {
     let mut buf = Vec::with_capacity(512);
     encode_with_len_to_writer(&mut buf, val).expect("Vec<u8> Write impl is infallible");
-    // buf.extend([0u8; 4]);
-
-    // encode_into_writer(val, &mut buf).expect("Vec<u8> Write impl is infallible");
-
-    // let len = ((buf.len() - 4) as u32).to_le_bytes();
-    // buf[..4].copy_from_slice(&len);
-
     buf
 }
 

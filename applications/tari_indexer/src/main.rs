@@ -63,7 +63,6 @@ async fn main_inner() -> Result<(), ExitError> {
     let cfg = load_configuration(config_path, true, &cli, cli.common.network)
         .map_err(|e| ExitError::new(ExitCode::ConfigError, e))?;
     let config = ApplicationConfig::load_from(&cfg)?;
-    println!("Starting indexer node on network {}", config.network);
     // Remove the file if it was left behind by a previous run
     let _file = fs::remove_file(config.common.base_path.join("pid"));
     let mut shutdown = Shutdown::new();

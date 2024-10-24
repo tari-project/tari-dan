@@ -57,11 +57,11 @@ impl ConfidentialOutput {
                 .sender_public_nonce
                 .map(|nonce| PublicKey::from_hex(&nonce).unwrap()),
             encryption_secret_key_index: self.encryption_secret_key_index as u64,
-            encrypted_data: EncryptedData::try_from(self.encrypted_data.as_slice()).map_err(|_| {
+            encrypted_data: EncryptedData::try_from(self.encrypted_data).map_err(|len| {
                 WalletStorageError::DecodingError {
                     operation: "try_into_output",
                     item: "output",
-                    details: "Corrupt db: invalid encrypted data".to_string(),
+                    details: format!("Corrupt db: invalid encrypted data length {len}"),
                 }
             })?,
             public_asset_tag: self.public_asset_tag.map(|tag| PublicKey::from_hex(&tag).unwrap()),

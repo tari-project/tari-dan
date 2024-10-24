@@ -5,5 +5,5 @@ export interface Claims {
   id: number;
   name: string;
   permissions: JrpcPermissions;
-  exp: number;
+  exp: bigint;
 }

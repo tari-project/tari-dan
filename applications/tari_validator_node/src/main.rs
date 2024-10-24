@@ -81,7 +81,6 @@ async fn main_inner() -> Result<(), ExitError> {
         eprintln!("{}", e);
     }
 
-    info!(target: LOG_TARGET, "Starting validator node on network {}", config.network);
     match run_validator_node(&config, shutdown.to_signal()).await {
         Ok(_) => info!(target: LOG_TARGET, "Validator node shutdown successfully"),
         Err(e) => match e.downcast() {
