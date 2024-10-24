@@ -282,7 +282,6 @@ where
                             status: transaction.status,
                             finalize: transaction.finalize,
                             final_fee: transaction.final_fee,
-                            is_dry_run: transaction.is_dry_run,
                         }),
                     }
                 },

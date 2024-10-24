@@ -269,10 +269,7 @@ impl ExecutedTransaction {
         Ok(exec.into_execution().for_block(*block_id))
     }
 
-    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &TTx,
-        tx_id: &TransactionId,
-    ) -> Result<bool, StorageError> {
+    pub fn exists<TTx: StateStoreReadTransaction>(tx: &TTx, tx_id: &TransactionId) -> Result<bool, StorageError> {
         match tx.transactions_get(tx_id).optional()? {
             Some(rec) => Ok(rec.execution_result.is_some()),
             None => Ok(false),

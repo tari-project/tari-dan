@@ -42,7 +42,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::init();
 
     let config_path = cli.common.config_path();
-    let cfg = load_configuration(config_path, true, &cli)?;
+    let cfg = load_configuration(config_path, true, &cli, cli.common.network)?;
     let config = ApplicationConfig::load_from(&cfg)?;
 
     if let Some(index) = cli.derive_secret {

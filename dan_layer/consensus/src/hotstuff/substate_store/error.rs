@@ -50,7 +50,7 @@ pub enum LockFailedError {
     #[error("Substate {id} is DOWN")]
     SubstateIsDown { id: VersionedSubstateId },
     #[error(
-        "Failed to {} lock substate {substate_id} due to conflict with existing {} lock on {}", conflict.requested_lock, conflict.existing_lock, conflict.transaction_id
+        "Failed to {} lock substate {substate_id} due to conflict with existing {} lock in transaction {}", conflict.requested_lock, conflict.existing_lock, conflict.transaction_id
     )]
     LockConflict {
         substate_id: VersionedSubstateId,

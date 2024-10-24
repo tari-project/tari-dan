@@ -25,7 +25,7 @@
 
 use blake2::{digest::consts::U32, Blake2b};
 use tari_crypto::{hash_domain, hashing::DomainSeparatedHasher};
-use tari_hashing::ValidatorNodeBmtHashDomain;
+use tari_hashing::ValidatorNodeMerkleHashDomain;
 use tari_mmr::{BalancedBinaryMerkleProof, BalancedBinaryMerkleTree, MergedBalancedBinaryMerkleProof};
 
 use crate::hasher::{tari_hasher, TariHasher};
@@ -56,7 +56,7 @@ fn dan_hasher(label: &'static str) -> TariHasher {
     tari_hasher::<TariDanConsensusHashDomain>(label)
 }
 
-pub type ValidatorNodeBmtHasherBlake2b = DomainSeparatedHasher<Blake2b<U32>, ValidatorNodeBmtHashDomain>;
+pub type ValidatorNodeBmtHasherBlake2b = DomainSeparatedHasher<Blake2b<U32>, ValidatorNodeMerkleHashDomain>;
 pub type ValidatorNodeBalancedMerkleTree = BalancedBinaryMerkleTree<ValidatorNodeBmtHasherBlake2b>;
 pub type ValidatorNodeMerkleProof = BalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake2b>;
 pub type MergedValidatorNodeMerkleProof = MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake2b>;

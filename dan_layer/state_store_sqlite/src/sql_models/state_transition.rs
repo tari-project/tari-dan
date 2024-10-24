@@ -18,12 +18,18 @@ pub struct StateTransition {
     pub epoch: i64,
     pub shard: i32,
     pub seq: i64,
+    #[allow(dead_code)]
     pub substate_address: String,
+    #[allow(dead_code)]
     pub substate_id: String,
+    #[allow(dead_code)]
     pub version: i32,
     pub transition: String,
+    #[allow(dead_code)]
     pub state_hash: Option<String>,
+    #[allow(dead_code)]
     pub state_version: i64,
+    #[allow(dead_code)]
     pub created_at: PrimitiveDateTime,
 }
 

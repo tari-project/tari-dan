@@ -26,7 +26,7 @@ impl WalletDaemonProcess {
             .get("jrpc")
             .ok_or_else(|| anyhow!("No wallet JSON-RPC port allocated"))?;
         let mut client = WalletDaemonClient::connect(format!("http://localhost:{port}"), None)?;
-        let AuthLoginResponse { auth_token } = client
+        let AuthLoginResponse { auth_token, .. } = client
             .auth_request(AuthLoginRequest {
                 permissions: vec!["Admin".to_string()],
                 duration: None,

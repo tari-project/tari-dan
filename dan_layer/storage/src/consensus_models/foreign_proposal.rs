@@ -65,39 +65,33 @@ impl ForeignProposal {
 impl ForeignProposal {
     pub fn upsert<TTx>(&self, tx: &mut TTx, proposed_in_block: Option<BlockId>) -> Result<(), StorageError>
     where
-        TTx: StateStoreWriteTransaction + Deref + ?Sized,
+        TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
     {
         self.justify_qc().save(tx)?;
         tx.foreign_proposals_upsert(self, proposed_in_block)
     }
 
-    pub fn delete<TTx: StateStoreWriteTransaction + ?Sized>(
-        tx: &mut TTx,
-        block_id: &BlockId,
-    ) -> Result<(), StorageError> {
+    pub fn delete<TTx: StateStoreWriteTransaction>(tx: &mut TTx, block_id: &BlockId) -> Result<(), StorageError> {
         tx.foreign_proposals_delete(block_id)
     }
 
-    pub fn delete_in_epoch<TTx: StateStoreWriteTransaction + ?Sized>(
-        tx: &mut TTx,
-        epoch: Epoch,
-    ) -> Result<(), StorageError> {
+    pub fn delete_in_epoch<TTx: StateStoreWriteTransaction>(tx: &mut TTx, epoch: Epoch) -> Result<(), StorageError> {
         tx.foreign_proposals_delete_in_epoch(epoch)
     }
 
-    pub fn get_any<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a BlockId>>(
+    pub fn get_any<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a BlockId>>(
         tx: &TTx,
         block_ids: I,
     ) -> Result<Vec<Self>, StorageError> {
         tx.foreign_proposals_get_any(block_ids)
     }
 
-    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<bool, StorageError> {
+    pub fn exists<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<bool, StorageError> {
         tx.foreign_proposals_exists(self.block.id())
     }
 
-    pub fn get_all_new<TTx: StateStoreReadTransaction + ?Sized>(
+    pub fn get_all_new<TTx: StateStoreReadTransaction>(
         tx: &TTx,
         block_id: &BlockId,
         limit: usize,
@@ -105,7 +99,7 @@ impl ForeignProposal {
         tx.foreign_proposals_get_all_new(block_id, limit)
     }
 
-    pub fn set_proposed_in<TTx: StateStoreWriteTransaction + ?Sized>(
+    pub fn set_proposed_in<TTx: StateStoreWriteTransaction>(
         tx: &mut TTx,
         block_id: &BlockId,
         proposed_in_block: &BlockId,
@@ -113,10 +107,7 @@ impl ForeignProposal {
         tx.foreign_proposals_set_proposed_in(block_id, proposed_in_block)
     }
 
-    pub fn has_unconfirmed<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &TTx,
-        epoch: Epoch,
-    ) -> Result<bool, StorageError> {
+    pub fn has_unconfirmed<TTx: StateStoreReadTransaction>(tx: &TTx, epoch: Epoch) -> Result<bool, StorageError> {
         tx.foreign_proposals_has_unconfirmed(epoch)
     }
 }
@@ -135,14 +126,11 @@ pub struct ForeignProposalAtom {
 }
 
 impl ForeignProposalAtom {
-    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<bool, StorageError> {
+    pub fn exists<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<bool, StorageError> {
         tx.foreign_proposals_exists(&self.block_id)
     }
 
-    pub fn get_proposal<TTx: StateStoreReadTransaction + ?Sized>(
-        &self,
-        tx: &TTx,
-    ) -> Result<ForeignProposal, StorageError> {
+    pub fn get_proposal<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<ForeignProposal, StorageError> {
         let mut found = tx.foreign_proposals_get_any(Some(&self.block_id))?;
         let found = found.pop().ok_or_else(|| StorageError::NotFound {
             item: "ForeignProposal",
@@ -151,11 +139,11 @@ impl ForeignProposalAtom {
         Ok(found)
     }
 
-    pub fn delete<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn delete<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         ForeignProposal::delete(tx, &self.block_id)
     }
 
-    pub fn set_status<TTx: StateStoreWriteTransaction + ?Sized>(
+    pub fn set_status<TTx: StateStoreWriteTransaction>(
         &self,
         tx: &mut TTx,
         status: ForeignProposalStatus,

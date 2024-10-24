@@ -141,7 +141,7 @@ impl From<&[PeerId]> for MulticastDestination {
 
 impl From<Vec<&PeerId>> for MulticastDestination {
     fn from(peers: Vec<&PeerId>) -> Self {
-        peers[..].to_vec().into()
+        peers.iter().map(|p| **p).collect()
     }
 }
 
@@ -151,6 +151,12 @@ impl IntoIterator for MulticastDestination {
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
+    }
+}
+
+impl FromIterator<PeerId> for MulticastDestination {
+    fn from_iter<T: IntoIterator<Item = PeerId>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
     }
 }
 

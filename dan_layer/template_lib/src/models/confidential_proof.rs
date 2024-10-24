@@ -3,8 +3,7 @@
 
 use std::mem::size_of;
 
-use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, Bytes};
+use serde::{de::Error, Deserialize, Serialize};
 #[cfg(feature = "ts")]
 use ts_rs::TS;
 
@@ -211,23 +210,50 @@ impl ConfidentialWithdrawProof {
 
 /// Used by the receiver to determine the value component of the commitment, in both confidential transfers and Minotari
 /// burns
-#[serde_as]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct EncryptedData(#[serde_as(as = "Bytes")] pub [u8; EncryptedData::size()]);
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EncryptedData(Vec<u8>);
 
 impl EncryptedData {
-    pub const fn size() -> usize {
-        const SIZE_NONCE: usize = 24;
-        const SIZE_VALUE: usize = size_of::<u64>();
-        const SIZE_MASK: usize = 32;
-        const SIZE_TAG: usize = 16;
-        const STATIC_ENCRYPTED_DATA_SIZE_TOTAL: usize = SIZE_NONCE + SIZE_VALUE + SIZE_MASK + SIZE_TAG;
-        STATIC_ENCRYPTED_DATA_SIZE_TOTAL
+    pub const ENCRYPTED_DATA_SIZE_TOTAL: usize = Self::SIZE_NONCE + Self::SIZE_VALUE + Self::SIZE_MASK + Self::SIZE_TAG;
+    pub const SIZE_MASK: usize = 32;
+    pub const SIZE_NONCE: usize = 24;
+    pub const SIZE_TAG: usize = 16;
+    pub const SIZE_VALUE: usize = size_of::<u64>();
+
+    pub const fn min_size() -> usize {
+        Self::ENCRYPTED_DATA_SIZE_TOTAL
+    }
+
+    pub const fn max_size() -> usize {
+        Self::min_size() + 256
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
+    }
+
+    pub fn tag_slice(&self) -> &[u8] {
+        &self.0[..Self::SIZE_TAG]
+    }
+
+    pub fn nonce_slice(&self) -> &[u8] {
+        &self.0[Self::SIZE_TAG..Self::SIZE_NONCE + Self::SIZE_TAG]
+    }
+
+    pub fn payload_slice(&self) -> &[u8] {
+        &self.0[Self::payload_offset()..]
+    }
+
+    pub const fn payload_offset() -> usize {
+        Self::SIZE_TAG + Self::SIZE_NONCE
     }
 }
 
@@ -237,21 +263,33 @@ impl AsRef<[u8]> for EncryptedData {
     }
 }
 
-impl Default for EncryptedData {
-    fn default() -> Self {
-        Self([0u8; Self::size()])
+impl TryFrom<Vec<u8>> for EncryptedData {
+    type Error = usize;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        if value.len() < Self::min_size() {
+            return Err(value.len());
+        }
+        if value.len() > Self::max_size() {
+            return Err(value.len());
+        }
+        Ok(Self(value))
     }
 }
 
-impl TryFrom<&[u8]> for EncryptedData {
-    type Error = ();
+impl Serialize for EncryptedData {
+    fn serialize<S>(&self, __serializer: S) -> Result<S::Ok, S::Error>
+    where S: serde::Serializer {
+        serde_with::As::<serde_with::Bytes>::serialize(&self.0, __serializer)
+    }
+}
 
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        if value.len() != Self::size() {
-            return Err(());
-        }
-        let mut out = [0_u8; Self::size()];
-        out.copy_from_slice(value);
-        Ok(Self(out))
+impl<'de> Deserialize<'de> for EncryptedData {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where D: serde::Deserializer<'de> {
+        // TODO: implement a deserializer that only deserializes up to some MAX_BYTES
+        serde_with::As::<serde_with::Bytes>::deserialize(deserializer).and_then(|v: Vec<u8>| {
+            EncryptedData::try_from(v).map_err(|len| D::Error::custom(format!("EncryptedData invalid length {len}")))
+        })
     }
 }

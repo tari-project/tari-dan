@@ -544,10 +544,8 @@ impl TryFrom<proto::transaction::ConfidentialStatement> for ConfidentialStatemen
             commitment: checked_copy_fixed(&val.commitment)
                 .ok_or_else(|| anyhow!("Invalid length of commitment bytes"))?,
             sender_public_nonce,
-            encrypted_data: EncryptedData(
-                checked_copy_fixed(&val.encrypted_value)
-                    .ok_or_else(|| anyhow!("Invalid length of encrypted_value bytes"))?,
-            ),
+            encrypted_data: EncryptedData::try_from(val.encrypted_value)
+                .map_err(|len| anyhow!("Invalid length ({len}) of encrypted_value bytes"))?,
             minimum_value_promise: val.minimum_value_promise,
             viewable_balance_proof: val.viewable_balance_proof.map(TryInto::try_into).transpose()?,
         })

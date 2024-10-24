@@ -10,7 +10,9 @@ use crate::serialization::{deserialize_hex_try_from, deserialize_json};
 
 #[derive(Debug, Clone, Queryable)]
 pub struct BlockDiff {
+    #[allow(dead_code)]
     pub id: i32,
+    #[allow(dead_code)]
     pub block_id: String,
     pub transaction_id: String,
     pub substate_id: String,
@@ -18,6 +20,7 @@ pub struct BlockDiff {
     pub shard: i32,
     pub change: String,
     pub state: Option<String>,
+    #[allow(dead_code)]
     pub created_at: PrimitiveDateTime,
 }
 

@@ -110,7 +110,7 @@ impl DanWalletDaemonProcess {
     pub async fn get_authed_client(&self) -> WalletDaemonClient {
         let mut client = self.get_client();
         // authentication
-        let AuthLoginResponse { auth_token } = client
+        let AuthLoginResponse { auth_token, .. } = client
             .auth_request(AuthLoginRequest {
                 permissions: vec!["Admin".to_string()],
                 duration: None,

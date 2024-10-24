@@ -8,7 +8,7 @@ use tari_dan_wallet_crypto::{ConfidentialOutputMaskAndValue, ConfidentialProofSt
 use tari_engine_types::confidential::get_commitment_factory;
 use tari_template_lib::{
     crypto::PedersonCommitmentBytes,
-    models::{Amount, ConfidentialOutputStatement, ConfidentialWithdrawProof},
+    models::{Amount, ConfidentialOutputStatement, ConfidentialWithdrawProof, EncryptedData},
 };
 
 pub fn generate_confidential_proof(
@@ -37,7 +37,7 @@ fn generate_confidential_proof_internal(
         mask: mask.clone(),
         sender_public_nonce: Default::default(),
         minimum_value_promise: 0,
-        encrypted_data: Default::default(),
+        encrypted_data: EncryptedData::try_from(vec![0; EncryptedData::min_size()]).unwrap(),
         resource_view_key: view_key.clone(),
     };
 
@@ -47,7 +47,7 @@ fn generate_confidential_proof_internal(
         mask: change_mask.clone(),
         sender_public_nonce: Default::default(),
         minimum_value_promise: 0,
-        encrypted_data: Default::default(),
+        encrypted_data: EncryptedData::try_from(vec![0; EncryptedData::min_size()]).unwrap(),
         resource_view_key: view_key,
     });
 
@@ -148,7 +148,7 @@ fn generate_withdraw_proof_internal(
         mask: output_mask.clone(),
         sender_public_nonce: Default::default(),
         minimum_value_promise: 0,
-        encrypted_data: Default::default(),
+        encrypted_data: EncryptedData::try_from(vec![0; EncryptedData::min_size()]).unwrap(),
         resource_view_key: view_key.clone(),
     };
     let change_proof = change_amount.map(|amount| ConfidentialProofStatement {
@@ -156,7 +156,7 @@ fn generate_withdraw_proof_internal(
         mask: change_mask.clone().unwrap(),
         sender_public_nonce: Default::default(),
         minimum_value_promise: 0,
-        encrypted_data: Default::default(),
+        encrypted_data: EncryptedData::try_from(vec![0; EncryptedData::min_size()]).unwrap(),
         resource_view_key: view_key,
     });
 

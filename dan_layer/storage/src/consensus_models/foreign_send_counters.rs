@@ -44,19 +44,12 @@ impl ForeignSendCounters {
 }
 
 impl ForeignSendCounters {
-    pub fn set<TTx: StateStoreWriteTransaction + ?Sized>(
-        &self,
-        tx: &mut TTx,
-        block_id: &BlockId,
-    ) -> Result<(), StorageError> {
+    pub fn set<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx, block_id: &BlockId) -> Result<(), StorageError> {
         tx.foreign_send_counters_set(self, block_id)?;
         Ok(())
     }
 
-    pub fn get_or_default<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &TTx,
-        block_id: &BlockId,
-    ) -> Result<Self, StorageError> {
+    pub fn get_or_default<TTx: StateStoreReadTransaction>(tx: &TTx, block_id: &BlockId) -> Result<Self, StorageError> {
         Ok(tx.foreign_send_counters_get(block_id).optional()?.unwrap_or_default())
     }
 }

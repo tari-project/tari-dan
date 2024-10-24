@@ -46,7 +46,7 @@ impl From<TemplateRegistration> for TemplateMetadata {
             name: reg.template_name,
             address: reg.template_address,
             url: reg.registration.binary_url.into_string(),
-            binary_sha: FixedHash::try_from(reg.registration.binary_sha.into_vec())
+            binary_sha: FixedHash::try_from(reg.registration.binary_sha.as_ref())
                 // TODO: impl Fallible conversion
                 .expect("binary_sha must be 32 bytes long"),
             height: reg.mined_height,

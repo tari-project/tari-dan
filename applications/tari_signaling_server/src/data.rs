@@ -19,7 +19,7 @@ pub struct Data {
     pub expiration: chrono::Duration,
     pub secret_key: String,
     // The lowest still probably alive id. They will be cleaned up after expiration, which goes in order.
-    pub low_id: u64,
+    pub _low_id: u64,
     pub id: u64,
 }
 
@@ -40,7 +40,7 @@ impl Data {
             answer_ice_candidates: HashMap::new(),
             expiration: chrono::Duration::minutes(5),
             secret_key: create_secret(),
-            low_id: 0,
+            _low_id: 0,
             id: 0,
         }
     }

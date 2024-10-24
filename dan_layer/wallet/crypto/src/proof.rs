@@ -1,8 +1,6 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::mem::size_of;
-
 use blake2::Blake2b;
 use chacha20poly1305::{
     aead,
@@ -45,7 +43,7 @@ use tari_template_lib::{
     },
 };
 use tari_utilities::safe_array::SafeArray;
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::{
     byte_utils::copy_fixed,
@@ -193,12 +191,6 @@ pub fn create_viewable_balance_proof(
 }
 
 const ENCRYPTED_DATA_TAG: &[u8] = b"TARI_AAD_VALUE_AND_MASK_EXTEND_NONCE_VARIANT";
-// Useful size constants, each in bytes
-const SIZE_NONCE: usize = size_of::<XNonce>();
-const SIZE_VALUE: usize = size_of::<u64>();
-const SIZE_MASK: usize = RistrettoSecretKey::KEY_LEN;
-const SIZE_TAG: usize = size_of::<Tag>();
-const SIZE_TOTAL: usize = SIZE_NONCE + SIZE_VALUE + SIZE_MASK + SIZE_TAG;
 
 pub(crate) fn encrypt_data(
     encryption_key: &RistrettoSecretKey,
@@ -206,28 +198,42 @@ pub(crate) fn encrypt_data(
     value: u64,
     mask: &RistrettoSecretKey,
 ) -> Result<EncryptedData, aead::Error> {
-    // Encode the value and mask
-    let mut bytes = Zeroizing::new([0u8; SIZE_VALUE + SIZE_MASK]);
-    bytes[..SIZE_VALUE].clone_from_slice(value.to_le_bytes().as_ref());
-    bytes[SIZE_VALUE..].clone_from_slice(mask.as_bytes());
+    fn payload_slice_mut(bytes: &mut [u8]) -> &mut [u8] {
+        &mut bytes[EncryptedData::payload_offset()..]
+    }
 
-    // Produce a secure random nonce
+    fn tag_slice_mut(bytes: &mut [u8]) -> &mut [u8] {
+        &mut bytes[..EncryptedData::SIZE_TAG]
+    }
+
+    fn nonce_slice_mut(bytes: &mut [u8]) -> &mut [u8] {
+        &mut bytes[EncryptedData::SIZE_TAG..EncryptedData::SIZE_TAG + EncryptedData::SIZE_NONCE]
+    }
+
+    // Produce a secure random nonce and the AEAD
     let nonce = XChaCha20Poly1305::generate_nonce(&mut OsRng);
-
-    // Set up the AEAD
     let aead_key = inner_encrypted_data_kdf_aead(encryption_key, commitment);
     let cipher = XChaCha20Poly1305::new(GenericArray::from_slice(aead_key.reveal()));
 
+    // Encode the value and mask
+    let mut bytes = vec![0; EncryptedData::min_size()];
+    let payload_mut = payload_slice_mut(&mut bytes);
+    payload_mut[..EncryptedData::SIZE_VALUE].copy_from_slice(value.to_le_bytes().as_ref());
+    payload_mut[EncryptedData::SIZE_VALUE..EncryptedData::SIZE_VALUE + EncryptedData::SIZE_MASK]
+        .copy_from_slice(mask.as_bytes());
     // Encrypt in place
-    let tag = cipher.encrypt_in_place_detached(&nonce, ENCRYPTED_DATA_TAG, bytes.as_mut_slice())?;
+    match cipher.encrypt_in_place_detached(&nonce, ENCRYPTED_DATA_TAG, payload_mut) {
+        Ok(tag) => {
+            tag_slice_mut(&mut bytes).copy_from_slice(&tag);
+            nonce_slice_mut(&mut bytes).copy_from_slice(&nonce);
 
-    // Put everything together: nonce, ciphertext, tag
-    let mut data = [0u8; SIZE_TOTAL];
-    data[..SIZE_TAG].clone_from_slice(&tag);
-    data[SIZE_TAG..SIZE_TAG + SIZE_NONCE].clone_from_slice(&nonce);
-    data[SIZE_NONCE + SIZE_TAG..SIZE_NONCE + SIZE_TAG + SIZE_VALUE + SIZE_MASK].clone_from_slice(bytes.as_slice());
-
-    Ok(EncryptedData(data))
+            Ok(EncryptedData::try_from(bytes).expect("bytes length == EncryptedData::min_size()"))
+        },
+        Err(err) => {
+            bytes.zeroize();
+            Err(err)
+        },
+    }
 }
 
 pub fn decrypt_data_and_mask(
@@ -235,13 +241,10 @@ pub fn decrypt_data_and_mask(
     commitment: &PedersenCommitment,
     encrypted_data: &EncryptedData,
 ) -> Result<(u64, RistrettoSecretKey), aead::Error> {
-    // Extract the tag, nonce and ciphertext
-    let tag = Tag::from_slice(&encrypted_data.as_bytes()[..SIZE_TAG]);
-    let nonce = XNonce::from_slice(&encrypted_data.0.as_bytes()[SIZE_TAG..SIZE_TAG + SIZE_NONCE]);
-    let mut bytes = Zeroizing::new([0u8; SIZE_VALUE + SIZE_MASK]);
-    bytes.clone_from_slice(
-        &encrypted_data.as_bytes()[SIZE_TAG + SIZE_NONCE..SIZE_TAG + SIZE_NONCE + SIZE_VALUE + SIZE_MASK],
-    );
+    // Extract the tag, nonce, and ciphertext
+    let tag = Tag::from_slice(encrypted_data.tag_slice());
+    let nonce = XNonce::from_slice(encrypted_data.nonce_slice());
+    let mut bytes = Zeroizing::new(encrypted_data.payload_slice().to_vec());
 
     // Set up the AEAD
     let aead_key = inner_encrypted_data_kdf_aead(encryption_key, commitment);
@@ -251,12 +254,14 @@ pub fn decrypt_data_and_mask(
     cipher.decrypt_in_place_detached(nonce, ENCRYPTED_DATA_TAG, bytes.as_mut_slice(), tag)?;
 
     // Decode the value and mask
-    let mut value_bytes = [0u8; SIZE_VALUE];
-    value_bytes.clone_from_slice(&bytes[0..SIZE_VALUE]);
+    let mut value_bytes = [0u8; EncryptedData::SIZE_VALUE];
+    value_bytes.copy_from_slice(&bytes[..EncryptedData::SIZE_VALUE]);
     Ok((
         u64::from_le_bytes(value_bytes),
-        RistrettoSecretKey::from_canonical_bytes(&bytes[SIZE_VALUE..])
-            .expect("The length of bytes is exactly SIZE_MASK"),
+        RistrettoSecretKey::from_canonical_bytes(
+            &bytes[EncryptedData::SIZE_VALUE..EncryptedData::SIZE_VALUE + EncryptedData::SIZE_MASK],
+        )
+        .expect("The length of bytes is exactly SIZE_MASK"),
     ))
 }
 
@@ -318,7 +323,7 @@ mod tests {
                     minimum_value_promise,
                     mask,
                     sender_public_nonce: Default::default(),
-                    encrypted_data: EncryptedData([0u8; EncryptedData::size()]),
+                    encrypted_data: EncryptedData::try_from(vec![0; EncryptedData::min_size()]).unwrap(),
                     resource_view_key: None,
                 }),
                 Default::default(),

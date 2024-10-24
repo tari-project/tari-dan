@@ -198,16 +198,13 @@ where
         .handle(
             &context,
             token,
-            value.parse_params().map_err(|e| {
-                match &e.result {
-                    JsonRpcAnswer::Result(_) => {
-                        unreachable!("parse_params() error should not return a result")
-                    },
-                    JsonRpcAnswer::Error(e) => {
-                        warn!(target: LOG_TARGET, "🌐 JSON-RPC params error: {}", e);
-                    },
-                }
-                e
+            value.parse_params().inspect_err(|e| match &e.result {
+                JsonRpcAnswer::Result(_) => {
+                    unreachable!("parse_params() error should not return a result")
+                },
+                JsonRpcAnswer::Error(e) => {
+                    warn!(target: LOG_TARGET, "🌐 JSON-RPC params error: {}", e);
+                },
             })?,
         )
         .await

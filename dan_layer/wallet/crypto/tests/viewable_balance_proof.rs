@@ -8,9 +8,17 @@ use tari_crypto::{
     keys::{PublicKey, SecretKey},
     ristretto::{pedersen::PedersenCommitment, RistrettoPublicKey, RistrettoSecretKey},
 };
-use tari_dan_wallet_crypto::{create_confidential_output_statement, AlwaysMissLookupTable, ConfidentialProofStatement};
+use tari_dan_wallet_crypto::{
+    create_confidential_output_statement,
+    create_withdraw_proof,
+    AlwaysMissLookupTable,
+    ConfidentialProofStatement,
+};
 use tari_engine_types::confidential::validate_elgamal_verifiable_balance_proof;
-use tari_template_lib::models::Amount;
+use tari_template_lib::{
+    models::{Amount, EncryptedData},
+    template_dependencies::{decode_exact, encode_with_len},
+};
 use tari_utilities::ByteArray;
 
 fn create_output_statement(value: Amount, view_key: &RistrettoPublicKey) -> ConfidentialProofStatement {
@@ -20,7 +28,7 @@ fn create_output_statement(value: Amount, view_key: &RistrettoPublicKey) -> Conf
         mask,
         sender_public_nonce: Default::default(),
         minimum_value_promise: 0,
-        encrypted_data: Default::default(),
+        encrypted_data: EncryptedData::try_from(vec![123; EncryptedData::min_size()]).unwrap(),
         resource_view_key: Some(view_key.clone()),
     }
 }
@@ -98,4 +106,29 @@ fn it_generates_a_valid_proof() {
     println!("Generate proof time: {:?}", gen_proof_time);
     println!("Validate proof time: {:?}", validate_proof_time);
     println!("Brute force time: {:?}", brute_force_time);
+}
+
+#[test]
+fn serialize_deserialize() {
+    let (_view_key_secret, view_key) = keypair_from_seed(1);
+    let output_statement = create_output_statement(123.into(), &view_key);
+    let change_statement = create_output_statement(123.into(), &view_key);
+
+    let proof = create_withdraw_proof(
+        &[],
+        Amount(123),
+        Some(&output_statement),
+        Amount(123),
+        Some(&change_statement),
+        Amount(0),
+    )
+    .unwrap();
+
+    let json = serde_json::to_string(&proof).unwrap();
+    let deser_proof = serde_json::from_str(&json).unwrap();
+    assert_eq!(proof, deser_proof);
+
+    let cbor = encode_with_len(&proof);
+    let deser_proof = decode_exact(&cbor[4..]).unwrap();
+    assert_eq!(proof, deser_proof);
 }

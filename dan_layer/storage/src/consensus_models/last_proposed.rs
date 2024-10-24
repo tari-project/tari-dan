@@ -38,7 +38,7 @@ impl LastProposed {
         tx.last_proposed_unset(self)
     }
 
-    pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<Block, StorageError> {
+    pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<Block, StorageError> {
         Block::get(tx, &self.block_id)
     }
 }

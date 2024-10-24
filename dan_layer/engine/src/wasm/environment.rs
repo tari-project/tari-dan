@@ -21,61 +21,60 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    cell::Cell,
     fmt::{Debug, Formatter},
+    ops::Range,
     sync::{Arc, Mutex},
 };
 
+use tari_template_abi::{TemplateDef, ABI_TEMPLATE_DEF_GLOBAL_NAME};
 use wasmer::{
-    imports,
-    Function,
-    HostEnvInitError,
+    AsStoreMut,
+    AsStoreRef,
+    ExportError,
     Instance,
-    LazyInit,
     Memory,
-    NativeFunc,
-    Pages,
-    Resolver,
-    Store,
-    WasmerEnv,
+    MemoryAccessError,
+    MemoryView,
+    TypedFunction,
+    WasmPtr,
 };
 
-use crate::{runtime::RuntimeError, wasm::WasmExecutionError};
+use crate::{
+    runtime::RuntimeError,
+    wasm::{mem_writer::MemWriter, WasmExecutionError},
+};
 
 #[derive(Clone)]
 pub struct WasmEnv<T> {
-    memory: LazyInit<Memory>,
-    mem_alloc: LazyInit<NativeFunc<i32, i32>>,
-    mem_free: LazyInit<NativeFunc<i32>>,
+    memory: Option<Memory>,
     state: T,
+    mem_alloc: Option<TypedFunction<u32, WasmPtr<u8>>>,
     last_panic: Arc<Mutex<Option<String>>>,
     last_engine_error: Arc<Mutex<Option<RuntimeError>>>,
 }
 
-impl<T: Clone + Sync + Send + 'static> WasmEnv<T> {
+impl<T: Send + 'static> WasmEnv<T> {
     pub fn new(state: T) -> Self {
         Self {
+            memory: None,
             state,
-            memory: LazyInit::new(),
-            mem_alloc: LazyInit::new(),
-            mem_free: LazyInit::new(),
+            mem_alloc: None,
             last_panic: Arc::new(Mutex::new(None)),
             last_engine_error: Arc::new(Mutex::new(None)),
         }
     }
 
-    pub(super) fn alloc(&self, len: u32) -> Result<AllocPtr, WasmExecutionError> {
-        let ptr = self.get_mem_alloc_func()?.call(len as i32)?;
-        if ptr == 0 {
+    pub(super) fn set_last_panic(&self, message: String) {
+        *self.last_panic.lock().unwrap() = Some(message);
+    }
+
+    pub(super) fn alloc<S: AsStoreMut>(&self, store: &mut S, len: u32) -> Result<WasmPtr<u8>, WasmExecutionError> {
+        let ptr = self.get_mem_alloc_func()?.call(store, len)?;
+        if ptr.offset() == 0 {
             return Err(WasmExecutionError::MemoryAllocationFailed);
         }
 
-        Ok(AllocPtr(ptr as u32, len))
-    }
-
-    pub(super) fn free(&self, ptr: AllocPtr) -> Result<(), WasmExecutionError> {
-        self.get_mem_free_func()?.call(ptr.as_i32())?;
-        Ok(())
+        Ok(ptr)
     }
 
     pub(super) fn take_last_panic_message(&self) -> Option<String> {
@@ -90,57 +89,71 @@ impl<T: Clone + Sync + Send + 'static> WasmEnv<T> {
         self.last_engine_error.lock().unwrap().take()
     }
 
-    pub(super) fn write_to_memory(&self, ptr: &AllocPtr, data: &[u8]) -> Result<(), WasmExecutionError> {
-        if data.len() != ptr.len() as usize {
-            return Err(WasmExecutionError::InvalidWriteLength {
-                allocated: ptr.len(),
-                requested: data.len() as u32,
-            });
-        }
-        // SAFETY: The pointer has been allocated by alloc above and the runtime is single-threaded so data
-        // races are not possible.
-        unsafe {
-            self.get_memory()?
-                .uint8view()
-                .subarray(ptr.get(), ptr.end())
-                .copy_from(data);
-        }
-        Ok(())
+    pub(super) fn load_abi<S: AsStoreMut>(
+        &self,
+        store: &mut S,
+        instance: &Instance,
+    ) -> Result<TemplateDef, WasmExecutionError> {
+        let ptr = instance
+            .exports
+            .get_global(ABI_TEMPLATE_DEF_GLOBAL_NAME)?
+            .get(store)
+            .i32()
+            .ok_or(WasmExecutionError::ExportError(ExportError::IncompatibleType))? as u32;
+
+        // Load ABI from memory
+        let data = self.read_memory_with_embedded_len(store, ptr)?;
+        let decoded = tari_bor::decode(&data).map_err(WasmExecutionError::AbiDecodeError)?;
+        Ok(decoded)
     }
 
-    pub(super) fn read_memory_with_embedded_len(&self, ptr: u32) -> Result<Vec<u8>, WasmExecutionError> {
-        let memory = self.get_memory()?;
-        let view = memory.uint8view().subarray(ptr, memory.data_size() as u32 - 1);
-        let view_bytes = &*view;
-        if view_bytes.len() < 4 {
-            return Err(WasmExecutionError::MemoryUnderflow {
-                required: 4,
-                remaining: view_bytes.len(),
-            });
-        }
+    pub(super) fn memory_writer<'a, S: AsStoreMut>(
+        &self,
+        store: &'a mut S,
+        ptr: WasmPtr<u8>,
+    ) -> Result<MemWriter<'a>, WasmExecutionError> {
+        let view = self.get_memory()?.view(store);
+        Ok(MemWriter::new(ptr, view))
+    }
 
+    pub(super) fn read_memory_with_embedded_len<S: AsStoreRef>(
+        &self,
+        store: &mut S,
+        offset: u32,
+    ) -> Result<Vec<u8>, WasmExecutionError> {
+        let memory = self.get_memory()?;
+        let view = memory.view(store);
         let mut buf = [0u8; 4];
-        copy_from_cell_slice(view_bytes, &mut buf);
+        view.read(u64::from(offset), &mut buf)?;
+
         let len = u32::from_le_bytes(buf);
-        let data = self.read_from_memory(ptr + 4, len)?;
+        let start = offset + 4;
+        let data = copy_range_to_vec(&view, start..start + len)?;
 
         Ok(data)
     }
 
-    pub(super) fn read_from_memory(&self, ptr: u32, len: u32) -> Result<Vec<u8>, WasmExecutionError> {
+    pub(super) fn read_from_memory<S: AsStoreRef>(
+        &self,
+        store: &mut S,
+        ptr: WasmPtr<u8>,
+        len: u32,
+    ) -> Result<Vec<u8>, WasmExecutionError> {
         let memory = self.get_memory()?;
-        let mem_size = memory.data_size();
-        let ptr_plus_len = ptr.checked_add(len).ok_or(WasmExecutionError::MaxMemorySizeExceeded)?;
-        if u64::from(ptr) >= mem_size || u64::from(ptr_plus_len) >= mem_size {
+        let view = memory.view(store);
+        let mem_size = view.data_size();
+        let ptr_plus_len = ptr
+            .offset()
+            .checked_add(len)
+            .ok_or(WasmExecutionError::MaxMemorySizeExceeded)?;
+        if u64::from(ptr.offset()) >= mem_size || u64::from(ptr_plus_len) >= mem_size {
             return Err(WasmExecutionError::MemoryPointerOutOfRange {
-                size: memory.data_size(),
-                pointer: u64::from(ptr),
+                size: mem_size,
+                pointer: u64::from(ptr.offset()),
                 len: u64::from(len),
             });
         }
-        let view = memory.uint8view().subarray(ptr, ptr + len);
-        let mut data = vec![0u8; len as usize];
-        copy_from_cell_slice(&view, &mut data);
+        let data = copy_range_to_vec(&view, ptr.offset()..ptr_plus_len)?;
         Ok(data)
     }
 
@@ -148,86 +161,31 @@ impl<T: Clone + Sync + Send + 'static> WasmEnv<T> {
         &self.state
     }
 
-    fn get_mem_alloc_func(&self) -> Result<&NativeFunc<i32, i32>, WasmExecutionError> {
-        self.mem_alloc
-            .get_ref()
-            .ok_or_else(|| WasmExecutionError::MissingAbiFunction {
-                function: "tari_alloc".into(),
-            })
+    pub fn state_mut(&mut self) -> &mut T {
+        &mut self.state
     }
 
-    fn get_mem_free_func(&self) -> Result<&NativeFunc<i32>, WasmExecutionError> {
-        self.mem_free
-            .get_ref()
-            .ok_or_else(|| WasmExecutionError::MissingAbiFunction {
-                function: "tari_free".into(),
-            })
+    fn get_mem_alloc_func(&self) -> Result<&TypedFunction<u32, WasmPtr<u8>>, WasmExecutionError> {
+        self.mem_alloc
+            .as_ref()
+            .ok_or_else(|| WasmExecutionError::MissingAbiFunction { function: "tari_alloc" })
     }
 
     fn get_memory(&self) -> Result<&Memory, WasmExecutionError> {
-        self.memory.get_ref().ok_or(WasmExecutionError::MemoryNotInitialized)
-    }
-
-    pub fn mem_size(&self) -> Pages {
-        self.memory.get_ref().map(|mem| mem.size()).unwrap_or(Pages(0))
-    }
-
-    pub fn create_resolver(&self, store: &Store, tari_engine: Function) -> impl Resolver {
-        imports! {
-            "env" => {
-                "tari_engine" => tari_engine,
-                "debug" => Function::new_native_with_env(store, self.clone(), Self::debug_handler),
-                "on_panic" => Function::new_native_with_env(store, self.clone(), Self::on_panic_handler),
-            }
-        }
-    }
-
-    fn debug_handler(env: &Self, arg_ptr: i32, arg_len: i32) {
-        const WASM_DEBUG_LOG_TARGET: &str = "tari::dan::wasm";
-        match env.read_from_memory(arg_ptr as u32, arg_len as u32) {
-            Ok(arg) => {
-                eprintln!("DEBUG: {}", String::from_utf8_lossy(&arg));
-            },
-            Err(err) => {
-                log::error!(target: WASM_DEBUG_LOG_TARGET, "Failed to read from memory: {}", err);
-            },
-        }
-    }
-
-    fn on_panic_handler(env: &Self, msg_ptr: i32, msg_len: i32, line: i32, col: i32) {
-        const WASM_DEBUG_LOG_TARGET: &str = "tari::dan::wasm";
-        match env.read_from_memory(msg_ptr as u32, msg_len as u32) {
-            Ok(msg) => {
-                let msg = String::from_utf8_lossy(&msg);
-                eprintln!("📣 PANIC: ({}:{}) {}", line, col, msg);
-                log::error!(target: WASM_DEBUG_LOG_TARGET, "📣 PANIC: ({}:{}) {}", line, col, msg);
-                *env.last_panic.lock().unwrap() = Some(msg.to_string());
-            },
-            Err(err) => {
-                log::error!(
-                    target: WASM_DEBUG_LOG_TARGET,
-                    "📣 PANIC: WASM template panicked but did not provide a valid memory pointer to on_panic \
-                     callback: {}",
-                    err
-                );
-                *env.last_panic.lock().unwrap() = Some(format!(
-                    "WASM panicked but did not provide a valid message pointer to on_panic callback: {}",
-                    err
-                ));
-            },
-        }
+        let memory = self.memory.as_ref().ok_or_else(|| WasmExecutionError::MemoryNotSet)?;
+        Ok(memory)
     }
 }
 
-impl<T: Clone + Sync + Send> WasmerEnv for WasmEnv<T> {
-    fn init_with_instance(&mut self, instance: &Instance) -> Result<(), HostEnvInitError> {
-        self.memory
-            .initialize(instance.exports.get_with_generics_weak("memory")?);
-        self.mem_alloc
-            .initialize(instance.exports.get_with_generics_weak("tari_alloc")?);
-        self.mem_free
-            .initialize(instance.exports.get_with_generics_weak("tari_free")?);
-        Ok(())
+impl<T: Clone + Sync + Send> WasmEnv<T> {
+    pub fn set_memory(&mut self, memory: Memory) -> &mut Self {
+        self.memory = Some(memory);
+        self
+    }
+
+    pub fn set_alloc_funcs(&mut self, mem_alloc: TypedFunction<u32, WasmPtr<u8>>) -> &mut Self {
+        self.mem_alloc = Some(mem_alloc);
+        self
     }
 }
 
@@ -236,28 +194,19 @@ impl<T: Debug> Debug for WasmEnv<T> {
         f.debug_struct("WasmEnv")
             .field("memory", &"LazyInit<Memory>")
             .field("tari_alloc", &" LazyInit<NativeFunc<(i32), (i32)>")
-            .field("tari_free", &"LazyInit<NativeFunc<(i32, i32), ()>>")
             .field("State", &self.state)
             .finish()
     }
-}
-
-/// Efficiently copy read-only memory into a mutable buffer.
-/// Panics if the length of `dest` is more than the length of `src`.
-fn copy_from_cell_slice(src: &[Cell<u8>], dest: &mut [u8]) {
-    assert!(dest.len() <= src.len());
-    let len = dest.len();
-    // SAFETY: size_of::<Cell<u8>() is equal to size_of::<u8>(), we assert this below just in case.
-    let (head, body, tail) = unsafe { src[..len].align_to() };
-    assert_eq!(head.len(), 0);
-    assert_eq!(tail.len(), 0);
-    dest.copy_from_slice(body);
 }
 
 #[derive(Debug)]
 pub struct AllocPtr(u32, u32);
 
 impl AllocPtr {
+    pub fn new(offset: u32, len: u32) -> Self {
+        Self(offset, len)
+    }
+
     pub fn get(&self) -> u32 {
         self.0
     }
@@ -266,12 +215,25 @@ impl AllocPtr {
         self.1
     }
 
-    pub fn end(&self) -> u32 {
-        self.get() + self.len()
+    pub fn as_wasm_ptr<T>(&self) -> WasmPtr<T> {
+        WasmPtr::new(self.get())
     }
+}
 
-    pub fn as_i32(&self) -> i32 {
-        // We want the 'u32 as i32' conversion to wrap
-        self.get() as i32
+/// Copies a range of the memory and returns it as a vector of bytes
+/// This is a u32 version of MemoryView::copy_range_to_vec
+fn copy_range_to_vec(view: &MemoryView, range: Range<u32>) -> Result<Vec<u8>, MemoryAccessError> {
+    let mut new_memory = Vec::new();
+    let mut offset = range.start;
+    let size = u32::try_from(view.data_size()).map_err(|_| MemoryAccessError::Overflow)?;
+    let end = range.end.min(size);
+    let mut chunk = [0u8; 40960];
+    while offset < end {
+        let remaining = end - offset;
+        let sublen = remaining.min(chunk.len() as u32) as usize;
+        view.read(u64::from(offset), &mut chunk[..sublen])?;
+        new_memory.extend_from_slice(&chunk[..sublen]);
+        offset += sublen as u32;
     }
+    Ok(new_memory)
 }

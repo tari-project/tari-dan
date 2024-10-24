@@ -217,6 +217,8 @@ impl Runtime {
 
 impl Debug for Runtime {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Runtime").field("engine", &"dyn RuntimeEngine").finish()
+        f.debug_struct("Runtime")
+            .field("interface", &"dyn RuntimeEngine")
+            .finish()
     }
 }

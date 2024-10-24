@@ -486,7 +486,7 @@ impl JsonRpcHandlers {
 
             return Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
                 result: IndexerTransactionFinalizedResult::Finalized {
-                    execution_result: Some(exec_result),
+                    execution_result: Some(Box::new(exec_result)),
                     final_decision: Decision::Commit,
                     abort_details: None,
                     finalized_time: Default::default(),
@@ -648,7 +648,7 @@ impl JsonRpcHandlers {
                 GetTransactionResultResponse {
                     result: IndexerTransactionFinalizedResult::Finalized {
                         final_decision: finalized.final_decision,
-                        execution_result: finalized.execute_result,
+                        execution_result: finalized.execute_result.map(Box::new),
                         execution_time: finalized.execution_time,
                         finalized_time: finalized.finalized_time,
                         abort_details: finalized.abort_details,
@@ -705,7 +705,7 @@ impl JsonRpcHandlers {
                         .map_err(|e| Self::internal_error(answer_id, e))?;
                     IndexerTransactionFinalizedResult::Finalized {
                         final_decision: finalized.final_decision,
-                        execution_result: finalized.execute_result,
+                        execution_result: finalized.execute_result.map(Box::new),
                         execution_time: finalized.execution_time,
                         finalized_time: finalized.finalized_time,
                         abort_details: finalized.abort_details,

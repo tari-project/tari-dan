@@ -24,7 +24,7 @@
 
 use tari_template_abi::on_panic;
 
-fn hook(info: &std::panic::PanicInfo<'_>) {
+fn hook(info: &std::panic::PanicHookInfo<'_>) {
     let error_msg = info
         .payload()
         .downcast_ref::<String>()

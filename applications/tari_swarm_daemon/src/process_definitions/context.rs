@@ -18,6 +18,7 @@ use crate::process_manager::{
 pub struct ProcessContext<'a> {
     instance_id: InstanceId,
     bin: &'a PathBuf,
+    envs: &'a [(String, String)],
     base_path: PathBuf,
     network: Network,
     listen_ip: IpAddr,
@@ -30,6 +31,7 @@ impl<'a> ProcessContext<'a> {
     pub(crate) fn new(
         instance_id: InstanceId,
         bin: &'a PathBuf,
+        envs: &'a [(String, String)],
         base_path: PathBuf,
         network: Network,
         listen_ip: IpAddr,
@@ -40,6 +42,7 @@ impl<'a> ProcessContext<'a> {
         Self {
             instance_id,
             bin,
+            envs,
             base_path,
             network,
             listen_ip,
@@ -77,8 +80,8 @@ impl<'a> ProcessContext<'a> {
         &self.listen_ip
     }
 
-    pub fn environment(&self) -> Vec<(&str, &str)> {
-        vec![]
+    pub fn environment(&self) -> impl Iterator<Item = (&'a str, &'a str)> {
+        self.envs.iter().map(|(k, v)| (k.as_str(), v.as_str()))
     }
 
     pub fn minotari_nodes(&self) -> impl Iterator<Item = &MinoTariNodeProcess> {

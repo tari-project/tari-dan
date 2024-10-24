@@ -3,7 +3,7 @@
 
 use std::io;
 
-use tari_bor::encode_into;
+use tari_bor::encode_into_std_writer;
 use tari_engine_types::fees::FeeSource;
 
 use super::FeeTable;
@@ -38,7 +38,7 @@ impl RuntimeModule for FeeModule {
         let total_storage = track.with_substates_to_persist(|changes| {
             let mut counter = ByteCounter::new();
             for substate in changes.values() {
-                encode_into(substate, &mut counter)?;
+                encode_into_std_writer(substate, &mut counter)?;
             }
             Ok::<_, RuntimeModuleError>(counter.get())
         })?;

@@ -174,7 +174,7 @@ impl Drop for ProofAccess {
             args: invoke_args![],
         });
 
-        resp.decode()
+        resp.decode::<()>()
             .unwrap_or_else(|_| panic!("Drop failed for proof {}", self.id));
     }
 }
@@ -193,7 +193,7 @@ impl Drop for ProofAuth {
             args: invoke_args![],
         });
 
-        resp.decode()
+        resp.decode::<()>()
             .unwrap_or_else(|_| panic!("Drop failed for proof {}", self.id));
     }
 }

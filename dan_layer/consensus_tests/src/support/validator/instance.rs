@@ -39,7 +39,7 @@ pub struct ValidatorChannels {
 
 pub struct Validator {
     pub address: TestAddress,
-    pub shard_address: SubstateAddress,
+    pub _shard_address: SubstateAddress,
     pub shard_group: ShardGroup,
     pub num_committees: u32,
 

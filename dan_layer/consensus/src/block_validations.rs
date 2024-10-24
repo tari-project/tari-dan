@@ -178,7 +178,7 @@ pub fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
     }
 
     if qc.signatures().is_empty() {
-        return Err(ProposalValidationError::QuorumWasNotReached { qc: qc.clone() }.into());
+        return Err(ProposalValidationError::QuorumWasNotReached { qc: *qc.id() }.into());
     }
 
     for signature in qc.signatures() {
@@ -198,14 +198,14 @@ pub fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
     for sign in qc.signatures() {
         let message = vote_signing_service.create_message(qc.block_id(), &qc.decision());
         if !sign.verify(message) {
-            return Err(ProposalValidationError::QCInvalidSignature { qc: qc.clone() }.into());
+            return Err(ProposalValidationError::QCInvalidSignature { qc: *qc.id() }.into());
         }
     }
 
     if committee_info.quorum_threshold() >
         u32::try_from(qc.signatures().len()).map_err(|_| ProposalValidationError::QCConversionError)?
     {
-        return Err(ProposalValidationError::QuorumWasNotReached { qc: qc.clone() }.into());
+        return Err(ProposalValidationError::QuorumWasNotReached { qc: *qc.id() }.into());
     }
     Ok(())
 }

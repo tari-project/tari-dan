@@ -32,8 +32,8 @@ pub enum TemplateLoaderError {
     CompileError(#[from] wasmer::CompileError),
     #[error(transparent)]
     InstantiationError(Box<wasmer::InstantiationError>),
-    #[error(transparent)]
-    HostEnvInitError(#[from] wasmer::HostEnvInitError),
+    #[error("Export error: {0}")]
+    ExportError(#[from] wasmer::ExportError),
     #[error("Runtime error: {0}")]
     RuntimeError(#[from] wasmer::RuntimeError),
 }

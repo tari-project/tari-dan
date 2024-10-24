@@ -88,7 +88,7 @@ pub enum TransactionFinalizedResult {
     Pending,
     Finalized {
         final_decision: Decision,
-        execution_result: Option<ExecuteResult>,
+        execution_result: Option<Box<ExecuteResult>>,
         execution_time: Duration,
         finalized_time: Duration,
         abort_details: Option<String>,
@@ -100,7 +100,7 @@ impl TransactionFinalizedResult {
     pub fn into_execute_result(self) -> Option<ExecuteResult> {
         match self {
             TransactionFinalizedResult::Pending => None,
-            TransactionFinalizedResult::Finalized { execution_result, .. } => execution_result,
+            TransactionFinalizedResult::Finalized { execution_result, .. } => execution_result.map(|r| *r),
         }
     }
 }

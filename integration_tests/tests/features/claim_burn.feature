@@ -6,6 +6,7 @@ Feature: Claim Burn
   @concurrent
 #  @serial
   @fixed
+  @doit
   Scenario: Claim base layer burn funds with wallet daemon
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE

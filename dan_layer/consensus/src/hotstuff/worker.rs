@@ -432,9 +432,9 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 Ok(())
             },
             MessageValidationResult::Discard => Ok(()),
-            MessageValidationResult::Invalid { err, .. } => {
+            MessageValidationResult::Invalid { err, from, message } => {
                 self.hooks.on_error(&err);
-                error!(target: LOG_TARGET, "🚨 Invalid new message: {}", err);
+                error!(target: LOG_TARGET, "🚨 Invalid new message from {from}: {err} - {message}");
                 Ok(())
             },
         }
@@ -460,7 +460,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             return Ok(());
         };
 
-        debug!(
+        info!(
             target: LOG_TARGET,
             "🔥 new transaction ready for consensus: {} ({} pending)",
             transaction.id(),
@@ -658,7 +658,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             let current_epoch = self.epoch_manager.current_epoch().await?;
             // Propose quickly if we should end the epoch (i.e base layer epoch > pacemaker epoch)
             if current_epoch == epoch {
-                debug!(target: LOG_TARGET, "[on_beat] No transactions to propose. Waiting for a timeout.");
+                info!(target: LOG_TARGET, "[on_beat] No transactions to propose. Waiting for a timeout.");
                 return Ok(());
             }
         }

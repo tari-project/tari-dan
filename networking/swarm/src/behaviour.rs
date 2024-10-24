@@ -77,11 +77,7 @@ where
 {
     let swarm = SwarmBuilder::with_existing_identity(identity)
         .with_tokio()
-        .with_tcp(
-            tcp::Config::new().nodelay(true).port_reuse(true),
-            noise_config,
-            yamux::Config::default,
-        )?
+        .with_tcp(tcp::Config::new().nodelay(true), noise_config, yamux::Config::default)?
         .with_quic()
         .with_relay_client(noise_config, yamux::Config::default)?
         .with_behaviour(|keypair, relay_client| {

@@ -561,7 +561,13 @@ pub async fn handle_claim_burn(
             commitment_substate_address.version,
         )
         .await?;
-    let output = output.into_unclaimed_confidential_output().unwrap();
+    let output = output.into_unclaimed_confidential_output().ok_or_else(|| {
+        anyhow!(
+            "Expected the indexer to return an unclaimed confidential output substate for {}, but another substate \
+             type was returned",
+            commitment_substate_address.substate_id
+        )
+    })?;
     let unmasked_output = sdk.confidential_crypto_api().unblind_output(
         &output.commitment,
         &output.encrypted_data,
@@ -580,6 +586,8 @@ pub async fn handle_claim_burn(
             unmasked_output.value
         ));
     }
+
+    // TODO: validate the proof_of_knowledge from the claim before submitting the transaction
 
     let encrypted_data = sdk.confidential_crypto_api().encrypt_value_and_mask(
         final_amount.as_u64_checked().unwrap(),

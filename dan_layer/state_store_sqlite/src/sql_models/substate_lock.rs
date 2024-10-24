@@ -12,6 +12,7 @@ use crate::{serialization::deserialize_hex_try_from, sql_models::SubstateRecord}
 
 #[derive(Debug, Clone, Queryable)]
 pub struct SubstateLock {
+    #[allow(dead_code)]
     pub id: i32,
     pub block_id: String,
     pub transaction_id: String,
@@ -19,6 +20,7 @@ pub struct SubstateLock {
     pub version: i32,
     pub lock: String,
     pub is_local_only: bool,
+    #[allow(dead_code)]
     pub created_at: PrimitiveDateTime,
 }
 

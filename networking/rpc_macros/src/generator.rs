@@ -54,7 +54,7 @@ impl RpcCodeGenerator {
         let server_struct = self.options.server_struct.as_ref().unwrap();
         let trait_ident = &self.trait_ident;
         let protocol_name = &self.options.protocol_name;
-        let dep_mod = quote!(::tari_rpc_framework::__macro_reexports);
+        let dep_mod = &self.options.dep_module_name;
 
         let match_branches = self
             .rpc_methods

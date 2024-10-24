@@ -161,7 +161,7 @@ fn fix_invalid_object_keys(value: &CborValue) -> CborValue {
 mod tests {
     use tari_common_types::types::Commitment;
     use tari_engine_types::{confidential::ConfidentialOutput, resource_container::ResourceContainer, vault::Vault};
-    use tari_template_lib::models::{Amount, ResourceAddress};
+    use tari_template_lib::models::{Amount, EncryptedData, ResourceAddress};
 
     use super::*;
 
@@ -173,7 +173,7 @@ mod tests {
         let confidential_output = ConfidentialOutput {
             commitment: commitment.clone(),
             stealth_public_nonce: commitment.as_public_key().clone(),
-            encrypted_data: Default::default(),
+            encrypted_data: EncryptedData::try_from(vec![0; EncryptedData::min_size()]).unwrap(),
             minimum_value_promise: 0,
             viewable_balance: None,
         };

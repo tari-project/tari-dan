@@ -173,7 +173,7 @@ mod tests {
     fn serialize_deserialize() {
         let hash = Hash::default();
         let mut buf = Vec::new();
-        tari_bor::encode_into(&hash, &mut buf).unwrap();
+        tari_bor::encode_into_std_writer(&hash, &mut buf).unwrap();
         let hash2 = tari_bor::decode(&buf).unwrap();
         assert_eq!(hash, hash2);
     }

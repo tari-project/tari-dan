@@ -38,10 +38,11 @@ impl ProcessDefinition for MinotariMiner {
         let base_node_grpc_port = base_node.instance().allocated_ports().expect("grpc");
         let mut wallet_client = wallet.connect_client().await?;
 
-        let grpc::GetAddressResponse { address } = wallet_client.get_address(grpc::Empty {}).await?.into_inner();
+        let grpc::GetAddressResponse { one_sided_address, .. } =
+            wallet_client.get_address(grpc::Empty {}).await?.into_inner();
 
         let wallet_payment_address =
-            TariAddress::from_bytes(&address).expect("Invalid public key returned from console wallet");
+            TariAddress::from_bytes(&one_sided_address).expect("Invalid public key returned from console wallet");
 
         let max_blocks = context
             .get_setting("max_blocks")

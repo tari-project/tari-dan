@@ -239,7 +239,7 @@ pub enum IndexerTransactionFinalizedResult {
     Pending,
     Finalized {
         final_decision: Decision,
-        execution_result: Option<ExecuteResult>,
+        execution_result: Option<Box<ExecuteResult>>,
         #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number}"))]
         execution_time: Duration,
         #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number}"))]

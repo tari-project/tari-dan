@@ -29,7 +29,7 @@ pub use wasm::*;
 mod non_wasm;
 #[cfg(not(target_arch = "wasm32"))]
 pub use non_wasm::*;
-use tari_bor::{decode_exact, decode_len, encode_into};
+use tari_bor::{decode_exact, decode_len, encode_into_writer, encoded_len};
 
 use crate::{
     ops::EngineOp,
@@ -43,19 +43,20 @@ pub fn wrap_ptr(mut v: Vec<u8>) -> *mut u8 {
 }
 
 pub fn call_engine<T: Serialize + fmt::Debug, U: DeserializeOwned>(op: EngineOp, input: &T) -> U {
-    let mut encoded = Vec::with_capacity(512);
-    encode_into(input, &mut encoded).unwrap();
+    let len = encoded_len(&input).unwrap();
+    let mut encoded = Vec::with_capacity(len);
+    encode_into_writer(input, &mut encoded).unwrap();
     let len = encoded.len();
     let input_ptr = wrap_ptr(encoded) as *const _;
     let ptr = unsafe { tari_engine(op.as_i32(), input_ptr, len) };
     if ptr.is_null() {
         panic!("Engine call returned null for op {:?}", op);
     }
-
     let slice = unsafe { slice::from_raw_parts(ptr as *const _, 4) };
     let len = decode_len(slice).unwrap();
-    let slice = unsafe { slice::from_raw_parts(ptr.offset(4), len) };
-    decode_exact(slice).unwrap_or_else(|e| {
+    // Take ownership of the data and deallocate it at the end of the function
+    let data = unsafe { Vec::from_raw_parts(ptr, len + 4, len + 4) };
+    decode_exact(&data[4..4 + len]).unwrap_or_else(|e| {
         panic!(
             "Failed to decode response from engine for op {:?} with input: {:?}: {:?}",
             op, input, e,
@@ -83,15 +84,19 @@ pub extern "C" fn tari_alloc(len: u32) -> *mut u8 {
     ptr
 }
 
-/// Frees a block of memory allocated by `tari_alloc`.
-///
-/// # Safety
-/// Caller must ensure that ptr must be a valid pointer to a block of memory allocated by `tari_alloc`.
-#[no_mangle]
-pub unsafe extern "C" fn tari_free(ptr: *mut u8) {
-    let mut len = [0u8; 4];
-    copy(ptr, len.as_mut_ptr(), 4);
-
-    let cap = (u32::from_le_bytes(len) + 4) as usize;
-    drop(Vec::<u8>::from_raw_parts(ptr, cap, cap));
-}
+// This is currently not needed as every engine alloc should be freed by the WASM template.
+// Note there is no appropriate way to force this behaviour but since WASM is already sandboxed, any leaked memory is
+// released after execution in any case.
+//
+// /// Frees a block of memory allocated by `tari_alloc`.
+// ///
+// /// # Safety
+// /// Caller must ensure that ptr must be a valid pointer to a block of memory allocated by `tari_alloc`.
+// #[no_mangle]
+// pub unsafe extern "C" fn tari_free(ptr: *mut u8) {
+//     let mut len = [0u8; 4];
+//     copy(ptr, len.as_mut_ptr(), 4);
+//
+//     let cap = (u32::from_le_bytes(len) + 4) as usize;
+//     drop(Vec::<u8>::from_raw_parts(ptr, cap, cap));
+// }

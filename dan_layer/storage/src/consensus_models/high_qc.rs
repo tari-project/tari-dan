@@ -67,22 +67,22 @@ impl HighQc {
 }
 
 impl HighQc {
-    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &TTx, epoch: Epoch) -> Result<Self, StorageError> {
+    pub fn get<TTx: StateStoreReadTransaction>(tx: &TTx, epoch: Epoch) -> Result<Self, StorageError> {
         tx.high_qc_get(epoch)
     }
 
-    pub fn get_quorum_certificate<TTx: StateStoreReadTransaction + ?Sized>(
+    pub fn get_quorum_certificate<TTx: StateStoreReadTransaction>(
         &self,
         tx: &TTx,
     ) -> Result<QuorumCertificate, StorageError> {
         QuorumCertificate::get(tx, &self.qc_id)
     }
 
-    pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &TTx) -> Result<Block, StorageError> {
+    pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<Block, StorageError> {
         Block::get(tx, &self.block_id)
     }
 
-    pub fn set<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn set<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.high_qc_set(self)
     }
 }

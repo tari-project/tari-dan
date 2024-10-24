@@ -38,12 +38,12 @@ impl ForeignReceiveCounters {
 }
 
 impl ForeignReceiveCounters {
-    pub fn save<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn save<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.foreign_receive_counters_set(self)?;
         Ok(())
     }
 
-    pub fn get_or_default<TTx: StateStoreReadTransaction + ?Sized>(tx: &TTx) -> Result<Self, StorageError> {
+    pub fn get_or_default<TTx: StateStoreReadTransaction>(tx: &TTx) -> Result<Self, StorageError> {
         Ok(tx.foreign_receive_counters_get().optional()?.unwrap_or_default())
     }
 }

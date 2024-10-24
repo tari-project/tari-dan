@@ -879,6 +879,7 @@ pub struct AuthLoginRequest {
 )]
 pub struct AuthLoginResponse {
     pub auth_token: String,
+    pub valid_for_secs: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

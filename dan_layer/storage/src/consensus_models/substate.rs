@@ -181,39 +181,32 @@ impl SubstateRecord {
         Ok(())
     }
 
-    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(
-        tx: &TTx,
-        id: &VersionedSubstateId,
-    ) -> Result<bool, StorageError> {
+    pub fn exists<TTx: StateStoreReadTransaction>(tx: &TTx, id: &VersionedSubstateId) -> Result<bool, StorageError> {
         Self::any_exist(tx, Some(id))
     }
 
-    pub fn any_exist<
-        TTx: StateStoreReadTransaction + ?Sized,
-        I: IntoIterator<Item = S>,
-        S: Borrow<VersionedSubstateId>,
-    >(
+    pub fn any_exist<TTx: StateStoreReadTransaction, I: IntoIterator<Item = S>, S: Borrow<VersionedSubstateId>>(
         tx: &TTx,
         substates: I,
     ) -> Result<bool, StorageError> {
         tx.substates_any_exist(substates)
     }
 
-    pub fn exists_for_transaction<TTx: StateStoreReadTransaction + ?Sized>(
+    pub fn exists_for_transaction<TTx: StateStoreReadTransaction>(
         tx: &TTx,
         transaction_id: &TransactionId,
     ) -> Result<bool, StorageError> {
         tx.substates_exists_for_transaction(transaction_id)
     }
 
-    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(
+    pub fn get<TTx: StateStoreReadTransaction>(
         tx: &TTx,
         address: &SubstateAddress,
     ) -> Result<SubstateRecord, StorageError> {
         tx.substates_get(address)
     }
 
-    pub fn substate_is_up<TTx: StateStoreReadTransaction + ?Sized>(
+    pub fn substate_is_up<TTx: StateStoreReadTransaction>(
         tx: &TTx,
         shard: &SubstateAddress,
     ) -> Result<bool, StorageError> {
@@ -222,7 +215,7 @@ impl SubstateRecord {
         Ok(rec.is_up())
     }
 
-    pub fn get_any<TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = SubstateRequirement>>(
+    pub fn get_any<TTx: StateStoreReadTransaction, I: IntoIterator<Item = SubstateRequirement>>(
         tx: &TTx,
         shards: I,
     ) -> Result<(Vec<SubstateRecord>, HashSet<SubstateRequirement>), StorageError> {
@@ -235,7 +228,7 @@ impl SubstateRecord {
         Ok((found, substate_ids))
     }
 
-    pub fn get_any_max_version<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a SubstateId>>(
+    pub fn get_any_max_version<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a SubstateId>>(
         tx: &TTx,
         substate_ids: I,
     ) -> Result<(Vec<SubstateRecord>, HashSet<&'a SubstateId>), StorageError> {
@@ -248,14 +241,14 @@ impl SubstateRecord {
         Ok((found, substate_ids))
     }
 
-    pub fn get_latest_version<TTx: StateStoreReadTransaction + ?Sized>(
+    pub fn get_latest_version<TTx: StateStoreReadTransaction>(
         tx: &TTx,
         substate_id: &SubstateId,
     ) -> Result<(u32, bool), StorageError> {
         tx.substates_get_max_version_for_substate(substate_id)
     }
 
-    pub fn get_latest<TTx: StateStoreReadTransaction + ?Sized>(
+    pub fn get_latest<TTx: StateStoreReadTransaction>(
         tx: &TTx,
         substate_id: &SubstateId,
     ) -> Result<SubstateRecord, StorageError> {

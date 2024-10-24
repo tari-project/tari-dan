@@ -22,7 +22,7 @@
 
 use std::{path::PathBuf, str::FromStr, sync::Arc};
 
-use minotari_node::{config::GrpcMethod, run_base_node, BaseNodeConfig};
+use minotari_node::{run_base_node, BaseNodeConfig, GrpcMethod};
 use rand::rngs::OsRng;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{configuration::CommonConfig, exit_codes::ExitError};
@@ -132,7 +132,8 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
                 GrpcMethod::GetTemplateRegistrations,
                 GrpcMethod::GetHeaderByHash,
                 GrpcMethod::GetSideChainUtxos,
-            ];
+            ]
+            .into();
 
             let result = run_base_node(shutdown, Arc::new(base_node_identity), Arc::new(base_node_config)).await;
             if let Err(e) = result {

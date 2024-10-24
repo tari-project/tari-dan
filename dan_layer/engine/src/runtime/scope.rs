@@ -345,7 +345,7 @@ pub enum PushCallFrame {
         module_name: String,
         component_scope: IndexedWellKnownTypes,
         component_lock: LockedSubstate,
-        arg_scope: IndexedWellKnownTypes,
+        arg_scope: Box<IndexedWellKnownTypes>,
         entity_id: EntityId,
     },
     Static {

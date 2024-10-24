@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use proc_macro2::Span;
+use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{
     parse::{Parse, ParseBuffer},
@@ -31,7 +31,7 @@ use syn::{
 #[derive(Debug)]
 pub struct RpcTraitOptions {
     pub protocol_name: syn::LitStr,
-    pub dep_module_name: Ident,
+    pub dep_module_name: TokenStream,
     pub client_struct: Option<Ident>,
     pub server_struct: Option<Ident>,
 }
@@ -54,7 +54,7 @@ impl Parse for RpcTraitOptions {
         let mut protocol_name = None;
         let mut server_struct = None;
         let mut client_struct = None;
-        let mut module_name = syn::Ident::new("__rpc_deps", Span::call_site());
+        let mut module_name = quote!(::tari_rpc_framework::__macro_reexports);
 
         while !input.is_empty() {
             let name: syn::Ident = input.parse()?;
@@ -67,7 +67,6 @@ impl Parse for RpcTraitOptions {
                 "server_struct" => {
                     server_struct = parse_value(input, &name)?;
                 },
-
                 "client_struct" => {
                     client_struct = parse_value(input, &name)?;
                 },
