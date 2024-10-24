@@ -248,7 +248,7 @@ jobs:
           path: ${{ github.workspace }}/target/nextest/ci/junit.xml
 
       - name: cargo test cucumber
-        run: cargo test --release --package integration_tests --test cucumber -- --tags "not(@ignore) and not(@flaky)"
+        run: cargo test --release --package integration_tests --test cucumber -- --tags "not @ignore and not @flaky"
 
       - name: upload test result artifact
         uses: actions/upload-artifact@v4 # upload test results as artifact
