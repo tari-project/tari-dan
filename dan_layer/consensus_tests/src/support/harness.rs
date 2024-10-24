@@ -533,6 +533,7 @@ impl TestBuilder {
                     missed_proposal_count_cap: 5,
                     max_block_size: 500,
                     fee_exhaust_divisor: 20,
+                    max_vns_per_epoch_activated: 5,
                 },
             },
         }

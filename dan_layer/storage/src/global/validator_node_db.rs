@@ -69,6 +69,16 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
             .map_err(TGlobalDbAdapter::Error::into)
     }
 
+    pub fn count_by_epoch(
+        &mut self,
+        epoch: Epoch,
+        sidechain_id: Option<&PublicKey>,
+    ) -> Result<u64, TGlobalDbAdapter::Error> {
+        self.backend
+            .validator_nodes_count_by_start_epoch(self.tx, epoch, sidechain_id)
+            .map_err(TGlobalDbAdapter::Error::into)
+    }
+
     pub fn count_in_shard_group(
         &mut self,
         epoch: Epoch,

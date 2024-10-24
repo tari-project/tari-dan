@@ -130,6 +130,8 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         Ok(())
     }
 
+    /// Assigns validators for the given epoch (makes them active) from the database.
+    /// Max number of validators must be passed to limit the number of validators to make active in the given epoch.
     fn assign_validators_for_epoch(&mut self, epoch: Epoch) -> Result<(), EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_nodes = self.global_db.validator_nodes(&mut tx);
@@ -137,7 +139,6 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         let vns = validator_nodes.get_all_within_epoch(epoch, self.config.validator_node_sidechain_id.as_ref())?;
 
         let num_committees = calculate_num_committees(vns.len() as u64, self.config.committee_size);
-
         for vn in &vns {
             validator_nodes.set_committee_shard(
                 vn.shard_key,
@@ -146,6 +147,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
                 epoch,
             )?;
         }
+
         tx.commit()?;
         if let Some(vn) = vns.iter().find(|vn| vn.public_key == self.node_public_key) {
             self.publish_event(EpochManagerEvent::ThisValidatorIsRegistered {
@@ -155,6 +157,13 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         }
 
         Ok(())
+    }
+
+    pub async fn base_layer_consensus_constants(&self) -> Result<&BaseLayerConsensusConstants, EpochManagerError> {
+        Ok(self
+            .base_layer_consensus_constants
+            .as_ref()
+            .expect("update_base_layer_consensus_constants did not set constants"))
     }
 
     pub async fn get_base_layer_consensus_constants(
@@ -183,6 +192,20 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         Ok(())
     }
 
+    fn validator_nodes_count(
+        &self,
+        next_epoch: Epoch,
+        sidechain_id: Option<&PublicKey>,
+    ) -> Result<u64, EpochManagerError> {
+        let mut tx = self.global_db.create_transaction()?;
+        let result = self
+            .global_db
+            .validator_nodes(&mut tx)
+            .count_by_epoch(next_epoch, sidechain_id)?;
+        tx.commit()?;
+        Ok(result)
+    }
+
     pub async fn add_validator_node_registration(
         &mut self,
         block_height: u64,
@@ -194,10 +217,19 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
                 actual: registration.sidechain_id().map(|v| v.to_hex()),
             });
         }
-        let constants = self.get_base_layer_consensus_constants().await?;
-        let next_epoch = constants.height_to_epoch(block_height) + Epoch(1);
-        let next_epoch_height = constants.epoch_to_height(next_epoch);
+
+        let constants = self.base_layer_consensus_constants().await?;
+        let mut next_epoch = constants.height_to_epoch(block_height) + Epoch(1);
         let validator_node_expiry = constants.validator_node_registration_expiry;
+
+        // find the next available epoch
+        let mut next_epoch_vn_count = self.validator_nodes_count(next_epoch, registration.sidechain_id())?;
+        while next_epoch_vn_count >= self.config.max_vns_per_epoch_activated {
+            next_epoch += Epoch(1);
+            next_epoch_vn_count = self.validator_nodes_count(next_epoch, registration.sidechain_id())?;
+        }
+
+        let next_epoch_height = constants.epoch_to_height(next_epoch);
 
         let shard_key = self
             .base_node_client
@@ -208,8 +240,9 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
                 block_height,
             })?;
 
-        let mut tx = self.global_db.create_transaction()?;
         info!(target: LOG_TARGET, "Registering validator node for epoch {}", next_epoch);
+
+        let mut tx = self.global_db.create_transaction()?;
         self.global_db.validator_nodes(&mut tx).insert_validator_node(
             TAddr::derive_from_public_key(registration.public_key()),
             registration.public_key().clone(),

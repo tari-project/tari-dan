@@ -218,6 +218,7 @@ pub async fn spawn_services(
             .context("committee size must be non-zero")?,
         validator_node_sidechain_id: config.validator_node.validator_node_sidechain_id.clone(),
         num_preshards: consensus_constants.num_preshards,
+        max_vns_per_epoch_activated: consensus_constants.max_vns_per_epoch_activated,
     };
     // Epoch manager
     let (epoch_manager, join_handle) = tari_epoch_manager::base_layer::spawn_service(

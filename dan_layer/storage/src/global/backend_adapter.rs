@@ -116,6 +116,12 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         epoch: Epoch,
         sidechain_id: Option<&PublicKey>,
     ) -> Result<u64, Self::Error>;
+    fn validator_nodes_count_by_start_epoch(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        epoch: Epoch,
+        sidechain_id: Option<&PublicKey>,
+    ) -> Result<u64, Self::Error>;
     fn validator_nodes_count_for_shard_group(
         &self,
         tx: &mut Self::DbTransaction<'_>,
