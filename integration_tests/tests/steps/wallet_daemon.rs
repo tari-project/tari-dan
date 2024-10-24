@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use cucumber::{then, when};
 use integration_tests::{wallet_daemon_cli, TariWorld};
-use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
-use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
+use tari_common_types::types::PublicKey;
+use tari_crypto::tari_utilities::ByteArray;
 use tari_template_lib::prelude::Amount;
 use tari_wallet_daemon_client::{types::KeyBranch, ComponentAddressOrName};
 
@@ -252,16 +252,11 @@ async fn when_i_burn_funds_with_wallet_daemon(
 
     assert!(resp.is_success);
     world.commitments.insert(commitment_name, resp.commitment);
-    // TODO: use proto::transaction::CommitmentSignature to deserialize once we update tari to include https://github.com/tari-project/tari/pull/5200
+
     let ownership_proof = resp.ownership_proof.unwrap();
-    world.commitment_ownership_proofs.insert(
-        ownership_proof_name,
-        RistrettoComSig::new(
-            Commitment::from_public_key(&PublicKey::from_canonical_bytes(&ownership_proof.public_nonce).unwrap()),
-            PrivateKey::from_canonical_bytes(&ownership_proof.u).unwrap(),
-            PrivateKey::from_canonical_bytes(&ownership_proof.v).unwrap(),
-        ),
-    );
+    world
+        .commitment_ownership_proofs
+        .insert(ownership_proof_name, ownership_proof.try_into().unwrap());
     world.rangeproofs.insert(rangeproof_name, resp.range_proof);
 
     world.claim_public_keys.insert(
