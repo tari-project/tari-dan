@@ -91,7 +91,7 @@ impl PaceMaker {
 
         loop {
             tokio::select! {
-                // biased;
+                biased;
                 maybe_req = self.handle_receiver.recv() => {
                     if let Some(req) = maybe_req {
                         match req {
@@ -105,10 +105,8 @@ impl PaceMaker {
                                 if let Some(height) = high_qc_height {
                                     self.current_high_qc_height =  height;
                                 }
-                                let delta = self.delta_time();
-                                info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_view, delta);
-                                leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
-                                // set a timer for when we must send a block...
+                                info!(target: LOG_TARGET, "🧿 Pacemaker Reset! Current height: {}, Delta: {:.2?}", self.current_view, self.delta_time());
+                                leader_timeout.as_mut().reset(self.leader_timeout());
                                 block_timer.as_mut().reset(self.block_time());
                            },
                             PacemakerRequest::Start { high_qc_height } => {
@@ -119,9 +117,8 @@ impl PaceMaker {
                                     continue;
                                 }
                                 self.current_high_qc_height = high_qc_height;
-                                let delta = self.delta_time();
-                                info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_view, delta);
-                                leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
+                                info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_view, self.delta_time());
+                                leader_timeout.as_mut().reset(self.leader_timeout());
                                 block_timer.as_mut().reset(self.block_time());
                                 on_beat.beat();
                                 started = true;
@@ -140,7 +137,7 @@ impl PaceMaker {
                                     continue;
                                 }
                                 leader_failure_suspended = true;
-                                debug!(target: LOG_TARGET, "🧿 Pacemaker suspend leader failure");
+                                debug!(target: LOG_TARGET, "🧿 Pacemaker suspend");
                            },
                             PacemakerRequest::ResumeLeaderFailure => {
                                 if !started {
@@ -149,13 +146,11 @@ impl PaceMaker {
                                 leader_failure_suspended = false;
                                 if leader_failure_triggered_during_suspension {
                                     leader_failure_triggered_during_suspension = false;
-                                    let delta = self.delta_time();
-                                    leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
-                                    info!(target: LOG_TARGET, "⚠️ Resumed leader timeout! Current view: {}, Delta: {:.2?}", self.current_view, delta);
-                                    self.current_view.set_next_height();
+                                    leader_timeout.as_mut().reset(self.leader_timeout());
+                                    info!(target: LOG_TARGET, "⚠️ Resumed leader timeout! Current view: {}, Delta: {:.2?}", self.current_view, self.delta_time());
                                     on_leader_timeout.leader_timed_out(self.current_view.get_height());
                                 }
-                                debug!(target: LOG_TARGET, "🧿 Pacemaker resume leader failure");
+                                debug!(target: LOG_TARGET, "🧿 Pacemaker resume");
                             }
                         }
                     } else{
@@ -169,17 +164,13 @@ impl PaceMaker {
                 }
                 () = &mut leader_timeout => {
                     block_timer.as_mut().reset(self.block_time());
-
-                    // Must be reset otherwise this branch will trigger endlessly
-                    let delta = self.delta_time();
-                    leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
+                    leader_timeout.as_mut().reset(self.leader_timeout());
 
                     if leader_failure_suspended {
                         info!(target: LOG_TARGET, "🧿 Leader timeout while suspended. Current view: {}", self.current_view);
                         leader_failure_triggered_during_suspension = true;
                     } else {
-                        info!(target: LOG_TARGET, "⚠️ Leader timeout! Current view: {}, Delta: {:.2?}", self.current_view, delta);
-                        self.current_view.set_next_height();
+                        info!(target: LOG_TARGET, "⚠️ Leader timeout! Current view: {}, Delta: {:.2?}", self.current_view, self.delta_time());
                         on_leader_timeout.leader_timed_out(self.current_view.get_height());
                     }
                 },
@@ -194,9 +185,19 @@ impl PaceMaker {
         tokio::time::Instant::now() + self.block_time.saturating_sub(OFFSET_BLOCK_TIME)
     }
 
-    /// Current delta time defined as 2^n where n is the difference in height between the last seen block height and the
-    /// high QC height. This is always greater than the block time.
+    /// Current leader timeout defined as block_time + delta
+    /// This is always greater than the block time.
     /// Ensure that current_height and current_high_qc_height are set before calling this function.
+    fn leader_timeout(&self) -> tokio::time::Instant {
+        let delta = self.delta_time();
+        // TODO: get real avg latency
+        let avg_latency = Duration::from_secs(2);
+        let offset = self.block_time + delta + avg_latency;
+        tokio::time::Instant::now() + offset
+    }
+
+    /// Delta time is defined as 2^n where n is the difference in height between the last seen block height and the high
+    /// QC height.
     fn delta_time(&self) -> Duration {
         let current_height = self.current_view.get_height();
         if current_height.is_zero() || self.current_high_qc_height.is_zero() {
@@ -208,13 +209,10 @@ impl PaceMaker {
             cmp::max(1, current_height.saturating_sub(self.current_high_qc_height).as_u64()),
         ))
         .unwrap_or(u32::MAX);
-        let delta = cmp::min(
+        cmp::min(
             MAX_DELTA,
             2u64.checked_pow(exp).map(Duration::from_secs).unwrap_or(MAX_DELTA),
-        );
-        // TODO: get real avg latency
-        let avg_latency = Duration::from_secs(2);
-        self.block_time + delta + avg_latency
+        )
     }
 }
 

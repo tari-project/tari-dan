@@ -113,15 +113,15 @@ impl<TStateStore: StateStore> BlockTransactionExecutor<TStateStore> for TestBloc
             .map(VersionedSubstateIdLockIntent::output)
             .collect::<Vec<_>>();
 
-        let exec_output = create_execution_result_for_transaction(
-            transaction,
+        let result = create_execution_result_for_transaction(
+            &transaction,
             spec.decision,
             spec.fee,
             &resolved_inputs,
             &resulting_outputs,
         );
 
-        let executed = ExecutedTransaction::new(exec_output.transaction, exec_output.result, resolved_inputs);
+        let executed = ExecutedTransaction::new(transaction, result, resolved_inputs);
         log::info!("Transaction {} executed. {}", id, executed.result().finalize.result);
         Ok(executed)
     }

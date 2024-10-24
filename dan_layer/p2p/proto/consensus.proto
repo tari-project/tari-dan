@@ -123,8 +123,18 @@ message Command {
 
     ForeignProposalAtom foreign_proposal = 9;
     MintConfidentialOutputAtom mint_confidential_output = 10;
-    bool end_epoch = 11;
+    SuspendNodeAtom suspend_node = 11;
+    ResumeNodeAtom resume_node = 12;
+    bool end_epoch = 13;
   }
+}
+
+message SuspendNodeAtom {
+  bytes public_key = 1;
+}
+
+message ResumeNodeAtom {
+  bytes public_key = 1;
 }
 
 message ForeignProposalAtom {

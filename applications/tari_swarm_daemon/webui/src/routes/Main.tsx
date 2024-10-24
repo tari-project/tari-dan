@@ -52,7 +52,7 @@ function ExtraInfoVN({name, url, addTxToPool, autoRefresh, state, horizontal}: {
     const [epoch, setEpoch] = useState(null);
     const [height, setHeight] = useState(null);
     const [pool, setPool] = useState([]);
-    const [copied, setCopied] = useState(false);
+    const [copied, setCopied] = useState<string | null>(null);
     const [missingTxStates, setMissingTxStates] = useState({}); // {tx_id: [vn1, vn2, ...]}
     const [publicKey, setPublicKey] = useState(null);
     const [peerId, setPeerId] = useState(null);
@@ -128,11 +128,11 @@ function ExtraInfoVN({name, url, addTxToPool, autoRefresh, state, horizontal}: {
     };
     useEffect(() => {
         if (copied) {
-            setTimeout(() => setCopied(false), 1000);
+            setTimeout(() => setCopied(null), 1000);
         }
     }, [copied]);
     const copyToClipboard = (str: string) => {
-        setCopied(true);
+        setCopied(str);
         navigator.clipboard.writeText(str);
     };
     const showMissingTx = (missingTxStates: { [key: string]: any }) => {
@@ -157,7 +157,7 @@ function ExtraInfoVN({name, url, addTxToPool, autoRefresh, state, horizontal}: {
                         const {known, abort_details, final_decision} = missingTxStates[tx];
                         return (
                             <>
-                                <div onClick={() => copyToClipboard(tx)}>{copied && "Copied" || shorten(tx)}</div>
+                                <div onClick={() => copyToClipboard(tx)}>{copied == tx ? "Copied" : shorten(tx)}</div>
                                 <div style={{color: known ? "green" : "red"}}><b>{known && "Yes" || "No"}</b></div>
                                 <div>{abort_details || <i>unknown</i>}</div>
                                 <div>{final_decision || <i>unknown</i>}</div>

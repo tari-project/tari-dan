@@ -64,6 +64,9 @@ where TConsensusSpec: ConsensusSpec
             .await?;
         self.store
             .with_write_tx(|tx| self.validate_and_save(tx, proposal, local_committee_info, &foreign_committee_info))?;
+
+        // Foreign proposals to propose
+        self.pacemaker.beat();
         Ok(())
     }
 
@@ -114,9 +117,6 @@ where TConsensusSpec: ConsensusSpec
 
         foreign_receive_counter.save(tx)?;
         proposal.upsert(tx, None)?;
-
-        // Foreign proposals to propose
-        self.pacemaker.on_beat();
 
         Ok(())
     }

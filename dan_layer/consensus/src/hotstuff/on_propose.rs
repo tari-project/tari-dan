@@ -36,14 +36,17 @@ use tari_dan_storage::{
         LockedBlock,
         PendingShardStateTreeDiff,
         QuorumCertificate,
+        ResumeNodeAtom,
         SubstateChange,
         SubstateRequirementLockIntent,
+        SuspendNodeAtom,
         TransactionAtom,
         TransactionExecution,
         TransactionPool,
         TransactionPoolRecord,
         TransactionPoolStage,
         TransactionRecord,
+        ValidatorConsensusStats,
     },
     StateStore,
 };
@@ -123,6 +126,7 @@ where TConsensusSpec: ConsensusSpec
     pub async fn handle(
         &mut self,
         epoch: Epoch,
+        next_height: NodeHeight,
         local_committee: &Committee<TConsensusSpec::Addr>,
         local_committee_info: CommitteeInfo,
         leaf_block: LeafBlock,
@@ -130,10 +134,11 @@ where TConsensusSpec: ConsensusSpec
     ) -> Result<(), HotStuffError> {
         let _timer = TraceTimer::info(LOG_TARGET, "OnPropose");
         if let Some(last_proposed) = self.store.with_read_tx(|tx| LastProposed::get(tx)).optional()? {
-            if last_proposed.epoch == leaf_block.epoch && last_proposed.height > leaf_block.height {
+            if last_proposed.epoch == epoch && last_proposed.height >= next_height {
                 info!(
                     target: LOG_TARGET,
-                    "⤵️ SKIPPING propose for {} because we already proposed block {}",
+                    "⤵️ SKIPPING propose for {} ({}) because we already proposed block {}",
+                    next_height,
                     leaf_block,
                     last_proposed,
                 );
@@ -142,7 +147,6 @@ where TConsensusSpec: ConsensusSpec
             }
         }
 
-        let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
         let (current_base_layer_block_height, current_base_layer_block_hash) =
             self.epoch_manager.current_base_layer_block_info().await?;
 
@@ -150,6 +154,7 @@ where TConsensusSpec: ConsensusSpec
         let base_layer_block_height = current_base_layer_block_height;
 
         let on_propose = self.clone();
+        let validator_node_pk = self.signing_service.public_key().clone();
         let (next_block, foreign_proposals) = task::spawn_blocking(move || {
             on_propose.store.with_write_tx(|tx| {
                 let high_qc = HighQc::get(&**tx, epoch)?;
@@ -165,9 +170,10 @@ where TConsensusSpec: ConsensusSpec
                 let next_block = on_propose.build_next_block(
                     tx,
                     epoch,
+                    next_height,
                     leaf_block,
                     high_qc_cert,
-                    validator.public_key,
+                    validator_node_pk,
                     &local_committee_info,
                     false,
                     base_layer_block_height,
@@ -207,7 +213,7 @@ where TConsensusSpec: ConsensusSpec
         info!(
             target: LOG_TARGET,
             "🌿 [{}] PROPOSING new local block {} to {} validators. justify: {} ({}), parent: {}",
-            validator.address,
+            self.signing_service.public_key(),
             next_block,
             local_committee.len(),
             next_block.justify().block_id(),
@@ -370,6 +376,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &<TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         epoch: Epoch,
+        next_height: NodeHeight,
         parent_block: LeafBlock,
         high_qc_certificate: QuorumCertificate,
         proposed_by: PublicKey,
@@ -379,11 +386,9 @@ where TConsensusSpec: ConsensusSpec
         base_layer_block_hash: FixedHash,
         propose_epoch_end: bool,
     ) -> Result<NextBlock, HotStuffError> {
-        // TODO: Configure
-        const TARGET_BLOCK_SIZE: usize = 500;
+        let max_block_size = self.config.consensus_constants.max_block_size;
 
         let justifies_parent = high_qc_certificate.block_id() == parent_block.block_id();
-        let next_height = parent_block.height() + NodeHeight(1);
         let start_of_chain_block = if justifies_parent || high_qc_certificate.is_zero() {
             // Parent is justified - we can include its state in the MR calc, foreign propose etc
             parent_block
@@ -399,7 +404,7 @@ where TConsensusSpec: ConsensusSpec
         let foreign_proposals = if propose_epoch_end {
             vec![]
         } else {
-            ForeignProposal::get_all_new(tx, start_of_chain_block.block_id(), TARGET_BLOCK_SIZE / 4)?
+            ForeignProposal::get_all_new(tx, start_of_chain_block.block_id(), max_block_size / 4)?
         };
 
         if !foreign_proposals.is_empty() {
@@ -413,7 +418,7 @@ where TConsensusSpec: ConsensusSpec
         let burnt_utxos = if dont_propose_transactions || propose_epoch_end {
             vec![]
         } else {
-            TARGET_BLOCK_SIZE
+            max_block_size
                 .checked_sub(foreign_proposals.len() * 4)
                 .filter(|n| *n > 0)
                 .map(|size| BurntUtxo::get_all_unproposed(tx, start_of_chain_block.block_id(), size))
@@ -421,18 +426,71 @@ where TConsensusSpec: ConsensusSpec
                 .unwrap_or_default()
         };
 
-        debug!(
-            target: LOG_TARGET,
-           "🌿 Found {} burnt utxos for next block",
-            burnt_utxos.len()
-        );
+        if !burnt_utxos.is_empty() {
+            debug!(
+                target: LOG_TARGET,
+               "🌿 Found {} burnt utxos for next block",
+                burnt_utxos.len()
+            );
+        }
+
+        let suspend_nodes = if dont_propose_transactions || propose_epoch_end {
+            vec![]
+        } else {
+            let num_suspended = ValidatorConsensusStats::count_number_suspended_nodes(tx)?;
+            let max_allowed_to_suspend =
+                u64::from(local_committee_info.quorum_threshold()).saturating_sub(num_suspended);
+
+            max_block_size
+                .checked_sub(foreign_proposals.len() * 4 + burnt_utxos.len())
+                .filter(|n| *n > 0)
+                .map(|size| {
+                    ValidatorConsensusStats::get_nodes_to_suspend(
+                        tx,
+                        start_of_chain_block.block_id(),
+                        self.config.consensus_constants.missed_proposal_suspend_threshold,
+                        size.min(max_allowed_to_suspend as usize),
+                    )
+                })
+                .transpose()?
+                .unwrap_or_default()
+        };
+
+        if !suspend_nodes.is_empty() {
+            debug!(
+                target: LOG_TARGET,
+                "🌿 Found {} suspend nodes for next block",
+                suspend_nodes.len()
+            )
+        }
+
+        let resume_nodes = if dont_propose_transactions || propose_epoch_end {
+            vec![]
+        } else {
+            max_block_size
+                .checked_sub(foreign_proposals.len() * 4 + burnt_utxos.len())
+                .filter(|n| *n > 0)
+                .map(|size| ValidatorConsensusStats::get_nodes_to_resume(tx, start_of_chain_block.block_id(), size))
+                .transpose()?
+                .unwrap_or_default()
+        };
+
+        if !resume_nodes.is_empty() {
+            debug!(
+                target: LOG_TARGET,
+                "🌿 Found {} resume nodes for next block",
+                resume_nodes.len()
+            )
+        }
+
+        let suspend_nodes_len = suspend_nodes.len();
 
         let batch = if dont_propose_transactions || propose_epoch_end {
             vec![]
         } else {
-            TARGET_BLOCK_SIZE
+            max_block_size
                 // Each foreign proposal is "heavier" than a transaction command
-                .checked_sub(foreign_proposals.len() * 4 + burnt_utxos.len())
+                .checked_sub(foreign_proposals.len() * 4 + burnt_utxos.len() + suspend_nodes.len())
                 .filter(|n| *n > 0)
                 .map(|size| self.transaction_pool.get_batch_for_next_block(tx, size, start_of_chain_block.block_id()))
                 .transpose()?
@@ -450,6 +508,16 @@ where TConsensusSpec: ConsensusSpec
                         burnt_utxos
                             .iter()
                             .map(|bu| Command::MintConfidentialOutput(bu.to_atom())),
+                    )
+                    .chain(
+                        suspend_nodes
+                            .into_iter()
+                            .map(|public_key| Command::SuspendNode(SuspendNodeAtom { public_key })),
+                    )
+                    .chain(
+                        resume_nodes
+                            .into_iter()
+                            .map(|public_key| Command::ResumeNode(ResumeNodeAtom { public_key })),
                     ),
             )
         };
@@ -491,8 +559,8 @@ where TConsensusSpec: ConsensusSpec
 
         debug!(
             target: LOG_TARGET,
-            "🌿 PROPOSE: {} (or less) transaction(s), {} foreign proposal(s), {} UTXOs for next block (justifies_parent = {})",
-            batch.len(), foreign_proposals.len() , burnt_utxos.len(), justifies_parent
+            "🌿 PROPOSE: {} (or less) transaction(s), {} foreign proposal(s), {} UTXOs, {} suspends for next block (justifies_parent = {})",
+            batch.len(), foreign_proposals.len() , burnt_utxos.len(), justifies_parent, suspend_nodes_len
         );
 
         // batch is empty for is_empty, is_epoch_end and is_epoch_start blocks

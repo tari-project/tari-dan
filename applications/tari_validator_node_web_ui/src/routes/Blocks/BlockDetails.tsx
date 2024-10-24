@@ -53,6 +53,12 @@ const COMMANDS = [
   "AllAccept",
   "SomeAccept",
 ];
+
+type OtherCommands = Record<string, Array<any>>;
+// interface OtherCommands {
+//   [key: string]: Array<any>;
+// }
+
 export default function BlockDetails() {
   const { blockId } = useParams();
   const [expandedPanels, setExpandedPanels] = useState<string[]>([]);
@@ -61,6 +67,7 @@ export default function BlockDetails() {
   const [block, setBlock] = useState<Block>();
 
   const [blockData, setBlockData] = useState<{ [key: string]: TransactionAtom[] }>({});
+  const [otherCommands, setOtherCommands] = useState<OtherCommands>({});
 
   const [epochEvents, setEpochEvents] = useState<string[]>([]);
   const [identity, setIdentity] = useState<VNGetIdentityResponse>();
@@ -84,6 +91,7 @@ export default function BlockDetails() {
             });
           }
           setEpochEvents([]);
+          const otherCommands: OtherCommands = {};
           const foreignProposals = [];
           const mintedUtxos = [];
           const data: { [key: string]: TransactionAtom[] } = {};
@@ -92,13 +100,20 @@ export default function BlockDetails() {
 
               const cmd = Object.keys(command)[0];
 
-              if ("ForeignProposal" in command) {
+              if (COMMANDS.indexOf(cmd) > -1) {
+                data[cmd] ||= [];
+                data[cmd].push(command[cmd as keyof Command]);
+              } else if ("ForeignProposal" in command) {
                 foreignProposals.push(command.ForeignProposal);
               } else if ("MintConfidentialOutput" in command) {
                 mintedUtxos.push(command.MintConfidentialOutput);
               } else {
-                data[cmd] ||= [];
-                data[cmd].push(command[cmd as keyof Command]);
+                if (Array.isArray(otherCommands[cmd])) {
+                  otherCommands[cmd].push(command[cmd as keyof Command]);
+                } else {
+                  // command[cmd as keyof Command]});
+                  Object.assign(otherCommands, { [cmd]: [command[cmd as keyof Command]] });
+                }
               }
             } else {
               setEpochEvents((epochEvents: string[]) => [...epochEvents, command as string]);
@@ -108,6 +123,8 @@ export default function BlockDetails() {
           setForeignProposals(foreignProposals);
           setMintedUtxos(mintedUtxos);
           setBlockData(data);
+          setOtherCommands(otherCommands);
+
         })
         .catch((err) => {
           setError(err && err.message ? err.message : `Unknown error: ${JSON.stringify(err)}`);
@@ -314,6 +331,17 @@ export default function BlockDetails() {
                     </AccordionDetails>
                   </Accordion>
                 )}
+                {Object.keys(otherCommands).length > 0 && Object.keys(otherCommands).map((key, i) => (
+                  <Accordion key={i} expanded={expandedPanels.includes(`panel${key}`)}
+                             onChange={handleChange(`panel${key}`)}>
+                    <AccordionSummary aria-controls={`panel${key}bh-content`} id={`panel${key}sbh-header`}>
+                      <Typography>{key}</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <ul>{otherCommands[key].map((elem, j) => <li key={j}>{JSON.stringify(elem)}</li>)}</ul>
+                    </AccordionDetails>
+                  </Accordion>
+                ))}
               </div>
             </Fade>
           )}

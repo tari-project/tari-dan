@@ -56,9 +56,15 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
         task::spawn(async move {
             let result = store.with_read_tx(|tx| {
                 let mut leaf_block = LeafBlock::get(tx, epoch)?;
-                let last_proposed = LastProposed::get(tx)?;
-                if last_proposed.height > leaf_block.height() {
-                    leaf_block = last_proposed.as_leaf_block();
+                if let Some(last_proposed) = LastProposed::get(tx).optional()? {
+                    if last_proposed.height > leaf_block.height() {
+                        leaf_block = last_proposed.as_leaf_block();
+                    }
+                }
+
+                if leaf_block.height.is_zero() {
+                    info!(target: LOG_TARGET, "This node is at height 0 so cannot return any syn blocks. Ignoring request");
+                    return Ok(vec![]);
                 }
 
                 if leaf_block.height() < msg.high_qc.block_height() {

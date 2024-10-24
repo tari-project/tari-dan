@@ -10,7 +10,7 @@ mod address;
 mod epoch_manager;
 mod executions_store;
 mod harness;
-mod helpers;
+pub mod helpers;
 mod leader_strategy;
 pub mod logging;
 mod messaging_impls;
