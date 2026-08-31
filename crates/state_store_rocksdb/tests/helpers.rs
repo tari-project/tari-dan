@@ -469,6 +469,9 @@ pub fn create_foreign_proposal(parent_id: BlockId, epoch: Epoch) -> ForeignPropo
             tari_sidechain::QuorumCertificate {
                 header_hash: foreign_block.header().calculate_hash(),
                 parent_id: *parent_id.hash(),
+                epoch: foreign_block.epoch().as_u64(),
+                height: foreign_block.height().as_u64(),
+                protocol_version: foreign_block.header().protocol_version().as_u32(),
                 signatures: vec![],
                 decision: QuorumDecision::Accept,
             },

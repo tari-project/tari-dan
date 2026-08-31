@@ -10,7 +10,10 @@ pub trait ToSignatureMessage {
     fn to_signature_message(&self) -> FixedHash;
 }
 
-pub trait SignedMessage: ToSignatureMessage {
+/// A message that carries a validator signature. The signed bytes are not part of this trait: a message whose
+/// preimage depends on context the message itself does not carry (such as the protocol version a proposal vote was
+/// cast under) implements only this, and is paired with its preimage at the point of verification.
+pub trait SignedMessage {
     fn signature(&self) -> &SchnorrSignatureBytes;
     fn public_key(&self) -> &RistrettoPublicKeyBytes;
 }

@@ -18,7 +18,7 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_storage::consensus_models::{Block, BlockHeader};
 use tari_ootle_transaction::Network;
-use tari_sidechain::ProposalCertificateSignatureFields;
+use tari_sidechain::ProposalVoteMessage;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{
@@ -218,6 +218,7 @@ pub(super) fn check_block_signature<TSignerService: ValidatorSignatureVerifierSe
 }
 
 pub(super) fn check_proposal_certificate<TConsensusSpec: ConsensusSpec>(
+    network: Network,
     candidate_block: &Block,
     committee: &Committee<TConsensusSpec::Addr>,
     signing_service: &TConsensusSpec::SignerService,
@@ -230,12 +231,13 @@ pub(super) fn check_proposal_certificate<TConsensusSpec: ConsensusSpec>(
         });
     }
 
-    check_quorum_certificate_signatures::<TConsensusSpec>(qc.into(), committee, signing_service)?;
+    check_quorum_certificate_signatures::<TConsensusSpec>(network, qc.into(), committee, signing_service)?;
 
     Ok(())
 }
 
 pub(super) fn check_timeout_certificate<TConsensusSpec: ConsensusSpec>(
+    network: Network,
     candidate_block: &Block,
     committee: &Committee<TConsensusSpec::Addr>,
     signing_service: &TConsensusSpec::SignerService,
@@ -250,7 +252,7 @@ pub(super) fn check_timeout_certificate<TConsensusSpec: ConsensusSpec>(
         });
     }
 
-    check_quorum_certificate_signatures::<TConsensusSpec>(tc.into(), committee, signing_service)?;
+    check_quorum_certificate_signatures::<TConsensusSpec>(network, tc.into(), committee, signing_service)?;
 
     Ok(())
 }
@@ -258,6 +260,7 @@ pub(super) fn check_timeout_certificate<TConsensusSpec: ConsensusSpec>(
 /// Validates the signatures of the quorum certificate.
 // pub because used in on receive NEWVIEW
 pub fn check_quorum_certificate_signatures<TConsensusSpec: ConsensusSpec>(
+    network: Network,
     qc: QuorumCertificateRef<'_>,
     committee: &Committee<TConsensusSpec::Addr>,
     signing_service: &TConsensusSpec::SignerService,
@@ -299,10 +302,13 @@ pub fn check_quorum_certificate_signatures<TConsensusSpec: ConsensusSpec>(
         match qc {
             QuorumCertificateRef::ProposalCertificate(pc) => {
                 let block_id = pc.calculate_block_id();
-                let message = ProposalCertificateSignatureFields {
-                    block_id: block_id.hash(),
-                    decision: pc.decision(),
-                };
+                let message = ProposalVoteMessage::new(
+                    ProtocolVersion::at(network, pc.epoch()).as_u32(),
+                    block_id.hash(),
+                    pc.decision(),
+                    pc.epoch().as_u64(),
+                    pc.height().as_u64(),
+                );
                 let vote = SignedProposalVote { message, signature };
                 let is_valid = signing_service.verify(&vote);
                 if !is_valid {

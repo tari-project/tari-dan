@@ -4,8 +4,7 @@
 use std::fmt::Display;
 
 use serde::Serialize;
-use tari_common_types::types::FixedHash;
-use tari_consensus_types::{ProposalVote, SignedMessage, ToSignatureMessage};
+use tari_consensus_types::{ProposalVote, SignedMessage};
 use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
 
 #[derive(Debug, Clone, Serialize)]
@@ -16,12 +15,6 @@ pub struct VoteMessage {
 impl Display for VoteMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.vote)
-    }
-}
-
-impl ToSignatureMessage for VoteMessage {
-    fn to_signature_message(&self) -> FixedHash {
-        self.vote.to_signature_message()
     }
 }
 

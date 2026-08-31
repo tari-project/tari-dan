@@ -5,10 +5,12 @@ use log::*;
 use tari_common_types::types::CompressedPublicKey;
 use tari_consensus_types::ProposalCertificate;
 use tari_crypto::{ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
+use tari_ootle_common_types::ProtocolVersion;
 use tari_ootle_storage::{
     StateStoreReadTransaction,
     consensus_models::{Block, BlockHeader, EndOfEpochCommand},
 };
+use tari_ootle_transaction::Network;
 use tari_sidechain::{
     ChainLink,
     CommandCommitProof,
@@ -126,7 +128,8 @@ pub fn generate_block_commit_proof<TTx: StateStoreReadTransaction>(
     let mut block = Block::get(tx, &commit_qc.calculate_block_id())?;
     debug!(target: LOG_TARGET, "⚙️ START: generate commit proof {} {} -> {} {}", block.height(), block.id(), committed_block.height(), committed_block.id());
     debug!(target: LOG_TARGET, "⚙️ Adding the commit_qc to the proof: {commit_qc}");
-    proof_elements.push(convert_qc_to_proof_element(commit_qc)?);
+    let network = committed_block.network();
+    proof_elements.push(convert_qc_to_proof_element(network, commit_qc)?);
     while block.id() != committed_block.id() {
         // Prevent possibility of endless loop if the IDs never match - which should be impossible.
         if block.height() < committed_block.height() {
@@ -151,7 +154,7 @@ pub fn generate_block_commit_proof<TTx: StateStoreReadTransaction>(
         if block.justifies_parent() {
             // This block justifies the parent, so we add it to the proof
             debug!(target: LOG_TARGET, "⚙️ Add justify: {}", block.justify());
-            proof_elements.push(convert_qc_to_proof_element(block.justify())?);
+            proof_elements.push(convert_qc_to_proof_element(network, block.justify())?);
             block = block.get_parent(tx)?;
         } else {
             // This block does not justify the parent. We'll add link(s) back until we find the block that is justified
@@ -244,11 +247,17 @@ pub fn convert_block_to_sidechain_block_header(header: &BlockHeader) -> Result<S
     })
 }
 
-fn convert_qc_to_proof_element(qc: &ProposalCertificate) -> Result<CommitProofElement, HotStuffError> {
+fn convert_qc_to_proof_element(
+    network: Network,
+    qc: &ProposalCertificate,
+) -> Result<CommitProofElement, HotStuffError> {
     Ok(CommitProofElement::QuorumCertificate(
         tari_sidechain::QuorumCertificate {
             header_hash: *qc.header_hash(),
             parent_id: *qc.parent_id().hash(),
+            epoch: qc.epoch().as_u64(),
+            height: qc.height().as_u64(),
+            protocol_version: ProtocolVersion::at(network, qc.epoch()).as_u32(),
             signatures: qc
                 .signatures()
                 .iter()
@@ -295,11 +304,22 @@ fn convert_validator_block_signature(
 #[cfg(test)]
 mod tests {
     use tari_common_types::types::FixedHash;
-    use tari_consensus_types::{ProposalCertificate, ShardGroupAccumulatedData};
+    use tari_consensus_types::{
+        ProposalCertificate,
+        ShardGroupAccumulatedData,
+        ToSignatureMessage,
+        ValidatorSchnorrSignature,
+    };
     use tari_crypto::tari_utilities::epoch_time::EpochTime;
-    use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight, NumPreshards, ProtocolVersion, ShardGroup};
-    use tari_ootle_transaction::Network;
-    use tari_sidechain::QuorumDecision;
+    use tari_ootle_common_types::{
+        Epoch,
+        ExtraData,
+        NodeHeight,
+        NumPreshards,
+        ShardGroup,
+        crypto::create_key_pair_from_seed,
+    };
+    use tari_sidechain::{ProposalVoteMessage, QuorumDecision, ValidatorQcSignature};
 
     use super::*;
 
@@ -349,6 +369,39 @@ mod tests {
             ExtraData::new(),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn a_vote_signed_here_verifies_in_the_sidechain_crate() {
+        for protocol_version in [ProtocolVersion::V0, ProtocolVersion::V1] {
+            assert_vote_verifies_in_the_sidechain_crate(protocol_version);
+        }
+    }
+
+    fn assert_vote_verifies_in_the_sidechain_crate(protocol_version: ProtocolVersion) {
+        let (secret, public) = create_key_pair_from_seed(5);
+        let (nonce, _) = create_key_pair_from_seed(6);
+        let block_id = seed_hash(3);
+        let (epoch, height) = (7u64, 9u64);
+        let decision = QuorumDecision::Accept;
+
+        let message = ProposalVoteMessage::new(protocol_version.as_u32(), &block_id, decision, epoch, height);
+        let signature =
+            ValidatorSchnorrSignature::sign_with_nonce_and_message(&secret, nonce, message.to_signature_message())
+                .expect("signing is infallible for a valid key");
+
+        let qc_signature = ValidatorQcSignature {
+            public_key: CompressedPublicKey::from_canonical_bytes(public.as_bytes()).unwrap(),
+            signature: ValidatorBlockSignature::new(
+                CompressedPublicKey::from_canonical_bytes(signature.get_public_nonce().as_bytes()).unwrap(),
+                signature.get_signature().clone(),
+            ),
+        };
+
+        assert!(qc_signature.verify(protocol_version.as_u32(), &block_id, decision, epoch, height));
+        // The version selects the message, so a certificate cannot claim a version its members did not sign under.
+        let other_version = protocol_version.as_u32() ^ 1;
+        assert!(!qc_signature.verify(other_version, &block_id, decision, epoch, height));
     }
 
     fn assert_hashes_identically_to_sidechain_header(protocol_version: ProtocolVersion) {

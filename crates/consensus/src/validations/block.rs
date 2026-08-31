@@ -64,8 +64,8 @@ fn check_proposal<TConsensusSpec: ConsensusSpec>(
 ) -> Result<(), HotStuffError> {
     check_header::<TConsensusSpec>(block.header(), expected_epoch_hash, config, signer_service)?;
     check_block(leader_strategy, committee_for_block, block)?;
-    check_proposal_certificate::<TConsensusSpec>(block, committee_for_block, signer_service)?;
-    check_timeout_certificate::<TConsensusSpec>(block, committee_for_block, signer_service)?;
+    check_proposal_certificate::<TConsensusSpec>(config.network, block, committee_for_block, signer_service)?;
+    check_timeout_certificate::<TConsensusSpec>(config.network, block, committee_for_block, signer_service)?;
 
     Ok(())
 }

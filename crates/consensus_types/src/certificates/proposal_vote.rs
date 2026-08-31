@@ -6,9 +6,8 @@ use std::fmt::Display;
 use minicbor::{CborLen, Decode, Encode};
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_hashing::layer2;
 use tari_ootle_common_types::{Epoch, NodeHeight};
-use tari_sidechain::{ProposalCertificateSignatureFields, QuorumDecision};
+use tari_sidechain::{ProposalVoteMessage, QuorumDecision};
 use tari_template_lib::types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
 
 use crate::{SignedMessage, ToSignatureMessage, Vote, ids::BlockId, validator_signature::ValidatorSignatureBytes};
@@ -51,16 +50,6 @@ impl Vote for ProposalVote {
     }
 }
 
-impl ToSignatureMessage for ProposalVote {
-    fn to_signature_message(&self) -> FixedHash {
-        ProposalCertificateSignatureFields {
-            block_id: self.block_id.hash(),
-            decision: self.decision,
-        }
-        .to_signature_message()
-    }
-}
-
 impl SignedMessage for ProposalVote {
     fn signature(&self) -> &SchnorrSignatureBytes {
         &self.signature.signature
@@ -81,9 +70,9 @@ impl Display for ProposalVote {
     }
 }
 
-impl ToSignatureMessage for ProposalCertificateSignatureFields<'_> {
+impl ToSignatureMessage for ProposalVoteMessage<'_> {
     /// Defines the signature message for a proposal vote which is collected into a ProposalCertificate.
     fn to_signature_message(&self) -> FixedHash {
-        layer2::proposal_vote_signature_hasher().chain(self).finalize().into()
+        self.calculate_hash()
     }
 }

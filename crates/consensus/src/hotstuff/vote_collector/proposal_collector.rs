@@ -3,21 +3,24 @@
 
 use log::*;
 use tari_consensus_types::{HighPc, ProposalCertificate, ProposalVote, ValidatorSignatureBytes};
-use tari_ootle_common_types::{Epoch, NodeHeight, optional::Optional};
+use tari_ootle_common_types::{Epoch, NodeHeight, ProtocolVersion, optional::Optional};
 use tari_ootle_storage::{StateStore, consensus_models::Block};
-use tari_sidechain::QuorumDecision;
+use tari_ootle_transaction::Network;
+use tari_sidechain::{ProposalVoteMessage, QuorumDecision};
 
 use super::collector::VoteCollector;
 use crate::{
     hotstuff::{epoch_state::EpochState, error::HotStuffError, vote_collector::helpers::check_eligibility},
     tracing::TraceTimer,
     traits::{CertificateStore, ConsensusSpec, ValidatorSignatureVerifierService},
+    validations::signed_vote::SignedProposalVote,
 };
 
 const LOG_TARGET: &str = "tari::consensus::hotstuff::proposal_collector";
 
 #[derive(Clone)]
 pub struct ProposalVoteCollector<TConsensusSpec: ConsensusSpec> {
+    network: Network,
     vote_collector: VoteCollector<ProposalVote>,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
@@ -28,11 +31,13 @@ impl<TConsensusSpec> ProposalVoteCollector<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
+        network: Network,
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         vote_signer_service: TConsensusSpec::SignerService,
     ) -> Self {
         Self {
+            network,
             store,
             vote_collector: VoteCollector::new(),
             epoch_manager,
@@ -42,6 +47,10 @@ where TConsensusSpec: ConsensusSpec
 
     pub fn signing_service(&self) -> &TConsensusSpec::SignerService {
         &self.vote_signer_service
+    }
+
+    pub fn network(&self) -> Network {
+        self.network
     }
 
     /// Returns Some if quorum is reached
@@ -133,7 +142,18 @@ where TConsensusSpec: ConsensusSpec
             });
         }
 
-        if !self.vote_signer_service.verify(vote) {
+        let message = ProposalVoteMessage::new(
+            ProtocolVersion::at(self.network, vote.epoch).as_u32(),
+            vote.block_id.hash(),
+            vote.decision,
+            vote.epoch.as_u64(),
+            vote.block_height.as_u64(),
+        );
+        let signed_vote = SignedProposalVote {
+            message,
+            signature: &vote.signature,
+        };
+        if !self.vote_signer_service.verify(&signed_vote) {
             return Err(HotStuffError::InvalidVoteSignature {
                 signer_public_key: *vote.signature.public_key(),
             });

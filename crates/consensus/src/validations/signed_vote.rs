@@ -3,11 +3,11 @@
 
 use tari_common_types::types::FixedHash;
 use tari_consensus_types::{SignedMessage, ToSignatureMessage, ValidatorSignatureBytes};
-use tari_sidechain::ProposalCertificateSignatureFields;
+use tari_sidechain::ProposalVoteMessage;
 use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
 
 pub struct SignedProposalVote<'a> {
-    pub message: ProposalCertificateSignatureFields<'a>,
+    pub message: ProposalVoteMessage<'a>,
     pub signature: &'a ValidatorSignatureBytes,
 }
 
