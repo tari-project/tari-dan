@@ -16,6 +16,7 @@ use tari_ootle_common_types::{
     ExtraData,
     NodeHeight,
     NumPreshards,
+    ProtocolVersion,
     ShardGroup,
     VersionedSubstateId,
     VersionedSubstateIdRef,
@@ -306,6 +307,7 @@ pub fn create_block(parent: Option<&Block>) -> Block {
 
     Block::create(
         network,
+        ProtocolVersion::V0,
         *parent.id(),
         parent.justify().clone(),
         None,
@@ -340,6 +342,7 @@ pub fn create_block_with_qc(parent: &LeafBlock) -> Block {
 
     Block::create(
         network,
+        ProtocolVersion::V0,
         *parent.block_id(),
         qc,
         None,
@@ -423,6 +426,7 @@ pub fn create_foreign_proposal(parent_id: BlockId, epoch: Epoch) -> ForeignPropo
 
     let foreign_block = Block::create(
         Network::LocalNet,
+        ProtocolVersion::V0,
         parent_id,
         qc1.clone(),
         None,
@@ -443,6 +447,7 @@ pub fn create_foreign_proposal(parent_id: BlockId, epoch: Epoch) -> ForeignPropo
     let commit_proof = CommandsCommitProof::new_latest(vec![], SidechainBlockCommitProof {
         header: SidechainBlockHeader {
             network: foreign_block.network().as_byte(),
+            protocol_version: foreign_block.header().protocol_version().as_u32(),
             parent_id: *parent_id.hash(),
             justify_id: *qc1.calculate_id().hash(),
             height: foreign_block.height().as_u64(),

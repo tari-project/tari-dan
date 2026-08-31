@@ -20,6 +20,7 @@ use super::common::{
     check_network,
     check_proposal_certificate,
     check_proposed_by_leader,
+    check_protocol_version,
     check_shard_group_bounds,
     check_shard_group_matches,
     check_sidechain_id,
@@ -85,6 +86,7 @@ fn check_header<TConsensusSpec: ConsensusSpec>(
     signer_service: &TConsensusSpec::SignerService,
 ) -> Result<(), ProposalValidationError> {
     check_network(header, config.network)?;
+    check_protocol_version(header, config.network)?;
     if header.is_genesis() {
         return Err(ProposalValidationError::ProposingGenesisBlock {
             proposed_by: header.proposed_by().to_string(),

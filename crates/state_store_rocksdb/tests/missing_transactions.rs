@@ -6,7 +6,7 @@ pub mod helpers;
 use helpers::{create_block, create_rocksdb, create_tx_atom};
 use tari_common_types::types::FixedHash;
 use tari_consensus_types::ShardGroupAccumulatedData;
-use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight};
+use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight, ProtocolVersion};
 use tari_ootle_storage::{
     StateStore,
     StateStoreWriteTransaction,
@@ -35,6 +35,7 @@ fn missing_transactions_operations(db: impl StateStore) {
     let atom2 = create_tx_atom();
     let block1 = Block::create(
         network,
+        ProtocolVersion::V0,
         *genesis.id(),
         genesis.justify().clone(),
         None,

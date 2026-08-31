@@ -6,7 +6,7 @@ pub mod helpers;
 use helpers::{assert_eq_debug, create_foreign_proposal, create_random_block_id, create_rocksdb};
 use tari_common_types::types::FixedHash;
 use tari_consensus_types::ShardGroupAccumulatedData;
-use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight, NumPreshards, ShardGroup};
+use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight, NumPreshards, ProtocolVersion, ShardGroup};
 use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
@@ -36,6 +36,7 @@ fn foreign_proposals_rocksdb() {
 
     let block1 = Block::create(
         network,
+        ProtocolVersion::V0,
         *zero_block.id(),
         zero_block.justify().clone(),
         None,
@@ -62,6 +63,7 @@ fn foreign_proposals_rocksdb() {
     tx.proposal_certificates_save(block1.justify()).unwrap();
     let fork_block = Block::create(
         network,
+        ProtocolVersion::V0,
         *zero_block.id(),
         zero_block.justify().clone(),
         None,

@@ -57,6 +57,7 @@ use tari_ootle_common_types::{
     Epoch,
     ExtraData,
     NodeHeight,
+    ProtocolVersion,
     ShardGroup,
     ShardStateVersions,
     StateVersion,
@@ -477,6 +478,7 @@ impl From<&consensus_models::BlockHeader> for proto::consensus::BlockHeader {
             epoch_hash: value.epoch_hash().as_bytes().to_vec(),
             extra_data: Some(value.extra_data().into()),
             accumulated_data: Some(value.accumulated_data().into()),
+            protocol_version: value.protocol_version().as_u32(),
         }
     }
 }
@@ -489,6 +491,8 @@ fn try_convert_proto_block_header(
     let network = u8::try_from(value.network)
         .map_err(|_| anyhow!("Block conversion: Invalid network byte {}", value.network))?
         .try_into()?;
+
+    let protocol_version = ProtocolVersion::try_from(value.protocol_version)?;
 
     let shard_group = ShardGroup::decode_from_u32(value.shard_group)
         .ok_or_else(|| anyhow!("Block shard_group ({}) is not a valid", value.shard_group))?;
@@ -507,6 +511,7 @@ fn try_convert_proto_block_header(
     if value.signature.is_none() {
         Ok(consensus_models::BlockHeader::dummy_block(
             network,
+            protocol_version,
             value.parent_id.try_into()?,
             proposed_by,
             NodeHeight(value.height),
@@ -527,6 +532,7 @@ fn try_convert_proto_block_header(
         // If there were a mismatch (perhaps due modified data over the wire) the signature verification will fail.
         let block = consensus_models::BlockHeader::create(
             network,
+            protocol_version,
             value.parent_id.try_into()?,
             justify_id,
             NodeHeight(value.height),

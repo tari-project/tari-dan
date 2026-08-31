@@ -9,10 +9,18 @@ use serde::{Deserialize, Serialize};
 use crate::Epoch;
 
 #[repr(u32)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, borsh::BorshSerialize)]
+#[derive(
+    Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, borsh::BorshSerialize,
+)]
 #[borsh(use_discriminant = true)]
 pub enum ProtocolVersion {
+    /// The genesis schema, which every network starts under and which anything carrying no explicit version is
+    /// under.
+    #[default]
     V0 = 0,
+    /// Block headers commit to their own protocol version. No network schedules this version in
+    /// [`Self::activations`]; scheduling it is a deliberate per-network deployment decision.
+    V1 = 1,
 }
 
 impl ProtocolVersion {
@@ -47,6 +55,14 @@ impl ProtocolVersion {
 
     pub const fn as_u32(self) -> u32 {
         self as u32
+    }
+
+    pub const fn from_u32(v: u32) -> Option<Self> {
+        match v {
+            0 => Some(Self::V0),
+            1 => Some(Self::V1),
+            _ => None,
+        }
     }
 
     /// Every activation after genesis on `network`. Genesis is the schema a network starts under, so
@@ -151,6 +167,45 @@ pub enum ActivationScheduleError {
          diverge from the network."
     )]
     RolledBack { activation: Epoch, last_known_epoch: Epoch },
+}
+
+impl TryFrom<u32> for ProtocolVersion {
+    type Error = UnknownProtocolVersionError;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        Self::from_u32(value).ok_or(UnknownProtocolVersionError(value))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("Unknown protocol version {0}")]
+pub struct UnknownProtocolVersionError(pub u32);
+
+/// Encoded as its `u32` value rather than as an enum variant, so that a version this binary does not know is a
+/// decode error naming the version rather than an opaque unknown-variant error, and so the encoding does not move
+/// when variants are added.
+impl<C> minicbor::Encode<C> for ProtocolVersion {
+    fn encode<W: minicbor::encode::Write>(
+        &self,
+        e: &mut minicbor::Encoder<W>,
+        _ctx: &mut C,
+    ) -> Result<(), minicbor::encode::Error<W::Error>> {
+        e.u32(self.as_u32())?;
+        Ok(())
+    }
+}
+
+impl<'b, C> minicbor::Decode<'b, C> for ProtocolVersion {
+    fn decode(d: &mut minicbor::Decoder<'b>, _ctx: &mut C) -> Result<Self, minicbor::decode::Error> {
+        let v = d.u32()?;
+        Self::from_u32(v).ok_or_else(|| minicbor::decode::Error::message(UnknownProtocolVersionError(v)))
+    }
+}
+
+impl<C> minicbor::CborLen<C> for ProtocolVersion {
+    fn cbor_len(&self, ctx: &mut C) -> usize {
+        minicbor::CborLen::cbor_len(&self.as_u32(), ctx)
+    }
 }
 
 impl Display for ProtocolVersion {

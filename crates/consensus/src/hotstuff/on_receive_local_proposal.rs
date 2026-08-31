@@ -21,6 +21,7 @@ use tari_epoch_manager::EpochManagerReader;
 use tari_ootle_common_types::{
     Epoch,
     NodeHeight,
+    ProtocolVersion,
     committee::{Committee, CommitteeInfo},
     optional::Optional,
 };
@@ -600,6 +601,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     // Create the next genesis
                     let mut genesis = Block::genesis(
                         network,
+                        ProtocolVersion::at(network, next_epoch),
                         next_epoch,
                         epoch_hash,
                         next_shard_group,

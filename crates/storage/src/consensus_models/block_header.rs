@@ -23,9 +23,9 @@ use tari_consensus_types::{
     ToSignatureMessage,
 };
 use tari_crypto::tari_utilities::epoch_time::EpochTime;
-use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight, NumPreshards, ShardGroup, hashing};
+use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight, NumPreshards, ProtocolVersion, ShardGroup, hashing};
 use tari_ootle_transaction::Network;
-use tari_sidechain::{BlockHeaderHashFields, BlockHeaderHashFieldsV1};
+use tari_sidechain::{BlockHeaderHashFields, BlockHeaderHashFieldsV1, BlockHeaderHashFieldsV2};
 use tari_state_tree::{TreeHash, compute_merkle_root_for_hashes};
 use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
 
@@ -98,12 +98,24 @@ pub struct BlockHeader {
     /// Currently, this is used to store the block's sidechain_id (if applicable).
     #[n(15)]
     extra_data: ExtraData,
+    /// The protocol version this block was produced under, resolved from the network's activation schedule at
+    /// [`Self::epoch`]. It makes the block self-describing: [`Self::calculate_hash`] and the L1 verifier in
+    /// `tari_sidechain` both select the hash schema from this field rather than from the schedule.
+    ///
+    /// A header that carries no version is under [`ProtocolVersion::V0`], so blocks written before the field
+    /// existed decode and hash unchanged.
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    #[serde(default)]
+    #[n(16)]
+    #[cbor(default)]
+    protocol_version: ProtocolVersion,
 }
 
 impl BlockHeader {
     #[allow(clippy::too_many_arguments)]
     pub fn create(
         network: Network,
+        protocol_version: ProtocolVersion,
         parent: BlockId,
         justify_id: PcId,
         height: NodeHeight,
@@ -121,6 +133,7 @@ impl BlockHeader {
     ) -> Result<Self, BlockError> {
         let mut header = Self::create_unsigned(
             network,
+            protocol_version,
             parent,
             justify_id,
             height,
@@ -144,6 +157,7 @@ impl BlockHeader {
     #[allow(clippy::too_many_arguments)]
     pub fn create_unsigned(
         network: Network,
+        protocol_version: ProtocolVersion,
         parent: BlockId,
         justify_id: PcId,
         height: NodeHeight,
@@ -162,6 +176,7 @@ impl BlockHeader {
         let mut header = BlockHeader {
             id: BlockId::zero(),
             network,
+            protocol_version,
             parent,
             justify_id,
             height,
@@ -182,8 +197,10 @@ impl BlockHeader {
         Ok(header)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn genesis(
         network: Network,
+        protocol_version: ProtocolVersion,
         justify_id: PcId,
         epoch: Epoch,
         shard_group: ShardGroup,
@@ -194,6 +211,7 @@ impl BlockHeader {
     ) -> Self {
         Self::create(
             network,
+            protocol_version,
             BlockId::zero(),
             justify_id,
             NodeHeight::zero(),
@@ -218,6 +236,7 @@ impl BlockHeader {
         let shard_group = ShardGroup::all_shards(num_preshards);
         Self {
             network,
+            protocol_version: ProtocolVersion::at(network, Epoch::zero()),
             id: BlockId::zero(),
             parent: BlockId::zero(),
             justify_id: ProposalCertificate::genesis(Epoch::zero(), ShardGroup::all_shards(num_preshards))
@@ -238,8 +257,10 @@ impl BlockHeader {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn dummy_block(
         network: Network,
+        protocol_version: ProtocolVersion,
         parent: BlockId,
         proposed_by: RistrettoPublicKeyBytes,
         height: NodeHeight,
@@ -254,6 +275,7 @@ impl BlockHeader {
         let mut block = Self {
             id: BlockId::zero(),
             network,
+            protocol_version,
             parent,
             justify_id,
             height,
@@ -320,22 +342,46 @@ impl BlockHeader {
         let metadata_hash = self.calculate_metadata_hash();
         let accumulated_data = self.accumulated_data.into();
 
-        let fields = BlockHeaderHashFields::V1(BlockHeaderHashFieldsV1 {
-            network: self.network.as_byte(),
-            justify_id: self.justify_id.hash(),
-            height: self.height.as_u64(),
-            epoch: self.epoch.as_u64(),
-            epoch_hash: &self.epoch_hash,
-            shard_group: tari_sidechain::ShardGroup {
-                start: self.shard_group.start().as_u32(),
-                end_inclusive: self.shard_group.end().as_u32(),
-            },
-            proposed_by: self.proposed_by.as_bytes(),
-            state_merkle_root: &self.state_merkle_root,
-            command_merkle_root: &self.command_merkle_root,
-            accumulated_data: &accumulated_data,
-            metadata_hash: &metadata_hash,
-        });
+        let shard_group = tari_sidechain::ShardGroup {
+            start: self.shard_group.start().as_u32(),
+            end_inclusive: self.shard_group.end().as_u32(),
+        };
+
+        // This selection must stay identical to `tari_sidechain::SidechainBlockHeader::calculate_hash`, which is what
+        // the base layer uses to verify a commit proof against the block ID a committee signed.
+        let fields = match self.protocol_version.as_u32() {
+            // Version 0 commits to a preimage that carries no version, so its block IDs stay reproducible.
+            0 => BlockHeaderHashFields::V1(BlockHeaderHashFieldsV1 {
+                network: self.network.as_byte(),
+                justify_id: self.justify_id.hash(),
+                height: self.height.as_u64(),
+                epoch: self.epoch.as_u64(),
+                epoch_hash: &self.epoch_hash,
+                shard_group,
+                proposed_by: self.proposed_by.as_bytes(),
+                state_merkle_root: &self.state_merkle_root,
+                command_merkle_root: &self.command_merkle_root,
+                accumulated_data: &accumulated_data,
+                metadata_hash: &metadata_hash,
+            }),
+            // From version 1 the version is part of the preimage, so that two versions sharing a preimage shape
+            // still produce distinct block IDs and the version a block claims cannot be altered without
+            // invalidating it.
+            protocol_version => BlockHeaderHashFields::V2(BlockHeaderHashFieldsV2 {
+                network: self.network.as_byte(),
+                protocol_version,
+                justify_id: self.justify_id.hash(),
+                height: self.height.as_u64(),
+                epoch: self.epoch.as_u64(),
+                epoch_hash: &self.epoch_hash,
+                shard_group,
+                proposed_by: self.proposed_by.as_bytes(),
+                state_merkle_root: &self.state_merkle_root,
+                command_merkle_root: &self.command_merkle_root,
+                accumulated_data: &accumulated_data,
+                metadata_hash: &metadata_hash,
+            }),
+        };
 
         hashing::block_hasher().chain(&fields).finalize().into()
     }
@@ -392,6 +438,10 @@ impl BlockHeader {
 
     pub fn network(&self) -> Network {
         self.network
+    }
+
+    pub fn protocol_version(&self) -> ProtocolVersion {
+        self.protocol_version
     }
 
     pub fn parent(&self) -> &BlockId {
@@ -518,4 +568,84 @@ struct MetadataHashFieldsV1<'a> {
     total_leader_fee: u64,
     timestamp: u64,
     extra_data: &'a ExtraData,
+}
+
+#[cfg(test)]
+mod tests {
+    use tari_consensus_types::ProposalCertificate;
+
+    use super::*;
+
+    fn header(protocol_version: ProtocolVersion) -> BlockHeader {
+        let shard_group = ShardGroup::all_shards(NumPreshards::P64);
+        BlockHeader::create(
+            Network::LocalNet,
+            protocol_version,
+            BlockId::zero(),
+            ProposalCertificate::genesis(Epoch(1), shard_group).calculate_id(),
+            NodeHeight(2),
+            Epoch(1),
+            shard_group,
+            RistrettoPublicKeyBytes::default(),
+            FixedHash::zero(),
+            &BTreeSet::new(),
+            1,
+            SchnorrSignatureBytes::zero(),
+            1234,
+            FixedHash::zero(),
+            ShardGroupAccumulatedData::default(),
+            ExtraData::new(),
+        )
+        .unwrap()
+    }
+
+    /// The encoding of a header that carries no protocol version: the same array with the trailing element,
+    /// which is `protocol_version`, dropped.
+    fn encode_without_protocol_version(header: &BlockHeader) -> Vec<u8> {
+        let bytes = tari_bor::encode(header).unwrap();
+        let mut decoder = minicbor::Decoder::new(&bytes);
+        let len = decoder
+            .array()
+            .unwrap()
+            .expect("BlockHeader encodes as a definite length array");
+        let body_start = decoder.position();
+        for _ in 0..len - 1 {
+            decoder.skip().unwrap();
+        }
+        let last_element_start = decoder.position();
+
+        let mut out = Vec::new();
+        minicbor::Encoder::new(&mut out).array(len - 1).unwrap();
+        out.extend_from_slice(&bytes[body_start..last_element_start]);
+        out
+    }
+
+    #[test]
+    fn a_header_encoded_without_a_protocol_version_decodes_as_v0() {
+        let header = header(ProtocolVersion::V0);
+        let decoded: BlockHeader = tari_bor::decode(&encode_without_protocol_version(&header)).unwrap();
+
+        assert_eq!(decoded.protocol_version(), ProtocolVersion::V0);
+        assert_eq!(decoded.id(), header.id());
+        assert_eq!(decoded.calculate_hash(), header.calculate_hash());
+    }
+
+    #[test]
+    fn a_header_round_trips_its_protocol_version() {
+        for protocol_version in [ProtocolVersion::V0, ProtocolVersion::V1] {
+            let header = header(protocol_version);
+            let bytes = tari_bor::encode(&header).unwrap();
+            let decoded: BlockHeader = tari_bor::decode(&bytes).unwrap();
+            assert_eq!(decoded.protocol_version(), protocol_version);
+            assert_eq!(decoded.calculate_hash(), header.calculate_hash());
+        }
+    }
+
+    #[test]
+    fn each_protocol_version_hashes_a_header_differently() {
+        assert_ne!(
+            header(ProtocolVersion::V0).calculate_hash(),
+            header(ProtocolVersion::V1).calculate_hash()
+        );
+    }
 }

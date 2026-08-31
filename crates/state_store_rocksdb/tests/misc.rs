@@ -174,6 +174,7 @@ fn miscellaneous_rocksdb() {
     let commit_proof = SidechainBlockCommitProof {
         header: SidechainBlockHeader {
             network: 0,
+            protocol_version: 0,
             parent_id: Default::default(),
             justify_id: Default::default(),
             height: 0,

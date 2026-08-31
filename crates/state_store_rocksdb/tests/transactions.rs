@@ -12,7 +12,7 @@ use tari_engine_types::{
     fees::FeeBreakdown,
     substate::SubstateDiff,
 };
-use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight, SubstateRequirement};
+use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight, ProtocolVersion, SubstateRequirement};
 use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
@@ -63,6 +63,7 @@ mod confirm_all_transitions {
 
         let block1 = Block::create(
             network,
+            ProtocolVersion::V0,
             *zero_block.id(),
             zero_block.justify().clone(),
             None,
@@ -170,6 +171,7 @@ mod confirm_all_transitions {
 
         let block1 = Block::create(
             network,
+            ProtocolVersion::V0,
             *zero_block.id(),
             zero_block.justify().clone(),
             None,
@@ -690,6 +692,7 @@ mod get_many_ready_weight_budget {
         let atoms: Vec<_> = weights.iter().map(|_| create_tx_atom()).collect();
         let block1 = Block::create(
             network,
+            ProtocolVersion::V0,
             *zero_block.id(),
             zero_block.justify().clone(),
             None,

@@ -11,6 +11,7 @@ use tari_ootle_common_types::{
     ExtraFieldKey,
     NodeHeight,
     NumPreshards,
+    ProtocolVersion,
     ShardGroup,
     VotePower,
     committee::Committee,
@@ -49,6 +50,22 @@ pub(super) fn check_network(header: &BlockHeader, network: Network) -> Result<()
         return Err(ProposalValidationError::InvalidNetwork {
             block_network: header.network().to_string(),
             expected_network: network.to_string(),
+            block_id: *header.id(),
+        });
+    }
+    Ok(())
+}
+
+/// The protocol version a block is produced under is fixed by the network's activation schedule at the block's
+/// epoch. A node whose schedule disagrees rejects the block instead of hashing it under a schema the rest of the
+/// network has left behind, which stalls the node rather than forking it.
+pub(super) fn check_protocol_version(header: &BlockHeader, network: Network) -> Result<(), ProposalValidationError> {
+    let expected_version = ProtocolVersion::at(network, header.epoch());
+    if header.protocol_version() != expected_version {
+        return Err(ProposalValidationError::InvalidProtocolVersion {
+            expected_version,
+            block_version: header.protocol_version(),
+            epoch: header.epoch(),
             block_id: *header.id(),
         });
     }

@@ -219,6 +219,7 @@ pub fn convert_block_to_sidechain_block_header(header: &BlockHeader) -> Result<S
 
     Ok(SidechainBlockHeader {
         network: header.network().as_byte(),
+        protocol_version: header.protocol_version().as_u32(),
         parent_id: *header.parent().hash(),
         justify_id: *header.justify_id().hash(),
         height: header.height().as_u64(),
@@ -296,7 +297,7 @@ mod tests {
     use tari_common_types::types::FixedHash;
     use tari_consensus_types::{ProposalCertificate, ShardGroupAccumulatedData};
     use tari_crypto::tari_utilities::epoch_time::EpochTime;
-    use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight, NumPreshards, ShardGroup};
+    use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight, NumPreshards, ProtocolVersion, ShardGroup};
     use tari_ootle_transaction::Network;
     use tari_sidechain::QuorumDecision;
 
@@ -309,6 +310,12 @@ mod tests {
 
     #[test]
     fn it_hashes_the_header_identically_to_sidechain_header() {
+        for protocol_version in [ProtocolVersion::V0, ProtocolVersion::V1] {
+            assert_hashes_identically_to_sidechain_header(protocol_version);
+        }
+    }
+
+    fn build_header(protocol_version: ProtocolVersion) -> BlockHeader {
         let parent_id = seed_hash(1).into_array().into();
         let shard_group = ShardGroup::all_shards(NumPreshards::P256);
         let qc1 = ProposalCertificate::new(
@@ -323,8 +330,9 @@ mod tests {
 
         let qc1_id = qc1.calculate_id();
         let network = Network::LocalNet;
-        let block = BlockHeader::create(
+        BlockHeader::create(
             network,
+            protocol_version,
             parent_id,
             qc1_id,
             NodeHeight(2),
@@ -340,14 +348,18 @@ mod tests {
             ShardGroupAccumulatedData::default(),
             ExtraData::new(),
         )
-        .unwrap();
+        .unwrap()
+    }
 
+    fn assert_hashes_identically_to_sidechain_header(protocol_version: ProtocolVersion) {
+        let block = build_header(protocol_version);
         let sidechain_header = SidechainBlockHeader {
-            network: network.as_byte(),
-            parent_id: *parent_id.hash(),
-            justify_id: *qc1_id.hash(),
-            height: 2,
-            epoch: 1,
+            network: block.network().as_byte(),
+            protocol_version: block.protocol_version().as_u32(),
+            parent_id: *block.parent().hash(),
+            justify_id: *block.justify_id().hash(),
+            height: block.height().as_u64(),
+            epoch: block.epoch().as_u64(),
             epoch_hash: Default::default(),
             shard_group: tari_sidechain::ShardGroup {
                 start: 1,
