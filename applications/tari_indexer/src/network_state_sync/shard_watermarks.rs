@@ -69,6 +69,15 @@ impl ShardWatermarks {
         (watermark.confirmed_at.elapsed() <= max_lag).then_some(watermark.state_version)
     }
 
+    /// The watermark for `shard` and how long ago it was confirmed, or `None` if it never was in
+    /// this run. Read together so that a confirmation landing between the two cannot make them
+    /// disagree.
+    pub fn confirmed(&self, shard: Shard) -> Option<(StateVersion, Duration)> {
+        self.read()
+            .get(&shard)
+            .map(|watermark| (watermark.state_version, watermark.confirmed_at.elapsed()))
+    }
+
     // Poisoning is recovered from rather than propagated: the map holds no invariant a panic could
     // break.
 
@@ -115,6 +124,16 @@ mod tests {
         watermarks.confirm(SHARD, StateVersion::new(7));
         watermarks.refresh(SHARD);
         assert_eq!(watermarks.get(SHARD, MAX_LAG), Some(StateVersion::new(7)));
+    }
+
+    #[test]
+    fn a_confirmation_reports_its_version_and_age_together() {
+        let watermarks = ShardWatermarks::new();
+        assert!(watermarks.confirmed(SHARD).is_none());
+        watermarks.confirm(SHARD, StateVersion::new(7));
+        let (version, age) = watermarks.confirmed(SHARD).unwrap();
+        assert_eq!(version, StateVersion::new(7));
+        assert!(age < MAX_LAG);
     }
 
     #[test]

@@ -47,7 +47,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 #[cfg(feature = "metrics")]
-use crate::{network_state_sync::NetworkStateMetrics, store::ReadOnlyStore};
+use crate::{network_state_sync::NetworkStateMetrics, store::ReadOnlyStore, substate_cache::SubstateCacheMetrics};
 use crate::{
     network_state_sync::{
         committee_client::{ValidatorCommitteeRpcPool, ValidatorRpcSession},
@@ -91,6 +91,8 @@ pub struct NetworkWideStateSync {
     #[cfg(feature = "metrics")]
     metrics: NetworkStateMetrics,
     #[cfg(feature = "metrics")]
+    substate_cache_metrics: SubstateCacheMetrics,
+    #[cfg(feature = "metrics")]
     consensus_constants: ConsensusConstants,
 }
 
@@ -106,6 +108,7 @@ impl NetworkWideStateSync {
         validator_status: ValidatorStatusMonitor,
         shard_watermarks: Arc<ShardWatermarks>,
         #[cfg(feature = "metrics")] metrics: NetworkStateMetrics,
+        #[cfg(feature = "metrics")] substate_cache_metrics: SubstateCacheMetrics,
         #[cfg(feature = "metrics")] consensus_constants: ConsensusConstants,
     ) -> Self {
         Self {
@@ -121,6 +124,8 @@ impl NetworkWideStateSync {
             shard_watermarks,
             #[cfg(feature = "metrics")]
             metrics,
+            #[cfg(feature = "metrics")]
+            substate_cache_metrics,
             #[cfg(feature = "metrics")]
             consensus_constants,
         }
@@ -925,17 +930,17 @@ impl NetworkWideStateSync {
             let xtr_fees_snapshot = xtr_fees;
             let xtr_receipt_burn_snapshot = xtr_receipt_burn;
 
-            let inserted_events = self
+            let (inserted_events, retired_cache_entries) = self
                 .store
                 .clone()
-                .with_write_tx(move |tx| -> Result<Vec<InsertedEvent>, StorageError> {
+                .with_write_tx(move |tx| -> Result<(Vec<InsertedEvent>, usize), StorageError> {
                     debug!(target: LOG_TARGET, "✅ Committing {} updates for shard {shard} (epoch: {msg_epoch}, state version: {state_version})", updates_len);
                     // TODO: this is not currently used. Consider removing.
                     tx.batch_insert_substate_transitions(network, shard, state_version, updates)?;
                     // Must commit with the watermark below: the substate cache serves an entry on the
                     // argument that it holds every transition up to that watermark, which a reader
                     // seeing one of the two without the other would break.
-                    tx.substate_cache_invalidate(invalidations, state_version)?;
+                    let retired_cache_entries = tx.substate_cache_invalidate(invalidations, state_version)?;
                     debug!(target: LOG_TARGET, "✅ Committing {} UTXOs for shard {shard} (epoch: {msg_epoch})", utxos_len);
                     tx.batch_insert_utxo_updates(msg_epoch, utxos)?;
                     for substate_data in validator_fee_pools {
@@ -964,10 +969,15 @@ impl NetworkWideStateSync {
                     let receipt_burn = tx.key_value_get_value(Key::TariAccumulatedReceiptExhaustBurn).optional()?;
                     let new_receipt_burn = receipt_burn.unwrap_or_else(Amount::zero) + xtr_receipt_burn_snapshot;
                     tx.key_value_set(Key::TariAccumulatedReceiptExhaustBurn, new_receipt_burn)?;
-                    Ok(inserted)
+                    Ok((inserted, retired_cache_entries))
                 })
                 .await?;
             drop(progress);
+            if retired_cache_entries > 0 {
+                debug!(target: LOG_TARGET, "Retired {retired_cache_entries} cached substates for shard {shard} at state version {state_version}");
+                #[cfg(feature = "metrics")]
+                self.substate_cache_metrics.add_invalidations(retired_cache_entries);
+            }
 
             // The stream flushes (has_more == false) once per state version, so each commit must fold only
             // that version's delta. Reset the running totals here, mirroring the buffer drains above.
