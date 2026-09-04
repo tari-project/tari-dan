@@ -27,6 +27,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use futures::FutureExt;
 use log::*;
 use ootle_network::Network;
 use tari_common_types::types::FixedHash;
@@ -57,6 +58,7 @@ use tari_validator_node_rpc::client::{
 };
 
 use crate::{
+    committee_read::{CommitteeReadTally, MemberResponse, READ_RACE_WIDTH, race_committee},
     error::IndexerError,
     substate_cache::{SubstateCache, SubstateCacheEntry, SubstateCacheEntryRef, caches_nonexistence},
 };
@@ -399,93 +401,39 @@ where
             });
         }
 
-        let f = (committee.len() - 1) / 3;
-        let mut num_nexist_substate_results = 0;
-        let mut last_error = None;
-        // Highest-version Up/Down response that came back without a proof. Only served if no member
-        // can prove.
-        let mut unproven_result: Option<SubstateResult> = None;
-        for member in committee.shuffled() {
-            let vn_addr = &member.address;
-            debug!(target: LOG_TARGET, "Getting substate {} from vn {}", substate_req, vn_addr);
+        let tally = CommitteeReadTally::new(committee.len(), self.verify_substate_proofs);
+        race_committee(
+            committee
+                .shuffled()
+                .map(|member| self.request_substate_from_vn(&member.address, substate_req)),
+            READ_RACE_WIDTH,
+            tally,
+            substate_req,
+        )
+        // Boxed so that the future's `Send` is settled here, where every lifetime is concrete. Left
+        // opaque, rustc has to re-prove it from the caller's generic view and gives up with
+        // "implementation of `Send` is not general enough" (rust-lang/rust#102211).
+        .boxed()
+        .await
+    }
 
-            match self.get_substate_from_vn(vn_addr, substate_req).await {
-                Ok((substate_result, verified)) => {
-                    debug!(target: LOG_TARGET, "Got substate result for {} from vn {} (verified = {}): {:?}", substate_req, vn_addr, verified, substate_result);
-                    match substate_result {
-                        SubstateResult::Up { .. } | SubstateResult::Down { .. } => {
-                            if verified || !self.verify_substate_proofs {
-                                return Ok(SubstateLookupResult {
-                                    result: substate_result,
-                                    verified,
-                                });
-                            }
-                            // The member could not prove its response (e.g. nothing committed since
-                            // the epoch started). Keep the highest version as a fallback (a member
-                            // that is still syncing may respond with a stale copy) and try the rest
-                            // of the committee for a proven copy.
-                            if unproven_result
-                                .as_ref()
-                                .is_none_or(|r| r.version() < substate_result.version())
-                            {
-                                unproven_result = Some(substate_result);
-                            }
-                        },
-                        SubstateResult::DoesNotExist => {
-                            if num_nexist_substate_results > f {
-                                return Ok(SubstateLookupResult {
-                                    result: substate_result,
-                                    verified: false,
-                                });
-                            }
-                            num_nexist_substate_results += 1;
-                        },
-                    }
-                },
-                Err(e) => {
-                    // We ignore a single VN error and keep querying the rest of the committee
-                    warn!(
-                        target: LOG_TARGET,
-                        "Could not get substate {} from vn {}: {}", substate_req, vn_addr, e
-                    );
-                    last_error = Some(e);
-                },
-            }
+    /// One committee member's answer to a read, logged.
+    async fn request_substate_from_vn(
+        &self,
+        vn_addr: &TAddr,
+        substate_req: SubstateRequirementRef<'_>,
+    ) -> MemberResponse {
+        debug!(target: LOG_TARGET, "Getting substate {} from vn {}", substate_req, vn_addr);
+        let response = self.get_substate_from_vn(vn_addr, substate_req).await;
+        match &response {
+            Ok((substate_result, verified)) => {
+                debug!(target: LOG_TARGET, "Got substate result for {} from vn {} (verified = {}): {:?}", substate_req, vn_addr, verified, substate_result);
+            },
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Could not get substate {} from vn {}: {}", substate_req, vn_addr, e);
+            },
         }
-
-        if let Some(result) = unproven_result {
-            warn!(
-                target: LOG_TARGET,
-                "No committee member could supply a proof for {substate_req}. Returning the substate unverified.",
-            );
-            return Ok(SubstateLookupResult {
-                result,
-                verified: false,
-            });
-        }
-
-        // Reaching here means no member returned the substate, so more than f DoesNotExist
-        // responses is f+1 agreement that it does not exist. This answer takes precedence over
-        // errors from unreachable members.
-        if num_nexist_substate_results > f {
-            return Ok(SubstateLookupResult {
-                result: SubstateResult::DoesNotExist,
-                verified: false,
-            });
-        }
-
-        warn!(
-            target: LOG_TARGET,
-            "Could not get substate for shard {} from any of the validator nodes", substate_req,
-        );
-
-        if let Some(e) = last_error {
-            return Err(e);
-        }
-        Ok(SubstateLookupResult {
-            result: SubstateResult::DoesNotExist,
-            verified: false,
-        })
+        response
     }
 
     /// Gets a substate directly from querying a VN. The returned flag is true if the result came
