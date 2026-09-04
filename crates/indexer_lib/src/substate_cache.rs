@@ -77,6 +77,31 @@ pub struct SubstateCacheEntry {
     pub verified: bool,
 }
 
+impl SubstateCacheEntry {
+    /// What this head says about a lookup at `version`, or `None` when it says nothing.
+    ///
+    /// The indexer serves the network's current state, not its history, so a version is only ever
+    /// asked about to learn whether it is still current. The head answers that on its own: the
+    /// version named is the head, or it is below it and therefore down - versions are contiguous
+    /// and upping a substate downs its predecessor - or it is above it, which the cache knows
+    /// nothing about. Nonexistence names no version and answers nothing about one: a destroyed
+    /// substate whose history has been pruned reports the same thing as one never created.
+    pub fn answer_at(self, version: Option<u32>) -> Option<Self> {
+        let Some(version) = version else {
+            return Some(self);
+        };
+        let head = self.version?;
+        if version == head {
+            return Some(self);
+        }
+        (version < head).then(|| Self {
+            version: Some(version),
+            substate_result: SubstateResult::Down { version },
+            ..self
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct SubstateCacheEntryRef<'a> {
     /// The substate's head version, or `None` when the substate does not exist.
@@ -95,18 +120,11 @@ pub trait SubstateCache: Send + Sync {
         id: &SubstateId,
     ) -> impl Future<Output = Result<Option<FetchWatermark>, SubstateCacheError>> + Send;
 
-    /// The cached answer for `id` at `version`, or for its latest version when `version` is `None`.
-    /// Returns `None` when nothing is cached or the shard has no watermark.
-    ///
-    /// A version below the cached one is answered without any watermark: see
-    /// [`SubstateCache::write`] for what the cache holds and why that conclusion cannot go stale.
-    ///
-    /// A cached nonexistence answers an unversioned read only. It says the substate has no live
-    /// version, never what was true at some version below, so a versioned read misses.
+    /// The cached head of `id`, or `None` when nothing is cached or the shard has no watermark. What
+    /// the head says about a particular version is [`SubstateCacheEntry::answer_at`]'s to decide.
     fn read(
         &self,
         id: &SubstateId,
-        version: Option<u32>,
     ) -> impl Future<Output = Result<Option<SubstateCacheEntry>, SubstateCacheError>> + Send;
 
     /// Records `entry` as the substate's head version, provided no transition for `id` has arrived
@@ -128,4 +146,48 @@ pub trait SubstateCache: Send + Sync {
         entry: SubstateCacheEntryRef<'_>,
         watermark: FetchWatermark,
     ) -> impl Future<Output = Result<(), SubstateCacheError>> + Send;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn head(version: Option<u32>) -> SubstateCacheEntry {
+        SubstateCacheEntry {
+            version,
+            substate_result: version.map_or(SubstateResult::DoesNotExist, |version| SubstateResult::Down { version }),
+            cached_at: 1_000,
+            verified: true,
+        }
+    }
+
+    #[test]
+    fn the_head_answers_an_unversioned_read_and_itself() {
+        assert_eq!(head(Some(6)).answer_at(None).unwrap().version, Some(6));
+        assert_eq!(head(Some(6)).answer_at(Some(6)).unwrap().version, Some(6));
+    }
+
+    /// The head only has to have been real at some point: the real head is at or above it, so every
+    /// version below is down for good. The answer carries the head's age so that it ages out with it.
+    #[test]
+    fn a_version_below_the_head_is_down() {
+        let answer = head(Some(6)).answer_at(Some(3)).unwrap();
+        assert!(matches!(answer.substate_result, SubstateResult::Down { version: 3 }));
+        assert_eq!(answer.version, Some(3));
+        assert_eq!(answer.cached_at, 1_000);
+        assert!(answer.verified);
+    }
+
+    /// Above the head the cache knows nothing: this indexer is behind, or the substate never got there.
+    #[test]
+    fn a_version_above_the_head_is_a_miss() {
+        assert!(head(Some(6)).answer_at(Some(7)).is_none());
+    }
+
+    #[test]
+    fn nonexistence_answers_an_unversioned_read_only() {
+        assert!(head(None).answer_at(None).is_some());
+        assert!(head(None).answer_at(Some(0)).is_none());
+        assert!(head(None).answer_at(Some(3)).is_none());
+    }
 }
