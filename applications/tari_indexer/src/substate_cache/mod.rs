@@ -27,6 +27,11 @@ use crate::{
     store::{IndexerStore, IndexerStoreReadTransaction, IndexerStoreReader, IndexerStoreWriteTransaction},
 };
 
+#[cfg(feature = "metrics")]
+mod metrics;
+#[cfg(feature = "metrics")]
+pub use metrics::SubstateCacheMetrics;
+
 const LOG_TARGET: &str = "tari::indexer::substate_cache";
 
 fn now_unix_secs() -> Result<u64, SubstateCacheError> {
@@ -78,6 +83,8 @@ pub struct SqliteSubstateCache {
     /// correct, which is one recorded above the version the substate actually reached.
     head_ttl: Duration,
     max_entries: usize,
+    #[cfg(feature = "metrics")]
+    metrics: Option<SubstateCacheMetrics>,
 }
 
 impl std::fmt::Debug for SqliteSubstateCache {
@@ -109,7 +116,15 @@ impl SqliteSubstateCache {
             journal_retention,
             head_ttl,
             max_entries,
+            #[cfg(feature = "metrics")]
+            metrics: None,
         }
+    }
+
+    #[cfg(feature = "metrics")]
+    pub fn with_metrics(mut self, metrics: SubstateCacheMetrics) -> Self {
+        self.metrics = Some(metrics);
+        self
     }
 
     /// Periodically drops journal entries that can no longer veto a write and evicts the oldest
@@ -173,9 +188,39 @@ impl SqliteSubstateCache {
     async fn prune(&self) -> Result<(), StorageError> {
         let journal_retention = self.journal_retention;
         let max_entries = self.max_entries;
-        self.store
+        let evicted = self
+            .store
             .with_write_tx(move |tx| tx.substate_cache_prune(journal_retention, max_entries))
-            .await
+            .await?;
+        if evicted > 0 {
+            debug!(target: LOG_TARGET, "Evicted {evicted} substate cache entries to stay within {max_entries}");
+            #[cfg(feature = "metrics")]
+            self.metrics.as_ref().inspect(|m| m.add_evictions(evicted));
+        }
+        Ok(())
+    }
+
+    /// The watermark gate on serving `id`: `Some` while its shard was confirmed level with its
+    /// committee within `max_lag`. A refusal is what turns every read of the shard into a committee
+    /// round trip, so it is logged and counted rather than passed off as a miss.
+    fn serve_watermark(&self, id: &SubstateId, max_lag: Duration) -> Option<StateVersion> {
+        let shard = Self::shard_of(id);
+        match self.watermarks.confirmed(shard) {
+            Some((version, age)) if age <= max_lag => return Some(version),
+            Some((_, age)) => debug!(
+                target: LOG_TARGET,
+                "Refusing cached {id}: shard {shard} was last confirmed {}s ago, over the {}s serve lag",
+                age.as_secs(),
+                max_lag.as_secs(),
+            ),
+            None => debug!(
+                target: LOG_TARGET,
+                "Refusing cached {id}: shard {shard} has not been confirmed since startup"
+            ),
+        }
+        #[cfg(feature = "metrics")]
+        self.metrics.as_ref().inspect(|m| m.inc_refused_stale());
+        None
     }
 
     fn shard_of(id: &SubstateId) -> Shard {
@@ -216,11 +261,7 @@ impl SubstateCache for SqliteSubstateCache {
             if version.is_some() {
                 return Ok(None);
             }
-            if self
-                .watermarks
-                .get(Self::shard_of(id), self.negative_serve_lag)
-                .is_none()
-            {
+            if self.serve_watermark(id, self.negative_serve_lag).is_none() {
                 return Ok(None);
             }
             return Ok(Some(entry));
@@ -246,7 +287,7 @@ impl SubstateCache for SqliteSubstateCache {
 
         // Anything else is a claim about the substate's current state, which holds only while its
         // shard is being kept up with.
-        if self.watermarks.get(Self::shard_of(id), self.max_serve_lag).is_none() {
+        if self.serve_watermark(id, self.max_serve_lag).is_none() {
             return Ok(None);
         }
 

@@ -359,11 +359,13 @@ pub trait IndexerStoreWriteTransaction {
     /// Must be applied in the same transaction that advances the sync watermark `state_version`
     /// belongs to: an entry is served on the argument that the cache holds every transition up to
     /// that watermark, which a reader observing one without the other would break.
+    ///
+    /// Returns how many cached entries were retired.
     fn substate_cache_invalidate<I: IntoIterator<Item = SubstateCacheInvalidation>>(
         &mut self,
         invalidations: I,
         state_version: StateVersion,
-    ) -> Result<(), StorageError>;
+    ) -> Result<usize, StorageError>;
 
     /// Like [`substate_cache_invalidate`](Self::substate_cache_invalidate), but for transitions
     /// learnt of ahead of the stream - from a committee's finalized result - so the journalled
@@ -377,8 +379,8 @@ pub trait IndexerStoreWriteTransaction {
     ) -> Result<(), StorageError>;
 
     /// Drops journal entries older than `journal_retention` and evicts the oldest cache entries down
-    /// to `max_entries`.
-    fn substate_cache_prune(&mut self, journal_retention: Duration, max_entries: usize) -> Result<(), StorageError>;
+    /// to `max_entries`. Returns how many entries were evicted.
+    fn substate_cache_prune(&mut self, journal_retention: Duration, max_entries: usize) -> Result<usize, StorageError>;
 }
 
 /// The locally recorded rejection state of a transaction.
