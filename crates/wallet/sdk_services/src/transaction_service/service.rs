@@ -1,7 +1,7 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use log::*;
 use tari_engine_types::commit_result::ExecuteResult;
@@ -52,7 +52,7 @@ pub struct TransactionServiceConfig {
     pub post_submit_check_delay: Duration,
     /// How long a pending transaction may go without a finalization notification before its result is queried
     /// directly. The stream never notifies about a transaction that aborts, so this bounds how late an abort is
-    /// noticed.
+    /// noticed; every poll after it costs one query per still-pending transaction.
     pub silent_transaction_timeout: Duration,
     /// Delay before re-subscribing to the finalization stream after it drops. While disconnected every poll
     /// queries every pending transaction.
@@ -64,7 +64,7 @@ impl Default for TransactionServiceConfig {
         Self {
             poll_interval: Duration::from_secs(5),
             post_submit_check_delay: Duration::from_millis(750),
-            silent_transaction_timeout: Duration::from_secs(30),
+            silent_transaction_timeout: Duration::from_secs(10),
             stream_reconnect_backoff: Duration::from_secs(5),
         }
     }
@@ -77,8 +77,12 @@ pub struct TransactionService<TSpec: WalletSdkSpec> {
     trigger_poll: watch::Sender<()>,
     rx_trigger: watch::Receiver<()>,
     poll_semaphore: Arc<Semaphore>,
-    rx_watch_events: mpsc::Receiver<WatchEvent>,
     stream_connected: bool,
+    /// Transactions this wallet is waiting on, so that the network-wide finalization stream can be filtered without
+    /// touching the store. Seeded from the store on start and maintained from wallet events; a missed event is
+    /// covered by the backstop poll.
+    pending: HashSet<TransactionId>,
+    /// Set when the next poll must query every pending transaction; cleared only once such a poll has run.
     check_all_on_next_tick: bool,
     config: TransactionServiceConfig,
     shutdown_signal: ShutdownSignal,
@@ -132,10 +136,6 @@ where
     ) -> (Self, TransactionServiceHandle) {
         let (trigger, rx_trigger) = watch::channel(());
         let (tx_request, rx_request) = mpsc::channel(1);
-        let rx_watch_events = FinalizedWatch::spawn(
-            wallet_sdk.get_network_interface().clone(),
-            config.stream_reconnect_backoff,
-        );
         let actor = Self {
             rx_request,
             notify,
@@ -143,8 +143,8 @@ where
             trigger_poll: trigger,
             rx_trigger,
             poll_semaphore: Arc::new(Semaphore::new(1)),
-            rx_watch_events,
             stream_connected: false,
+            pending: HashSet::new(),
             check_all_on_next_tick: false,
             config,
             shutdown_signal,
@@ -157,6 +157,18 @@ where
         let mut events_subscription = self.notify.subscribe();
         let mut poll_interval = time::interval(self.config.poll_interval);
         poll_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        let mut rx_watch_events = FinalizedWatch::spawn(
+            self.wallet_sdk.get_network_interface().clone(),
+            self.config.stream_reconnect_backoff,
+            self.shutdown_signal.clone(),
+        );
+        self.pending = self
+            .wallet_sdk
+            .transaction_api()
+            .fetch_all(Some(TransactionStatus::Pending), None)?
+            .into_iter()
+            .map(|t| t.id)
+            .collect();
 
         loop {
             tokio::select! {
@@ -181,16 +193,26 @@ where
                     poll_interval.reset_after(self.config.post_submit_check_delay);
                 }
 
-                Some(watch_event) = self.rx_watch_events.recv() => {
+                Some(watch_event) = rx_watch_events.recv() => {
                     match watch_event {
                         WatchEvent::Connected => {
                             info!(target: LOG_TARGET, "Subscribed to transaction finalization stream");
                             self.stream_connected = true;
                             // Anything finalized before the subscription was established was never notified.
-                            self.on_poll(CheckScope::All)?;
+                            if !self.on_poll(CheckScope::All)? {
+                                self.check_all_on_next_tick = true;
+                            }
                         },
                         WatchEvent::Finalized(notification) => {
-                            self.on_transaction_finalized(notification);
+                            if self.pending.contains(&notification.transaction_id) {
+                                self.on_transaction_finalized(notification);
+                            } else {
+                                trace!(
+                                    target: LOG_TARGET,
+                                    "Ignoring finalization of transaction {} not pending in this wallet",
+                                    notification.transaction_id
+                                );
+                            }
                         },
                         WatchEvent::Disconnected => {
                             self.stream_connected = false;
@@ -209,9 +231,10 @@ where
                     } else {
                         CheckScope::PendingFor(self.config.silent_transaction_timeout)
                     };
-                    self.check_all_on_next_tick = false;
                     trace!(target: LOG_TARGET, "Polling for transactions ({scope:?})");
-                    self.on_poll(scope)?;
+                    if self.on_poll(scope)? {
+                        self.check_all_on_next_tick = false;
+                    }
                 }
             }
         }
@@ -308,12 +331,13 @@ where
         }
     }
 
-    fn on_poll(&self, scope: CheckScope) -> Result<(), TransactionServiceError> {
+    /// Starts a poll, returning `false` without polling if one is already in progress.
+    fn on_poll(&self, scope: CheckScope) -> Result<bool, TransactionServiceError> {
         let permit = match self.poll_semaphore.clone().try_acquire_owned() {
             Ok(permit) => permit,
             Err(_) => {
                 debug!(target: LOG_TARGET, "Polling is already in progress");
-                return Ok(());
+                return Ok(false);
             },
         };
 
@@ -332,24 +356,19 @@ where
 
             drop(permit);
         });
-        Ok(())
+        Ok(true)
     }
 
-    /// Queries the result of a transaction the network reports as finalized, if this wallet is waiting on it.
+    /// Queries the result of a transaction the network reports as finalized and this wallet is waiting on.
     ///
-    /// The stream carries every transaction the network finalizes, so most notifications are for transactions this
-    /// wallet never submitted and are dropped after a lookup. A transaction this wallet is waiting on is checked
-    /// under the poll permit so a concurrent poll cannot report the same finalization twice.
+    /// The check runs under the poll permit and re-reads the transaction's status once it holds it, so a poll that
+    /// resolved the transaction in the meantime is not reported a second time.
     fn on_transaction_finalized(&self, notification: TransactionFinalizedNotification) {
         let tx_id = notification.transaction_id;
         let wallet_sdk = self.wallet_sdk.clone();
         let notify = self.notify.clone();
         let semaphore = self.poll_semaphore.clone();
         tokio::spawn(async move {
-            if !Self::is_pending_in_wallet(&wallet_sdk, tx_id) {
-                trace!(target: LOG_TARGET, "Ignoring finalization of transaction {tx_id}");
-                return;
-            }
             let Ok(_permit) = semaphore.acquire_owned().await else {
                 return;
             };
@@ -526,11 +545,16 @@ where
 
     fn on_event(&mut self, event: WalletEvent) -> Result<(), TransactionServiceError> {
         match event {
-            WalletEvent::TransactionSubmitted(_) => {
+            WalletEvent::TransactionSubmitted(event) => {
+                self.pending.insert(event.transaction_id);
                 let _ = self.trigger_poll.send(());
             },
-            WalletEvent::TransactionInvalid(_) |
-            WalletEvent::TransactionFinalized(_) |
+            WalletEvent::TransactionInvalid(event) => {
+                self.pending.remove(&event.transaction_id);
+            },
+            WalletEvent::TransactionFinalized(event) => {
+                self.pending.remove(&event.transaction_id);
+            },
             WalletEvent::AccountChangedOnChain(_) |
             WalletEvent::AuthLoginRequest(_) |
             WalletEvent::AccountCreatedOnChain(_) |

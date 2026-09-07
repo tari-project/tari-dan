@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::anyhow;
 use futures::{StreamExt, TryStreamExt};
+use log::warn;
 use reqwest::{IntoUrl, Url};
 use tari_engine_types::{
     Utxo,
@@ -61,6 +62,7 @@ use tari_template_lib_types::{
 use time::{OffsetDateTime, PrimitiveDateTime};
 use url::ParseError;
 
+const LOG_TARGET: &str = "tari::ootle::wallet_services::indexer_rest_api";
 const INVALID_REQUEST_CODE: i64 = 400;
 
 #[derive(Debug, Clone)]
@@ -212,12 +214,20 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
                 if event.event_type != IndexerEvent::TRANSACTION_FINALIZED_EVENT_NAME {
                     return Ok(None);
                 }
-                let event: TransactionFinalizedEvent = event.try_parse_event().map_err(|e| {
-                    IndexerRestApiNetworkInterfaceError::StreamDecodeError(anyhow!(
-                        "Failed to decode {} event: {e}",
-                        IndexerEvent::TRANSACTION_FINALIZED_EVENT_NAME
-                    ))
-                })?;
+                // A payload this client cannot decode is skipped rather than ending the subscription: the wallet
+                // queries a transaction's result after it has stayed silent, so a skipped event costs latency, not
+                // correctness.
+                let event: TransactionFinalizedEvent = match event.try_parse_event() {
+                    Ok(event) => event,
+                    Err(e) => {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Skipping undecodable {} event: {e}",
+                            IndexerEvent::TRANSACTION_FINALIZED_EVENT_NAME
+                        );
+                        return Ok(None);
+                    },
+                };
                 Ok(Some(TransactionFinalizedNotification {
                     transaction_id: event.transaction_id,
                     outcome: event.outcome,

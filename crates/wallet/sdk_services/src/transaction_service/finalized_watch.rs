@@ -10,6 +10,7 @@ use tari_ootle_wallet_sdk::network::{
     TransactionFinalizedStream,
     WalletNetworkInterface,
 };
+use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::mpsc,
     time::{Instant, Sleep, sleep_until},
@@ -40,8 +41,13 @@ pub(super) enum WatchEvent {
 impl<TNetwork> FinalizedWatch<TNetwork>
 where TNetwork: WalletNetworkInterface + Send + 'static
 {
-    /// Runs the watch on its own task, delivering events to the returned channel until the receiver is dropped.
-    pub fn spawn(network: TNetwork, reconnect_backoff: Duration) -> mpsc::Receiver<WatchEvent> {
+    /// Runs the watch on its own task, delivering events to the returned channel until shutdown or until the
+    /// receiver is dropped.
+    pub fn spawn(
+        network: TNetwork,
+        reconnect_backoff: Duration,
+        mut shutdown_signal: ShutdownSignal,
+    ) -> mpsc::Receiver<WatchEvent> {
         let (tx, rx) = mpsc::channel(64);
         let mut watch = Self {
             network,
@@ -50,9 +56,13 @@ where TNetwork: WalletNetworkInterface + Send + 'static
         };
         tokio::spawn(async move {
             loop {
-                let event = watch.next_event().await;
-                if tx.send(event).await.is_err() {
-                    break;
+                tokio::select! {
+                    _ = shutdown_signal.wait() => break,
+                    event = watch.next_event() => {
+                        if tx.send(event).await.is_err() {
+                            break;
+                        }
+                    }
                 }
             }
         });
