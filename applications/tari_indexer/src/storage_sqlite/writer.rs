@@ -833,7 +833,12 @@ impl SqliteStoreWriteTransaction<'_> {
             .do_update()
             .set((
                 substate_cache_invalidations::state_version.eq(state_version.as_u64() as i64),
-                substate_cache_invalidations::substate_version.eq(invalidation.observed_version() as i32),
+                // A floor only ever rises. The transitions of one batch arrive in no stated order,
+                // and a destroy of the version below a creation must not lower what the creation
+                // showed.
+                substate_cache_invalidations::substate_version.eq(diesel::dsl::sql::<diesel::sql_types::Integer>(
+                    "max(substate_version, excluded.substate_version)",
+                )),
                 substate_cache_invalidations::invalidated_at.eq(now),
             ))
             .execute(self.connection())

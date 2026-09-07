@@ -1215,6 +1215,26 @@ mod tests {
         assert!(put(&store, &id, 7, 110).await);
     }
 
+    /// One transaction downs a version and ups the next, and the two reach the journal in no stated
+    /// order. The floor is the highest version either showed, whichever was journalled last.
+    #[tokio::test]
+    async fn the_floor_is_the_highest_version_a_batch_showed() {
+        let (_d, store) = temp_store().await;
+        let id = substate(1);
+
+        let batch = [
+            SubstateCacheInvalidation::created(&id, 7).unwrap(),
+            SubstateCacheInvalidation::destroyed(id.clone(), 6),
+        ];
+        store
+            .with_write_tx(move |tx| tx.substate_cache_invalidate(batch, StateVersion::new(105)))
+            .await
+            .unwrap();
+
+        assert!(!put(&store, &id, 6, 110).await);
+        assert!(put(&store, &id, 7, 110).await);
+    }
+
     /// Nonexistence is settled by f + 1 members rather than one, so a single member being behind
     /// cannot produce it, and the one that follows a destroy is legitimate.
     #[tokio::test]
