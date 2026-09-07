@@ -50,77 +50,115 @@ const DUPLICATE_DELIVERY_FACTOR: f64 = 2.0;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapacityProjection {
-    pub bandwidth: Bandwidth,
-    pub disk: Disk,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Bandwidth {
-    /// Upload to sustain block propagation at maximum block size: forwarding each block to the
-    /// gossipsub mesh. The dominant term, and the reason the floor is not small.
-    pub block_upload_mbps: f64,
-    /// Download for the same, including duplicate mesh deliveries.
-    pub block_download_mbps: f64,
-    /// Votes exchanged across the committee each view.
-    pub vote_mbps: f64,
-    /// What a validator needs before any user traffic exists at all: block propagation plus votes
-    /// at maximum block size. Publish this — it does not move with adoption.
-    pub consensus_floor_mbps: f64,
+    /// One projection per block interval. Bandwidth and disk both scale inversely with the interval,
+    /// and the interval is not a constant, so a single figure would be an assumption wearing the
+    /// costume of a measurement.
+    pub scenarios: Vec<Scenario>,
     /// Transaction gossip per sustained transaction per second, so an adoption assumption can be
-    /// multiplied through rather than guessed at once and frozen.
+    /// multiplied through. Independent of block interval.
     pub gossip_mbps_per_tps: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Disk {
-    /// Ootle blocks per epoch, as supplied — this follows the layer-one epoch length and is not
-    /// derivable offline.
-    pub blocks_per_epoch: u64,
-    pub bytes_per_block: u64,
-    /// Worst-case block data for one epoch.
-    pub bytes_per_epoch: u64,
-    /// The retention window's ceiling: blocks and foreign proposals are pruned beyond
-    /// `epoch_history_length` epochs, so this component of the database is bounded, not boundless.
-    pub history_ceiling_bytes: u64,
+    pub epoch_secs: f64,
     pub epoch_history_length: u64,
 }
 
+/// Requirements at one block production rate.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Scenario {
+    pub name: String,
+    /// Why this interval, so the projection can be argued with rather than taken on faith.
+    pub basis: String,
+    pub block_interval_secs: f64,
+    pub blocks_per_epoch: u64,
+    /// Forwarding each block to the gossipsub mesh — the dominant term.
+    pub upload_mbps: f64,
+    pub download_mbps: f64,
+    /// Block propagation plus committee votes, at maximum block size. What a validator needs before
+    /// any user traffic exists.
+    pub consensus_floor_mbps: f64,
+    pub bytes_per_epoch: u64,
+    /// Bounded: blocks prune beyond `epoch_history_length` epochs.
+    pub history_ceiling_bytes: u64,
+}
+
+/// Projects requirements at each supplied block interval.
+///
+/// `saturation_interval_secs` is the interval a busy network actually runs at, when known. Under
+/// load the next block is proposed as soon as the previous one's quorum certificate forms
+/// (`on_receive_vote` beats the pacemaker), so the rate is set by execution plus one round of vote
+/// collection — not by `pacemaker_block_time`, which is the liveness ceiling for a *quiet* network.
+/// Projecting only at the ceiling understates a busy network by the ratio between the two.
 pub fn project(
     wire: &WireMeasurement,
     budgets: &Budgets,
-    blocks_per_epoch: u64,
+    epoch_secs: f64,
     epoch_history_length: u64,
+    saturation_interval_secs: Option<f64>,
 ) -> CapacityProjection {
-    let block_bytes = wire.max_block_command_bytes as f64 + BLOCK_FIXED_OVERHEAD_BYTES;
-    let per_view = budgets.block_time_secs;
+    let block_bytes = wire.block_command_bytes as f64 + BLOCK_FIXED_OVERHEAD_BYTES;
 
-    let to_mbps = |bytes_per_view: f64| bytes_per_view * 8.0 / per_view / 1_000_000.0;
+    let mut scenarios = vec![scenario(
+        "quiet (pacemaker ceiling)",
+        format!(
+            "no backlog, so blocks come at pacemaker_block_time = {:.0}s",
+            budgets.block_time_secs
+        ),
+        budgets.block_time_secs,
+        block_bytes,
+        budgets,
+        epoch_secs,
+        epoch_history_length,
+    )];
 
-    let block_upload_mbps = to_mbps(block_bytes * GOSSIPSUB_MESH_N);
-    let block_download_mbps = to_mbps(block_bytes * DUPLICATE_DELIVERY_FACTOR);
-    let vote_mbps = to_mbps(VOTE_BYTES * f64::from(budgets.committee_size_per_shard_group));
-
-    // A transaction is gossiped once to the mesh and forwarded to it, so one transaction per second
-    // costs its encoded size times the mesh degree, in each direction.
-    let gossip_mbps_per_tps = wire.transaction_bytes as f64 * (GOSSIPSUB_MESH_N + 1.0) * 8.0 / 1_000_000.0;
-
-    let bytes_per_block = block_bytes as u64;
-    let bytes_per_epoch = bytes_per_block.saturating_mul(blocks_per_epoch);
+    if let Some(interval) = saturation_interval_secs.filter(|i| *i > 0.0 && *i < budgets.block_time_secs) {
+        scenarios.push(scenario(
+            "saturated",
+            format!(
+                "a backlog keeps proposing: {interval:.2}s = block execution measured on this host plus one vote \
+                 round trip"
+            ),
+            interval,
+            block_bytes,
+            budgets,
+            epoch_secs,
+            epoch_history_length,
+        ));
+    }
 
     CapacityProjection {
-        bandwidth: Bandwidth {
-            block_upload_mbps,
-            block_download_mbps,
-            vote_mbps,
-            consensus_floor_mbps: block_upload_mbps + block_download_mbps + vote_mbps,
-            gossip_mbps_per_tps,
-        },
-        disk: Disk {
-            blocks_per_epoch,
-            bytes_per_block,
-            bytes_per_epoch,
-            history_ceiling_bytes: bytes_per_epoch.saturating_mul(epoch_history_length.max(1)),
-            epoch_history_length,
-        },
+        scenarios,
+        gossip_mbps_per_tps: wire.transaction_bytes as f64 * (GOSSIPSUB_MESH_N + 1.0) * 8.0 / 1_000_000.0,
+        epoch_secs,
+        epoch_history_length,
+    }
+}
+
+fn scenario(
+    name: &str,
+    basis: String,
+    interval_secs: f64,
+    block_bytes: f64,
+    budgets: &Budgets,
+    epoch_secs: f64,
+    epoch_history_length: u64,
+) -> Scenario {
+    let to_mbps = |bytes_per_block: f64| bytes_per_block * 8.0 / interval_secs / 1_000_000.0;
+
+    let upload_mbps = to_mbps(block_bytes * GOSSIPSUB_MESH_N);
+    let download_mbps = to_mbps(block_bytes * DUPLICATE_DELIVERY_FACTOR);
+    let vote_mbps = to_mbps(VOTE_BYTES * f64::from(budgets.committee_size_per_shard_group));
+
+    let blocks_per_epoch = (epoch_secs / interval_secs) as u64;
+    let bytes_per_epoch = (block_bytes as u64).saturating_mul(blocks_per_epoch);
+
+    Scenario {
+        name: name.to_string(),
+        basis,
+        block_interval_secs: interval_secs,
+        blocks_per_epoch,
+        upload_mbps,
+        download_mbps,
+        consensus_floor_mbps: upload_mbps + download_mbps + vote_mbps,
+        bytes_per_epoch,
+        history_ceiling_bytes: bytes_per_epoch.saturating_mul(epoch_history_length.max(1)),
     }
 }

@@ -53,16 +53,25 @@ pub struct WireMeasurement {
     /// carry these rather than transaction payloads, so this — not `transaction_bytes` — is what
     /// block propagation costs.
     pub command_bytes_by_committees: Vec<(u32, usize)>,
-    /// Commands in a maximum-size block, from `max_commands_in_block`.
+    /// Weight of the canonical transfer, which decides how many of them fit a block's weight budget.
+    pub transaction_weight: u64,
+    /// Commands a block of canonical transfers holds: `max_block_weight` divided by the transfer's
+    /// weight. This is what ordinary traffic produces, and it is the figure the projections use.
+    pub commands_per_block: usize,
+    /// The hard ceiling on commands regardless of weight (`max_commands_in_block`), reachable only
+    /// by a flood of near-zero-weight commands — which is the case that constant exists to bound.
     pub max_commands_in_block: usize,
-    /// Command payload of a maximum-size block at the largest measured committee count. Excludes
-    /// the header and certificates, which are a fixed cost of a few KiB against this.
+    /// Command payload of a full block of canonical transfers, at the largest measured committee
+    /// count. Excludes the header and certificates, a fixed cost of a few KiB against this.
+    pub block_command_bytes: usize,
+    /// Command payload at the command-count ceiling: the adversarial bound, not ordinary traffic.
     pub max_block_command_bytes: usize,
 }
 
-pub fn measure(max_commands_in_block: usize) -> anyhow::Result<WireMeasurement> {
+pub fn measure(max_commands_in_block: usize, max_block_weight: u64) -> anyhow::Result<WireMeasurement> {
     let transaction = canonical_transfer();
     let transaction_bytes = tari_bor::encode(&transaction)?.len();
+    let transaction_weight = transaction.calculate_transaction_weight().as_u64();
 
     let command_bytes_by_committees = COMMITTEE_COUNTS
         .into_iter()
@@ -80,10 +89,20 @@ pub fn measure(max_commands_in_block: usize) -> anyhow::Result<WireMeasurement> 
         .max()
         .expect("COMMITTEE_COUNTS is not empty");
 
+    // Two ceilings bound a block and the tighter one wins. For ordinary traffic that is weight:
+    // `max_commands_in_block` only binds when commands are close to weightless, which is precisely
+    // the flood it exists to stop. Sizing every projection at the command ceiling would overstate
+    // real traffic several-fold.
+    let weight_bound_commands = (max_block_weight / transaction_weight.max(1)) as usize;
+    let commands_per_block = weight_bound_commands.min(max_commands_in_block);
+
     Ok(WireMeasurement {
         transaction_bytes,
         command_bytes_by_committees,
+        transaction_weight,
+        commands_per_block,
         max_commands_in_block,
+        block_command_bytes: worst_command_bytes * commands_per_block,
         max_block_command_bytes: worst_command_bytes * max_commands_in_block,
     })
 }

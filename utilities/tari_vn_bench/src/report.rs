@@ -748,7 +748,14 @@ fn render_capacity(out: &mut String, report: &Report) {
     }
     let _ = writeln!(
         out,
-        "  max block command payload    {} ({} commands, widest sharding measured)",
+        "  full block of transfers      {} ({} commands at {} weight each — weight-bound)",
+        human_bytes(wire.block_command_bytes as u64),
+        wire.commands_per_block,
+        wire.transaction_weight,
+    );
+    let _ = writeln!(
+        out,
+        "  command-count ceiling        {} ({} commands — only reachable by near-weightless commands)",
         human_bytes(wire.max_block_command_bytes as u64),
         wire.max_commands_in_block,
     );
@@ -757,41 +764,44 @@ fn render_capacity(out: &mut String, report: &Report) {
     let _ = writeln!(out, "{}", "-".repeat(78));
     let _ = writeln!(
         out,
-        "  block propagation            {:.1} Mbps up / {:.1} Mbps down",
-        cap.bandwidth.block_upload_mbps, cap.bandwidth.block_download_mbps
+        "  {:<26} {:>9} {:>10} {:>12} {:>12}",
+        "scenario", "interval", "blocks/ep", "consensus", "disk/epoch"
     );
+    for sc in &cap.scenarios {
+        let _ = writeln!(
+            out,
+            "  {:<26} {:>8.2}s {:>10} {:>9.1} Mbps {:>12}",
+            sc.name,
+            sc.block_interval_secs,
+            sc.blocks_per_epoch,
+            sc.consensus_floor_mbps,
+            human_bytes(sc.history_ceiling_bytes),
+        );
+        for line in wrap(&sc.basis, 68) {
+            let _ = writeln!(out, "    {line}");
+        }
+    }
     let _ = writeln!(
         out,
-        "  committee votes              {:.2} Mbps",
-        cap.bandwidth.vote_mbps
+        "\n  transaction gossip           {:.3} Mbps per sustained TPS (independent of block rate)",
+        cap.gossip_mbps_per_tps
     );
+    if let Some(worst) = cap
+        .scenarios
+        .iter()
+        .max_by(|a, b| a.consensus_floor_mbps.total_cmp(&b.consensus_floor_mbps))
+    {
+        let _ = writeln!(
+            out,
+            "  gossip parity                {:.0} TPS — where gossip equals the {} consensus floor",
+            worst.consensus_floor_mbps / cap.gossip_mbps_per_tps,
+            worst.name,
+        );
+    }
     let _ = writeln!(
         out,
-        "  consensus floor              {:.1} Mbps  <- saturated blocks, before any user traffic",
-        cap.bandwidth.consensus_floor_mbps
-    );
-    let _ = writeln!(
-        out,
-        "  transaction gossip           {:.3} Mbps per sustained TPS",
-        cap.bandwidth.gossip_mbps_per_tps
-    );
-    let _ = writeln!(
-        out,
-        "  gossip parity                {:.0} TPS — where transaction gossip equals the consensus floor",
-        cap.bandwidth.consensus_floor_mbps / cap.bandwidth.gossip_mbps_per_tps,
-    );
-    let _ = writeln!(
-        out,
-        "  block data                   {} per block, {} per epoch ({} blocks) — every block full",
-        human_bytes(cap.disk.bytes_per_block),
-        human_bytes(cap.disk.bytes_per_epoch),
-        cap.disk.blocks_per_epoch,
-    );
-    let _ = writeln!(
-        out,
-        "  history ceiling              {} at epoch_history_length={} — worst case; prunes beyond it",
-        human_bytes(cap.disk.history_ceiling_bytes),
-        cap.disk.epoch_history_length,
+        "  disk figures assume every block is full, and prune beyond epoch_history_length={}",
+        cap.epoch_history_length
     );
     let _ = writeln!(
         out,

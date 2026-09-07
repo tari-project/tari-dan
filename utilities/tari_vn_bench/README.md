@@ -126,8 +126,15 @@ treat the bandwidth figures as a modest over-estimate rather than a floor.
 
 What is **not** covered: growth of live substate state, the genuinely unbounded term. Bounding it
 needs bytes-per-committed-substate measured against a running network with representative traffic.
-`--epoch-blocks` and `--epoch-history-length` parameterise the disk projection, since epoch length
-follows the layer-one constants and cannot be derived offline.
+Both requirements scale inversely with the block interval, and that interval is not a constant.
+`pacemaker_block_time` is the liveness ceiling for a *quiet* network; under load the next block is
+proposed as soon as the previous quorum certificate forms, so the rate is set by execution plus one
+round of vote collection. The report therefore projects two scenarios rather than one, and anchors
+the saturated interval to this host's measured execution time — which makes it an upper bound on
+demand, since that measurement excludes storage work.
+
+`--epoch-minutes` (default 20, matching 10 layer-one blocks at a 2 minute L1 block time),
+`--epoch-history-length` and `--committee-rtt-ms` parameterise the projection.
 
 ### Memory — derived, then corroborated
 
