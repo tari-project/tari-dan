@@ -44,6 +44,7 @@ use tari_ootle_common_types::{
     VotePower,
     committee::Committee,
     displayable::Displayable,
+    optional::Optional,
 };
 use tari_ootle_storage::{
     consensus_models::{CommittedBlockProof, VerifiedBlockTip},
@@ -304,7 +305,12 @@ where
             let committee = self
                 .committee_provider
                 .get_committee_by_shard_group(epoch, shard_group)
-                .await?;
+                .await
+                .optional()?
+                .filter(|committee| !committee.is_empty())
+                .ok_or_else(|| IndexerError::NoCommitteeMembers {
+                    details: format!("No validators are assigned to {shard_group} at {epoch}"),
+                })?;
             map.insert(shard_group, (committee, vec![substate_id]));
         }
         Ok(map)
@@ -395,15 +401,20 @@ where
     ) -> Result<SubstateLookupResult, IndexerError> {
         debug!(target: LOG_TARGET, "get_specific_substate_from_committee: {substate_req}");
         let epoch = self.committee_provider.current_epoch().await?;
-        let committee = self
+        // A shard group with no assigned validators reads back as a missing committee rather than an
+        // empty one, and both mean the same thing here: nothing answers for this substate at this
+        // epoch, which is a temporary state of the network and not an internal failure.
+        let Some(committee) = self
             .committee_provider
             .get_committee_for_substate(epoch, substate_req.or_zero_version().to_substate_address())
-            .await?;
-        if committee.is_empty() {
+            .await
+            .optional()?
+            .filter(|committee| !committee.is_empty())
+        else {
             return Err(IndexerError::NoCommitteeMembers {
                 details: format!("No committee found for substate {} at epoch {}", substate_req, epoch),
             });
-        }
+        };
 
         let tally = CommitteeReadTally::new(committee.len(), self.verify_substate_proofs);
         race_committee(

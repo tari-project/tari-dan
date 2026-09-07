@@ -497,7 +497,7 @@
             }
           },
           "503": {
-            "description": "Indexer is still syncing",
+            "description": "Indexer is still syncing, or no committee answers for the substate's shard group",
             "content": {
               "application/json": {
                 "schema": {
@@ -579,7 +579,7 @@
             }
           },
           "503": {
-            "description": "Indexer is still syncing",
+            "description": "Indexer is still syncing, or no committee answers for the substate's shard group",
             "content": {
               "application/json": {
                 "schema": {
@@ -910,7 +910,7 @@
             }
           },
           "503": {
-            "description": "All validators failed to process the transaction",
+            "description": "All validators failed to process the transaction, or a shard group it involves has no committee",
             "content": {
               "application/json": {
                 "schema": {

@@ -36,6 +36,11 @@ async fn given_validator_connects_to_other_vns(world: &mut TariWorld, name: Stri
 /// The number of shard groups follows the registered validator count divided by the committee size,
 /// so this is how a scenario states the shape of the network it has built - and waits for a
 /// registration to take effect at an epoch boundary.
+///
+/// Every shard group is also required to have a committee. Validators are placed in the shard space
+/// by a base-layer shard key that the scenario does not choose, so a small network can be dealt a
+/// split that leaves one half with no validators at all. Nothing can answer for that half, and
+/// every later step that touches it fails somewhere far from the cause, so it is named here.
 #[then(expr = "the network has {int} shard group(s) according to indexer {word}")]
 async fn network_has_shard_groups(world: &mut TariWorld, step: &Step, num_shard_groups: usize, name: String) {
     cucumber_log!("=== Step:{}", step.value);
@@ -47,11 +52,28 @@ async fn network_has_shard_groups(world: &mut TariWorld, step: &Step, num_shard_
             .await
             .expect("Failed to get network sync state");
         let shard_groups = &state.network_desc.shard_groups;
-        if shard_groups.len() == num_shard_groups {
+        let empty = shard_groups
+            .iter()
+            .filter(|(_, num_members)| *num_members == 0)
+            .map(|(shard_group, _)| shard_group.to_string())
+            .collect::<Vec<_>>();
+        if shard_groups.len() == num_shard_groups && empty.is_empty() {
             return;
         }
 
         if remaining == 0 {
+            if shard_groups.len() == num_shard_groups {
+                panic!(
+                    "Indexer {} sees the expected {} shard group(s) at epoch {}, but no validator is assigned to {}. \
+                     Every validator shard key landed in the other part of the shard space, so nothing can answer for \
+                     this one. Shard groups: {:?}",
+                    name,
+                    num_shard_groups,
+                    state.network_desc.epoch,
+                    empty.join(", "),
+                    shard_groups
+                );
+            }
             panic!(
                 "Indexer {} sees {} shard group(s) at epoch {}, expected {}: {:?}",
                 name,

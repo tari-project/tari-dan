@@ -10,6 +10,7 @@ use axum::{
 };
 use tari_engine_types::substate::SubstateId;
 use tari_indexer_client::types::{GetSubstateRequest, GetSubstateResponse, GetSubstatesRequest, GetSubstatesResponse};
+use tari_indexer_lib::error::IndexerError;
 use tari_ootle_common_types::{SubstateRequirementRef, optional::IsNotFoundError};
 
 use crate::{
@@ -28,6 +29,14 @@ fn substate_lookup_error(e: SubstateManagerError) -> ErrorResponse {
     // has to resolve the substate again rather than retry what it asked for.
     if matches!(e, SubstateManagerError::InputSubstateIsDown { .. }) || e.is_not_found_error() {
         return ErrorResponse::not_found(e.to_string());
+    }
+    // No committee answers for the substate's shard group at this epoch. The network will have one
+    // again, so the caller is told to come back rather than that the indexer broke.
+    if matches!(
+        e,
+        SubstateManagerError::IndexerError(IndexerError::NoCommitteeMembers { .. })
+    ) {
+        return ErrorResponse::service_unavailable(e.to_string());
     }
     ErrorResponse::internal_error(format!("Error getting substate: {e}"))
 }
@@ -48,7 +57,11 @@ fn substate_lookup_error(e: SubstateManagerError) -> ErrorResponse {
             description = "No such substate, or the version asked for has been spent",
             body = ErrorResponse
         ),
-        (status = SERVICE_UNAVAILABLE, description = "Indexer is still syncing", body = ErrorResponse),
+        (
+            status = SERVICE_UNAVAILABLE,
+            description = "Indexer is still syncing, or no committee answers for the substate's shard group",
+            body = ErrorResponse
+        ),
         (status = INTERNAL_SERVER_ERROR, description = "Failed to fetch substate", body = ErrorResponse),
     )
 )]
@@ -111,7 +124,11 @@ pub async fn get_substate(
     responses(
         (status = 200, description = "Substates details", body = GetSubstatesResponse),
         (status = BAD_REQUEST, description = "Too many substates requested", body = ErrorResponse),
-        (status = SERVICE_UNAVAILABLE, description = "Indexer is still syncing", body = ErrorResponse),
+        (
+            status = SERVICE_UNAVAILABLE,
+            description = "Indexer is still syncing, or no committee answers for the substate's shard group",
+            body = ErrorResponse
+        ),
         (status = INTERNAL_SERVER_ERROR, description = "Failed to fetch substates", body = ErrorResponse),
     ),
 )]
@@ -143,7 +160,7 @@ pub async fn fetch_substates(
         .substate_manager()
         .fetch_and_cache_substates(requests.as_slice())
         .await
-        .map_err(|e| ErrorResponse::internal_error(format!("Error getting substates: {}", e)))?;
+        .map_err(substate_lookup_error)?;
 
     Ok(Json(GetSubstatesResponse { substates }))
 }
@@ -179,6 +196,17 @@ mod tests {
             substate_id: substate(),
         });
         assert_eq!(resp.status, StatusCode::NOT_FOUND);
+    }
+
+    /// A shard group without a committee is a state the network leaves on its own, so the caller is
+    /// told to come back rather than that the indexer is broken.
+    #[test]
+    fn a_shard_group_without_a_committee_is_unavailable() {
+        let resp = substate_lookup_error(SubstateManagerError::IndexerError(IndexerError::NoCommitteeMembers {
+            details: "no validators are assigned to ShardGroup(129-256)".to_string(),
+        }));
+        assert_eq!(resp.status, StatusCode::SERVICE_UNAVAILABLE);
+        assert!(resp.error.contains("ShardGroup(129-256)"), "{}", resp.error);
     }
 
     /// Only the indexer being unable to answer is a server error, or a caller cannot tell the two
