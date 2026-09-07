@@ -20,7 +20,7 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fs, panic, path::PathBuf, process};
+use std::{fs, io::IsTerminal, panic, path::PathBuf, process};
 
 use anyhow::Context;
 use futures::stream;
@@ -85,21 +85,20 @@ fn init_tracing_subscriber(cli: &Cli) -> anyhow::Result<WorkerGuard> {
     let (ootle_log, guard) = tracing_appender::non_blocking(appender);
 
     tracing_subscriber::registry()
-        .with(
-            fmt::Layer::new()
-                .with_writer(ootle_log)
-                .with_filter(filter::Targets::new().with_targets([
-                    ("tari::application", tracing::Level::DEBUG),
-                    ("tari::indexer", tracing::Level::DEBUG),
-                    ("tari::ootle", tracing::Level::DEBUG),
-                    ("tower_http", tracing::Level::DEBUG),
-                ])),
-        )
+        .with(fmt::Layer::new().with_writer(ootle_log).with_ansi(false).with_filter(
+            filter::Targets::new().with_targets([
+                ("tari::application", tracing::Level::DEBUG),
+                ("tari::indexer", tracing::Level::DEBUG),
+                ("tari::ootle", tracing::Level::DEBUG),
+                ("tower_http", tracing::Level::DEBUG),
+            ]),
+        ))
         .with(
             fmt::Layer::new()
                 .without_time()
                 .with_target(false)
                 .with_writer(std::io::stdout)
+                .with_ansi(std::io::stdout().is_terminal())
                 .with_filter(filter::Targets::new().with_targets([
                     ("tari::application", tracing::Level::INFO),
                     ("tari::indexer", tracing::Level::INFO),
