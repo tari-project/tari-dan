@@ -1179,7 +1179,7 @@ mod tests {
         let id = substate(1);
         assert!(put(&store, &id, 6, 100).await);
 
-        invalidate(&store, SubstateCacheInvalidation::created(id.clone(), 7).unwrap(), 105).await;
+        invalidate(&store, SubstateCacheInvalidation::created(&id, 7).unwrap(), 105).await;
         assert!(read(&store, &id).await.is_none());
 
         // A fetch that began after the creation committed, answered by a member still on v6.
@@ -1194,7 +1194,7 @@ mod tests {
         let (_d, store) = temp_store().await;
         let id = substate(1);
 
-        invalidate(&store, SubstateCacheInvalidation::created(id.clone(), 7).unwrap(), 105).await;
+        invalidate(&store, SubstateCacheInvalidation::created(&id, 7).unwrap(), 105).await;
         assert!(put(&store, &id, 7, 110).await);
         assert_eq!(read(&store, &id).await, Some(7));
         assert!(put(&store, &id, 9, 110).await);
@@ -1236,7 +1236,7 @@ mod tests {
         assert!(put_nonexistent(&store, &id, 100).await);
         assert!(is_nonexistent(&read_entry(&store, &id).await.unwrap()));
 
-        invalidate(&store, SubstateCacheInvalidation::created(id.clone(), 0).unwrap(), 105).await;
+        invalidate(&store, SubstateCacheInvalidation::created(&id, 0).unwrap(), 105).await;
         assert!(read_entry(&store, &id).await.is_none());
     }
 
@@ -1247,7 +1247,7 @@ mod tests {
         let id = substate(1);
         assert!(put_nonexistent(&store, &id, 100).await);
 
-        invalidate(&store, SubstateCacheInvalidation::created(id.clone(), 6).unwrap(), 105).await;
+        invalidate(&store, SubstateCacheInvalidation::created(&id, 6).unwrap(), 105).await;
         assert!(read_entry(&store, &id).await.is_none());
     }
 
@@ -1271,7 +1271,7 @@ mod tests {
         let id = substate(1);
 
         // The fetch captured the watermark at 100; the creation commits at 105 while it is in flight.
-        invalidate(&store, SubstateCacheInvalidation::created(id.clone(), 0).unwrap(), 105).await;
+        invalidate(&store, SubstateCacheInvalidation::created(&id, 0).unwrap(), 105).await;
         assert!(!put_nonexistent(&store, &id, 100).await);
         assert!(read_entry(&store, &id).await.is_none());
     }
@@ -1307,7 +1307,7 @@ mod tests {
         assert!(put(&store, &id, 5, 100).await);
         assert_eq!(read(&store, &id).await, Some(5));
 
-        invalidate(&store, SubstateCacheInvalidation::created(id.clone(), 6).unwrap(), 105).await;
+        invalidate(&store, SubstateCacheInvalidation::created(&id, 6).unwrap(), 105).await;
         assert_eq!(read(&store, &id).await, None);
     }
 
@@ -1330,7 +1330,7 @@ mod tests {
         let id = substate(1);
         assert!(put(&store, &id, 9, 100).await);
 
-        invalidate(&store, SubstateCacheInvalidation::created(id.clone(), 7).unwrap(), 105).await;
+        invalidate(&store, SubstateCacheInvalidation::created(&id, 7).unwrap(), 105).await;
         invalidate(&store, SubstateCacheInvalidation::destroyed(id.clone(), 8), 106).await;
         assert_eq!(read(&store, &id).await, Some(9));
     }
@@ -1387,7 +1387,7 @@ mod tests {
     async fn a_write_is_vetoed_by_a_transition_that_landed_during_the_fetch() {
         let (_d, store) = temp_store().await;
         let id = substate(1);
-        invalidate(&store, SubstateCacheInvalidation::created(id.clone(), 6).unwrap(), 105).await;
+        invalidate(&store, SubstateCacheInvalidation::created(&id, 6).unwrap(), 105).await;
 
         assert!(!put(&store, &id, 6, 100).await);
         assert_eq!(read(&store, &id).await, None);
@@ -1405,7 +1405,12 @@ mod tests {
         for n in 0..5u8 {
             assert!(put_entry(&store, &substate(n), 1, true, now - u64::from(4 - n), 100).await);
         }
-        invalidate(&store, SubstateCacheInvalidation::created(substate(9), 1).unwrap(), 105).await;
+        invalidate(
+            &store,
+            SubstateCacheInvalidation::created(&substate(9), 1).unwrap(),
+            105,
+        )
+        .await;
 
         store
             .with_write_tx(|tx| tx.substate_cache_prune(Duration::ZERO, 2))

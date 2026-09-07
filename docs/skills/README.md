@@ -19,6 +19,7 @@ AI agents can automatically discover and load skills from this endpoint. No manu
 | Directory | Agent | Description |
 |-----------|-------|-------------|
 | [`claude-code/`](claude-code/) | [Claude Code](https://claude.ai) | Claude Code / Anthropic Claude |
+| [`opencode/`](opencode/) | [OpenCode](https://opencode.ai) | OpenCode CLI agent |
 | [`cursor/`](cursor/) | [Cursor](https://cursor.com) | Cursor AI editor |
 | [`github-copilot/`](github-copilot/) | [GitHub Copilot](https://github.com/features/copilot) | GitHub Copilot coding agent |
 | [`windsurf/`](windsurf/) | [Windsurf](https://windsurf.com) | Windsurf (Cognition) |
@@ -41,6 +42,15 @@ cp docs/skills/claude-code/SKILL.md ./CLAUDE.md
 ```
 
 Claude Code reads `CLAUDE.md` automatically at the start of every session.
+
+### OpenCode
+
+OpenCode loads skills from its skills directory (`~/.config/opencode/skills/<name>/SKILL.md`). Copy the skill there:
+
+```bash
+mkdir -p ~/.config/opencode/skills/tari-ootle
+cp docs/skills/opencode/SKILL.md ~/.config/opencode/skills/tari-ootle/SKILL.md
+```
 
 ### Cursor
 

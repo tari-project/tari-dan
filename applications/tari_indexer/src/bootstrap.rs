@@ -274,6 +274,8 @@ pub async fn spawn_services(
 
     #[cfg(feature = "metrics")]
     let network_state_metrics = network_state_sync::NetworkStateMetrics::register(metrics_registry);
+    #[cfg(feature = "metrics")]
+    let substate_cache_metrics = crate::substate_cache::SubstateCacheMetrics::register(metrics_registry);
 
     // Shared between the state sync (which confirms how far each shard is synced) and the substate
     // cache (which serves an entry only while its shard is being kept up with).
@@ -298,6 +300,8 @@ pub async fn spawn_services(
         #[cfg(feature = "metrics")]
         network_state_metrics,
         #[cfg(feature = "metrics")]
+        substate_cache_metrics.clone(),
+        #[cfg(feature = "metrics")]
         consensus_constants.clone(),
     )
     .spawn(shutdown.clone());
@@ -312,13 +316,15 @@ pub async fn spawn_services(
         DEFAULT_CACHE_TTL,
         config.indexer.substate_cache_max_entries,
     );
+    #[cfg(feature = "metrics")]
+    let substate_cache = substate_cache.with_metrics(substate_cache_metrics);
     substate_cache.spawn_pruner(SUBSTATE_CACHE_PRUNE_INTERVAL, shutdown.clone());
     let substate_manager = SubstateManager::new(
         config.network,
         store.clone(),
         epoch_manager.clone(),
         validator_node_client_factory.clone(),
-        substate_cache,
+        substate_cache.clone(),
     )
     .with_substate_proof_verification(config.indexer.verify_substate_proofs)
     .with_negative_cache_ttl(config.indexer.substate_cache_negative_ttl);
@@ -434,6 +440,7 @@ pub async fn spawn_services(
         config.network,
         consensus_constants.max_transaction_weight,
         consensus_constants.max_transaction_validity_epochs,
+        substate_cache,
     );
 
     // Save final node identity after comms has initialized. This is required because the public_address can be

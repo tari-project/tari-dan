@@ -507,7 +507,7 @@ where
                 info!(target: LOG_TARGET, "🔌 Connection closed: peer_id={}, endpoint={:?}, cause={:?}", peer_id, endpoint, cause);
                 match self.active_connections.entry(peer_id) {
                     Entry::Occupied(mut entry) => {
-                        entry.get_mut().retain(|c| c.endpoint != endpoint);
+                        entry.get_mut().retain(|c| c.connection_id != connection_id);
                         if entry.get().is_empty() {
                             entry.remove_entry();
                         }
@@ -583,6 +583,7 @@ where
                         .and_then(|c| c.iter_mut().find(|c| c.connection_id == connection))
                     {
                         c.ping_latency = Some(*t);
+                        c.num_ping_failures = 0;
                     }
                     if self.config.high_ping_warning_threshold.is_some_and(|th| th < *t) {
                         warn!(target: LOG_TARGET, "🏓 Slow ping: peer={}, connection={}, t={:.2?}", peer, connection, t);
@@ -590,8 +591,34 @@ where
                         trace!(target: LOG_TARGET, "🏓 Ping: peer={}, connection={}, t={:.2?}", peer, connection, t);
                     }
                 },
+                // A peer that does not speak the ping protocol is not unreachable, so it must not count towards the
+                // failure budget.
+                Err(ping::Failure::Unsupported) => {
+                    debug!(target: LOG_TARGET, "🏓 Peer {} does not support the ping protocol on connection {}", peer, connection);
+                },
                 Err(err) => {
-                    warn!(target: LOG_TARGET, "🏓 Ping failed: peer={}, connection={}, error={}", peer, connection, err);
+                    let mut num_failures = 0;
+                    if let Some(c) = self
+                        .active_connections
+                        .get_mut(&peer)
+                        .and_then(|c| c.iter_mut().find(|c| c.connection_id == connection))
+                    {
+                        c.ping_latency = None;
+                        c.num_ping_failures = c.num_ping_failures.saturating_add(1);
+                        num_failures = c.num_ping_failures;
+                    }
+                    warn!(target: LOG_TARGET, "🏓 Ping failed: peer={}, connection={}, failures={}, error={}", peer, connection, num_failures, err);
+
+                    if self
+                        .config
+                        .max_consecutive_ping_failures
+                        .is_some_and(|max| num_failures >= max)
+                    {
+                        // The peer stays in the peer store, so the messaging behaviour re-dials it the next time it
+                        // has something to send, trying every address held for the peer.
+                        warn!(target: LOG_TARGET, "🔌 Closing unresponsive connection={} to peer={} after {} consecutive ping failures", connection, peer, num_failures);
+                        self.swarm.close_connection(connection);
+                    }
                 },
             },
             Dcutr(dcutr::Event { remote_peer_id, result }) => match &result {
@@ -921,6 +948,7 @@ where
             num_concurrent_dial_errors,
             established_in,
             ping_latency: None,
+            num_ping_failures: 0,
             user_agent: None,
         });
 
