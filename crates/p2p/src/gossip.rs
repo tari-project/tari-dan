@@ -6,30 +6,30 @@ use tari_swarm::messaging::{Codec, prost::ProstCodec};
 
 use crate::{TariMessage, proto};
 
-/// The largest message the gossip topics accept.
+/// Room above `max_transaction_size_bytes` for the protobuf wrapper the transaction travels in: the
+/// `TariMessage` envelope, the `Transaction.bor_encoded` field tag and its length prefix.
 ///
-/// Every node on the transaction mesh must agree on this, for the same reason they must agree on
-/// [`TRANSACTION_TOPIC`]: a node with a smaller limit rejects messages its peers consider valid, and
-/// does so as a codec frame error rather than a per-message drop.
+/// Loose against those — they are tens of bytes — because the cost of being wrong is asymmetric: a
+/// few spare kibibytes per message against refusing an admissible transaction at the frame boundary,
+/// which surfaces as a codec error and costs the sender's peer score.
+const GOSSIP_FRAMING_ALLOWANCE: usize = 16 * 1024;
+
+/// The largest message the gossip topics accept, for a network with the given transaction byte cap.
 ///
-/// The consensus topic does not bear on the figure. A foreign proposal's substate bundle is
-/// requested and answered over the messaging protocol; the topic carries only the notification that
-/// one exists.
+/// The transaction topic sets the figure: a transaction admitted at ingress must be one the mesh can
+/// carry, so this is `ConsensusConstants::max_transaction_size_bytes` plus the framing it travels in.
+/// Deriving it keeps the two from drifting — a limit below what ingress admits refuses valid
+/// transactions, and does so as a codec frame error rather than a per-message drop, because the
+/// per-topic size map gossipsub checks messages against is not populated here.
 ///
-/// # This limit is below what ingress admits
+/// The consensus topic does not bear on the figure. A foreign proposal's substate bundle is requested
+/// and answered over the messaging protocol; the topic carries only the notification that one exists.
 ///
-/// The transaction topic sets the figure, and the largest transaction ingress accepts is bounded by
-/// `ConsensusConstants::max_transaction_weight`, not by any byte cap. Blob payloads are charged at
-/// `calc_blobs_weight`'s divisor and `Blobs` is a transaction-level list, so a transaction may carry
-/// a maximum-size template binary *and* further blob arguments and still weigh under the cap —
-/// roughly 2.8 MiB of payload against this 2 MiB. Such a transaction validates everywhere and
-/// gossips nowhere.
-///
-/// Closing the gap means either raising this to what the weight cap admits, or bounding transaction
-/// bytes at ingress so the weight cap stops being the only limit. The second is the better shape and
-/// the more disruptive change: it makes transactions invalid that are valid today, so it belongs
-/// with a protocol activation rather than in a constant.
-pub const MAX_GOSSIP_MESSAGE_SIZE: usize = 2 * 1024 * 1024;
+/// Every node on a network must agree on the result, for the same reason they must agree on
+/// [`TRANSACTION_TOPIC`]: a node with a smaller limit rejects messages its peers consider valid.
+pub const fn max_gossip_message_size(max_transaction_size_bytes: usize) -> usize {
+    max_transaction_size_bytes + GOSSIP_FRAMING_ALLOWANCE
+}
 
 /// All transactions are gossiped on a single network-wide topic. Using one topic (rather than a topic per shard group)
 /// keeps the gossipsub mesh stable across epoch boundaries, since validators never need to unsubscribe and resubscribe

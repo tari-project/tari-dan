@@ -147,7 +147,8 @@ So the report derives it from the caps the code enforces, and separates:
 
 What is left in the estimated column is bounded by message counts rather than byte budgets
 (gossipsub's caches and per-connection send queues) or scales with a block's contents (the execution
-working set), so both depend on figures nothing caps — message size and peer count.
+working set). The counts turn into bytes via the gossip message limit, which is derived from
+`max_transaction_size_bytes`, so that figure is capped; peer count is not.
 
 The table here is for a node running stock configuration. A node logs its own version of it at
 startup, and checks it against `MemAvailable`, so a differently configured node reports its own

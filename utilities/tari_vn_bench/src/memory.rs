@@ -20,8 +20,9 @@
 //! attack-and-burst ceilings, not steady state.
 
 use serde::{Deserialize, Serialize};
+use tari_consensus::consensus_constants::ConsensusConstants;
 use tari_engine_types::limits::{ENGINE_LIMITS, WASM_LIMITS};
-use tari_ootle_p2p::MAX_GOSSIP_MESSAGE_SIZE;
+use tari_ootle_p2p::max_gossip_message_size;
 use tari_ootle_template_provider::TemplateConfig;
 use tari_state_store_rocksdb::{DatabaseOptions, MAX_WRITE_BUFFER_NUMBER, all_column_families_iter};
 use tari_swarm::Config as SwarmConfig;
@@ -95,7 +96,7 @@ pub struct ObservedProcess {
 /// the enforced caps, because it runs a startup check that must not fail on terms outside the
 /// node's control, and folds everything below into a single larger headroom factor. The two move
 /// together.
-pub fn budget(pid: Option<u32>) -> MemoryBudget {
+pub fn budget(constants: &ConsensusConstants, pid: Option<u32>) -> MemoryBudget {
     let db_options = DatabaseOptions::default();
     let swarm = SwarmConfig::default();
     // With the configured per-family buffer size and buffer count, this bounds how far memtable
@@ -163,7 +164,7 @@ pub fn budget(pid: Option<u32>) -> MemoryBudget {
                 swarm.gossip_sub_history_length,
                 swarm.gossip_sub_max_send_queue_messages,
                 COMMITTEE_PEERS,
-                MAX_GOSSIP_MESSAGE_SIZE as f64 / MIB as f64,
+                max_gossip_message_size(constants.max_transaction_size_bytes) as f64 / MIB as f64,
             ),
         },
         BudgetLine {

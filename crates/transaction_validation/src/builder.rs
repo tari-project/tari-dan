@@ -13,6 +13,7 @@ use crate::{
     StealthTransactionLimitsValidator,
     TransactionNetworkValidator,
     TransactionSignatureValidator,
+    TransactionSizeValidator,
     TransactionValidationError,
     TransactionValidityWindowValidator,
     TransactionWeightValidator,
@@ -21,7 +22,7 @@ use crate::{
 };
 
 /// Builds the structural (context-free) mempool validations suitable for any transaction entry
-/// point: network match, basic well-formedness, blob references, the per-transaction weight cap,
+/// point: network match, basic well-formedness, the per-transaction byte and weight caps, blob references,
 /// and signature verification.
 ///
 /// These never depend on lagging runtime state (epoch, template existence), so they cannot
@@ -31,9 +32,13 @@ use crate::{
 pub fn create_structural_transaction_validator(
     network: Network,
     max_transaction_weight: u64,
+    max_transaction_size_bytes: usize,
 ) -> impl Validator<Transaction, Context = (), Error = TransactionValidationError> {
     TransactionNetworkValidator::new(network)
         .and_then(BasicValidations::new())
+        // Bytes before weight: the byte cap is what the gossip message limit is derived from, so a
+        // transaction failing it could not have been relayed regardless of what it weighs.
+        .and_then(TransactionSizeValidator::new(max_transaction_size_bytes))
         .and_then(BlobReferenceValidator::new())
         .and_then(TransactionWeightValidator::new(max_transaction_weight))
         .and_then(StealthTransactionLimitsValidator::new())
@@ -59,12 +64,13 @@ pub fn create_structural_transaction_validator(
 pub fn create_gossip_transaction_validator(
     network: Network,
     max_transaction_weight: u64,
+    max_transaction_size_bytes: usize,
     max_validity_epochs: u64,
 ) -> impl Validator<Transaction, Context = Epoch, Error = TransactionValidationError> {
     WithContext::<Epoch, Transaction, TransactionValidationError>::new()
         .map_context(
             |_| (),
-            create_structural_transaction_validator(network, max_transaction_weight),
+            create_structural_transaction_validator(network, max_transaction_weight, max_transaction_size_bytes),
         )
         .and_then(EpochRangeValidator::new())
         .and_then(TransactionValidityWindowValidator::new(max_validity_epochs))
@@ -79,6 +85,7 @@ mod tests {
     use super::*;
 
     const MAX_TRANSACTION_WEIGHT: u64 = 100_000;
+    const MAX_TRANSACTION_SIZE_BYTES: usize = 1024 * 1024;
     const MAX_VALIDITY_EPOCHS: u64 = 10;
 
     fn transaction(max_epoch: Epoch) -> Transaction {
@@ -88,8 +95,13 @@ mod tests {
     }
 
     fn validate(current_epoch: Epoch, transaction: &Transaction) -> Result<(), TransactionValidationError> {
-        create_gossip_transaction_validator(Network::LocalNet, MAX_TRANSACTION_WEIGHT, MAX_VALIDITY_EPOCHS)
-            .validate(&current_epoch, transaction)
+        create_gossip_transaction_validator(
+            Network::LocalNet,
+            MAX_TRANSACTION_WEIGHT,
+            MAX_TRANSACTION_SIZE_BYTES,
+            MAX_VALIDITY_EPOCHS,
+        )
+        .validate(&current_epoch, transaction)
     }
 
     #[test]

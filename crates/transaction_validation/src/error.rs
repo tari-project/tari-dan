@@ -63,6 +63,12 @@ pub enum TransactionValidationError {
         weight: u64,
         max_weight: u64,
     },
+    #[error("Transaction {transaction_id} is {size} bytes, exceeding the maximum allowed {max_size}")]
+    TransactionExceedsMaxSize {
+        transaction_id: TransactionId,
+        size: usize,
+        max_size: usize,
+    },
     #[error("Transaction {transaction_id} exceeds the per-transaction stealth {limit} cap: max {max}, got {actual}")]
     ExceedsStealthTransactionLimit {
         transaction_id: TransactionId,
@@ -151,6 +157,7 @@ impl TransactionValidationError {
             Self::ContainsPayFeeInstruction { .. } |
             Self::DryRunNotAllowed |
             Self::TransactionExceedsMaxWeight { .. } |
+            Self::TransactionExceedsMaxSize { .. } |
             Self::ExceedsStealthTransactionLimit { .. } |
             Self::TooManyPublishTemplateInstructions { .. } |
             Self::TooManySignatures { .. } |

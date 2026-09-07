@@ -695,6 +695,9 @@ impl TestBuilder {
                     max_block_validation_weight: u64::MAX,
                     // Per-transaction mempool weight cap; effectively unbounded in tests.
                     max_transaction_weight: u64::MAX,
+                    // Per-transaction byte cap; likewise unbounded, so tests are shaped by the
+                    // behaviour they exercise rather than by transaction size.
+                    max_transaction_size_bytes: usize::MAX,
                     // Network-default wasm budgets. Fabricated executions consume
                     // TEST_WASM_EXECUTION_POINTS each, sized so normal test transactions can never
                     // hit the budget (asserted in `start`). Tests exercising excessive computation

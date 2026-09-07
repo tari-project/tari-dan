@@ -54,6 +54,7 @@ pub struct TransactionManager<TEpochManager, TClientFactory, TStore> {
     store: TStore,
     network: Network,
     max_transaction_weight: u64,
+    max_transaction_size_bytes: usize,
     max_transaction_validity_epochs: u64,
     /// Told of every finalized commit this manager hands out, so that a caller reading what its
     /// transaction created is not answered from before the commit. See
@@ -76,6 +77,7 @@ where
         store: TStore,
         network: Network,
         max_transaction_weight: u64,
+        max_transaction_size_bytes: usize,
         max_transaction_validity_epochs: u64,
         substate_cache: SqliteSubstateCache,
     ) -> Self {
@@ -84,6 +86,7 @@ where
             store,
             network,
             max_transaction_weight,
+            max_transaction_size_bytes,
             max_transaction_validity_epochs,
             substate_cache,
             retired_results: Arc::new(Mutex::new(IndexSet::with_capacity(RETIRED_RESULTS_CAPACITY))),
@@ -117,7 +120,11 @@ where
         // template existence) are left to the validators, whose epoch/template view is authoritative.
         // DEV note: an invalid signature here is probably a JSON decoding issue
         // (crates/engine_types/src/argument_parser.rs).
-        let validator = create_structural_transaction_validator(self.network, self.max_transaction_weight);
+        let validator = create_structural_transaction_validator(
+            self.network,
+            self.max_transaction_weight,
+            self.max_transaction_size_bytes,
+        );
         if let Err(err) = validator.validate(&(), &transaction) {
             return Err(TransactionManagerError::InvalidTransaction {
                 transaction_id,

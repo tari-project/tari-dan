@@ -73,7 +73,7 @@ use tari_ootle_app_utilities::{
     transaction_executor::TariTransactionProcessor,
 };
 use tari_ootle_common_types::services::template_provider::TemplateProvider;
-use tari_ootle_p2p::{MAX_GOSSIP_MESSAGE_SIZE, PeerAddress, TRANSACTION_TOPIC, TariMessagingSpec};
+use tari_ootle_p2p::{PeerAddress, TRANSACTION_TOPIC, TariMessagingSpec, max_gossip_message_size};
 use tari_ootle_storage::{StateStore, global::GlobalDb};
 use tari_ootle_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_ootle_template_provider::MemoryCacheTemplateProvider;
@@ -89,6 +89,7 @@ use tari_ootle_transaction_validation::{
     TransactionDryRunValidator,
     TransactionNetworkValidator,
     TransactionSignatureValidator,
+    TransactionSizeValidator,
     TransactionValidationError,
     TransactionValidityWindowValidator,
     TransactionWeightValidator,
@@ -229,7 +230,7 @@ pub async fn spawn_services(
                     TRANSACTION_TOPIC.to_string(),
                     consensus_gossip::TOPIC_PREFIX.to_string(),
                 ],
-                gossip_sub_max_message_size: MAX_GOSSIP_MESSAGE_SIZE,
+                gossip_sub_max_message_size: max_gossip_message_size(consensus_constants.max_transaction_size_bytes),
                 // TODO: allow node operator to configure
                 relay_circuit_limits: RelayCircuitLimits::high(),
                 relay_reservation_limits: RelayReservationLimits::high(),
@@ -548,6 +549,7 @@ pub fn create_node_transaction_validator<TProvider: TemplateProvider>(
         // fail at execution, and unreferenced blobs would never fail at all.
         .and_then(BlobReferenceValidator::new())
         // Cheap structural check — reject over-weight transactions before verifying signatures.
+        .and_then(TransactionSizeValidator::new(constants.max_transaction_size_bytes))
         .and_then(TransactionWeightValidator::new(constants.max_transaction_weight))
         // Reject transactions whose aggregate stealth-transfer work exceeds the per-transaction caps before
         // verifying signatures or executing.
