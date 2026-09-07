@@ -130,11 +130,20 @@ pub struct ValidatorNodeConfig {
     /// sizes this admits a very deep backlog, while capping a flood of maximum-size messages.
     #[serde(default = "default_max_transaction_gossip_queue_bytes")]
     pub max_transaction_gossip_queue_bytes: usize,
-    /// Maximum total size of inbound consensus gossip awaiting processing. This topic carries
-    /// `HotStuffMessage`s between shard groups, including block-sized foreign proposals, and it
-    /// feeds a short blocking channel into consensus — so this queue absorbs real bursts rather
-    /// than sitting idle. Budgeted above transactions because a dropped proposal or vote can cost a
-    /// view, whereas a dropped transaction can be re-requested.
+    /// Maximum total size of inbound consensus gossip awaiting processing.
+    ///
+    /// The topic carries only `HotstuffMessage::ForeignProposalNotification` — a block id, an epoch
+    /// and a shard group list. The proposal itself is requested over the messaging protocol, so
+    /// legitimate traffic here is a few hundred bytes per message and nowhere near this budget.
+    ///
+    /// The budget is not sized for legitimate traffic. It is sized for what a flood can queue before
+    /// the node starts dropping, and the topic is open to anyone: a message is only known to be
+    /// undecodable or invalid after it has been drained. It is set above the transaction topic's
+    /// because a dropped notification delays a foreign proposal the local committee is waiting on,
+    /// whereas a dropped transaction can be re-gossiped.
+    ///
+    /// No measurement supports this particular figure. Now that the legitimate traffic on this topic
+    /// is known to be small, it is the queue most likely to be over-provisioned.
     #[serde(default = "default_max_consensus_gossip_queue_bytes")]
     pub max_consensus_gossip_queue_bytes: usize,
     /// Maximum total size of inbound direct consensus messages awaiting processing. Carries

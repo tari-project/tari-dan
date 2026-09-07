@@ -184,8 +184,11 @@ fn format_bytes(bytes: u64) -> String {
 mod tests {
     use super::*;
 
-    fn budget_of(config: &ValidatorNodeConfig, db_options: &DatabaseOptions) -> u64 {
-        MemoryBudget::from_config(config, db_options, &TemplateConfig::default()).capped_bytes
+    /// Builds the budget the way the node does — from configuration alone, through the same mapping
+    /// `bootstrap` uses — so that a cap lost on its way into `DatabaseOptions` fails here rather than
+    /// being bypassed by the test setting the store options directly.
+    fn budget_of(config: &ValidatorNodeConfig) -> u64 {
+        MemoryBudget::from_config(config, &config.state_store_options(), &TemplateConfig::default()).capped_bytes
     }
 
     /// Every configured cap must reach the total. Moving each input in turn and requiring the total
@@ -195,30 +198,28 @@ mod tests {
     fn every_configured_cap_reaches_the_total() {
         const DELTA: usize = 16 * 1024 * 1024;
         let base_config = ValidatorNodeConfig::default();
-        let base_options = DatabaseOptions::default();
-        let base = budget_of(&base_config, &base_options);
+        let base = budget_of(&base_config);
 
-        type Mutation = fn(&mut ValidatorNodeConfig, &mut DatabaseOptions);
+        type Mutation = fn(&mut ValidatorNodeConfig);
 
         let mutations: [(&str, Mutation); 4] = [
-            ("consensus gossip queue", |c, _| {
+            ("consensus gossip queue", |c| {
                 c.max_consensus_gossip_queue_bytes += DELTA
             }),
-            ("transaction gossip queue", |c, _| {
+            ("transaction gossip queue", |c| {
                 c.max_transaction_gossip_queue_bytes += DELTA
             }),
-            ("consensus messaging queue", |c, _| {
+            ("consensus messaging queue", |c| {
                 c.max_consensus_messaging_queue_bytes += DELTA
             }),
-            ("state store budget", |_, o| o.memory_budget_bytes += DELTA),
+            ("state store budget", |c| c.state_store_memory_budget_bytes += DELTA),
         ];
 
         for (name, mutate) in mutations {
             let mut config = base_config.clone();
-            let mut options = base_options.clone();
-            mutate(&mut config, &mut options);
+            mutate(&mut config);
             assert_eq!(
-                budget_of(&config, &options) - base,
+                budget_of(&config) - base,
                 DELTA as u64,
                 "{name} does not reach the total"
             );
@@ -253,11 +254,8 @@ mod tests {
 
     #[test]
     fn the_requirement_exceeds_the_caps_it_is_derived_from() {
-        let budget = MemoryBudget::from_config(
-            &ValidatorNodeConfig::default(),
-            &DatabaseOptions::default(),
-            &TemplateConfig::default(),
-        );
+        let config = ValidatorNodeConfig::default();
+        let budget = MemoryBudget::from_config(&config, &config.state_store_options(), &TemplateConfig::default());
         assert!(budget.required_bytes > budget.capped_bytes);
     }
 }

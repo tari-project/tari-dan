@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use tari_engine_types::limits::{ENGINE_LIMITS, WASM_LIMITS};
 use tari_ootle_p2p::MAX_GOSSIP_MESSAGE_SIZE;
 use tari_ootle_template_provider::TemplateConfig;
-use tari_state_store_rocksdb::{DatabaseOptions, MAX_WRITE_BUFFER_NUMBER};
+use tari_state_store_rocksdb::{DatabaseOptions, MAX_WRITE_BUFFER_NUMBER, all_column_families_iter};
 use tari_swarm::Config as SwarmConfig;
 
 const MIB: u64 = 1024 * 1024;
@@ -32,11 +32,6 @@ const MIB: u64 = 1024 * 1024;
 /// not itself capped — a node also holds connections to foreign shard groups and to seeds — so the
 /// gossip terms derived from it are estimates rather than ceilings.
 const COMMITTEE_PEERS: u64 = 40;
-
-/// Column families the state store opens, from `all_column_families_iter`. With the configured
-/// per-family buffer size and buffer count, this bounds how far memtable memory can run past its
-/// budget while triggered flushes are still completing.
-const COLUMN_FAMILIES: u64 = 9;
 
 /// Whether a budget line is enforced by the code or merely expected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -103,6 +98,9 @@ pub struct ObservedProcess {
 pub fn budget(pid: Option<u32>) -> MemoryBudget {
     let db_options = DatabaseOptions::default();
     let swarm = SwarmConfig::default();
+    // With the configured per-family buffer size and buffer count, this bounds how far memtable
+    // memory can run past its budget while triggered flushes are still completing.
+    let column_families = all_column_families_iter().count() as u64;
     // Inbound queue caps. Sized in bytes precisely because a single gossip message may be up to the
     // swarm's 2 MiB `gossip_sub_max_message_size`, so these are reached by a flood of large
     // messages, not by ordinary traffic.
@@ -148,7 +146,7 @@ pub fn budget(pid: Option<u32>) -> MemoryBudget {
                 "DatabaseOptions::memory_budget_bytes, shared by all column families via one rocksdb Cache and a \
                  WriteBufferManager charged against it; enforced by triggering flushes rather than by stalling \
                  writers, so memtables can overshoot by up to the {} MiB of buffers in flight",
-                db_options.write_buffer_bytes as u64 * MAX_WRITE_BUFFER_NUMBER as u64 * COLUMN_FAMILIES / MIB,
+                db_options.write_buffer_bytes as u64 * MAX_WRITE_BUFFER_NUMBER as u64 * column_families / MIB,
             ),
         },
         BudgetLine {
