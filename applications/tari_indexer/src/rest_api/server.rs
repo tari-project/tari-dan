@@ -97,6 +97,13 @@ impl Server {
     ) -> anyhow::Result<SocketAddr> {
         let context = HandlerContext::from_services(services);
 
+        #[cfg(feature = "metrics")]
+        let api_metrics = metrics::register(registry);
+        #[cfg(feature = "metrics")]
+        let sse_metrics = api_metrics.sse.clone();
+        #[cfg(not(feature = "metrics"))]
+        let sse_metrics = crate::rest_api::rate_limit::SseConnectionMetrics::default();
+
         // Per-IP rate limiters for specific endpoint groups.
         // `trust_proxy_headers` mirrors the value from config – enable only when
         // the indexer is behind a trusted reverse proxy.
@@ -130,10 +137,14 @@ impl Server {
             limiter: IpRateLimiter::new(rate_limits.non_fungibles_rate),
             trust_proxy_headers: rate_limits.trust_proxy_headers,
         };
-        let sse_limiter = SseLimitConfig {
+        // The streaming routes share one per-IP limiter but are counted separately, so each
+        // takes its own config carrying that route's gauge handle.
+        let sse_connections = SseConnectionLimiter::new(rate_limits.sse_max_connections_per_ip);
+        let sse_limiter = |endpoint: &'static str| SseLimitConfig {
             enabled: rate_limits.enabled,
-            limiter: SseConnectionLimiter::new(rate_limits.sse_max_connections_per_ip),
+            limiter: sse_connections.clone(),
             trust_proxy_headers: rate_limits.trust_proxy_headers,
+            active_connections: sse_metrics.endpoint(endpoint),
         };
 
         let router = Router::new()
@@ -193,7 +204,7 @@ impl Server {
                 .route("/events", get(handlers::transactions::query_transaction_events))
                 // SSE stream – per-IP concurrent connection limit
                 .route("/events/stream", get(handlers::transaction_events::sse_transaction_events)
-                    .route_layer(middleware::from_fn_with_state(sse_limiter.clone(), sse_limit_middleware)))
+                    .route_layer(middleware::from_fn_with_state(sse_limiter("/transactions/events/stream"), sse_limit_middleware)))
             )
             .nest("/templates", Router::new()
                 .route("/cached", get(handlers::templates::list_cached_templates))
@@ -220,7 +231,7 @@ impl Server {
                     .route_layer(middleware::from_fn_with_state(utxos_fetch_limiter, rate_limit_middleware)))
                 // POST /utxos/stream (SSE-like streaming) – per-IP concurrent connection limit
                 .route("/stream", post(handlers::utxos::stream_utxo_updates)
-                    .route_layer(middleware::from_fn_with_state(sse_limiter.clone(), sse_limit_middleware)))
+                    .route_layer(middleware::from_fn_with_state(sse_limiter("/utxos/stream"), sse_limit_middleware)))
             )
             .nest(
                 "/transaction-receipts",
@@ -243,7 +254,7 @@ impl Server {
                 .route("/latest", get(handlers::epoch_checkpoints::get_latest_epoch_checkpoint))
             )
             .route("/events", get(handlers::indexer_events::sse_events)
-                .route_layer(middleware::from_fn_with_state(sse_limiter.clone(), sse_limit_middleware)))
+                .route_layer(middleware::from_fn_with_state(sse_limiter("/events"), sse_limit_middleware)))
             // Wraps the API routes so that a handler which sets no policy still denies caching. Applied
             // before the Swagger UI is merged in, whose static assets are fine to cache normally.
             .layer(middleware::from_fn(default_no_store))
@@ -258,7 +269,7 @@ impl Server {
         // metrics are not exposed on the public REST API.
         #[cfg(feature = "metrics")]
         let router = router.layer(axum::middleware::from_fn_with_state(
-            metrics::register(registry),
+            api_metrics.requests,
             metrics::layer,
         ));
 
