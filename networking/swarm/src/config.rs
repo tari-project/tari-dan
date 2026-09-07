@@ -24,6 +24,10 @@ pub struct Config {
     pub identify_interval: Duration,
     /// The largest gossip message accepted or sent. Every other gossipsub bound below is a message
     /// count, so this is the factor that turns those counts into bytes.
+    ///
+    /// What a network's messages may legitimately be is the application's to know, not this crate's,
+    /// so nodes on a shared mesh must set this from a value they agree on rather than take the
+    /// default — a node with a smaller limit silently rejects messages its peers consider valid.
     pub gossip_sub_max_message_size: usize,
     /// Heartbeat windows of full messages the gossipsub message cache retains.
     ///

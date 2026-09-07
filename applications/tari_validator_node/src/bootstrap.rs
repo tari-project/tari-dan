@@ -73,7 +73,7 @@ use tari_ootle_app_utilities::{
     transaction_executor::TariTransactionProcessor,
 };
 use tari_ootle_common_types::services::template_provider::TemplateProvider;
-use tari_ootle_p2p::{PeerAddress, TRANSACTION_TOPIC, TariMessagingSpec};
+use tari_ootle_p2p::{MAX_GOSSIP_MESSAGE_SIZE, PeerAddress, TRANSACTION_TOPIC, TariMessagingSpec};
 use tari_ootle_storage::{StateStore, global::GlobalDb};
 use tari_ootle_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_ootle_template_provider::MemoryCacheTemplateProvider;
@@ -97,7 +97,6 @@ use tari_ootle_transaction_validation::{
 };
 use tari_rpc_framework::RpcServer;
 use tari_shutdown::ShutdownSignal;
-use tari_state_store_rocksdb::DatabaseOptions;
 use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
 use tokio::{
     sync::{broadcast, mpsc},
@@ -230,6 +229,7 @@ pub async fn spawn_services(
                     TRANSACTION_TOPIC.to_string(),
                     consensus_gossip::TOPIC_PREFIX.to_string(),
                 ],
+                gossip_sub_max_message_size: MAX_GOSSIP_MESSAGE_SIZE,
                 // TODO: allow node operator to configure
                 relay_circuit_limits: RelayCircuitLimits::high(),
                 relay_reservation_limits: RelayReservationLimits::high(),
@@ -255,14 +255,7 @@ pub async fn spawn_services(
     info!(target: LOG_TARGET, "State store initializing");
 
     // TODO: just enable it always for now, later make it configurable and default to true for testnets
-    let state_store_memory_budget = config.validator_node.state_store_memory_budget_bytes;
-    let db_options = DatabaseOptions::default()
-        .with_debugging_data(true)
-        .with_prune_transaction_history(!config.validator_node.keep_transaction_history)
-        .with_memory_budget_bytes(state_store_memory_budget)
-        // Half the budget for memtables leaves the rest to cache reads, which is RocksDB's own
-        // guidance; the two are one capacity because memtables are charged against the cache.
-        .with_memtable_budget_bytes(state_store_memory_budget / 2);
+    let db_options = config.validator_node.state_store_options();
 
     memory_budget::check_against_available_memory(&memory_budget::MemoryBudget::from_config(
         &config.validator_node,

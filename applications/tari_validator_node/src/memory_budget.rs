@@ -230,8 +230,8 @@ mod tests {
     #[test]
     fn the_constant_caps_are_present() {
         let templates = TemplateConfig::default();
-        let budget =
-            MemoryBudget::from_config(&ValidatorNodeConfig::default(), &DatabaseOptions::default(), &templates);
+        let config = ValidatorNodeConfig::default();
+        let budget = MemoryBudget::from_config(&config, &config.state_store_options(), &templates);
 
         for (name, bytes) in [
             ("template module cache", templates.max_cache_size_bytes()),

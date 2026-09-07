@@ -13105,6 +13105,7 @@ dependencies = [
  "tari_crypto",
  "tari_engine_types",
  "tari_ootle_common_types",
+ "tari_ootle_p2p",
  "tari_ootle_storage",
  "tari_ootle_template_provider",
  "tari_ootle_transaction",

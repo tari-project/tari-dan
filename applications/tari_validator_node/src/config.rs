@@ -35,6 +35,7 @@ use tari_ootle_app_utilities::{
 };
 use tari_ootle_template_provider::TemplateConfig;
 use tari_ootle_transaction::Network;
+use tari_state_store_rocksdb::DatabaseOptions;
 
 #[derive(Debug, Clone)]
 pub struct ApplicationConfig {
@@ -167,6 +168,20 @@ fn default_state_store_memory_budget_bytes() -> usize {
 }
 
 impl ValidatorNodeConfig {
+    /// Database options for the state store this node opens.
+    ///
+    /// The memory budget is one capacity covering the block cache and memtables together, split so
+    /// that memtables take half and the rest stays available to cache reads — RocksDB's own
+    /// guidance, and the split the startup memory budget assumes.
+    pub fn state_store_options(&self) -> DatabaseOptions {
+        DatabaseOptions::default()
+            // TODO: just enable it always for now, later make it configurable and default to true for testnets
+            .with_debugging_data(true)
+            .with_prune_transaction_history(!self.keep_transaction_history)
+            .with_memory_budget_bytes(self.state_store_memory_budget_bytes)
+            .with_memtable_budget_bytes(self.state_store_memory_budget_bytes / 2)
+    }
+
     pub fn set_base_path<P: AsRef<Path>>(&mut self, base_path: P) {
         if !self.shard_key_file.is_absolute() {
             self.shard_key_file = base_path.as_ref().join(&self.shard_key_file);

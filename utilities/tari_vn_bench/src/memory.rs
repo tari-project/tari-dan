@@ -21,6 +21,7 @@
 
 use serde::{Deserialize, Serialize};
 use tari_engine_types::limits::{ENGINE_LIMITS, WASM_LIMITS};
+use tari_ootle_p2p::MAX_GOSSIP_MESSAGE_SIZE;
 use tari_ootle_template_provider::TemplateConfig;
 use tari_state_store_rocksdb::{DatabaseOptions, MAX_WRITE_BUFFER_NUMBER};
 use tari_swarm::Config as SwarmConfig;
@@ -160,11 +161,11 @@ pub fn budget(pid: Option<u32>) -> MemoryBudget {
             // anything observed; this is a working figure at realistic message sizes.
             source: format!(
                 "{} heartbeats of arrivals retained, plus up to {} messages queued per connection across ~{} \
-                 committee peers, at up to {} MiB each",
+                 committee peers, at up to {:.2} MiB each",
                 swarm.gossip_sub_history_length,
                 swarm.gossip_sub_max_send_queue_messages,
                 COMMITTEE_PEERS,
-                swarm.gossip_sub_max_message_size as u64 / MIB,
+                MAX_GOSSIP_MESSAGE_SIZE as f64 / MIB as f64,
             ),
         },
         BudgetLine {
