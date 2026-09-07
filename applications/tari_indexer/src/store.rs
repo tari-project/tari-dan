@@ -365,6 +365,17 @@ pub trait IndexerStoreWriteTransaction {
         state_version: StateVersion,
     ) -> Result<(), StorageError>;
 
+    /// Like [`substate_cache_invalidate`](Self::substate_cache_invalidate), but for transitions
+    /// learnt of ahead of the stream - from a committee's finalized result - so the journalled
+    /// `StateVersion` is not the transition's own. Each is journalled at its own version: the
+    /// caller passes one just past the shard's watermark, so that every fetch captured before the
+    /// stream delivers the transition is vetoed, and the stream's own journal row replaces it when
+    /// it does.
+    fn substate_cache_retire_ahead<I: IntoIterator<Item = (SubstateCacheInvalidation, StateVersion)>>(
+        &mut self,
+        invalidations: I,
+    ) -> Result<(), StorageError>;
+
     /// Drops journal entries older than `journal_retention` and evicts the oldest cache entries down
     /// to `max_entries`.
     fn substate_cache_prune(&mut self, journal_retention: Duration, max_entries: usize) -> Result<(), StorageError>;

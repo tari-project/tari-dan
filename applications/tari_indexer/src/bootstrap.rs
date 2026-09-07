@@ -314,7 +314,7 @@ pub async fn spawn_services(
         store.clone(),
         epoch_manager.clone(),
         validator_node_client_factory.clone(),
-        substate_cache,
+        substate_cache.clone(),
     )
     .with_substate_proof_verification(config.indexer.verify_substate_proofs)
     .with_negative_cache_ttl(config.indexer.substate_cache_negative_ttl);
@@ -430,6 +430,7 @@ pub async fn spawn_services(
         config.network,
         consensus_constants.max_transaction_weight,
         consensus_constants.max_transaction_validity_epochs,
+        substate_cache,
     );
 
     // Save final node identity after comms has initialized. This is required because the public_address can be

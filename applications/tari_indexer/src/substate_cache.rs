@@ -7,7 +7,7 @@ use std::{
 };
 
 use log::*;
-use tari_engine_types::substate::SubstateId;
+use tari_engine_types::substate::{SubstateDiff, SubstateId};
 use tari_indexer_lib::substate_cache::{
     FetchWatermark,
     SubstateCache,
@@ -15,7 +15,7 @@ use tari_indexer_lib::substate_cache::{
     SubstateCacheEntryRef,
     SubstateCacheError,
 };
-use tari_ootle_common_types::{NumPreshards, SubstateAddress, shard::Shard};
+use tari_ootle_common_types::{NumPreshards, StateVersion, SubstateAddress, shard::Shard};
 use tari_ootle_storage::StorageError;
 use tari_shutdown::ShutdownSignal;
 use tari_validator_node_rpc::client::SubstateResult;
@@ -23,7 +23,7 @@ use tokio::{task, time};
 
 use crate::{
     network_state_sync::ShardWatermarks,
-    storage_sqlite::SqliteIndexerStore,
+    storage_sqlite::{SqliteIndexerStore, models::SubstateCacheInvalidation},
     store::{IndexerStore, IndexerStoreReadTransaction, IndexerStoreReader, IndexerStoreWriteTransaction},
 };
 
@@ -133,6 +133,41 @@ impl SqliteSubstateCache {
                 }
             }
         })
+    }
+
+    /// Retires every entry that `diff` supersedes, for a commit this indexer has learnt of from the
+    /// committee before its own transition stream has delivered it.
+    ///
+    /// The stream is what ordinarily keeps the cache honest, but a caller that is handed a
+    /// finalized result and then reads what it created must not be answered from before the
+    /// commit. Each retirement is journalled just past its shard's watermark so that a fetch which
+    /// started before the result cannot re-cache the stale value; the stream's own journal row
+    /// replaces it once the transition arrives. A shard that has never been confirmed cannot be
+    /// served from anyway, so its entries are only deleted.
+    pub async fn retire_committed(&self, diff: &SubstateDiff) -> Result<(), StorageError> {
+        let created = diff
+            .up_iter()
+            .filter_map(|(id, substate)| SubstateCacheInvalidation::created(id, substate.version()));
+        let destroyed = diff
+            .down_iter()
+            .map(|(id, version)| SubstateCacheInvalidation::destroyed(id.clone(), *version));
+        let invalidations = created
+            .chain(destroyed)
+            .map(|invalidation| {
+                let ahead = self
+                    .watermarks
+                    .get(Self::shard_of(invalidation.substate_id()), Duration::MAX)
+                    .map_or(0, |version| version.as_u64() + 1);
+                (invalidation, StateVersion::new(ahead))
+            })
+            .collect::<Vec<_>>();
+        if invalidations.is_empty() {
+            return Ok(());
+        }
+        debug!(target: LOG_TARGET, "Retiring {} cached substates ahead of the stream", invalidations.len());
+        self.store
+            .with_write_tx(move |tx| tx.substate_cache_retire_ahead(invalidations))
+            .await
     }
 
     async fn prune(&self) -> Result<(), StorageError> {
@@ -261,8 +296,6 @@ impl SubstateCache for SqliteSubstateCache {
 
 #[cfg(test)]
 mod tests {
-    use tari_ootle_common_types::StateVersion;
-
     use super::*;
     use crate::storage_sqlite::SqliteIndexerStore;
 
@@ -425,6 +458,83 @@ mod tests {
         // The same shard, at the same age, still answers for a head.
         let (_d2, head_cache, head_id) = cache_with_head(6, true, Duration::ZERO).await;
         assert!(head_cache.read(&head_id, None).await.unwrap().is_some());
+    }
+
+    async fn write_nonexistence(cache: &SqliteSubstateCache, id: &SubstateId, watermark: u64) {
+        cache
+            .write(
+                id,
+                SubstateCacheEntryRef {
+                    version: None,
+                    substate_result: &SubstateResult::DoesNotExist,
+                    cached_at: now_unix_secs().unwrap(),
+                    verified: false,
+                },
+                FetchWatermark::new(watermark),
+            )
+            .await
+            .unwrap();
+    }
+
+    /// A caller handed a finalized result reads what it created next. The stream that would retract
+    /// the cached nonexistence has not necessarily delivered the commit yet, so the result retires
+    /// it, and holds off any fetch that started before the commit until the stream catches up.
+    #[tokio::test]
+    async fn a_finalized_result_retires_what_it_created_ahead_of_the_stream() {
+        use tari_engine_types::{
+            non_fungible::NonFungibleContainer,
+            substate::{Substate, SubstateValue},
+        };
+
+        let (_d, cache, id) = cache_with_nonexistence(true).await;
+        let mut diff = SubstateDiff::new();
+        diff.up(
+            id.clone(),
+            Substate::new(0, SubstateValue::NonFungible(NonFungibleContainer::no_data())),
+        );
+        cache.retire_committed(&diff).await.unwrap();
+        assert!(cache.read(&id, None).await.unwrap().is_none());
+
+        // A fetch captured at the shard's watermark predates the commit, so its answer is refused.
+        write_nonexistence(&cache, &id, 100).await;
+        assert!(cache.read(&id, None).await.unwrap().is_none());
+
+        // One captured once the stream has moved past it is not.
+        write_nonexistence(&cache, &id, 101).await;
+        assert!(cache.read(&id, None).await.unwrap().is_some());
+    }
+
+    /// The other half of the same race: a head the transaction replaced. The old head is retired,
+    /// and a fetch captured before the commit cannot put it back.
+    #[tokio::test]
+    async fn a_finalized_result_retires_the_head_it_replaced_ahead_of_the_stream() {
+        use tari_engine_types::{
+            non_fungible::NonFungibleContainer,
+            substate::{Substate, SubstateValue},
+        };
+
+        let (_d, cache, id) = cache_with_head(6, true, Duration::ZERO).await;
+        let mut diff = SubstateDiff::new();
+        diff.down(id.clone(), 6);
+        diff.up(
+            id.clone(),
+            Substate::new(7, SubstateValue::NonFungible(NonFungibleContainer::no_data())),
+        );
+        cache.retire_committed(&diff).await.unwrap();
+        assert!(cache.read(&id, None).await.unwrap().is_none());
+
+        let stale = SubstateResult::Down { version: 6 };
+        let entry = SubstateCacheEntryRef {
+            version: Some(6),
+            substate_result: &stale,
+            cached_at: now_unix_secs().unwrap(),
+            verified: true,
+        };
+        cache.write(&id, entry, FetchWatermark::new(100)).await.unwrap();
+        assert!(cache.read(&id, None).await.unwrap().is_none());
+
+        cache.write(&id, entry, FetchWatermark::new(101)).await.unwrap();
+        assert_eq!(cache.read(&id, None).await.unwrap().unwrap().version, Some(6));
     }
 
     /// Above the head the cache knows nothing: this indexer is behind, or the substate never got there.

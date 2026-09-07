@@ -22,6 +22,10 @@
 
 pub(crate) mod error;
 
+use std::sync::{Arc, Mutex};
+
+use indexmap::IndexSet;
+use log::*;
 use tari_epoch_manager::EpochManagerReader;
 use tari_indexer_client::types::{IndexerTransactionFinalizedResult, TransactionEntry, TransactionSource};
 use tari_ootle_common_types::{Epoch, NodeAddressable, ToSubstateAddress, optional::Optional};
@@ -32,8 +36,17 @@ use tari_validator_node_rpc::client::{TransactionResultStatus, ValidatorNodeClie
 use crate::{
     network_client::TariNetworkClient,
     store::{IndexerStore, IndexerStoreReadTransaction, IndexerStoreWriteTransaction, TransactionRejectionStatus},
+    substate_cache::SqliteSubstateCache,
     transaction_manager::error::TransactionManagerError,
 };
+
+const LOG_TARGET: &str = "tari::indexer::transaction_manager";
+
+/// How many finalized transactions are remembered as already having had their cache entries
+/// retired. Only the first time a result is handed out matters, since that is the only moment a
+/// fetch can be in flight from before this indexer knew of the commit; remembering it stops every
+/// later poll of the same result from taking the write lock again.
+const RETIRED_RESULTS_CAPACITY: usize = 4096;
 
 #[derive(Debug, Clone)]
 pub struct TransactionManager<TEpochManager, TClientFactory, TStore> {
@@ -42,6 +55,13 @@ pub struct TransactionManager<TEpochManager, TClientFactory, TStore> {
     network: Network,
     max_transaction_weight: u64,
     max_transaction_validity_epochs: u64,
+    /// Told of every finalized commit this manager hands out, so that a caller reading what its
+    /// transaction created is not answered from before the commit. See
+    /// [`SqliteSubstateCache::retire_committed`].
+    substate_cache: SqliteSubstateCache,
+    /// Finalized transactions whose commit has already been retired from the cache, most recent
+    /// last, bounded at [`RETIRED_RESULTS_CAPACITY`].
+    retired_results: Arc<Mutex<IndexSet<TransactionId>>>,
 }
 
 impl<TEpochManager, TClientFactory, TAddr, TStore> TransactionManager<TEpochManager, TClientFactory, TStore>
@@ -57,6 +77,7 @@ where
         network: Network,
         max_transaction_weight: u64,
         max_transaction_validity_epochs: u64,
+        substate_cache: SqliteSubstateCache,
     ) -> Self {
         Self {
             network_client,
@@ -64,6 +85,27 @@ where
             network,
             max_transaction_weight,
             max_transaction_validity_epochs,
+            substate_cache,
+            retired_results: Arc::new(Mutex::new(IndexSet::with_capacity(RETIRED_RESULTS_CAPACITY))),
+        }
+    }
+
+    fn is_result_retired(&self, transaction_id: &TransactionId) -> bool {
+        self.retired_results
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(transaction_id)
+    }
+
+    /// Records that `transaction_id`'s commit has been retired from the cache. Recorded only after
+    /// the retirement succeeded, so a failed one is tried again on the next poll and concurrent
+    /// pollers each wait on their own (idempotent) retirement rather than one racing past the
+    /// other's.
+    fn mark_result_retired(&self, transaction_id: TransactionId) {
+        let mut retired = self.retired_results.lock().unwrap_or_else(|e| e.into_inner());
+        retired.insert(transaction_id);
+        if retired.len() > RETIRED_RESULTS_CAPACITY {
+            retired.shift_remove_index(0);
         }
     }
 
@@ -159,6 +201,21 @@ where
                         self.store
                             .with_write_tx(move |tx| tx.set_transaction_rejected(transaction_id, &details))
                             .await?;
+                    }
+                }
+
+                // The committee answered ahead of this indexer's own transition stream. A caller
+                // holding this result will read what it committed next, so the cache must not
+                // answer that from before the commit. A fee-only accept commits its diff too.
+                if let Some(diff) = finalized.execute_result.as_ref().and_then(|r| r.finalize.any_accept()) &&
+                    !self.is_result_retired(&transaction_id)
+                {
+                    match self.substate_cache.retire_committed(diff).await {
+                        Ok(()) => self.mark_result_retired(transaction_id),
+                        Err(e) => warn!(
+                            target: LOG_TARGET,
+                            "Failed to retire cached substates committed by {transaction_id}: {e}"
+                        ),
                     }
                 }
 

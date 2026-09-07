@@ -35,14 +35,14 @@ impl SubstateCacheInvalidation {
     /// retraction of a cached nonexistence. Where nothing caches that, it carries nothing, and is
     /// not one of these at all: emitting it would put a journal row on the sync path for every
     /// created-once substate in the stream and buy nothing with it.
-    pub fn created(substate_id: SubstateId, version: u32) -> Option<Self> {
+    pub fn created(substate_id: &SubstateId, version: u32) -> Option<Self> {
         let retires_up_to = version.checked_sub(1);
-        let retires_nonexistence = caches_nonexistence(&substate_id);
+        let retires_nonexistence = caches_nonexistence(substate_id);
         if retires_up_to.is_none() && !retires_nonexistence {
             return None;
         }
         Some(Self {
-            substate_id,
+            substate_id: substate_id.clone(),
             retires_up_to,
             retires_nonexistence,
         })
@@ -91,7 +91,7 @@ mod tests {
 
     #[test]
     fn a_first_creation_retires_nothing_but_the_nonexistence() {
-        let invalidation = SubstateCacheInvalidation::created(substate(), 0).unwrap();
+        let invalidation = SubstateCacheInvalidation::created(&substate(), 0).unwrap();
         assert_eq!(invalidation.retires_up_to(), None);
         assert!(invalidation.retires_nonexistence());
     }
@@ -101,17 +101,17 @@ mod tests {
     #[test]
     fn a_first_creation_is_dropped_where_nonexistence_is_not_cached() {
         assert!(!caches_nonexistence(&receipt()));
-        assert!(SubstateCacheInvalidation::created(receipt(), 0).is_none());
+        assert!(SubstateCacheInvalidation::created(&receipt(), 0).is_none());
         // Above the first version it carries a retirement that stands on its own, and does not
         // attempt one that could never match.
-        let above = SubstateCacheInvalidation::created(receipt(), 1).unwrap();
+        let above = SubstateCacheInvalidation::created(&receipt(), 1).unwrap();
         assert_eq!(above.retires_up_to(), Some(0));
         assert!(!above.retires_nonexistence());
     }
 
     #[test]
     fn a_creation_retires_every_version_below_it() {
-        let invalidation = SubstateCacheInvalidation::created(substate(), 6).unwrap();
+        let invalidation = SubstateCacheInvalidation::created(&substate(), 6).unwrap();
         assert_eq!(invalidation.retires_up_to(), Some(5));
         assert!(invalidation.retires_nonexistence());
     }

@@ -1194,7 +1194,7 @@ fn extend_bufs_from_substate_update(
 ) -> Result<(), NetworkStateSyncError> {
     invalidations_buf.extend(match &update {
         SubstateUpdateProof::Create(create) => {
-            SubstateCacheInvalidation::created(create.substate.substate_id().clone(), create.substate.version)
+            SubstateCacheInvalidation::created(create.substate.substate_id(), create.substate.version)
         },
         SubstateUpdateProof::Destroy(destroy) => Some(SubstateCacheInvalidation::destroyed(
             destroy.substate_id.clone(),

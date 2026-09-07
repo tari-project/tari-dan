@@ -633,49 +633,21 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
         invalidations: I,
         state_version: StateVersion,
     ) -> Result<(), StorageError> {
-        const OPERATION: &str = "substate_cache_invalidate";
-        use crate::storage_sqlite::schema::{substate_cache, substate_cache_invalidations};
-
         let now = unix_timestamp();
         for invalidation in invalidations {
-            let id = invalidation.substate_id().to_string();
-
-            if let Some(retires_up_to) = invalidation.retires_up_to() {
-                diesel::delete(
-                    substate_cache::table
-                        .filter(substate_cache::substate_id.eq(&id))
-                        .filter(substate_cache::version.le(retires_up_to as i32)),
-                )
-                .execute(self.connection())
-                .map_err(|e| StorageError::general(OPERATION, e))?;
-            }
-
-            if invalidation.retires_nonexistence() {
-                diesel::delete(
-                    substate_cache::table
-                        .filter(substate_cache::substate_id.eq(&id))
-                        .filter(substate_cache::version.is_null()),
-                )
-                .execute(self.connection())
-                .map_err(|e| StorageError::general(OPERATION, e))?;
-            }
-
-            diesel::insert_into(substate_cache_invalidations::table)
-                .values((
-                    substate_cache_invalidations::substate_id.eq(&id),
-                    substate_cache_invalidations::state_version.eq(state_version.as_u64() as i64),
-                    substate_cache_invalidations::invalidated_at.eq(now),
-                ))
-                .on_conflict(substate_cache_invalidations::substate_id)
-                .do_update()
-                .set((
-                    substate_cache_invalidations::state_version.eq(state_version.as_u64() as i64),
-                    substate_cache_invalidations::invalidated_at.eq(now),
-                ))
-                .execute(self.connection())
-                .map_err(|e| StorageError::general(OPERATION, e))?;
+            self.apply_substate_cache_invalidation(&invalidation, state_version, now)?;
         }
+        Ok(())
+    }
 
+    fn substate_cache_retire_ahead<I: IntoIterator<Item = (SubstateCacheInvalidation, StateVersion)>>(
+        &mut self,
+        invalidations: I,
+    ) -> Result<(), StorageError> {
+        let now = unix_timestamp();
+        for (invalidation, state_version) in invalidations {
+            self.apply_substate_cache_invalidation(&invalidation, state_version, now)?;
+        }
         Ok(())
     }
 
@@ -793,5 +765,56 @@ impl Drop for SqliteStoreWriteTransaction<'_> {
                 "Substate store write transaction was not committed/rolled back"
             );
         }
+    }
+}
+
+impl SqliteStoreWriteTransaction<'_> {
+    fn apply_substate_cache_invalidation(
+        &mut self,
+        invalidation: &SubstateCacheInvalidation,
+        state_version: StateVersion,
+        now: i64,
+    ) -> Result<(), StorageError> {
+        const OPERATION: &str = "substate_cache_invalidate";
+        use crate::storage_sqlite::schema::{substate_cache, substate_cache_invalidations};
+
+        let id = invalidation.substate_id().to_string();
+
+        if let Some(retires_up_to) = invalidation.retires_up_to() {
+            diesel::delete(
+                substate_cache::table
+                    .filter(substate_cache::substate_id.eq(&id))
+                    .filter(substate_cache::version.le(retires_up_to as i32)),
+            )
+            .execute(self.connection())
+            .map_err(|e| StorageError::general(OPERATION, e))?;
+        }
+
+        if invalidation.retires_nonexistence() {
+            diesel::delete(
+                substate_cache::table
+                    .filter(substate_cache::substate_id.eq(&id))
+                    .filter(substate_cache::version.is_null()),
+            )
+            .execute(self.connection())
+            .map_err(|e| StorageError::general(OPERATION, e))?;
+        }
+
+        diesel::insert_into(substate_cache_invalidations::table)
+            .values((
+                substate_cache_invalidations::substate_id.eq(&id),
+                substate_cache_invalidations::state_version.eq(state_version.as_u64() as i64),
+                substate_cache_invalidations::invalidated_at.eq(now),
+            ))
+            .on_conflict(substate_cache_invalidations::substate_id)
+            .do_update()
+            .set((
+                substate_cache_invalidations::state_version.eq(state_version.as_u64() as i64),
+                substate_cache_invalidations::invalidated_at.eq(now),
+            ))
+            .execute(self.connection())
+            .map_err(|e| StorageError::general(OPERATION, e))?;
+
+        Ok(())
     }
 }
