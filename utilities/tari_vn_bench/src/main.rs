@@ -18,6 +18,7 @@
 //! machine look worse than it is — but a report taken under load says nothing useful about the
 //! machine's ceiling. The report flags a noisy run rather than silently grading one.
 
+mod capacity;
 mod execution;
 mod host;
 mod memory;
@@ -25,6 +26,7 @@ mod native;
 mod report;
 mod stats;
 mod storage;
+mod wire;
 
 use std::{fs, path::PathBuf};
 
@@ -50,6 +52,13 @@ struct Cli {
     /// Read a running validator node's memory footprint and check it against the derived ceiling.
     #[clap(long)]
     vn_pid: Option<u32>,
+    /// Ootle blocks per epoch, used for the per-epoch disk figures. Follows the layer-one epoch
+    /// length, so it cannot be derived offline. The default is 24 hours at the 10s block time.
+    #[clap(long, default_value = "8640")]
+    epoch_blocks: u64,
+    /// Epochs of block history retained before pruning. Matches `DatabaseOptions::epoch_history_length`.
+    #[clap(long, default_value = "1")]
+    epoch_history_length: u64,
     /// Emit the report as JSON on stdout. Progress and harness output stay on stderr, so this
     /// redirects cleanly.
     #[clap(long)]
@@ -125,10 +134,24 @@ fn main() -> anyhow::Result<()> {
         }
     };
 
+    // Deterministic and cheap: no host state is involved, so this runs whatever else was skipped.
+    let wire = wire::measure(constants.max_commands_in_block)?;
+    let capacity = capacity::project(&wire, &budgets, cli.epoch_blocks, cli.epoch_history_length);
+
     let memory = memory::budget(cli.vn_pid);
     host.record_peak_rss();
 
-    let report = report::Report::build(host, budgets, execution, native, storage, storage_error, memory);
+    let report = report::Report::build(
+        host,
+        budgets,
+        execution,
+        native,
+        storage,
+        storage_error,
+        memory,
+        wire,
+        capacity,
+    );
 
     if cli.json {
         println!("{}", serde_json::to_string_pretty(&report)?);

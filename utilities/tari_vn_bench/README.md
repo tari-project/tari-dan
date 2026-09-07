@@ -98,6 +98,37 @@ Random-read IOPS is deliberately absent. Without `O_DIRECT` or the ability to dr
 neither of which a benchmark may assume it can do — any figure would be the cache's, not the
 device's. Use `fio` if the fsync result is marginal.
 
+### Encoded sizes and network requirements — measured once, not per host
+
+Bandwidth and disk are products of a rate the protocol fixes and a size the implementation fixes.
+The rate is knowable from the consensus constants; the size is not, because a block command carries
+`Evidence`, and evidence holds a full `SubstateId` for every input and output in every shard group
+the transaction touches. That cannot be estimated to better than a factor of two by reading the
+types, so the tool builds the real structures and encodes them with the real codec.
+
+Nothing in that phase touches the host — no network, no database, not even an engine — so the
+figures are identical on every machine. They are reported but deliberately **not graded**: grading
+this box against a number every validator shares would say nothing about this box.
+
+Both requirements are split the same way:
+
+- a **floor** the protocol fixes, computable today, which does not move with adoption. Publish this one.
+- a **rate** per unit of traffic, so an adoption assumption can be multiplied through rather than baked into a figure
+  that goes stale.
+
+The floor matters for the same reason the CPU floor did: a validator must survive the worst its
+peers can send, not the average. A link sized for today's traffic drops proposals the first time a
+committee saturates.
+
+Sizes are CBOR, which is exactly what the state store persists, so the disk figures are direct.
+Consensus messages go over the wire as protobuf, which packs the same data slightly tighter, so
+treat the bandwidth figures as a modest over-estimate rather than a floor.
+
+What is **not** covered: growth of live substate state, the genuinely unbounded term. Bounding it
+needs bytes-per-committed-substate measured against a running network with representative traffic.
+`--epoch-blocks` and `--epoch-history-length` parameterise the disk projection, since epoch length
+follows the layer-one constants and cannot be derived offline.
+
 ### Memory — derived, then corroborated
 
 Memory is the one axis a benchmark cannot measure by running: the ceiling is what the node

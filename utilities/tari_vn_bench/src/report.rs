@@ -21,11 +21,13 @@ use tari_consensus::consensus_constants::ConsensusConstants;
 use tari_engine_types::limits::NativeExecutionPoints;
 
 use crate::{
+    capacity::CapacityProjection,
     execution::ExecutionMeasurement,
     host::Host,
     memory::{Bound, MemoryBudget},
     native::NativeMeasurement,
     storage::StorageMeasurement,
+    wire::WireMeasurement,
 };
 
 /// Weight per second measured on the two-core class the block weight budgets were calibrated
@@ -157,6 +159,12 @@ pub struct Report {
     #[serde(default)]
     pub storage_error: Option<String>,
     pub memory: MemoryBudget,
+    /// Encoded sizes of blocks and transactions. Deterministic and identical on every host, so it
+    /// is reported rather than graded.
+    pub wire: WireMeasurement,
+    /// Bandwidth and disk requirements derived from `wire` and the consensus constants. Properties
+    /// of the network, not of this machine, and likewise not graded.
+    pub capacity: CapacityProjection,
     pub projections: Option<Projections>,
     pub findings: Vec<Finding>,
     pub grade: Grade,
@@ -171,6 +179,8 @@ impl Report {
         storage: Option<StorageMeasurement>,
         storage_error: Option<String>,
         memory: MemoryBudget,
+        wire: WireMeasurement,
+        capacity: CapacityProjection,
     ) -> Self {
         let projections = execution.as_ref().map(|e| project(e, &budgets));
         let mut findings = Vec::new();
@@ -226,6 +236,8 @@ impl Report {
             storage,
             storage_error,
             memory,
+            wire,
+            capacity,
             projections,
             findings,
             grade,
@@ -540,6 +552,7 @@ pub fn render(report: &Report) -> String {
         render_storage(&mut out, storage);
     }
     render_memory(&mut out, &report.memory);
+    render_capacity(&mut out, report);
     render_findings(&mut out, report);
     out
 }
@@ -711,6 +724,83 @@ fn render_memory(out: &mut String, memory: &MemoryBudget) {
             observed.uptime_hint.as_deref().unwrap_or("unknown process"),
         );
     }
+}
+
+/// Network-wide requirements. Printed after the host sections and deliberately outside the verdict:
+/// these numbers are identical on every validator, so grading this machine against them would say
+/// nothing about this machine.
+fn render_capacity(out: &mut String, report: &Report) {
+    let wire = &report.wire;
+    let cap = &report.capacity;
+
+    let _ = writeln!(out, "\nENCODED SIZES (measured; same on every host)");
+    let _ = writeln!(out, "{}", "-".repeat(78));
+    let _ = writeln!(
+        out,
+        "  canonical transfer           {} bytes on the wire",
+        wire.transaction_bytes
+    );
+    for (committees, bytes) in &wire.command_bytes_by_committees {
+        let _ = writeln!(
+            out,
+            "  block command                {bytes} bytes at {committees} committee(s)"
+        );
+    }
+    let _ = writeln!(
+        out,
+        "  max block command payload    {} ({} commands, widest sharding measured)",
+        human_bytes(wire.max_block_command_bytes as u64),
+        wire.max_commands_in_block,
+    );
+
+    let _ = writeln!(out, "\nNETWORK REQUIREMENTS (derived; not graded — same on every host)");
+    let _ = writeln!(out, "{}", "-".repeat(78));
+    let _ = writeln!(
+        out,
+        "  block propagation            {:.1} Mbps up / {:.1} Mbps down",
+        cap.bandwidth.block_upload_mbps, cap.bandwidth.block_download_mbps
+    );
+    let _ = writeln!(
+        out,
+        "  committee votes              {:.2} Mbps",
+        cap.bandwidth.vote_mbps
+    );
+    let _ = writeln!(
+        out,
+        "  consensus floor              {:.1} Mbps  <- saturated blocks, before any user traffic",
+        cap.bandwidth.consensus_floor_mbps
+    );
+    let _ = writeln!(
+        out,
+        "  transaction gossip           {:.3} Mbps per sustained TPS",
+        cap.bandwidth.gossip_mbps_per_tps
+    );
+    let _ = writeln!(
+        out,
+        "  gossip parity                {:.0} TPS — where transaction gossip equals the consensus floor",
+        cap.bandwidth.consensus_floor_mbps / cap.bandwidth.gossip_mbps_per_tps,
+    );
+    let _ = writeln!(
+        out,
+        "  block data                   {} per block, {} per epoch ({} blocks) — every block full",
+        human_bytes(cap.disk.bytes_per_block),
+        human_bytes(cap.disk.bytes_per_epoch),
+        cap.disk.blocks_per_epoch,
+    );
+    let _ = writeln!(
+        out,
+        "  history ceiling              {} at epoch_history_length={} — worst case; prunes beyond it",
+        human_bytes(cap.disk.history_ceiling_bytes),
+        cap.disk.epoch_history_length,
+    );
+    let _ = writeln!(
+        out,
+        "  live substate growth         NOT MEASURED — the unbounded term; needs bytes-per-substate"
+    );
+    let _ = writeln!(
+        out,
+        "                               from a running network with representative traffic"
+    );
 }
 
 fn render_findings(out: &mut String, report: &Report) {

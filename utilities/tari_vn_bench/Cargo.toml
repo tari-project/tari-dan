@@ -12,8 +12,12 @@ name = "tari-vn-bench"
 path = "src/main.rs"
 
 [dependencies]
+tari_bor = { workspace = true }
 tari_consensus = { workspace = true }
+tari_consensus_types = { workspace = true }
 tari_crypto = { workspace = true }
+tari_ootle_common_types = { workspace = true }
+tari_ootle_storage = { workspace = true }
 tari_engine_types = { workspace = true }
 tari_ootle_transaction = { workspace = true }
 tari_template_lib = { workspace = true }
