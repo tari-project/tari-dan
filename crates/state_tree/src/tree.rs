@@ -300,17 +300,41 @@ pub fn compute_merkle_root_for_hashes<I: IntoIterator<Item = TreeHash>>(hashes: 
     Ok(hash)
 }
 
+/// An ephemeral tree over a set of hashes, held so that several of them can be proved against the
+/// same root without rebuilding it.
+///
+/// Building costs O(n log n) hashes in n, the size of the set; each proof after that is one
+/// traversal. Callers proving more than one hash against the same set should build this once -
+/// [`compute_proof_for_hashes`] is the one-shot form and rebuilds the tree per proof.
+pub struct RootProofTree {
+    store: MemoryTreeStore<()>,
+}
+
+impl RootProofTree {
+    pub fn build<I: IntoIterator<Item = TreeHash>>(hashes: I) -> Result<Self, StateTreeError> {
+        let mut store = MemoryTreeStore::new();
+        RootStateTree::new(&mut store).put_changes(None, 1, hashes)?;
+        Ok(Self { store })
+    }
+
+    /// Proves that `hash_to_prove` is one of the hashes the tree was built over, or that it is not.
+    /// Returns the value (if it exists) and the Merkle proof.
+    pub fn get_proof(
+        &self,
+        hash_to_prove: TreeHash,
+    ) -> Result<(Option<ProofValue<()>>, SparseMerkleProofExt), StateTreeError> {
+        let jmt = JellyfishMerkleTree::new(&self.store);
+        let key = HashIdentityKeyMapper::map_to_leaf_key(&hash_to_prove);
+        let proof_tuple = jmt.get_with_proof_ext(key.as_ref(), 1)?;
+        Ok(proof_tuple)
+    }
+}
+
 /// Computes a Merkle proof for the given hash is either included in the provided the hashes, or proof of absence.
 /// Returns the value (if it exists) and the Merkle proof.
 pub fn compute_proof_for_hashes<I: Iterator<Item = TreeHash>>(
     hashes: I,
     hash_to_prove: TreeHash,
 ) -> Result<(Option<ProofValue<()>>, SparseMerkleProofExt), StateTreeError> {
-    let mut mem_store = MemoryTreeStore::new();
-    let mut root_tree = RootStateTree::new(&mut mem_store);
-    root_tree.put_changes(None, 1, hashes)?;
-    let jmt = JellyfishMerkleTree::new(&mem_store);
-    let key = HashIdentityKeyMapper::map_to_leaf_key(&hash_to_prove);
-    let proof_tuple = jmt.get_with_proof_ext(key.as_ref(), 1)?;
-    Ok(proof_tuple)
+    RootProofTree::build(hashes)?.get_proof(hash_to_prove)
 }
