@@ -154,6 +154,7 @@ diesel::table! {
     substate_cache_invalidations (substate_id) {
         substate_id -> Text,
         state_version -> BigInt,
+        substate_version -> Integer,
         invalidated_at -> BigInt,
     }
 }

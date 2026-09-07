@@ -558,20 +558,42 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
 
         // Read inside this transaction so that the journal and the insert cannot straddle a
         // concurrent invalidation commit.
-        let invalidated_at_version: Option<i64> = substate_cache_invalidations::table
-            .select(substate_cache_invalidations::state_version)
+        let journalled: Option<(i64, i32)> = substate_cache_invalidations::table
+            .select((
+                substate_cache_invalidations::state_version,
+                substate_cache_invalidations::substate_version,
+            ))
             .filter(substate_cache_invalidations::substate_id.eq(&id))
             .first(self.connection())
             .optional()
             .map_err(|e| StorageError::general(OPERATION, e))?;
 
-        if invalidated_at_version.is_some_and(|v| v as u64 > watermark.as_u64()) {
-            debug!(
-                target: LOG_TARGET,
-                "Discarding cache write for {substate_id} v{}: its shard advanced past the fetch",
-                entry.version.display()
-            );
-            return Ok(false);
+        if let Some((invalidated_at_version, observed_version)) = journalled {
+            if invalidated_at_version as u64 > watermark.as_u64() {
+                debug!(
+                    target: LOG_TARGET,
+                    "Discarding cache write for {substate_id} v{}: its shard advanced past the fetch",
+                    entry.version.display()
+                );
+                return Ok(false);
+            }
+
+            // A fetch that started after the transition is not overtaken by it, but the member it
+            // asked can be behind: it answers with a version the stream has already shown this
+            // substate past. The transition left no cached row to rank that against, so the journal
+            // is what refuses it.
+            //
+            // A record that the substate does not exist is left to the ranking below. It is settled
+            // by f + 1 members rather than one, so a single member being behind cannot produce it,
+            // and refusing it here would suppress the legitimate one that follows a destroy.
+            if version.is_some_and(|v| v < observed_version) {
+                debug!(
+                    target: LOG_TARGET,
+                    "Discarding cache write for {substate_id} v{}: the stream has already seen v{observed_version}",
+                    entry.version.display()
+                );
+                return Ok(false);
+            }
         }
 
         // A committee member that is behind can answer with a version below the head already held.
@@ -804,12 +826,19 @@ impl SqliteStoreWriteTransaction<'_> {
             .values((
                 substate_cache_invalidations::substate_id.eq(&id),
                 substate_cache_invalidations::state_version.eq(state_version.as_u64() as i64),
+                substate_cache_invalidations::substate_version.eq(invalidation.observed_version() as i32),
                 substate_cache_invalidations::invalidated_at.eq(now),
             ))
             .on_conflict(substate_cache_invalidations::substate_id)
             .do_update()
             .set((
                 substate_cache_invalidations::state_version.eq(state_version.as_u64() as i64),
+                // A floor only ever rises. The transitions of one batch arrive in no stated order,
+                // and a destroy of the version below a creation must not lower what the creation
+                // showed.
+                substate_cache_invalidations::substate_version.eq(diesel::dsl::sql::<diesel::sql_types::Integer>(
+                    "max(substate_version, excluded.substate_version)",
+                )),
                 substate_cache_invalidations::invalidated_at.eq(now),
             ))
             .execute(self.connection())

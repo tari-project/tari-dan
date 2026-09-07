@@ -108,9 +108,13 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::indexer::bootstrap";
 
-/// How long a substate stays journalled as recently changed. The journal exists only to stop a
-/// committee fetch that started before a transition arrived from writing its result back as current,
-/// so it needs to outlive an in-flight fetch and nothing more.
+/// How long a substate stays journalled as recently changed.
+///
+/// The journal stops a fetch from writing back a version the stream has moved past, which covers two
+/// things with different horizons. A fetch the transition overtook is bounded by how long a fetch
+/// takes. A fetch answered by a committee member that is behind is bounded by how far behind that
+/// member is, which is the longer of the two and the one this must outlive: a member lagging by less
+/// than this serves stale copies only of substates whose journal rows are still here to refuse them.
 const SUBSTATE_CACHE_JOURNAL_RETENTION: Duration = Duration::from_secs(300);
 
 const SUBSTATE_CACHE_PRUNE_INTERVAL: Duration = Duration::from_secs(60);

@@ -1169,6 +1169,84 @@ mod tests {
             .unwrap();
     }
 
+    /// The hole the substate version closes: the fetch is not overtaken by the transition - it
+    /// started afterwards - but the member it asked is behind and answers with a version the stream
+    /// has already shown this substate past. The transition deleted the row that would have ranked
+    /// it, so the journal is the only thing left to refuse it.
+    #[tokio::test]
+    async fn a_version_the_stream_has_already_seen_past_is_refused() {
+        let (_d, store) = temp_store().await;
+        let id = substate(1);
+        assert!(put(&store, &id, 6, 100).await);
+
+        invalidate(&store, SubstateCacheInvalidation::created(&id, 7).unwrap(), 105).await;
+        assert!(read(&store, &id).await.is_none());
+
+        // A fetch that began after the creation committed, answered by a member still on v6.
+        assert!(!put(&store, &id, 6, 110).await);
+        assert!(read(&store, &id).await.is_none());
+    }
+
+    /// The version the stream showed is a floor, not a target: the substate can move on, and a fetch
+    /// that catches up with it must still be recorded.
+    #[tokio::test]
+    async fn a_version_at_or_above_the_one_the_stream_saw_is_recorded() {
+        let (_d, store) = temp_store().await;
+        let id = substate(1);
+
+        invalidate(&store, SubstateCacheInvalidation::created(&id, 7).unwrap(), 105).await;
+        assert!(put(&store, &id, 7, 110).await);
+        assert_eq!(read(&store, &id).await, Some(7));
+        assert!(put(&store, &id, 9, 110).await);
+        assert_eq!(read(&store, &id).await, Some(9));
+    }
+
+    /// A destroy shows the version it names as reached just as a creation does, so a member still
+    /// answering below it is refused the same way.
+    #[tokio::test]
+    async fn a_destroy_records_the_version_it_saw() {
+        let (_d, store) = temp_store().await;
+        let id = substate(1);
+
+        invalidate(&store, SubstateCacheInvalidation::destroyed(id.clone(), 7), 105).await;
+        assert!(!put(&store, &id, 6, 110).await);
+        // The destroyed version is itself a legitimate head: it is down, which is what a lookup for
+        // it answers.
+        assert!(put(&store, &id, 7, 110).await);
+    }
+
+    /// One transaction downs a version and ups the next, and the two reach the journal in no stated
+    /// order. The floor is the highest version either showed, whichever was journalled last.
+    #[tokio::test]
+    async fn the_floor_is_the_highest_version_a_batch_showed() {
+        let (_d, store) = temp_store().await;
+        let id = substate(1);
+
+        let batch = [
+            SubstateCacheInvalidation::created(&id, 7).unwrap(),
+            SubstateCacheInvalidation::destroyed(id.clone(), 6),
+        ];
+        store
+            .with_write_tx(move |tx| tx.substate_cache_invalidate(batch, StateVersion::new(105)))
+            .await
+            .unwrap();
+
+        assert!(!put(&store, &id, 6, 110).await);
+        assert!(put(&store, &id, 7, 110).await);
+    }
+
+    /// Nonexistence is settled by f + 1 members rather than one, so a single member being behind
+    /// cannot produce it, and the one that follows a destroy is legitimate.
+    #[tokio::test]
+    async fn a_nonexistence_after_a_destroy_is_still_recorded() {
+        let (_d, store) = temp_store().await;
+        let id = substate(1);
+
+        invalidate(&store, SubstateCacheInvalidation::destroyed(id.clone(), 7), 105).await;
+        assert!(put_nonexistent(&store, &id, 110).await);
+        assert!(is_nonexistent(&read_entry(&store, &id).await.unwrap()));
+    }
+
     /// The point of journalling a first creation: it is the only transition that can retract the
     /// claim that a substate does not exist.
     #[tokio::test]

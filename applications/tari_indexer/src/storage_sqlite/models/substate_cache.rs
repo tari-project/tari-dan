@@ -25,6 +25,7 @@ pub struct SubstateCacheInvalidation {
     substate_id: SubstateId,
     retires_up_to: Option<u32>,
     retires_nonexistence: bool,
+    observed_version: u32,
 }
 
 impl SubstateCacheInvalidation {
@@ -45,6 +46,7 @@ impl SubstateCacheInvalidation {
             substate_id: substate_id.clone(),
             retires_up_to,
             retires_nonexistence,
+            observed_version: version,
         })
     }
 
@@ -57,11 +59,18 @@ impl SubstateCacheInvalidation {
             substate_id,
             retires_up_to: Some(version),
             retires_nonexistence: false,
+            observed_version: version,
         }
     }
 
     pub fn substate_id(&self) -> &SubstateId {
         &self.substate_id
+    }
+
+    /// The version the stream showed the substate at: created at it, or destroyed at it. A head
+    /// below this is one the substate has already been watched past, whoever offers it.
+    pub fn observed_version(&self) -> u32 {
+        self.observed_version
     }
 
     /// The highest cached head version this retires, if any.
