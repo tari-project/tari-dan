@@ -97,7 +97,8 @@ impl Transaction {
     ///
     /// Computed from the derived `CborLen` rather than by encoding, so nothing is allocated.
     pub fn encoded_size(&self) -> usize {
-        minicbor::len(self)
+        // The `Result` is vestigial — `encoded_len` cannot fail for a type that derives `CborLen`.
+        tari_bor::encoded_len(self).unwrap_or(0)
     }
 
     pub fn is_dry_run(&self) -> bool {

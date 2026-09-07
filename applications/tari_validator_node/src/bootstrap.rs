@@ -545,11 +545,13 @@ pub fn create_node_transaction_validator<TProvider: TemplateProvider>(
     TransactionNetworkValidator::new(network)
         .and_then(TransactionDryRunValidator)
         .and_then(BasicValidations::new())
+        // Bytes before weight: the byte cap is what the gossip message limit is derived from, so a
+        // transaction failing it could not have been relayed regardless of what it weighs.
+        .and_then(TransactionSizeValidator::new(constants.max_transaction_size_bytes))
         // Blob payloads must be exactly what the instructions reference: bad indices would only
         // fail at execution, and unreferenced blobs would never fail at all.
         .and_then(BlobReferenceValidator::new())
         // Cheap structural check — reject over-weight transactions before verifying signatures.
-        .and_then(TransactionSizeValidator::new(constants.max_transaction_size_bytes))
         .and_then(TransactionWeightValidator::new(constants.max_transaction_weight))
         // Reject transactions whose aggregate stealth-transfer work exceeds the per-transaction caps before
         // verifying signatures or executing.

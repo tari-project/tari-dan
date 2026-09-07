@@ -27,6 +27,20 @@ const GOSSIP_FRAMING_ALLOWANCE: usize = 16 * 1024;
 ///
 /// Every node on a network must agree on the result, for the same reason they must agree on
 /// [`TRANSACTION_TOPIC`]: a node with a smaller limit rejects messages its peers consider valid.
+///
+/// # Narrowing this is a rollout decision
+///
+/// The invariant is one-directional — gossip must carry anything ingress admits, and nothing
+/// requires it to be tight — so raising the transaction byte cap is always safe to deploy in any
+/// order, while lowering it is not. Between a node on the lower limit and a peer still on the higher
+/// one there is a band of transactions the peer admits and relays whose frame the upgraded node
+/// cannot decode, which costs the relaying peer a torn-down substream rather than a per-message
+/// drop.
+///
+/// The current value is below the flat 2 MiB it replaces, which is deliberate and safe here only
+/// because every validator and indexer on these networks is upgraded together. A deployment that
+/// cannot do that must floor the result at the limit its peers already run, or raise the cap first
+/// and narrow it in a later release.
 pub const fn max_gossip_message_size(max_transaction_size_bytes: usize) -> usize {
     max_transaction_size_bytes + GOSSIP_FRAMING_ALLOWANCE
 }

@@ -28,6 +28,11 @@ use tari_ootle_transaction::Network;
 
 /// Room above a template binary for the rest of the transaction carrying it: its other instructions,
 /// inputs, signatures and CBOR framing.
+///
+/// Deliberately loose against those — a real max-size publish encodes to a couple of hundred bytes
+/// over its binary, and a single instruction is capped at `ENGINE_LIMITS.max_call_size` — because a
+/// legitimate transaction refused at ingress is a worse failure than the bytes a larger allowance
+/// costs. `max_transaction_size_admits_max_template_publish` is what holds it to that.
 const TRANSACTION_ENVELOPE_ALLOWANCE: usize = 256 * 1024;
 
 /// The byte cap every network uses, derived so that it moves with the template binary limit it has
@@ -173,10 +178,6 @@ impl ConsensusConstants {
         // (binary bytes / 3) — with ~2x headroom, while bounding any single transaction's
         // size/execution cost at ingress. A mempool admission bound, not a consensus rule.
         max_transaction_weight: 1_000_000,
-        // A max-size template publish plus room for the transaction around it: instructions, inputs,
-        // signatures and CBOR framing, against a `max_call_size` of 128 KiB. Deliberately loose
-        // against those, because a legitimate transaction refused at ingress is a worse failure than
-        // the bytes a larger allowance costs.
         max_transaction_size_bytes: MAX_TRANSACTION_SIZE_BYTES,
         // ~18 max-compute transactions (`MAX_WASM_POINTS_PER_TRANSACTION` each) — ~536ms of serial
         // execution at the calibrated ~8.4M points/ms, ~5% of the block time, leaving the rest for
@@ -218,10 +219,6 @@ impl ConsensusConstants {
         // (binary bytes / 3) — with ~2x headroom, while bounding any single transaction's
         // size/execution cost at ingress. A mempool admission bound, not a consensus rule.
         max_transaction_weight: 1_000_000,
-        // A max-size template publish plus room for the transaction around it: instructions, inputs,
-        // signatures and CBOR framing, against a `max_call_size` of 128 KiB. Deliberately loose
-        // against those, because a legitimate transaction refused at ingress is a worse failure than
-        // the bytes a larger allowance costs.
         max_transaction_size_bytes: MAX_TRANSACTION_SIZE_BYTES,
         // ~18 max-compute transactions (`MAX_WASM_POINTS_PER_TRANSACTION` each) — ~536ms of serial
         // execution at the calibrated ~8.4M points/ms, ~5% of the block time, leaving the rest for
@@ -263,10 +260,6 @@ impl ConsensusConstants {
         // (binary bytes / 3) — with ~2x headroom, while bounding any single transaction's
         // size/execution cost at ingress. A mempool admission bound, not a consensus rule.
         max_transaction_weight: 1_000_000,
-        // A max-size template publish plus room for the transaction around it: instructions, inputs,
-        // signatures and CBOR framing, against a `max_call_size` of 128 KiB. Deliberately loose
-        // against those, because a legitimate transaction refused at ingress is a worse failure than
-        // the bytes a larger allowance costs.
         max_transaction_size_bytes: MAX_TRANSACTION_SIZE_BYTES,
         // ~18 max-compute transactions (`MAX_WASM_POINTS_PER_TRANSACTION` each) — ~536ms of serial
         // execution at the calibrated ~8.4M points/ms, ~5% of the block time, leaving the rest for
@@ -322,10 +315,6 @@ impl ConsensusConstants {
             // (binary bytes / 3) — with ~2x headroom, while bounding any single transaction's
             // size/execution cost at ingress. A mempool admission bound, not a consensus rule.
             max_transaction_weight: 1_000_000,
-            // A max-size template publish plus room for the transaction around it: instructions, inputs,
-            // signatures and CBOR framing, against a `max_call_size` of 128 KiB. Deliberately loose
-            // against those, because a legitimate transaction refused at ingress is a worse failure than
-            // the bytes a larger allowance costs.
             max_transaction_size_bytes: MAX_TRANSACTION_SIZE_BYTES,
             // ~18 max-compute transactions (`MAX_WASM_POINTS_PER_TRANSACTION` each) — ~536ms of serial
             // execution at the calibrated ~8.4M points/ms, ~5% of the block time, leaving the rest for
