@@ -227,7 +227,10 @@ impl TemplateTest {
         test
     }
 
-    fn from_package(package: Package) -> Self {
+    /// Builds a harness over a package assembled by the caller. The public constructors compile
+    /// templates from source; this is the seam for a caller that already has loaded templates —
+    /// notably one embedding pre-compiled WASM so it needs no toolchain at run time.
+    pub fn from_package(package: Package) -> Self {
         let secret_key =
             RistrettoSecretKey::from_hex("8a39567509bf2f7074e5fd153337405292cdc9f574947313b62fbf8fb4cffc02").unwrap();
 
