@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 mod error;
+mod finalized_watch;
 mod handle;
 mod service;
 

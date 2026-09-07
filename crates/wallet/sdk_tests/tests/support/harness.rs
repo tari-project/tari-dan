@@ -3,6 +3,7 @@
 
 use std::{collections::HashMap, convert::Infallible, future::Future, marker::PhantomData, str::FromStr};
 
+use futures::StreamExt;
 use ootle_byte_type::ToByteType;
 use tari_crypto::tari_utilities::SafePassword;
 use tari_engine_types::{
@@ -36,7 +37,13 @@ use tari_ootle_wallet_sdk::{
         WalletLockDropGuard,
         WalletLockId,
     },
-    network::{SubstateQueryResult, TransactionQueryResult, UtxoUpdateStream, WalletNetworkInterface},
+    network::{
+        SubstateQueryResult,
+        TransactionFinalizedStream,
+        TransactionQueryResult,
+        UtxoUpdateStream,
+        WalletNetworkInterface,
+    },
     storage::TagAndPublicNoncePair,
 };
 use tari_ootle_wallet_storage_sqlite::SqliteWalletStore;
@@ -259,6 +266,10 @@ impl WalletNetworkInterface for CannedTransactionResultInterface {
         Ok(self.result.clone())
     }
 
+    async fn subscribe_transaction_finalized(&self) -> Result<TransactionFinalizedStream<Self::Error>, Self::Error> {
+        Ok(futures::stream::pending().boxed())
+    }
+
     async fn fetch_template_definition(&self, _template_address: TemplateAddress) -> Result<TemplateDef, Self::Error> {
         panic!("CannedTransactionResultInterface called")
     }
@@ -345,6 +356,10 @@ impl WalletNetworkInterface for PanicNetworkInterface {
         &self,
         _transaction_id: TransactionId,
     ) -> Result<TransactionQueryResult, Self::Error> {
+        panic!("PanicNetworkInterface called")
+    }
+
+    async fn subscribe_transaction_finalized(&self) -> Result<TransactionFinalizedStream<Self::Error>, Self::Error> {
         panic!("PanicNetworkInterface called")
     }
 

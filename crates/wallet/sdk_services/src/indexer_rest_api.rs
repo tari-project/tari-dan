@@ -15,6 +15,7 @@ use tari_engine_types::{
 };
 use tari_indexer_client::{
     error::IndexerRestClientError,
+    event::{IndexerEvent, TransactionFinalizedEvent},
     protobuf,
     rest_api_client::IndexerRestApiClient,
     types::{
@@ -43,7 +44,9 @@ use tari_ootle_wallet_sdk::{
     models::{EndOfShard, StartOfShard, UtxoBurnt, UtxoSpent, UtxoUnspent, UtxoUpdatePayload, WalletUtxoUpdate},
     network::{
         SubstateQueryResult,
+        TransactionFinalizedNotification,
         TransactionFinalizedResult,
+        TransactionFinalizedStream,
         TransactionQueryResult,
         UtxoUpdateStream,
         WalletNetworkInterface,
@@ -198,6 +201,29 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
             transaction_id,
             result: convert_indexer_result_to_wallet_result(resp.result),
         })
+    }
+
+    async fn subscribe_transaction_finalized(&self) -> Result<TransactionFinalizedStream<Self::Error>, Self::Error> {
+        let client = self.get_client()?;
+        let events = client.sse_events().await?;
+        let stream = events
+            .map_err(|e| IndexerRestApiNetworkInterfaceError::StreamDecodeError(e.into()))
+            .try_filter_map(|event| async move {
+                if event.event_type != IndexerEvent::TRANSACTION_FINALIZED_EVENT_NAME {
+                    return Ok(None);
+                }
+                let event: TransactionFinalizedEvent = event.try_parse_event().map_err(|e| {
+                    IndexerRestApiNetworkInterfaceError::StreamDecodeError(anyhow!(
+                        "Failed to decode {} event: {e}",
+                        IndexerEvent::TRANSACTION_FINALIZED_EVENT_NAME
+                    ))
+                })?;
+                Ok(Some(TransactionFinalizedNotification {
+                    transaction_id: event.transaction_id,
+                    outcome: event.outcome,
+                }))
+            });
+        Ok(stream.boxed())
     }
 
     async fn fetch_template_definition(
