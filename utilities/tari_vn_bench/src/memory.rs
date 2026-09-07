@@ -145,11 +145,11 @@ pub fn budget(pid: Option<u32>) -> MemoryBudget {
         },
         BudgetLine {
             name: "Compiled template module cache".to_string(),
-            bytes: 128 * MIB,
-            bound: Bound::Estimated,
-            // Grows with the number of distinct templates the shard group has seen; there is no
-            // eviction, so this is the term that rises over a node's lifetime.
-            source: "grows with published template count; ENGINE_LIMITS.max_template_binary_size_bytes each"
+            bytes: 200 * MIB,
+            bound: Bound::Capped,
+            // A moka LRU weighed at 4x each template's code size, so the cap is on resident bytes rather than
+            // template count and the cache evicts rather than growing over a node's lifetime.
+            source: "TemplateConfig::max_cache_size_bytes default (crates/template_provider/src/memory_cache.rs)"
                 .to_string(),
         },
         BudgetLine {
