@@ -177,12 +177,17 @@ struct BatchProofContext {
 /// Everything is read in one transaction, so every value proof verifies against the anchor's
 /// shard-group root. The anchor comes first so a client can establish that root before it has to
 /// verify anything against it; `missing` comes last, once the ids that were found are known.
+///
+/// A substate whose shard has no committed state cannot be proved against the anchor. It is reported
+/// as missing rather than failing the batch, so the ids that can be answered still are; the client
+/// refetches whatever it did not get.
 fn read_substate_batch<TTx: StateStoreReadTransaction>(
     tx: &TTx,
     ids: &[SubstateId],
     ctx: BatchProofContext,
 ) -> Result<Vec<batch_response::Response>, StorageError> {
-    let (substates, missing) = SubstateRecord::get_any_max_version(tx, ids)?;
+    let (substates, mut missing) = SubstateRecord::get_any_max_version(tx, ids)?;
+    let mut missing = missing.drain().map(|id| id.to_bytes()).collect::<Vec<_>>();
 
     let mut generator = None;
     let mut messages = Vec::with_capacity(substates.len() + 2);
@@ -194,19 +199,25 @@ fn read_substate_batch<TTx: StateStoreReadTransaction>(
     }
 
     for substate in substates {
-        let value_proof = generator
-            .as_mut()
-            .map(|generator| {
-                let proof = generator.generate(&substate.to_versioned_substate_id())?;
-                tari_bor::serde_codec::to_vec(&proof).map_err(|e| StorageError::QueryError {
-                    reason: format!("encode substate value proof: {e}"),
-                })
-            })
-            .transpose()?;
+        let mut value_proof = Vec::new();
+        if let Some(generator) = generator.as_mut() {
+            let Some(proof) = generator.generate(&substate.to_versioned_substate_id())? else {
+                warn!(
+                    target: LOG_TARGET,
+                    "{} is stored but its shard has no committed state; reporting it as missing",
+                    substate.substate_id()
+                );
+                missing.push(substate.substate_id().to_bytes());
+                continue;
+            };
+            value_proof = tari_bor::serde_codec::to_vec(&proof).map_err(|e| StorageError::QueryError {
+                reason: format!("encode substate value proof: {e}"),
+            })?;
+        }
 
         messages.push(batch_response::Response::Substate(proto::rpc::ProvenSubstate {
             proof_epoch: substate.created().at_epoch.as_u64(),
-            substate_value_proof: value_proof.unwrap_or_default(),
+            substate_value_proof: value_proof,
             substate: Some(proto::consensus::Substate {
                 substate_id: substate.substate_id().to_bytes(),
                 version: substate.version(),
@@ -218,14 +229,9 @@ fn read_substate_batch<TTx: StateStoreReadTransaction>(
     }
 
     if !missing.is_empty() {
-        debug!(
-            target: LOG_TARGET,
-            "{} requested substate(s) not found: {}",
-            missing.len(),
-            missing.display()
-        );
+        debug!(target: LOG_TARGET, "{} requested substate(s) not answered", missing.len());
         messages.push(batch_response::Response::Missing(proto::rpc::MissingSubstates {
-            substate_ids: missing.iter().map(|id| id.to_bytes()).collect(),
+            substate_ids: missing,
         }));
     }
 
@@ -294,16 +300,13 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
             .ok_or_else(|| RpcStatus::bad_request("Missing substate requirement"))?;
 
         // We need our local committee info to (a) confirm we store a non-global substate and (b) know
-        // our shard group + preshard count when generating a proof.
+        // our shard group + preshard count when generating a proof. It is read at the epoch consensus
+        // is committing at - the epoch the proved state and its anchor belong to - so that a shard
+        // group from a newer epoch cannot shape a proof the anchor's root does not commit.
         let local_committee_info = if !substate_requirement.substate_id().is_global() || req.include_proof {
-            let current_epoch = self
-                .epoch_manager
-                .current_epoch()
-                .await
-                .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
             let info = self
                 .epoch_manager
-                .get_local_committee_info(current_epoch)
+                .get_local_committee_info(self.consensus.current_epoch())
                 .await
                 .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
             if !substate_requirement.substate_id().is_global() &&
@@ -724,6 +727,9 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
         if req.substate_ids.len() > MAX_REQUESTS {
             return Err(RpcStatus::bad_request("Cannot request more than 50 substates at once"));
         }
+        if req.substate_ids.is_empty() {
+            return Err(RpcStatus::bad_request("No substate ids requested"));
+        }
 
         debug!(
             target: LOG_TARGET,
@@ -736,22 +742,18 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| RpcStatus::bad_request(format!("Invalid substate ID: {e}")))?;
 
-        // Our local committee info tells us (a) which of the requested ids we are actually responsible
-        // for and (b) our shard group + preshard count, needed to generate proofs.
-        let current_epoch = self
-            .epoch_manager
-            .current_epoch()
-            .await
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+        // The state being read and the anchor proving it both belong to the epoch consensus is
+        // committing at, so the committee info that shapes the proof must come from that epoch too:
+        // a shard group read at a newer epoch would produce level-2 proofs against a root the anchor
+        // does not commit. It tells us (a) which of the requested ids we are responsible for and
+        // (b) our shard group + preshard count.
+        let consensus_epoch = self.consensus.current_epoch();
         let local_committee_info = self
             .epoch_manager
-            .get_local_committee_info(current_epoch)
+            .get_local_committee_info(consensus_epoch)
             .await
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-        if let Some(id) = ids
-            .iter()
-            .find(|id| !id.is_global() && !local_committee_info.includes_substate_id(id))
-        {
+        if let Some(id) = ids.iter().find(|id| !local_committee_info.includes_substate_id(id)) {
             return Err(RpcStatus::bad_request(format!(
                 "This node in {} does not store {}",
                 local_committee_info.shard_group(),
@@ -762,7 +764,6 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
         let (sender, receiver) = mpsc::channel(req.substate_ids.len() + 2);
 
         let store = self.state_store.clone();
-        let consensus_epoch = self.consensus.current_epoch();
         let shard_group = local_committee_info.shard_group();
         let num_preshards = local_committee_info.num_preshards();
         let include_proofs = req.include_proofs;

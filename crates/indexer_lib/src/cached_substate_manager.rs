@@ -92,6 +92,26 @@ pub trait TrustedRootStore: std::fmt::Debug + Send + Sync + 'static {
     async fn record(&self, tip: VerifiedBlockTip) -> Result<(), IndexerError>;
 }
 
+/// The most substates a validator will answer for in one batch request.
+const SUBSTATE_BATCH_SIZE: usize = 50;
+
+/// How many committee members a batch chunk is tried against before it is given up on. Unlike
+/// [`READ_RACE_WIDTH`], which bounds concurrent in-flight reads, these are sequential attempts: a
+/// batch is large enough that asking several members at once for the same chunk would waste more
+/// bandwidth than the latency it saves.
+const BATCH_READ_ATTEMPTS: usize = 5;
+
+/// What a batch's proofs establish about the results in it.
+#[derive(Debug, Clone, Copy)]
+enum BatchTrust {
+    /// Proof verification is off, so there was nothing to establish.
+    NotRequired,
+    /// Every result was proven against the batch's anchor.
+    Proven,
+    /// The responder had no committed block to anchor against, so it proved nothing.
+    Unanchored,
+}
+
 /// Outcome of a substate lookup together with whether the value was committee-verified.
 #[derive(Debug, Clone)]
 pub struct SubstateLookupResult {
@@ -336,83 +356,118 @@ where
         let mut results = HashMap::with_capacity(substate_ids.len());
         for (shard_group, (committee, substate_ids)) in committee_map {
             debug!(target: LOG_TARGET, "Fetching {} substates from shard group {}", substate_ids.len(), shard_group);
-            let num_batches = substate_ids.len().div_ceil(50);
-            let mut batch_count = 0;
-            for member in committee.shuffled().take(5) {
-                if batch_count >= num_batches {
-                    break;
+            for chunk in substate_ids.chunks(SUBSTATE_BATCH_SIZE) {
+                let (batch, verified) = self.race_substate_batch(&committee, chunk, shard_group).await?;
+                if !batch.missing.is_empty() {
+                    debug!(
+                        target: LOG_TARGET,
+                        "{} of {} requested substate(s) are unknown to {shard_group}",
+                        batch.missing.len(),
+                        chunk.len()
+                    );
                 }
-                let mut client = self.validator_node_client_factory.create_client(&member.address);
-                let batches = substate_ids.chunks(50).skip(batch_count);
-                for batch in batches {
-                    let resp = match client.get_substates_batch(batch, self.verify_substate_proofs).await {
-                        Ok(resp) => resp,
-                        Err(e) => {
-                            warn!(target: LOG_TARGET, "⚠️Failed to get substate batch for shard group {}: {}", shard_group, e);
-                            break;
-                        },
-                    };
 
-                    // One anchor covers the whole batch, so the commit proof is validated against the
-                    // committee at most once per batch and each result costs only its Merkle path.
-                    let verified = match self.verify_substate_batch(&resp).await {
-                        Ok(verified) => verified,
-                        Err(e) => {
-                            // Fail closed: an unverifiable batch disqualifies this member, and the
-                            // batch is retried against the next one.
-                            warn!(target: LOG_TARGET, "⚠️Rejected substate batch from {}: {}", member.address, e);
-                            break;
-                        },
-                    };
-                    batch_count += 1;
-
-                    for substate in resp.substates {
-                        if let Some(watermark) = watermarks.get(&substate.substate_id).copied() {
-                            let entry = SubstateCacheEntryRef {
-                                version: substate.result.version(),
-                                substate_result: &substate.result,
-                                cached_at: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?.as_secs(),
-                                verified,
-                            };
-                            // An unverified entry is not cached while verification is on, so the next
-                            // read retries for a proven copy instead of pinning an unproven value.
-                            if verified || !self.verify_substate_proofs {
-                                self.substate_cache
-                                    .write(&substate.substate_id, entry, watermark)
-                                    .await?;
-                            }
-                        }
-
-                        // A batch answers with the head version; a caller asking for substates by id
-                        // wants the live ones, and a down head is not one.
-                        if let Some(up) = substate.result.into_up() {
-                            results.insert(substate.substate_id, up);
+                for substate in batch.substates {
+                    if let Some(watermark) = watermarks.get(&substate.substate_id).copied() {
+                        let entry = SubstateCacheEntryRef {
+                            version: substate.result.version(),
+                            substate_result: &substate.result,
+                            cached_at: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?.as_secs(),
+                            verified,
+                        };
+                        // An unverified entry is not cached while verification is on, so the next
+                        // read retries for a proven copy instead of pinning an unproven value.
+                        if verified || !self.verify_substate_proofs {
+                            self.substate_cache
+                                .write(&substate.substate_id, entry, watermark)
+                                .await?;
                         }
                     }
+
+                    // A batch answers with the head version; a caller asking for substates by id
+                    // wants the live ones, and a down head is not one.
+                    if let Some(up) = substate.result.into_up() {
+                        results.insert(substate.substate_id, up);
+                    }
                 }
-            }
-            if batch_count < num_batches {
-                return Err(IndexerError::ValidatorNodeClientError(format!(
-                    "Failed to get all substate batches for shard group {}. {}/{}",
-                    shard_group, batch_count, num_batches
-                )));
             }
         }
         Ok(results)
     }
 
-    /// Verifies every value proof in `batch` against the batch's single anchor, returning whether the
-    /// results may be cached as verified.
+    /// Fetches one chunk of substate ids, preferring a member that can prove it.
     ///
-    /// Returns `false` (rather than failing) when the batch carries no anchor at all: a validator with
-    /// nothing committed yet cannot prove anything, which is not misbehaviour. A batch that carries an
-    /// anchor must prove every result it returns.
-    async fn verify_substate_batch(&self, batch: &SubstateBatch) -> Result<bool, IndexerError> {
+    /// A member that answers without an anchor has nothing committed to prove against (it is behind,
+    /// or in the window right after an epoch change). Rather than settle for that answer, its batch is
+    /// held and the rest of the committee is asked, the same way [`CommitteeReadTally`] holds an
+    /// unproven single-substate result while it keeps racing. The held batch is served only once every
+    /// member has failed to prove the chunk, and never cached.
+    ///
+    /// Returns the batch and whether it was proven.
+    async fn race_substate_batch(
+        &self,
+        committee: &Committee<TAddr>,
+        chunk: &[&SubstateId],
+        shard_group: ShardGroup,
+    ) -> Result<(SubstateBatch, bool), IndexerError> {
+        let mut unproven = None;
+        for member in committee.shuffled().take(BATCH_READ_ATTEMPTS) {
+            let mut client = self.validator_node_client_factory.create_client(&member.address);
+            let batch = match client.get_substates_batch(chunk, self.verify_substate_proofs).await {
+                Ok(batch) => batch,
+                Err(e) => {
+                    warn!(target: LOG_TARGET, "⚠️Failed to get substate batch from {}: {}", member.address, e);
+                    continue;
+                },
+            };
+
+            // One anchor covers the whole batch, so the commit proof is validated against the
+            // committee at most once per batch and each result costs only its Merkle path.
+            match self.verify_substate_batch(&batch).await {
+                Ok(BatchTrust::NotRequired) => return Ok((batch, false)),
+                Ok(BatchTrust::Proven) => return Ok((batch, true)),
+                Ok(BatchTrust::Unanchored) => {
+                    debug!(
+                        target: LOG_TARGET,
+                        "{} has nothing committed to prove this batch against; asking another member",
+                        member.address
+                    );
+                    unproven.get_or_insert(batch);
+                },
+                // Fail closed: an unverifiable batch disqualifies this member.
+                Err(e) => {
+                    warn!(target: LOG_TARGET, "⚠️Rejected substate batch from {}: {}", member.address, e);
+                },
+            }
+        }
+
+        match unproven {
+            Some(batch) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "⚠️No member of {shard_group} could prove {} substate(s); serving them unproven",
+                    chunk.len()
+                );
+                Ok((batch, false))
+            },
+            None => Err(IndexerError::ValidatorNodeClientError(format!(
+                "No member of {shard_group} answered for {} substate(s)",
+                chunk.len()
+            ))),
+        }
+    }
+
+    /// Verifies every value proof in `batch` against the batch's single anchor.
+    ///
+    /// A batch that carries an anchor must prove every result it returns; one that carries no anchor
+    /// proves nothing, which is not misbehaviour and is reported as [`BatchTrust::Unanchored`] for the
+    /// caller to weigh against what other members offer.
+    async fn verify_substate_batch(&self, batch: &SubstateBatch) -> Result<BatchTrust, IndexerError> {
         if !self.verify_substate_proofs {
-            return Ok(false);
+            return Ok(BatchTrust::NotRequired);
         }
         let Some(commit_proof) = &batch.commit_proof else {
-            return Ok(false);
+            return Ok(BatchTrust::Unanchored);
         };
 
         let root = self.trusted_root_from_commit_proof(commit_proof).await?;
@@ -449,7 +504,7 @@ where
             .map_err(|e| IndexerError::SubstateProofVerificationFailed { details: e.to_string() })?;
         }
 
-        Ok(true)
+        Ok(BatchTrust::Proven)
     }
 
     async fn fetch_substate_from_committee(

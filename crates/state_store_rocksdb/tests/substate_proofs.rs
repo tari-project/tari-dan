@@ -108,7 +108,7 @@ fn proofs_for_a_batch_verify_against_one_shard_group_root() {
 
     for substate in &substates {
         let versioned_id = substate.to_versioned_substate_id();
-        let proof = generator.generate(&versioned_id).unwrap();
+        let proof = generator.generate(&versioned_id).unwrap().expect("shard has state");
         proof
             .verify_inclusion(&group_root, &versioned_id, &value_hash(substate))
             .unwrap_or_else(|e| panic!("{versioned_id} in {}: {e}", substate.created().in_shard));
@@ -125,22 +125,20 @@ fn a_reused_shard_root_proof_belongs_to_its_own_shard() {
     commit_substates(&db, &substates);
 
     let tx = db.create_read_tx().unwrap();
+    let group_root = shard_group_root(&tx, shard_group);
     let mut generator = SubstateProofGenerator::new(&tx, shard_group, num_preshards()).unwrap();
 
-    // Prove every substate once to fill the cache, then again to read it back.
-    let first = substates
-        .iter()
-        .map(|s| generator.generate(&s.to_versioned_substate_id()).unwrap())
-        .collect::<Vec<_>>();
-    for (substate, first) in substates.iter().zip(first) {
-        let again = generator.generate(&substate.to_versioned_substate_id()).unwrap();
-        assert_eq!(
-            tari_bor::serde_codec::to_vec(&again).unwrap(),
-            tari_bor::serde_codec::to_vec(&first).unwrap(),
-            "{} in {}",
-            substate.substate_id(),
-            substate.created().in_shard
-        );
+    // Fill the cache for every shard the substates live in, so that the second pass is served
+    // entirely from it, then check each cached proof still verifies for its own substate.
+    for substate in &substates {
+        generator.generate(&substate.to_versioned_substate_id()).unwrap();
+    }
+    for substate in &substates {
+        let versioned_id = substate.to_versioned_substate_id();
+        let proof = generator.generate(&versioned_id).unwrap().expect("shard has state");
+        proof
+            .verify_inclusion(&group_root, &versioned_id, &value_hash(substate))
+            .unwrap_or_else(|e| panic!("{versioned_id} in {}: {e}", substate.created().in_shard));
     }
 }
 
@@ -156,7 +154,7 @@ fn a_batched_proof_matches_the_single_substate_proof() {
 
     for substate in &substates {
         let versioned_id = substate.to_versioned_substate_id();
-        let batched = generator.generate(&versioned_id).unwrap();
+        let batched = generator.generate(&versioned_id).unwrap().expect("shard has state");
         let single = generate_substate_proof(&tx, shard_group, &versioned_id, num_preshards()).unwrap();
         assert_eq!(
             tari_bor::serde_codec::to_vec(&batched).unwrap(),
@@ -181,7 +179,7 @@ fn a_version_that_is_not_up_gets_an_exclusion_proof() {
 
     for substate in &substates {
         let next_version = VersionedSubstateId::new(substate.substate_id().clone(), substate.version() + 1);
-        let proof = generator.generate(&next_version).unwrap();
+        let proof = generator.generate(&next_version).unwrap().expect("shard has state");
         proof.verify_exclusion(&group_root, &next_version).unwrap();
         proof
             .verify_inclusion(&group_root, &next_version, &value_hash(substate))
@@ -213,4 +211,31 @@ fn a_substate_outside_the_shard_group_is_refused() {
         .generate(&outsider.to_versioned_substate_id())
         .expect_err("outside the shard group");
     assert!(err.to_string().contains("outside this shard group"), "{err}");
+}
+
+/// A shard with no committed state has no root to prove against. That is not a read failure, so the
+/// responder can drop the one substate and still answer for the rest of its batch.
+#[test]
+fn a_shard_with_no_committed_state_proves_nothing() {
+    let (db, _tmp) = create_rocksdb();
+    let shard_group = ShardGroup::all_shards(num_preshards());
+    let substates = substates_spanning_shards(2, 2);
+    // Commit only the first substate, so the second one's shard has no state tree at all.
+    commit_substates(&db, &substates[..1]);
+
+    let tx = db.create_read_tx().unwrap();
+    let mut generator = SubstateProofGenerator::new(&tx, shard_group, num_preshards()).unwrap();
+
+    assert!(
+        generator
+            .generate(&substates[0].to_versioned_substate_id())
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        generator
+            .generate(&substates[1].to_versioned_substate_id())
+            .unwrap()
+            .is_none()
+    );
 }

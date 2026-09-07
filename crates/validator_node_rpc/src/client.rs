@@ -1,7 +1,13 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, convert::TryInto, future::Future, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    convert::TryInto,
+    future::Future,
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::anyhow;
 use futures::StreamExt;
@@ -356,6 +362,7 @@ impl<TAddr: NodeAddressable + ToPeerId, TMsg: MessageSpec> ValidatorNodeRpcClien
             .await?;
 
         // For simplicity, we'll collect the stream instead of returning a decoded stream
+        let requested = substate_ids.iter().copied().collect::<HashSet<_>>();
         let mut batch = SubstateBatch {
             substates: Vec::with_capacity(substate_ids.len()),
             ..Default::default()
@@ -369,7 +376,23 @@ impl<TAddr: NodeAddressable + ToPeerId, TMsg: MessageSpec> ValidatorNodeRpcClien
                     batch.commit_proof = Some(commit_proof);
                 },
                 batch_response::Response::Substate(proven) => {
-                    batch.substates.push(decode_batched_substate(proven)?);
+                    // A responder can only answer for what was asked. Bounding the stream by the
+                    // request keeps a peer from growing this vec without limit, and dropping ids we
+                    // did not ask for keeps them out of the caller's results.
+                    if batch.substates.len() >= substate_ids.len() {
+                        return Err(ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
+                            "Node returned more substates than the {} requested",
+                            substate_ids.len()
+                        )));
+                    }
+                    let substate = decode_batched_substate(proven)?;
+                    if !requested.contains(&substate.substate_id) {
+                        return Err(ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
+                            "Node returned {} which was not requested",
+                            substate.substate_id
+                        )));
+                    }
+                    batch.substates.push(substate);
                 },
                 batch_response::Response::Missing(missing) => {
                     for id in &missing.substate_ids {
@@ -380,6 +403,17 @@ impl<TAddr: NodeAddressable + ToPeerId, TMsg: MessageSpec> ValidatorNodeRpcClien
                     }
                 },
             }
+        }
+
+        // Every requested id is either answered or named as missing. A responder that accounts for
+        // none of them is not answering this protocol - most likely it predates the batch response
+        // becoming a oneof, and its substates decoded as an unknown field. Failing here keeps that
+        // skew from reading as "none of these substates exist".
+        if batch.substates.is_empty() && batch.missing.is_empty() {
+            return Err(ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
+                "Node accounted for none of the {} requested substates",
+                substate_ids.len()
+            )));
         }
 
         Ok(batch)

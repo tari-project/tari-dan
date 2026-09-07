@@ -6,8 +6,7 @@ use std::collections::{HashMap, hash_map::Entry};
 use ootle_network::Network;
 use tari_common_types::types::FixedHash;
 use tari_engine_types::substate::{SubstateId, SubstateValue, hash_substate};
-use tari_ootle_common_types::{Epoch, NumPreshards, ShardGroup, VersionedSubstateId, VotePower, shard::Shard};
-use tari_sidechain::SidechainProofValidationError;
+use tari_ootle_common_types::{Epoch, NumPreshards, ShardGroup, VersionedSubstateId, shard::Shard};
 use tari_state_tree::{
     SPARSE_MERKLE_PLACEHOLDER_HASH,
     SparseMerkleProofExt,
@@ -18,14 +17,8 @@ use tari_state_tree::{
     Version,
     compute_proof_for_hashes,
 };
-use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
-use crate::{
-    StateStoreReadTransaction,
-    StorageError,
-    consensus_models::{CommittedBlockProof, CommittedBlockProofError, VerifiedBlockTip},
-    state_store::ShardScopedTreeStoreReader,
-};
+use crate::{StateStoreReadTransaction, StorageError, state_store::ShardScopedTreeStoreReader};
 
 /// Generates two-level [`SubstateValueProof`]s against one committed shard-group state.
 ///
@@ -86,16 +79,20 @@ impl<'a, TTx: StateStoreReadTransaction> SubstateProofGenerator<'a, TTx> {
     }
 
     /// Proves `versioned_id`'s committed value, or its absence, against the shard-group root.
-    pub fn generate(&mut self, versioned_id: &VersionedSubstateId) -> Result<SubstateValueProof, StorageError> {
+    ///
+    /// `Ok(None)` means the substate's shard has no committed state at all, so there is no root to
+    /// prove anything against. A caller proving many substates can drop that one and keep the rest;
+    /// an error means the read itself failed and nothing in the batch can be trusted.
+    pub fn generate(&mut self, versioned_id: &VersionedSubstateId) -> Result<Option<SubstateValueProof>, StorageError> {
         let shard = versioned_id.to_shard(self.num_preshards);
         let Some(state) = self.shards.get(&shard).copied() else {
             return Err(StorageError::QueryError {
                 reason: format!("generate_substate_proof: {versioned_id} is in {shard}, outside this shard group"),
             });
         };
-        let version = state.version.ok_or_else(|| StorageError::QueryError {
-            reason: format!("generate_substate_proof: shard {shard} has no committed state"),
-        })?;
+        let Some(version) = state.version else {
+            return Ok(None);
+        };
 
         // Level 1: leaf proof (inclusion or exclusion) for the substate within its shard.
         let mut scoped = ShardScopedTreeStoreReader::new(self.tx, shard);
@@ -120,7 +117,7 @@ impl<'a, TTx: StateStoreReadTransaction> SubstateProofGenerator<'a, TTx> {
             },
         };
 
-        Ok(SubstateValueProof::new(state.root, shard_root_proof, leaf_proof))
+        Ok(Some(SubstateValueProof::new(state.root, shard_root_proof, leaf_proof)))
     }
 }
 
@@ -133,57 +130,26 @@ pub fn generate_substate_proof<TTx: StateStoreReadTransaction>(
     versioned_id: &VersionedSubstateId,
     num_preshards: NumPreshards,
 ) -> Result<SubstateValueProof, StorageError> {
-    SubstateProofGenerator::new(tx, shard_group, num_preshards)?.generate(versioned_id)
-}
-
-/// Verifies a substate value proof served by a (possibly untrusted) validator.
-///
-/// 1. The commit proof is validated against the shard group committee, yielding a trusted shard-group state merkle
-///    root.
-/// 2. The substate value proof is verified against that root - an inclusion proof for an up substate (binding the
-///    returned `value` by re-deriving its leaf value hash), or an exclusion proof for a down substate (`value` is
-///    `None`).
-///
-/// `check_vn` must return the voting power of the given validator in the committee for the commit
-/// proof's epoch/shard group (zero if not a member); the caller is responsible for fetching that
-/// committee (see [`CommittedBlockProof::epoch`]/[`CommittedBlockProof::shard_group`]).
-#[allow(clippy::too_many_arguments)]
-pub fn verify_substate_value_proof(
-    commit_proof: &CommittedBlockProof,
-    value_proof_bytes: &[u8],
-    substate_id: &SubstateId,
-    version: u32,
-    value: Option<&SubstateValue>,
-    network: Network,
-    proof_epoch: Epoch,
-    quorum_threshold: VotePower,
-    check_vn: impl Fn(&RistrettoPublicKeyBytes) -> Result<VotePower, SidechainProofValidationError>,
-) -> Result<VerifiedBlockTip, SubstateProofVerifyError> {
-    // Anchor: a quorum-signed shard-group state merkle root.
-    let verified_tip = commit_proof.validate(quorum_threshold, check_vn)?;
-    verify_substate_value_proof_against_root(
-        value_proof_bytes,
-        substate_id,
-        version,
-        value,
-        network,
-        proof_epoch,
-        verified_tip.state_merkle_root,
-    )?;
-    Ok(verified_tip)
+    SubstateProofGenerator::new(tx, shard_group, num_preshards)?
+        .generate(versioned_id)?
+        .ok_or_else(|| StorageError::QueryError {
+            reason: format!(
+                "generate_substate_proof: shard {} has no committed state",
+                versioned_id.to_shard(num_preshards)
+            ),
+        })
 }
 
 /// Verifies a substate value proof against an *already-trusted* shard-group state merkle root,
 /// skipping commit-proof (QC chain) validation.
 ///
-/// This is the inner half of [`verify_substate_value_proof`] for callers that have independently
-/// established `trusted_root` - e.g. from a commit proof that was committee-validated in an earlier
-/// round and recorded in a trusted-root store. Soundness is identical to the full path: the
-/// validator pins the substate value proof to the same committed block whose `state_merkle_root` we
-/// trust (proof and commit proof are generated in one read transaction against the same committed
-/// block), so verifying the proof against that root is exactly what [`verify_substate_value_proof`]
-/// does after `validate()`. The trust decision must therefore be keyed on `trusted_root` itself: a
-/// node cannot forge a substate proof that verifies against a root a quorum already signed.
+/// `trusted_root` must have been established independently - from a commit proof validated against
+/// the shard group committee (`CommittedBlockProof::validate`), either for this read or in an earlier
+/// round and recorded in a trusted-root store. The validator pins the substate value proof to the
+/// same committed block whose `state_merkle_root` is trusted (proof and commit proof are generated in
+/// one read transaction against the same committed block), so verifying against that root is the
+/// whole of the check. The trust decision must therefore be keyed on `trusted_root` itself: a node
+/// cannot forge a substate proof that verifies against a root a quorum already signed.
 pub fn verify_substate_value_proof_against_root(
     value_proof_bytes: &[u8],
     substate_id: &SubstateId,
@@ -216,8 +182,6 @@ pub fn verify_substate_value_proof_against_root(
 
 #[derive(Debug, thiserror::Error)]
 pub enum SubstateProofVerifyError {
-    #[error("commit proof invalid: {0}")]
-    CommitProof(#[from] CommittedBlockProofError),
     #[error("failed to decode substate value proof: {0}")]
     Decode(String),
     #[error("substate value proof invalid: {0}")]
