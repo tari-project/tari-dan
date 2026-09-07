@@ -17,10 +17,14 @@ tari_engine_types = { workspace = true }
 tari_validator_node_rpc = { workspace = true }
 
 async-trait = { workspace = true }
+futures = { workspace = true }
 log = { workspace = true }
 thiserror = { workspace = true }
 
 prometheus-client = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, default-features = false, features = ["rt", "macros", "time"] }
 
 [features]
 metrics = ["prometheus-client"]
