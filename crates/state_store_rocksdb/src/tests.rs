@@ -19,7 +19,7 @@ pub fn create_rocksdb(cf_names: impl IntoIterator<Item = &'static str>) -> (Tran
     let temp_dir = tempfile::Builder::new().disable_cleanup(false).tempdir().unwrap();
     let path = temp_dir.path().join("rocksdb");
     // Use the production options so that tests exercise the prefix extractor and memtable prefix bloom
-    let db_opts = crate::store::build_default_store_opts();
+    let (db_opts, _budget) = crate::store::build_default_store_opts(&crate::options::DatabaseOptions::default());
     let tx_opts = rocksdb::TransactionDBOptions::default();
     let cf_descriptors = cf_names
         .into_iter()

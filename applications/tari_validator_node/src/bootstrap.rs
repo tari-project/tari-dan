@@ -110,6 +110,8 @@ use crate::consensus::metrics::PrometheusConsensusMetrics;
 use crate::epoch_metrics::{EpochManagerCollector, MeteredEpochOracle, PrometheusEpochOracleMetrics};
 #[cfg(feature = "metrics")]
 use crate::inbound_queue_metrics::InboundQueueCollector;
+#[cfg(feature = "metrics")]
+use crate::state_store_metrics::StateStoreMemoryCollector;
 use crate::{
     ApplicationConfig,
     ValidatorNodeEpochManagerSpec,
@@ -123,6 +125,7 @@ use crate::{
         spec::ValidatorTemplateProvider,
     },
     file_l1_submitter::FileLayerOneSubmitter,
+    memory_budget,
     migrations,
     p2p::{
         NopLogger,
@@ -251,13 +254,21 @@ pub async fn spawn_services(
 
     info!(target: LOG_TARGET, "State store initializing");
 
-    let state_store = ValidatorNodeStateStore::open(
-        &config.validator_node.state_db_path,
-        // TODO: just enable it always for now, later make it configurable and default to true for testnets
-        DatabaseOptions::default()
-            .with_debugging_data(true)
-            .with_prune_transaction_history(!config.validator_node.keep_transaction_history),
-    )?;
+    // TODO: just enable it always for now, later make it configurable and default to true for testnets
+    let db_options = DatabaseOptions::default()
+        .with_debugging_data(true)
+        .with_prune_transaction_history(!config.validator_node.keep_transaction_history);
+
+    memory_budget::check_against_available_memory(&memory_budget::MemoryBudget::from_config(
+        &config.validator_node,
+        &db_options,
+        &config.validator_node.templates,
+    ));
+
+    let state_store = ValidatorNodeStateStore::open(&config.validator_node.state_db_path, db_options)?;
+
+    #[cfg(feature = "metrics")]
+    StateStoreMemoryCollector::new(state_store.memory_budget().clone()).register(metrics_registry);
 
     state_store.with_write_tx(|tx| migrations::migrate(tx, config.network, &consensus_constants))?;
 

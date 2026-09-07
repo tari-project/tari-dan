@@ -22,7 +22,26 @@ pub struct Config {
     pub relay_circuit_limits: RelayCircuitLimits,
     pub relay_reservation_limits: RelayReservationLimits,
     pub identify_interval: Duration,
+    /// The largest gossip message accepted or sent. Every other gossipsub bound below is a message
+    /// count, so this is the factor that turns those counts into bytes.
     pub gossip_sub_max_message_size: usize,
+    /// Heartbeat windows of full messages the gossipsub message cache retains so that a peer which
+    /// missed one can still ask for it (IWANT). Retained bytes are this many heartbeats of arrivals,
+    /// so it trades recovery window against memory directly.
+    pub gossip_sub_history_length: usize,
+    /// How many of the retained windows are advertised to peers (IHAVE). Must not exceed
+    /// `gossip_sub_history_length` — advertising a message the cache can no longer serve produces
+    /// IWANTs that go unanswered.
+    pub gossip_sub_history_gossip: usize,
+    /// How long a seen message's id is remembered so a duplicate arriving by another path is
+    /// discarded rather than reprocessed. Ids only, so this is cheap; it should comfortably outlast
+    /// the propagation time of a single message.
+    pub gossip_sub_duplicate_cache_time: Duration,
+    /// Messages that may queue for one connection awaiting transmission. This is the largest
+    /// gossipsub memory term: each queued entry holds the full message, so the bytes a connection
+    /// can hold are this count times `gossip_sub_max_message_size`. Beyond the queue, gossipsub
+    /// drops for that peer rather than buffering without limit.
+    pub gossip_sub_max_send_queue_messages: usize,
     /// Gossipsub topics on which peers are scored for delivering invalid messages. Empty disables
     /// peer scoring entirely.
     ///
@@ -49,6 +68,10 @@ impl Default for Config {
             // This is the default for identify
             identify_interval: Duration::from_secs(5 * 60),
             gossip_sub_max_message_size: 2 * 1024 * 1024,
+            gossip_sub_history_length: 3,
+            gossip_sub_history_gossip: 2,
+            gossip_sub_duplicate_cache_time: Duration::from_secs(60),
+            gossip_sub_max_send_queue_messages: 256,
             gossip_sub_scored_topics: Vec::new(),
             rendezvous_server_enabled: false,
         }

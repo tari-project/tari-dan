@@ -21,8 +21,16 @@
 
 use serde::{Deserialize, Serialize};
 use tari_engine_types::limits::{ENGINE_LIMITS, WASM_LIMITS};
+use tari_ootle_template_provider::TemplateConfig;
+use tari_state_store_rocksdb::DatabaseOptions;
+use tari_swarm::Config as SwarmConfig;
 
 const MIB: u64 = 1024 * 1024;
+
+/// Committee members a validator gossips with, from `committee_size_per_shard_group`. Peer count is
+/// not itself capped — a node also holds connections to foreign shard groups and to seeds — so the
+/// gossip terms derived from it are estimates rather than ceilings.
+const COMMITTEE_PEERS: u64 = 40;
 
 /// Whether a budget line is enforced by the code or merely expected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,9 +87,12 @@ pub struct ObservedProcess {
 /// Builds the budget for a node running with stock configuration.
 ///
 /// Every figure is either imported from the crate that enforces it or carries the file that sets
-/// it. The hardcoded ones live behind private defaults or inside RocksDB, so they cannot be
-/// imported — when one of those moves, this table has to move with it.
+/// it. The few hardcoded ones live behind private defaults, so they cannot be imported — when one
+/// of those moves, this table has to move with it. A node running with a non-default configuration
+/// logs its own version of this table at startup.
 pub fn budget(pid: Option<u32>) -> MemoryBudget {
+    let db_options = DatabaseOptions::default();
+    let swarm = SwarmConfig::default();
     // Inbound queue caps. Sized in bytes precisely because a single gossip message may be up to the
     // swarm's 2 MiB `gossip_sub_max_message_size`, so these are reached by a flood of large
     // messages, not by ordinary traffic.
@@ -117,35 +128,36 @@ pub fn budget(pid: Option<u32>) -> MemoryBudget {
             bound: Bound::Capped,
             source: "WASM_LIMITS.max_memory_pages x ENGINE_LIMITS.max_call_depth".to_string(),
         },
-        // RocksDB is opened without an explicit write buffer size or shared block cache, so its
-        // memory is whatever the library defaults to, multiplied by the column family count. This
-        // is the largest single term in the model and the one least visible from the Ootle code.
+        // Every column family shares one block cache, and memtable memory is charged against that
+        // same cache, so the whole store is bounded by a single configured capacity.
         BudgetLine {
-            name: "RocksDB memtables (9 column families)".to_string(),
-            bytes: 9 * 64 * MIB * 2,
-            bound: Bound::Estimated,
-            source: "9 CFs x write_buffer_size 64 MiB x max_write_buffer_number 2 (rocksdb options.h defaults); \
-                     db_write_buffer_size is 0, so nothing caps the sum across column families"
+            name: "State store block cache and memtables".to_string(),
+            bytes: db_options.memory_budget_bytes as u64,
+            bound: Bound::Capped,
+            source: "DatabaseOptions::memory_budget_bytes, shared by all column families via one rocksdb Cache and a \
+                     WriteBufferManager charged against it"
                 .to_string(),
         },
         BudgetLine {
-            name: "RocksDB block cache and pinned index/filter blocks".to_string(),
-            bytes: 288 * MIB,
-            bound: Bound::Estimated,
-            source: "9 CFs x the 32 MiB internal cache rocksdb creates when block_cache is unset (table.h); holds \
-                     index and filter blocks, which cache_index_and_filter_blocks puts there"
-                .to_string(),
-        },
-        BudgetLine {
-            name: "Gossipsub message cache and per-peer buffers".to_string(),
+            name: "Gossipsub message cache and per-connection send queues".to_string(),
             bytes: 256 * MIB,
             bound: Bound::Estimated,
-            // Scales with committee size and message size, neither of which the node caps directly.
-            source: "libp2p gossipsub defaults x committee_size_per_shard_group x 2 MiB max message".to_string(),
+            // Both bounds are message counts, not byte budgets, so the figure they imply is a
+            // product of message size and peer count — neither of which the node caps. The theoretical
+            // maximum (every queue full of maximum-size messages) is orders of magnitude above
+            // anything observed; this is a working figure at realistic message sizes.
+            source: format!(
+                "{} heartbeats of arrivals retained, plus up to {} messages queued per connection across ~{} \
+                 committee peers, at up to {} MiB each",
+                swarm.gossip_sub_history_length,
+                swarm.gossip_sub_max_send_queue_messages,
+                COMMITTEE_PEERS,
+                swarm.gossip_sub_max_message_size as u64 / MIB,
+            ),
         },
         BudgetLine {
             name: "Compiled template module cache".to_string(),
-            bytes: 200 * MIB,
+            bytes: TemplateConfig::default().max_cache_size_bytes(),
             bound: Bound::Capped,
             // A moka LRU weighed at 4x each template's code size, so the cap is on resident bytes rather than
             // template count and the cache evicts rather than growing over a node's lifetime.

@@ -18,6 +18,9 @@ tari_consensus_types = { workspace = true }
 tari_crypto = { workspace = true }
 tari_ootle_common_types = { workspace = true }
 tari_ootle_storage = { workspace = true }
+tari_ootle_template_provider = { workspace = true }
+tari_state_store_rocksdb = { workspace = true }
+tari_swarm = { workspace = true }
 tari_engine_types = { workspace = true }
 tari_ootle_transaction = { workspace = true }
 tari_template_lib = { workspace = true }

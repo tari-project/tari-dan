@@ -13106,7 +13106,10 @@ dependencies = [
  "tari_engine_types",
  "tari_ootle_common_types",
  "tari_ootle_storage",
+ "tari_ootle_template_provider",
  "tari_ootle_transaction",
+ "tari_state_store_rocksdb",
+ "tari_swarm",
  "tari_template_lib",
  "tari_template_test_tooling",
 ]

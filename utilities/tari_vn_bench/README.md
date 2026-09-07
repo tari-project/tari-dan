@@ -145,6 +145,14 @@ So the report derives it from the caps the code enforces, and separates:
 - **capped** terms, with a hard limit in the code — a flood cannot exceed them;
 - **estimated** terms, bounded only by library defaults or by traffic — where a memory surprise comes from.
 
+What is left in the estimated column is bounded by message counts rather than byte budgets
+(gossipsub's caches and per-connection send queues) or scales with a block's contents (the execution
+working set), so both depend on figures nothing caps — message size and peer count.
+
+The table here is for a node running stock configuration. A node logs its own version of it at
+startup, and checks it against `MemAvailable`, so a differently configured node reports its own
+ceiling rather than this one.
+
 `--vn-pid` reads a running node's `VmHWM` and checks it against the derived ceiling. A node sitting
 far below is normal: the capped terms are burst-and-attack ceilings, not steady state.
 

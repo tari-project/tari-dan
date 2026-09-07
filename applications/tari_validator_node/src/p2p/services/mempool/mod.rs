@@ -31,5 +31,5 @@ mod gossip;
 #[cfg(feature = "metrics")]
 mod metrics;
 mod service;
-
 pub use error::*;
+pub use service::MEM_MAX_TRANSACTIONS_DEDUP;

@@ -29,6 +29,7 @@ use crate::{
     dbs::read_only::ReadOnlyDb,
     error::RocksDbStorageError,
     info::ColumnFamilyInfo,
+    memory_budget::RocksDbMemoryBudget,
     options::DatabaseOptions,
     read_only_ctx::ReadOnlyContext,
     reader::RocksDbStateStoreReadTransaction,
@@ -53,7 +54,17 @@ pub fn all_column_families_iter() -> impl Iterator<Item = &'static str> {
     .into_iter()
 }
 
-pub(crate) fn build_default_store_opts() -> rocksdb::Options {
+/// Builds the options every column family is opened with, together with the memory budget they
+/// share.
+///
+/// The returned `Options` is cloned once per column family; the clone carries the same [`Cache`]
+/// and [`WriteBufferManager`], which is what makes the budget shared rather than per-family. Open
+/// the database from this one call — building the options twice would build two budgets.
+///
+/// [`Cache`]: rocksdb::Cache
+/// [`WriteBufferManager`]: rocksdb::WriteBufferManager
+pub(crate) fn build_default_store_opts(options: &DatabaseOptions) -> (rocksdb::Options, RocksDbMemoryBudget) {
+    let budget = RocksDbMemoryBudget::new(options.memory_budget_bytes, options.memtable_budget_bytes);
     let mut opts = rocksdb::Options::default();
     // Don't error if the DB exists
     opts.set_error_if_exists(false);
@@ -72,21 +83,30 @@ pub(crate) fn build_default_store_opts() -> rocksdb::Options {
     opts.set_bytes_per_sync(1_048_576);
     opts.set_compaction_pri(rocksdb::CompactionPri::MinOverlappingRatio);
     opts.set_level_compaction_dynamic_level_bytes(true);
+    // Memtable memory is bounded across all column families by the write buffer manager, which
+    // supersedes `db_write_buffer_size`. The per-family buffer size bounds how far past the budget
+    // memtable memory can drift while triggered flushes are still in flight.
+    opts.set_write_buffer_size(options.write_buffer_bytes);
+    opts.set_write_buffer_manager(budget.write_buffer_manager());
     let mut bb_opts = rocksdb::BlockBasedOptions::default();
     bb_opts.set_block_size(16 * 1024);
+    // Index and filter blocks are the largest thing a column family holds outside its memtables, so
+    // they belong inside the shared cache where they are accounted for and evictable.
     bb_opts.set_cache_index_and_filter_blocks(true);
     bb_opts.set_pin_l0_filter_and_index_blocks_in_cache(true);
     bb_opts.set_format_version(6);
     bb_opts.set_optimize_filters_for_memory(true);
+    bb_opts.set_block_cache(budget.cache());
 
     opts.set_block_based_table_factory(&bb_opts);
-    opts
+    (opts, budget)
 }
 
 pub type RocksDbReadOnlyStateStore<TAddr> = RocksDbStateStore<TAddr, ReadOnlyDb>;
 pub struct RocksDbStateStore<TAddr, DB = TransactionDB> {
     db: Arc<DB>,
     options: DatabaseOptions,
+    memory_budget: RocksDbMemoryBudget,
     _addr: PhantomData<TAddr>,
 }
 
@@ -96,7 +116,7 @@ pub type ReadView<'a, TAddr> = RocksDbStateStoreReadTransaction<'a, TAddr, Snaps
 
 impl<TAddr> RocksDbStateStore<TAddr, TransactionDB> {
     pub fn open<P: AsRef<Path>>(path: P, options: DatabaseOptions) -> Result<Self, StorageError> {
-        let rocks_opts = build_default_store_opts();
+        let (rocks_opts, memory_budget) = build_default_store_opts(&options);
         let tx_db_opts = TransactionDBOptions::default();
 
         let cf_names = all_column_families_iter().map(|name| ColumnFamilyDescriptor::new(name, rocks_opts.clone()));
@@ -107,6 +127,7 @@ impl<TAddr> RocksDbStateStore<TAddr, TransactionDB> {
         let db = Self {
             db: Arc::new(db),
             options,
+            memory_budget,
             _addr: PhantomData,
         };
 
@@ -116,7 +137,7 @@ impl<TAddr> RocksDbStateStore<TAddr, TransactionDB> {
     /// Force compact all column families in the database.
     /// This is not typically needed but can be useful for experimentation.
     pub fn compact_all<P: AsRef<Path>>(path: P) -> Result<(), StorageError> {
-        let options = build_default_store_opts();
+        let (options, _budget) = build_default_store_opts(&DatabaseOptions::default());
         let cf_names = all_column_families_iter();
         let db = DB::open_cf(&options, path, cf_names).map_err(|e| StorageError::ConnectionError {
             reason: e.into_string(),
@@ -144,7 +165,8 @@ impl<TAddr> RocksDbStateStore<TAddr, ReadOnlyDb> {
         path: P,
         secondary_path: P,
     ) -> Result<RocksDbReadOnlyStateStore<TAddr>, StorageError> {
-        let options = build_default_store_opts();
+        let db_options = DatabaseOptions::default();
+        let (options, memory_budget) = build_default_store_opts(&db_options);
         let cf_names = all_column_families_iter().map(|name| ColumnFamilyDescriptor::new(name, options.clone()));
         let db = DB::open_cf_descriptors_as_secondary(&options, path, secondary_path, cf_names).map_err(|e| {
             StorageError::ConnectionError {
@@ -155,12 +177,22 @@ impl<TAddr> RocksDbStateStore<TAddr, ReadOnlyDb> {
         Ok(Self {
             db: Arc::new(ReadOnlyDb::new(db)),
             _addr: PhantomData,
-            options: DatabaseOptions::default(),
+            options: db_options,
+            memory_budget,
         })
     }
 
     pub fn read_only_context(&self) -> ReadOnlyContext<'_> {
         ReadOnlyContext::new(&self.db)
+    }
+}
+
+impl<TAddr, DB> RocksDbStateStore<TAddr, DB> {
+    /// The block cache and memtable budget every column family of this store shares. Reports live
+    /// usage as well as the configured capacity, so the ceiling can be checked against what the
+    /// store is really holding.
+    pub fn memory_budget(&self) -> &RocksDbMemoryBudget {
+        &self.memory_budget
     }
 }
 
@@ -248,6 +280,7 @@ impl<TAddr, DB> Clone for RocksDbStateStore<TAddr, DB> {
             db: self.db.clone(),
             _addr: PhantomData,
             options: self.options.clone(),
+            memory_budget: self.memory_budget.clone(),
         }
     }
 }
