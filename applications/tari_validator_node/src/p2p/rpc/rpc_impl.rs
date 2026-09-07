@@ -721,6 +721,12 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
         &self,
         req: Request<GetSubstatesBatchRequest>,
     ) -> Result<Streaming<GetSubstatesBatchResponse>, RpcStatus> {
+        // Proving a batch costs a fixed amount per request - reading every shard root in the group and
+        // building the tree over them - plus a leaf traversal per substate. Measured on a 256-shard
+        // group (see the `proof_cost` test), that is ~220us fixed against ~4us per substate, so a
+        // request answering 50 costs ~450us where 50 single-substate requests cost ~11ms. A lower cap
+        // would therefore make a flood *more* expensive to serve, not less; what 50 bounds is the
+        // response, which the responder holds in memory before streaming.
         const MAX_REQUESTS: usize = 50;
         let req = req.into_message();
 

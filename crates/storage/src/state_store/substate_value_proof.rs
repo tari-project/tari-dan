@@ -8,6 +8,7 @@ use tari_common_types::types::FixedHash;
 use tari_engine_types::substate::{SubstateId, SubstateValue, hash_substate};
 use tari_ootle_common_types::{Epoch, NumPreshards, ShardGroup, VersionedSubstateId, shard::Shard};
 use tari_state_tree::{
+    RootProofTree,
     SPARSE_MERKLE_PLACEHOLDER_HASH,
     SparseMerkleProofExt,
     SpreadPrefixStateTree,
@@ -15,7 +16,6 @@ use tari_state_tree::{
     SubstateValueProofError,
     TreeHash,
     Version,
-    compute_proof_for_hashes,
 };
 
 use crate::{StateStoreReadTransaction, StorageError, state_store::ShardScopedTreeStoreReader};
@@ -41,12 +41,14 @@ use crate::{StateStoreReadTransaction, StorageError, state_store::ShardScopedTre
 pub struct SubstateProofGenerator<'a, TTx> {
     tx: &'a TTx,
     num_preshards: NumPreshards,
-    /// Per-shard roots in the canonical order the block header commits them: [global, shard_0, ...].
-    ordered_roots: Vec<TreeHash>,
-    /// The committed state of each shard in `ordered_roots`, keyed by shard.
+    /// The tree over the shard group's per-shard roots, in the canonical order the block header
+    /// commits them: [global, shard_0, ...]. Every level-2 proof is a leaf of this one tree, so it is
+    /// built once however many substates are proved - which is what keeps the cost of a batch
+    /// independent of the size of the shard group.
+    root_tree: RootProofTree,
+    /// The committed state of each shard in the root tree, keyed by shard.
     shards: HashMap<Shard, CommittedShardState>,
-    /// Level-2 proofs, computed on first use of each shard. They all come out of the same tree over
-    /// `ordered_roots`; only the leaf extracted from it differs.
+    /// Level-2 proofs, extracted from `root_tree` on first use of each shard.
     shard_root_proofs: HashMap<Shard, SparseMerkleProofExt>,
 }
 
@@ -72,7 +74,9 @@ impl<'a, TTx: StateStoreReadTransaction> SubstateProofGenerator<'a, TTx> {
         Ok(Self {
             tx,
             num_preshards,
-            ordered_roots,
+            root_tree: RootProofTree::build(ordered_roots).map_err(|e| StorageError::QueryError {
+                reason: format!("generate_substate_proof shard group root tree: {e}"),
+            })?,
             shards,
             shard_root_proofs: HashMap::new(),
         })
@@ -107,11 +111,11 @@ impl<'a, TTx: StateStoreReadTransaction> SubstateProofGenerator<'a, TTx> {
         let shard_root_proof = match self.shard_root_proofs.entry(shard) {
             Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(entry) => {
-                let (_, proof) =
-                    compute_proof_for_hashes(self.ordered_roots.iter().copied(), state.root).map_err(|e| {
-                        StorageError::QueryError {
-                            reason: format!("generate_substate_proof shard root proof: {e}"),
-                        }
+                let (_, proof) = self
+                    .root_tree
+                    .get_proof(state.root)
+                    .map_err(|e| StorageError::QueryError {
+                        reason: format!("generate_substate_proof shard root proof: {e}"),
                     })?;
                 entry.insert(proof).clone()
             },
