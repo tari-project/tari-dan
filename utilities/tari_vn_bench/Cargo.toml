@@ -1,0 +1,25 @@
+[package]
+name = "tari_vn_bench"
+description = "Measures whether a machine can keep up with validator-node consensus, and reports the spec it implies"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "tari-vn-bench"
+path = "src/main.rs"
+
+[dependencies]
+tari_consensus = { workspace = true }
+tari_crypto = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_ootle_transaction = { workspace = true }
+tari_template_lib = { workspace = true }
+tari_template_test_tooling = { workspace = true }
+
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }

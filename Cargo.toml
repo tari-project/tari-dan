@@ -77,6 +77,7 @@ members = [
     "utilities/db_inspector",
     "utilities/traffic-sim",
     "utilities/validator_rollback",
+    "utilities/tari_vn_bench",
 ]
 # The cargo-fuzz crate is nightly-only (needs libFuzzer sanitizer instrumentation) and must stay out
 # of the default workspace build/test sweep. See fuzz/README.md.

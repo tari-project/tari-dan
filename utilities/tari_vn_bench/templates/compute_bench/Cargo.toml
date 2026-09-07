@@ -1,0 +1,20 @@
+[workspace]
+[package]
+name = "compute_bench"
+version = "0.1.0"
+edition = "2024"
+
+# Compute-bound template for tari-vn-bench. One function with a tunable round count, so the
+# benchmark can fit a marginal WASM execution rate from the slope between two round counts.
+
+[dependencies]
+tari_template_lib = { path = "../../../../crates/template_lib" }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = 'abort'
+
+[lib]
+crate-type = ["cdylib"]

@@ -13092,6 +13092,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_vn_bench"
+version = "0.41.0"
+dependencies = [
+ "anyhow",
+ "clap 3.2.25",
+ "serde",
+ "serde_json",
+ "tari_consensus",
+ "tari_crypto",
+ "tari_engine_types",
+ "tari_ootle_transaction",
+ "tari_template_lib",
+ "tari_template_test_tooling",
+]
+
+[[package]]
 name = "tari_watcher"
 version = "0.41.0"
 dependencies = [

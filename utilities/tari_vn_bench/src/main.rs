@@ -1,0 +1,129 @@
+//   Copyright 2026 The Tari Project
+//   SPDX-License-Identifier: BSD-3-Clause
+
+//! Measures whether a machine can keep up with validator-node consensus, and reports the spec that
+//! implies.
+//!
+//! The tool is a single self-contained binary: the templates it executes are compiled into the
+//! `tari_template_builtin` crate, so nothing needs a Rust toolchain, a checkout or a network
+//! connection on the machine under test. Copy it to the candidate host and run it.
+//!
+//! ```text
+//! tari-vn-bench --label mainnet-candidate-1 --data-dir /var/lib/tari
+//! tari-vn-bench --json --label candidate-1 > candidate-1.json
+//! tari-vn-bench --compare candidate-1.json --label candidate-2
+//! ```
+//!
+//! Run it on an idle machine. Every figure is a minimum-of-N, so competing load can only make the
+//! machine look worse than it is — but a report taken under load says nothing useful about the
+//! machine's ceiling. The report flags a noisy run rather than silently grading one.
+
+mod execution;
+mod host;
+mod memory;
+mod native;
+mod report;
+mod stats;
+mod storage;
+
+use std::{fs, path::PathBuf};
+
+use clap::Parser;
+use tari_consensus::consensus_constants::ConsensusConstants;
+
+use crate::{host::Host, report::Budgets};
+
+#[derive(Parser, Debug)]
+#[allow(clippy::struct_excessive_bools)]
+#[clap(author, version, about = "Validator node hardware sizing benchmark", long_about = None)]
+struct Cli {
+    /// Name for this machine, carried into the report so two runs can be told apart.
+    #[clap(long, default_value = "unnamed-host")]
+    label: String,
+    /// Network whose consensus constants the results are graded against.
+    #[clap(long, default_value = "mainnet", possible_values = ["mainnet", "testnet", "esmeralda", "devnet"])]
+    network: String,
+    /// Directory to run the storage benchmark in. This must be on the volume the node's data
+    /// directory will live on: a fast root disk says nothing about a slow attached volume.
+    #[clap(long, default_value = ".")]
+    data_dir: PathBuf,
+    /// Read a running validator node's memory footprint and check it against the derived ceiling.
+    #[clap(long)]
+    vn_pid: Option<u32>,
+    /// Emit the report as JSON on stdout. Progress and harness output stay on stderr, so this
+    /// redirects cleanly.
+    #[clap(long)]
+    json: bool,
+    /// A JSON report from a previous run to compare this one against.
+    #[clap(long)]
+    compare: Option<PathBuf>,
+    /// Fewer samples. Useful for a first look; the margins it reports are wider than they appear.
+    #[clap(long)]
+    quick: bool,
+    #[clap(long)]
+    skip_execution: bool,
+    #[clap(long)]
+    skip_native: bool,
+    #[clap(long)]
+    skip_storage: bool,
+}
+
+fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
+
+    let constants = match cli.network.as_str() {
+        "mainnet" => ConsensusConstants::mainnet(),
+        "testnet" => ConsensusConstants::testnet(),
+        "esmeralda" => ConsensusConstants::esmeralda(),
+        "devnet" => ConsensusConstants::DEVNET,
+        other => anyhow::bail!("unknown network {other}"),
+    };
+    let budgets = Budgets::new(&cli.network, &constants);
+
+    let mut host = Host::detect(cli.label.clone());
+    if host.debug_assertions {
+        eprintln!(
+            "WARNING: this is a debug build. The engine runs several times slower than the release build a validator \
+             actually uses, so the execution results will be meaningless. Rebuild with --release."
+        );
+    }
+
+    let execution = if cli.skip_execution {
+        None
+    } else {
+        eprintln!("[1/3] Executing transactions through the engine...");
+        Some(execution::measure(constants.max_block_validation_weight, cli.quick)?)
+    };
+
+    let native = if cli.skip_native {
+        None
+    } else {
+        eprintln!("[2/3] Timing native verification...");
+        Some(native::measure(cli.quick)?)
+    };
+
+    let storage = if cli.skip_storage {
+        None
+    } else {
+        eprintln!("[3/3] Measuring storage at {}...", cli.data_dir.display());
+        Some(storage::measure(&cli.data_dir, cli.quick)?)
+    };
+
+    let memory = memory::budget(cli.vn_pid);
+    host.record_peak_rss();
+
+    let report = report::Report::build(host, budgets, execution, native, storage, memory);
+
+    if cli.json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        print!("{}", report::render(&report));
+    }
+
+    if let Some(baseline_path) = &cli.compare {
+        let baseline: report::Report = serde_json::from_str(&fs::read_to_string(baseline_path)?)?;
+        eprint!("{}", report::render_comparison(&baseline, &report));
+    }
+
+    Ok(())
+}
