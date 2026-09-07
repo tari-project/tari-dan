@@ -5,10 +5,10 @@ use prometheus_client::{metrics::counter::Counter, registry::Registry};
 
 use crate::metrics::CollectorRegister;
 
-/// Counters for what the cache does that a hit/miss ratio alone cannot explain: entries retired by
-/// the transition stream, entries evicted at the size cap, and reads refused because the shard's
-/// stream has fallen behind. A miss rate that climbs alongside `refused_stale` is a sync problem,
-/// not a cache one.
+/// Counters for what the cache does that a hit/miss ratio alone cannot explain: entries retired
+/// because the state they held was superseded, entries evicted at the size cap, and reads refused
+/// because the shard's stream has fallen behind. A miss rate that climbs alongside `refused_stale`
+/// is a sync problem, not a cache one.
 ///
 /// The hit/miss pair itself is recorded by the manager that fronts the cache, under
 /// `substate_scanner_cache_hits` and `substate_scanner_cache_misses`.
@@ -25,7 +25,8 @@ impl SubstateCacheMetrics {
         Self {
             invalidations: Counter::default().register_at(
                 "invalidations",
-                "Number of cached substate entries retired by a transition from the state sync stream",
+                "Number of cached substate entries retired by a transition from the state sync stream or by a \
+                 finalized transaction result ahead of it",
                 registry,
             ),
             evictions: Counter::default().register_at(

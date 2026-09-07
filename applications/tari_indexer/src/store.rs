@@ -376,10 +376,12 @@ pub trait IndexerStoreWriteTransaction {
     /// caller passes one just past the shard's watermark, so that every fetch captured before the
     /// stream delivers the transition is vetoed, and the stream's own journal row replaces it when
     /// it does.
+    ///
+    /// Returns how many cached entries were retired.
     fn substate_cache_retire_ahead<I: IntoIterator<Item = (SubstateCacheInvalidation, StateVersion)>>(
         &mut self,
         invalidations: I,
-    ) -> Result<(), StorageError>;
+    ) -> Result<usize, StorageError>;
 
     /// Drops journal entries older than `journal_retention` and evicts the oldest cache entries down
     /// to `max_entries`. Returns how many entries were evicted.

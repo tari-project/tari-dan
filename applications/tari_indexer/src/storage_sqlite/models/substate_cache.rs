@@ -26,6 +26,7 @@ pub struct SubstateCacheInvalidation {
     retires_up_to: Option<u32>,
     retires_nonexistence: bool,
     observed_version: u32,
+    spent: bool,
 }
 
 impl SubstateCacheInvalidation {
@@ -47,6 +48,7 @@ impl SubstateCacheInvalidation {
             retires_up_to,
             retires_nonexistence,
             observed_version: version,
+            spent: false,
         })
     }
 
@@ -60,6 +62,7 @@ impl SubstateCacheInvalidation {
             retires_up_to: Some(version),
             retires_nonexistence: false,
             observed_version: version,
+            spent: true,
         }
     }
 
@@ -71,6 +74,14 @@ impl SubstateCacheInvalidation {
     /// below this is one the substate has already been watched past, whoever offers it.
     pub fn observed_version(&self) -> u32 {
         self.observed_version
+    }
+
+    /// Whether [`observed_version`](Self::observed_version) is spent: it was destroyed rather than
+    /// created. A `Down` at a spent version is still a legitimate head - it is what a lookup for that
+    /// version answers - but an `Up` at it is not, so the version alone does not settle a result
+    /// landing there.
+    pub fn is_observed_version_spent(&self) -> bool {
+        self.spent
     }
 
     /// The highest cached head version this retires, if any.
@@ -123,6 +134,7 @@ mod tests {
         let invalidation = SubstateCacheInvalidation::created(&substate(), 6).unwrap();
         assert_eq!(invalidation.retires_up_to(), Some(5));
         assert!(invalidation.retires_nonexistence());
+        assert!(!invalidation.is_observed_version_spent());
     }
 
     #[test]
@@ -130,5 +142,6 @@ mod tests {
         let invalidation = SubstateCacheInvalidation::destroyed(substate(), 6);
         assert_eq!(invalidation.retires_up_to(), Some(6));
         assert!(!invalidation.retires_nonexistence());
+        assert!(invalidation.is_observed_version_spent());
     }
 }

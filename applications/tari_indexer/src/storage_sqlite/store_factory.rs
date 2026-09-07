@@ -1126,6 +1126,39 @@ mod tests {
         put_entry(store, id, version, true, now_secs(), watermark).await
     }
 
+    /// A committee member answering that `version` is live, as against the `Down` every other put
+    /// helper here records.
+    async fn put_up(store: &SqliteIndexerStore, id: &SubstateId, version: u32, watermark: u64) -> bool {
+        use tari_engine_types::{
+            non_fungible::NonFungibleContainer,
+            substate::{Substate, SubstateValue},
+        };
+
+        let result = SubstateResult::Up {
+            substate: Box::new(Substate::new(
+                version,
+                SubstateValue::NonFungible(NonFungibleContainer::no_data()),
+            )),
+        };
+        let id = id.clone();
+        store
+            .with_write_tx(move |tx| {
+                tx.substate_cache_put(
+                    &id,
+                    SubstateCacheEntryRef {
+                        version: Some(version),
+                        substate_result: &result,
+                        cached_at: now_secs(),
+                        verified: true,
+                    },
+                    FetchWatermark::new(watermark),
+                    HEAD_TTL,
+                )
+            })
+            .await
+            .unwrap()
+    }
+
     /// The cached head version. `None` covers both no row at all and a row recording that the
     /// substate does not exist; use [`read_entry`] where the two must be told apart.
     async fn read(store: &SqliteIndexerStore, id: &SubstateId) -> Option<u32> {
@@ -1213,6 +1246,81 @@ mod tests {
         // The destroyed version is itself a legitimate head: it is down, which is what a lookup for
         // it answers.
         assert!(put(&store, &id, 7, 110).await);
+    }
+
+    /// A destroy with no successor leaves the version it named as the floor, and that version is
+    /// spent. A member still holding it live offers an `Up` at exactly the floor, which the version
+    /// alone does not refuse.
+    #[tokio::test]
+    async fn a_destroy_with_no_successor_refuses_a_live_head_at_the_version_it_spent() {
+        let (_d, store) = temp_store().await;
+        let id = substate(1);
+
+        invalidate(&store, SubstateCacheInvalidation::destroyed(id.clone(), 7), 105).await;
+        assert!(!put_up(&store, &id, 7, 110).await);
+        assert!(read(&store, &id).await.is_none());
+    }
+
+    /// The other half of the same floor: a lookup for a destroyed version answers `Down`, so that
+    /// result is the substate's legitimate head and is recorded.
+    #[tokio::test]
+    async fn a_destroy_with_no_successor_still_admits_the_down_at_that_version() {
+        let (_d, store) = temp_store().await;
+        let id = substate(1);
+
+        invalidate(&store, SubstateCacheInvalidation::destroyed(id.clone(), 7), 105).await;
+        assert!(put(&store, &id, 7, 110).await);
+        assert_eq!(read(&store, &id).await, Some(7));
+    }
+
+    /// A destroy with a successor is not a spend of the floor: the creation raises it to the version
+    /// that is live, which must be admitted as an `Up`. The two reach the journal in no stated order.
+    #[tokio::test]
+    async fn a_destroy_with_a_successor_admits_the_created_version_live() {
+        for reversed in [false, true] {
+            let (_d, store) = temp_store().await;
+            let id = substate(1);
+            let mut batch = vec![
+                SubstateCacheInvalidation::destroyed(id.clone(), 6),
+                SubstateCacheInvalidation::created(&id, 7).unwrap(),
+            ];
+            if reversed {
+                batch.reverse();
+            }
+            store
+                .with_write_tx(move |tx| tx.substate_cache_invalidate(batch, StateVersion::new(105)))
+                .await
+                .unwrap();
+
+            assert!(!put_up(&store, &id, 6, 110).await);
+            assert!(put_up(&store, &id, 7, 110).await);
+            assert_eq!(read(&store, &id).await, Some(7));
+        }
+    }
+
+    /// A substate created and destroyed within one batch reaches the journal at a single version
+    /// from both sides. The spend is the later of the two whichever order they arrive in, so it
+    /// stands.
+    #[tokio::test]
+    async fn a_version_both_created_and_destroyed_in_one_batch_is_spent() {
+        for reversed in [false, true] {
+            let (_d, store) = temp_store().await;
+            let id = substate(1);
+            let mut batch = vec![
+                SubstateCacheInvalidation::created(&id, 7).unwrap(),
+                SubstateCacheInvalidation::destroyed(id.clone(), 7),
+            ];
+            if reversed {
+                batch.reverse();
+            }
+            store
+                .with_write_tx(move |tx| tx.substate_cache_invalidate(batch, StateVersion::new(105)))
+                .await
+                .unwrap();
+
+            assert!(!put_up(&store, &id, 7, 110).await);
+            assert!(put(&store, &id, 7, 110).await);
+        }
     }
 
     /// One transaction downs a version and ups the next, and the two reach the journal in no stated
@@ -1415,6 +1523,35 @@ mod tests {
         // The same result fetched against a watermark that already covers the transition is current.
         assert!(put(&store, &id, 6, 105).await);
         assert_eq!(read(&store, &id).await, Some(6));
+    }
+
+    /// Retirements driven by a finalized result are counted like the stream's own, so the counter
+    /// means what its name says.
+    #[tokio::test]
+    async fn retiring_ahead_of_the_stream_reports_what_it_retired() {
+        let (_d, store) = temp_store().await;
+        let held = substate(1);
+        let spent = substate(2);
+        let untouched = substate(3);
+        assert!(put(&store, &held, 6, 100).await);
+        assert!(put(&store, &spent, 6, 100).await);
+        assert!(put(&store, &untouched, 6, 100).await);
+
+        let ahead = StateVersion::new(101);
+        let invalidations = vec![
+            // Below the cached head, so it retires nothing.
+            (SubstateCacheInvalidation::created(&held, 4).unwrap(), ahead),
+            (SubstateCacheInvalidation::destroyed(spent.clone(), 6), ahead),
+        ];
+        let retired = store
+            .with_write_tx(move |tx| tx.substate_cache_retire_ahead(invalidations))
+            .await
+            .unwrap();
+
+        assert_eq!(retired, 1);
+        assert_eq!(read(&store, &held).await, Some(6));
+        assert_eq!(read(&store, &spent).await, None);
+        assert_eq!(read(&store, &untouched).await, Some(6));
     }
 
     #[tokio::test]
