@@ -1,7 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use log::warn;
 use tari_template_lib::types::{Amount, ComponentAddress, ResourceAddress, ResourceType, VaultId};
+
+const LOG_TARGET: &str = "tari::ootle::wallet_sdk::models::vault";
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct VaultModel {
@@ -23,7 +26,20 @@ impl VaultModel {
     /// A lock is held until its transaction resolves, while the revealed balance follows the chain, so a vault can
     /// be locked for more than it currently holds. Such a vault has nothing available to spend.
     pub fn available_revealed_balance(&self) -> Amount {
-        self.revealed_balance.saturating_sub(self.locked_revealed_balance)
+        match self.revealed_balance.checked_sub(self.locked_revealed_balance) {
+            Some(available) => available,
+            None => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Vault {} has {} revealed funds locked but holds only {}. Nothing is available until the lock is \
+                     released",
+                    self.id,
+                    self.locked_revealed_balance,
+                    self.revealed_balance
+                );
+                Amount::zero()
+            },
+        }
     }
 }
 

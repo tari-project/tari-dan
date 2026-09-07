@@ -145,7 +145,7 @@ where TSpec: WalletSdkSpec
                 })
             },
             UtxoInputSelection::PreferRevealed => {
-                let revealed_to_spend = cmp::min(src_vault.revealed_balance, spend_amount);
+                let revealed_to_spend = cmp::min(available_revealed_funds, spend_amount);
                 let confidential_to_spend = spend_amount - revealed_to_spend;
                 if confidential_to_spend.is_zero() {
                     info!(
