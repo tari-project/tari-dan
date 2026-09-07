@@ -22,6 +22,7 @@ use crate::{
 mod cli;
 mod config;
 mod layer_one_transactions;
+mod logfile;
 mod logger;
 mod process_definitions;
 mod process_manager;

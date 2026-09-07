@@ -31,6 +31,7 @@ use crate::{
         InstanceId,
         MinoTariWalletProcess,
         MinotariNodeDetails,
+        crash_report,
         executables::ExecutableManager,
         handle::{ProcessManagerHandle, ProcessManagerRequest},
         instances::InstanceManager,
@@ -238,10 +239,11 @@ impl ProcessManager {
         }) {
             if let Some(status) = instance.check_running()? {
                 return Err(anyhow!(
-                    "Failed to start instance: {} {} {}",
+                    "Failed to start instance: {} {} {}{}",
                     instance.name(),
                     instance.instance_type(),
-                    status
+                    status,
+                    crash_report::crash_report(instance)
                 ));
             }
         }
@@ -264,10 +266,11 @@ impl ProcessManager {
                     );
                 } else {
                     log::error!(
-                        "Instance exited with status {}: {} {}",
+                        "💥 Instance exited with status {}: {} {}{}",
                         status.code().unwrap_or(-1),
                         instance.name(),
-                        instance.instance_type()
+                        instance.instance_type(),
+                        crash_report::crash_report(instance)
                     );
                 }
                 // We only want to clear the miners, the rest we keep around to display that they are terminated
