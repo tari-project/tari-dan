@@ -192,7 +192,11 @@ where
         specific_version: Option<u32>,
     ) -> Result<SubstateLookupResult, IndexerError> {
         debug!(target: LOG_TARGET, "get_substate: {}v{}", substate_id, specific_version.display());
-        let cache_res = self.substate_cache.read(substate_id, specific_version).await?;
+        let cache_res = self
+            .substate_cache
+            .read(substate_id)
+            .await?
+            .and_then(|entry| entry.answer_at(specific_version));
         if let Some(entry) = cache_res {
             // Absence has nothing to prove against the state tree, so a cached nonexistence is never
             // verified and gating it on a proof would mean never serving one. Its evidence is the
@@ -277,7 +281,7 @@ where
     ) -> Result<HashMap<&'a SubstateId, Option<SubstateCacheEntry>>, IndexerError> {
         let mut results = HashMap::with_capacity(substate_ids.len());
         for substate_id in substate_ids {
-            let cache_res = self.substate_cache.read(substate_id, None).await?;
+            let cache_res = self.substate_cache.read(substate_id).await?;
             results.insert(substate_id, cache_res);
         }
         Ok(results)

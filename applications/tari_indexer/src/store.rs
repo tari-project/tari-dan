@@ -260,7 +260,10 @@ pub trait IndexerStoreReadTransaction {
     // -------------------------------- Substate Cache -------------------------------- //
 
     /// The cached head version of `substate_id`. Says nothing about whether it is fresh enough to
-    /// serve, nor what it implies for lower versions - see [`crate::substate_cache::SqliteSubstateCache`].
+    /// serve - see [`crate::substate_cache::SqliteSubstateCache`] - nor what it implies for a
+    /// lookup at a particular version, which is
+    /// [`SubstateCacheEntry::answer_at`](tari_indexer_lib::substate_cache::SubstateCacheEntry::answer_at)'s
+    /// to decide.
     fn substate_cache_get(&mut self, substate_id: &SubstateId) -> Result<Option<SubstateCacheEntry>, StorageError>;
 }
 
