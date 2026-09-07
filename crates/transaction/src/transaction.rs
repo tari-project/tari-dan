@@ -97,8 +97,11 @@ impl Transaction {
     ///
     /// Computed from the derived `CborLen` rather than by encoding, so nothing is allocated.
     pub fn encoded_size(&self) -> usize {
-        // The `Result` is vestigial — `encoded_len` cannot fail for a type that derives `CborLen`.
-        tari_bor::encoded_len(self).unwrap_or(0)
+        // `encoded_len`'s `Result` is vestigial — it cannot fail for a type deriving `CborLen`. The
+        // fallback is therefore unreachable, which makes its direction free: this figure is read to
+        // decide whether a transaction is under a size cap, so an unknown size must be one that
+        // fails the check rather than one that passes it.
+        tari_bor::encoded_len(self).unwrap_or(usize::MAX)
     }
 
     pub fn is_dry_run(&self) -> bool {
