@@ -10,6 +10,8 @@ license.workspace = true
 
 [dev-dependencies]
 tari_ootle_wallet_sdk = { workspace = true }
+tari_ootle_wallet_sdk_services = { workspace = true }
+tari_shutdown = { workspace = true }
 tari_transaction_components = { workspace = true }
 tari_ootle_wallet_storage_sqlite = { workspace = true }
 
@@ -29,4 +31,7 @@ tempfile = { workspace = true }
 digest = { workspace = true }
 rand = { workspace = true }
 time = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt"] }
+futures = { workspace = true }
+tokio-stream = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "time"] }

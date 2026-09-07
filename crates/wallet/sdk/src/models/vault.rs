@@ -1,7 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use log::warn;
 use tari_template_lib::types::{Amount, ComponentAddress, ResourceAddress, ResourceType, VaultId};
+
+const LOG_TARGET: &str = "tari::ootle::wallet_sdk::models::vault";
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct VaultModel {
@@ -18,10 +21,25 @@ pub struct VaultModel {
 }
 
 impl VaultModel {
+    /// The revealed balance not held by a wallet lock.
+    ///
+    /// A lock is held until its transaction resolves, while the revealed balance follows the chain, so a vault can
+    /// be locked for more than it currently holds. Such a vault has nothing available to spend.
     pub fn available_revealed_balance(&self) -> Amount {
-        self.revealed_balance
-            .checked_sub(self.locked_revealed_balance)
-            .expect("Revealed balance should always be greater than or equal to locked revealed balance")
+        match self.revealed_balance.checked_sub(self.locked_revealed_balance) {
+            Some(available) => available,
+            None => {
+                warn!(
+                    target: LOG_TARGET,
+                    "Vault {} has {} revealed funds locked but holds only {}. Nothing is available until the lock is \
+                     released",
+                    self.id,
+                    self.locked_revealed_balance,
+                    self.revealed_balance
+                );
+                Amount::zero()
+            },
+        }
     }
 }
 
@@ -30,4 +48,46 @@ pub struct VaultBalance {
     pub account: ComponentAddress,
     pub confidential: Amount,
     pub revealed: Amount,
+}
+
+#[cfg(test)]
+mod tests {
+    use tari_template_lib::types::{ComponentAddress, ResourceType};
+
+    use super::*;
+
+    fn vault(revealed_balance: Amount, locked_revealed_balance: Amount) -> VaultModel {
+        VaultModel {
+            account_address: ComponentAddress::from_array([0u8; 32]),
+            id: "vault_0000000000000000000000000000000000000000000000000000000000000000"
+                .parse()
+                .unwrap(),
+            vault_version: 0,
+            resource_address: "resource_0000000000000000000000000000000000000000000000000000000000000000"
+                .parse()
+                .unwrap(),
+            resource_type: ResourceType::Stealth,
+            confidential_balance: Amount::zero(),
+            revealed_balance,
+            locked_revealed_balance,
+            token_symbol: None,
+            divisibility: 6,
+        }
+    }
+
+    #[test]
+    fn available_revealed_balance_excludes_locked_funds() {
+        assert_eq!(
+            vault(Amount::new(100), Amount::new(40)).available_revealed_balance(),
+            Amount::new(60)
+        );
+    }
+
+    #[test]
+    fn available_revealed_balance_is_zero_when_locked_exceeds_revealed() {
+        assert_eq!(
+            vault(Amount::new(123_004_298), Amount::new(123_009_691)).available_revealed_balance(),
+            Amount::zero()
+        );
+    }
 }

@@ -10,6 +10,7 @@ use tari_engine_types::{
     Utxo,
     commit_result::ExecuteResult,
     substate::{Substate, SubstateId, SubstateValue},
+    transaction_receipt::FinalizeOutcome,
 };
 use tari_indexer_client::types::WatchedSubstateItem;
 use tari_ootle_common_types::{
@@ -33,6 +34,21 @@ use crate::models::UtxoUpdatePayload;
 
 /// A pinned, boxed stream of UTXO updates
 pub type UtxoUpdateStream<E> = Pin<Box<dyn Stream<Item = Result<UtxoUpdatePayload, E>> + Send + 'static>>;
+
+/// A pinned, boxed stream of transaction finalization notifications.
+pub type TransactionFinalizedStream<E> =
+    Pin<Box<dyn Stream<Item = Result<TransactionFinalizedNotification, E>> + Send + 'static>>;
+
+/// A push notification that a transaction committed a receipt.
+///
+/// Only transactions that commit something (`Commit` or `FeeIntentCommit`) produce a notification: an aborted
+/// transaction writes no substate, so it never appears on the stream. Subscribers must still query the result of
+/// transactions that stay silent for too long.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TransactionFinalizedNotification {
+    pub transaction_id: TransactionId,
+    pub outcome: FinalizeOutcome,
+}
 
 pub trait WalletNetworkInterface {
     type Error: IsNotFoundError + TransactionStatusResponseError + std::error::Error + Send + Sync + 'static;
@@ -67,6 +83,12 @@ pub trait WalletNetworkInterface {
         &self,
         transaction_id: TransactionId,
     ) -> impl Future<Output = Result<TransactionQueryResult, Self::Error>> + Send;
+
+    /// Subscribes to finalization notifications for every transaction the network commits from this point on.
+    /// The stream ends or yields an error when the connection is lost; the subscriber reconnects by calling again.
+    fn subscribe_transaction_finalized(
+        &self,
+    ) -> impl Future<Output = Result<TransactionFinalizedStream<Self::Error>, Self::Error>> + Send;
 
     fn fetch_template_definition(
         &self,
