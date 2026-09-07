@@ -59,6 +59,8 @@ pub struct CapacityProjection {
     pub gossip_mbps_per_tps: f64,
     pub epoch_secs: f64,
     pub epoch_history_length: u64,
+    /// Seconds a validator is willing to take to get its proposal out when it leads.
+    pub propose_target_secs: f64,
 }
 
 /// Requirements at one block production rate.
@@ -69,12 +71,18 @@ pub struct Scenario {
     pub basis: String,
     pub block_interval_secs: f64,
     pub blocks_per_epoch: u64,
-    /// Forwarding each block to the gossipsub mesh — the dominant term.
-    pub upload_mbps: f64,
+    /// Sustained upload from forwarding every block to the gossipsub mesh. This is a *following*
+    /// cost, paid on every block whoever proposed it, and it is the dominant term.
+    pub forward_mbps: f64,
+    /// Sustained download, including duplicate mesh deliveries.
     pub download_mbps: f64,
-    /// Block propagation plus committee votes, at maximum block size. What a validator needs before
-    /// any user traffic exists.
-    pub consensus_floor_mbps: f64,
+    /// Sustained cost of keeping up: forwarding, receiving and votes. Not self-paced — it is set by
+    /// how fast the rest of the committee produces blocks.
+    pub follow_mbps: f64,
+    /// Burst upload to push one proposal to the mesh inside the propose budget, paid only in the
+    /// views this validator leads. Self-paced: a slower link makes slower blocks rather than a
+    /// missed proposal, until the leader timeout.
+    pub propose_burst_mbps: f64,
     pub bytes_per_epoch: u64,
     /// Bounded: blocks prune beyond `epoch_history_length` epochs.
     pub history_ceiling_bytes: u64,
@@ -93,6 +101,7 @@ pub fn project(
     epoch_secs: f64,
     epoch_history_length: u64,
     saturation_interval_secs: Option<f64>,
+    propose_target_secs: f64,
 ) -> CapacityProjection {
     let block_bytes = wire.block_command_bytes as f64 + BLOCK_FIXED_OVERHEAD_BYTES;
 
@@ -107,6 +116,7 @@ pub fn project(
         budgets,
         epoch_secs,
         epoch_history_length,
+        propose_target_secs,
     )];
 
     if let Some(interval) = saturation_interval_secs.filter(|i| *i > 0.0 && *i < budgets.block_time_secs) {
@@ -121,6 +131,7 @@ pub fn project(
             budgets,
             epoch_secs,
             epoch_history_length,
+            propose_target_secs,
         ));
     }
 
@@ -129,9 +140,11 @@ pub fn project(
         gossip_mbps_per_tps: wire.transaction_bytes as f64 * (GOSSIPSUB_MESH_N + 1.0) * 8.0 / 1_000_000.0,
         epoch_secs,
         epoch_history_length,
+        propose_target_secs,
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn scenario(
     name: &str,
     basis: String,
@@ -140,12 +153,15 @@ fn scenario(
     budgets: &Budgets,
     epoch_secs: f64,
     epoch_history_length: u64,
+    propose_target_secs: f64,
 ) -> Scenario {
     let to_mbps = |bytes_per_block: f64| bytes_per_block * 8.0 / interval_secs / 1_000_000.0;
 
-    let upload_mbps = to_mbps(block_bytes * GOSSIPSUB_MESH_N);
+    let forward_mbps = to_mbps(block_bytes * GOSSIPSUB_MESH_N);
     let download_mbps = to_mbps(block_bytes * DUPLICATE_DELIVERY_FACTOR);
     let vote_mbps = to_mbps(VOTE_BYTES * f64::from(budgets.committee_size_per_shard_group));
+    // A burst, not a rate: the whole block has to reach the mesh within the propose budget.
+    let propose_burst_mbps = block_bytes * GOSSIPSUB_MESH_N * 8.0 / propose_target_secs / 1_000_000.0;
 
     let blocks_per_epoch = (epoch_secs / interval_secs) as u64;
     let bytes_per_epoch = (block_bytes as u64).saturating_mul(blocks_per_epoch);
@@ -155,9 +171,10 @@ fn scenario(
         basis,
         block_interval_secs: interval_secs,
         blocks_per_epoch,
-        upload_mbps,
+        forward_mbps,
         download_mbps,
-        consensus_floor_mbps: upload_mbps + download_mbps + vote_mbps,
+        follow_mbps: forward_mbps + download_mbps + vote_mbps,
+        propose_burst_mbps,
         bytes_per_epoch,
         history_ceiling_bytes: bytes_per_epoch.saturating_mul(epoch_history_length.max(1)),
     }

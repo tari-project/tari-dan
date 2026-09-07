@@ -61,6 +61,11 @@ struct Cli {
     /// under load the next block is proposed as soon as the previous quorum certificate forms.
     #[clap(long, default_value = "250")]
     committee_rtt_ms: f64,
+    /// Seconds this validator is willing to take to get its proposal to the mesh when it leads.
+    /// Proposing is self-paced up to the leader timeout, so this is a throughput target rather than
+    /// a liveness bound — set it low to avoid being the committee's slowest leader.
+    #[clap(long, default_value = "5")]
+    propose_target_secs: f64,
     /// Epochs of block history retained before pruning. Matches `DatabaseOptions::epoch_history_length`.
     #[clap(long, default_value = "1")]
     epoch_history_length: u64,
@@ -153,6 +158,7 @@ fn main() -> anyhow::Result<()> {
         cli.epoch_minutes * 60.0,
         cli.epoch_history_length,
         saturation_interval_secs,
+        cli.propose_target_secs,
     );
 
     let memory = memory::budget(cli.vn_pid);

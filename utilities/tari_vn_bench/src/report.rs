@@ -764,17 +764,17 @@ fn render_capacity(out: &mut String, report: &Report) {
     let _ = writeln!(out, "{}", "-".repeat(78));
     let _ = writeln!(
         out,
-        "  {:<26} {:>9} {:>10} {:>12} {:>12}",
-        "scenario", "interval", "blocks/ep", "consensus", "disk/epoch"
+        "  {:<24} {:>8} {:>10} {:>11} {:>11}",
+        "scenario", "interval", "follow", "propose", "disk/epoch"
     );
     for sc in &cap.scenarios {
         let _ = writeln!(
             out,
-            "  {:<26} {:>8.2}s {:>10} {:>9.1} Mbps {:>12}",
+            "  {:<24} {:>7.2}s {:>7.1} Mbps {:>6.1} Mbps {:>11}",
             sc.name,
             sc.block_interval_secs,
-            sc.blocks_per_epoch,
-            sc.consensus_floor_mbps,
+            sc.follow_mbps,
+            sc.propose_burst_mbps,
             human_bytes(sc.history_ceiling_bytes),
         );
         for line in wrap(&sc.basis, 68) {
@@ -783,18 +783,36 @@ fn render_capacity(out: &mut String, report: &Report) {
     }
     let _ = writeln!(
         out,
+        "\n  follow   = sustained; forwarding to the mesh, receiving and votes. NOT self-paced — the"
+    );
+    let _ = writeln!(
+        out,
+        "             rest of the committee sets this rate and a node must keep up or miss votes."
+    );
+    let _ = writeln!(
+        out,
+        "  propose  = burst to push one block to the mesh within {:.0}s, paid only when leading.",
+        cap.propose_target_secs
+    );
+    let _ = writeln!(
+        out,
+        "             Self-paced: a slow link makes slower blocks, not missed proposals, until the"
+    );
+    let _ = writeln!(out, "             leader timeout.");
+    let _ = writeln!(
+        out,
         "\n  transaction gossip           {:.3} Mbps per sustained TPS (independent of block rate)",
         cap.gossip_mbps_per_tps
     );
     if let Some(worst) = cap
         .scenarios
         .iter()
-        .max_by(|a, b| a.consensus_floor_mbps.total_cmp(&b.consensus_floor_mbps))
+        .max_by(|a, b| a.follow_mbps.total_cmp(&b.follow_mbps))
     {
         let _ = writeln!(
             out,
-            "  gossip parity                {:.0} TPS — where gossip equals the {} consensus floor",
-            worst.consensus_floor_mbps / cap.gossip_mbps_per_tps,
+            "  gossip parity                {:.0} TPS — where gossip equals the {} follow cost",
+            worst.follow_mbps / cap.gossip_mbps_per_tps,
             worst.name,
         );
     }
