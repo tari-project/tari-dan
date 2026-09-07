@@ -84,15 +84,14 @@ impl<'a, TTx: StateStoreReadTransaction> SubstateProofGenerator<'a, TTx> {
 
     /// Proves `versioned_id`'s committed value, or its absence, against the shard-group root.
     ///
-    /// `Ok(None)` means the substate's shard has no committed state at all, so there is no root to
-    /// prove anything against. A caller proving many substates can drop that one and keep the rest;
-    /// an error means the read itself failed and nothing in the batch can be trusted.
+    /// `Ok(None)` means this state cannot prove anything about the substate, either way: its shard
+    /// lies outside the shard group, or that shard has no committed state to root a proof at. A
+    /// caller proving many substates can drop that one and keep the rest; an error means the read
+    /// itself failed and nothing it produced can be trusted.
     pub fn generate(&mut self, versioned_id: &VersionedSubstateId) -> Result<Option<SubstateValueProof>, StorageError> {
         let shard = versioned_id.to_shard(self.num_preshards);
         let Some(state) = self.shards.get(&shard).copied() else {
-            return Err(StorageError::QueryError {
-                reason: format!("generate_substate_proof: {versioned_id} is in {shard}, outside this shard group"),
-            });
+            return Ok(None);
         };
         let Some(version) = state.version else {
             return Ok(None);
@@ -123,25 +122,6 @@ impl<'a, TTx: StateStoreReadTransaction> SubstateProofGenerator<'a, TTx> {
 
         Ok(Some(SubstateValueProof::new(state.root, shard_root_proof, leaf_proof)))
     }
-}
-
-/// Generates a two-level [`SubstateValueProof`] for a single `versioned_id` against the latest
-/// committed shard-group state. See [`SubstateProofGenerator`], which proves many substates against
-/// the same state without repeating the per-shard-group work.
-pub fn generate_substate_proof<TTx: StateStoreReadTransaction>(
-    tx: &TTx,
-    shard_group: ShardGroup,
-    versioned_id: &VersionedSubstateId,
-    num_preshards: NumPreshards,
-) -> Result<SubstateValueProof, StorageError> {
-    SubstateProofGenerator::new(tx, shard_group, num_preshards)?
-        .generate(versioned_id)?
-        .ok_or_else(|| StorageError::QueryError {
-            reason: format!(
-                "generate_substate_proof: shard {} has no committed state",
-                versioned_id.to_shard(num_preshards)
-            ),
-        })
 }
 
 /// Verifies a substate value proof against an *already-trusted* shard-group state merkle root,

@@ -5,17 +5,9 @@ pub mod helpers;
 
 use std::{collections::BTreeMap, time::Instant};
 
-use helpers::{NETWORK, build_substate_record, create_rocksdb, create_substate_update_batch, num_preshards};
-use tari_ootle_common_types::{Epoch, ShardGroup, shard::Shard};
-use tari_ootle_storage::{
-    ShardScopedTreeStoreWriter,
-    StateStore,
-    StateStoreWriteTransaction,
-    SubstateProofGenerator,
-    consensus_models::{Block, SubstateRecord},
-    generate_substate_proof,
-};
-use tari_state_tree::{SpreadPrefixStateTree, SubstateTreeChange};
+use helpers::{PROOF_TEST_TREE_VERSION, build_substate_record, commit_substates, create_rocksdb, num_preshards};
+use tari_ootle_common_types::{ShardGroup, shard::Shard};
+use tari_ootle_storage::{StateStore, SubstateProofGenerator, consensus_models::SubstateRecord};
 
 use crate::helpers::substate_id_seed;
 
@@ -31,7 +23,7 @@ fn proof_cost() {
     let shard_group = ShardGroup::all_shards(num_preshards());
 
     let substates = (0..BATCH)
-        .map(|seed| build_substate_record(&substate_id_seed(seed << 24), 0, 1))
+        .map(|seed| build_substate_record(&substate_id_seed(seed << 24), 0, PROOF_TEST_TREE_VERSION))
         .collect::<Vec<_>>();
     let mut by_shard: BTreeMap<Shard, Vec<&SubstateRecord>> = BTreeMap::new();
     for s in &substates {
@@ -44,31 +36,18 @@ fn proof_cost() {
         shard_group.len()
     );
 
-    let mut tx = db.create_write_tx().unwrap();
-    Block::zero_block(NETWORK, num_preshards()).insert(&mut tx).unwrap();
-    for (shard, records) in &by_shard {
-        let changes = records.iter().map(|s| SubstateTreeChange::Up {
-            id: s.to_versioned_substate_id(),
-            value_hash: *s.state_hash(),
-        });
-        {
-            let mut store = ShardScopedTreeStoreWriter::new(&mut tx, *shard);
-            SpreadPrefixStateTree::new(&mut store)
-                .batch_put_substate_changes(None, 1, changes)
-                .unwrap();
-        }
-        tx.state_tree_shard_versions_set(*shard, 1).unwrap();
-    }
-    tx.substates_commit_batch(create_substate_update_batch(Epoch::zero(), &substates))
-        .unwrap();
-    tx.commit().unwrap();
+    commit_substates(&db, &substates);
 
     let tx = db.create_read_tx().unwrap();
 
-    // One-shot per substate: what the batch would cost without hoisting.
+    // One generator per substate: what the batch would cost without hoisting.
     let t = Instant::now();
     for s in &substates {
-        generate_substate_proof(&tx, shard_group, &s.to_versioned_substate_id(), num_preshards()).unwrap();
+        SubstateProofGenerator::new(&tx, shard_group, num_preshards())
+            .unwrap()
+            .generate(&s.to_versioned_substate_id())
+            .unwrap()
+            .unwrap();
     }
     let one_shot = t.elapsed();
 
@@ -89,12 +68,10 @@ fn proof_cost() {
 
     // A single-substate request pays the whole fixed cost too.
     let t = Instant::now();
-    generate_substate_proof(
-        &tx,
-        shard_group,
-        &substates[0].to_versioned_substate_id(),
-        num_preshards(),
-    )
-    .unwrap();
+    SubstateProofGenerator::new(&tx, shard_group, num_preshards())
+        .unwrap()
+        .generate(&substates[0].to_versioned_substate_id())
+        .unwrap()
+        .unwrap();
     println!("one substate alone:  {:?}", t.elapsed());
 }

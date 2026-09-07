@@ -82,7 +82,6 @@ use tari_ootle_storage::{
         SubstateValueFilterFlags,
         TransactionRecord,
     },
-    generate_substate_proof,
 };
 use tari_ootle_transaction::{Transaction, TransactionId};
 use tari_rpc_framework::{Request, Response, RpcStatus, Streaming};
@@ -152,8 +151,14 @@ impl<TStateStore: StateStore> ValidatorNodeRpcServiceImpl<TStateStore> {
         };
 
         let shard_group = proof_shard_group(&commit_proof).map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-        let value_proof = generate_substate_proof(tx, shard_group, &substate.to_versioned_substate_id(), num_preshards)
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+        // The anchor cannot speak for this substate - its shard is outside the group the anchor
+        // commits, or has nothing committed. Answer unproven rather than not at all.
+        let Some(value_proof) = SubstateProofGenerator::new(tx, shard_group, num_preshards)
+            .and_then(|mut generator| generator.generate(&substate.to_versioned_substate_id()))
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
+        else {
+            return Ok(());
+        };
 
         resp.commit_proof = commit_proof.to_bytes();
         resp.substate_value_proof =
@@ -216,7 +221,7 @@ fn read_substate_batch<TTx: StateStoreReadTransaction>(
             let Some(proof) = generator.generate(&substate.to_versioned_substate_id())? else {
                 warn!(
                     target: LOG_TARGET,
-                    "{} is stored but its shard has no committed state; reporting it as missing",
+                    "{} is stored but cannot be proved against the anchor; reporting it as missing",
                     substate.substate_id()
                 );
                 missing.push(substate.substate_id().to_bytes());
@@ -258,7 +263,13 @@ fn latest_commit_proof<TTx: StateStoreReadTransaction>(
     tx: &TTx,
     epoch: Epoch,
 ) -> Result<Option<CommittedBlockProof>, StorageError> {
-    let last_executed = tx.last_executed_get(epoch)?;
+    // `last_executed_get` reports both "nothing committed here" cases as `NotFound`: no row at all,
+    // and a row belonging to another epoch - the latter being exactly the window after an epoch
+    // change, and the former a node that has not started consensus since restarting. Neither is a
+    // failure to read; both mean there is nothing to anchor to.
+    let Some(last_executed) = tx.last_executed_get(epoch).optional()? else {
+        return Ok(None);
+    };
     if last_executed.height.is_zero() {
         return Ok(None);
     }

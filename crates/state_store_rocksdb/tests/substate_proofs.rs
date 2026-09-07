@@ -3,62 +3,25 @@
 
 pub mod helpers;
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 
-use helpers::{NETWORK, build_substate_record, create_rocksdb, create_substate_update_batch, num_preshards};
-use tari_ootle_common_types::{Epoch, ShardGroup, VersionedSubstateId, shard::Shard};
+use helpers::{PROOF_TEST_TREE_VERSION, build_substate_record, commit_substates, create_rocksdb, num_preshards};
+use tari_ootle_common_types::{ShardGroup, VersionedSubstateId};
 use tari_ootle_storage::{
     ShardScopedTreeStoreReader,
-    ShardScopedTreeStoreWriter,
     StateStore,
     StateStoreReadTransaction,
-    StateStoreWriteTransaction,
     SubstateProofGenerator,
-    consensus_models::{Block, SubstateRecord},
-    generate_substate_proof,
+    consensus_models::SubstateRecord,
 };
 use tari_state_tree::{
     SPARSE_MERKLE_PLACEHOLDER_HASH,
     SpreadPrefixStateTree,
-    SubstateTreeChange,
     TreeHash,
     compute_merkle_root_for_hashes,
 };
 
 use crate::helpers::substate_id_seed;
-
-/// The state-tree version every shard in these tests is committed at.
-const TREE_VERSION: u64 = 1;
-
-/// Commits `substates` to the store and to their shards' state trees, as a validator does when a
-/// block commits.
-fn commit_substates(db: &impl StateStore, substates: &[SubstateRecord]) {
-    let mut by_shard: BTreeMap<Shard, Vec<&SubstateRecord>> = BTreeMap::new();
-    for substate in substates {
-        by_shard.entry(substate.created().in_shard).or_default().push(substate);
-    }
-
-    let mut tx = db.create_write_tx().unwrap();
-    Block::zero_block(NETWORK, num_preshards()).insert(&mut tx).unwrap();
-
-    for (shard, substates) in &by_shard {
-        let changes = substates.iter().map(|s| SubstateTreeChange::Up {
-            id: s.to_versioned_substate_id(),
-            value_hash: *s.state_hash(),
-        });
-        {
-            let mut store = ShardScopedTreeStoreWriter::new(&mut tx, *shard);
-            SpreadPrefixStateTree::new(&mut store)
-                .batch_put_substate_changes(None, TREE_VERSION, changes)
-                .unwrap();
-        }
-        tx.state_tree_shard_versions_set(*shard, TREE_VERSION).unwrap();
-    }
-
-    tx.substates_commit_batch(create_substate_update_batch(Epoch::zero(), substates))
-        .unwrap();
-    tx.commit().unwrap();
-}
 
 /// The shard-group state merkle root a block header commits: the root of the tree over the shard
 /// group's per-shard roots, in the canonical `[global, shard_0, ...]` order.
@@ -84,7 +47,7 @@ fn substates_spanning_shards(count: u32, min_shards: usize) -> Vec<SubstateRecor
     // A substate's shard is read off the leading byte of its entity id, and `substate_id_seed` writes
     // the seed there big-endian, so the seed has to vary in its top byte to move between shards.
     let substates = (0..count)
-        .map(|seed| build_substate_record(&substate_id_seed(seed << 24), 0, TREE_VERSION))
+        .map(|seed| build_substate_record(&substate_id_seed(seed << 24), 0, PROOF_TEST_TREE_VERSION))
         .collect::<Vec<_>>();
     let shards = substates.iter().map(|s| s.created().in_shard).collect::<HashSet<_>>();
     assert!(
@@ -142,28 +105,6 @@ fn a_reused_shard_root_proof_belongs_to_its_own_shard() {
     }
 }
 
-#[test]
-fn a_batched_proof_matches_the_single_substate_proof() {
-    let (db, _tmp) = create_rocksdb();
-    let shard_group = ShardGroup::all_shards(num_preshards());
-    let substates = substates_spanning_shards(4, 2);
-    commit_substates(&db, &substates);
-
-    let tx = db.create_read_tx().unwrap();
-    let mut generator = SubstateProofGenerator::new(&tx, shard_group, num_preshards()).unwrap();
-
-    for substate in &substates {
-        let versioned_id = substate.to_versioned_substate_id();
-        let batched = generator.generate(&versioned_id).unwrap().expect("shard has state");
-        let single = generate_substate_proof(&tx, shard_group, &versioned_id, num_preshards()).unwrap();
-        assert_eq!(
-            tari_bor::serde_codec::to_vec(&batched).unwrap(),
-            tari_bor::serde_codec::to_vec(&single).unwrap(),
-            "{versioned_id}"
-        );
-    }
-}
-
 /// A version that is not up gets an exclusion proof - the shape a down substate in a batch is
 /// answered with.
 #[test]
@@ -187,8 +128,10 @@ fn a_version_that_is_not_up_gets_an_exclusion_proof() {
     }
 }
 
+/// A substate the shard group does not cover cannot be proved against its root - which is a fact
+/// about the group, not a read failure, so the rest of a batch is still answerable.
 #[test]
-fn a_substate_outside_the_shard_group_is_refused() {
+fn a_substate_outside_the_shard_group_proves_nothing() {
     let (db, _tmp) = create_rocksdb();
     let substates = substates_spanning_shards(8, 2);
     commit_substates(&db, &substates);
@@ -204,13 +147,18 @@ fn a_substate_outside_the_shard_group_is_refused() {
     let tx = db.create_read_tx().unwrap();
     let mut generator = SubstateProofGenerator::new(&tx, shard_group, num_preshards()).unwrap();
 
-    generator
-        .generate(&substates[0].to_versioned_substate_id())
-        .expect("in the shard group");
-    let err = generator
-        .generate(&outsider.to_versioned_substate_id())
-        .expect_err("outside the shard group");
-    assert!(err.to_string().contains("outside this shard group"), "{err}");
+    assert!(
+        generator
+            .generate(&substates[0].to_versioned_substate_id())
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        generator
+            .generate(&outsider.to_versioned_substate_id())
+            .unwrap()
+            .is_none()
+    );
 }
 
 /// A shard with no committed state has no root to prove against. That is not a read failure, so the
