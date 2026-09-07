@@ -18,6 +18,15 @@ pub struct Config {
     pub rendezvous_namespace: String,
     pub rendezvous_peer_limit: Option<u64>,
     pub high_ping_warning_threshold: Option<Duration>,
+    /// Close a connection once this many consecutive pings have failed on it.
+    ///
+    /// A connection whose pings stop completing can no longer carry traffic, but the transport may take a very long
+    /// time to notice: a TCP socket whose local address has been removed (VPN interface torn down, roaming) stays
+    /// established until the kernel exhausts `tcp_retries2`, on the order of 15 minutes. Ping failures are the first
+    /// signal available, so acting on them returns the peer to the dialable pool long before the transport gives up.
+    ///
+    /// `None` disables the check, in which case the connection is only ever dropped by the transport.
+    pub max_consecutive_ping_failures: Option<u32>,
 }
 
 impl Default for Config {
@@ -35,6 +44,7 @@ impl Default for Config {
             rendezvous_namespace: "tari".to_string(),
             rendezvous_peer_limit: Some(1000),
             high_ping_warning_threshold: Some(Duration::from_secs(2)),
+            max_consecutive_ping_failures: Some(3),
         }
     }
 }

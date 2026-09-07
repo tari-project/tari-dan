@@ -18,6 +18,8 @@ pub struct Connection {
     pub num_concurrent_dial_errors: usize,
     pub established_in: Duration,
     pub ping_latency: Option<Duration>,
+    /// Consecutive ping failures on this connection. Reset to zero by any successful ping.
+    pub num_ping_failures: u32,
     pub user_agent: Option<Arc<String>>,
 }
 
