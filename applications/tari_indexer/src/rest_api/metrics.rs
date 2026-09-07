@@ -25,7 +25,7 @@ use prometheus_client::{
 use tari_ootle_app_utilities::tcp::try_bind_with_fallback;
 use tari_shutdown::ShutdownSignal;
 
-use crate::metrics::CollectorRegister;
+use crate::{metrics::CollectorRegister, rest_api::rate_limit::SseConnectionMetrics};
 
 const LOG_TARGET: &str = "tari::ootle::indexer::rest_api::metrics";
 
@@ -71,27 +71,44 @@ pub struct RequestMetrics {
     response_body_size_histogram: Histogram,
 }
 
-pub fn register(registry: &mut Registry) -> RequestMetrics {
+/// Everything the REST API exports, all of it under the `api` prefix.
+#[derive(Clone)]
+pub struct ApiMetrics {
+    /// State for the [`layer`] middleware wrapping the whole router.
+    pub requests: RequestMetrics,
+    /// Shared with the SSE limit middleware, which maintains the count.
+    pub sse: SseConnectionMetrics,
+}
+
+pub fn register(registry: &mut Registry) -> ApiMetrics {
     let registry = registry.sub_registry_with_prefix("api");
 
-    RequestMetrics {
-        request_counter: Counter::default().register_at(
-            "http_requests_total",
-            "Total number of HTTP requests received",
-            registry,
-        ),
-        response_time_histogram: Histogram::new(
-            exponential_buckets(0.001, 2.0, 15), // buckets from 1ms, doubling, 15 buckets
-        )
-        .register_at("http_response_time_seconds", "HTTP response times in seconds", registry),
-        requests_pending: Gauge::default().register_at(
-            "http_requests_pending",
-            "Number of HTTP requests currently being processed",
-            registry,
-        ),
-        response_body_size_histogram: Histogram::new(
-            exponential_buckets(100.0, 2.0, 15), // buckets from 100B, doubling, 15 buckets
-        ),
+    ApiMetrics {
+        requests: RequestMetrics {
+            request_counter: Counter::default().register_at(
+                "http_requests_total",
+                "Total number of HTTP requests received",
+                registry,
+            ),
+            response_time_histogram: Histogram::new(
+                exponential_buckets(0.001, 2.0, 15), // buckets from 1ms, doubling, 15 buckets
+            )
+            .register_at("http_response_time_seconds", "HTTP response times in seconds", registry),
+            requests_pending: Gauge::default().register_at(
+                "http_requests_pending",
+                "Number of HTTP requests currently being processed",
+                registry,
+            ),
+            response_body_size_histogram: Histogram::new(
+                exponential_buckets(100.0, 2.0, 15), // buckets from 100B, doubling, 15 buckets
+            )
+            .register_at(
+                "http_response_body_size_bytes",
+                "HTTP response body sizes in bytes, for responses of known length",
+                registry,
+            ),
+        },
+        sse: SseConnectionMetrics::register(registry),
     }
 }
 
@@ -175,6 +192,34 @@ mod tests {
         );
         // The OpenMetrics text exposition always ends with an EOF marker
         assert!(response.contains("# EOF"), "unexpected response: {response}");
+    }
+
+    #[tokio::test]
+    async fn it_exports_every_registered_metric() {
+        let shutdown = Shutdown::new();
+        let mut registry = Registry::default();
+        let metrics = register(&mut registry);
+        metrics.sse.endpoint("/events");
+
+        let listen_addr = spawn_metrics_server("127.0.0.1:0".parse().unwrap(), registry, shutdown.to_signal())
+            .await
+            .unwrap();
+        let response = http_get(listen_addr, "/_metrics").await;
+
+        for name in [
+            "api_http_requests_total",
+            "api_http_response_time_seconds",
+            "api_http_requests_pending",
+            "api_http_response_body_size_bytes",
+        ] {
+            assert!(response.contains(name), "{name} missing from: {response}");
+        }
+        // A `Family` gets its descriptor written whether or not it has children, so the
+        // labelled series is what shows the endpoint handle reaches the exposition.
+        assert!(
+            response.contains(r#"api_sse_connections_active{endpoint="/events"}"#),
+            "sse gauge series missing from: {response}"
+        );
     }
 
     #[tokio::test]

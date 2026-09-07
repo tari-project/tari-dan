@@ -13,6 +13,11 @@
 //! SSE / streaming endpoints use a per-IP concurrent-connection counter
 //! instead of a token bucket — the slot is held for the full lifetime of the
 //! response body and released on disconnect.
+//!
+//! The same middleware maintains [`SseConnectionMetrics`], the gauge of streams
+//! currently being served. It is kept independently of the per-IP limiter so
+//! that a node running with rate limiting switched off still reports its
+//! streams.
 
 use std::{
     net::{IpAddr, SocketAddr},
@@ -30,6 +35,16 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use dashmap::DashMap;
+#[cfg(feature = "metrics")]
+use prometheus_client::{
+    encoding::EncodeLabelSet,
+    metrics::{family::Family, gauge::Gauge},
+    registry::Registry,
+};
+
+#[cfg(feature = "metrics")]
+use crate::metrics::CollectorRegister;
+
 // ---------------------------------------------------------------------------
 // Token-bucket state per IP
 // ---------------------------------------------------------------------------
@@ -230,6 +245,106 @@ impl Drop for SseConnectionGuard {
 }
 
 // ---------------------------------------------------------------------------
+// SSE active-connection gauge
+// ---------------------------------------------------------------------------
+
+/// The route an SSE connection was opened on.
+///
+/// The streaming endpoints share one limiter but serve quite different consumers, so the
+/// connection count is labelled to keep them apart. Values are fixed route paths chosen at
+/// router construction, never taken from the request, so the label cardinality is bounded by
+/// the number of streaming routes.
+#[cfg(feature = "metrics")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, EncodeLabelSet)]
+struct SseEndpointLabels {
+    endpoint: &'static str,
+}
+
+/// Gauge of the SSE connections the indexer is currently serving, labelled by endpoint.
+///
+/// Registered under the `api` sub-registry, so the exported name is
+/// `api_sse_connections_active`.
+///
+/// Clones share the counts: the value handed to a middleware instance and the value the
+/// registry encodes are the same gauge. Without the `metrics` feature the type is empty and
+/// every operation on it compiles away.
+///
+/// The only way to obtain one with the feature on is [`SseConnectionMetrics::register`], so a
+/// gauge that counts but is exported nowhere cannot be built by accident.
+#[derive(Clone)]
+#[cfg_attr(not(feature = "metrics"), derive(Default))]
+pub struct SseConnectionMetrics {
+    #[cfg(feature = "metrics")]
+    active: Family<SseEndpointLabels, Gauge>,
+}
+
+impl SseConnectionMetrics {
+    #[cfg(feature = "metrics")]
+    pub fn register(registry: &mut Registry) -> Self {
+        Self {
+            active: Family::default().register_at(
+                "sse_connections_active",
+                "Number of SSE connections currently being served, by endpoint",
+                registry,
+            ),
+        }
+    }
+
+    /// The handle counting connections on one endpoint. Give each streaming route its own.
+    #[cfg(feature = "metrics")]
+    pub fn endpoint(&self, endpoint: &'static str) -> SseEndpointConnections {
+        SseEndpointConnections {
+            active: self.active.get_or_create_owned(&SseEndpointLabels { endpoint }),
+        }
+    }
+
+    #[cfg(not(feature = "metrics"))]
+    pub fn endpoint(&self, _endpoint: &'static str) -> SseEndpointConnections {
+        SseEndpointConnections {}
+    }
+}
+
+/// Counts the SSE connections currently open on one endpoint.
+#[derive(Clone)]
+pub struct SseEndpointConnections {
+    #[cfg(feature = "metrics")]
+    active: Gauge,
+}
+
+impl SseEndpointConnections {
+    /// Counts one connection as open until the returned token is dropped.
+    fn open(&self) -> SseOpenConnection {
+        #[cfg(feature = "metrics")]
+        self.active.inc();
+        SseOpenConnection {
+            #[cfg(feature = "metrics")]
+            active: self.active.clone(),
+        }
+    }
+
+    #[cfg(all(test, feature = "metrics"))]
+    fn count(&self) -> i64 {
+        self.active.get()
+    }
+}
+
+/// Holds one connection open in [`SseEndpointConnections`] for as long as it is alive.
+///
+/// Travels in the response body's stream state next to [`SseConnectionGuard`], so the count
+/// falls when the stream ends or the client disconnects.
+struct SseOpenConnection {
+    #[cfg(feature = "metrics")]
+    active: Gauge,
+}
+
+#[cfg(feature = "metrics")]
+impl Drop for SseOpenConnection {
+    fn drop(&mut self) {
+        self.active.dec();
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Helper: extract peer IP from request
 // ---------------------------------------------------------------------------
 
@@ -282,6 +397,9 @@ pub struct RateLimitConfig {
 }
 
 /// Configuration for the SSE connection-limit middleware layer.
+///
+/// One instance per streaming route: `active_connections` carries that route's label, so
+/// each route must be given its own config even though they share a `limiter`.
 #[derive(Clone)]
 pub struct SseLimitConfig {
     pub enabled: bool,
@@ -289,6 +407,8 @@ pub struct SseLimitConfig {
     /// Whether to trust `X-Forwarded-For` / `X-Real-IP` headers for IP
     /// extraction. Only enable this when running behind a trusted reverse proxy.
     pub trust_proxy_headers: bool,
+    /// Gauge handle for the route this config is attached to.
+    pub active_connections: SseEndpointConnections,
 }
 
 /// Axum middleware that enforces a per-IP token-bucket rate limit.
@@ -322,14 +442,21 @@ pub async fn rate_limit_middleware(
 }
 
 /// Axum middleware that enforces a per-IP concurrent-connection limit on SSE
-/// endpoints.
+/// endpoints and counts the streams it is serving.
 ///
-/// The guard is moved into the response **body**'s stream state, not the
-/// response extensions. Axum/hyper drop response parts (including extensions)
-/// once headers are flushed, so an extension-based guard would be released at
-/// the start of the SSE stream rather than its end. By tying the guard to the
-/// body stream, it lives until the stream is fully drained or the client
-/// disconnects.
+/// Both the connection slot and the gauge token are moved into the response
+/// **body**'s stream state, not the response extensions. Axum/hyper drop
+/// response parts (including extensions) once headers are flushed, so an
+/// extension-based guard would be released at the start of the SSE stream
+/// rather than its end. By tying them to the body stream, they live until the
+/// stream is fully drained or the client disconnects.
+///
+/// A disabled limiter takes no slot but is still counted, so the gauge reflects
+/// the streams in flight on every node.
+///
+/// Only a successful response is a stream. A handler that rejects the request
+/// returns a short body, which passes through untouched so that it holds
+/// neither a slot nor a place in the gauge and keeps its `Content-Length`.
 pub async fn sse_limit_middleware(
     axum::extract::State(config): axum::extract::State<SseLimitConfig>,
     req: Request,
@@ -337,35 +464,39 @@ pub async fn sse_limit_middleware(
 ) -> Response {
     use futures::StreamExt;
 
-    if !config.enabled {
-        return next.run(req).await;
+    let slot = if config.enabled {
+        let connect_info = req.extensions().get::<ConnectInfo<SocketAddr>>().copied();
+        let ip = extract_ip(req.headers(), connect_info.as_ref(), config.trust_proxy_headers);
+        let Some(guard) = config.limiter.try_acquire(ip) else {
+            return (
+                StatusCode::TOO_MANY_REQUESTS,
+                [(header::RETRY_AFTER, "60".to_string())],
+                axum::Json(serde_json::json!({
+                    "error": "Too many concurrent SSE connections. Please try again later."
+                })),
+            )
+                .into_response();
+        };
+        Some(guard)
+    } else {
+        None
+    };
+
+    let response = next.run(req).await;
+    if !response.status().is_success() {
+        return response;
     }
 
-    let connect_info = req.extensions().get::<ConnectInfo<SocketAddr>>().copied();
-    let ip = extract_ip(req.headers(), connect_info.as_ref(), config.trust_proxy_headers);
-    match config.limiter.try_acquire(ip) {
-        Some(guard) => {
-            let response = next.run(req).await;
-            let (parts, body) = response.into_parts();
-            let stream = body.into_data_stream();
-            // `unfold` carries `guard` in its state. When the stream completes
-            // or is dropped (client disconnect, server shutdown), the state is
-            // dropped and the guard releases the connection slot.
-            let stream = futures::stream::unfold((stream, guard), |(mut s, g)| async move {
-                s.next().await.map(|item| (item, (s, g)))
-            });
-            let body = axum::body::Body::from_stream(stream);
-            Response::from_parts(parts, body)
-        },
-        None => (
-            StatusCode::TOO_MANY_REQUESTS,
-            [(header::RETRY_AFTER, "60".to_string())],
-            axum::Json(serde_json::json!({
-                "error": "Too many concurrent SSE connections. Please try again later."
-            })),
-        )
-            .into_response(),
-    }
+    let open = config.active_connections.open();
+    let (parts, body) = response.into_parts();
+    let stream = body.into_data_stream();
+    // `unfold` carries `slot` and `open` in its state. When the stream completes or is
+    // dropped (client disconnect, server shutdown), the state is dropped, releasing the
+    // connection slot and decrementing the gauge.
+    let stream = futures::stream::unfold((stream, slot, open), |(mut s, slot, open)| async move {
+        s.next().await.map(|item| (item, (s, slot, open)))
+    });
+    Response::from_parts(parts, axum::body::Body::from_stream(stream))
 }
 
 #[cfg(test)]
@@ -594,6 +725,210 @@ mod tests {
         headers.insert("x-real-ip", HeaderValue::from_static("also-garbage"));
         let conn = ci("203.0.113.7:55512");
         assert_eq!(extract_ip(&headers, Some(&conn), true), IpAddr::from([203, 0, 113, 7]));
+    }
+
+    // ------------------------------------------------------ SSE connection gauge --
+
+    #[cfg(feature = "metrics")]
+    mod sse_gauge {
+        use axum::{
+            Router,
+            body::{Body, Bytes},
+            http::StatusCode,
+            response::Response,
+            routing::get,
+        };
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpStream,
+        };
+
+        use super::*;
+
+        const GAUGE_TIMEOUT: Duration = Duration::from_secs(5);
+
+        /// A response whose body keeps sending until the connection goes away. The repeated
+        /// writes are what make the server notice a vanished client.
+        fn ticking_response(status: StatusCode) -> Response {
+            let ticks = futures::stream::unfold(
+                tokio::time::interval(Duration::from_millis(20)),
+                |mut tick| async move {
+                    tick.tick().await;
+                    Some((Ok::<_, std::io::Error>(Bytes::from_static(b"tick\n")), tick))
+                },
+            );
+            let mut response = Response::new(Body::from_stream(ticks));
+            *response.status_mut() = status;
+            response
+        }
+
+        async fn ticking_stream() -> Response {
+            ticking_response(StatusCode::OK)
+        }
+
+        /// Holds the connection open on a failed status, so a wrongly counted rejection stays
+        /// visible in the gauge for as long as the test looks at it.
+        async fn rejected_stream() -> Response {
+            ticking_response(StatusCode::BAD_REQUEST)
+        }
+
+        /// A rejection shaped like the argument validation the real streaming handlers do
+        /// before they open a stream.
+        async fn rejected() -> Response {
+            (StatusCode::BAD_REQUEST, "bad request").into_response()
+        }
+
+        async fn serve_handler(config: SseLimitConfig, handler: axum::routing::MethodRouter) -> SocketAddr {
+            let app = Router::new().route(
+                "/stream",
+                handler.route_layer(axum::middleware::from_fn_with_state(config, sse_limit_middleware)),
+            );
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = listener.local_addr().unwrap();
+            tokio::spawn(async move {
+                // Matches how the REST API is served, so `extract_ip` sees a real peer address
+                // rather than falling back to localhost.
+                axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+                    .await
+                    .unwrap();
+            });
+            addr
+        }
+
+        async fn serve(config: SseLimitConfig) -> SocketAddr {
+            serve_handler(config, get(ticking_stream)).await
+        }
+
+        /// Opens a request and returns once the response has started arriving, so the caller
+        /// knows the middleware has run.
+        async fn open_stream(addr: SocketAddr) -> TcpStream {
+            let mut stream = TcpStream::connect(addr).await.unwrap();
+            stream
+                .write_all(format!("GET /stream HTTP/1.1\r\nHost: {addr}\r\n\r\n").as_bytes())
+                .await
+                .unwrap();
+            let mut buf = [0u8; 512];
+            let n = stream.read(&mut buf).await.unwrap();
+            assert!(n > 0, "server closed the connection without responding");
+            stream
+        }
+
+        async fn read_response(addr: SocketAddr) -> String {
+            let mut stream = TcpStream::connect(addr).await.unwrap();
+            stream
+                .write_all(format!("GET /stream HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n").as_bytes())
+                .await
+                .unwrap();
+            let mut buf = Vec::new();
+            stream.read_to_end(&mut buf).await.unwrap();
+            String::from_utf8(buf).unwrap()
+        }
+
+        async fn wait_for_count(connections: &SseEndpointConnections, expected: i64) {
+            let deadline = Instant::now() + GAUGE_TIMEOUT;
+            loop {
+                let count = connections.count();
+                if count == expected {
+                    return;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "gauge settled at {count}, expected {expected}"
+                );
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        }
+
+        fn metrics() -> SseConnectionMetrics {
+            SseConnectionMetrics::register(&mut Registry::default())
+        }
+
+        fn config(enabled: bool, max_per_ip: usize, connections: SseEndpointConnections) -> SseLimitConfig {
+            SseLimitConfig {
+                enabled,
+                limiter: SseConnectionLimiter::new(max_per_ip),
+                trust_proxy_headers: false,
+                active_connections: connections,
+            }
+        }
+
+        #[tokio::test]
+        async fn it_counts_a_stream_until_the_client_disconnects() {
+            let events = metrics().endpoint("/events");
+            let addr = serve(config(true, 4, events.clone())).await;
+
+            let client = open_stream(addr).await;
+            wait_for_count(&events, 1).await;
+
+            drop(client);
+            wait_for_count(&events, 0).await;
+        }
+
+        #[tokio::test]
+        async fn it_counts_streams_when_the_limiter_is_disabled() {
+            let events = metrics().endpoint("/events");
+            let addr = serve(config(false, 4, events.clone())).await;
+
+            let client = open_stream(addr).await;
+            wait_for_count(&events, 1).await;
+
+            drop(client);
+            wait_for_count(&events, 0).await;
+        }
+
+        #[tokio::test]
+        async fn it_does_not_count_a_rejected_connection() {
+            let events = metrics().endpoint("/events");
+            let cfg = config(true, 1, events.clone());
+            let held = cfg.limiter.try_acquire(IpAddr::from([127, 0, 0, 1])).unwrap();
+            let addr = serve(cfg).await;
+
+            let response = read_response(addr).await;
+            assert!(response.starts_with("HTTP/1.1 429"), "unexpected response: {response}");
+            assert_eq!(events.count(), 0);
+            drop(held);
+        }
+
+        #[tokio::test]
+        async fn it_does_not_count_a_response_the_handler_rejected() {
+            let events = metrics().endpoint("/events");
+            let addr = serve_handler(config(true, 4, events.clone()), get(rejected_stream)).await;
+
+            let client = open_stream(addr).await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            assert_eq!(events.count(), 0);
+            drop(client);
+        }
+
+        #[tokio::test]
+        async fn it_leaves_a_rejected_response_untouched() {
+            let events = metrics().endpoint("/events");
+            let addr = serve_handler(config(true, 4, events), get(rejected)).await;
+
+            let response = read_response(addr).await;
+            assert!(response.starts_with("HTTP/1.1 400"), "unexpected response: {response}");
+            // A body that is passed through keeps its length, so it is still observed by the
+            // response-size histogram.
+            assert!(
+                response.to_lowercase().contains("content-length:"),
+                "unexpected response: {response}"
+            );
+        }
+
+        #[tokio::test]
+        async fn it_counts_each_endpoint_separately() {
+            let metrics = metrics();
+            let events = metrics.endpoint("/events");
+            let utxos = metrics.endpoint("/utxos/stream");
+            let addr = serve(config(true, 4, events.clone())).await;
+
+            let client = open_stream(addr).await;
+            wait_for_count(&events, 1).await;
+            assert_eq!(utxos.count(), 0);
+
+            drop(client);
+            wait_for_count(&events, 0).await;
+        }
     }
 
     #[test]
