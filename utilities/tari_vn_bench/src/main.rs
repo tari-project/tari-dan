@@ -88,6 +88,13 @@ fn main() -> anyhow::Result<()> {
         );
     }
 
+    // The storage phase runs last but is checked first: it is the only phase that can fail on the
+    // machine's configuration rather than its speed, and discovering that after several minutes of
+    // execution benchmarking costs the whole run.
+    if !cli.skip_storage {
+        storage::preflight(&cli.data_dir)?;
+    }
+
     let execution = if cli.skip_execution {
         None
     } else {
@@ -102,17 +109,26 @@ fn main() -> anyhow::Result<()> {
         Some(native::measure(cli.quick)?)
     };
 
-    let storage = if cli.skip_storage {
-        None
+    // A failure here is reported rather than propagated: the execution and native phases have
+    // already run by this point, and their results are worth more than the storage figures are
+    // worth aborting for.
+    let (storage, storage_error) = if cli.skip_storage {
+        (None, None)
     } else {
         eprintln!("[3/3] Measuring storage at {}...", cli.data_dir.display());
-        Some(storage::measure(&cli.data_dir, cli.quick)?)
+        match storage::measure(&cli.data_dir, cli.quick) {
+            Ok(measurement) => (Some(measurement), None),
+            Err(e) => {
+                eprintln!("WARNING: the storage phase failed: {e:#}");
+                (None, Some(format!("{e:#}")))
+            },
+        }
     };
 
     let memory = memory::budget(cli.vn_pid);
     host.record_peak_rss();
 
-    let report = report::Report::build(host, budgets, execution, native, storage, memory);
+    let report = report::Report::build(host, budgets, execution, native, storage, storage_error, memory);
 
     if cli.json {
         println!("{}", serde_json::to_string_pretty(&report)?);

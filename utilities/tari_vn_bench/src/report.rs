@@ -151,6 +151,11 @@ pub struct Report {
     pub execution: Option<ExecutionMeasurement>,
     pub native: Option<NativeMeasurement>,
     pub storage: Option<StorageMeasurement>,
+    /// Why the storage phase produced nothing, when it was attempted and failed. Kept separate from
+    /// `storage: None`, which also covers `--skip-storage`: a phase the operator declined is not the
+    /// same as one that broke, and only the second needs to appear in the verdict.
+    #[serde(default)]
+    pub storage_error: Option<String>,
     pub memory: MemoryBudget,
     pub projections: Option<Projections>,
     pub findings: Vec<Finding>,
@@ -164,6 +169,7 @@ impl Report {
         execution: Option<ExecutionMeasurement>,
         native: Option<NativeMeasurement>,
         storage: Option<StorageMeasurement>,
+        storage_error: Option<String>,
         memory: MemoryBudget,
     ) -> Self {
         let projections = execution.as_ref().map(|e| project(e, &budgets));
@@ -194,6 +200,19 @@ impl Report {
         if let Some(storage) = storage.as_ref() {
             findings.push(grade_storage(storage));
         }
+        if let Some(error) = storage_error.as_ref() {
+            findings.push(Finding {
+                axis: "storage".to_string(),
+                grade: Grade::Warn,
+                headline: "Storage was not measured".to_string(),
+                detail: format!(
+                    "{error} The rest of this report stands, but storage is unassessed — fsync latency floors every \
+                     block commit, so a machine can pass every other axis and still miss proposals on a slow volume. \
+                     Re-run with --data-dir pointing at a writable path on the volume the node's data directory will \
+                     use."
+                ),
+            });
+        }
         findings.push(grade_memory(&host, &memory));
 
         let grade = findings.iter().map(|f| f.grade).max().unwrap_or(Grade::Pass);
@@ -205,6 +224,7 @@ impl Report {
             execution,
             native,
             storage,
+            storage_error,
             memory,
             projections,
             findings,

@@ -23,6 +23,7 @@ use std::{
     time::Instant,
 };
 
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 use crate::stats::Sample;
@@ -52,14 +53,54 @@ pub struct StorageMeasurement {
     pub bytes_written: u64,
 }
 
+/// Confirms the storage phase can run before anything expensive happens.
+///
+/// The phase runs last but its prerequisites are knowable first, and a data directory that turns
+/// out to be unwritable after several minutes of execution benchmarking wastes the whole run. So
+/// this is called up front, and says what to do rather than surfacing a bare `os error 13`.
+pub fn preflight(data_dir: &Path) -> anyhow::Result<()> {
+    if let Err(e) = fs::create_dir_all(data_dir) {
+        anyhow::bail!(
+            "cannot create the storage benchmark directory {}: {e}\nCreate it with write access for this user, or \
+             pass --data-dir pointing at a writable path on the same volume (check with `df -h {}`). The volume \
+             matters: a fast root disk says nothing about a slow attached one. Use --skip-storage to run without it.",
+            data_dir.display(),
+            data_dir.display(),
+        );
+    }
+
+    let probe = scratch_path(data_dir);
+    if let Err(e) = File::create(&probe) {
+        anyhow::bail!(
+            "cannot write to the storage benchmark directory {}: {e}\nGive this user write access (`sudo chown $USER \
+             {}`), or pass --data-dir pointing at a writable path on the same volume (check with `df -h {}`). Use \
+             --skip-storage to run without it.",
+            data_dir.display(),
+            data_dir.display(),
+            data_dir.display(),
+        );
+    }
+    let _ignore = fs::remove_file(&probe);
+    Ok(())
+}
+
+/// The single file every measurement here writes through. Named so it is recognisable as this
+/// tool's leftover if a run is killed before it cleans up.
+fn scratch_path(data_dir: &Path) -> PathBuf {
+    data_dir.join(".tari-vn-bench.tmp")
+}
+
 pub fn measure(data_dir: &Path, quick: bool) -> anyhow::Result<StorageMeasurement> {
-    fs::create_dir_all(data_dir)?;
-    let scratch = data_dir.join(".tari-vn-bench.tmp");
+    fs::create_dir_all(data_dir)
+        .with_context(|| format!("creating storage benchmark directory {}", data_dir.display()))?;
+    let scratch = scratch_path(data_dir);
 
     let filesystem = filesystem_for(data_dir);
-    let fsync = measure_fsync(&scratch, if quick { SYNC_TRIALS_QUICK } else { SYNC_TRIALS })?;
+    let fsync = measure_fsync(&scratch, if quick { SYNC_TRIALS_QUICK } else { SYNC_TRIALS })
+        .with_context(|| format!("measuring fsync latency in {}", data_dir.display()))?;
     let target_bytes = if quick { SEQ_WRITE_BYTES_QUICK } else { SEQ_WRITE_BYTES };
-    let sequential_write_mib_per_sec = measure_sequential_write(&scratch, target_bytes)?;
+    let sequential_write_mib_per_sec = measure_sequential_write(&scratch, target_bytes)
+        .with_context(|| format!("measuring sequential write throughput in {}", data_dir.display()))?;
 
     // Best effort: a leftover scratch file is untidy but not a failure worth aborting the report
     // for, and the caller may have no way to act on it anyway.
