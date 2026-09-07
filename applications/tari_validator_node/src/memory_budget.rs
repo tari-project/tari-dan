@@ -13,6 +13,10 @@
 //! of a block mid-execution, allocator fragmentation — are deliberately absent. Including a guess
 //! here would make the check fail for reasons the node cannot control, so [`HEADROOM_FACTOR`]
 //! covers them in one place instead.
+//!
+//! The budget itself is arithmetic over the configuration and is reported everywhere. The
+//! comparison against the machine needs `/proc/meminfo`, so on a non-Linux build the budget is
+//! logged and the comparison is skipped, with a line saying so.
 
 use std::fmt::Write;
 
@@ -118,7 +122,13 @@ pub fn check_against_available_memory(budget: &MemoryBudget) {
     info!(target: LOG_TARGET, "Memory budget:\n{table}");
 
     let Some(available) = available_memory_bytes() else {
-        debug!(target: LOG_TARGET, "Available memory is unknown on this platform; budget not checked");
+        info!(
+            target: LOG_TARGET,
+            "Available memory could not be read on {}, so the budget above is reported but not checked against this \
+             machine. Confirm by hand that it has {} free.",
+            std::env::consts::OS,
+            format_bytes(budget.required_bytes),
+        );
         return;
     };
 
@@ -134,8 +144,11 @@ pub fn check_against_available_memory(budget: &MemoryBudget) {
     }
 }
 
-/// Memory the kernel believes can be handed out without swapping, from `/proc/meminfo`. `None`
-/// where `/proc` is unavailable, which is not an error — the budget stands without it.
+/// Memory the kernel believes can be handed out without swapping, read from `/proc/meminfo`.
+///
+/// `None` anywhere `/proc` is absent, which the node is built for but not deployed on. That is not
+/// an error: the budget is arithmetic over the configuration and stands on its own, and only the
+/// comparison against this machine is lost.
 fn available_memory_bytes() -> Option<u64> {
     let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
     meminfo

@@ -156,6 +156,10 @@ ceiling rather than this one.
 `--vn-pid` reads a running node's `VmHWM` and checks it against the derived ceiling. A node sitting
 far below is normal: the capped terms are burst-and-attack ceilings, not steady state.
 
+**Linux only.** Host detection, the memory readings and `--vn-pid` all read `/proc`. The tool builds
+and runs elsewhere, but reports no CPU model, core count or memory, which makes most of the verdict
+meaningless — run it on the machine you intend to validate from.
+
 ## Reading the verdict
 
 `PASS` / `WARN` / `FAIL` per axis, worst axis wins. The grades are coarse because the decision is
