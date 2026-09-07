@@ -347,7 +347,7 @@ message GetSubstatesBatchResponse {
     // root every value proof in this stream verifies against.
     bytes commit_proof = 1;
     ProvenSubstate substate = 2;
-    // Sent once, after every substate, naming the requested ids the responder holds no record of.
+    // Sent once, after every substate, naming the requested ids this response does not answer for.
     MissingSubstates missing = 3;
   }
 }
@@ -364,9 +364,12 @@ message ProvenSubstate {
 }
 
 message MissingSubstates {
-  // Encoded SubstateIds the responder holds no record of at any version. Unproven: leaf keys are
-  // version-scoped, so an exclusion proof states that one version is not up, never that an id was
-  // never created.
+  // Encoded SubstateIds this response does not answer for, whatever the reason: the responder holds
+  // no record of them, or it holds one it cannot prove because the substate's shard has no committed
+  // state. This is never evidence that a substate does not exist - a consumer may only use it to
+  // decide what to ask for again, never to conclude absence. Absence is not provable at all here:
+  // leaf keys are version-scoped, so an exclusion proof states that one version is not up, never
+  // that an id was never created.
   repeated bytes substate_ids = 1;
 }
 

@@ -83,8 +83,11 @@ pub struct SubstateBatch {
     /// were not requested, or when the responder had no committed block to anchor against.
     pub commit_proof: Option<Vec<u8>>,
     pub substates: Vec<BatchedSubstate>,
-    /// Ids the responder holds no record of at any version. Unproven: a leaf key is version-scoped,
-    /// so an exclusion proof states that one version is not up, never that an id was never created.
+    /// Ids this response does not answer for, whatever the reason: the responder holds no record of
+    /// them, or holds one it cannot prove. Never evidence that a substate does not exist - use it to
+    /// decide what to ask for again, never to conclude absence, which is not provable here at all: a
+    /// leaf key is version-scoped, so an exclusion proof states that one version is not up, never
+    /// that an id was never created.
     pub missing: Vec<SubstateId>,
 }
 
