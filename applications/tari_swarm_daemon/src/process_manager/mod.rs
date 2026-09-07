@@ -7,6 +7,7 @@ use tokio::task;
 
 use crate::config::Config;
 
+mod crash_report;
 mod executables;
 mod handle;
 

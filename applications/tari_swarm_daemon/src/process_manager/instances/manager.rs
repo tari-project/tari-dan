@@ -47,6 +47,7 @@ const CONSENSUS_CONSTANTS_TEMPLATE: &str = r#"# Consensus constants for this swa
 "#;
 use crate::{
     config::{InstanceConfig, InstanceType},
+    logger::FORWARDED_TARGET,
     process_definitions::{CONSENSUS_CONSTANTS_FILE_NAME, ProcessContext, get_definition},
     process_manager::{
         AllocatedPorts,
@@ -282,6 +283,7 @@ impl InstanceManager {
             // This saves us from having to join the network string to the path all over the place, since everything we
             // want is under {base_dir}/{network}
             base_path.join(self.network.to_string()),
+            base_path,
             instance_envs,
             instance_settings,
         );
@@ -556,7 +558,7 @@ fn forward_logs<R: AsyncRead + Unpin + Send + 'static>(path: PathBuf, reader: R,
             },
         };
         while let Some(output) = lines.next_line().await.unwrap() {
-            log::debug!(target: "swarm", "[{target}] {output}");
+            log::debug!(target: FORWARDED_TARGET, "[{target}] {output}");
             if let Err(err) = log_file.write_all(output.as_bytes()).await {
                 log::error!("forward_logs: {err}");
                 return;
@@ -570,6 +572,6 @@ fn forward_logs<R: AsyncRead + Unpin + Send + 'static>(path: PathBuf, reader: R,
                 return;
             }
         }
-        log::debug!(target: "swarm", "Process exited ({target})");
+        log::debug!(target: FORWARDED_TARGET, "Process exited ({target})");
     });
 }

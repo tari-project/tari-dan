@@ -12698,6 +12698,7 @@ dependencies = [
  "indexmap 2.13.0",
  "lockfile",
  "log",
+ "memmap2 0.9.9",
  "mime_guess",
  "minotari_node_grpc_client",
  "minotari_wallet_grpc_client",
