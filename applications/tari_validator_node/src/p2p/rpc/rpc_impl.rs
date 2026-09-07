@@ -65,11 +65,14 @@ use tari_ootle_p2p::{
         SyncBlocksResponse,
         SyncStateRequest,
         SyncStateResponse,
+        get_substates_batch_response as batch_response,
     },
 };
 use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
+    StorageError,
+    SubstateProofGenerator,
     consensus_models::{
         Block,
         BookkeepingEpochAgnosticRead,
@@ -144,28 +147,110 @@ impl<TStateStore: StateStore> ValidatorNodeRpcServiceImpl<TStateStore> {
         resp: &mut GetSubstateResponse,
     ) -> Result<(), RpcStatus> {
         let epoch = self.consensus.current_epoch();
-        let last_executed = tx
-            .last_executed_get(epoch)
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-        if last_executed.height.is_zero() {
+        let Some(commit_proof) = latest_commit_proof(tx, epoch).map_err(RpcStatus::log_internal_error(LOG_TARGET))?
+        else {
             return Ok(());
-        }
+        };
 
-        let block = Block::get(tx, &last_executed.block_id).map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-        let commit_qc = block
-            .get_commit_qc(tx)
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-        let commit_proof =
-            generate_block_commit_proof(tx, &commit_qc, &block).map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
         let value_proof = generate_substate_proof(tx, shard_group, &substate.to_versioned_substate_id(), num_preshards)
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
-        resp.commit_proof = CommittedBlockProof::new(commit_proof).to_bytes();
+        resp.commit_proof = commit_proof.to_bytes();
         resp.substate_value_proof =
             tari_bor::serde_codec::to_vec(&value_proof).map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
         resp.proof_epoch = substate.created().at_epoch.as_u64();
         Ok(())
     }
+}
+
+/// What the responder needs to prove a batch of substates against its own committed state.
+struct BatchProofContext {
+    epoch: Epoch,
+    shard_group: ShardGroup,
+    num_preshards: NumPreshards,
+    include_proofs: bool,
+}
+
+/// Reads the head version of each of `ids` and, when proofs were asked for, a single anchor followed
+/// by a value proof per substate.
+///
+/// Everything is read in one transaction, so every value proof verifies against the anchor's
+/// shard-group root. The anchor comes first so a client can establish that root before it has to
+/// verify anything against it; `missing` comes last, once the ids that were found are known.
+fn read_substate_batch<TTx: StateStoreReadTransaction>(
+    tx: &TTx,
+    ids: &[SubstateId],
+    ctx: BatchProofContext,
+) -> Result<Vec<batch_response::Response>, StorageError> {
+    let (substates, missing) = SubstateRecord::get_any_max_version(tx, ids)?;
+
+    let mut generator = None;
+    let mut messages = Vec::with_capacity(substates.len() + 2);
+    if ctx.include_proofs &&
+        let Some(commit_proof) = latest_commit_proof(tx, ctx.epoch)?
+    {
+        messages.push(batch_response::Response::CommitProof(commit_proof.to_bytes()));
+        generator = Some(SubstateProofGenerator::new(tx, ctx.shard_group, ctx.num_preshards)?);
+    }
+
+    for substate in substates {
+        let value_proof = generator
+            .as_mut()
+            .map(|generator| {
+                let proof = generator.generate(&substate.to_versioned_substate_id())?;
+                tari_bor::serde_codec::to_vec(&proof).map_err(|e| StorageError::QueryError {
+                    reason: format!("encode substate value proof: {e}"),
+                })
+            })
+            .transpose()?;
+
+        messages.push(batch_response::Response::Substate(proto::rpc::ProvenSubstate {
+            proof_epoch: substate.created().at_epoch.as_u64(),
+            substate_value_proof: value_proof.unwrap_or_default(),
+            substate: Some(proto::consensus::Substate {
+                substate_id: substate.substate_id().to_bytes(),
+                version: substate.version(),
+                substate: substate.substate_value().map(|v| v.to_bytes()).unwrap_or_default(),
+                created: Some(substate.created().into()),
+                destroyed: substate.destroyed().map(Into::into),
+            }),
+        }));
+    }
+
+    if !missing.is_empty() {
+        debug!(
+            target: LOG_TARGET,
+            "{} requested substate(s) not found: {}",
+            missing.len(),
+            missing.display()
+        );
+        messages.push(batch_response::Response::Missing(proto::rpc::MissingSubstates {
+            substate_ids: missing.iter().map(|id| id.to_bytes()).collect(),
+        }));
+    }
+
+    Ok(messages)
+}
+
+/// The commit proof for the latest committed block: the quorum-signed anchor for the shard-group
+/// state merkle root that substate value proofs generated in the same read transaction verify
+/// against. `None` when nothing is committed beyond the epoch genesis yet, in which case results go
+/// out unproven and the caller treats them as unverified.
+fn latest_commit_proof<TTx: StateStoreReadTransaction>(
+    tx: &TTx,
+    epoch: Epoch,
+) -> Result<Option<CommittedBlockProof>, StorageError> {
+    let last_executed = tx.last_executed_get(epoch)?;
+    if last_executed.height.is_zero() {
+        return Ok(None);
+    }
+
+    let block = Block::get(tx, &last_executed.block_id)?;
+    let commit_qc = block.get_commit_qc(tx)?;
+    let proof = generate_block_commit_proof(tx, &commit_qc, &block).map_err(|e| StorageError::QueryError {
+        reason: format!("generate_block_commit_proof: {e}"),
+    })?;
+    Ok(Some(CommittedBlockProof::new(proof)))
 }
 
 #[tari_rpc_framework::async_trait]
@@ -616,21 +701,7 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
 
         let maybe_proof = task::spawn_blocking(move || {
             store
-                .with_read_tx(|tx| {
-                    let last_executed = tx.last_executed_get(epoch)?;
-                    // Nothing has been committed beyond the epoch genesis yet - there is no proof to give.
-                    if last_executed.height.is_zero() {
-                        return Ok(None);
-                    }
-                    let block = Block::get(tx, &last_executed.block_id)?;
-                    let commit_qc = block.get_commit_qc(tx)?;
-                    let proof = generate_block_commit_proof(tx, &commit_qc, &block).map_err(|e| {
-                        tari_ootle_storage::StorageError::QueryError {
-                            reason: format!("generate_block_commit_proof: {e}"),
-                        }
-                    })?;
-                    Ok::<_, tari_ootle_storage::StorageError>(Some(CommittedBlockProof::new(proof)))
-                })
+                .with_read_tx(|tx| latest_commit_proof(tx, epoch))
                 .map_err(RpcStatus::log_internal_error(LOG_TARGET))
         })
         .await
@@ -665,40 +736,56 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| RpcStatus::bad_request(format!("Invalid substate ID: {e}")))?;
 
-        let (sender, receiver) = mpsc::channel(req.substate_ids.len());
+        // Our local committee info tells us (a) which of the requested ids we are actually responsible
+        // for and (b) our shard group + preshard count, needed to generate proofs.
+        let current_epoch = self
+            .epoch_manager
+            .current_epoch()
+            .await
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+        let local_committee_info = self
+            .epoch_manager
+            .get_local_committee_info(current_epoch)
+            .await
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+        if let Some(id) = ids
+            .iter()
+            .find(|id| !id.is_global() && !local_committee_info.includes_substate_id(id))
+        {
+            return Err(RpcStatus::bad_request(format!(
+                "This node in {} does not store {}",
+                local_committee_info.shard_group(),
+                id
+            )));
+        }
+
+        let (sender, receiver) = mpsc::channel(req.substate_ids.len() + 2);
 
         let store = self.state_store.clone();
+        let consensus_epoch = self.consensus.current_epoch();
+        let shard_group = local_committee_info.shard_group();
+        let num_preshards = local_committee_info.num_preshards();
+        let include_proofs = req.include_proofs;
         let responses = task::spawn_blocking(move || {
             // TODO: we should use a snapshot - will need to refactor the state store to support this, by abstracting
             // the .cf(X) call and implementing read only transaction for all implementors of this trait
-            let (substates, missing) = store
-                .with_read_tx(|tx| SubstateRecord::get_any_max_version(tx, &ids))
-                .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-
-            if !missing.is_empty() {
-                debug!(
-                    target: LOG_TARGET,
-                    "{} requested substate(s) not found: {}",
-                    missing.len(),
-                    missing.display()
-                );
-            }
-
-            Ok::<_, RpcStatus>(substates.into_iter().map(|substate| proto::consensus::Substate {
-                substate_id: substate.substate_id().to_bytes(),
-                version: substate.version(),
-                substate: substate.substate_value().map(|v| v.to_bytes()).unwrap_or_default(),
-                created: Some(substate.created().into()),
-                destroyed: substate.destroyed().map(Into::into),
-            }))
+            store.with_read_tx(|tx| {
+                read_substate_batch(tx, &ids, BatchProofContext {
+                    epoch: consensus_epoch,
+                    shard_group,
+                    num_preshards,
+                    include_proofs,
+                })
+            })
         })
         .await
-        .map_err(RpcStatus::log_internal_error(LOG_TARGET))??;
+        .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
+        .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
         task::spawn(async move {
             for resp in responses {
                 if sender
-                    .send(Ok(GetSubstatesBatchResponse { substate: Some(resp) }))
+                    .send(Ok(GetSubstatesBatchResponse { response: Some(resp) }))
                     .await
                     .is_err()
                 {

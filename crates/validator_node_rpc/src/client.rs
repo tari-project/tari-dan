@@ -1,10 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, convert::TryInto, future, future::Future, sync::Arc, time::Duration};
+use std::{collections::HashMap, convert::TryInto, future::Future, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
-use futures::{StreamExt, TryStreamExt};
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use tari_bor::decode;
 use tari_consensus_types::Decision;
@@ -18,7 +18,13 @@ use tari_ootle_p2p::{
     TariMessagingSpec,
     ToPeerId,
     proto,
-    proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SubmitTransactionRequest, SubstateStatus},
+    proto::rpc::{
+        GetTransactionResultRequest,
+        PayloadResultStatus,
+        SubmitTransactionRequest,
+        SubstateStatus,
+        get_substates_batch_response as batch_response,
+    },
 };
 use tari_ootle_storage::time::{PrimitiveDateTime, UtcDateTime};
 use tari_ootle_transaction::{Transaction, TransactionId};
@@ -55,10 +61,37 @@ pub trait ValidatorNodeRpcClient<TAddr: NodeAddressable>: Send + Sync {
         substate_req: SubstateRequirementRef<'_>,
     ) -> impl Future<Output = Result<(SubstateResult, Option<SubstateProofData>), ValidatorNodeRpcClientError>> + Send;
 
+    /// Fetches the head version of many substates in one round trip. With `include_proofs` the
+    /// responder anchors the batch with a single commit proof and proves each result against it.
     fn get_substates_batch(
         &mut self,
-        substate_reqs: &[&SubstateId],
-    ) -> impl Future<Output = Result<HashMap<SubstateId, Substate>, ValidatorNodeRpcClientError>> + Send;
+        substate_ids: &[&SubstateId],
+        include_proofs: bool,
+    ) -> impl Future<Output = Result<SubstateBatch, ValidatorNodeRpcClientError>> + Send;
+}
+
+/// The results of one [`get_substates_batch`](ValidatorNodeRpcClient::get_substates_batch) call.
+#[derive(Debug, Clone, Default)]
+pub struct SubstateBatch {
+    /// CBOR-encoded CommittedBlockProof anchoring every value proof in the batch. `None` when proofs
+    /// were not requested, or when the responder had no committed block to anchor against.
+    pub commit_proof: Option<Vec<u8>>,
+    pub substates: Vec<BatchedSubstate>,
+    /// Ids the responder holds no record of at any version. Unproven: a leaf key is version-scoped,
+    /// so an exclusion proof states that one version is not up, never that an id was never created.
+    pub missing: Vec<SubstateId>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BatchedSubstate {
+    pub substate_id: SubstateId,
+    pub result: SubstateResult,
+    /// CBOR-encoded SubstateValueProof, verified against [`SubstateBatch::commit_proof`]'s root.
+    /// `None` when the batch carries no anchor.
+    pub value_proof: Option<Vec<u8>>,
+    /// Epoch the substate value hash was computed at; needed to re-derive the leaf value hash when
+    /// verifying an inclusion proof.
+    pub proof_epoch: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -310,33 +343,76 @@ impl<TAddr: NodeAddressable + ToPeerId, TMsg: MessageSpec> ValidatorNodeRpcClien
 
     async fn get_substates_batch(
         &mut self,
-        substate_reqs: &[&SubstateId],
-    ) -> Result<HashMap<SubstateId, Substate>, ValidatorNodeRpcClientError> {
+        substate_ids: &[&SubstateId],
+        include_proofs: bool,
+    ) -> Result<SubstateBatch, ValidatorNodeRpcClientError> {
         let mut conn = self.client_connection().await?;
         // NOTE: current maximum is 50 substates per request
-        let stream = conn
+        let mut stream = conn
             .get_substate_batch(proto::rpc::GetSubstatesBatchRequest {
-                substate_ids: substate_reqs.iter().map(|id| id.to_bytes()).collect(),
+                substate_ids: substate_ids.iter().map(|id| id.to_bytes()).collect(),
+                include_proofs,
             })
             .await?;
 
         // For simplicity, we'll collect the stream instead of returning a decoded stream
-        stream
-            .map_err(ValidatorNodeRpcClientError::from)
-            .map_ok(|resp| resp.substate)
-            .filter_map(|res| future::ready(res.transpose()))
-            .and_then(|substate| async move {
-                let version = substate.version;
-                let value = SubstateValue::from_bytes(&substate.substate)
-                    .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("{}", e)))?;
-                let substate_id = SubstateId::from_bytes(&substate.substate_id)
-                    .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("{}", e)))?;
+        let mut batch = SubstateBatch {
+            substates: Vec::with_capacity(substate_ids.len()),
+            ..Default::default()
+        };
+        while let Some(resp) = stream.next().await {
+            let Some(response) = resp?.response else {
+                continue;
+            };
+            match response {
+                batch_response::Response::CommitProof(commit_proof) => {
+                    batch.commit_proof = Some(commit_proof);
+                },
+                batch_response::Response::Substate(proven) => {
+                    batch.substates.push(decode_batched_substate(proven)?);
+                },
+                batch_response::Response::Missing(missing) => {
+                    for id in &missing.substate_ids {
+                        batch.missing.push(
+                            SubstateId::from_bytes(id)
+                                .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("{}", e)))?,
+                        );
+                    }
+                },
+            }
+        }
 
-                Ok::<_, ValidatorNodeRpcClientError>((substate_id, Substate::new(version, value)))
-            })
-            .try_collect()
-            .await
+        Ok(batch)
     }
+}
+
+fn decode_batched_substate(proven: proto::rpc::ProvenSubstate) -> Result<BatchedSubstate, ValidatorNodeRpcClientError> {
+    let substate = proven
+        .substate
+        .ok_or_else(|| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("Batched substate has no substate")))?;
+    let substate_id = SubstateId::from_bytes(&substate.substate_id)
+        .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("{}", e)))?;
+
+    // A batch always answers with the head version, which is down when the substate's latest version
+    // has been spent. Only an up substate carries a value.
+    let result = if substate.destroyed.is_some() {
+        SubstateResult::Down {
+            version: substate.version,
+        }
+    } else {
+        let value = SubstateValue::from_bytes(&substate.substate)
+            .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("{}", e)))?;
+        SubstateResult::Up {
+            substate: Box::new(Substate::new(substate.version, value)),
+        }
+    };
+
+    Ok(BatchedSubstate {
+        substate_id,
+        result,
+        value_proof: Some(proven.substate_value_proof).filter(|proof| !proof.is_empty()),
+        proof_epoch: proven.proof_epoch,
+    })
 }
 
 #[derive(Clone, Debug)]
