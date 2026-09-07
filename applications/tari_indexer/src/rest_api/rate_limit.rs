@@ -268,7 +268,11 @@ struct SseEndpointLabels {
 /// Clones share the counts: the value handed to a middleware instance and the value the
 /// registry encodes are the same gauge. Without the `metrics` feature the type is empty and
 /// every operation on it compiles away.
-#[derive(Clone, Default)]
+///
+/// The only way to obtain one with the feature on is [`SseConnectionMetrics::register`], so a
+/// gauge that counts but is exported nowhere cannot be built by accident.
+#[derive(Clone)]
+#[cfg_attr(not(feature = "metrics"), derive(Default))]
 pub struct SseConnectionMetrics {
     #[cfg(feature = "metrics")]
     active: Family<SseEndpointLabels, Gauge>,
@@ -301,7 +305,7 @@ impl SseConnectionMetrics {
 }
 
 /// Counts the SSE connections currently open on one endpoint.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct SseEndpointConnections {
     #[cfg(feature = "metrics")]
     active: Gauge,
@@ -449,6 +453,10 @@ pub async fn rate_limit_middleware(
 ///
 /// A disabled limiter takes no slot but is still counted, so the gauge reflects
 /// the streams in flight on every node.
+///
+/// Only a successful response is a stream. A handler that rejects the request
+/// returns a short body, which passes through untouched so that it holds
+/// neither a slot nor a place in the gauge and keeps its `Content-Length`.
 pub async fn sse_limit_middleware(
     axum::extract::State(config): axum::extract::State<SseLimitConfig>,
     req: Request,
@@ -474,8 +482,12 @@ pub async fn sse_limit_middleware(
         None
     };
 
-    let open = config.active_connections.open();
     let response = next.run(req).await;
+    if !response.status().is_success() {
+        return response;
+    }
+
+    let open = config.active_connections.open();
     let (parts, body) = response.into_parts();
     let stream = body.into_data_stream();
     // `unfold` carries `slot` and `open` in its state. When the stream completes or is
@@ -722,39 +734,69 @@ mod tests {
         use axum::{
             Router,
             body::{Body, Bytes},
+            http::StatusCode,
             response::Response,
             routing::get,
         };
-        use futures::StreamExt;
         use tokio::{
             io::{AsyncReadExt, AsyncWriteExt},
             net::TcpStream,
         };
-        use tokio_stream::wrappers::IntervalStream;
 
         use super::*;
 
         const GAUGE_TIMEOUT: Duration = Duration::from_secs(5);
 
-        /// A response body that keeps sending until the connection goes away. The repeated
+        /// A response whose body keeps sending until the connection goes away. The repeated
         /// writes are what make the server notice a vanished client.
-        async fn ticking_stream() -> Response {
-            let ticks = IntervalStream::new(tokio::time::interval(Duration::from_millis(20)))
-                .map(|_| Ok::<_, std::io::Error>(Bytes::from_static(b"tick\n")));
-            Response::new(Body::from_stream(ticks))
+        fn ticking_response(status: StatusCode) -> Response {
+            let ticks = futures::stream::unfold(
+                tokio::time::interval(Duration::from_millis(20)),
+                |mut tick| async move {
+                    tick.tick().await;
+                    Some((Ok::<_, std::io::Error>(Bytes::from_static(b"tick\n")), tick))
+                },
+            );
+            let mut response = Response::new(Body::from_stream(ticks));
+            *response.status_mut() = status;
+            response
         }
 
-        async fn serve(config: SseLimitConfig) -> SocketAddr {
+        async fn ticking_stream() -> Response {
+            ticking_response(StatusCode::OK)
+        }
+
+        /// Holds the connection open on a failed status, so a wrongly counted rejection stays
+        /// visible in the gauge for as long as the test looks at it.
+        async fn rejected_stream() -> Response {
+            ticking_response(StatusCode::BAD_REQUEST)
+        }
+
+        /// A rejection shaped like the argument validation the real streaming handlers do
+        /// before they open a stream.
+        async fn rejected() -> Response {
+            (StatusCode::BAD_REQUEST, "bad request").into_response()
+        }
+
+        async fn serve_handler(config: SseLimitConfig, handler: axum::routing::MethodRouter) -> SocketAddr {
             let app = Router::new().route(
                 "/stream",
-                get(ticking_stream).route_layer(axum::middleware::from_fn_with_state(config, sse_limit_middleware)),
+                handler.route_layer(axum::middleware::from_fn_with_state(config, sse_limit_middleware)),
             );
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let addr = listener.local_addr().unwrap();
             tokio::spawn(async move {
-                axum::serve(listener, app.into_make_service()).await.unwrap();
+                // Matches how the REST API is served, so `extract_ip` sees a real peer address
+                // rather than falling back to localhost.
+                axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+                    .await
+                    .unwrap();
             });
             addr
+        }
+
+        async fn serve(config: SseLimitConfig) -> SocketAddr {
+            serve_handler(config, get(ticking_stream)).await
         }
 
         /// Opens a request and returns once the response has started arriving, so the caller
@@ -797,6 +839,10 @@ mod tests {
             }
         }
 
+        fn metrics() -> SseConnectionMetrics {
+            SseConnectionMetrics::register(&mut Registry::default())
+        }
+
         fn config(enabled: bool, max_per_ip: usize, connections: SseEndpointConnections) -> SseLimitConfig {
             SseLimitConfig {
                 enabled,
@@ -808,7 +854,7 @@ mod tests {
 
         #[tokio::test]
         async fn it_counts_a_stream_until_the_client_disconnects() {
-            let events = SseConnectionMetrics::default().endpoint("/events");
+            let events = metrics().endpoint("/events");
             let addr = serve(config(true, 4, events.clone())).await;
 
             let client = open_stream(addr).await;
@@ -820,7 +866,7 @@ mod tests {
 
         #[tokio::test]
         async fn it_counts_streams_when_the_limiter_is_disabled() {
-            let events = SseConnectionMetrics::default().endpoint("/events");
+            let events = metrics().endpoint("/events");
             let addr = serve(config(false, 4, events.clone())).await;
 
             let client = open_stream(addr).await;
@@ -832,7 +878,7 @@ mod tests {
 
         #[tokio::test]
         async fn it_does_not_count_a_rejected_connection() {
-            let events = SseConnectionMetrics::default().endpoint("/events");
+            let events = metrics().endpoint("/events");
             let cfg = config(true, 1, events.clone());
             let held = cfg.limiter.try_acquire(IpAddr::from([127, 0, 0, 1])).unwrap();
             let addr = serve(cfg).await;
@@ -844,8 +890,34 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn it_does_not_count_a_response_the_handler_rejected() {
+            let events = metrics().endpoint("/events");
+            let addr = serve_handler(config(true, 4, events.clone()), get(rejected_stream)).await;
+
+            let client = open_stream(addr).await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            assert_eq!(events.count(), 0);
+            drop(client);
+        }
+
+        #[tokio::test]
+        async fn it_leaves_a_rejected_response_untouched() {
+            let events = metrics().endpoint("/events");
+            let addr = serve_handler(config(true, 4, events), get(rejected)).await;
+
+            let response = read_response(addr).await;
+            assert!(response.starts_with("HTTP/1.1 400"), "unexpected response: {response}");
+            // A body that is passed through keeps its length, so it is still observed by the
+            // response-size histogram.
+            assert!(
+                response.to_lowercase().contains("content-length:"),
+                "unexpected response: {response}"
+            );
+        }
+
+        #[tokio::test]
         async fn it_counts_each_endpoint_separately() {
-            let metrics = SseConnectionMetrics::default();
+            let metrics = metrics();
             let events = metrics.endpoint("/events");
             let utxos = metrics.endpoint("/utxos/stream");
             let addr = serve(config(true, 4, events.clone())).await;

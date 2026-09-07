@@ -211,10 +211,15 @@ mod tests {
             "api_http_response_time_seconds",
             "api_http_requests_pending",
             "api_http_response_body_size_bytes",
-            "api_sse_connections_active",
         ] {
             assert!(response.contains(name), "{name} missing from: {response}");
         }
+        // A `Family` gets its descriptor written whether or not it has children, so the
+        // labelled series is what shows the endpoint handle reaches the exposition.
+        assert!(
+            response.contains(r#"api_sse_connections_active{endpoint="/events"}"#),
+            "sse gauge series missing from: {response}"
+        );
     }
 
     #[tokio::test]
