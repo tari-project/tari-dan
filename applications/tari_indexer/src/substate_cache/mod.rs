@@ -424,6 +424,23 @@ mod tests {
         assert!(head_cache.read(&head_id).await.unwrap().is_some());
     }
 
+    async fn write_head(cache: &SqliteSubstateCache, id: &SubstateId, version: u32, watermark: u64) {
+        let result = SubstateResult::Down { version };
+        cache
+            .write(
+                id,
+                SubstateCacheEntryRef {
+                    version: Some(version),
+                    substate_result: &result,
+                    cached_at: now_unix_secs().unwrap(),
+                    verified: true,
+                },
+                FetchWatermark::new(watermark),
+            )
+            .await
+            .unwrap();
+    }
+
     async fn write_nonexistence(cache: &SqliteSubstateCache, id: &SubstateId, watermark: u64) {
         cache
             .write(
@@ -469,7 +486,9 @@ mod tests {
     }
 
     /// The other half of the same race: a head the transaction replaced. The old head is retired,
-    /// and a fetch captured before the commit cannot put it back.
+    /// and nothing puts it back: a fetch captured before the commit is overtaken, and one captured
+    /// after it is below the version the result showed. Only the version the transaction created
+    /// is recorded.
     #[tokio::test]
     async fn a_finalized_result_retires_the_head_it_replaced_ahead_of_the_stream() {
         use tari_engine_types::{
@@ -487,17 +506,12 @@ mod tests {
         cache.retire_committed(&diff).await.unwrap();
         assert!(cache.read(&id).await.unwrap().is_none());
 
-        let stale = SubstateResult::Down { version: 6 };
-        let entry = SubstateCacheEntryRef {
-            version: Some(6),
-            substate_result: &stale,
-            cached_at: now_unix_secs().unwrap(),
-            verified: true,
-        };
-        cache.write(&id, entry, FetchWatermark::new(100)).await.unwrap();
+        write_head(&cache, &id, 6, 100).await;
+        assert!(cache.read(&id).await.unwrap().is_none());
+        write_head(&cache, &id, 6, 101).await;
         assert!(cache.read(&id).await.unwrap().is_none());
 
-        cache.write(&id, entry, FetchWatermark::new(101)).await.unwrap();
-        assert_eq!(cache.read(&id).await.unwrap().unwrap().version, Some(6));
+        write_head(&cache, &id, 7, 101).await;
+        assert_eq!(cache.read(&id).await.unwrap().unwrap().version, Some(7));
     }
 }
