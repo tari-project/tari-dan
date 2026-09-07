@@ -263,9 +263,9 @@ fn latest_commit_proof<TTx: StateStoreReadTransaction>(
     tx: &TTx,
     epoch: Epoch,
 ) -> Result<Option<CommittedBlockProof>, StorageError> {
-    // `last_executed_get` reports both "nothing committed here" cases as `NotFound`: no row at all,
-    // and a row belonging to another epoch - the latter being exactly the window after an epoch
-    // change, and the former a node that has not started consensus since restarting. Neither is a
+    // `last_executed_get` reports both "nothing committed here" cases as `NotFound`: a node that has
+    // never committed anything has no row, and one whose row belongs to another epoch is either in
+    // the window after an epoch change or has not started consensus since restarting. Neither is a
     // failure to read; both mean there is nothing to anchor to.
     let Some(last_executed) = tx.last_executed_get(epoch).optional()? else {
         return Ok(None);

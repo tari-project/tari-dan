@@ -75,7 +75,7 @@ impl<'a, TTx: StateStoreReadTransaction> SubstateProofGenerator<'a, TTx> {
             tx,
             num_preshards,
             root_tree: RootProofTree::build(ordered_roots).map_err(|e| StorageError::QueryError {
-                reason: format!("generate_substate_proof shard group root tree: {e}"),
+                reason: format!("SubstateProofGenerator shard group root tree: {e}"),
             })?,
             shards,
             shard_root_proofs: HashMap::new(),
@@ -103,7 +103,7 @@ impl<'a, TTx: StateStoreReadTransaction> SubstateProofGenerator<'a, TTx> {
         let (_leaf_key, _proof_value, leaf_proof) =
             tree.get_proof(version, versioned_id)
                 .map_err(|e| StorageError::QueryError {
-                    reason: format!("generate_substate_proof get_proof: {e}"),
+                    reason: format!("SubstateProofGenerator get_proof: {e}"),
                 })?;
 
         // Level 2: prove the shard root is committed in the shard-group root.
@@ -114,7 +114,7 @@ impl<'a, TTx: StateStoreReadTransaction> SubstateProofGenerator<'a, TTx> {
                     .root_tree
                     .get_proof(state.root)
                     .map_err(|e| StorageError::QueryError {
-                        reason: format!("generate_substate_proof shard root proof: {e}"),
+                        reason: format!("SubstateProofGenerator shard root proof: {e}"),
                     })?;
                 entry.insert(proof).clone()
             },
@@ -187,7 +187,7 @@ fn committed_shard_state<TTx: StateStoreReadTransaction>(
     let mut scoped = ShardScopedTreeStoreReader::new(tx, shard);
     let tree = SpreadPrefixStateTree::new(&mut scoped);
     let root = tree.get_root_hash(version).map_err(|e| StorageError::QueryError {
-        reason: format!("generate_substate_proof shard {shard} root: {e}"),
+        reason: format!("SubstateProofGenerator shard {shard} root: {e}"),
     })?;
     Ok(CommittedShardState {
         root,
