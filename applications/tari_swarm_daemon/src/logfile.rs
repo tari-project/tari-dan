@@ -58,13 +58,14 @@ pub fn read_chunk(path: &Path, end: Option<u64>, max_bytes: Option<u64>) -> io::
     // fragment is only worth doing while it leaves a line behind: a line longer than the window has no interior
     // boundary, and returning nothing there would leave `start` at `end`, so the caller would ask for the same
     // empty window forever. One rendered partial line is the cheaper end of that trade.
-    if start > 0 {
-        if let Some(nl) = bytes.iter().position(|b| *b == b'\n') {
-            if nl + 1 < bytes.len() {
-                bytes = &bytes[nl + 1..];
-                start += nl as u64 + 1;
-            }
-        }
+    let boundary = if start > 0 {
+        bytes.iter().position(|b| *b == b'\n').filter(|nl| nl + 1 < bytes.len())
+    } else {
+        None
+    };
+    if let Some(nl) = boundary {
+        bytes = &bytes[nl + 1..];
+        start += nl as u64 + 1;
     }
 
     Ok(LogChunk {
