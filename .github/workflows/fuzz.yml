@@ -72,7 +72,7 @@ jobs:
       - uses: rui314/setup-mold@v1
 
       - name: install cargo-fuzz
-        uses: taiki-e/install-action@v2.87.0
+        uses: taiki-e/install-action@v2.87.5
         with:
           tool: cargo-fuzz
 
