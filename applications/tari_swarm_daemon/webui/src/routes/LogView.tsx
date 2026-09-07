@@ -13,7 +13,7 @@ import {
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { describeError, swarmRpc } from "../api/rpc";
-import { LEVELS, Level, Line, TARGET_RE, TIME_RE, parse } from "./logFormat";
+import { LEVELS, Level, Line, TARGET_RE, TIME_RE, parse, toEntries } from "./logFormat";
 
 /** Bytes fetched per request. The daemon trims each window to whole lines. */
 const CHUNK_BYTES = 256 * 1024;
@@ -114,8 +114,12 @@ export default function LogView() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const view = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
-  /** Line to hold still across a buffer trim, which removes rendered lines above the viewport. */
-  const anchor = useRef<{ n: number; top: number } | null>(null);
+  /**
+   * Line to hold still across a buffer trim, which removes rendered lines above the viewport. `from` records the
+   * oldest offset at capture time, so an anchor left behind by a load that never committed is discarded rather
+   * than applied to some later, unrelated re-render.
+   */
+  const anchor = useRef<{ n: number; top: number; from: number } | null>(null);
 
   const atStartOfFile = chunks !== null && chunks[chunks.length - 1]?.start === 0;
 
@@ -165,7 +169,7 @@ export default function LogView() {
     const anchorN = oldestRendered?.dataset.n;
     anchor.current =
       oldestRendered && anchorN !== undefined
-        ? { n: Number(anchorN), top: oldestRendered.getBoundingClientRect().top }
+        ? { n: Number(anchorN), top: oldestRendered.getBoundingClientRect().top, from: oldest.start }
         : null;
 
     try {
@@ -203,22 +207,27 @@ export default function LogView() {
     }
   };
 
-  const lines = useMemo(
-    () => (chunks === null ? null : chunks.flatMap((chunk) => chunk.lines.slice().reverse())),
+  // Newest entry first, but the lines inside each entry stay in the order they were written.
+  const entries = useMemo(
+    () => (chunks === null ? null : chunks.flatMap((chunk) => toEntries(chunk.lines).reverse())),
     [chunks],
   );
 
   const visible = useMemo(() => {
-    if (lines === null) {
+    if (entries === null) {
       return [];
     }
     const lowerNeedle = needle.trim().toLowerCase();
-    return lines.filter(
-      (line) =>
-        !(line.level && hidden.has(line.level)) &&
-        (!lowerNeedle || line.text.toLowerCase().includes(lowerNeedle)),
-    );
-  }, [lines, hidden, needle]);
+    // An entry's level is its opening line's - a continuation carries none of its own, and hiding a record has
+    // to take its continuations with it.
+    return entries
+      .filter(
+        (entry) =>
+          !(entry[0].level && hidden.has(entry[0].level)) &&
+          (!lowerNeedle || entry.some((line) => line.text.toLowerCase().includes(lowerNeedle))),
+      )
+      .flat();
+  }, [entries, hidden, needle]);
 
   useLayoutEffect(() => {
     const el = view.current;
@@ -229,14 +238,14 @@ export default function LogView() {
     }
     const held = anchor.current;
     anchor.current = null;
-    if (!el || !held) {
+    if (!el || !held || chunks?.[chunks.length - 1]?.start === held.from) {
       return;
     }
     const moved = el.querySelector<HTMLElement>(`.logline[data-n="${held.n}"]`);
     if (moved) {
       el.scrollTop += moved.getBoundingClientRect().top - held.top;
     }
-  }, [visible, follow]);
+  }, [visible, follow, chunks]);
 
   // Level filters can leave too few lines to fill the view, which would strand it with nothing to scroll.
   useEffect(() => {
@@ -248,13 +257,13 @@ export default function LogView() {
 
   const counts = useMemo(() => {
     const tally: Record<string, number> = {};
-    for (const line of lines ?? []) {
+    for (const [line] of entries ?? []) {
       if (line.level) {
         tally[line.level] = (tally[line.level] ?? 0) + 1;
       }
     }
     return tally;
-  }, [lines]);
+  }, [entries]);
 
   const toggle = (level: Level) =>
     setHidden((current) => {
@@ -313,9 +322,13 @@ export default function LogView() {
 
       <div className="logview" ref={view} onScroll={onScroll}>
         {error && <p className="empty">{error}</p>}
-        {!error && lines === null && <p className="empty">Loading…</p>}
-        {!error && lines !== null && !visible.length && (
-          <p className="empty">{lines.length ? "No lines match the filters." : "This file is empty."}</p>
+        {!error && entries === null && <p className="empty">Loading…</p>}
+        {!error && entries !== null && !visible.length && (
+          <p className="empty">{entries.length ? "No lines match the filters." : "This file is empty."}</p>
+        )}
+        {/* Paging back trims the newest chunks, so the head of the file is only reachable through Follow. */}
+        {!error && !follow && visible.length > 0 && (
+          <p className="logstart">Paused · Follow to jump back to the newest lines</p>
         )}
         {visible.map((line) => (
           <div className={`logline${wrap ? "" : " nowrap"}`} data-n={line.n} key={line.n}>

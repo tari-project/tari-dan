@@ -76,6 +76,10 @@ pub struct InstanceInfo {
     pub name: String,
     pub ports: AllocatedPorts,
     pub base_path: PathBuf,
+    /// Where the daemon captures this process's stdout and stderr. The parent of `base_path`, which points at the
+    /// network subdirectory the process writes its own logs into.
+    pub stdout_log_path: PathBuf,
+    pub stderr_log_path: PathBuf,
     pub instance_type: InstanceType,
     pub settings: HashMap<String, String>,
     pub is_running: bool,
@@ -190,6 +194,8 @@ impl From<&Instance> for InstanceInfo {
             name: instance.name().to_string(),
             ports: instance.allocated_ports().clone(),
             base_path: instance.base_path().clone(),
+            stdout_log_path: instance.stdout_log_path(),
+            stderr_log_path: instance.stderr_log_path(),
             instance_type: instance.instance_type(),
             settings: instance.settings().clone(),
             is_running: instance.is_running(),

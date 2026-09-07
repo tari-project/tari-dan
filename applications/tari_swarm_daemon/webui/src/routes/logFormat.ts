@@ -52,6 +52,47 @@ export function normalise(raw: string): string {
   return `${time} [${target}] ${level.padEnd(5)} ${spans ? `${spans} ` : ""}${message}`;
 }
 
+/**
+ * Groups lines into whole log entries.
+ *
+ * The view shows the newest entry first, and reversing bare lines to get there would turn every multi-line
+ * entry - a record whose message contains newlines, a panic and its backtrace - upside down. Reversing entries
+ * instead keeps each one readable top to bottom.
+ *
+ * A timestamped file starts a new entry at each timestamp. Raw stdout and stderr carry no timestamps, so each
+ * line stands alone there, except inside a panic block: that runs from the `panicked at` header to the next
+ * blank line, which is the one multi-line shape those files reliably contain.
+ */
+export function toEntries(lines: Line[]): Line[][] {
+  const timestamped = lines.some((line) => TIME_RE.test(line.text));
+  const entries: Line[][] = [];
+  let inPanic = false;
+
+  for (const line of lines) {
+    const startsRecord = TIME_RE.test(line.text);
+    if (startsRecord) {
+      inPanic = false;
+    } else if (!timestamped) {
+      if (inPanic && line.text.trim() === "") {
+        inPanic = false;
+      } else if (!inPanic && line.text.includes("panicked at")) {
+        inPanic = true;
+        entries.push([line]);
+        continue;
+      }
+    }
+
+    const continues = !startsRecord && (timestamped ? entries.length > 0 : inPanic);
+    if (continues) {
+      entries[entries.length - 1].push(line);
+    } else {
+      entries.push([line]);
+    }
+  }
+
+  return entries;
+}
+
 /** Splits a chunk of file bytes into lines, keyed by their byte offset in the file. */
 export function parse(body: string, start: number): Line[] {
   const raw = body.split("\n");

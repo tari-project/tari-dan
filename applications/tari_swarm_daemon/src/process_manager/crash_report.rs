@@ -14,6 +14,9 @@ use crate::{logfile, process_manager::Instance};
 const TAIL_LINES: usize = 50;
 /// Lines of a panic's backtrace worth showing before it turns into noise.
 const PANIC_CONTEXT_LINES: usize = 30;
+/// Lines searched for a panic header. A backtrace easily runs longer than what is shown, and the header sits above
+/// all of it, so the search has to reach further back than either window.
+const SCAN_LINES: usize = 500;
 
 /// Renders the panic message, or failing that the tail of the process's output, as an indented block.
 pub fn crash_report(instance: &Instance) -> String {
@@ -38,7 +41,7 @@ pub fn crash_report(instance: &Instance) -> String {
 }
 
 fn report_for(path: &Path) -> Option<String> {
-    let lines = logfile::tail_lines(path, TAIL_LINES.max(PANIC_CONTEXT_LINES)).ok()?;
+    let lines = logfile::tail_lines(path, SCAN_LINES).ok()?;
     if lines.is_empty() {
         return None;
     }
@@ -113,6 +116,24 @@ mod tests {
         assert!(report.contains("noise 199"), "{report}");
         assert!(report.contains("noise 150"), "{report}");
         assert!(!report.contains("noise 149"), "{report}");
+    }
+
+    #[test]
+    fn a_panic_above_a_long_backtrace_is_still_found() {
+        let mut body = String::from("thread 'main' panicked at crates/consensus/src/lib.rs:12:9:\n");
+        body.push_str("assertion failed: leaf.height() > 0\n");
+        body.push_str("stack backtrace:\n");
+        for frame in 0..300 {
+            body.push_str(&format!("  {frame}: tari_consensus::hotstuff::frame_{frame}\n"));
+        }
+
+        let report = report_for(&write_temp("deep-panic", &body)).unwrap();
+        assert!(
+            report.contains("panicked at crates/consensus/src/lib.rs:12:9"),
+            "{report}"
+        );
+        assert!(report.contains("assertion failed: leaf.height() > 0"), "{report}");
+        assert!(!report.contains("frame_299"), "backtrace should be truncated: {report}");
     }
 
     #[test]

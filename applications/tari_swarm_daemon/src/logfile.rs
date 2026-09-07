@@ -54,17 +54,16 @@ pub fn read_chunk(path: &Path, end: Option<u64>, max_bytes: Option<u64>) -> io::
     let window = map_window(&file, start, end)?;
     let mut bytes = &window[..];
 
-    // A window that does not begin at the start of the file almost certainly begins mid-line.
+    // A window that does not begin at the start of the file almost certainly begins mid-line. Trimming that
+    // fragment is only worth doing while it leaves a line behind: a line longer than the window has no interior
+    // boundary, and returning nothing there would leave `start` at `end`, so the caller would ask for the same
+    // empty window forever. One rendered partial line is the cheaper end of that trade.
     if start > 0 {
-        match bytes.iter().position(|b| *b == b'\n') {
-            Some(nl) => {
+        if let Some(nl) = bytes.iter().position(|b| *b == b'\n') {
+            if nl + 1 < bytes.len() {
                 bytes = &bytes[nl + 1..];
                 start += nl as u64 + 1;
-            },
-            None => {
-                bytes = &[];
-                start = end;
-            },
+            }
         }
     }
 
@@ -78,16 +77,32 @@ pub fn read_chunk(path: &Path, end: Option<u64>, max_bytes: Option<u64>) -> io::
 
 /// Returns up to the last `n` lines of the file, scanning back at most [`TAIL_SCAN_BYTES`].
 pub fn tail_lines(path: &Path, n: usize) -> io::Result<Vec<String>> {
+    tail_lines_within(path, n, TAIL_SCAN_BYTES)
+}
+
+fn tail_lines_within(path: &Path, n: usize, scan_bytes: u64) -> io::Result<Vec<String>> {
     let file = File::open(path)?;
     let file_size = file.metadata()?.len();
-    let start = file_size.saturating_sub(TAIL_SCAN_BYTES);
+    let start = file_size.saturating_sub(scan_bytes);
     if start == file_size {
         return Ok(Vec::new());
     }
 
     let window = map_window(&file, start, file_size)?;
     let text = String::from_utf8_lossy(&window);
-    let mut lines = text
+    // A window that began mid-file opens on a fragment. It must go before the last `n` lines are taken, or the
+    // fragment survives whenever the window holds more than `n` lines and a whole line is dropped in its place.
+    // A window with no boundary at all is one long line, and the fragment is all there is to show.
+    let body = if start > 0 {
+        match text.find('\n') {
+            Some(nl) if nl + 1 < text.len() => &text[nl + 1..],
+            _ => &text[..],
+        }
+    } else {
+        &text[..]
+    };
+
+    let mut lines = body
         .lines()
         .rev()
         .take(n)
@@ -95,18 +110,14 @@ pub fn tail_lines(path: &Path, n: usize) -> io::Result<Vec<String>> {
         .collect::<Vec<_>>();
     lines.reverse();
 
-    // The first line of a window that started mid-file is a fragment, and is only worth keeping if it is all we have.
-    if start > 0 && lines.len() > 1 {
-        lines.remove(0);
-    }
-
     Ok(lines)
 }
 
 fn map_window(file: &File, start: u64, end: u64) -> io::Result<Mmap> {
     let len = usize::try_from(end - start).map_err(|_| io::Error::other("log window exceeds addressable memory"))?;
-    // SAFETY: the mapping is read-only and is dropped before the caller returns. Swarm rotates logs by rename and
-    // otherwise only appends, so a mapped region is never truncated underneath us.
+    // SAFETY: the mapping is read-only and is dropped before the caller returns. Touching a page past a shortened
+    // file raises SIGBUS rather than an error, so the mapped region must never shrink: swarm's writers only append,
+    // and rotation renames the file, which leaves this mapping on the original inode.
     unsafe { MmapOptions::new().offset(start).len(len).map(file) }
 }
 
@@ -194,6 +205,7 @@ mod tests {
         let path = write_temp("utf8", body);
         for max in 1..=body.len() as u64 {
             let chunk = read_chunk(&path, None, Some(max)).unwrap();
+            assert!(chunk.start < chunk.end, "max={max} returned an empty window");
             assert!(
                 body.ends_with(&chunk.contents),
                 "max={max} returned {:?}, which is not a suffix of the file",
@@ -203,9 +215,61 @@ mod tests {
     }
 
     #[test]
+    fn a_line_longer_than_the_window_still_pages_to_the_start() {
+        let body = format!("{}\n{}\n", "a".repeat(1000), "b".repeat(1000));
+        let path = write_temp("oversized", &body);
+
+        let mut pages = Vec::new();
+        let mut end = None;
+        for _ in 0..64 {
+            let chunk = read_chunk(&path, end, Some(300)).unwrap();
+            assert!(
+                chunk.start < chunk.end,
+                "window [{}, {}) addresses nothing new, so paging cannot terminate",
+                chunk.start,
+                chunk.end
+            );
+            pages.push(chunk.contents);
+            if chunk.start == 0 {
+                break;
+            }
+            end = Some(chunk.start);
+        }
+
+        assert_eq!(
+            pages.iter().map(String::len).sum::<usize>(),
+            body.len(),
+            "paging did not reach the start of the file within the iteration budget"
+        );
+        assert_eq!(pages.last().map(|page| page.starts_with('a')), Some(true));
+        pages.reverse();
+        assert_eq!(pages.concat(), body);
+    }
+
+    #[test]
     fn tail_lines_returns_the_last_lines_in_order() {
         let path = write_temp("tail", "one\ntwo\nthree\n");
         assert_eq!(tail_lines(&path, 2).unwrap(), vec!["two", "three"]);
         assert_eq!(tail_lines(&path, 50).unwrap(), vec!["one", "two", "three"]);
+    }
+
+    #[test]
+    fn tail_lines_keeps_every_whole_line_in_a_window_that_began_mid_file() {
+        let body = (0..100).map(|i| format!("line {i}\n")).collect::<String>();
+        let path = write_temp("tail-mid", &body);
+
+        // A scan window that starts mid-file and holds far more than the requested number of lines: the fragment
+        // it opens on falls outside the last `n`, so dropping it after the fact would delete a real line.
+        let lines = tail_lines_within(&path, 5, 200).unwrap();
+        assert_eq!(lines, vec!["line 95", "line 96", "line 97", "line 98", "line 99"]);
+    }
+
+    #[test]
+    fn tail_lines_shows_the_fragment_when_the_window_holds_no_whole_line() {
+        let body = format!("{}\n", "a".repeat(500));
+        let path = write_temp("tail-fragment", &body);
+
+        let lines = tail_lines_within(&path, 5, 100).unwrap();
+        assert_eq!(lines, vec!["a".repeat(99)]);
     }
 }
