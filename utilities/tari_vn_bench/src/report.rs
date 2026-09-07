@@ -488,7 +488,7 @@ fn grade_memory(host: &Host, memory: &MemoryBudget) -> Finding {
     };
 
     let mut detail = format!(
-        "{} of hard-capped buffers plus {} of default- and traffic-governed allocation, grown for allocator overhead, \
+        "{} of capped buffers plus {} of default- and traffic-governed allocation, grown for allocator overhead, \
          gives a {} ceiling; with {} for the OS this machine wants {}.",
         human_bytes(memory.capped_bytes),
         human_bytes(memory.estimated_bytes),
@@ -704,7 +704,7 @@ fn render_memory(out: &mut String, memory: &MemoryBudget) {
     }
     let _ = writeln!(
         out,
-        "  {:<9} {:>10}  hard-capped subtotal",
+        "  {:<9} {:>10}  capped subtotal",
         "",
         human_bytes(memory.capped_bytes)
     );

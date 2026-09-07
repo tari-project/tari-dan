@@ -102,8 +102,7 @@ where
                 .history_gossip(config.gossip_sub_history_gossip)
                 .duplicate_cache_time(config.gossip_sub_duplicate_cache_time)
                 .connection_handler_queue_len(config.gossip_sub_max_send_queue_messages)
-                .build()
-                .unwrap();
+                .build()?;
 
             let mut gossipsub = gossipsub::Behaviour::new(
                 gossipsub::MessageAuthenticity::Signed(keypair.clone()),

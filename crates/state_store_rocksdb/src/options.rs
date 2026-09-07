@@ -21,6 +21,13 @@ pub const DEFAULT_MEMTABLE_BUDGET_BYTES: usize = DEFAULT_MEMORY_BUDGET_BYTES / 2
 /// Smaller per-family buffers make that overshoot smaller.
 pub const DEFAULT_WRITE_BUFFER_BYTES: usize = 32 * 1024 * 1024;
 
+/// Memtables a column family may hold at once: the active one plus one being flushed.
+///
+/// With [`DEFAULT_WRITE_BUFFER_BYTES`] and the column family count, this is what bounds the
+/// overshoot above: no column family can hold more than this many buffers, so nothing can hold
+/// more than their product while flushes complete.
+pub const MAX_WRITE_BUFFER_NUMBER: i32 = 2;
+
 #[derive(Debug, Clone)]
 pub struct DatabaseOptions {
     /// The versions behind the latest to keep for each shard.
@@ -95,6 +102,13 @@ impl DatabaseOptions {
     /// The portion of the memory budget memtables may occupy before flushes are triggered.
     pub fn with_memtable_budget_bytes(mut self, memtable_budget_bytes: usize) -> Self {
         self.memtable_budget_bytes = memtable_budget_bytes;
+        self
+    }
+
+    /// The size of one column family's active memtable, which bounds how far memtable memory can
+    /// overshoot the budget while triggered flushes are in flight.
+    pub fn with_write_buffer_bytes(mut self, write_buffer_bytes: usize) -> Self {
+        self.write_buffer_bytes = write_buffer_bytes;
         self
     }
 }

@@ -30,7 +30,7 @@ use crate::{
     error::RocksDbStorageError,
     info::ColumnFamilyInfo,
     memory_budget::RocksDbMemoryBudget,
-    options::DatabaseOptions,
+    options::{DatabaseOptions, MAX_WRITE_BUFFER_NUMBER},
     read_only_ctx::ReadOnlyContext,
     reader::RocksDbStateStoreReadTransaction,
     traits::{RocksDatabase, RocksReader},
@@ -87,6 +87,7 @@ pub(crate) fn build_default_store_opts(options: &DatabaseOptions) -> (rocksdb::O
     // supersedes `db_write_buffer_size`. The per-family buffer size bounds how far past the budget
     // memtable memory can drift while triggered flushes are still in flight.
     opts.set_write_buffer_size(options.write_buffer_bytes);
+    opts.set_max_write_buffer_number(MAX_WRITE_BUFFER_NUMBER);
     opts.set_write_buffer_manager(budget.write_buffer_manager());
     let mut bb_opts = rocksdb::BlockBasedOptions::default();
     bb_opts.set_block_size(16 * 1024);

@@ -255,9 +255,14 @@ pub async fn spawn_services(
     info!(target: LOG_TARGET, "State store initializing");
 
     // TODO: just enable it always for now, later make it configurable and default to true for testnets
+    let state_store_memory_budget = config.validator_node.state_store_memory_budget_bytes;
     let db_options = DatabaseOptions::default()
         .with_debugging_data(true)
-        .with_prune_transaction_history(!config.validator_node.keep_transaction_history);
+        .with_prune_transaction_history(!config.validator_node.keep_transaction_history)
+        .with_memory_budget_bytes(state_store_memory_budget)
+        // Half the budget for memtables leaves the rest to cache reads, which is RocksDB's own
+        // guidance; the two are one capacity because memtables are charged against the cache.
+        .with_memtable_budget_bytes(state_store_memory_budget / 2);
 
     memory_budget::check_against_available_memory(&memory_budget::MemoryBudget::from_config(
         &config.validator_node,

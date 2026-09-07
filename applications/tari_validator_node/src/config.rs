@@ -142,6 +142,12 @@ pub struct ValidatorNodeConfig {
     /// equally liveness-critical.
     #[serde(default = "default_max_consensus_messaging_queue_bytes")]
     pub max_consensus_messaging_queue_bytes: usize,
+    /// Total memory the state store may hold across its block cache and memtables, shared by every
+    /// column family. Half is given to memtables and the rest stays available to cache reads.
+    /// Larger trades memory for fewer disk reads and less frequent flushing; it is the largest
+    /// single line in the node's memory budget, which is logged at startup.
+    #[serde(default = "default_state_store_memory_budget_bytes")]
+    pub state_store_memory_budget_bytes: usize,
 }
 
 fn default_max_transaction_gossip_queue_bytes() -> usize {
@@ -154,6 +160,10 @@ fn default_max_consensus_gossip_queue_bytes() -> usize {
 
 fn default_max_consensus_messaging_queue_bytes() -> usize {
     128 * 1024 * 1024
+}
+
+fn default_state_store_memory_budget_bytes() -> usize {
+    tari_state_store_rocksdb::DEFAULT_MEMORY_BUDGET_BYTES
 }
 
 impl ValidatorNodeConfig {
@@ -228,6 +238,7 @@ impl Default for ValidatorNodeConfig {
             max_transaction_gossip_queue_bytes: default_max_transaction_gossip_queue_bytes(),
             max_consensus_gossip_queue_bytes: default_max_consensus_gossip_queue_bytes(),
             max_consensus_messaging_queue_bytes: default_max_consensus_messaging_queue_bytes(),
+            state_store_memory_budget_bytes: default_state_store_memory_budget_bytes(),
         }
     }
 }

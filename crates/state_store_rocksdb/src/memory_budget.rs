@@ -107,11 +107,25 @@ mod tests {
         assert_eq!(budget.memtable_capacity_bytes(), 64 * 1024 * 1024);
     }
 
+    /// Sharing is the whole point: the budget handed to one column family's options must constrain
+    /// and report the same memory as every other's. Writing through one handle and reading usage
+    /// through another is what distinguishes sharing from a copy that merely reports equal figures.
     #[test]
-    fn clones_share_one_budget() {
-        let budget = RocksDbMemoryBudget::new(8 * 1024 * 1024, 4 * 1024 * 1024);
-        let clone = budget.clone();
-        assert_eq!(clone.capacity_bytes(), budget.capacity_bytes());
-        assert_eq!(clone.memtable_bytes(), budget.memtable_bytes());
+    fn a_clone_observes_writes_made_through_the_original() {
+        let budget = RocksDbMemoryBudget::new(64 * 1024 * 1024, 32 * 1024 * 1024);
+        let observer = budget.clone();
+        assert_eq!(observer.memtable_bytes(), 0);
+
+        let temp = tempfile::tempdir().unwrap();
+        let mut opts = rocksdb::Options::default();
+        opts.create_if_missing(true);
+        opts.set_write_buffer_manager(budget.write_buffer_manager());
+        let db = rocksdb::DB::open(&opts, temp.path().join("db")).unwrap();
+        db.put(b"key", vec![0u8; 4 * 1024 * 1024]).unwrap();
+
+        assert!(
+            observer.memtable_bytes() > 0,
+            "the clone reports no memtable memory, so it is not charged against the same budget"
+        );
     }
 }

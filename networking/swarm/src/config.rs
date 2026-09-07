@@ -25,13 +25,20 @@ pub struct Config {
     /// The largest gossip message accepted or sent. Every other gossipsub bound below is a message
     /// count, so this is the factor that turns those counts into bytes.
     pub gossip_sub_max_message_size: usize,
-    /// Heartbeat windows of full messages the gossipsub message cache retains so that a peer which
-    /// missed one can still ask for it (IWANT). Retained bytes are this many heartbeats of arrivals,
-    /// so it trades recovery window against memory directly.
+    /// Heartbeat windows of full messages the gossipsub message cache retains.
+    ///
+    /// With `validate_messages` enabled this is also the deadline for the application's validation
+    /// verdict, which is what makes it a liveness setting rather than only a memory one: a verdict
+    /// arriving after the message has aged out of the cache neither forwards an accepted message
+    /// nor scores a rejected sender. The verdict is reported once the message has been drained from
+    /// the bounded inbound queue and validated, so this window must cover the queue's drain
+    /// latency under the bursts those queues are sized to absorb.
     pub gossip_sub_history_length: usize,
-    /// How many of the retained windows are advertised to peers (IHAVE). Must not exceed
-    /// `gossip_sub_history_length` — advertising a message the cache can no longer serve produces
-    /// IWANTs that go unanswered.
+    /// How many of the retained windows are advertised to peers (IHAVE).
+    ///
+    /// Must not exceed `gossip_sub_history_length`. The difference between the two is the margin in
+    /// which an advertised message can still be served: advertising a window we no longer hold
+    /// turns an IWANT into an unanswered promise, which the requester scores against us.
     pub gossip_sub_history_gossip: usize,
     /// How long a seen message's id is remembered so a duplicate arriving by another path is
     /// discarded rather than reprocessed. Ids only, so this is cheap; it should comfortably outlast
@@ -41,6 +48,10 @@ pub struct Config {
     /// gossipsub memory term: each queued entry holds the full message, so the bytes a connection
     /// can hold are this count times `gossip_sub_max_message_size`. Beyond the queue, gossipsub
     /// drops for that peer rather than buffering without limit.
+    ///
+    /// A drop is scored against the *remote* peer as a slow receiver, so this is local pressure
+    /// expressed as a judgement about someone else: sizing it too tightly graylists peers for our
+    /// own backlog.
     pub gossip_sub_max_send_queue_messages: usize,
     /// Gossipsub topics on which peers are scored for delivering invalid messages. Empty disables
     /// peer scoring entirely.
@@ -68,8 +79,8 @@ impl Default for Config {
             // This is the default for identify
             identify_interval: Duration::from_secs(5 * 60),
             gossip_sub_max_message_size: 2 * 1024 * 1024,
-            gossip_sub_history_length: 3,
-            gossip_sub_history_gossip: 2,
+            gossip_sub_history_length: 5,
+            gossip_sub_history_gossip: 3,
             gossip_sub_duplicate_cache_time: Duration::from_secs(60),
             gossip_sub_max_send_queue_messages: 256,
             gossip_sub_scored_topics: Vec::new(),

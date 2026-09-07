@@ -22,7 +22,7 @@
 use serde::{Deserialize, Serialize};
 use tari_engine_types::limits::{ENGINE_LIMITS, WASM_LIMITS};
 use tari_ootle_template_provider::TemplateConfig;
-use tari_state_store_rocksdb::DatabaseOptions;
+use tari_state_store_rocksdb::{DatabaseOptions, MAX_WRITE_BUFFER_NUMBER};
 use tari_swarm::Config as SwarmConfig;
 
 const MIB: u64 = 1024 * 1024;
@@ -31,6 +31,11 @@ const MIB: u64 = 1024 * 1024;
 /// not itself capped — a node also holds connections to foreign shard groups and to seeds — so the
 /// gossip terms derived from it are estimates rather than ceilings.
 const COMMITTEE_PEERS: u64 = 40;
+
+/// Column families the state store opens, from `all_column_families_iter`. With the configured
+/// per-family buffer size and buffer count, this bounds how far memtable memory can run past its
+/// budget while triggered flushes are still completing.
+const COLUMN_FAMILIES: u64 = 9;
 
 /// Whether a budget line is enforced by the code or merely expected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -87,9 +92,13 @@ pub struct ObservedProcess {
 /// Builds the budget for a node running with stock configuration.
 ///
 /// Every figure is either imported from the crate that enforces it or carries the file that sets
-/// it. The few hardcoded ones live behind private defaults, so they cannot be imported — when one
-/// of those moves, this table has to move with it. A node running with a non-default configuration
-/// logs its own version of this table at startup.
+/// it. The queue caps are the exception: they live behind private defaults in the validator node's
+/// own config module, so they are literals here and must be moved when that module moves.
+///
+/// The node keeps a second, shorter table (`memory_budget.rs`) over the same model: it lists only
+/// the enforced caps, because it runs a startup check that must not fail on terms outside the
+/// node's control, and folds everything below into a single larger headroom factor. The two move
+/// together.
 pub fn budget(pid: Option<u32>) -> MemoryBudget {
     let db_options = DatabaseOptions::default();
     let swarm = SwarmConfig::default();
@@ -134,9 +143,12 @@ pub fn budget(pid: Option<u32>) -> MemoryBudget {
             name: "State store block cache and memtables".to_string(),
             bytes: db_options.memory_budget_bytes as u64,
             bound: Bound::Capped,
-            source: "DatabaseOptions::memory_budget_bytes, shared by all column families via one rocksdb Cache and a \
-                     WriteBufferManager charged against it"
-                .to_string(),
+            source: format!(
+                "DatabaseOptions::memory_budget_bytes, shared by all column families via one rocksdb Cache and a \
+                 WriteBufferManager charged against it; enforced by triggering flushes rather than by stalling \
+                 writers, so memtables can overshoot by up to the {} MiB of buffers in flight",
+                db_options.write_buffer_bytes as u64 * MAX_WRITE_BUFFER_NUMBER as u64 * COLUMN_FAMILIES / MIB,
+            ),
         },
         BudgetLine {
             name: "Gossipsub message cache and per-connection send queues".to_string(),

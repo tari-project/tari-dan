@@ -4,10 +4,16 @@
 //! What this node's configured caps add up to, checked against the machine it is starting on.
 //!
 //! Every term here is a limit the node enforces: a queue that drops beyond its byte budget, a cache
-//! that evicts at its capacity, an interpreter whose instances are bounded by the engine limits. A
-//! node cannot exceed their sum by any amount of traffic, which makes the sum the figure to size a
-//! machine from — and makes a machine that cannot supply it misconfigured at startup rather than
-//! killed by the OOM killer at some later moment under load.
+//! that evicts at its capacity, an interpreter whose instances are bounded by the engine limits.
+//! That makes the sum the figure to size a machine from, and a machine that cannot supply it
+//! misconfigured at startup rather than killed by the OOM killer at some later moment under load.
+//!
+//! Not every term is enforced the same way. The queues drop on arrival, so they are hard. The state
+//! store enforces by triggering flushes and evicting, so it is a soft ceiling: memtable memory can
+//! run past its share by as much as the buffers already in flight while those flushes complete, and
+//! an LRU cache admits before it evicts. The overshoot is bounded — it is a multiple of
+//! `write_buffer_bytes`, not of traffic — but "cap" here means "the level enforcement acts at", not
+//! "a level allocation cannot reach".
 //!
 //! Terms that scale with traffic rather than with a cap — libp2p's message caches, the working set
 //! of a block mid-execution, allocator fragmentation — are deliberately absent. Including a guess
@@ -33,7 +39,12 @@ const LOG_TARGET: &str = "tari::validator_node::memory_budget";
 ///
 /// It covers the terms this model deliberately does not enumerate — libp2p's message and peer
 /// caches, the substate diffs held while a block executes, and the allocator arenas a long-running
-/// process does not return to the OS once its queues have been full.
+/// process does not return to the OS once its queues have been full — and the overshoot the softly
+/// enforced terms allow.
+///
+/// `tari-vn-bench` enumerates those unlisted terms instead of folding them into a factor, so its
+/// table has more lines and a smaller multiplier. The two are different views of one model and move
+/// together.
 const HEADROOM_FACTOR: f64 = 1.5;
 
 /// Bytes a transaction id occupies in the mempool's dedup set: 33 bytes across both generations it
@@ -137,7 +148,7 @@ pub fn check_against_available_memory(budget: &MemoryBudget) {
             target: LOG_TARGET,
             "⚠️ This machine has {} available but the configured memory budget requires {}. The node will run under \
              ordinary load, but a burst that fills its queues can exhaust memory. Either provision more memory or \
-             lower the queue and cache budgets in the configuration.",
+             lower `state_store_memory_budget_bytes` and the `max_*_queue_bytes` settings in the configuration.",
             format_bytes(available),
             format_bytes(budget.required_bytes),
         );
@@ -173,26 +184,80 @@ fn format_bytes(bytes: u64) -> String {
 mod tests {
     use super::*;
 
-    #[test]
-    fn every_configured_cap_is_counted() {
-        let config = ValidatorNodeConfig::default();
-        let budget = MemoryBudget::from_config(&config, &DatabaseOptions::default(), &TemplateConfig::default());
+    fn budget_of(config: &ValidatorNodeConfig, db_options: &DatabaseOptions) -> u64 {
+        MemoryBudget::from_config(config, db_options, &TemplateConfig::default()).capped_bytes
+    }
 
-        assert_eq!(
-            budget.capped_bytes,
-            budget.lines.iter().map(|l| l.bytes).sum::<u64>(),
-            "the total must be the sum of the lines it is printed alongside"
-        );
-        assert!(budget.required_bytes > budget.capped_bytes);
+    /// Every configured cap must reach the total. Moving each input in turn and requiring the total
+    /// to move with it is what catches a cap that was added to the configuration but never given a
+    /// line here — the failure this table exists to prevent.
+    #[test]
+    fn every_configured_cap_reaches_the_total() {
+        const DELTA: usize = 16 * 1024 * 1024;
+        let base_config = ValidatorNodeConfig::default();
+        let base_options = DatabaseOptions::default();
+        let base = budget_of(&base_config, &base_options);
+
+        type Mutation = fn(&mut ValidatorNodeConfig, &mut DatabaseOptions);
+
+        let mutations: [(&str, Mutation); 4] = [
+            ("consensus gossip queue", |c, _| {
+                c.max_consensus_gossip_queue_bytes += DELTA
+            }),
+            ("transaction gossip queue", |c, _| {
+                c.max_transaction_gossip_queue_bytes += DELTA
+            }),
+            ("consensus messaging queue", |c, _| {
+                c.max_consensus_messaging_queue_bytes += DELTA
+            }),
+            ("state store budget", |_, o| o.memory_budget_bytes += DELTA),
+        ];
+
+        for (name, mutate) in mutations {
+            let mut config = base_config.clone();
+            let mut options = base_options.clone();
+            mutate(&mut config, &mut options);
+            assert_eq!(
+                budget_of(&config, &options) - base,
+                DELTA as u64,
+                "{name} does not reach the total"
+            );
+        }
+    }
+
+    /// The caps that are constants rather than configuration cannot be varied, so they are checked
+    /// by the value they contribute instead.
+    #[test]
+    fn the_constant_caps_are_present() {
+        let templates = TemplateConfig::default();
+        let budget =
+            MemoryBudget::from_config(&ValidatorNodeConfig::default(), &DatabaseOptions::default(), &templates);
+
+        for (name, bytes) in [
+            ("template module cache", templates.max_cache_size_bytes()),
+            (
+                "mempool dedup cache",
+                MEM_MAX_TRANSACTIONS_DEDUP as u64 * DEDUP_BYTES_PER_TRANSACTION,
+            ),
+            (
+                "WASM instance memory",
+                WASM_LIMITS.max_memory_pages as u64 * 64 * 1024 * ENGINE_LIMITS.max_call_depth as u64,
+            ),
+        ] {
+            assert!(
+                budget.lines.iter().any(|l| l.bytes == bytes),
+                "{name} is not among the lines"
+            );
+        }
     }
 
     #[test]
-    fn raising_a_queue_budget_raises_the_requirement() {
-        let mut config = ValidatorNodeConfig::default();
-        let before = MemoryBudget::from_config(&config, &DatabaseOptions::default(), &TemplateConfig::default());
-        config.max_consensus_gossip_queue_bytes += 128 * 1024 * 1024;
-        let after = MemoryBudget::from_config(&config, &DatabaseOptions::default(), &TemplateConfig::default());
-
-        assert_eq!(after.capped_bytes - before.capped_bytes, 128 * 1024 * 1024);
+    fn the_requirement_exceeds_the_caps_it_is_derived_from() {
+        let budget = MemoryBudget::from_config(
+            &ValidatorNodeConfig::default(),
+            &DatabaseOptions::default(),
+            &TemplateConfig::default(),
+        );
+        assert!(budget.required_bytes > budget.capped_bytes);
     }
 }
