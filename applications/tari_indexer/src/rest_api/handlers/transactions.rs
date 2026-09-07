@@ -38,7 +38,11 @@ const LOG_TARGET: &str = "tari::indexer::rest_api::handlers::transactions";
     responses(
         (status = 200, description = "Transaction submitted successfully", body = SubmitTransactionResponse),
         (status = BAD_REQUEST, description = "Invalid transaction or request parameters", body = ErrorResponse),
-        (status = SERVICE_UNAVAILABLE, description = "All validators failed to process the transaction", body = ErrorResponse),
+        (
+            status = SERVICE_UNAVAILABLE,
+            description = "All validators failed to process the transaction, or a shard group it involves has no committee",
+            body = ErrorResponse
+        ),
         (status = INTERNAL_SERVER_ERROR, description = "Failed to submit transaction due to an internal error", body = ErrorResponse),
     )
 )]
@@ -83,8 +87,12 @@ pub async fn submit_transaction(
                         ErrorResponse::general_error(format!("Rpc error: ({} members) {}", committee_size, last_err))
                     },
                 },
-                e @ NetworkClientError::AllValidatorsFailed { .. } | e @ NetworkClientError::NoCommitteeMembers => {
+                e @ NetworkClientError::AllValidatorsFailed { .. } => {
                     ErrorResponse::service_unavailable(format!("All validators failed: {}", e))
+                },
+                e @ NetworkClientError::NoCommitteeMembers |
+                e @ NetworkClientError::NoCommitteeForShardGroup { .. } => {
+                    ErrorResponse::service_unavailable(e.to_string())
                 },
                 e => ErrorResponse::anyhow(e),
             },

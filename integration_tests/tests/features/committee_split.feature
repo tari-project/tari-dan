@@ -9,15 +9,19 @@ Feature: Committee split
     Given a network with spec
     """
     consensus_constants:
-      # One committee per three validators, so a sixth registration splits the network rather than
-      # needing the fourteen the devnet default would ask for.
-      committee_size_per_shard_group: 3
+      # One committee per four validators, so an eighth registration splits the network rather than
+      # needing the fourteen the devnet default would ask for. Validators are placed in the split
+      # shard space by their base-layer shard key, which no one here chooses, so the count is kept
+      # high enough that the draw is unlikely to leave either half of the shard space empty.
+      committee_size_per_shard_group: 4
     validators:
       - name: VN1
       - name: VN2
       - name: VN3
       - name: VN4
       - name: VN5
+      - name: VN6
+      - name: VN7
     walletds:
       - name: WALLET_D
     """
@@ -27,14 +31,14 @@ Feature: Committee split
     When I create an account ACC1 via the wallet daemon WALLET_D with 10000 XTR
     Then I wait for the indexer INDEXER to sync with the network
 
-    # A sixth registration takes the validator count past the committee size, so the next epoch splits
-    # the shard space in two and every validator stops storing half of what it stored before.
-    Given a validator node VN6 connected to base node BASE_NODE
-    Given validator VN6 nodes connect to all other validators
+    # An eighth registration takes the validator count past the committee size, so the next epoch
+    # splits the shard space in two and every validator stops storing half of what it stored before.
+    Given a validator node VN8 connected to base node BASE_NODE
+    Given validator VN8 nodes connect to all other validators
     When indexer INDEXER connects to all other validators
-    When validator node VN6 sends a registration transaction to base wallet MINOTARI_WALLET
+    When validator node VN8 sends a registration transaction to base wallet MINOTARI_WALLET
     Then miner MINER mines to the next epoch
-    Then the validator node VN6 is listed as registered
+    Then the validator node VN8 is listed as registered
     When all validator nodes have started epoch 4
     Then the network has 2 shard groups according to indexer INDEXER
 

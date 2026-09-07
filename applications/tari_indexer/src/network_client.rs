@@ -16,6 +16,7 @@ use tari_ootle_common_types::{
     ShardGroup,
     SubstateAddress,
     displayable::Displayable,
+    optional::Optional,
 };
 use tari_ootle_transaction::{Transaction, TransactionId};
 use tari_rpc_framework::RpcStatusCode;
@@ -165,10 +166,17 @@ where
                 continue; // Already processed this shard group
             }
 
+            // A shard group with no assigned validators is a statement about the network - nothing
+            // answers for that part of the shard space at this epoch - rather than a failure of this
+            // indexer, so it must reach the caller as an unavailable committee and not an internal
+            // error.
             let committee = self
                 .epoch_manager
                 .get_committee_by_shard_group(epoch, shard_group)
-                .await?;
+                .await
+                .optional()?
+                .filter(|committee| !committee.is_empty())
+                .ok_or(NetworkClientError::NoCommitteeForShardGroup { epoch, shard_group })?;
             all_members.insert(shard_group, committee);
         }
 
@@ -232,6 +240,8 @@ pub enum NetworkClientError {
     },
     #[error("No committee at present. Try again later")]
     NoCommitteeMembers,
+    #[error("No validators are assigned to {shard_group} at {epoch}")]
+    NoCommitteeForShardGroup { epoch: Epoch, shard_group: ShardGroup },
 }
 
 impl NetworkClientError {
