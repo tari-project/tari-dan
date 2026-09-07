@@ -999,6 +999,15 @@ td.nowrap,
   color: var(--rail-text);
 }
 
+.logend {
+  padding: 14px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  border-top: 1px dashed var(--line);
+}
+
 /* ============================================================== toasts == */
 
 .toasts {

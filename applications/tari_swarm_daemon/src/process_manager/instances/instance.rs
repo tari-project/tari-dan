@@ -16,6 +16,9 @@ pub struct Instance {
     child: Child,
     allocated_ports: AllocatedPorts,
     base_path: PathBuf,
+    /// Directory holding the forwarded stdout/stderr of this process. The parent of `base_path`, which points at the
+    /// network subdirectory the process itself writes to.
+    process_dir: PathBuf,
     settings: HashMap<String, String>,
     envs: Vec<(String, String)>,
     exit_status: Option<ExitStatus>,
@@ -30,6 +33,7 @@ impl Instance {
         child: Child,
         allocated_ports: AllocatedPorts,
         base_path: PathBuf,
+        process_dir: PathBuf,
         envs: Vec<(String, String)>,
         settings: HashMap<String, String>,
     ) -> Self {
@@ -40,6 +44,7 @@ impl Instance {
             child,
             allocated_ports,
             base_path,
+            process_dir,
             envs,
             settings,
             exit_status: None,
@@ -73,6 +78,14 @@ impl Instance {
 
     pub fn base_path(&self) -> &PathBuf {
         &self.base_path
+    }
+
+    pub fn stdout_log_path(&self) -> PathBuf {
+        self.process_dir.join("stdout.log")
+    }
+
+    pub fn stderr_log_path(&self) -> PathBuf {
+        self.process_dir.join("stderr.log")
     }
 
     pub fn envs(&self) -> &[(String, String)] {

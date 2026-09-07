@@ -5,6 +5,9 @@ use std::{fs, path::PathBuf};
 
 use fern::FormatCallback;
 
+/// Target used by [`crate::process_manager`] when it relays a child process's own output.
+pub const FORWARDED_TARGET: &str = "swarm";
+
 pub fn init_logger(log_to_file: Option<PathBuf>) -> Result<(), log::SetLoggerError> {
     fn should_skip(target: &str) -> bool {
         const SKIP: &[&str] = &[
@@ -35,6 +38,13 @@ pub fn init_logger(log_to_file: Option<PathBuf>) -> Result<(), log::SetLoggerErr
                     message
                 ))
             };
+
+            // Only forwarded child output embeds the process's own target and level in the message text, and only it
+            // is guaranteed to be a single line. Every other record is formatted as written.
+            if record.target() != FORWARDED_TARGET {
+                fallback(out);
+                return;
+            }
 
             // Example: [Validator node-#1] 12:55 INFO Received vote for block #NodeHeight(88)
             // d9abc7b1bb66fd912848f5bc4e5a69376571237e3243dc7f6a91db02bb5cf37c from

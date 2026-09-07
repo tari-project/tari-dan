@@ -39,6 +39,7 @@ lockfile = "0.4.0"
 indexmap = { workspace = true }
 slug = "0.1.6"
 log = { workspace = true }
+memmap2 = { workspace = true }
 mime_guess = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
