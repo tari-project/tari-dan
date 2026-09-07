@@ -14,10 +14,15 @@ pub enum IndexerEvent {
 }
 
 impl IndexerEvent {
+    /// SSE event name of [`IndexerEvent::NewEpoch`].
+    pub const NEW_EPOCH_EVENT_NAME: &'static str = "NewEpoch";
+    /// SSE event name of [`IndexerEvent::TransactionFinalized`].
+    pub const TRANSACTION_FINALIZED_EVENT_NAME: &'static str = "TransactionFinalized";
+
     pub const fn as_event_name(&self) -> &'static str {
         match self {
-            Self::NewEpoch(_) => "NewEpoch",
-            Self::TransactionFinalized(_) => "TransactionFinalized",
+            Self::NewEpoch(_) => Self::NEW_EPOCH_EVENT_NAME,
+            Self::TransactionFinalized(_) => Self::TRANSACTION_FINALIZED_EVENT_NAME,
         }
     }
 }
