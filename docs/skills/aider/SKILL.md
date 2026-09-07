@@ -73,7 +73,7 @@ When running a CLI client app (e.g., the guessing game CLI), operations MUST hap
 5. **Register players** — Add player accounts AFTER the game component exists
 6. **Play** — Start rounds, make guesses, end games
 
-> **CRITICAL:** Never register players or add users before the template is published and the game component is deployed. Players need a component to interact with. Never try to publish a template programmatically unless the CLI already has a publish command — always direct users to the Wallet Web UI for publishing.
+> **CRITICAL:** Never register players or add users before the template is published and the game component is deployed. Players need a component to interact with. Do not add a publish command to an example CLI unless the user asks for one; for a one-off publish, direct them to the Wallet Web UI.
 
 ### Tooling Requirements
 
@@ -81,6 +81,7 @@ The only tools needed for Ootle development are:
 - `rustup` with the `wasm32-unknown-unknown` target
 - `cargo-generate` (for scaffolding)
 - Standard Rust toolchain (`cargo build`, `cargo test`)
+- `wasm-opt` — optional, for checking or shrinking the binary yourself (see [Minifying the WASM](#minifying-the-wasm))
 
 > **Do NOT install** rust-analyzer extensions, cargo-expand, wasm-pack, wasm-bindgen, or other WASM/Rust analysis tools. They are unnecessary for Ootle development and add bloat. The `wasm32-unknown-unknown` target and standard `cargo build` are sufficient.
 
@@ -133,7 +134,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-tari_template_lib = "0.20"
+tari_template_lib = "0.31"
 
 [lib]
 crate-type = ["cdylib"]
@@ -148,9 +149,11 @@ strip = true          # Strip symbols and debug info.
 
 > **CRITICAL:** The `crate-type = ["cdylib"]` is required for WASM compilation. Without it, the build will not produce a `.wasm` file.
 
+> **CRITICAL:** Keep `crate-type = ["cdylib"]` and nothing else. Adding `rlib` alongside it — a common attempt to make template code unit-testable — stops Cargo applying `lto = true` to the target, so the `[profile.release]` settings below quietly stop shrinking the binary. To unit-test pure logic (tallies, state machines), put it in a separate crate that both the template and the tests depend on.
+
 > **Tip:** The `[profile.release]` section in `Cargo.toml` significantly reduces the size of the compiled WASM file, which lowers the fees required for on-chain storage and publishing.
 
-> **Versions:** These crate versions are updated as new releases are published to crates.io. Use the minor version (e.g. `"0.20"` not `"0.20.5"`) to automatically get the latest patch. Before starting a new template, check [crates.io](https://crates.io/crates/tari_template_lib) for a newer minor version (e.g. `"0.21"`, `"0.22"`).
+> **Versions:** `0.31` is the current `tari_template_lib` release on crates.io. Use the minor version (e.g. `"0.31"` not `"0.31.1"`) to pick up patches automatically, and check [crates.io](https://crates.io/crates/tari_template_lib) for a newer minor before starting a new template. Keep it in step with `tari_template_test_tooling` (see [Test Setup](#test-setup)) — the test harness compiles your template against its own copy of `tari_template_lib`, and a mismatched pair builds the two halves against different copies of the library types.
 
 ### Compilation
 
@@ -163,6 +166,23 @@ cargo build --target wasm32-unknown-unknown --release
 ```
 
 Output: `target/wasm32-unknown-unknown/release/your_template_name.wasm`
+
+### Minifying the WASM
+
+Publishing through the wallet daemon — the Web UI, or the `transactions.publish_template` JSON-RPC method — runs `wasm-opt` over the binary for you and stores the optimized result, so a Web UI publish is already minified. Run it yourself to check the size before publishing, or when a client publishes a raw binary with `TransactionBuilder::publish_template`, which stores exactly the bytes it is handed:
+
+```bash
+wasm-opt -Oz --enable-bulk-memory \
+  --strip-debug --strip-producers --strip-target-features \
+  target/wasm32-unknown-unknown/release/your_template_name.wasm \
+  -o target/wasm32-unknown-unknown/release/your_template_name.min.wasm
+```
+
+> `--enable-bulk-memory` is required: rustc's `wasm32-unknown-unknown` output uses bulk-memory operations and `wasm-opt` rejects the module without it.
+>
+> The strip flags are not optional on a raw publish. The engine accepts no custom section other than `tari_tdef`, and rustc emits `name`, `producers` and `target_features` sections — a binary that still carries them is rejected at publish time.
+>
+> Check the size before publishing: `ls -la target/wasm32-unknown-unknown/release/*.wasm`. Only the first 96 KiB of a template are priced as ordinary storage; every whole kilobyte beyond that is charged quadratically, so keeping the binary near or below 96 KiB is what keeps a publish cheap — see [Publishing Templates](#publishing-templates).
 
 ### Template Structure
 
@@ -604,9 +624,9 @@ fn generate_number() -> u8 {
 
 ## Publishing Templates
 
-> **STOP: Do NOT write a publish command.** When the user needs to publish a template, tell them to use the Wallet Web UI. Do NOT add a `publish` subcommand to CLI apps, do NOT write `publish_template()` code, do NOT try to create a programmatic publish workflow. The Web UI at `http://127.0.0.1:5100` is the correct and only supported way to publish templates.
+> **Publishing is the most expensive operation you will run** — every validator stores the WASM permanently, so the fee is dominated by binary size. Fees are denominated in microtari (µT); 1 tTARI = 1,000,000 µT. At current testnet rates a publish costs a flat 250,000 µT, plus the first 96 KiB of the binary at the per-byte storage rate, plus a quadratic premium of `100 µT × units²` where `units` is the number of whole kilobytes beyond 96 KiB. That works out at roughly 0.35 tTARI for a 96 KiB template, 2.9 tTARI at 256 KiB and 17.7 tTARI at 512 KiB; binaries over 1.5 MiB are rejected outright. Shrink the binary first (see [Minifying the WASM](#minifying-the-wasm)) and take the fee from a dry run (see [Fee Estimation (Dry-Run)](#fee-estimation-dry-run)) or the Web UI's "Estimate Fee" button — never a hardcoded number. Do NOT add a `publish` subcommand to an example CLI; a client app may publish programmatically when the fee comes from a dry-run estimate.
 
-### Publish via Wallet Web UI (The Only Supported Method)
+### Publish via Wallet Web UI (Easiest for a One-Off Publish)
 
 1. Open the Tari Ootle Wallet web UI (default: `http://127.0.0.1:5100`)
 2. Click "Publish Template" on the Home page
@@ -616,22 +636,30 @@ fn generate_number() -> u8 {
 6. Find the template address under "Templates" in the sidebar
 7. Paste the template address into the CLI's state file or `--template-address` flag
 
-### Publish Programmatically (ootle-rs) — Reference Only
+### Publish Programmatically (ootle-rs)
 
-> This section is reference documentation for existing publish implementations. Do NOT use this to write new publish commands — direct users to the Web UI instead.
+> Programmatic publishing is fine for a client app when the fee comes from a dry-run estimate, never from a hardcoded value — see [Fee Estimation (Dry-Run)](#fee-estimation-dry-run).
 
 ```rust
 use tari_ootle_transaction::TransactionBuilder;
 use ootle_rs::TransactionRequest;
 
 let wasm_binary: Vec<u8> = std::fs::read("target/wasm32-unknown-unknown/release/your_template.wasm")?;
-let unsigned = TransactionBuilder::new(provider.network())
+let build = |max_fee: u64| TransactionBuilder::new(provider.network())
     .with_auto_fill_inputs()
-    .pay_fee_from_component(account_addr, 250_000u64) // See fee note below
-    .publish_template(wasm_binary.try_into().unwrap())
+    .pay_fee_from_component(account_addr, max_fee)
+    .publish_template(wasm_binary.clone().try_into().unwrap())
     .build_unsigned();
+
+// Dry-run with a generous max_fee, then submit with the fee it reports.
+let required = provider
+    .sign_and_send_dry_run(build(50_000_000))
+    .await?
+    .finalize
+    .required_fees();
+
 let tx = TransactionRequest::default()
-    .with_transaction(unsigned)
+    .with_transaction(build(required))
     .build(provider.wallet())
     .await?;
 let receipt = provider.send_transaction(tx).await?.watch().await?;
@@ -643,7 +671,41 @@ let template_addr = receipt.diff_summary.upped
     .expect("template address in receipt");
 ```
 
-> **Fee guidance for publishing:** Template publishing fees are proportional to WASM binary size. A typical template (~100-300 KB) needs **150,000-250,000** fee units. If you get an "insufficient fees" error, increase the fee amount. You can use the Wallet Web UI's "Estimate Fee" button to get an accurate estimate before publishing.
+> **Fee guidance for publishing:** the cost follows the binary size, not what the template does — see the rates above. Take the exact figure from a dry run: from ootle-rs, `IndexerProvider::sign_and_send_dry_run` returns an `ExecuteResult` whose `finalize.required_fees()` is the minimum a real submission may carry; over JSON-RPC, `transactions.publish_template` with `dry_run: true` returns `dry_run_fee`.
+
+### Fee Estimation (Dry-Run)
+
+**Never hardcode a fee in client code.** Dry-run the transaction, then submit with what the dry run reports:
+
+```rust
+// 1. Build with a generous max_fee. A dry run is metered at whatever max_fee it
+//    carries, so one that is too small aborts on fee exhaustion instead of
+//    reporting the real cost.
+let unsigned = TransactionBuilder::new(provider.network())
+    .with_auto_fill_inputs()
+    .pay_fee_from_component(account_addr, 10_000_000u64)
+    .call_method(component_addr, "some_method", args![])
+    .build_unsigned();
+
+// 2. Dry-run it. The result is the ExecuteResult a real run would produce.
+let result = provider.sign_and_send_dry_run(unsigned).await?;
+let required = result.finalize.required_fees();
+
+// 3. Rebuild with the reported fee and submit that.
+let unsigned = TransactionBuilder::new(provider.network())
+    .with_auto_fill_inputs()
+    .pay_fee_from_component(account_addr, required)
+    .call_method(component_addr, "some_method", args![])
+    .build_unsigned();
+```
+
+The `max_fee` the dry run carries has to be generous but still within the paying account's balance — it is withdrawn from the fee vault for the run, so a dry run cannot be metered above what the account holds.
+
+`required_fees()` is a floor, not an estimate to pad: it is what the dry run was charged plus a small allowance for the metering drift that carrying a different `max_fee` causes, so no margin multiplier is needed. Submitting above the floor is harmless when an account vault pays — the unspent remainder is returned to that vault — but a fee paid purely by a stealth reveal keeps no change, so pay close to the floor there.
+
+The wallet daemon exposes the same estimate over JSON-RPC: `transactions.publish_template` with `dry_run: true` returns `dry_run_fee`, and `transactions.submit_dry_run` returns the full result. The Web UI's "Estimate Fee" button runs a dry run too.
+
+The pattern applies to every transaction type: faucet claims, publishes, method calls and stealth spends.
 
 ---
 
@@ -721,7 +783,7 @@ use ootle_rs::TransactionRequest;
 // 1. Build an unsigned transaction
 let unsigned_tx = TransactionBuilder::new(provider.network())
     .with_auto_fill_inputs()                              // Auto-detect input substates
-    .pay_fee_from_component(account_addr, 2000u64)        // Pay fee from account
+    .pay_fee_from_component(account_addr, 2000u64)        // Placeholder — take this from a dry run
     .call_function(template_addr, "new", args![])         // Or call_method(...)
     .build_unsigned();
 
@@ -735,6 +797,8 @@ let tx = TransactionRequest::default()
 let pending = provider.send_transaction(tx).await?;
 let receipt = pending.watch().await?;
 ```
+
+> **The fees in these examples are placeholders.** Real client code takes the fee from a dry run (see [Fee Estimation (Dry-Run)](#fee-estimation-dry-run)); a hardcoded amount is either wasteful or fails the transaction.
 
 ### Call a Template Function (Create Component)
 
@@ -852,11 +916,12 @@ Use `tari_template_test_tooling` as a **dev-dependency**. It compiles your templ
 Add to your test crate's `Cargo.toml`:
 ```toml
 [dev-dependencies]
-tari_template_test_tooling = "0.25"
-tari_ootle_transaction = "0.20"
+tari_template_test_tooling = "0.40"
 ```
 
-> **Versions:** These versions may be updated as new crates are published. Use the minor version (e.g. `"0.25"` not `"0.25.7"`) to get the latest patch. Check [crates.io](https://crates.io/crates/tari_template_test_tooling) for newer versions before starting.
+> `tari_template_test_tooling` re-exports the transaction crate, so use `tari_template_test_tooling::transaction::args` (and the other transaction items) in tests rather than adding `tari_ootle_transaction` as a second dev-dependency — pinning it separately is how a test crate ends up compiled against two incompatible copies of the transaction types.
+
+> **Versions:** `0.40` is the current `tari_template_test_tooling` release on crates.io. Use the minor version (e.g. `"0.40"` not `"0.40.0"`) to pick up patches, and check [crates.io](https://crates.io/crates/tari_template_test_tooling) for a newer minor before starting. `0.40` builds against `tari_template_lib` `0.31`; bump the two together.
 
 ### Standard Test Pattern
 
@@ -864,7 +929,7 @@ Most template interactions require multiple instructions in a single transaction
 
 ```rust
 use tari_template_test_tooling::TemplateTest;
-use tari_ootle_transaction::args;
+use tari_template_test_tooling::transaction::args;
 
 #[test]
 fn test_my_template() {
@@ -1235,10 +1300,10 @@ mod guessing_game {
     - `IAccount::publish_template()` — no such method; publish via `TransactionBuilder::publish_template()` or the Web UI
     - `provider.publish_template()` — no such method on the provider
     - `ProviderBuilder::with_timeout()` — use `connect_with_transaction_timeout()` instead
-12. **Writing publish commands** — Do NOT write custom template publish code. Direct users to the Wallet Web UI. The generated CLI examples do not include a publish command by design.
+12. **Hardcoded fees** — A fee is never a constant. Publishing in particular is priced on binary size and runs to millions of µT (~2.9 tTARI for a 256 KiB template), so shrink the WASM and take the fee from a dry run or the Web UI's "Estimate Fee" button. Do NOT add a `publish` subcommand to an example CLI — the generated CLI examples deliberately have none; for a one-off publish, use the Wallet Web UI.
 13. **Wrong operation order** — Always: init wallet → fund → publish template → create component → register players. Never register players before the game component exists.
 14. **Struct placement in template module** — The `#[template]` macro requires the main component struct to appear first in the template module. Placing other structs above it causes the macro to treat the wrong struct as the component, leading to compilation errors like *"a template must have associated functions and/or methods"*. Fix: define ancillary structs in their own module and `use` them, or place them below the component `impl` block. Note: ancillary structs defined outside the template module must derive `#[derive(serde::Serialize, serde::Deserialize)]` and require `serde = "1"` as a dependency.
-15. **Git dependencies** — Never use git dependencies in `Cargo.toml`. All Tari crates are published on [crates.io](https://crates.io). Always use the latest minor version (e.g. `"0.20"` not a git URL). Check crates.io if unsure.
+15. **Git dependencies** — Never use git dependencies in `Cargo.toml`. All Tari crates are published on [crates.io](https://crates.io). Always use the latest minor version (e.g. `"0.31"` not a git URL). Check crates.io if unsure.
 16. **Duplicate test dependency** — `tari_template_test_tooling` re-exports the `tari_ootle_transaction` crate. Use the re-export (`tari_template_test_tooling::transaction`) in tests rather than adding `tari_ootle_transaction` as a separate `[dev-dependencies]` entry.
 17. **Missing standard imports** — Import standard library types (e.g. `HashMap`, `BTreeMap`) as normal in Rust. You can import them outside the template module and bring them in with `use super::*;` (which all template modules should include), or import directly inside the template module.
 
