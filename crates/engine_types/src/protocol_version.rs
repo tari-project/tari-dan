@@ -21,8 +21,10 @@ pub enum ProtocolVersion {
     /// under.
     #[default]
     V0 = 0,
-    /// Block headers commit to their own protocol version. No network schedules this version in
-    /// [`Self::activations`]; scheduling it is a deliberate per-network deployment decision.
+    /// Block headers commit to their own protocol version, and a transaction receipt's substate hash
+    /// covers `FeeReceipt::exhaust_burn`. Networks without history launch at this version; a network
+    /// with V0 history reaches it through a scheduled activation in [`Self::activations`], a
+    /// deliberate per-network deployment decision.
     V1 = 1,
 }
 
