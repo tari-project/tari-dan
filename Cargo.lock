@@ -12533,6 +12533,7 @@ dependencies = [
  "futures 0.3.31",
  "log",
  "ootle-network",
+ "rand 0.10.1",
  "tari_consensus",
  "tari_consensus_types",
  "tari_epoch_manager",

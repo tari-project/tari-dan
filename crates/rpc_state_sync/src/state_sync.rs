@@ -147,8 +147,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         };
 
         let num_returned = checkpoints.len();
-        // Most of the batch is checkpoints we did not ask for, so a malformed entry only disqualifies itself;
-        // the one we select is still checked against the signing committee's quorum.
+        // The batch can include checkpoints for other shard groups and later epochs, so a malformed entry
+        // only disqualifies itself; the one we select is still checked against the signing committee's quorum.
         for checkpoint in checkpoints {
             let checkpoint = match EpochCheckpoint::try_from(checkpoint) {
                 Ok(cp) => cp,
