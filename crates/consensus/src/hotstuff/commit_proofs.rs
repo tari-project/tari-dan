@@ -5,12 +5,10 @@ use log::*;
 use tari_common_types::types::CompressedPublicKey;
 use tari_consensus_types::ProposalCertificate;
 use tari_crypto::{ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
-use tari_ootle_common_types::ProtocolVersion;
 use tari_ootle_storage::{
     StateStoreReadTransaction,
     consensus_models::{Block, BlockHeader, EndOfEpochCommand},
 };
-use tari_ootle_transaction::Network;
 use tari_sidechain::{
     ChainLink,
     CommandCommitProof,
@@ -128,8 +126,7 @@ pub fn generate_block_commit_proof<TTx: StateStoreReadTransaction>(
     let mut block = Block::get(tx, &commit_qc.calculate_block_id())?;
     debug!(target: LOG_TARGET, "⚙️ START: generate commit proof {} {} -> {} {}", block.height(), block.id(), committed_block.height(), committed_block.id());
     debug!(target: LOG_TARGET, "⚙️ Adding the commit_qc to the proof: {commit_qc}");
-    let network = committed_block.network();
-    proof_elements.push(convert_qc_to_proof_element(network, commit_qc)?);
+    proof_elements.push(convert_qc_to_proof_element(&block, commit_qc)?);
     while block.id() != committed_block.id() {
         // Prevent possibility of endless loop if the IDs never match - which should be impossible.
         if block.height() < committed_block.height() {
@@ -154,8 +151,9 @@ pub fn generate_block_commit_proof<TTx: StateStoreReadTransaction>(
         if block.justifies_parent() {
             // This block justifies the parent, so we add it to the proof
             debug!(target: LOG_TARGET, "⚙️ Add justify: {}", block.justify());
-            proof_elements.push(convert_qc_to_proof_element(network, block.justify())?);
-            block = block.get_parent(tx)?;
+            let parent = block.get_parent(tx)?;
+            proof_elements.push(convert_qc_to_proof_element(&parent, block.justify())?);
+            block = parent;
         } else {
             // This block does not justify the parent. We'll add link(s) back until we find the block that is justified
             // by the PC. NOTE: That these blocks are not necessarily dummy blocks, they simply do not propose a new
@@ -247,8 +245,10 @@ pub fn convert_block_to_sidechain_block_header(header: &BlockHeader) -> Result<S
     })
 }
 
+/// `justified` is the block `qc` justifies, and its header carries the protocol version the certificate's members
+/// signed under. A proof may span an activation, so each certificate is versioned by its own block.
 fn convert_qc_to_proof_element(
-    network: Network,
+    justified: &Block,
     qc: &ProposalCertificate,
 ) -> Result<CommitProofElement, HotStuffError> {
     Ok(CommitProofElement::QuorumCertificate(
@@ -257,7 +257,7 @@ fn convert_qc_to_proof_element(
             parent_id: *qc.parent_id().hash(),
             epoch: qc.epoch().as_u64(),
             height: qc.height().as_u64(),
-            protocol_version: ProtocolVersion::at(network, qc.epoch()).as_u32(),
+            protocol_version: justified.header().protocol_version().as_u32(),
             signatures: qc
                 .signatures()
                 .iter()
@@ -316,9 +316,11 @@ mod tests {
         ExtraData,
         NodeHeight,
         NumPreshards,
+        ProtocolVersion,
         ShardGroup,
         crypto::create_key_pair_from_seed,
     };
+    use tari_ootle_transaction::Network;
     use tari_sidechain::{ProposalVoteMessage, QuorumDecision, ValidatorQcSignature};
 
     use super::*;

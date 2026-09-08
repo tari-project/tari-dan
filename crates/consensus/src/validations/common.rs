@@ -302,6 +302,8 @@ pub fn check_quorum_certificate_signatures<TConsensusSpec: ConsensusSpec>(
         match qc {
             QuorumCertificateRef::ProposalCertificate(pc) => {
                 let block_id = pc.calculate_block_id();
+                // `check_protocol_version` pins a block's version to `at(network, header.epoch())` before any vote
+                // is cast on it, so resolving from the schedule here yields the version the signers used.
                 let message = ProposalVoteMessage::new(
                     ProtocolVersion::at(network, pc.epoch()).as_u32(),
                     block_id.hash(),

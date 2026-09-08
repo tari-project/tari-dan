@@ -236,7 +236,7 @@ impl BlockHeader {
         let shard_group = ShardGroup::all_shards(num_preshards);
         Self {
             network,
-            protocol_version: ProtocolVersion::at(network, Epoch::zero()),
+            protocol_version: ProtocolVersion::V0,
             id: BlockId::zero(),
             parent: BlockId::zero(),
             justify_id: ProposalCertificate::genesis(Epoch::zero(), ShardGroup::all_shards(num_preshards))
@@ -349,9 +349,9 @@ impl BlockHeader {
 
         // This selection must stay identical to `tari_sidechain::SidechainBlockHeader::calculate_hash`, which is what
         // the base layer uses to verify a commit proof against the block ID a committee signed.
-        let fields = match self.protocol_version.as_u32() {
+        let fields = match self.protocol_version {
             // Version 0 commits to a preimage that carries no version, so its block IDs stay reproducible.
-            0 => BlockHeaderHashFields::V1(BlockHeaderHashFieldsV1 {
+            ProtocolVersion::V0 => BlockHeaderHashFields::V1(BlockHeaderHashFieldsV1 {
                 network: self.network.as_byte(),
                 justify_id: self.justify_id.hash(),
                 height: self.height.as_u64(),
@@ -367,9 +367,9 @@ impl BlockHeader {
             // From version 1 the version is part of the preimage, so that two versions sharing a preimage shape
             // still produce distinct block IDs and the version a block claims cannot be altered without
             // invalidating it.
-            protocol_version => BlockHeaderHashFields::V2(BlockHeaderHashFieldsV2 {
+            ProtocolVersion::V1 => BlockHeaderHashFields::V2(BlockHeaderHashFieldsV2 {
                 network: self.network.as_byte(),
-                protocol_version,
+                protocol_version: self.protocol_version.as_u32(),
                 justify_id: self.justify_id.hash(),
                 height: self.height.as_u64(),
                 epoch: self.epoch.as_u64(),

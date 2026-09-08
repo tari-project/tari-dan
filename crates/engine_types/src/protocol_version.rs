@@ -8,11 +8,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::Epoch;
 
+/// Encoded as its `u32` value in every representation: borsh by discriminant, minicbor and protobuf as a `u32`,
+/// and serde through `u32` so that a JSON consumer reads the same number the other three write.
 #[repr(u32)]
 #[derive(
     Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, borsh::BorshSerialize,
 )]
 #[borsh(use_discriminant = true)]
+#[serde(into = "u32", try_from = "u32")]
 pub enum ProtocolVersion {
     /// The genesis schema, which every network starts under and which anything carrying no explicit version is
     /// under.
@@ -167,6 +170,12 @@ pub enum ActivationScheduleError {
          diverge from the network."
     )]
     RolledBack { activation: Epoch, last_known_epoch: Epoch },
+}
+
+impl From<ProtocolVersion> for u32 {
+    fn from(value: ProtocolVersion) -> Self {
+        value.as_u32()
+    }
 }
 
 impl TryFrom<u32> for ProtocolVersion {
