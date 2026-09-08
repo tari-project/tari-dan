@@ -1012,6 +1012,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "base64"
+version = "0.23.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
+
+[[package]]
 name = "base64ct"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1377,9 +1383,9 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
-version = "1.11.1"
+version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
+checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 dependencies = [
  "serde",
 ]
@@ -2974,7 +2980,7 @@ dependencies = [
  "cbc",
  "dbus",
  "fastrand",
- "hkdf",
+ "hkdf 0.12.4",
  "num",
  "once_cell",
  "sha2 0.10.9",
@@ -3483,7 +3489,7 @@ dependencies = [
  "ccm",
  "chacha20poly1305",
  "der-parser 9.0.0",
- "hmac",
+ "hmac 0.12.1",
  "log",
  "p256",
  "p384",
@@ -3500,7 +3506,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "webrtc-util",
- "x25519-dalek",
+ "x25519-dalek 2.0.1",
  "x509-parser 0.16.0",
 ]
 
@@ -3627,7 +3633,7 @@ dependencies = [
  "ff 0.13.1",
  "generic-array",
  "group 0.13.0",
- "hkdf",
+ "hkdf 0.12.4",
  "pem-rfc7468",
  "pkcs8",
  "rand_core 0.6.4",
@@ -3825,6 +3831,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "495a39d30d624c2caabe6312bfead73e7717692b44e0b32df168c275a2e8e9e4"
 dependencies = [
  "ascii_utils",
+]
+
+[[package]]
+name = "fastbloom"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e7f34442dbe69c60fe8eaf58a8cafff81a1f278816d8ab4db255b3bef4ac3c4"
+dependencies = [
+ "getrandom 0.3.4",
+ "libm",
+ "rand 0.9.4",
+ "siphasher",
 ]
 
 [[package]]
@@ -4071,8 +4089,8 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b604752cefc5aa3ab98992a107a8bd99465d2825c1584e0b60cb6957b21e19d7"
 dependencies = [
+ "futures-timer",
  "futures-util",
- "tokio",
 ]
 
 [[package]]
@@ -4338,7 +4356,7 @@ dependencies = [
  "bstr",
  "log",
  "regex-automata",
- "regex-syntax 0.8.8",
+ "regex-syntax 0.8.11",
 ]
 
 [[package]]
@@ -4481,6 +4499,9 @@ name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
+dependencies = [
+ "foldhash 0.2.0",
+]
 
 [[package]]
 name = "hashlink"
@@ -4493,11 +4514,11 @@ dependencies = [
 
 [[package]]
 name = "hashlink"
-version = "0.11.0"
+version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea0b22561a9c04a7cb1a302c013e0259cd3b4bb619f145b32f72b8b4bcbed230"
+checksum = "a596f1b20ed2cc5ecac41a164aaebc7258057060f06c0cf7a2ba3991ee7990fb"
 dependencies = [
- "hashbrown 0.16.1",
+ "hashbrown 0.17.1",
 ]
 
 [[package]]
@@ -4715,7 +4736,16 @@ version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b5f8eb2ad728638ea2c7d47a21db23b7b58a72ed6a38256b8a1849f15fbbdf7"
 dependencies = [
- "hmac",
+ "hmac 0.12.1",
+]
+
+[[package]]
+name = "hkdf"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4aaa26c720c68b866f2c96ef5c1264b3e6f473fe5d4ce61cd44bbe913e553018"
+dependencies = [
+ "hmac 0.13.0",
 ]
 
 [[package]]
@@ -4725,6 +4755,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e"
 dependencies = [
  "digest 0.10.7",
+]
+
+[[package]]
+name = "hmac"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f"
+dependencies = [
+ "digest 0.11.3",
 ]
 
 [[package]]
@@ -5354,7 +5393,7 @@ dependencies = [
  "minotari_node",
  "minotari_node_grpc_client",
  "minotari_wallet",
- "multiaddr 0.18.3",
+ "multiaddr 0.19.0",
  "notify",
  "ootle_byte_type",
  "rand 0.10.1",
@@ -5868,13 +5907,13 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 [[package]]
 name = "libp2p"
 version = "0.57.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "bytes",
  "either",
  "futures 0.3.31",
  "futures-timer",
- "getrandom 0.2.17",
+ "getrandom 0.4.2",
  "libp2p-allow-block-list",
  "libp2p-autonat",
  "libp2p-connection-limits",
@@ -5883,7 +5922,7 @@ dependencies = [
  "libp2p-dns",
  "libp2p-gossipsub",
  "libp2p-identify",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "libp2p-mdns",
  "libp2p-metrics",
  "libp2p-noise",
@@ -5895,7 +5934,7 @@ dependencies = [
  "libp2p-tcp",
  "libp2p-upnp",
  "libp2p-yamux",
- "multiaddr 0.18.3",
+ "multiaddr 0.19.0",
  "pin-project 1.1.13",
  "rw-stream-sink",
  "thiserror 2.0.18",
@@ -5904,17 +5943,17 @@ dependencies = [
 [[package]]
 name = "libp2p-allow-block-list"
 version = "0.7.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "libp2p-swarm",
 ]
 
 [[package]]
 name = "libp2p-autonat"
 version = "0.16.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "asynchronous-codec",
  "either",
@@ -5922,13 +5961,13 @@ dependencies = [
  "futures-bounded 0.3.0",
  "futures-timer",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "libp2p-request-response",
  "libp2p-swarm",
  "prost 0.14.3",
  "prost-codec",
- "rand 0.8.6",
- "rand_core 0.6.4",
+ "rand 0.10.1",
+ "rand_core 0.10.1",
  "thiserror 2.0.18",
  "tracing",
  "web-time",
@@ -5937,30 +5976,30 @@ dependencies = [
 [[package]]
 name = "libp2p-connection-limits"
 version = "0.7.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "libp2p-swarm",
 ]
 
 [[package]]
 name = "libp2p-core"
 version = "0.44.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "either",
  "fnv",
  "futures 0.3.31",
  "futures-timer",
- "libp2p-identity 0.2.14",
- "multiaddr 0.18.3",
+ "libp2p-identity 0.3.0",
+ "multiaddr 0.19.0",
  "multihash",
  "multistream-select",
  "parking_lot",
  "pin-project 1.1.13",
  "prost 0.14.3",
- "rand 0.8.6",
+ "rand 0.10.1",
  "rw-stream-sink",
  "thiserror 2.0.18",
  "tracing",
@@ -5971,16 +6010,16 @@ dependencies = [
 [[package]]
 name = "libp2p-dcutr"
 version = "0.15.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "asynchronous-codec",
  "either",
  "futures 0.3.31",
  "futures-bounded 0.3.0",
  "futures-timer",
- "hashlink 0.11.0",
+ "hashlink 0.12.2",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "libp2p-swarm",
  "prost 0.14.3",
  "prost-codec",
@@ -5992,12 +6031,12 @@ dependencies = [
 [[package]]
 name = "libp2p-dns"
 version = "0.45.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "futures 0.3.31",
  "hickory-resolver",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "parking_lot",
  "smallvec 1.15.1",
  "tracing",
@@ -6006,29 +6045,29 @@ dependencies = [
 [[package]]
 name = "libp2p-gossipsub"
 version = "0.50.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "async-channel",
  "asynchronous-codec",
- "base64 0.22.1",
+ "base64 0.23.1",
  "byteorder",
  "bytes",
  "either",
  "fnv",
  "futures 0.3.31",
  "futures-timer",
- "getrandom 0.2.17",
- "hashlink 0.11.0",
+ "getrandom 0.4.2",
+ "hashlink 0.12.2",
  "hex_fmt",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "libp2p-swarm",
  "prometheus-client",
  "prost 0.14.3",
  "prost-codec",
- "rand 0.8.6",
+ "rand 0.10.1",
  "regex",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "tracing",
  "web-time",
 ]
@@ -6036,7 +6075,7 @@ dependencies = [
 [[package]]
 name = "libp2p-identify"
 version = "0.48.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "asynchronous-codec",
  "either",
@@ -6044,7 +6083,7 @@ dependencies = [
  "futures-bounded 0.3.0",
  "futures-timer",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "libp2p-swarm",
  "prost 0.14.3",
  "prost-codec",
@@ -6060,7 +6099,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0c7892c221730ba55f7196e98b0b8ba5e04b4155651736036628e9f73ed6fc3"
 dependencies = [
  "bs58",
- "hkdf",
+ "hkdf 0.12.4",
  "multihash",
  "sha2 0.10.9",
  "thiserror 2.0.18",
@@ -6069,17 +6108,17 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identity"
-version = "0.2.14"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+version = "0.3.0"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "bs58",
  "ed25519-dalek 3.0.0",
- "hkdf",
+ "hkdf 0.13.0",
  "multihash",
  "prost 0.14.3",
  "rand 0.10.1",
  "serde",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "tari_crypto",
  "thiserror 2.0.18",
  "tracing",
@@ -6089,15 +6128,15 @@ dependencies = [
 [[package]]
 name = "libp2p-mdns"
 version = "0.49.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "futures 0.3.31",
  "hickory-proto",
  "if-watch",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "libp2p-swarm",
- "rand 0.8.6",
+ "rand 0.10.1",
  "smallvec 1.15.1",
  "socket2 0.6.3",
  "tokio",
@@ -6120,14 +6159,14 @@ dependencies = [
 [[package]]
 name = "libp2p-metrics"
 version = "0.18.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "futures 0.3.31",
  "libp2p-core",
  "libp2p-dcutr",
  "libp2p-gossipsub",
  "libp2p-identify",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "libp2p-ping",
  "libp2p-relay",
  "libp2p-swarm",
@@ -6139,31 +6178,32 @@ dependencies = [
 [[package]]
 name = "libp2p-noise"
 version = "0.47.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "asynchronous-codec",
  "bytes",
  "futures 0.3.31",
+ "getrandom 0.3.4",
  "libp2p-core",
- "libp2p-identity 0.2.14",
- "multiaddr 0.18.3",
+ "libp2p-identity 0.3.0",
+ "multiaddr 0.19.0",
  "multihash",
  "prost 0.14.3",
- "rand 0.8.6",
- "snow",
+ "rand 0.10.1",
+ "snow 0.10.0",
  "static_assertions",
  "thiserror 2.0.18",
  "tracing",
- "x25519-dalek",
+ "x25519-dalek 3.0.0",
  "zeroize",
 ]
 
 [[package]]
 name = "libp2p-peer-store"
 version = "0.1.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
- "hashlink 0.11.0",
+ "hashlink 0.12.2",
  "libp2p-core",
  "libp2p-swarm",
 ]
@@ -6189,14 +6229,14 @@ dependencies = [
 [[package]]
 name = "libp2p-ping"
 version = "0.48.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "futures 0.3.31",
  "futures-timer",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "libp2p-swarm",
- "rand 0.8.6",
+ "rand 0.10.1",
  "tracing",
  "web-time",
 ]
@@ -6204,18 +6244,18 @@ dependencies = [
 [[package]]
 name = "libp2p-quic"
 version = "0.14.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "futures 0.3.31",
  "futures-timer",
  "if-watch",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "libp2p-tls",
  "quinn",
- "rand 0.8.6",
+ "quinn-proto",
+ "rand 0.10.1",
  "ring",
- "rustls",
  "socket2 0.6.3",
  "thiserror 2.0.18",
  "tokio",
@@ -6225,7 +6265,7 @@ dependencies = [
 [[package]]
 name = "libp2p-relay"
 version = "0.22.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -6234,11 +6274,11 @@ dependencies = [
  "futures-bounded 0.3.0",
  "futures-timer",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "libp2p-swarm",
  "prost 0.14.3",
  "prost-codec",
- "rand 0.8.6",
+ "rand 0.10.1",
  "static_assertions",
  "thiserror 2.0.18",
  "tracing",
@@ -6248,20 +6288,20 @@ dependencies = [
 [[package]]
 name = "libp2p-rendezvous"
 version = "0.18.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "asynchronous-codec",
  "bimap",
  "futures 0.3.31",
  "futures-timer",
- "hashlink 0.11.0",
+ "hashlink 0.12.2",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "libp2p-request-response",
  "libp2p-swarm",
  "prost 0.14.3",
  "prost-codec",
- "rand 0.8.6",
+ "rand 0.10.1",
  "thiserror 2.0.18",
  "tracing",
  "web-time",
@@ -6270,14 +6310,14 @@ dependencies = [
 [[package]]
 name = "libp2p-request-response"
 version = "0.30.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "futures 0.3.31",
  "futures-bounded 0.3.0",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "libp2p-swarm",
- "rand 0.8.6",
+ "rand 0.10.1",
  "smallvec 1.15.1",
  "tracing",
 ]
@@ -6295,19 +6335,19 @@ dependencies = [
 [[package]]
 name = "libp2p-swarm"
 version = "0.48.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "either",
  "fnv",
  "futures 0.3.31",
  "futures-timer",
- "getrandom 0.2.17",
- "hashlink 0.11.0",
+ "getrandom 0.4.2",
+ "hashlink 0.12.2",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "libp2p-swarm-derive",
  "multistream-select",
- "rand 0.8.6",
+ "rand 0.10.1",
  "smallvec 1.15.1",
  "tokio",
  "tracing",
@@ -6318,17 +6358,17 @@ dependencies = [
 [[package]]
 name = "libp2p-swarm-derive"
 version = "0.36.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "heck 0.5.0",
  "quote",
- "syn 2.0.117",
+ "syn 3.0.4",
 ]
 
 [[package]]
 name = "libp2p-tcp"
 version = "0.45.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "futures 0.3.31",
  "futures-timer",
@@ -6343,12 +6383,12 @@ dependencies = [
 [[package]]
 name = "libp2p-tls"
 version = "0.7.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "futures 0.3.31",
  "futures-rustls",
  "libp2p-core",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "rcgen 0.13.2",
  "ring",
  "rustls",
@@ -6361,7 +6401,7 @@ dependencies = [
 [[package]]
 name = "libp2p-upnp"
 version = "0.7.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "futures 0.3.31",
  "futures-timer",
@@ -6375,15 +6415,13 @@ dependencies = [
 [[package]]
 name = "libp2p-yamux"
 version = "0.48.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
- "either",
  "futures 0.3.31",
  "libp2p-core",
  "thiserror 2.0.18",
  "tracing",
- "yamux 0.12.1",
- "yamux 0.13.10",
+ "yamux 0.14.0",
 ]
 
 [[package]]
@@ -7305,14 +7343,14 @@ dependencies = [
 
 [[package]]
 name = "multiaddr"
-version = "0.18.3"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+version = "0.19.0"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "arrayref",
  "byteorder",
  "bytes",
  "data-encoding",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "multibase",
  "multihash",
  "percent-encoding",
@@ -7358,7 +7396,7 @@ checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
 [[package]]
 name = "multistream-select"
 version = "0.14.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "bytes",
  "futures 0.3.31",
@@ -8484,7 +8522,7 @@ dependencies = [
  "flate2",
  "generic-array",
  "hex",
- "hkdf",
+ "hkdf 0.12.4",
  "idea",
  "k256",
  "log",
@@ -8510,7 +8548,7 @@ dependencies = [
  "smallvec 1.15.1",
  "snafu 0.8.9",
  "twofish",
- "x25519-dalek",
+ "x25519-dalek 2.0.1",
  "zeroize",
 ]
 
@@ -8833,9 +8871,9 @@ dependencies = [
 
 [[package]]
 name = "prometheus-client"
-version = "0.24.0"
+version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4500adecd7af8e0e9f4dbce15cfee07ce913fbf6ad605cc468b83f2d531ee94"
+checksum = "1784dc11a05f5a8f57c4a62915686be140f24f70301290b997e317241fa9ffc2"
 dependencies = [
  "dtoa",
  "itoa",
@@ -8845,13 +8883,13 @@ dependencies = [
 
 [[package]]
 name = "prometheus-client-derive-encode"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9adf1691c04c0a5ff46ff8f262b58beb07b0dbb61f96f9f54f6cbd82106ed87f"
+checksum = "01e34894696ff94f64a20c2c373a6440903e9c2789a303d68ec6e6f953f890e4"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.117",
+ "syn 3.0.4",
 ]
 
 [[package]]
@@ -8948,7 +8986,7 @@ dependencies = [
 [[package]]
 name = "prost-codec"
 version = "0.4.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -9174,6 +9212,7 @@ checksum = "434b42fec591c96ef50e21e886936e66d3cc3f737104fdb9b737c40ffb94c098"
 dependencies = [
  "aws-lc-rs",
  "bytes",
+ "fastbloom",
  "getrandom 0.3.4",
  "lru-slab",
  "rand 0.9.4",
@@ -9483,25 +9522,25 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.12.3"
+version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e10754a14b9137dd7b1e3e5b0493cc9171fdd105e0ab477f51b72e7f3ac0e276"
+checksum = "f020237b6c8eed93db2e2cb53c00c60a8e1bc73da7d073199a1180401450218d"
 dependencies = [
  "aho-corasick",
  "memchr",
  "regex-automata",
- "regex-syntax 0.8.8",
+ "regex-syntax 0.8.11",
 ]
 
 [[package]]
 name = "regex-automata"
-version = "0.4.13"
+version = "0.4.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5276caf25ac86c8d810222b3dbb938e512c55c6831a10f3e6ed1c93b84041f1c"
+checksum = "ad8553b9b26413251cbf30e620595c7a41b3887f03da04579c0e6b0d6a06b4b2"
 dependencies = [
  "aho-corasick",
  "memchr",
- "regex-syntax 0.8.8",
+ "regex-syntax 0.8.11",
 ]
 
 [[package]]
@@ -9512,9 +9551,9 @@ checksum = "dbb5fb1acd8a1a18b3dd5be62d25485eb770e05afb408a9627d14d451bae12da"
 
 [[package]]
 name = "regex-syntax"
-version = "0.8.8"
+version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
+checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "region"
@@ -9641,7 +9680,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dd2a808d456c4a54e300a23e9f5a67e122c3024119acbfd73e3bf664491cb2"
 dependencies = [
- "hmac",
+ "hmac 0.12.1",
  "subtle",
 ]
 
@@ -10067,7 +10106,7 @@ dependencies = [
 [[package]]
 name = "rw-stream-sink"
 version = "0.5.0"
-source = "git+https://github.com/tari-project/rust-libp2p.git?rev=e31882612c2e9c843a789117e460022ab7cda06b#e31882612c2e9c843a789117e460022ab7cda06b"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2#780b2d34b1abb78ba5d6b73f9e07f91c5c94a5f2"
 dependencies = [
  "futures 0.3.31",
  "pin-project 1.1.13",
@@ -10661,6 +10700,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
 
 [[package]]
+name = "siphasher"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
+
+[[package]]
 name = "skeptic"
 version = "0.13.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10786,6 +10831,22 @@ dependencies = [
  "chacha20poly1305",
  "curve25519-dalek 4.1.3",
  "rand_core 0.6.4",
+ "rustc_version",
+ "sha2 0.10.9",
+ "subtle",
+]
+
+[[package]]
+name = "snow"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "599b506ccc4aff8cf7844bc42cf783009a434c1e26c964432560fb6d6ad02d82"
+dependencies = [
+ "aes-gcm",
+ "blake2 0.10.6",
+ "chacha20poly1305",
+ "curve25519-dalek 4.1.3",
+ "getrandom 0.3.4",
  "ring",
  "rustc_version",
  "sha2 0.10.9",
@@ -11350,7 +11411,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "sha3",
- "snow",
+ "snow 0.9.6",
  "tari_common",
  "tari_common_sqlite",
  "tari_crypto",
@@ -11953,9 +12014,9 @@ dependencies = [
  "clap 3.2.25",
  "config",
  "dirs-next 2.0.0",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "log",
- "multiaddr 0.18.3",
+ "multiaddr 0.19.0",
  "ootle-network",
  "ootle_byte_type",
  "ootle_serde",
@@ -12021,7 +12082,7 @@ version = "0.41.0"
 dependencies = [
  "anyhow",
  "libp2p",
- "libp2p-identity 0.2.14",
+ "libp2p-identity 0.3.0",
  "prost 0.14.3",
  "proto_builder",
  "rand 0.10.1",
@@ -12193,7 +12254,7 @@ dependencies = [
  "clap 3.2.25",
  "humantime",
  "log",
- "multiaddr 0.18.3",
+ "multiaddr 0.19.0",
  "reqwest 0.13.2",
  "serde_json",
  "tari_bor",
@@ -13018,7 +13079,7 @@ name = "tari_validator_node_client"
 version = "0.41.0"
 dependencies = [
  "indexmap 2.13.0",
- "multiaddr 0.18.3",
+ "multiaddr 0.19.0",
  "reqwest 0.13.2",
  "serde",
  "serde_json",
@@ -13379,9 +13440,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.52.2"
+version = "1.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "110a78583f19d5cdb2c5ccf321d1290344e71313c6c37d43520d386027d18386"
+checksum = "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed"
 dependencies = [
  "bytes",
  "libc",
@@ -14933,7 +14994,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "ctr",
- "hmac",
+ "hmac 0.12.1",
  "log",
  "rtcp",
  "rtp",
@@ -15602,6 +15663,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "x25519-dalek"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7e8131a03190127fb2263afc72b322ecadae46b6ff8c6f399ff5d02f5559af6"
+dependencies = [
+ "curve25519-dalek 5.0.0",
+ "rand_core 0.10.1",
+ "zeroize",
+]
+
+[[package]]
 name = "x509-parser"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15693,21 +15765,6 @@ dependencies = [
 
 [[package]]
 name = "yamux"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ed0164ae619f2dc144909a9f082187ebb5893693d8c0196e8085283ccd4b776"
-dependencies = [
- "futures 0.3.31",
- "log",
- "nohash-hasher",
- "parking_lot",
- "pin-project 1.1.13",
- "rand 0.8.6",
- "static_assertions",
-]
-
-[[package]]
-name = "yamux"
 version = "0.13.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1991f6690292030e31b0144d73f5e8368936c58e45e7068254f7138b23b00672"
@@ -15718,6 +15775,21 @@ dependencies = [
  "parking_lot",
  "pin-project 1.1.13",
  "rand 0.9.4",
+ "static_assertions",
+ "web-time",
+]
+
+[[package]]
+name = "yamux"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "767113d8f66a81e461362462aa71d8d0108cbf3430d4442fb88a04e31be81165"
+dependencies = [
+ "futures 0.3.31",
+ "log",
+ "nohash-hasher",
+ "parking_lot",
+ "pin-project 1.1.13",
  "static_assertions",
  "web-time",
 ]
