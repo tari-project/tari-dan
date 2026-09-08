@@ -28,22 +28,25 @@ pub enum ProtocolVersion {
 
 impl ProtocolVersion {
     /// The schema activation schedule for `network`, ordered by activation epoch ascending. Entry at
-    /// index 0 is the genesis schema, which every network starts under.
+    /// index 0 is the genesis schema, which every network starts under. A network with no history to
+    /// preserve may start at any version; one that has already run starts at the version it ran under.
     ///
     /// Networks run at independent epochs, so an activation is scheduled per network: the epoch at
     /// which a schema goes live on esmeralda says nothing about when it goes live on igor.
     ///
     /// NB: entries here are CONSENSUS-BOUND via `hash_substate`. Never reorder or mutate an entry
-    /// after it has activated on a live network — doing so changes every hash derived under it. The
-    /// match is exhaustive so that a new network must state its own schedule rather than inherit one.
+    /// after it has activated on a live network — doing so changes every hash derived under it. A
+    /// network that is reset keeps no history, so its schedule is free to collapse back to a single
+    /// genesis entry at the newest version. The match is exhaustive so that a new network must state
+    /// its own schedule rather than inherit one.
     const fn activations(network: Network) -> &'static [(Epoch, Self)] {
         match network {
-            Network::MainNet => &[(Epoch(0), Self::V0)],
-            Network::StageNet => &[(Epoch(0), Self::V0)],
-            Network::NextNet => &[(Epoch(0), Self::V0)],
-            Network::Igor => &[(Epoch(0), Self::V0)],
+            Network::MainNet => &[(Epoch(0), Self::V1)],
+            Network::StageNet => &[(Epoch(0), Self::V1)],
+            Network::NextNet => &[(Epoch(0), Self::V1)],
+            Network::Igor => &[(Epoch(0), Self::V1)],
             Network::Esmeralda => &[(Epoch(0), Self::V0)],
-            Network::LocalNet => &[(Epoch(0), Self::V0)],
+            Network::LocalNet => &[(Epoch(0), Self::V1)],
         }
     }
 
@@ -236,9 +239,10 @@ mod tests {
     }
 
     #[test]
-    fn every_network_starts_at_v0() {
+    fn every_network_starts_at_its_genesis_schema() {
         for network in all_networks() {
-            assert_eq!(ProtocolVersion::at(network, Epoch(0)), ProtocolVersion::V0, "{network}");
+            let (_, genesis) = ProtocolVersion::activations(network)[0];
+            assert_eq!(ProtocolVersion::at(network, Epoch(0)), genesis, "{network}");
         }
     }
 
@@ -253,11 +257,8 @@ mod tests {
     #[test]
     fn genesis_is_never_a_scheduled_activation() {
         for network in all_networks() {
-            assert_eq!(
-                ProtocolVersion::activations(network)[0],
-                (Epoch(0), ProtocolVersion::V0),
-                "{network}"
-            );
+            let (at, _) = ProtocolVersion::activations(network)[0];
+            assert_eq!(at, Epoch(0), "{network}");
             assert!(
                 !ProtocolVersion::scheduled_activations(network)
                     .iter()

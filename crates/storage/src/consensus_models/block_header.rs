@@ -236,7 +236,7 @@ impl BlockHeader {
         let shard_group = ShardGroup::all_shards(num_preshards);
         Self {
             network,
-            protocol_version: ProtocolVersion::V0,
+            protocol_version: ProtocolVersion::at(network, Epoch::zero()),
             id: BlockId::zero(),
             parent: BlockId::zero(),
             justify_id: ProposalCertificate::genesis(Epoch::zero(), ShardGroup::all_shards(num_preshards))
