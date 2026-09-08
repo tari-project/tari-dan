@@ -161,10 +161,15 @@ impl SqliteSubstateCache {
         if invalidations.is_empty() {
             return Ok(());
         }
-        debug!(target: LOG_TARGET, "Retiring {} cached substates ahead of the stream", invalidations.len());
-        self.store
+        let transitions = invalidations.len();
+        let retired = self
+            .store
             .with_write_tx(move |tx| tx.substate_cache_retire_ahead(invalidations))
-            .await
+            .await?;
+        debug!(target: LOG_TARGET, "Retired {retired} cached substates ahead of the stream, from {transitions} transitions");
+        #[cfg(feature = "metrics")]
+        self.metrics.as_ref().inspect(|m| m.add_invalidations(retired));
+        Ok(())
     }
 
     async fn prune(&self) -> Result<(), StorageError> {
@@ -441,6 +446,35 @@ mod tests {
             .unwrap();
     }
 
+    /// A committee member answering that `version` is live, as against the `Down` [`write_head`]
+    /// records.
+    async fn write_live_head(cache: &SqliteSubstateCache, id: &SubstateId, version: u32, watermark: u64) {
+        use tari_engine_types::{
+            non_fungible::NonFungibleContainer,
+            substate::{Substate, SubstateValue},
+        };
+
+        let result = SubstateResult::Up {
+            substate: Box::new(Substate::new(
+                version,
+                SubstateValue::NonFungible(NonFungibleContainer::no_data()),
+            )),
+        };
+        cache
+            .write(
+                id,
+                SubstateCacheEntryRef {
+                    version: Some(version),
+                    substate_result: &result,
+                    cached_at: now_unix_secs().unwrap(),
+                    verified: true,
+                },
+                FetchWatermark::new(watermark),
+            )
+            .await
+            .unwrap();
+    }
+
     async fn write_nonexistence(cache: &SqliteSubstateCache, id: &SubstateId, watermark: u64) {
         cache
             .write(
@@ -513,5 +547,24 @@ mod tests {
 
         write_head(&cache, &id, 7, 101).await;
         assert_eq!(cache.read(&id).await.unwrap().unwrap().version, Some(7));
+    }
+
+    /// A destroy the result carries with no successor: the substate is spent and has no live version
+    /// left. A member that has not caught up still answers that the destroyed version is live, and
+    /// nothing but the journal's provenance separates that from the `Down` a lookup for the same
+    /// version legitimately returns.
+    #[tokio::test]
+    async fn a_finalized_result_refuses_a_live_head_at_the_version_it_spent() {
+        let (_d, cache, id) = cache_with_head(6, true).await;
+        let mut diff = SubstateDiff::new();
+        diff.down(id.clone(), 6);
+        cache.retire_committed(&diff).await.unwrap();
+        assert!(cache.read(&id).await.unwrap().is_none());
+
+        write_live_head(&cache, &id, 6, 101).await;
+        assert!(cache.read(&id).await.unwrap().is_none());
+
+        write_head(&cache, &id, 6, 101).await;
+        assert_eq!(cache.read(&id).await.unwrap().unwrap().version, Some(6));
     }
 }

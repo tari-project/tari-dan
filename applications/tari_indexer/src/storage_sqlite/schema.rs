@@ -155,6 +155,7 @@ diesel::table! {
         substate_id -> Text,
         state_version -> BigInt,
         substate_version -> Integer,
+        spent -> Bool,
         invalidated_at -> BigInt,
     }
 }
