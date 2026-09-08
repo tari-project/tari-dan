@@ -56,6 +56,7 @@ use wasmer::{AsStoreMut, AsStoreRef, Function, FunctionEnv, FunctionEnvMut, Inst
 use wasmer_middlewares::metering::{MeteringPoints, get_remaining_points, set_remaining_points};
 
 use crate::{
+    abi_metrics,
     runtime::{ComputeAllowance, ComputeFunding, Runtime, RuntimeError},
     traits::Invokable,
     wasm::{
@@ -120,7 +121,9 @@ impl WasmProcess {
         }
         let len = u32::try_from(alloc_size).map_err(|_| WasmExecutionError::MemoryAllocationTooLarge)?;
 
+        let span = abi_metrics::Span::start();
         let ptr = self.alloc_checked(store, len)?;
+        abi_metrics::record_guest_alloc(alloc_size, span.finish());
         let mut fn_env = self.env_and_store(store);
         let (env, mut store) = fn_env.data_and_store_mut();
         let mut writer = env.memory_writer(&mut store, ptr)?;
@@ -281,78 +284,90 @@ impl WasmProcess {
         log::debug!(target: LOG_TARGET, "Engine call: {:?}", op);
 
         let result = match op {
-            EngineOp::EmitLog => Self::handle(&mut env, arg_ptr, arg_len, |state, arg: EmitLogArg| {
+            EngineOp::EmitLog => Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: EmitLogArg| {
                 state.interface_mut().emit_log(arg.level, arg.message)
             }),
-            EngineOp::ComponentInvoke => Self::handle(&mut env, arg_ptr, arg_len, |state, arg: ComponentInvokeArg| {
-                state
-                    .interface_mut()
-                    .component_invoke(arg.component_ref, arg.action, arg.args.into())
-            }),
-            EngineOp::ResourceInvoke => Self::handle(&mut env, arg_ptr, arg_len, |state, arg: ResourceInvokeArg| {
-                state
-                    .interface_mut()
-                    .resource_invoke(arg.resource_ref, arg.action, arg.args.into())
-            }),
-            EngineOp::VaultInvoke => Self::handle(&mut env, arg_ptr, arg_len, |state, arg: VaultInvokeArg| {
+            EngineOp::ComponentInvoke => {
+                Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: ComponentInvokeArg| {
+                    state
+                        .interface_mut()
+                        .component_invoke(arg.component_ref, arg.action, arg.args.into())
+                })
+            },
+            EngineOp::ResourceInvoke => {
+                Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: ResourceInvokeArg| {
+                    state
+                        .interface_mut()
+                        .resource_invoke(arg.resource_ref, arg.action, arg.args.into())
+                })
+            },
+            EngineOp::VaultInvoke => Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: VaultInvokeArg| {
                 state
                     .interface_mut()
                     .vault_invoke(arg.vault_ref, arg.action, arg.args.into())
             }),
-            EngineOp::BucketInvoke => Self::handle(&mut env, arg_ptr, arg_len, |state, arg: BucketInvokeArg| {
+            EngineOp::BucketInvoke => Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: BucketInvokeArg| {
                 state
                     .interface_mut()
                     .bucket_invoke(arg.bucket_ref, arg.action, arg.args.into())
             }),
             EngineOp::NonFungibleInvoke => {
-                Self::handle(&mut env, arg_ptr, arg_len, |state, arg: NonFungibleInvokeArg| {
+                Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: NonFungibleInvokeArg| {
                     state
                         .interface_mut()
                         .non_fungible_invoke(arg.address, arg.action, arg.args.into())
                 })
             },
-            EngineOp::GenerateUniqueId => Self::handle(&mut env, arg_ptr, arg_len, |state, _arg: ()| {
+            EngineOp::GenerateUniqueId => Self::handle(&mut env, op, arg_ptr, arg_len, |state, _arg: ()| {
                 state.interface_mut().generate_uuid()
             }),
-            EngineOp::ConsensusInvoke => Self::handle(&mut env, arg_ptr, arg_len, |state, arg: ConsensusInvokeArg| {
-                state.interface_mut().consensus_invoke(arg.action)
-            }),
+            EngineOp::ConsensusInvoke => {
+                Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: ConsensusInvokeArg| {
+                    state.interface_mut().consensus_invoke(arg.action)
+                })
+            },
             EngineOp::CallerContextInvoke => {
-                Self::handle(&mut env, arg_ptr, arg_len, |state, arg: CallerContextInvokeArg| {
+                Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: CallerContextInvokeArg| {
                     state.interface_mut().caller_context_invoke(arg.action, arg.args.into())
                 })
             },
-            EngineOp::AddressAllocationInvoke => {
-                Self::handle(&mut env, arg_ptr, arg_len, |state, arg: AddressAllocationInvokeArg| {
-                    state.interface_mut().allocate_address_invoke(arg)
-                })
-            },
+            EngineOp::AddressAllocationInvoke => Self::handle(
+                &mut env,
+                op,
+                arg_ptr,
+                arg_len,
+                |state, arg: AddressAllocationInvokeArg| state.interface_mut().allocate_address_invoke(arg),
+            ),
             EngineOp::GenerateRandomInvoke => {
-                Self::handle(&mut env, arg_ptr, arg_len, |state, arg: GenerateRandomInvokeArg| {
+                Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: GenerateRandomInvokeArg| {
                     state.interface_mut().generate_random_invoke(arg.action)
                 })
             },
-            EngineOp::EmitEvent => Self::handle(&mut env, arg_ptr, arg_len, |state, arg: EmitEventArg| {
+            EngineOp::EmitEvent => Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: EmitEventArg| {
                 state.interface_mut().emit_event(arg.topic, arg.payload)
             }),
-            EngineOp::CallInvoke => Self::handle(&mut env, arg_ptr, arg_len, |state, arg: CallInvokeArg| {
+            EngineOp::CallInvoke => Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: CallInvokeArg| {
                 state.interface_mut().call_invoke(arg.action, arg.args.into())
             }),
-            EngineOp::ProofInvoke => Self::handle(&mut env, arg_ptr, arg_len, |state, arg: ProofInvokeArg| {
+            EngineOp::ProofInvoke => Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: ProofInvokeArg| {
                 state
                     .interface_mut()
                     .proof_invoke(arg.proof_ref, arg.action, arg.args.into())
             }),
-            EngineOp::BuiltinTemplateInvoke => {
-                Self::handle(&mut env, arg_ptr, arg_len, |state, arg: BuiltinTemplateInvokeArg| {
-                    state.interface_mut().builtin_template_invoke(arg.action)
+            EngineOp::BuiltinTemplateInvoke => Self::handle(
+                &mut env,
+                op,
+                arg_ptr,
+                arg_len,
+                |state, arg: BuiltinTemplateInvokeArg| state.interface_mut().builtin_template_invoke(arg.action),
+            ),
+            EngineOp::IntrinsicInvoke => {
+                Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: IntrinsicInvokeArg| {
+                    state.interface_mut().intrinsic_invoke(arg.intrinsic, arg.args.into())
                 })
             },
-            EngineOp::IntrinsicInvoke => Self::handle(&mut env, arg_ptr, arg_len, |state, arg: IntrinsicInvokeArg| {
-                state.interface_mut().intrinsic_invoke(arg.intrinsic, arg.args.into())
-            }),
             EngineOp::SpendContextInvoke => {
-                Self::handle(&mut env, arg_ptr, arg_len, |state, arg: SpendContextInvokeArg| {
+                Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: SpendContextInvokeArg| {
                     state.interface_mut().spend_context_invoke(arg.action)
                 })
             },
@@ -369,6 +384,7 @@ impl WasmProcess {
 
     fn handle<T, U, E>(
         env: &mut FunctionEnvMut<WasmEnv<Runtime>>,
+        op: EngineOp,
         arg_ptr: WasmPtr<u8>,
         arg_len: u32,
         f: fn(&mut Runtime, T) -> Result<U, E>,
@@ -378,6 +394,12 @@ impl WasmProcess {
         U: tari_bor::Encode<()> + tari_bor::CborLen<()>,
         WasmExecutionError: From<E>,
     {
+        let mut sample = abi_metrics::OpSample {
+            arg_bytes: arg_len as usize,
+            ..Default::default()
+        };
+
+        let span = abi_metrics::Span::start();
         let decoded = {
             let (env_mut, mut store) = env.data_and_store_mut();
             // SAFETY: WasmProcess is not used concurrently and templates are not able to spawn threads
@@ -390,14 +412,29 @@ impl WasmProcess {
                 })
             }??
         };
+        sample.decode_ns = span.finish();
+
+        let span = abi_metrics::Span::start();
         let resp = f(env.data_mut().state_mut(), decoded)?;
+        sample.handler_ns = span.finish();
+
+        let span = abi_metrics::Span::start();
         let len = encoded_len(&resp)?;
+        sample.encode_ns = span.finish();
+        sample.resp_bytes = len;
+
+        let span = abi_metrics::Span::start();
         let ptr = Self::alloc_response(env, len)?;
+        sample.alloc_ns = span.finish();
 
         // Encode response directly into the WASM memory. The WASM code is responsible for freeing it.
+        let span = abi_metrics::Span::start();
         let (env_mut, mut store) = env.data_and_store_mut();
         let mut writer = env_mut.memory_writer(&mut store, ptr)?;
         encode_into_writer(&resp, &mut writer)?;
+        sample.encode_ns += span.finish();
+
+        abi_metrics::record_engine_op(op, sample);
         Ok(ptr)
     }
 
@@ -470,13 +507,18 @@ impl Invokable<Store> for WasmProcess {
         }
 
         let func_ident = hash_function_name(&func_def.name);
+        let span = abi_metrics::Span::start();
         let mut counter = ByteCounter::new();
         CallInfo::encode_v1_packed(&mut counter, func_ident, args)?;
         let call_info_size = counter.get();
+        abi_metrics::record_call_info_size_pass(call_info_size, span.finish());
+
+        let span = abi_metrics::Span::start();
         let call_info_ptr = self.with_alloc_and_mem_writer(store, call_info_size, |mem_writer| {
             CallInfo::encode_v1_packed(mem_writer, func_ident, args)?;
             Ok(())
         })?;
+        abi_metrics::record_call_info_encode(call_info_size, span.finish());
 
         let MeteringAllowance {
             consumed,
@@ -529,11 +571,17 @@ impl Invokable<Store> for WasmProcess {
             Ok(return_ptr) => {
                 // Read response from memory
                 // SAFETY: WasmProcess is not used concurrently
+                let span = abi_metrics::Span::start();
+                let mut return_bytes = 0usize;
                 let value = unsafe {
                     let mut fn_env = self.env_and_store(store);
                     let (env, mut store) = fn_env.data_and_store_mut();
-                    env.with_memory_embedded_len(&mut store, return_ptr.offset(), IndexedValue::from_raw)??
+                    env.with_memory_embedded_len(&mut store, return_ptr.offset(), |raw| {
+                        return_bytes = raw.len();
+                        IndexedValue::from_raw(raw)
+                    })??
                 };
+                abi_metrics::record_return_decode(return_bytes, span.finish());
 
                 // Free allocated memory containing the result
                 self.free_checked(store, return_ptr)?;
