@@ -153,24 +153,24 @@ ootle-wasm-core = { path = "crates/ootle_wasm/core", version = "0.41" }
 ootle_sdk_core = { path = "crates/ootle_sdk_core", version = "0.41" }
 
 # external minotari/tari dependencies
-minotari_app_grpc = { version = "5.6.0", default-features = false }
-minotari_app_utilities = "5.6.0"
-minotari_node_grpc_client = "5.6.0"
-minotari_wallet_grpc_client = "5.6.0"
-tari_common = "5.6.0"
-tari_common_sqlite = "5.6.0"
-tari_common_types = "5.6.0"
-tari_jellyfish = "5.6.0"
-tari_metrics = "5.6.0"
-tari_mmr = "5.6.0"
-tari_node_components = "5.6.0"
-tari_shutdown = "5.6.0"
-tari_sidechain = "5.6.0"
-tari_transaction_components = "5.6.0"
+minotari_app_grpc = { version = "5.7.0-pre.5", default-features = false }
+minotari_app_utilities = "5.7.0-pre.5"
+minotari_node_grpc_client = "5.7.0-pre.5"
+minotari_wallet_grpc_client = "5.7.0-pre.5"
+tari_common = "5.7.0-pre.5"
+tari_common_sqlite = "5.7.0-pre.5"
+tari_common_types = "5.7.0-pre.5"
+tari_jellyfish = "5.7.0-pre.5"
+tari_metrics = "5.7.0-pre.5"
+tari_mmr = "5.7.0-pre.5"
+tari_node_components = "5.7.0-pre.5"
+tari_shutdown = "5.7.0-pre.5"
+tari_sidechain = "5.7.0-pre.5"
+tari_transaction_components = "5.7.0-pre.5"
 
 tari_crypto = "0.23"
 tari_utilities = "0.10"
-tari_hashing = "5.6.0"
+tari_hashing = "5.7.0-pre.5"
 
 ## Ledger
 ootle_ledger_common = { path = "crates/wallet/ledger/common", version = "0.2.0" }

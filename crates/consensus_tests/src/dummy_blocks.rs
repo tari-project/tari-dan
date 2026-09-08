@@ -18,6 +18,7 @@ use tari_ootle_common_types::{
     ExtraData,
     NodeHeight,
     NumPreshards,
+    ProtocolVersion,
     ShardGroup,
     VotePower,
     committee::{Committee, CommitteeMember},
@@ -34,6 +35,7 @@ fn dummy_blocks() {
     let shard_group = ShardGroup::new(1, 127);
     let genesis = Block::genesis(
         Network::LocalNet,
+        ProtocolVersion::V0,
         Epoch(1),
         FixedHash::zero(),
         shard_group,
@@ -99,6 +101,7 @@ fn last_matches_generated_using_real_data() {
 
     let justify = Block::genesis(
         Network::LocalNet,
+        ProtocolVersion::V0,
         candidate.epoch(),
         FixedHash::zero(),
         candidate.shard_group(),
@@ -143,6 +146,7 @@ fn dummy_blocks_from_epoch_genesis_vs_zero_block() {
     // The epoch genesis has real state carried over from the previous epoch
     let epoch_genesis = Block::genesis(
         Network::LocalNet,
+        ProtocolVersion::V0,
         Epoch(100),
         non_zero_epoch_hash,
         shard_group,
@@ -262,9 +266,11 @@ fn proposer_accumulated_data_must_come_from_justify_on_timeout_recovery() {
     let justify_height = NodeHeight(534);
     let justify_header = BlockHeader::create_unsigned(
         Network::LocalNet,
+        ProtocolVersion::V0,
         BlockId::zero(),
         Block::genesis(
             Network::LocalNet,
+            ProtocolVersion::V0,
             Epoch(7991),
             FixedHash::zero(),
             shard_group,
@@ -290,6 +296,7 @@ fn proposer_accumulated_data_must_come_from_justify_on_timeout_recovery() {
         justify_header,
         Block::genesis(
             Network::LocalNet,
+            ProtocolVersion::V0,
             Epoch(7991),
             FixedHash::zero(),
             shard_group,
@@ -386,6 +393,7 @@ fn proposer_must_anchor_recovery_on_justify_not_uncertified_leaf() {
 
     let genesis = Block::genesis(
         Network::LocalNet,
+        ProtocolVersion::V0,
         epoch,
         FixedHash::zero(),
         shard_group,
@@ -396,6 +404,7 @@ fn proposer_must_anchor_recovery_on_justify_not_uncertified_leaf() {
     let make_block = |parent, height, timestamp| {
         let header = BlockHeader::create_unsigned(
             Network::LocalNet,
+            ProtocolVersion::V0,
             parent,
             genesis.justify().calculate_id(),
             height,

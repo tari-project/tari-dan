@@ -4,7 +4,7 @@
 use tari_common_types::types::FixedHash;
 use tari_consensus_types::{BlockId, LeafBlock, PcId, QcId};
 use tari_epoch_manager::EpochManagerError;
-use tari_ootle_common_types::{Epoch, NodeHeight, ShardGroup, VersionedSubstateIdError, VotePower};
+use tari_ootle_common_types::{Epoch, NodeHeight, ProtocolVersion, ShardGroup, VersionedSubstateIdError, VotePower};
 use tari_ootle_storage::{
     StorageError,
     consensus_models::{
@@ -220,6 +220,16 @@ pub enum ProposalValidationError {
     InvalidNetwork {
         expected_network: String,
         block_network: String,
+        block_id: BlockId,
+    },
+    #[error(
+        "Invalid protocol version in block {block_id}: this node's schedule puts epoch {epoch} at {expected_version} \
+         but the block was produced under {block_version}"
+    )]
+    InvalidProtocolVersion {
+        expected_version: ProtocolVersion,
+        block_version: ProtocolVersion,
+        epoch: Epoch,
         block_id: BlockId,
     },
     #[error("Invalid state merkle root for block {block_id}: calculated {calculated} but block has {from_block}")]

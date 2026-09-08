@@ -7,6 +7,7 @@ use log::*;
 use tari_consensus_types::{ProposalCertificate, Vote};
 use tari_epoch_manager::EpochManagerReader;
 use tari_ootle_common_types::{Epoch, NodeHeight, optional::Optional};
+use tari_ootle_transaction::Network;
 
 use crate::{
     hotstuff::error::HotStuffError,
@@ -26,13 +27,14 @@ pub struct OnInboundMessage<TConsensusSpec: ConsensusSpec> {
 
 impl<TConsensusSpec: ConsensusSpec> OnInboundMessage<TConsensusSpec> {
     pub fn new(
+        network: Network,
         inbound_messaging: TConsensusSpec::InboundMessaging,
         epoch_manager: TConsensusSpec::EpochManager,
         signer_service: TConsensusSpec::SignerService,
         hooks: TConsensusSpec::Hooks,
     ) -> Self {
         Self {
-            message_buffer: MessageBuffer::new(inbound_messaging, epoch_manager, signer_service),
+            message_buffer: MessageBuffer::new(network, inbound_messaging, epoch_manager, signer_service),
             hooks,
         }
     }
@@ -75,6 +77,7 @@ impl<TConsensusSpec: ConsensusSpec> OnInboundMessage<TConsensusSpec> {
 
 type EpochAndHeight = (Epoch, NodeHeight);
 pub struct MessageBuffer<TConsensusSpec: ConsensusSpec> {
+    network: Network,
     buffer: BTreeMap<EpochAndHeight, VecDeque<(TConsensusSpec::Addr, HotstuffMessage)>>,
     inbound_messaging: TConsensusSpec::InboundMessaging,
     epoch_manager: TConsensusSpec::EpochManager,
@@ -83,11 +86,13 @@ pub struct MessageBuffer<TConsensusSpec: ConsensusSpec> {
 
 impl<TConsensusSpec: ConsensusSpec> MessageBuffer<TConsensusSpec> {
     pub fn new(
+        network: Network,
         inbound_messaging: TConsensusSpec::InboundMessaging,
         epoch_manager: TConsensusSpec::EpochManager,
         signer_service: TConsensusSpec::SignerService,
     ) -> Self {
         Self {
+            network,
             buffer: BTreeMap::new(),
             inbound_messaging,
             epoch_manager,
@@ -244,7 +249,12 @@ impl<TConsensusSpec: ConsensusSpec> MessageBuffer<TConsensusSpec> {
             return Ok(None);
         };
 
-        match check_quorum_certificate_signatures::<TConsensusSpec>(qc.into(), &committee, &self.signer_service) {
+        match check_quorum_certificate_signatures::<TConsensusSpec>(
+            self.network,
+            qc.into(),
+            &committee,
+            &self.signer_service,
+        ) {
             Ok(()) => {
                 let reason = format!(
                     "Received valid 2f+1 QC for {} ({} signatures) while consensus view is still in {}: network \

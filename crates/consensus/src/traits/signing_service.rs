@@ -15,7 +15,7 @@ pub trait ValidatorSignerService {
 }
 
 pub trait ValidatorSignatureVerifierService {
-    fn verify<M: SignedMessage>(&self, message: &M) -> bool {
+    fn verify<M: SignedMessage + ToSignatureMessage>(&self, message: &M) -> bool {
         let Ok(public_key) = RistrettoPublicKey::convert_from_byte_type(message.public_key()) else {
             warn!(
                 target: LOG_TARGET,

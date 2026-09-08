@@ -13,6 +13,7 @@ use tari_ootle_common_types::{
     NodeAddressable,
     NodeHeight,
     NumPreshards,
+    ProtocolVersion,
     ShardGroup,
     committee::{Committee, CommitteeInfo},
     derive_fee_pool_address,
@@ -211,6 +212,7 @@ fn with_dummy_blocks<TAddr, TLeaderStrategy, F>(
         let (_, leader) = leader_strategy.get_leader(local_committee, view_height);
         let dummy_header = BlockHeader::dummy_block(
             network,
+            ProtocolVersion::at(network, epoch),
             parent_block_id,
             *leader,
             current_block_height,

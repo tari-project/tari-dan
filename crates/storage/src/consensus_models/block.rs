@@ -32,6 +32,7 @@ use tari_ootle_common_types::{
     ExtraFieldKey,
     NodeHeight,
     NumPreshards,
+    ProtocolVersion,
     ShardGroup,
     VersionedSubstateId,
     VersionedSubstateIdRef,
@@ -129,6 +130,7 @@ impl Block {
     #[allow(clippy::too_many_arguments)]
     pub fn create(
         network: Network,
+        protocol_version: ProtocolVersion,
         parent: BlockId,
         justify: ProposalCertificate,
         high_tc: Option<TimeoutCertificate>,
@@ -147,6 +149,7 @@ impl Block {
     ) -> Result<Self, BlockError> {
         let header = BlockHeader::create(
             network,
+            protocol_version,
             parent,
             justify.calculate_id(),
             height,
@@ -185,6 +188,7 @@ impl Block {
 
     pub fn genesis(
         network: Network,
+        protocol_version: ProtocolVersion,
         epoch: Epoch,
         epoch_hash: FixedHash,
         shard_group: ShardGroup,
@@ -204,6 +208,7 @@ impl Block {
         let justify = ProposalCertificate::genesis(epoch, shard_group);
         let header = BlockHeader::genesis(
             network,
+            protocol_version,
             justify.calculate_id(),
             epoch,
             shard_group,

@@ -144,6 +144,7 @@ mod tests {
     fn sample_proof() -> CommittedBlockProof {
         let header = SidechainBlockHeader {
             network: 0,
+            protocol_version: 0,
             parent_id: FixedHash::zero(),
             justify_id: FixedHash::zero(),
             height: 7,

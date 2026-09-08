@@ -185,6 +185,7 @@ where TConsensusSpec: ConsensusSpec
             });
         }
         check_quorum_certificate_signatures::<TConsensusSpec>(
+            self.proposal_vote_collector.network(),
             qc.into(),
             epoch_state.local_committee(),
             vote_signing_service,

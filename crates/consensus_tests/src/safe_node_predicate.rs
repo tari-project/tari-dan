@@ -21,7 +21,7 @@ use tari_common_types::types::FixedHash;
 use tari_consensus::traits::CertificateStore;
 use tari_consensus_types::{BlockId, LeafBlock, ProposalCertificate, ShardGroupAccumulatedData};
 use tari_crypto::tari_utilities::epoch_time::EpochTime;
-use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight, NumPreshards, ShardGroup};
+use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight, NumPreshards, ProtocolVersion, ShardGroup};
 use tari_ootle_p2p::PeerAddress;
 use tari_ootle_storage::{
     StateStore,
@@ -73,6 +73,7 @@ fn build_block(parent_id: BlockId, justify: ProposalCertificate, height: NodeHei
     state_root[1] = height.as_u64() as u8;
     let header = BlockHeader::create_unsigned(
         NETWORK,
+        ProtocolVersion::V0,
         parent_id,
         justify.calculate_id(),
         height,

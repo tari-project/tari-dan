@@ -8,32 +8,59 @@ use serde::{Deserialize, Serialize};
 
 use crate::Epoch;
 
+/// Encoded as its `u32` value in every representation: borsh by discriminant, minicbor and protobuf as a `u32`,
+/// and serde through `u32` so that a JSON consumer reads the same number the other three write.
 #[repr(u32)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, borsh::BorshSerialize)]
+#[derive(
+    Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, borsh::BorshSerialize,
+)]
 #[borsh(use_discriminant = true)]
+#[serde(into = "u32", try_from = "u32")]
 pub enum ProtocolVersion {
+    /// The genesis schema, which every network starts under and which anything carrying no explicit version is
+    /// under.
+    #[default]
     V0 = 0,
+    /// Block headers commit to their own protocol version. No network schedules this version in
+    /// [`Self::activations`]; scheduling it is a deliberate per-network deployment decision.
+    V1 = 1,
 }
 
 impl ProtocolVersion {
     /// The schema activation schedule for `network`, ordered by activation epoch ascending. Entry at
-    /// index 0 is the genesis schema, which every network starts under.
+    /// index 0 is the genesis schema, which that network starts under.
+    ///
+    /// Esmeralda is the only network with an Ootle deployment carrying block history, so it is the
+    /// only one whose genesis entry is chain history: it stays at `V0` and takes a scheduled
+    /// activation when one is decided. Mainnet, stagenet and nextnet have never launched; igor and
+    /// localnet are reset before use. Those five are launched directly at the newest version, which
+    /// spares them an activation to coordinate.
     ///
     /// Networks run at independent epochs, so an activation is scheduled per network: the epoch at
     /// which a schema goes live on esmeralda says nothing about when it goes live on igor.
     ///
     /// NB: entries here are CONSENSUS-BOUND via `hash_substate`. Never reorder or mutate an entry
-    /// after it has activated on a live network — doing so changes every hash derived under it. The
-    /// match is exhaustive so that a new network must state its own schedule rather than inherit one.
+    /// after it has activated on a live network — doing so changes every hash derived under it. A
+    /// network that is reset keeps no history, so its schedule is free to collapse back to a single
+    /// genesis entry at the newest version. Moving a genesis entry is caught for a node that has
+    /// epoch history by [`Self::check_activation_schedule`], and is a fork for one that does not.
+    /// The match is exhaustive so that a new network must state its own schedule rather than inherit
+    /// one.
     const fn activations(network: Network) -> &'static [(Epoch, Self)] {
         match network {
-            Network::MainNet => &[(Epoch(0), Self::V0)],
-            Network::StageNet => &[(Epoch(0), Self::V0)],
-            Network::NextNet => &[(Epoch(0), Self::V0)],
-            Network::Igor => &[(Epoch(0), Self::V0)],
+            Network::MainNet => &[(Epoch(0), Self::V1)],
+            Network::StageNet => &[(Epoch(0), Self::V1)],
+            Network::NextNet => &[(Epoch(0), Self::V1)],
+            Network::Igor => &[(Epoch(0), Self::V1)],
             Network::Esmeralda => &[(Epoch(0), Self::V0)],
-            Network::LocalNet => &[(Epoch(0), Self::V0)],
+            Network::LocalNet => &[(Epoch(0), Self::V1)],
         }
+    }
+
+    /// The version `network` starts under. A network with no chain to preserve may be launched at any
+    /// version, so this is not `V0` for every network.
+    pub fn genesis(network: Network) -> Self {
+        Self::activations(network)[0].1
     }
 
     pub fn at(network: Network, epoch: Epoch) -> Self {
@@ -47,6 +74,14 @@ impl ProtocolVersion {
 
     pub const fn as_u32(self) -> u32 {
         self as u32
+    }
+
+    pub const fn from_u32(v: u32) -> Option<Self> {
+        match v {
+            0 => Some(Self::V0),
+            1 => Some(Self::V1),
+            _ => None,
+        }
     }
 
     /// Every activation after genesis on `network`. Genesis is the schema a network starts under, so
@@ -87,16 +122,25 @@ impl ProtocolVersion {
     pub fn check_activation_schedule(
         network: Network,
         recorded: &[Epoch],
+        recorded_genesis: Self,
         last_known_epoch: Option<Epoch>,
     ) -> Result<Vec<Epoch>, ActivationScheduleError> {
-        Self::check_schedule(Self::scheduled_activations(network), recorded, last_known_epoch)
+        Self::check_schedule(
+            Self::scheduled_activations(network),
+            Self::genesis(network),
+            recorded,
+            recorded_genesis,
+            last_known_epoch,
+        )
     }
 
     /// [`Self::check_activation_schedule`] against an explicit schedule, so the rule can be exercised
     /// for schedules other than the ones this binary is compiled with.
     fn check_schedule(
         scheduled: &[(Epoch, Self)],
+        genesis: Self,
         recorded: &[Epoch],
+        recorded_genesis: Self,
         last_known_epoch: Option<Epoch>,
     ) -> Result<Vec<Epoch>, ActivationScheduleError> {
         let to_record = || scheduled.iter().map(|(at, _)| *at).collect();
@@ -104,6 +148,16 @@ impl ProtocolVersion {
         let Some(last_known_epoch) = last_known_epoch else {
             return Ok(to_record());
         };
+
+        // The genesis entry is not in `scheduled`, so a binary that moves it would otherwise pass every check
+        // below while hashing every block from height zero under a different schema than the node's own history.
+        if genesis != recorded_genesis {
+            return Err(ActivationScheduleError::GenesisChanged {
+                recorded: recorded_genesis,
+                binary: genesis,
+                last_known_epoch,
+            });
+        }
 
         // An activation this binary schedules at or before the epoch the node reached, that the node
         // never ran under: the epochs between it and now were hashed under the superseded schema.
@@ -151,6 +205,61 @@ pub enum ActivationScheduleError {
          diverge from the network."
     )]
     RolledBack { activation: Epoch, last_known_epoch: Epoch },
+    #[error(
+        "This binary launches the network at protocol version {binary}, but this node has run under {recorded} (last \
+         known epoch {last_known_epoch}). Starting would hash every block under a version the rest of the network is \
+         not using. This binary is meant for a network that has not launched."
+    )]
+    GenesisChanged {
+        recorded: ProtocolVersion,
+        binary: ProtocolVersion,
+        last_known_epoch: Epoch,
+    },
+}
+
+impl From<ProtocolVersion> for u32 {
+    fn from(value: ProtocolVersion) -> Self {
+        value.as_u32()
+    }
+}
+
+impl TryFrom<u32> for ProtocolVersion {
+    type Error = UnknownProtocolVersionError;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        Self::from_u32(value).ok_or(UnknownProtocolVersionError(value))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("Unknown protocol version {0}")]
+pub struct UnknownProtocolVersionError(pub u32);
+
+/// Encoded as its `u32` value rather than as an enum variant, so that a version this binary does not know is a
+/// decode error naming the version rather than an opaque unknown-variant error, and so the encoding does not move
+/// when variants are added.
+impl<C> minicbor::Encode<C> for ProtocolVersion {
+    fn encode<W: minicbor::encode::Write>(
+        &self,
+        e: &mut minicbor::Encoder<W>,
+        _ctx: &mut C,
+    ) -> Result<(), minicbor::encode::Error<W::Error>> {
+        e.u32(self.as_u32())?;
+        Ok(())
+    }
+}
+
+impl<'b, C> minicbor::Decode<'b, C> for ProtocolVersion {
+    fn decode(d: &mut minicbor::Decoder<'b>, _ctx: &mut C) -> Result<Self, minicbor::decode::Error> {
+        let v = d.u32()?;
+        Self::from_u32(v).ok_or_else(|| minicbor::decode::Error::message(UnknownProtocolVersionError(v)))
+    }
+}
+
+impl<C> minicbor::CborLen<C> for ProtocolVersion {
+    fn cbor_len(&self, ctx: &mut C) -> usize {
+        minicbor::CborLen::cbor_len(&self.as_u32(), ctx)
+    }
 }
 
 impl Display for ProtocolVersion {
@@ -172,10 +281,10 @@ mod tests {
     }
 
     #[test]
-    fn every_network_starts_at_v0() {
-        for network in all_networks() {
-            assert_eq!(ProtocolVersion::at(network, Epoch(0)), ProtocolVersion::V0, "{network}");
-        }
+    fn the_live_network_stays_at_its_launched_version() {
+        // Esmeralda is running, so its genesis version is chain history and cannot be moved. Every other network
+        // is free to be launched at whatever version is newest when it starts.
+        assert_eq!(ProtocolVersion::genesis(Network::Esmeralda), ProtocolVersion::V0);
     }
 
     #[test]
@@ -189,11 +298,8 @@ mod tests {
     #[test]
     fn genesis_is_never_a_scheduled_activation() {
         for network in all_networks() {
-            assert_eq!(
-                ProtocolVersion::activations(network)[0],
-                (Epoch(0), ProtocolVersion::V0),
-                "{network}"
-            );
+            let (at, _) = ProtocolVersion::activations(network)[0];
+            assert_eq!(at, Epoch(0), "{network}");
             assert!(
                 !ProtocolVersion::scheduled_activations(network)
                     .iter()
@@ -232,11 +338,49 @@ mod tests {
             already_recorded: &[u64],
             last_known_epoch: Option<u64>,
         ) -> Result<Vec<Epoch>, ActivationScheduleError> {
+            check_with_genesis(
+                scheduled,
+                already_recorded,
+                last_known_epoch,
+                ProtocolVersion::V0,
+                ProtocolVersion::V0,
+            )
+        }
+
+        fn check_with_genesis(
+            scheduled: &[u64],
+            already_recorded: &[u64],
+            last_known_epoch: Option<u64>,
+            genesis: ProtocolVersion,
+            recorded_genesis: ProtocolVersion,
+        ) -> Result<Vec<Epoch>, ActivationScheduleError> {
             ProtocolVersion::check_schedule(
                 &schedule(scheduled),
+                genesis,
                 &recorded(already_recorded),
+                recorded_genesis,
                 last_known_epoch.map(Epoch),
             )
+        }
+
+        #[test]
+        fn moving_the_genesis_version_under_a_node_with_history_is_rejected() {
+            assert_eq!(
+                check_with_genesis(&[], &[], Some(6), ProtocolVersion::V1, ProtocolVersion::V0),
+                Err(ActivationScheduleError::GenesisChanged {
+                    recorded: ProtocolVersion::V0,
+                    binary: ProtocolVersion::V1,
+                    last_known_epoch: Epoch(6),
+                })
+            );
+        }
+
+        #[test]
+        fn a_node_with_no_epoch_history_adopts_any_genesis_version() {
+            assert_eq!(
+                check_with_genesis(&[], &[], None, ProtocolVersion::V1, ProtocolVersion::V0),
+                Ok(recorded(&[]))
+            );
         }
 
         #[test]

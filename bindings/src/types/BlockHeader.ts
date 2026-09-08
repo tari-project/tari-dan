@@ -75,4 +75,13 @@ export type BlockHeader = {
    * Currently, this is used to store the block's sidechain_id (if applicable).
    */
   extra_data: ExtraData;
+  /**
+   * The protocol version this block was produced under, resolved from the network's activation schedule at
+   * [`Self::epoch`]. It makes the block self-describing: [`Self::calculate_hash`] and the L1 verifier in
+   * `tari_sidechain` both select the hash schema from this field rather than from the schedule.
+   *
+   * A header that carries no version is under [`ProtocolVersion::V0`], so blocks written before the field
+   * existed decode and hash unchanged.
+   */
+  protocol_version: number;
 };

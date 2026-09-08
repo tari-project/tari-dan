@@ -20,6 +20,7 @@ use super::common::{
     check_network,
     check_proposal_certificate,
     check_proposed_by_leader,
+    check_protocol_version,
     check_shard_group_bounds,
     check_shard_group_matches,
     check_sidechain_id,
@@ -63,8 +64,8 @@ fn check_proposal<TConsensusSpec: ConsensusSpec>(
 ) -> Result<(), HotStuffError> {
     check_header::<TConsensusSpec>(block.header(), expected_epoch_hash, config, signer_service)?;
     check_block(leader_strategy, committee_for_block, block)?;
-    check_proposal_certificate::<TConsensusSpec>(block, committee_for_block, signer_service)?;
-    check_timeout_certificate::<TConsensusSpec>(block, committee_for_block, signer_service)?;
+    check_proposal_certificate::<TConsensusSpec>(config.network, block, committee_for_block, signer_service)?;
+    check_timeout_certificate::<TConsensusSpec>(config.network, block, committee_for_block, signer_service)?;
 
     Ok(())
 }
@@ -85,6 +86,7 @@ fn check_header<TConsensusSpec: ConsensusSpec>(
     signer_service: &TConsensusSpec::SignerService,
 ) -> Result<(), ProposalValidationError> {
     check_network(header, config.network)?;
+    check_protocol_version(header, config.network)?;
     if header.is_genesis() {
         return Err(ProposalValidationError::ProposingGenesisBlock {
             proposed_by: header.proposed_by().to_string(),

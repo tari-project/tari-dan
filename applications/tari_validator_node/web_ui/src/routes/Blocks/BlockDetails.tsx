@@ -266,6 +266,10 @@ export default function BlockDetails() {
                             <DataTableCell>{block!.header.height}</DataTableCell>
                           </TableRow>
                           <TableRow>
+                            <TableCell>Protocol version</TableCell>
+                            <DataTableCell>V{block!.header.protocol_version}</DataTableCell>
+                          </TableRow>
+                          <TableRow>
                             <TableCell>Proposal Certificate</TableCell>
                             <DataTableCell>{block!.justify.height} ({block!.justify.signatures.length} signatures)</DataTableCell>
                           </TableRow>

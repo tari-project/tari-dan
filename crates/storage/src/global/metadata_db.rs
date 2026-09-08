@@ -60,6 +60,10 @@ pub enum MetadataKey {
     /// The schema activation schedule the node last started with. Compared against the running
     /// binary's schedule to detect a disagreement about activations the node has already passed.
     ProtocolActivationSchedule,
+    /// The genesis protocol version the node last started with. A network that has not launched may
+    /// have its genesis version changed; this catches a node with history whose binary makes that
+    /// change under it. Absent means V0, which is what every binary predating this key ran under.
+    ProtocolGenesisVersion,
 }
 
 impl MetadataKey {
@@ -73,6 +77,7 @@ impl MetadataKey {
             Self::EpochManagerHighestLockedEpoch => b"epoch_manager.highest_locked_epoch",
             Self::EpochManagerBirthdayEpoch => b"epoch_manager.birthday_epoch",
             Self::ProtocolActivationSchedule => b"protocol.activation_schedule",
+            Self::ProtocolGenesisVersion => b"protocol.genesis_version",
         }
     }
 }

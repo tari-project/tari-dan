@@ -917,6 +917,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
             };
 
             if let Err(e) = check_quorum_certificate_signatures::<TConsensusSpec>(
+                self.network,
                 (&qc).into(),
                 &verify_committee,
                 &self.signer_service,

@@ -12,6 +12,7 @@ use tari_ootle_common_types::{
     ExtraFieldKey,
     NodeHeight,
     NumPreshards,
+    ProtocolVersion,
     ShardGroup,
     optional::Optional,
 };
@@ -107,6 +108,7 @@ mod block_parent_operations {
         let shard_group = ShardGroup::all_shards(NumPreshards::P64);
         let block1 = Block::create(
             network,
+            ProtocolVersion::V0,
             *zero_block.id(),
             zero_block.justify().clone(),
             None,
@@ -130,6 +132,7 @@ mod block_parent_operations {
 
         let block2 = Block::create(
             network,
+            ProtocolVersion::V0,
             *block1.id(),
             block1.justify().clone(),
             None,
@@ -240,6 +243,7 @@ mod block_query_operations {
         let shard_group = ShardGroup::all_shards(NumPreshards::P64);
         let block1 = Block::create(
             network,
+            ProtocolVersion::V0,
             *zero_block.id(),
             zero_block.justify().clone(),
             None,
@@ -266,6 +270,7 @@ mod block_query_operations {
 
         let block2 = Block::create(
             network,
+            ProtocolVersion::V0,
             *block1.id(),
             block1.justify().clone(),
             None,
@@ -298,6 +303,7 @@ mod block_query_operations {
         );
         let block3 = Block::create(
             network,
+            ProtocolVersion::V0,
             *block1.id(),
             block1.justify().clone(),
             None,

@@ -34,7 +34,7 @@ impl ValidatorSignerService for TariSignatureService {
 }
 
 impl ValidatorSignatureVerifierService for TariSignatureService {
-    fn verify<M: SignedMessage>(&self, message: &M) -> bool {
+    fn verify<M: SignedMessage + ToSignatureMessage>(&self, message: &M) -> bool {
         let Ok(public_key) = RistrettoPublicKey::convert_from_byte_type(message.public_key()) else {
             return false;
         };

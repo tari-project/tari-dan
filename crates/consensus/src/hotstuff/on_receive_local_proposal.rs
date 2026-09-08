@@ -21,6 +21,7 @@ use tari_epoch_manager::EpochManagerReader;
 use tari_ootle_common_types::{
     Epoch,
     NodeHeight,
+    ProtocolVersion,
     committee::{Committee, CommitteeInfo},
     optional::Optional,
 };
@@ -37,7 +38,7 @@ use tari_ootle_storage::{
         ValidBlock,
     },
 };
-use tari_sidechain::{ProposalCertificateSignatureFields, QuorumDecision};
+use tari_sidechain::{ProposalVoteMessage, QuorumDecision};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::{sync::broadcast, task};
 
@@ -600,6 +601,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     // Create the next genesis
                     let mut genesis = Block::genesis(
                         network,
+                        ProtocolVersion::at(network, next_epoch),
                         next_epoch,
                         epoch_hash,
                         next_shard_group,
@@ -815,10 +817,13 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
     }
 
     fn generate_vote_message(&self, block: &Block, decision: QuorumDecision) -> Result<VoteMessage, HotStuffError> {
-        let msg = ProposalCertificateSignatureFields {
-            block_id: block.id().hash(),
+        let msg = ProposalVoteMessage::new(
+            block.header().protocol_version().as_u32(),
+            block.id().hash(),
             decision,
-        };
+            block.epoch().as_u64(),
+            block.height().as_u64(),
+        );
         let signature = self.signing_service.sign(&msg);
         let signature = ValidatorSignatureBytes {
             public_key: self.signing_service.public_key().to_byte_type(),

@@ -89,6 +89,7 @@ message BlockHeader {
   bytes epoch_hash = 12;
   ExtraData extra_data = 13;
   ShardGroupAccumulatedData accumulated_data = 14;
+  uint32 protocol_version = 15;
 }
 
 message Block {

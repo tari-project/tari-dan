@@ -28,7 +28,8 @@ pub enum SubstateHashMessage<'a> {
 impl<'a> SubstateHashMessage<'a> {
     pub fn new(protocol_version: ProtocolVersion, value: &'a SubstateValue) -> Self {
         match protocol_version {
-            ProtocolVersion::V0 => Self::V0(value.into()),
+            // V1 changes the block header preimage only, so substates keep the V0 schema.
+            ProtocolVersion::V0 | ProtocolVersion::V1 => Self::V0(value.into()),
         }
     }
 }
