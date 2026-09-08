@@ -11205,7 +11205,7 @@ dependencies = [
 
 [[package]]
 name = "tari_bor"
-version = "0.15.1"
+version = "0.16.0"
 dependencies = [
  "borsh",
  "indexmap 2.13.0",

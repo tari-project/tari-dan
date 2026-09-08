@@ -375,7 +375,7 @@ fn calc_stealth_statement_weight(statement: &StealthTransferStatement) -> u64 {
         .inputs_statement
         .inputs
         .iter()
-        .map(|i| tari_bor::encoded_len(&i.witness).unwrap_or(0) as u64)
+        .map(|i| tari_bor::encoded_len(&i.witness) as u64)
         .sum();
 
     // Fixed cost of a transfer (resource lock, balance-proof verification, basic validation).

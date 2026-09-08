@@ -210,6 +210,6 @@ mod tests {
     #[test]
     fn cbor_len_matches_the_encoding() {
         let raw = RawCbor::from_encodable(&vec![0u8; 300]).unwrap();
-        assert_eq!(crate::encoded_len(&raw).unwrap(), raw.as_bytes().len());
+        assert_eq!(crate::encoded_len(&raw), raw.as_bytes().len());
     }
 }

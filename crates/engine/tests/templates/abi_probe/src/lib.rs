@@ -94,7 +94,7 @@ mod abi_probe {
             match strategy {
                 0 => {
                     for _ in 0..n {
-                        let len = tari_bor::encoded_len(&arg).unwrap();
+                        let len = tari_bor::encoded_len(&arg);
                         let mut buf = Vec::with_capacity(len);
                         tari_bor::encode_into_writer(&arg, &mut buf).unwrap();
                         acc = acc.wrapping_add(core::hint::black_box(&buf).len() as u32);

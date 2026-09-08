@@ -36,10 +36,7 @@ pub struct CallInfo;
 impl CallInfo {
     #[cfg(feature = "std")]
     pub fn encode_v1_packed_size(args: &[tari_bor::Value]) -> Result<usize, tari_bor::BorError> {
-        let total_args_len = args
-            .iter()
-            .map(|a| tari_bor::encoded_len(&a))
-            .sum::<Result<usize, tari_bor::BorError>>()?;
+        let total_args_len = args.iter().map(|a| tari_bor::encoded_len(&a)).sum::<usize>();
         let total_len = CallHeader::SIZE + total_args_len + args.len() * size_of::<u32>();
         Ok(total_len)
     }
@@ -61,7 +58,6 @@ impl CallInfo {
         let args_lens = args.iter().map(|a| tari_bor::encoded_len(&a));
         // Args
         for (arg, len) in args.iter().zip(args_lens) {
-            let len = len?;
             let arg_len =
                 u32::try_from(len).map_err(|_| tari_bor::BorError::new("Argument length exceeds u32".to_string()))?;
             writer

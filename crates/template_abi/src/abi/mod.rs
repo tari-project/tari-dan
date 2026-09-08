@@ -59,7 +59,7 @@ where
     T: Encode<()> + CborLen<()> + ?Sized,
     U: for<'b> Decode<'b, ()>,
 {
-    let len = encoded_len(&input).unwrap();
+    let len = encoded_len(&input);
     let mut encoded_input = Vec::with_capacity(len);
     encode_into_writer(input, &mut encoded_input).unwrap();
     let len = encoded_input.len();
@@ -122,7 +122,7 @@ impl OwnedData {
 /// Allocates a length-prefixed block of memory containing the encoded value and returns a pointer to that value.
 /// This memory should be freed using `tari_free`.
 pub fn alloc_and_encode<T: Encode<()> + CborLen<()> + ?Sized>(val: &T) -> *mut u8 {
-    let len = encoded_len(val).expect("ENCDLENFAIL");
+    let len = encoded_len(val);
     let ptr = internal_alloc(len);
     let mut buf = unsafe { Vec::from_raw_parts(ptr, 0, len) };
     encode_into_writer(val, &mut buf).expect("ENCDFAIL");

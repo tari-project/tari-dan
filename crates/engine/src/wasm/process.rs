@@ -419,7 +419,7 @@ impl WasmProcess {
         sample.handler_ns = span.finish();
 
         let span = abi_metrics::Span::start();
-        let len = encoded_len(&resp)?;
+        let len = encoded_len(&resp);
         sample.encode_ns = span.finish();
         sample.resp_bytes = len;
 
