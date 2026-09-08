@@ -248,7 +248,7 @@ impl<TStore: StateReader> WorkingState<TStore> {
         if value.published_template().is_some() {
             return Ok(());
         }
-        let size = encoded_len(value)?;
+        let size = encoded_len(value);
         if size > limits::ENGINE_LIMITS.max_substate_size {
             return Err(LimitError::SubstateSizeExceeded { size }.into());
         }

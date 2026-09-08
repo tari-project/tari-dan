@@ -53,7 +53,7 @@ impl TemplateDef {
         use tari_bor::{encode_into_writer, encoded_len};
 
         use crate::WASM_PTR_SIZE;
-        let data_len = encoded_len(self)?;
+        let data_len = encoded_len(self);
         // for the length prefix
         let mut buf = Vec::with_capacity(data_len + WASM_PTR_SIZE);
         let full_len = data_len + WASM_PTR_SIZE;
