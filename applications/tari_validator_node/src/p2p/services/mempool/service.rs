@@ -50,7 +50,7 @@ const LOG_TARGET: &str = "tari::validator_node::mempool::service";
 /// Transaction ids the mempool remembers having seen. See [`SeenTransactions`] for the footprint
 /// this implies; it is a cache with a database fallback, so this trades memory against how often a
 /// re-gossiped transaction costs a lookup, not against correctness.
-const MEM_MAX_TRANSACTIONS_DEDUP: usize = 1_000_000;
+pub const MEM_MAX_TRANSACTIONS_DEDUP: usize = 1_000_000;
 
 #[derive(Debug)]
 pub struct MempoolService<TValidator, TStateStore> {

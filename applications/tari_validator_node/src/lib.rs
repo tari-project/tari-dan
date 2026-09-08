@@ -34,11 +34,14 @@ mod http_ui;
 #[cfg(feature = "metrics")]
 mod inbound_queue_metrics;
 mod json_rpc;
+mod memory_budget;
 #[cfg(feature = "metrics")]
 mod metrics;
 mod migrations;
 pub mod node;
 mod p2p;
+#[cfg(feature = "metrics")]
+mod state_store_metrics;
 
 use std::{fs, io, iter, process, time::Instant};
 

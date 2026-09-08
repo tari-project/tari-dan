@@ -74,7 +74,7 @@ use tari_ootle_app_utilities::{
     shared_consts::TXTR_FAUCET_INITIAL_SUPPLY,
 };
 use tari_ootle_common_types::optional::Optional;
-use tari_ootle_p2p::{PeerAddress, TRANSACTION_TOPIC, TariMessagingSpec};
+use tari_ootle_p2p::{PeerAddress, TRANSACTION_TOPIC, TariMessagingSpec, max_gossip_message_size};
 use tari_ootle_storage::global::GlobalDb;
 use tari_ootle_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_ootle_transaction::Network;
@@ -201,6 +201,7 @@ pub async fn spawn_services(
                 // The indexer reports a `Reject` verdict for messages that fail to decode or fail
                 // validation, so it can score the peers that send them.
                 gossip_sub_scored_topics: vec![TRANSACTION_TOPIC.to_string()],
+                gossip_sub_max_message_size: max_gossip_message_size(consensus_constants.max_transaction_size_bytes),
                 relay_circuit_limits: RelayCircuitLimits::high(),
                 relay_reservation_limits: RelayReservationLimits::high(),
                 rendezvous_server_enabled: config.indexer.p2p.enable_rendezvous,
@@ -423,6 +424,7 @@ pub async fn spawn_services(
             create_gossip_transaction_validator(
                 config.network,
                 consensus_constants.max_transaction_weight,
+                consensus_constants.max_transaction_size_bytes,
                 consensus_constants.max_transaction_validity_epochs,
             ),
             consensus_constants.max_transaction_validity_epochs,
@@ -439,6 +441,7 @@ pub async fn spawn_services(
         store.clone(),
         config.network,
         consensus_constants.max_transaction_weight,
+        consensus_constants.max_transaction_size_bytes,
         consensus_constants.max_transaction_validity_epochs,
         substate_cache,
     );

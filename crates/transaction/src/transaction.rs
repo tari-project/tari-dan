@@ -88,6 +88,22 @@ impl Transaction {
         }
     }
 
+    /// Bytes this transaction occupies in its canonical CBOR encoding.
+    ///
+    /// This is the figure the network moves and stores: the p2p `Transaction` message carries the
+    /// transaction as a single `bor_encoded` field, and the state store persists the same bytes. It
+    /// is a pure function of the transaction, so every node computes the same number and can enforce
+    /// a byte limit on it without diverging.
+    ///
+    /// Computed from the derived `CborLen` rather than by encoding, so nothing is allocated.
+    pub fn encoded_size(&self) -> usize {
+        // `encoded_len`'s `Result` is vestigial — it cannot fail for a type deriving `CborLen`. The
+        // fallback is therefore unreachable, which makes its direction free: this figure is read to
+        // decide whether a transaction is under a size cap, so an unknown size must be one that
+        // fails the check rather than one that passes it.
+        tari_bor::encoded_len(self).unwrap_or(usize::MAX)
+    }
+
     pub fn is_dry_run(&self) -> bool {
         match self {
             Transaction::V1(tx) => tx.is_dry_run(),

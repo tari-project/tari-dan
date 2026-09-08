@@ -22,9 +22,22 @@
 
 use std::time::Duration;
 
-use tari_engine_types::fees::ExhaustBurnRate;
+use tari_engine_types::{fees::ExhaustBurnRate, limits::ENGINE_LIMITS};
 use tari_ootle_common_types::{Epoch, NumPreshards};
 use tari_ootle_transaction::Network;
+
+/// Room above a template binary for the rest of the transaction carrying it: its other instructions,
+/// inputs, signatures and CBOR framing.
+///
+/// Deliberately loose against those — a real max-size publish encodes to a couple of hundred bytes
+/// over its binary, and a single instruction is capped at `ENGINE_LIMITS.max_call_size` — because a
+/// legitimate transaction refused at ingress is a worse failure than the bytes a larger allowance
+/// costs. `max_transaction_size_admits_max_template_publish` is what holds it to that.
+const TRANSACTION_ENVELOPE_ALLOWANCE: usize = 256 * 1024;
+
+/// The byte cap every network uses, derived so that it moves with the template binary limit it has
+/// to admit. Keeping it uniform is what lets one gossip limit serve the whole network.
+const MAX_TRANSACTION_SIZE_BYTES: usize = ENGINE_LIMITS.max_template_binary_size_bytes + TRANSACTION_ENVELOPE_ALLOWANCE;
 
 #[derive(Clone, Debug)]
 pub struct ConsensusConstants {
@@ -73,6 +86,21 @@ pub struct ConsensusConstants {
     /// max-size template publish (`limits::ENGINE_LIMITS.max_template_binary_size_bytes`) — so honest
     /// transactions are never rejected. Enforced at RPC submit / mempool admission, not in consensus.
     pub max_transaction_weight: u64,
+    /// The maximum encoded size (`Transaction::encoded_size`) a single transaction may have to be
+    /// admitted.
+    ///
+    /// `max_transaction_weight` bounds work, not bytes: blob payloads are charged at a divisor, so a
+    /// transaction can carry several times this many bytes and still weigh under the cap. This bounds
+    /// the bytes directly, which is what the gossip layer has to admit — a node whose gossip limit is
+    /// below what ingress accepts refuses valid transactions as a codec frame error, so the two must
+    /// be set together (see `tari_ootle_p2p::max_gossip_message_size`).
+    ///
+    /// Must sit above a max-size template publish
+    /// (`limits::ENGINE_LIMITS.max_template_binary_size_bytes` plus its transaction envelope) so
+    /// honest publishes are never rejected. Enforced at RPC submit / mempool admission, not in
+    /// consensus, but every node must agree on it: a node admitting more than its peers gossips
+    /// transactions they will not relay.
+    pub max_transaction_size_bytes: usize,
     /// The maximum total execution points a leader will pack into a single block, summed from each transaction's
     /// actual cost (`ExecuteResult::total_execution_points`): WASM metering plus native crypto verification.
     /// Transaction weight is size/IO-based and blind to execution cost, so a low-weight compute-heavy
@@ -150,6 +178,7 @@ impl ConsensusConstants {
         // (binary bytes / 3) — with ~2x headroom, while bounding any single transaction's
         // size/execution cost at ingress. A mempool admission bound, not a consensus rule.
         max_transaction_weight: 1_000_000,
+        max_transaction_size_bytes: MAX_TRANSACTION_SIZE_BYTES,
         // ~18 max-compute transactions (`MAX_WASM_POINTS_PER_TRANSACTION` each) — ~536ms of serial
         // execution at the calibrated ~8.4M points/ms, ~5% of the block time, leaving the rest for
         // consensus, storage and slower validator hardware. The transaction count is a floor the
@@ -190,6 +219,7 @@ impl ConsensusConstants {
         // (binary bytes / 3) — with ~2x headroom, while bounding any single transaction's
         // size/execution cost at ingress. A mempool admission bound, not a consensus rule.
         max_transaction_weight: 1_000_000,
+        max_transaction_size_bytes: MAX_TRANSACTION_SIZE_BYTES,
         // ~18 max-compute transactions (`MAX_WASM_POINTS_PER_TRANSACTION` each) — ~536ms of serial
         // execution at the calibrated ~8.4M points/ms, ~5% of the block time, leaving the rest for
         // consensus, storage and slower validator hardware. The transaction count is a floor the
@@ -230,6 +260,7 @@ impl ConsensusConstants {
         // (binary bytes / 3) — with ~2x headroom, while bounding any single transaction's
         // size/execution cost at ingress. A mempool admission bound, not a consensus rule.
         max_transaction_weight: 1_000_000,
+        max_transaction_size_bytes: MAX_TRANSACTION_SIZE_BYTES,
         // ~18 max-compute transactions (`MAX_WASM_POINTS_PER_TRANSACTION` each) — ~536ms of serial
         // execution at the calibrated ~8.4M points/ms, ~5% of the block time, leaving the rest for
         // consensus, storage and slower validator hardware. The transaction count is a floor the
@@ -284,6 +315,7 @@ impl ConsensusConstants {
             // (binary bytes / 3) — with ~2x headroom, while bounding any single transaction's
             // size/execution cost at ingress. A mempool admission bound, not a consensus rule.
             max_transaction_weight: 1_000_000,
+            max_transaction_size_bytes: MAX_TRANSACTION_SIZE_BYTES,
             // ~18 max-compute transactions (`MAX_WASM_POINTS_PER_TRANSACTION` each) — ~536ms of serial
             // execution at the calibrated ~8.4M points/ms, ~5% of the block time, leaving the rest for
             // consensus, storage and slower validator hardware. The transaction count is a floor the
@@ -330,12 +362,14 @@ impl From<Network> for ConsensusConstants {
 
 #[cfg(test)]
 mod tests {
+    use tari_common_types::types::PrivateKey;
     use tari_engine_types::limits::{
         ENGINE_LIMITS,
         MAX_NATIVE_POINTS_PER_TRANSACTION,
         MAX_WASM_POINTS_PER_TRANSACTION,
         MIN_MAX_COMPUTE_TRANSACTIONS_PER_BLOCK,
     };
+    use tari_ootle_transaction::Transaction;
 
     use super::*;
 
@@ -395,6 +429,63 @@ mod tests {
                 "a block admits only {admitted} max-compute transactions, below the floor of \
                  {MIN_MAX_COMPUTE_TRANSACTIONS_PER_BLOCK}: either the per-transaction ceiling has outgrown the block \
                  budget, or the floor needs revisiting",
+            );
+        }
+    }
+
+    /// The byte cap has the same obligation as the weight cap: a maximum-size template publish must
+    /// still be admitted, envelope included.
+    ///
+    /// Built and measured rather than reasoned about, because `TRANSACTION_ENVELOPE_ALLOWANCE` is an
+    /// estimate of encoding overhead and this is the assertion that keeps it honest — if the template
+    /// limit or the transaction encoding moves, this fails rather than the network quietly refusing
+    /// publishes.
+    #[test]
+    fn max_transaction_size_admits_max_template_publish() {
+        let binary = vec![0u8; ENGINE_LIMITS.max_template_binary_size_bytes];
+        let transaction = Transaction::builder_localnet(Epoch(1))
+            .publish_template(binary)
+            .build_and_seal(&PrivateKey::from(1u64));
+        let size = transaction.encoded_size();
+
+        assert!(
+            size > ENGINE_LIMITS.max_template_binary_size_bytes,
+            "a transaction carrying the binary must encode to at least the binary's size"
+        );
+        for constants in [
+            ConsensusConstants::mainnet(),
+            ConsensusConstants::devnet(7),
+            ConsensusConstants::esmeralda(),
+            ConsensusConstants::testnet(),
+        ] {
+            assert!(
+                constants.max_transaction_size_bytes >= size,
+                "max_transaction_size_bytes ({}) must admit a max-size template publish ({size} bytes)",
+                constants.max_transaction_size_bytes,
+            );
+        }
+    }
+
+    /// The byte cap must be the binding limit, not the weight cap: a transaction under the weight cap
+    /// but over the byte cap is the case this exists to reject, and one over the weight cap but under
+    /// the byte cap would mean the byte cap never fires.
+    #[test]
+    fn the_byte_cap_binds_before_the_weight_cap() {
+        // Blob payloads are the cheapest bytes a transaction can carry — `calc_blobs_weight` charges
+        // them at a divisor of 3 — so this is the most bytes the weight cap alone would admit.
+        for constants in [
+            ConsensusConstants::mainnet(),
+            ConsensusConstants::devnet(7),
+            ConsensusConstants::esmeralda(),
+            ConsensusConstants::testnet(),
+        ] {
+            let bytes_the_weight_cap_admits = constants.max_transaction_weight as usize * 3;
+            assert!(
+                constants.max_transaction_size_bytes < bytes_the_weight_cap_admits,
+                "max_transaction_size_bytes ({}) is above the {} bytes max_transaction_weight already admits, so it \
+                 would never reject anything",
+                constants.max_transaction_size_bytes,
+                bytes_the_weight_cap_admits,
             );
         }
     }

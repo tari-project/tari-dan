@@ -34,6 +34,8 @@ pub use store::*;
 
 mod dbs;
 mod info;
+mod memory_budget;
+pub use memory_budget::RocksDbMemoryBudget;
 pub mod read_only_ctx;
 
 mod options;

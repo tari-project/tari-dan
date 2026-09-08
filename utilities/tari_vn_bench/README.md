@@ -145,8 +145,21 @@ So the report derives it from the caps the code enforces, and separates:
 - **capped** terms, with a hard limit in the code — a flood cannot exceed them;
 - **estimated** terms, bounded only by library defaults or by traffic — where a memory surprise comes from.
 
+What is left in the estimated column is bounded by message counts rather than byte budgets
+(gossipsub's caches and per-connection send queues) or scales with a block's contents (the execution
+working set). The counts turn into bytes via the gossip message limit, which is derived from
+`max_transaction_size_bytes`, so that figure is capped; peer count is not.
+
+The table here is for a node running stock configuration. A node logs its own version of it at
+startup, and checks it against `MemAvailable`, so a differently configured node reports its own
+ceiling rather than this one.
+
 `--vn-pid` reads a running node's `VmHWM` and checks it against the derived ceiling. A node sitting
 far below is normal: the capped terms are burst-and-attack ceilings, not steady state.
+
+**Linux only.** Host detection, the memory readings and `--vn-pid` all read `/proc`. The tool builds
+and runs elsewhere, but reports no CPU model, core count or memory, which makes most of the verdict
+meaningless — run it on the machine you intend to validate from.
 
 ## Reading the verdict
 

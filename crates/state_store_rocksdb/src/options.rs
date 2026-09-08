@@ -1,6 +1,33 @@
 //   Copyright 2025 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+/// Total memory RocksDB may hold across its block cache and its memtables.
+///
+/// Memtable memory is charged to the block cache, so this single figure bounds both: block, index
+/// and filter data is evicted to make room for memtables rather than the two growing side by side.
+pub const DEFAULT_MEMORY_BUDGET_BYTES: usize = 768 * 1024 * 1024;
+
+/// The share of [`DEFAULT_MEMORY_BUDGET_BYTES`] memtables may occupy before RocksDB starts
+/// flushing. The remainder is what stays available to cache reads.
+///
+/// Half is RocksDB's own guidance: a write budget larger than that starves the read cache under
+/// write-heavy load, and a much smaller one flushes so often that compaction never catches up.
+pub const DEFAULT_MEMTABLE_BUDGET_BYTES: usize = DEFAULT_MEMORY_BUDGET_BYTES / 2;
+
+/// The size of a single column family's active memtable.
+///
+/// The memtable budget is enforced by triggering flushes, not by blocking writers, so the amount
+/// by which memtable memory can overshoot the budget is bounded by the buffers already in flight.
+/// Smaller per-family buffers make that overshoot smaller.
+pub const DEFAULT_WRITE_BUFFER_BYTES: usize = 32 * 1024 * 1024;
+
+/// Memtables a column family may hold at once: the active one plus one being flushed.
+///
+/// With [`DEFAULT_WRITE_BUFFER_BYTES`] and the column family count, this is what bounds the
+/// overshoot above: no column family can hold more than this many buffers, so nothing can hold
+/// more than their product while flushes complete.
+pub const MAX_WRITE_BUFFER_NUMBER: i32 = 2;
+
 #[derive(Debug, Clone)]
 pub struct DatabaseOptions {
     /// The versions behind the latest to keep for each shard.
@@ -23,6 +50,14 @@ pub struct DatabaseOptions {
     /// drives pruning is always maintained, so pruning can be enabled later and will still remove
     /// history accumulated while it was disabled.
     pub prune_transaction_history: bool,
+    /// Total bytes RocksDB may hold across its block cache and memtables, shared by every column
+    /// family. See [`DEFAULT_MEMORY_BUDGET_BYTES`].
+    pub memory_budget_bytes: usize,
+    /// The portion of `memory_budget_bytes` memtables may occupy before flushes are triggered.
+    /// Must not exceed `memory_budget_bytes`. See [`DEFAULT_MEMTABLE_BUDGET_BYTES`].
+    pub memtable_budget_bytes: usize,
+    /// The size of one column family's active memtable. See [`DEFAULT_WRITE_BUFFER_BYTES`].
+    pub write_buffer_bytes: usize,
 }
 
 impl DatabaseOptions {
@@ -57,6 +92,25 @@ impl DatabaseOptions {
         self.prune_transaction_history = prune_transaction_history;
         self
     }
+
+    /// Total bytes RocksDB may hold across its block cache and memtables.
+    pub fn with_memory_budget_bytes(mut self, memory_budget_bytes: usize) -> Self {
+        self.memory_budget_bytes = memory_budget_bytes;
+        self
+    }
+
+    /// The portion of the memory budget memtables may occupy before flushes are triggered.
+    pub fn with_memtable_budget_bytes(mut self, memtable_budget_bytes: usize) -> Self {
+        self.memtable_budget_bytes = memtable_budget_bytes;
+        self
+    }
+
+    /// The size of one column family's active memtable, which bounds how far memtable memory can
+    /// overshoot the budget while triggered flushes are in flight.
+    pub fn with_write_buffer_bytes(mut self, write_buffer_bytes: usize) -> Self {
+        self.write_buffer_bytes = write_buffer_bytes;
+        self
+    }
 }
 
 impl Default for DatabaseOptions {
@@ -66,6 +120,9 @@ impl Default for DatabaseOptions {
             epoch_history_length: 1,
             debugging_data: false,
             prune_transaction_history: true,
+            memory_budget_bytes: DEFAULT_MEMORY_BUDGET_BYTES,
+            memtable_budget_bytes: DEFAULT_MEMTABLE_BUDGET_BYTES,
+            write_buffer_bytes: DEFAULT_WRITE_BUFFER_BYTES,
         }
     }
 }

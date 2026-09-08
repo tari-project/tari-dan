@@ -89,13 +89,20 @@ where
             let local_peer_id = keypair.public().to_peer_id();
 
             // Gossipsub
+            // Everything gossipsub retains is set here rather than left to a library default: the
+            // message cache, the duplicate cache and the per-connection send queue are all bounds
+            // on how much memory a flood of gossip can make the node hold, and a bound nobody chose
+            // is not a bound. See `Config` for what each one trades away.
             let gossipsub_config = gossipsub::ConfigBuilder::default()
                 .max_transmit_size(config.gossip_sub_max_message_size)
                 .validation_mode(gossipsub::ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
                 .validate_messages()
                 .message_id_fn(get_message_id) // content-address messages. No two messages of the same content will be propagated.
-                .build()
-                .unwrap();
+                .history_length(config.gossip_sub_history_length)
+                .history_gossip(config.gossip_sub_history_gossip)
+                .duplicate_cache_time(config.gossip_sub_duplicate_cache_time)
+                .connection_handler_queue_len(config.gossip_sub_max_send_queue_messages)
+                .build()?;
 
             let mut gossipsub = gossipsub::Behaviour::new(
                 gossipsub::MessageAuthenticity::Signed(keypair.clone()),

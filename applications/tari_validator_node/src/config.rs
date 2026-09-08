@@ -35,6 +35,7 @@ use tari_ootle_app_utilities::{
 };
 use tari_ootle_template_provider::TemplateConfig;
 use tari_ootle_transaction::Network;
+use tari_state_store_rocksdb::DatabaseOptions;
 
 #[derive(Debug, Clone)]
 pub struct ApplicationConfig {
@@ -129,11 +130,20 @@ pub struct ValidatorNodeConfig {
     /// sizes this admits a very deep backlog, while capping a flood of maximum-size messages.
     #[serde(default = "default_max_transaction_gossip_queue_bytes")]
     pub max_transaction_gossip_queue_bytes: usize,
-    /// Maximum total size of inbound consensus gossip awaiting processing. This topic carries
-    /// `HotStuffMessage`s between shard groups, including block-sized foreign proposals, and it
-    /// feeds a short blocking channel into consensus — so this queue absorbs real bursts rather
-    /// than sitting idle. Budgeted above transactions because a dropped proposal or vote can cost a
-    /// view, whereas a dropped transaction can be re-requested.
+    /// Maximum total size of inbound consensus gossip awaiting processing.
+    ///
+    /// The topic carries only `HotstuffMessage::ForeignProposalNotification` — a block id, an epoch
+    /// and a shard group list. The proposal itself is requested over the messaging protocol, so
+    /// legitimate traffic here is a few hundred bytes per message and nowhere near this budget.
+    ///
+    /// The budget is not sized for legitimate traffic. It is sized for what a flood can queue before
+    /// the node starts dropping, and the topic is open to anyone: a message is only known to be
+    /// undecodable or invalid after it has been drained. It is set above the transaction topic's
+    /// because a dropped notification delays a foreign proposal the local committee is waiting on,
+    /// whereas a dropped transaction can be re-gossiped.
+    ///
+    /// No measurement supports this particular figure. Now that the legitimate traffic on this topic
+    /// is known to be small, it is the queue most likely to be over-provisioned.
     #[serde(default = "default_max_consensus_gossip_queue_bytes")]
     pub max_consensus_gossip_queue_bytes: usize,
     /// Maximum total size of inbound direct consensus messages awaiting processing. Carries
@@ -142,6 +152,12 @@ pub struct ValidatorNodeConfig {
     /// equally liveness-critical.
     #[serde(default = "default_max_consensus_messaging_queue_bytes")]
     pub max_consensus_messaging_queue_bytes: usize,
+    /// Total memory the state store may hold across its block cache and memtables, shared by every
+    /// column family. Half is given to memtables and the rest stays available to cache reads.
+    /// Larger trades memory for fewer disk reads and less frequent flushing; it is the largest
+    /// single line in the node's memory budget, which is logged at startup.
+    #[serde(default = "default_state_store_memory_budget_bytes")]
+    pub state_store_memory_budget_bytes: usize,
 }
 
 fn default_max_transaction_gossip_queue_bytes() -> usize {
@@ -156,7 +172,25 @@ fn default_max_consensus_messaging_queue_bytes() -> usize {
     128 * 1024 * 1024
 }
 
+fn default_state_store_memory_budget_bytes() -> usize {
+    tari_state_store_rocksdb::DEFAULT_MEMORY_BUDGET_BYTES
+}
+
 impl ValidatorNodeConfig {
+    /// Database options for the state store this node opens.
+    ///
+    /// The memory budget is one capacity covering the block cache and memtables together, split so
+    /// that memtables take half and the rest stays available to cache reads — RocksDB's own
+    /// guidance, and the split the startup memory budget assumes.
+    pub fn state_store_options(&self) -> DatabaseOptions {
+        DatabaseOptions::default()
+            // TODO: just enable it always for now, later make it configurable and default to true for testnets
+            .with_debugging_data(true)
+            .with_prune_transaction_history(!self.keep_transaction_history)
+            .with_memory_budget_bytes(self.state_store_memory_budget_bytes)
+            .with_memtable_budget_bytes(self.state_store_memory_budget_bytes / 2)
+    }
+
     pub fn set_base_path<P: AsRef<Path>>(&mut self, base_path: P) {
         if !self.shard_key_file.is_absolute() {
             self.shard_key_file = base_path.as_ref().join(&self.shard_key_file);
@@ -228,6 +262,7 @@ impl Default for ValidatorNodeConfig {
             max_transaction_gossip_queue_bytes: default_max_transaction_gossip_queue_bytes(),
             max_consensus_gossip_queue_bytes: default_max_consensus_gossip_queue_bytes(),
             max_consensus_messaging_queue_bytes: default_max_consensus_messaging_queue_bytes(),
+            state_store_memory_budget_bytes: default_state_store_memory_budget_bytes(),
         }
     }
 }

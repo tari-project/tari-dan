@@ -161,7 +161,7 @@ fn main() -> anyhow::Result<()> {
         cli.propose_target_secs,
     );
 
-    let memory = memory::budget(cli.vn_pid);
+    let memory = memory::budget(&constants, cli.vn_pid);
     host.record_peak_rss();
 
     let report = report::Report::build(

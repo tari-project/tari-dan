@@ -1,0 +1,119 @@
+---
+title: Validator Node Requirements
+description: What a machine needs to keep up with Ootle consensus — measured for CPU, memory and storage speed, and explicitly unknown for disk capacity and bandwidth.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+A validator node has to finish its work inside a consensus view. Falling behind is not a
+performance problem that shows up as slowness — a node that misses enough proposals is suspended,
+so the machine either keeps up or eventually stops participating.
+
+These figures come from `tari-vn-bench` (in `utilities/tari_vn_bench`), which measures a machine on
+each axis and grades it against the consensus budgets the network actually enforces. Run it on a
+candidate machine before committing to it:
+
+```bash
+cargo build --release -p tari_vn_bench
+./target/release/tari-vn-bench --label my-candidate
+```
+
+## Recommended
+
+| | Recommended | Where it comes from |
+|---|---|---|
+| CPU | 8 physical cores at 2.2 GHz or better, with AVX2 | Measured — a machine of this class passes every axis with margin |
+| Memory | 16 GiB | The node's enforced caps sum to ~2 GiB; the rest is headroom and OS |
+| Storage speed | NVMe, fsync p99 under 2 ms | Measured at 0.64 ms on a passing machine; the threshold is judgement |
+| Disk capacity | **not yet established** | See [Open questions](#open-questions) |
+| Network bandwidth | **not yet established** | See [Open questions](#open-questions) |
+
+<Aside type="caution" title="Core count is a throughput lever, not a safety one">
+Block execution is **serial**. Single-thread speed sets the floor under whether a node can validate
+a block in time, and no number of additional cores substitutes for it. Sixteen slow cores are worse
+than eight fast ones for the thing that gets a node evicted.
+</Aside>
+
+## CPU
+
+Two separate budgets have to be met, and they measure different things:
+
+- **Weight** — can the machine execute a full block of ordinary transactions inside a view? Transaction weight is a
+  size-and-shape proxy, calibrated against a two-core reference class.
+- **Execution points** — the compute-heavy counterpart, which weight is blind to. A block can be light by weight and
+  expensive to run.
+
+Signature verification is charged separately: the node verifies the signature on every gossiped
+transaction during mempool admission, including transactions it goes on to reject, so this cost is
+paid whether or not the transaction reaches a block.
+
+The benchmark also compares measured stealth-statement verification against what the fee schedule
+prices it at. A machine much slower than the priced figure will find that the execution-point budget
+understates what a stealth-heavy block costs it.
+
+## Memory
+
+Memory is the one axis a benchmark cannot measure by running: the ceiling is what the node holds
+when every bounded buffer is full at once, and a quiet machine never gets there. So it is derived
+from the caps the code enforces, and the node logs its own version of that table at startup:
+
+```
+Memory budget:
+     256 MiB  Consensus gossip queue
+     128 MiB  Transaction gossip queue
+     128 MiB  Consensus messaging queue
+     768 MiB  State store block cache and memtables
+     200 MiB  Compiled template module cache
+      64 MiB  Mempool dedup cache
+      20 MiB  WASM instance memory at maximum call depth
+     1.5 GiB  enforced caps
+     2.3 GiB  required, including headroom for traffic-scaled buffers and allocator overhead
+```
+
+Every line there is a limit the node enforces — a queue that drops beyond its byte budget, a cache
+that evicts at its capacity. Traffic cannot push the node past their sum. If the machine has less
+than the required figure free at startup, the node logs a warning and carries on: the caps are
+burst-and-attack ceilings rather than steady state, so an undersized node usually runs, right up
+until the burst that fills its queues.
+
+The terms that are *not* in that table are the ones that scale with traffic rather than with a cap —
+libp2p's message caches and per-connection send queues, and the substate diffs held while a block
+executes. They are bounded by message counts rather than byte budgets, so what they cost depends on
+message size and peer count. The headroom factor covers them; a node that peaks well above the
+required figure is worth reporting.
+
+16 GiB leaves room for all of it plus the OS, and matches the machines the figures were measured on.
+
+## Storage
+
+**Speed matters more than it looks.** fsync latency is the floor under every block commit — RocksDB
+syncs its write-ahead log before a commit is durable — and it is the tail, not the median, that a
+burst of epoch garbage collection or state sync runs into. NVMe, not SATA SSD, and definitely not
+spinning disk.
+
+Sequential throughput governs how long joining a shard group or recovering from a gap takes, which
+is not on the consensus critical path but is what determines whether a node that fell behind can
+catch up.
+
+## Open questions
+
+Two lines above are marked unknown rather than guessed. Both need a node run under real conditions,
+which no amount of benchmarking on an idle machine substitutes for.
+
+**Disk capacity.** No data. The benchmark measures storage speed, not growth. `state_history_length`
+and `epoch_history_length` bound how much history is retained, but committed substates grow
+monotonically and nothing has measured the rate. Answering it needs a node run across several
+epochs with disk usage sampled per epoch, at both `keep_transaction_history` settings.
+
+**Network bandwidth.** No data. A committee is 40 validators per shard group and gossip messages may
+be up to 2 MiB, but nothing has been measured. Nothing caps the total number of peers a node holds
+connections to either, which is what the traffic-scaled memory terms above scale with.
+
+Two further gaps affect how much to trust the CPU figures:
+
+- **The in-memory-to-real multiplier.** Every execution figure the benchmark reports runs against an in-memory state
+  store, so it excludes substate IO, state-tree maintenance and RocksDB commits. The real multiplier is unknown. A node
+  under load logs its own observed weight/s from `on_propose`; comparing that against the benchmark's figure for the
+  same machine would settle it.
+- **Epoch boundaries.** Committee reshuffle, state sync and garbage collection all land together. That is the real peak,
+  and none of the figures above describe it.
