@@ -12,6 +12,7 @@ use alloc::{format, vec::Vec};
 pub mod adapters;
 mod error;
 mod macros;
+mod raw;
 #[cfg(feature = "serde")]
 pub mod serde_codec;
 mod tag;
@@ -26,6 +27,7 @@ pub use byte_counter::ByteCounter;
 pub use error::BorError;
 pub use macros::__cbor_macro;
 pub use minicbor::{self, CborLen, Decode, Encode};
+pub use raw::RawCbor;
 #[cfg(feature = "serde")]
 pub use serde::{self, Deserialize, Serialize, de::DeserializeOwned};
 pub use tag::*;

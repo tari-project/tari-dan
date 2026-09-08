@@ -3347,7 +3347,7 @@ where
                                 id,
                                 existing_ids: state.workspace().all_ids_iter().collect(),
                             })?;
-                    Ok(InvokeResult::from_value(value))
+                    Ok(InvokeResult::from_value(value)?)
                 })
             },
 
@@ -3421,7 +3421,7 @@ where
                         .data()
                         .clone();
                     state.unlock_substate(nft_lock)?;
-                    Ok(InvokeResult::from_value(contents))
+                    Ok(InvokeResult::from_value(contents)?)
                 })
             },
             NonFungibleAction::GetMutableData => {
@@ -3441,7 +3441,7 @@ where
                         .clone();
                     state.unlock_substate(nft_lock)?;
 
-                    Ok(InvokeResult::from_value(contents))
+                    Ok(InvokeResult::from_value(contents)?)
                 })
             },
         }
@@ -3729,7 +3729,7 @@ where
             },
         };
 
-        Ok(InvokeResult::from_value(exec_result.indexed.into_value()))
+        Ok(InvokeResult::from_value(exec_result.indexed.into_value())?)
     }
 
     fn builtin_template_invoke(&mut self, action: BuiltinTemplateAction) -> Result<InvokeResult, RuntimeError> {

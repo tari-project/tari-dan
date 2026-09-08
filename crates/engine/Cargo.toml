@@ -37,6 +37,11 @@ memmap2 = { workspace = true, optional = true }
 
 [features]
 default = []
+# Instruments the WASM ABI boundary (`tari_engine::abi_metrics`) so
+# `examples/abi_measure.rs` can attribute host time and wire bytes per engine
+# op. Measurement only: it adds two clock reads per ABI phase and is never
+# enabled by a validator build.
+abi-metrics = ["tari_template_lib/metrics"]
 # Enables the on-disk wasmer module cache (`tari_engine::wasm::cache`). Pulls
 # in `tari_template_builtin` to bypass caching for builtin addresses, plus the
 # filesystem I/O surface (memmap + bytes). Disable if embedding the engine in

@@ -145,7 +145,7 @@ tari_template_lib = { version = "0.32", path = "crates/template_lib" }
 tari_template_lib_types = { version = "0.32", path = "crates/template_lib_types", default-features = false }
 tari_template_abi = { version = "0.20", path = "crates/template_abi", default-features = false }
 tari_template_macros = { version = "0.23", path = "crates/template_macros" }
-tari_bor = { version = "0.15.0", path = "crates/tari_bor", default-features = false }
+tari_bor = { version = "0.15.1", path = "crates/tari_bor", default-features = false }
 
 ootle_byte_type = { path = "crates/ootle_byte_type", version = "0.13" }
 ootle_serde = { path = "crates/ootle_serde", version = "0.5", default-features = false }

@@ -1,0 +1,12 @@
+[workspace]
+[package]
+name = "abi_probe"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tari_template_lib = { path = "../../../../template_lib" }
+tari_template_abi = { path = "../../../../template_abi", default-features = false }
+
+[lib]
+crate-type = ["cdylib"]

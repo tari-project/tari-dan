@@ -29,3 +29,8 @@ borsh = ["dep:borsh", "tari_template_lib_types/borsh", "tari_bor/borsh"]
 extra-arith = ["tari_template_lib_types/extra-arith"]
 precision = ["tari_template_lib_types/precision"]
 extra-maps = ["tari_template_lib_types/extra-maps"]
+# Times the encode and decode an `InvokeResult` performs, so a host measuring the
+# ABI boundary can separate them from the rest of an engine call. Host-side
+# measurement only (see `tari_engine::abi_metrics`); it needs a thread-local, so
+# it implies `std` and is never on in a template build.
+metrics = ["std"]
