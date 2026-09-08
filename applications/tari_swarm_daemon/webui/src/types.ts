@@ -48,9 +48,11 @@ export interface Indexer {
 }
 
 /** (full path, instance name, path without extension) */
-export type LogFile = [string, string, string];
+/** [full path, instance name, path without extension, instance id] */
+export type LogFile = [string, string, string, number];
 /** (full path, "stdout") */
-export type StdoutFile = [string, string];
+/** [full path, stream name, instance id] */
+export type StdoutFile = [string, string, number];
 
 export interface ShardGroup {
   start: number;

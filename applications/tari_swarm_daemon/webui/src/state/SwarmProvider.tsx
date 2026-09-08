@@ -37,29 +37,24 @@ async function settle<T>(work: Promise<T>, fallback: T): Promise<T> {
 }
 
 /** Groups log files by the instance whose base path contains them. */
+/**
+ * Buckets log files by the instance id the daemon reported for each one.
+ *
+ * Instances do not have distinct directories: the wallet daemon and the key-creating run that seeds it share
+ * `wallet-daemon-00`, so deducing the owner from the path handed both instances' files to whichever matched
+ * first and left the other showing nothing.
+ */
 function assignToInstances(
-  instances: Instance[],
   logFiles: LogFile[],
   stdoutFiles: StdoutFile[],
 ): Record<number, InstanceLogs> {
   const byInstance: Record<number, InstanceLogs> = {};
-  // Longest base path first so a nested instance directory wins over its parent.
-  const ordered = [...instances].sort((a, b) => b.base_path.length - a.base_path.length);
-  const owner = (path: string) => ordered.find((i) => path.startsWith(i.base_path));
 
   for (const file of logFiles) {
-    const instance = owner(file[0]);
-    if (!instance) {
-      continue;
-    }
-    (byInstance[instance.id] ??= { logs: [], stdout: [] }).logs.push(file);
+    (byInstance[file[3]] ??= { logs: [], stdout: [] }).logs.push(file);
   }
   for (const file of stdoutFiles) {
-    const instance = owner(file[0]);
-    if (!instance) {
-      continue;
-    }
-    (byInstance[instance.id] ??= { logs: [], stdout: [] }).stdout.push(file);
+    (byInstance[file[2]] ??= { logs: [], stdout: [] }).stdout.push(file);
   }
   return byInstance;
 }
@@ -176,7 +171,6 @@ export function SwarmProvider({ children }: { children: ReactNode }) {
     );
     setLogs(
       assignToInstances(
-        allInstances.instances,
         logResults.flatMap(([l]) => l),
         logResults.flatMap(([, s]) => s),
       ),

@@ -14,23 +14,17 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 import { describeError, swarmRpc } from "../api/rpc";
 import { LEVELS, Level, Line, TARGET_RE, TIME_RE, parse, toEntries } from "./logFormat";
+import {
+  CHUNK_BYTES,
+  Chunk,
+  MAX_SCAN_CHUNKS,
+  formatBytes,
+  trimBuffer,
+} from "./logBuffer";
 
-/** Bytes fetched per request. The daemon trims each window to whole lines. */
-const CHUNK_BYTES = 256 * 1024;
-/**
- * Chunks held at once. Paging further back drops the newest ones, so however long a session runs the buffer stays
- * bounded and the tab stays responsive.
- */
-const MAX_CHUNKS = 6;
 const FOLLOW_MS = 2000;
 /** Distance from the older end of the view at which the next chunk starts loading. */
 const LOAD_MARGIN_PX = 400;
-
-interface Chunk {
-  start: number;
-  end: number;
-  lines: Line[];
-}
 
 interface ChunkResponse {
   contents: string;
@@ -88,7 +82,8 @@ function renderText(text: string, needle: string): ReactNode {
 
 async function fetchChunk(path: string, end: number | null): Promise<Chunk> {
   const res: ChunkResponse = await swarmRpc("get_file", { path, end, max_bytes: CHUNK_BYTES });
-  return { start: res.start, end: res.end, lines: parse(res.contents, res.start) };
+  const lines = parse(res.contents, res.start);
+  return { start: res.start, end: res.end, lines, entries: toEntries(lines) };
 }
 
 export default function LogView() {
@@ -155,6 +150,25 @@ export default function LogView() {
     };
   }, [path, follow]);
 
+  // An entry's level is its opening line's - a continuation carries none of its own, and hiding a record has
+  // to take its continuations with it.
+  const matches = useCallback(
+    (entry: Line[]) => {
+      const lowerNeedle = needle.trim().toLowerCase();
+      return (
+        !(entry[0].level && hidden.has(entry[0].level)) &&
+        (!lowerNeedle || entry.some((line) => line.text.toLowerCase().includes(lowerNeedle)))
+      );
+    },
+    [hidden, needle],
+  );
+
+  const countVisible = useCallback(
+    (candidates: Chunk[]) =>
+      candidates.reduce((total, chunk) => total + chunk.entries.filter(matches).length, 0),
+    [matches],
+  );
+
   const loadOlder = useCallback(async () => {
     const oldest = chunks?.[chunks.length - 1];
     if (!path || !oldest || loadingRef.current || oldest.start === 0) {
@@ -179,7 +193,7 @@ export default function LogView() {
         if (!current || current[current.length - 1]?.start !== oldest.start) {
           return current;
         }
-        return [...current, chunk].slice(-MAX_CHUNKS);
+        return trimBuffer([...current, chunk], countVisible);
       });
       setFetchError(null);
     } catch (err) {
@@ -188,7 +202,7 @@ export default function LogView() {
       loadingRef.current = false;
       setLoadingOlder(false);
     }
-  }, [path, chunks]);
+  }, [path, chunks, countVisible]);
 
   // Newest lines sit at the top, so scrolling down walks backwards through the file.
   const onScroll = () => {
@@ -209,25 +223,14 @@ export default function LogView() {
 
   // Newest entry first, but the lines inside each entry stay in the order they were written.
   const entries = useMemo(
-    () => (chunks === null ? null : chunks.flatMap((chunk) => toEntries(chunk.lines).reverse())),
+    () => (chunks === null ? null : chunks.flatMap((chunk) => chunk.entries.slice().reverse())),
     [chunks],
   );
 
-  const visible = useMemo(() => {
-    if (entries === null) {
-      return [];
-    }
-    const lowerNeedle = needle.trim().toLowerCase();
-    // An entry's level is its opening line's - a continuation carries none of its own, and hiding a record has
-    // to take its continuations with it.
-    return entries
-      .filter(
-        (entry) =>
-          !(entry[0].level && hidden.has(entry[0].level)) &&
-          (!lowerNeedle || entry.some((line) => line.text.toLowerCase().includes(lowerNeedle))),
-      )
-      .flat();
-  }, [entries, hidden, needle]);
+  const visible = useMemo(
+    () => (entries === null ? [] : entries.filter(matches).flat()),
+    [entries, matches],
+  );
 
   useLayoutEffect(() => {
     const el = view.current;
@@ -247,13 +250,27 @@ export default function LogView() {
     }
   }, [visible, follow, chunks]);
 
+  /** True once the buffer has scanned as far back as it will go without finding a line to render. */
+  const scanExhausted = (chunks?.length ?? 0) >= MAX_SCAN_CHUNKS;
+
   // Level filters can leave too few lines to fill the view, which would strand it with nothing to scroll.
   useEffect(() => {
     const el = view.current;
-    if (el && !follow && !loadingOlder && !atStartOfFile && el.scrollHeight <= el.clientHeight) {
+    if (
+      el &&
+      !follow &&
+      !loadingOlder &&
+      !atStartOfFile &&
+      !scanExhausted &&
+      el.scrollHeight <= el.clientHeight
+    ) {
       void loadOlder();
     }
-  }, [visible, follow, loadingOlder, atStartOfFile, loadOlder]);
+  }, [visible, follow, loadingOlder, atStartOfFile, scanExhausted, loadOlder]);
+
+  /** Bytes the buffer currently spans, which is what the filters have been applied to. */
+  const scannedBytes =
+    chunks && chunks.length ? chunks[0].end - chunks[chunks.length - 1].start : 0;
 
   const counts = useMemo(() => {
     const tally: Record<string, number> = {};
@@ -324,7 +341,13 @@ export default function LogView() {
         {error && <p className="empty">{error}</p>}
         {!error && entries === null && <p className="empty">Loading…</p>}
         {!error && entries !== null && !visible.length && (
-          <p className="empty">{entries.length ? "No lines match the filters." : "This file is empty."}</p>
+          <p className="empty">
+            {!entries.length
+              ? "This file is empty."
+              : `No lines match the filters in the ${formatBytes(scannedBytes)} scanned${
+                  atStartOfFile ? " (the whole file)" : scanExhausted ? ", and the search stopped there" : ""
+                }. ${entries.length.toLocaleString()} entries hidden — show a level, or clear the search.`}
+          </p>
         )}
         {/* Paging back trims the newest chunks, so the head of the file is only reachable through Follow. */}
         {!error && !follow && visible.length > 0 && (
