@@ -146,14 +146,28 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             Err(err) => return Err(err.into()),
         };
 
+        let num_returned = checkpoints.len();
+        // Most of the batch is checkpoints we did not ask for, so a malformed entry only disqualifies itself;
+        // the one we select is still checked against the signing committee's quorum.
         for checkpoint in checkpoints {
-            let checkpoint = EpochCheckpoint::try_from(checkpoint).map_err(RpcStateSyncError::InvalidResponse)?;
-            let shard_group = checkpoint.checked_shard_group().map_err(|err| {
-                RpcStateSyncError::InvalidResponse(anyhow!(
-                    "Fetched checkpoint for epoch {} has invalid shard group: {err}",
-                    checkpoint.epoch()
-                ))
-            })?;
+            let checkpoint = match EpochCheckpoint::try_from(checkpoint) {
+                Ok(cp) => cp,
+                Err(err) => {
+                    warn!(target: LOG_TARGET, "Skipping undecodable checkpoint in batch: {err}");
+                    continue;
+                },
+            };
+            let shard_group = match checkpoint.checked_shard_group() {
+                Ok(sg) => sg,
+                Err(err) => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Skipping checkpoint for epoch {} with invalid shard group: {err}",
+                        checkpoint.epoch()
+                    );
+                    continue;
+                },
+            };
             if checkpoint.epoch() != prev_epoch || shard_group != for_shard_group {
                 continue;
             }
@@ -161,6 +175,14 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             self.validate_checkpoint(&checkpoint, prev_committee, prev_epoch)?;
             self.state_store.with_write_tx(|tx| checkpoint.save(tx))?;
             return Ok(Some(checkpoint));
+        }
+
+        if num_returned >= MAX_CHECKPOINTS_PER_REQUEST as usize {
+            warn!(
+                target: LOG_TARGET,
+                "Peer returned {num_returned} checkpoints without one for epoch {prev_epoch} shard group \
+                 {for_shard_group}; the batch may have been truncated at MAX_CHECKPOINTS_PER_REQUEST"
+            );
         }
 
         Ok(None)
