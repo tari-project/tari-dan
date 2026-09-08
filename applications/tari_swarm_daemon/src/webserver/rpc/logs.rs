@@ -10,7 +10,12 @@ use std::{
 use axum_jrpc::error::{JsonRpcError, JsonRpcErrorReason};
 use serde::{Deserialize, Serialize};
 
-use crate::{config::InstanceType, logfile, process_manager::InstanceInfo, webserver::context::HandlerContext};
+use crate::{
+    config::InstanceType,
+    logfile,
+    process_manager::{InstanceId, InstanceInfo},
+    webserver::context::HandlerContext,
+};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ListLogFilesRequest {
@@ -19,8 +24,11 @@ pub struct ListLogFilesRequest {
     pub index: Option<usize>,
 }
 
-/// (full path, name, path without extension)
-pub type ListValidatorNodesResponse = Vec<(String, String, String)>;
+/// (full path, instance name, path without extension, instance id)
+///
+/// The id is what identifies the owning instance: two instances can share a base path - the wallet daemon and
+/// the key-creating run that seeds it both point at `wallet-daemon-00` - so a path alone is ambiguous.
+pub type ListValidatorNodesResponse = Vec<(String, String, String, InstanceId)>;
 
 pub async fn list_log_files(
     context: &HandlerContext,
@@ -41,12 +49,12 @@ pub async fn list_log_files(
             )
         })?;
         visit_dirs(&instance.base_path.join("log"), &mut |dir| {
-            collect_current_log(dir, &instance.name, &mut log_files);
+            collect_current_log(dir, instance, &mut log_files);
         })?;
     } else {
-        for instance in instances {
+        for instance in &instances {
             visit_dirs(&instance.base_path.join("log"), &mut |dir| {
-                collect_current_log(dir, &instance.name, &mut log_files);
+                collect_current_log(dir, instance, &mut log_files);
             })?;
         }
     }
@@ -54,7 +62,7 @@ pub async fn list_log_files(
     Ok(log_files)
 }
 
-fn collect_current_log(entry: &DirEntry, instance_name: &str, log_files: &mut ListValidatorNodesResponse) {
+fn collect_current_log(entry: &DirEntry, instance: &InstanceInfo, log_files: &mut ListValidatorNodesResponse) {
     let path = entry.path();
     if path.extension() != Some("log".as_ref()) || is_rotated(&path) {
         return;
@@ -62,8 +70,9 @@ fn collect_current_log(entry: &DirEntry, instance_name: &str, log_files: &mut Li
     let path_without_ext = path.with_extension("");
     log_files.push((
         path.to_string_lossy().to_string(),
-        instance_name.to_string(),
+        instance.name.clone(),
         path_without_ext.to_string_lossy().to_string(),
+        instance.id,
     ));
 }
 
@@ -91,8 +100,8 @@ fn visit_dirs<F: FnMut(&DirEntry)>(dir: &Path, cb: &mut F) -> io::Result<()> {
 
 pub type ListStdoutLogsRequest = ListLogFilesRequest;
 
-/// (full path, name)
-pub type ListStdoutLogsResponse = Vec<(String, &'static str)>;
+/// (full path, stream name, instance id)
+pub type ListStdoutLogsResponse = Vec<(String, &'static str, InstanceId)>;
 pub async fn list_stdout_files(
     context: &HandlerContext,
     req: ListStdoutLogsRequest,
@@ -129,7 +138,7 @@ fn collect_captured_output(instance: &InstanceInfo, log_files: &mut ListStdoutLo
         (&instance.stderr_log_path, "stderr"),
     ] {
         if path.exists() {
-            log_files.push((path.to_string_lossy().to_string(), name));
+            log_files.push((path.to_string_lossy().to_string(), name, instance.id));
         }
     }
 }
