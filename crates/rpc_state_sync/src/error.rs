@@ -26,8 +26,8 @@ pub enum RpcStateSyncError {
     InvalidResponse(anyhow::Error),
     #[error("Block {block_id} failed SafeNode predicate")]
     BlockNotSafe { block_id: BlockId },
-    #[error("Failed to sync from all peers. The committee size is {committee_size}")]
-    SyncFailedAllPeers { committee_size: usize },
+    #[error("Failed to sync from all {num_peers} peer(s)")]
+    SyncFailedAllPeers { num_peers: usize },
     #[error("Proposal validation error: {0}")]
     ProposalValidationError(#[from] ProposalValidationError),
     #[error("State tree error: {0}")]
