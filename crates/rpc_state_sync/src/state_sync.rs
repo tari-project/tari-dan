@@ -65,10 +65,6 @@ use tari_validator_node_rpc::{
 
 use crate::{error::RpcStateSyncError, stats::StateSyncStats};
 
-/// Upper bound on checkpoints requested per peer. A peer stores one checkpoint per shard group it synced from
-/// in an epoch, so this only needs to cover the previous epoch's committee count.
-const MAX_CHECKPOINTS_PER_REQUEST: u32 = 32;
-
 const LOG_TARGET: &str = "tari::ootle::rpc_state_sync";
 
 pub struct RpcStateSyncClientProtocol<TConsensusSpec: ConsensusSpec> {
@@ -132,12 +128,11 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
         self.stats.total_requests += 1;
 
-        // A peer holds one checkpoint per shard group it synced from at prev_epoch, and the request has no
-        // shard-group selector, so fetch a batch and pick the one for the requested group.
-        let checkpoints = match client
+        let mut checkpoints = match client
             .get_checkpoints(GetCheckpointsRequest {
                 from_epoch: Some(prev_epoch.into()),
-                num_to_return: MAX_CHECKPOINTS_PER_REQUEST,
+                num_to_return: 1,
+                shard_group: Some(for_shard_group.encode_as_u32()),
             })
             .await
         {
@@ -146,46 +141,27 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             Err(err) => return Err(err.into()),
         };
 
-        let num_returned = checkpoints.len();
-        // The batch can include checkpoints for other shard groups and later epochs, so a malformed entry
-        // only disqualifies itself; the one we select is still checked against the signing committee's quorum.
-        for checkpoint in checkpoints {
-            let checkpoint = match EpochCheckpoint::try_from(checkpoint) {
-                Ok(cp) => cp,
-                Err(err) => {
-                    warn!(target: LOG_TARGET, "Skipping undecodable checkpoint in batch: {err}");
-                    continue;
-                },
-            };
-            let shard_group = match checkpoint.checked_shard_group() {
-                Ok(sg) => sg,
-                Err(err) => {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Skipping checkpoint for epoch {} with invalid shard group: {err}",
-                        checkpoint.epoch()
-                    );
-                    continue;
-                },
-            };
-            if checkpoint.epoch() != prev_epoch || shard_group != for_shard_group {
-                continue;
-            }
-            info!(target: LOG_TARGET, "🛜 Checkpoint: {checkpoint}");
-            self.validate_checkpoint(&checkpoint, prev_committee, prev_epoch)?;
-            self.state_store.with_write_tx(|tx| checkpoint.save(tx))?;
-            return Ok(Some(checkpoint));
+        let Some(checkpoint) = checkpoints.pop() else {
+            return Ok(None);
+        };
+        let checkpoint = EpochCheckpoint::try_from(checkpoint).map_err(RpcStateSyncError::InvalidResponse)?;
+        let shard_group = checkpoint.checked_shard_group().map_err(|err| {
+            RpcStateSyncError::InvalidResponse(anyhow!(
+                "Fetched checkpoint for epoch {} has invalid shard group: {err}",
+                checkpoint.epoch()
+            ))
+        })?;
+        if checkpoint.epoch() != prev_epoch || shard_group != for_shard_group {
+            return Err(RpcStateSyncError::InvalidResponse(anyhow!(
+                "Requested checkpoint for epoch {prev_epoch} shard group {for_shard_group} but peer returned epoch {} \
+                 shard group {shard_group}",
+                checkpoint.epoch()
+            )));
         }
-
-        if num_returned >= MAX_CHECKPOINTS_PER_REQUEST as usize {
-            warn!(
-                target: LOG_TARGET,
-                "Peer returned {num_returned} checkpoints without one for epoch {prev_epoch} shard group \
-                 {for_shard_group}; the batch may have been truncated at MAX_CHECKPOINTS_PER_REQUEST"
-            );
-        }
-
-        Ok(None)
+        info!(target: LOG_TARGET, "🛜 Checkpoint: {checkpoint}");
+        self.validate_checkpoint(&checkpoint, prev_committee, prev_epoch)?;
+        self.state_store.with_write_tx(|tx| checkpoint.save(tx))?;
+        Ok(Some(checkpoint))
     }
 
     #[allow(clippy::too_many_lines)]

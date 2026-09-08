@@ -567,6 +567,24 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
             )));
         }
 
+        if let Some(shard_group) = msg.shard_group {
+            let shard_group = ShardGroup::decode_from_u32(shard_group)
+                .ok_or_else(|| RpcStatus::bad_request(format!("Invalid shard group {shard_group}")))?;
+            let checkpoint = self
+                .state_store
+                .with_read_tx(|tx| EpochCheckpoint::get_by_shard_group(tx, from_epoch, shard_group))
+                .optional()
+                .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
+                .ok_or_else(|| {
+                    RpcStatus::not_found(format!(
+                        "No checkpoint for epoch {from_epoch} shard group {shard_group}"
+                    ))
+                })?;
+            return Ok(Response::new(GetCheckpointsResponse {
+                checkpoints: vec![checkpoint.into()],
+            }));
+        }
+
         if msg.num_to_return > 100 {
             return Err(RpcStatus::bad_request("num_to_return must be less than 100"));
         }

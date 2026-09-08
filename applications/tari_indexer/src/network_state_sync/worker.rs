@@ -352,6 +352,7 @@ impl NetworkWideStateSync {
                         .get_checkpoints(rpc::GetCheckpointsRequest {
                             from_epoch: Some(from_epoch.into()),
                             num_to_return: 100,
+                            shard_group: None,
                         })
                         .await?;
 
