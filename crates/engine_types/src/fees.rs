@@ -214,7 +214,7 @@ impl FeeReceipt {
 
     /// Writes the receipt as a protocol version 0 substate hash preimage: every field but
     /// `exhaust_burn`, which version 0 receipts do not carry.
-    pub fn borsh_serialize_v0<W: borsh::io::Write>(&self, writer: &mut W) -> borsh::io::Result<()> {
+    pub(crate) fn borsh_serialize_v0<W: borsh::io::Write>(&self, writer: &mut W) -> borsh::io::Result<()> {
         borsh::BorshSerialize::serialize(&self.total_fee_payment, writer)?;
         borsh::BorshSerialize::serialize(&self.total_fees_paid, writer)?;
         borsh::BorshSerialize::serialize(&self.total_fee_overcharge, writer)?;

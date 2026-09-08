@@ -36,54 +36,29 @@ impl<'a> SubstateHashMessage<'a> {
     }
 }
 
+pub type SubstateValueHashMessageV0<'a> = SubstateValueHashMessage<'a, TransactionReceiptHashMessageV0<'a>>;
+
+/// Version 1 changes the transaction receipt's preimage, which covers `FeeReceipt::exhaust_burn`,
+/// and - through the leading `SubstateHashMessage` tag - the preimage of every substate.
+pub type SubstateValueHashMessageV1<'a> = SubstateValueHashMessage<'a, TransactionReceiptHashMessageV1<'a>>;
+
+/// The per-type preimage, shared by every protocol version so that the borsh tag of each variant is
+/// the same under all of them. Variant order is consensus-bound: a new variant goes at the end.
 #[derive(Debug, Clone, Copy, borsh::BorshSerialize)]
-pub enum SubstateValueHashMessageV0<'a> {
+pub enum SubstateValueHashMessage<'a, R> {
     Component(ComponentHashMessage<'a>),
     Resource(ResourceHashMessage<'a>),
     Vault(VaultHashMessage<'a>),
     NonFungible(NonFungibleContainerHashMessage<'a>),
     ClaimedOutputTombstone(ClaimedOutputTombstoneHashMessage<'a>),
-    TransactionReceipt(TransactionReceiptHashMessageV0<'a>),
+    TransactionReceipt(R),
     Template(PublishedTemplateHashMessage<'a>),
     ValidatorFeePool(ValidatorFeePoolHashMessage<'a>),
     Utxo(UtxoHashMessage<'a>),
     ConfidentialOutput(ConfidentialOutputHashMessage<'a>),
 }
 
-impl<'a> From<&'a SubstateValue> for SubstateValueHashMessageV0<'a> {
-    fn from(value: &'a SubstateValue) -> Self {
-        match value {
-            SubstateValue::Component(component) => Self::Component(component.into()),
-            SubstateValue::Resource(resource) => Self::Resource(resource.as_ref().into()),
-            SubstateValue::Vault(vault) => Self::Vault(vault.into()),
-            SubstateValue::NonFungible(nf) => Self::NonFungible(nf.into()),
-            SubstateValue::ClaimedOutputTombstone(tombstone) => Self::ClaimedOutputTombstone(tombstone.into()),
-            SubstateValue::TransactionReceipt(receipt) => Self::TransactionReceipt(receipt.into()),
-            SubstateValue::Template(template) => Self::Template(template.into()),
-            SubstateValue::ValidatorFeePool(pool) => Self::ValidatorFeePool(pool.into()),
-            SubstateValue::Utxo(utxo) => Self::Utxo(utxo.into()),
-            SubstateValue::ConfidentialOutput(output) => Self::ConfidentialOutput(output.into()),
-        }
-    }
-}
-
-/// Version 1 differs from version 0 in the transaction receipt alone: its preimage covers
-/// `FeeReceipt::exhaust_burn`.
-#[derive(Debug, Clone, Copy, borsh::BorshSerialize)]
-pub enum SubstateValueHashMessageV1<'a> {
-    Component(ComponentHashMessage<'a>),
-    Resource(ResourceHashMessage<'a>),
-    Vault(VaultHashMessage<'a>),
-    NonFungible(NonFungibleContainerHashMessage<'a>),
-    ClaimedOutputTombstone(ClaimedOutputTombstoneHashMessage<'a>),
-    TransactionReceipt(TransactionReceiptHashMessageV1<'a>),
-    Template(PublishedTemplateHashMessage<'a>),
-    ValidatorFeePool(ValidatorFeePoolHashMessage<'a>),
-    Utxo(UtxoHashMessage<'a>),
-    ConfidentialOutput(ConfidentialOutputHashMessage<'a>),
-}
-
-impl<'a> From<&'a SubstateValue> for SubstateValueHashMessageV1<'a> {
+impl<'a, R: From<&'a TransactionReceipt>> From<&'a SubstateValue> for SubstateValueHashMessage<'a, R> {
     fn from(value: &'a SubstateValue) -> Self {
         match value {
             SubstateValue::Component(component) => Self::Component(component.into()),
@@ -273,12 +248,16 @@ fn hash<T: borsh::BorshSerialize>(value: &T) -> Hash32 {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use ootle_network::Network;
+    use tari_template_lib::types::{ObjectKey, ResourceAddress, crypto::RistrettoPublicKeyBytes};
 
     use super::*;
     use crate::{
         Epoch,
         fees::{FeeBreakdown, FeeSource},
+        resource_container::ResourceContainer,
         substate::hash_substate,
         transaction_receipt::{DiffSummary, FinalizeOutcome},
     };
@@ -314,17 +293,34 @@ mod tests {
             .result()
     }
 
+    fn hex(hash: Hash32) -> String {
+        hex::encode(hash.as_ref() as &[u8])
+    }
+
     /// The hash a binary that predates `FeeReceipt::exhaust_burn` produced for this receipt (captured
     /// from `hash_substate` at 2cc729b95). Version 0 must keep producing it, or no node can re-derive
-    /// the state roots that committed such receipts. Esmeralda is the network whose genesis is V0.
+    /// the state roots that committed such receipts.
     #[test]
     fn version_0_reproduces_the_pre_exhaust_burn_hash() {
-        let hash = hash_substate(Network::Esmeralda, &receipt(0), 0, Epoch(3));
         assert_eq!(
-            hex::encode(hash.as_ref() as &[u8]),
+            hex(hash_at(ProtocolVersion::V0, &receipt(0))),
             "061d838f149c767043152d6362afd71f18d58ac41c1c7b0a7f130066e9e1efcb"
         );
-        assert_eq!(hash, hash_at(ProtocolVersion::V0, &receipt(0)));
+        // Esmeralda is the network whose history was hashed under version 0.
+        assert_eq!(ProtocolVersion::at(Network::Esmeralda, Epoch(3)), ProtocolVersion::V0);
+        assert_eq!(
+            hash_substate(Network::Esmeralda, &receipt(0), 0, Epoch(3)),
+            hash_at(ProtocolVersion::V0, &receipt(0))
+        );
+    }
+
+    /// Networks launched at version 1 commit to this from their first block.
+    #[test]
+    fn version_1_hash_is_pinned() {
+        assert_eq!(
+            hex(hash_at(ProtocolVersion::V1, &receipt(123))),
+            "78a85877d39682b55d299b5c3fad89b4261603bc2e261f5af728caa876fbbc78"
+        );
     }
 
     #[test]
@@ -345,5 +341,47 @@ mod tests {
             hash_at(ProtocolVersion::V0, &receipt(0)),
             hash_at(ProtocolVersion::V1, &receipt(0))
         );
+    }
+
+    /// Pins the borsh tag of every variant with a cheaply constructed value, so a variant inserted
+    /// ahead of any of them fails here rather than moving consensus-bound tags silently. The two
+    /// leading bytes are the `SubstateHashMessage` version tag and the value tag.
+    #[test]
+    fn value_tags_are_stable_and_shared_by_both_versions() {
+        let values: Vec<(u8, SubstateValue)> = vec![
+            (
+                2,
+                SubstateValue::Vault(Vault::new(ResourceContainer::non_fungible(
+                    ResourceAddress::new(ObjectKey::from_array([1u8; ObjectKey::LENGTH])),
+                    BTreeSet::new(),
+                ))),
+            ),
+            (
+                3,
+                SubstateValue::NonFungible(NonFungibleContainer::new(tari_bor::Value::Null, tari_bor::Value::Null)),
+            ),
+            (
+                4,
+                SubstateValue::ClaimedOutputTombstone(ClaimedOutputTombstone { value: 1 }),
+            ),
+            (5, receipt(0)),
+            (
+                7,
+                SubstateValue::ValidatorFeePool(ValidatorFeePool::new(RistrettoPublicKeyBytes::default(), 5)),
+            ),
+        ];
+        for (tag, value) in &values {
+            let v0 = borsh::to_vec(&SubstateHashMessage::new(ProtocolVersion::V0, value)).unwrap();
+            let v1 = borsh::to_vec(&SubstateHashMessage::new(ProtocolVersion::V1, value)).unwrap();
+            assert_eq!(&v0[..2], &[0, *tag], "V0 tag for {value:?}");
+            assert_eq!(&v1[..2], &[1, *tag], "V1 tag for {value:?}");
+            if value.as_transaction_receipt().is_none() {
+                assert_eq!(
+                    v0[1..],
+                    v1[1..],
+                    "V1 must differ from V0 only in the version tag for {value:?}"
+                );
+            }
+        }
     }
 }
