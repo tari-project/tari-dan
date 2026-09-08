@@ -13,12 +13,16 @@ versioning rules below.
 ## TL;DR — the two scripts
 
 ```sh
-# What's in the publish set, in publish order, with current versions + tiers
+# What's in the publish set, in publish order, with current versions + tiers,
+# and whether each version is already on crates.io or still pending release
 ./scripts/crate_versioning.py list
 
 # I bumped crate X. Who else needs to bump, and how?
 ./scripts/crate_versioning.py impact <crate>              # non-breaking (patch)
 ./scripts/crate_versioning.py impact <crate> --breaking   # breaking (minor)
+
+# Both consult crates.io. Add --offline to skip it (see "Pending releases" below)
+./scripts/crate_versioning.py impact <crate> --breaking --offline
 
 # Once versions are set, publish to crates.io
 ./scripts/publish_crates.py                  # what would publish (read-only)
@@ -57,6 +61,43 @@ actually depend on something that moved.
 
 ---
 
+## Pending releases (the second must-read)
+
+The tiers above answer *who a change is breaking for*. That is not the same
+question as *who still needs a version edit*, and the two come apart whenever a
+release is pending.
+
+A version that was never published to crates.io carries no `^0.y` pins. Nobody
+depends on it, so nothing can be broken by changing what goes into it. If a
+crate's working-tree version is already an unreleased minor ahead of crates.io,
+its bump is **already made** — the pending release ships the change under a
+number that announces it, and bumping again just burns a version.
+
+This is easy to get wrong, because a whole cohort can sit on unreleased bumps
+for weeks. After `tari_bor` 0.15.1 → 0.16.0, `impact tari_bor --breaking` named
+18 crates; 17 of them were already on unreleased minors and the real cascade was
+one crate.
+
+So `list` and `impact` both query the crates.io sparse index and classify every
+crate:
+
+| State | Meaning | Action |
+|---|---|---|
+| `pending` | the tree's version is not on crates.io **and** breaks a pin on the latest that is | none — the pending release covers it |
+| `released` | the tree's version is already on crates.io | must move; the number is spent |
+| *short* | a bump is pending, but too small to break the pin it needs to (e.g. `0.15.1` against a published `0.15.0`) | promote it to a minor |
+
+A crate that has never been published is `pending` — its first release announces
+everything.
+
+`--offline` skips the lookup. The output then lists the entire cascade whether
+or not each bump has already been made, which is the pre-registry behaviour;
+useful with no network, misleading otherwise. A failed lookup for an individual
+crate is treated as `released`, so the script asks for a bump it may not need
+rather than skipping one it does.
+
+---
+
 ## `crate_versioning.py` — bump impact analysis
 
 Subcommands:
@@ -64,11 +105,20 @@ Subcommands:
 ### `list`
 
 ```sh
-./scripts/crate_versioning.py list
+./scripts/crate_versioning.py list [--offline]
 ```
 
-Prints the publish set in topological order with current version + tier + path.
-Sourced from `cargo metadata` (versions) and `publish_crates.py` (order/tier).
+Prints the publish set in topological order with current version + tier +
+release state + path. Sourced from `cargo metadata` (versions),
+`publish_crates.py` (order/tier) and the crates.io sparse index (release state):
+
+```
+tari_bor          0.16.0  [stable  ]  pending (crates.io: 0.15.0)  crates/tari_bor
+ootle-network      0.2.0  [stable  ]  released                     crates/ootle_network
+```
+
+The `pending` column doubles as a release checklist: it is exactly the set of
+crates the next `publish_crates.py --execute` will push.
 
 ### `deps <crate>`
 
@@ -101,21 +151,29 @@ the full bump plan.
 
 For a **breaking** bump, output is structured as:
 
-1. **Tier 3 (core) cohort** — every tier-3 crate's new version (because the workspace
-   `[workspace.package].version` moves), plus the exact `version = "0.31" →
-   "0.32"` pin updates required in `[workspace.dependencies]`.
-2. **Independent (non-core) minor bumps** — the crate itself (and any other
-   independently-versioned crate that ends up minor-bumped in this round).
+1. **Tier 3 (core) cohort** — either the exact `[workspace.package].version` and
+   `[workspace.dependencies]` pin updates (`"0.31" → "0.32"`), or a note that the
+   workspace version is already an unreleased breaking bump and no rollup is
+   needed. The cohort shares one version, so it moves as soon as any single
+   member still owes a bump.
+2. **Independent (non-core) minor bumps** — independently-versioned crates whose
+   published version is spent and so must move, each with the reason (which dep
+   it re-exposes) and its registry state.
 3. **Independent (non-core) pin updates** — independently-versioned crates that
    don't minor-bump themselves but still need to update pins and republish at least
    a patch. The output lists which pin(s) to bump and a *patch vs minor*
    recommendation (patch is safe; minor is required only if the crate's own
    public API re-exposes the upstream's changed types).
-4. **Dev-only callouts** — informational; dev-only edges never force a bump.
-5. **Suggested workflow** — numbered checklist for the bump → format → publish loop.
+4. **Already covered** — crates the change breaks for whose bump is already made
+   and unreleased. Listed for the audit trail; no action.
+5. **Dev-only callouts** — informational; dev-only edges never force a bump.
+6. **Suggested workflow** — numbered checklist for the bump → format → publish
+   loop, covering only the crates that actually need to move. When nothing does,
+   it says `No version changes required.` instead.
 
 Without `--breaking`, the output is a single line: it's a patch bump,
-dependents auto-pick-up via `^0.y` and nobody else republishes.
+dependents auto-pick-up via `^0.y` and nobody else republishes — or, if the
+crate's version is already pending release, that no edit is needed at all.
 
 ---
 
@@ -166,11 +224,17 @@ When asked to bump a crate / cut a release:
    ```sh
    ./scripts/crate_versioning.py impact <crate> [--breaking]
    ```
-3. **Apply the bumps the script printed:**
+3. **Apply the bumps the script printed** — and only those. Crates under
+   "already covered by an unreleased bump" need nothing; bumping them anyway
+   burns a version for no one's benefit. If the script says `No version changes
+   required.`, skip to step 4.
    - If a tier-3 crate moved, update `[workspace.package].version` and every
      `version = "<old>"` pin in `[workspace.dependencies]` for tier-3 crates.
    - For each independent (non-core) crate the script listed, update its own
      `Cargo.toml` `version` (patch or minor as advised) and any pin(s) on the bumped deps.
+   - A few pins live outside the root manifest (`ootle_ledger_client` in
+     `crates/wallet/ootle-rs`, `ootle-wasm-core` in `crates/ootle_wasm/wasm`).
+     `cargo metadata` fails loudly if one is left behind, so run it after editing.
 4. **Format:**
    ```sh
    cargo +nightly-2025-12-05 fmt --all
@@ -200,3 +264,14 @@ crates skip themselves automatically, but it's wasted CI time.
 3. Run `./scripts/crate_versioning.py list` to confirm the new crate shows up
    with the expected version and tier.
 4. Run `./scripts/publish_crates.py --dry-run` to confirm the build works.
+
+---
+
+## Tests
+
+The version arithmetic behind the registry check — is this version spent, does
+this bump break that pin — has its own tests. No network, no cargo, no pytest:
+
+```sh
+python3 scripts/test_crate_versioning.py
+```

@@ -135,23 +135,44 @@ def crate_index_path(name: str) -> str:
         return f"{name[:2]}/{name[2:4]}/{name}"
 
 
-def is_published(crate_name: str, version: str) -> bool:
-    """Check if a specific version of a crate exists on crates.io."""
+def published_versions(crate_name: str):
+    """Every version of a crate on crates.io, as [(version, yanked), ...].
+
+    Returns [] for a crate that has never been published, and None when the
+    lookup itself failed — callers must distinguish the two, since "no versions"
+    and "we could not find out" lead to opposite advice.
+
+    Reads the sparse index rather than the JSON API: one unauthenticated request
+    against the same source cargo resolves from.
+    """
     url = f"https://index.crates.io/{crate_index_path(crate_name)}"
     try:
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=10) as resp:
-            # Each line is a JSON object for one version
-            for line in resp.read().decode().splitlines():
-                try:
-                    entry = json.loads(line)
-                    if entry.get("vers") == version:
-                        return True
-                except json.JSONDecodeError:
-                    continue
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
-        pass
-    return False
+            body = resp.read().decode()
+    except urllib.error.HTTPError as e:
+        return [] if e.code == 404 else None
+    except (urllib.error.URLError, TimeoutError):
+        return None
+
+    versions = []
+    for line in body.splitlines():
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if entry.get("vers"):
+            versions.append((entry["vers"], bool(entry.get("yanked"))))
+    return versions
+
+
+def is_published(crate_name: str, version: str) -> bool:
+    """Check if a specific version of a crate exists on crates.io.
+
+    A failed lookup answers False so a publish is attempted rather than skipped;
+    cargo rejects a duplicate version itself.
+    """
+    return any(v == version for v, _ in published_versions(crate_name) or ())
 
 
 def cargo_publish(crate_name: str, dry_run: bool = False) -> bool:
