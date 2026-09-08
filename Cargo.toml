@@ -148,7 +148,7 @@ tari_template_macros = { version = "0.23", path = "crates/template_macros" }
 tari_bor = { version = "0.16.0", path = "crates/tari_bor", default-features = false }
 
 ootle_byte_type = { path = "crates/ootle_byte_type", version = "0.13" }
-ootle_serde = { path = "crates/ootle_serde", version = "0.5", default-features = false }
+ootle_serde = { path = "crates/ootle_serde", version = "0.6", default-features = false }
 ootle-wasm-core = { path = "crates/ootle_wasm/core", version = "0.41" }
 ootle_sdk_core = { path = "crates/ootle_sdk_core", version = "0.41" }
 
