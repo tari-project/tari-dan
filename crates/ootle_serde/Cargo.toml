@@ -1,6 +1,6 @@
 [package]
 name = "ootle_serde"
-version = "0.5.0"
+version = "0.6.0"
 description = "serde utilities for Tari Ootle"
 edition.workspace = true
 authors.workspace = true

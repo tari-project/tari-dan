@@ -77,13 +77,18 @@ Two scripts in `scripts/` cover publishing to crates.io and reasoning about vers
   - Default (no flags) is a dry-run summary. `--dry-run` runs `cargo publish --dry-run` per crate. `--execute` publishes.
   - `--from <crate>` resumes after a failure.
 - `scripts/crate_versioning.py` — answers "who needs to bump if X bumps?".
-  - `list` — same publish set with versions/tiers.
+  - `list` — same publish set with versions/tiers, plus whether each version is already on crates.io (`released`) or
+    still unpublished (`pending`).
   - `deps <crate>` / `dependents <crate> [--transitive]` — graph queries.
   - `impact <crate> [--breaking]` — for a non-breaking change, prints just a patch bump. For `--breaking`, prints the
     tier-3 workspace rollup (every tier-3 crate moves with `workspace.package.version`) plus the tier-1/2 crates that
     need pin updates + their republish guidance (patch min, minor if their public API re-exposes the changed types).
+  - Both commands query crates.io and ask only for bumps that are still outstanding. A crate whose in-tree version is
+    an unreleased minor ahead of crates.io needs nothing — the pending release already carries the change, because a
+    `^0.y` pin cannot exist on a version that was never published. `--offline` skips the check and lists the whole
+    cascade instead.
 
 When asked to bump a crate or prepare a release, run `impact <crate> --breaking` (or without `--breaking` for a patch)
-first, then follow its workflow checklist. Both scripts share their crate list — `publish_crates.py::CRATES` is the
-source of truth, so adding/removing a published crate there automatically updates `crate_versioning.py`. Detailed
-reference: `scripts/README.md`.
+first, then follow its workflow checklist — and apply only the bumps it asks for, not the ones it lists as already
+covered. Both scripts share their crate list — `publish_crates.py::CRATES` is the source of truth, so adding/removing a
+published crate there automatically updates `crate_versioning.py`. Detailed reference: `scripts/README.md`.

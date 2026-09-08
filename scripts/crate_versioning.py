@@ -8,10 +8,10 @@ by hand. When a crate is added/removed in `publish_crates.py`, this
 script automatically picks it up.
 
 Usage:
-    ./scripts/crate_versioning.py list
+    ./scripts/crate_versioning.py list [--offline]
     ./scripts/crate_versioning.py deps <crate>
     ./scripts/crate_versioning.py dependents <crate> [--transitive]
-    ./scripts/crate_versioning.py impact <crate> [--breaking]
+    ./scripts/crate_versioning.py impact <crate> [--breaking] [--offline]
 
 Tier semantics (mirrors publish_crates.py). Tier 3 is the only workspace-versioned
 cohort; every other tier is independently versioned:
@@ -31,17 +31,36 @@ crate, so it must bump minor too (and that, in turn, can promote its own public
 dependents). Deps are treated as public by default — the safe, never-under-bump
 assumption. IMPL_DETAIL_DEPS records audited exceptions that are
 implementation-detail only and so need just a patch + pin update.
+
+That cascade says which crates a change is breaking FOR. It does not say which
+ones still need a version edit, and the two differ whenever a release is
+pending: a version that was never published carries no ^0.y pins, so nothing can
+be broken by changing what it contains. A crate whose working-tree version is
+already an unreleased minor ahead of crates.io therefore needs nothing — its
+pending release absorbs the change and already announces it.
+
+So every bump is checked against the crates.io sparse index before it is
+printed, and a crate is only asked to move when its working-tree version is
+genuinely taken (or its pending bump is too small to break the pin it needs to).
+Pass --offline to skip the lookup; the output then falls back to listing the
+whole cascade, bumps already made included.
 """
 
 import argparse
 import json
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 
 # Reuse the publish list as the single source of truth.
 sys.path.insert(0, str(Path(__file__).parent))
-from publish_crates import CRATES, TIER_LABELS  # type: ignore[import-not-found]
+from publish_crates import (  # type: ignore[import-not-found]
+    CRATES,
+    TIER_LABELS,
+    published_versions,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PUBLISH_SET = {name for name, _, _ in CRATES}
@@ -86,6 +105,119 @@ IMPL_DETAIL_DEPS = {}
 def is_public_dep(crate, dep):
     """True unless the (crate -> dep) edge is an audited implementation-detail."""
     return dep not in IMPL_DETAIL_DEPS.get(crate, set())
+
+
+# ---------------------------------------------------------------------------
+# Registry state — what is actually published, vs what the tree says.
+# ---------------------------------------------------------------------------
+
+REGISTRY_WORKERS = 8
+
+
+def vkey(version: str):
+    """Sortable key for a version, ignoring any pre-release/build suffix."""
+    core = version.split("-", 1)[0].split("+", 1)[0]
+    parts = []
+    for part in core.split("."):
+        parts.append(int(part) if part.isdigit() else 0)
+    while len(parts) < 3:
+        parts.append(0)
+    return tuple(parts[:3])
+
+
+def breaks_pin(newer: str, older: str) -> bool:
+    """True if `newer` falls outside a caret pin on `older`.
+
+    Cargo's caret rules make the leftmost non-zero component the compatibility
+    one: ^1.2 admits 1.3, ^0.2 admits 0.2.9 but not 0.3, ^0.0.2 admits nothing
+    but 0.0.2.
+    """
+    a, b = vkey(newer), vkey(older)
+    if a[0] != b[0]:
+        return True
+    if a[0] == 0 and a[1] != b[1]:
+        return True
+    if a[0] == 0 and a[1] == 0 and a[2] != b[2]:
+        return True
+    return False
+
+
+@dataclass
+class Release:
+    """A crate's working-tree version set against what crates.io holds."""
+
+    name: str
+    local: str
+    # [(version, yanked), ...] — or None when the lookup failed or was skipped.
+    published: "list | None"
+
+    @property
+    def known(self) -> bool:
+        return self.published is not None
+
+    @property
+    def latest(self):
+        """Highest non-yanked published version, or None if there is none.
+
+        Yanked versions are excluded because this is the version dependents
+        resolve to; `taken` keeps them because their numbers stay spent.
+        """
+        live = [v for v, yanked in self.published or () if not yanked]
+        return max(live, key=vkey, default=None)
+
+    @property
+    def taken(self) -> bool:
+        """The tree's own version is spent — a release must carry a new number."""
+        return any(v == self.local for v, _ in self.published or ())
+
+    def carries(self, kind: str) -> bool:
+        """Is a `kind`-sized bump already made but unreleased?
+
+        A version nobody could depend on cannot break anybody, so an unpublished
+        local version that is far enough ahead of crates.io has already done the
+        job: the pending release ships the change under a number that announces
+        it. Unknown registry state answers False, so the caller asks for the bump
+        rather than skipping one that is needed.
+        """
+        if not self.known or self.taken:
+            return False
+        if self.latest is None:
+            return True  # never published — the first release announces everything
+        if vkey(self.local) <= vkey(self.latest):
+            return False  # tree is level with or behind the registry
+        return breaks_pin(self.local, self.latest) if kind == "minor" else True
+
+    def describe(self) -> str:
+        if not self.known:
+            return "registry unknown"
+        if self.taken:
+            return f"{self.local} is on crates.io"
+        if self.latest is None:
+            return "never published"
+        return f"{self.local} pending, crates.io has {self.latest}"
+
+
+def fetch_releases(versions: dict, offline: bool = False) -> dict:
+    """Look up every crate's published versions, concurrently."""
+    if offline:
+        return {n: Release(n, v, None) for n, v in versions.items()}
+    names = list(versions)
+    with ThreadPoolExecutor(max_workers=REGISTRY_WORKERS) as pool:
+        found = dict(zip(names, pool.map(published_versions, names)))
+    return {n: Release(n, versions[n], found[n]) for n in names}
+
+
+def registry_caveat(releases: dict, offline: bool) -> str:
+    """A warning line when the bumps below are not registry-checked, else ''."""
+    if offline:
+        return (f"{YELLOW}Registry check skipped (--offline) — bumps already made "
+                f"but unreleased are listed as if still needed.{NC}")
+    unknown = sorted(n for n, r in releases.items() if not r.known)
+    if not unknown:
+        return ""
+    shown = ", ".join(unknown[:3]) + (f", +{len(unknown) - 3} more" if len(unknown) > 3 else "")
+    return (f"{YELLOW}crates.io lookup failed for {len(unknown)} crate(s) ({shown}) — "
+            f"treating them as published, so their bumps are listed.{NC}")
 
 
 def cargo_metadata():
@@ -146,12 +278,26 @@ def transitive_dependents(seed: str, rev_deps):
     return seen
 
 
-def cmd_list(_args):
+def cmd_list(args):
     versions, _, _ = build_graph()
+    releases = fetch_releases(versions, args.offline)
     print(f"{BOLD}Publish order (from publish_crates.py):{NC}")
     for name, crate_dir, tier in CRATES:
         ver = versions[name]
-        print(f"  {name:38} {ver:8}  [{TIER_LABELS[tier]:11}]  {crate_dir}")
+        r = releases[name]
+        if not r.known:
+            plain, colour = "", ""
+        elif r.taken:
+            plain, colour = "released", GREEN
+        else:
+            plain, colour = f"pending (crates.io: {r.latest or 'never'})", YELLOW
+        # Pad on the visible text: the colour escapes would otherwise count
+        # toward the field width and stagger the column.
+        status = f"{colour}{plain}{NC}" + " " * max(0, 34 - len(plain))
+        print(f"  {name:38} {ver:8}  [{TIER_LABELS[tier]:11}]  {status}{crate_dir}")
+    caveat = registry_caveat(releases, args.offline)
+    if caveat:
+        print(caveat)
 
 
 def cmd_deps(args):
@@ -191,6 +337,21 @@ def cmd_dependents(args):
             print(f"  <~ {d} {versions[d]} [{TIER_LABELS[TIER_OF[d]]}]")
 
 
+def classify(name: str, kind: str, releases: dict) -> str:
+    """How much of a `kind` bump is still outstanding for this crate.
+
+      covered — the bump is already made and unreleased; nothing to do.
+      short   — a bump is pending but too small to break the pin it must break.
+      needed  — the tree's version is spent (or unknown); it has to move.
+    """
+    r = releases[name]
+    if r.carries(kind):
+        return "covered"
+    if r.known and not r.taken and r.latest and vkey(r.local) > vkey(r.latest):
+        return "short"
+    return "needed"
+
+
 def cmd_impact(args):
     versions, deps, dev_deps = build_graph()
     target = args.crate
@@ -202,15 +363,29 @@ def cmd_impact(args):
     target_tier = TIER_OF[target]
 
     print(f"{BOLD}Impact analysis: {target} {cur_ver} [{TIER_LABELS[target_tier]}]{NC}")
+
     if not args.breaking:
-        print(f"{GREEN}Non-breaking (patch) bump.{NC}")
-        print(f"  {target}: {cur_ver} -> {bump(cur_ver, 'patch')}")
+        rel = fetch_releases({target: cur_ver}, args.offline)[target]
+        if rel.carries("patch"):
+            print(f"{GREEN}Non-breaking (patch) change — no version edit needed.{NC}")
+            print(f"  {target} {rel.describe()}, so the pending release carries it.")
+        else:
+            print(f"{GREEN}Non-breaking (patch) bump.{NC}")
+            print(f"  {target}: {cur_ver} -> {bump(cur_ver, 'patch')}")
         print(f"  Dependents auto-pick-up via ^0.y constraints — no republish needed")
         print(f"  unless a dependent wants to ship the fix.")
         return
 
-    new_ver = bump(cur_ver, "minor")
-    print(f"{YELLOW}Breaking (minor) bump: {cur_ver} -> {new_ver}{NC}")
+    releases = fetch_releases(versions, args.offline)
+    target_state = classify(target, "minor", releases)
+    if target_state == "covered":
+        print(f"{GREEN}Breaking (minor) change — {target} {releases[target].describe()}, "
+              f"so its own bump is already made.{NC}")
+    else:
+        print(f"{YELLOW}Breaking (minor) bump: {cur_ver} -> {bump(cur_ver, 'minor')}{NC}")
+    caveat = registry_caveat(releases, args.offline)
+    if caveat:
+        print(caveat)
     print()
 
     tier3_crates = {n for n, t in TIER_OF.items() if t == 3}
@@ -224,6 +399,10 @@ def cmd_impact(args):
     #     change (the changed types reach its public API) and joins the set. This
     #     cascades: a crate promoted to minor can in turn promote its own public
     #     dependents.
+    #
+    # This set is who the change is breaking FOR. Whether each of them still needs
+    # a version edit is a separate question, answered against the registry below —
+    # a crate already sitting on an unreleased minor has nothing left to do.
     minor_set = {target}
     while True:
         changed = False
@@ -251,22 +430,43 @@ def cmd_impact(args):
         if c not in minor_set and TIER_OF[c] != 3 and ds & minor_set
     }
 
-    # Render tier-3 cohort.
-    if minor_set & tier3_crates:
-        print(f"{BOLD}Tier 3 (core) — all republish at the new workspace version:{NC}")
+    state = {c: classify(c, "minor", releases) for c in minor_set}
+    state.update({c: classify(c, "patch", releases) for c in pin_update_set})
+    # Tier-3 members are reported by the cohort block below, which owns their
+    # shared version; listing them again as individually covered double-counts.
+    covered = sorted(c for c, st in state.items()
+                     if st == "covered" and TIER_OF[c] != 3)
+
+    # Render tier-3 cohort. The cohort shares one version, so it moves as soon as
+    # any single member still owes a bump.
+    t3_in_play = sorted(minor_set & tier3_crates)
+    t3_moving = [c for c in t3_in_play if state[c] != "covered"]
+    if t3_in_play:
         ws_ver = workspace_version()
-        new_ws = bump(ws_ver, "minor")
-        print(f"  Set [workspace.package].version = \"{new_ws}\" in root Cargo.toml.")
-        print(f"  Update every tier-3 pin in [workspace.dependencies] "
-              f"from \"{trim(ws_ver)}\" -> \"{trim(new_ws)}\".")
-        for c in sorted(tier3_crates):
-            marker = "*" if c == target else " "
-            print(f"  {marker} {c} {versions[c]} -> {new_ws}")
+        print(f"{BOLD}Tier 3 (core) — the workspace cohort:{NC}")
+        if not t3_moving:
+            print(f"  {GREEN}No rollup needed{NC} — [workspace.package].version {ws_ver} is "
+                  f"already an unreleased breaking bump ahead of crates.io.")
+            for c in t3_in_play:
+                print(f"    {c:38} {releases[c].describe()}")
+        else:
+            new_ws = bump(ws_ver, "minor")
+            print(f"  Set [workspace.package].version = \"{new_ws}\" in root Cargo.toml.")
+            print(f"  Update every tier-3 pin in [workspace.dependencies] "
+                  f"from \"{trim(ws_ver)}\" -> \"{trim(new_ws)}\".")
+            if 0 < len(t3_moving) < len(t3_in_play):
+                print(f"  The whole cohort moves because {len(t3_moving)} member(s) "
+                      f"still owe a bump:")
+                for c in t3_moving:
+                    print(f"    {c:38} ({releases[c].describe()})")
+            for c in sorted(tier3_crates):
+                marker = "*" if c == target else " "
+                print(f"  {marker} {c} {versions[c]} -> {new_ws}")
         print()
 
-    # Render independent (non-core) minor bumps (target if independent, plus any
-    # other independent crate elevated to minor — typically none unless target is).
-    non_t3_minor = sorted(c for c in minor_set if TIER_OF[c] != 3)
+    # Render independent (non-core) minor bumps that are still outstanding.
+    non_t3_minor = sorted(c for c in minor_set
+                          if TIER_OF[c] != 3 and state[c] != "covered")
     if non_t3_minor:
         print(f"{BOLD}Independent (non-core) — minor (breaking) bump required:{NC}")
         for c in non_t3_minor:
@@ -277,10 +477,16 @@ def cmd_impact(args):
             else:
                 causes = sorted(d for d in deps[c] & minor_set if is_public_dep(c, d))
                 print(f"{line}  (re-exposes {', '.join(causes)} in public API)")
+            if state[c] == "short":
+                print(f"      {YELLOW}{versions[c]} is pending but does not break "
+                      f"^{releases[c].latest} — promote it.{NC}")
+            elif releases[c].known:
+                print(f"      {releases[c].describe()}")
         print()
 
     # Render pin-update set (independent crates that must republish).
-    pin_independent = sorted(c for c in pin_update_set if TIER_OF[c] != 3)
+    pin_independent = sorted(c for c in pin_update_set
+                             if TIER_OF[c] != 3 and state[c] != "covered")
     if pin_independent:
         print(f"{BOLD}Independent (non-core) — recompile & republish a PATCH "
               f"(deps are impl-detail, not re-exposed):{NC}")
@@ -296,6 +502,18 @@ def cmd_impact(args):
             print(f"    pins:  {pin_hint}")
         print()
 
+    # Crates the change breaks for, whose bump is already made and unreleased.
+    if covered:
+        print(f"{GREEN}Already covered by an unreleased bump ({len(covered)}) — "
+              f"no action:{NC}")
+        for c in covered:
+            tag = " [tier-3 cohort]" if TIER_OF[c] == 3 else ""
+            print(f"  {c:38} {releases[c].describe()}{tag}")
+        print(f"  A ^0.y pin cannot exist on a version that was never published, so "
+              f"the pending")
+        print(f"  release absorbs the change under a number that already announces it.")
+        print()
+
     # Dev-only callouts on the target (informational).
     direct_dev_dependents = sorted(rev_dev.get(target, ()))
     if direct_dev_dependents:
@@ -306,15 +524,23 @@ def cmd_impact(args):
         print()
 
     # Suggested workflow.
+    if not t3_moving and not non_t3_minor and not pin_independent:
+        print(f"{BOLD}{GREEN}No version changes required.{NC}")
+        print(f"  Every crate this change breaks is already on an unreleased bump.")
+        if args.offline:
+            print(f"  (…as far as --offline can tell; re-run without it to confirm.)")
+        return
+
     print(f"{BOLD}Suggested workflow:{NC}")
     step = 1
-    if minor_set & tier3_crates:
+    if t3_moving:
         print(f"  {step}. Bump workspace.package.version in root Cargo.toml.")
         step += 1
         print(f"  {step}. Update tier-3 pins in [workspace.dependencies].")
         step += 1
     if non_t3_minor:
-        print(f"  {step}. Minor-bump these independent crates in their own Cargo.toml:")
+        print(f"  {step}. Minor-bump these independent crates in their own Cargo.toml,")
+        print(f"     and update each one's pin in [workspace.dependencies]:")
         for c in non_t3_minor:
             print(f"       {c} -> {bump(versions[c], 'minor')}")
         step += 1
@@ -363,7 +589,12 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = p.add_subparsers(dest="cmd", required=True)
 
-    sp.add_parser("list", help="Show the publish set with versions and tiers.").set_defaults(func=cmd_list)
+    OFFLINE_HELP = ("Skip the crates.io lookup. Bumps already made but not yet "
+                    "released can then no longer be told apart from ones still owed.")
+
+    pl = sp.add_parser("list", help="Show the publish set with versions and tiers.")
+    pl.add_argument("--offline", action="store_true", help=OFFLINE_HELP)
+    pl.set_defaults(func=cmd_list)
 
     pd = sp.add_parser("deps", help="What does this crate depend on (in the publish set)?")
     pd.add_argument("crate")
@@ -378,6 +609,7 @@ def main():
     pi.add_argument("crate")
     pi.add_argument("--breaking", action="store_true",
                     help="Treat the change as a breaking (minor) bump rather than a patch.")
+    pi.add_argument("--offline", action="store_true", help=OFFLINE_HELP)
     pi.set_defaults(func=cmd_impact)
 
     args = p.parse_args()
