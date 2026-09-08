@@ -103,10 +103,9 @@ mod measure {
         /// Points for an engine call whose response is a bare `()`: envelope encode, the host call
         /// and the length-prefixed free.
         bare_call: f64,
-        /// Points to bring a small response back as `InvokeResult(Value)`, over [`Self::bare_call`].
-        response_value: f64,
-        /// Points to convert that `Value` into the concrete type.
-        from_value: f64,
+        /// Points to decode an engine call's response into the concrete type, over
+        /// [`Self::bare_call`].
+        response_decode: f64,
     }
 
     fn probe_points() -> Fits {
@@ -168,15 +167,18 @@ mod measure {
         println!("One engine call with payloads of a few tens of bytes, by stage (guest points):");
         println!("  argument encode + host call + unit response     {bare_call:>8.0}   (EmitLog, empty message)");
         println!(
-            "  response arrives as InvokeResult(Value)         {:>8.0}   (CallerContextInvoke, 32-byte key)",
+            "  response decoded into the concrete type         {:>8.0}   (CallerContextInvoke, 32-byte key)",
+            floor - bare_call
+        );
+        println!("  total                                          {floor:>8.0}");
+        println!(
+            "  the same response built as a Value tree         {:>8.0}   (what a response no longer does)",
             raw - bare_call
         );
-        println!("  from_value into the concrete type              {:>8.0}", floor - raw);
-        println!("  total                                          {floor:>8.0}");
 
         let (state_get_typed, state_get_value, state_set) = state_fits(&mut test);
-        let from_value_fixed = state_get_typed.intercept - state_get_value.intercept;
-        let from_value_slope = state_get_typed.slope - state_get_value.slope;
+        let value_tree_fixed = state_get_value.intercept - state_get_typed.intercept;
+        let value_tree_slope = state_get_value.slope - state_get_typed.slope;
 
         println!(
             "\nOne argument costs {:.0} points before its first byte: the {noop}-point empty invocation is already \
@@ -197,8 +199,8 @@ mod measure {
             println!("{:<34} {:>14.0} {:>10.3} /{}", f.label, f.intercept, f.slope, f.unit);
         }
         println!(
-            "\nGuest-side `from_value` on a GetState response: {from_value_fixed:.0} points fixed, \
-             {from_value_slope:.3} points/byte"
+            "\nBuilding a Value tree from a GetState response rather than decoding it: {value_tree_fixed:.0} points \
+             fixed, {value_tree_slope:.3} points/byte"
         );
 
         Fits {
@@ -207,8 +209,7 @@ mod measure {
             hop3_arg,
             state_get_typed,
             bare_call,
-            response_value: raw - bare_call,
-            from_value: floor - raw,
+            response_decode: floor - bare_call,
         }
     }
 
@@ -247,7 +248,7 @@ mod measure {
         table("Hop 3: one SetState call", "state bytes", &set);
         (
             fit("hop 4: GetState into a type", "state byte", &typed),
-            fit("hop 4: GetState, response Value only", "state byte", &value_only),
+            fit("hop 4: GetState, response as a Value", "state byte", &value_only),
             fit("hop 3: SetState", "state byte", &set),
         )
     }
@@ -336,11 +337,13 @@ mod measure {
     /// encodes a realistic `SetState` argument, varying only how the destination buffer is obtained.
     fn buffer_strategies() {
         const COUNTS: [u32; 2] = [64, 512];
-        const STRATEGIES: [(&str, u32); 4] = [
+        const PAYLOADS: [u32; 4] = [64, 512, 4_096, 16_384];
+        const STRATEGIES: [(&str, u32); 5] = [
             ("encoded_len, exact buffer", 0),
             ("empty buffer, grown", 1),
             ("512-byte buffer", 2),
             ("1024-byte buffer", 3),
+            ("4096-byte buffer", 4),
         ];
 
         let mut test = TemplateTest::new(CRATE_PATH, [PROBE]);
@@ -348,14 +351,14 @@ mod measure {
 
         println!("\n== Guest points per engine-call argument encode ==");
         print!("{:<28}", "buffer strategy");
-        for size in [64u32, 512, 4096] {
+        for size in PAYLOADS {
             print!("{:>16}", format!("{size} B payload"));
         }
         println!();
         println!("{}", "-".repeat(76));
         for (label, strategy) in STRATEGIES {
             print!("{label:<28}");
-            for size in [64u32, 512, 4096] {
+            for size in PAYLOADS {
                 let low = method_points(&mut test, component, "encode_buffered", args![
                     COUNTS[0], size, strategy
                 ]);
@@ -442,9 +445,12 @@ mod measure {
         name: &'static str,
         wall_ns: u64,
         wasm_points: u64,
+        /// Whether the trials disagreed on points, i.e. the workload did not run the same
+        /// transaction each time.
+        points_vary: bool,
         census: abi_metrics::Census,
-        to_value: value_metrics::Phase,
-        from_value: value_metrics::Phase,
+        result_encode: value_metrics::Phase,
+        result_decode: value_metrics::Phase,
     }
 
     impl WorkloadCensus {
@@ -457,8 +463,8 @@ mod measure {
                     .ns
                     .saturating_sub(self.census.guest_alloc().ns) +
                 self.census.return_decode().ns +
-                self.to_value.ns +
-                self.from_value.ns
+                self.result_encode.ns +
+                self.result_decode.ns
         }
 
         fn engine_calls(&self) -> u64 {
@@ -517,6 +523,7 @@ mod measure {
         execute(test);
 
         let mut best: Option<WorkloadCensus> = None;
+        let mut all_points = Vec::with_capacity(CENSUS_TRIALS);
         for _ in 0..CENSUS_TRIALS {
             abi_metrics::reset();
             value_metrics::reset();
@@ -527,23 +534,37 @@ mod measure {
                 name,
                 wall_ns,
                 wasm_points: test.last_execution_points().wasm,
+                points_vary: false,
                 census: abi_metrics::snapshot(),
-                to_value: value_metrics::to_value(),
-                from_value: value_metrics::from_value(),
+                result_encode: value_metrics::encode(),
+                result_decode: value_metrics::decode(),
             };
+            all_points.push(candidate.wasm_points);
             if best.as_ref().is_none_or(|best| candidate.wall_ns < best.wall_ns) {
                 best = Some(candidate);
             }
         }
-        best.expect("at least one trial")
+        let mut best = best.expect("at least one trial");
+        // Every figure reported describes one trial, so a ratio drawn between two of them is a
+        // ratio over the same transaction. Points are deterministic per transaction, so trials
+        // that disagree mean the workload mutated state and ran a different transaction each time;
+        // that makes the points column incomparable across runs, which the flag says rather than
+        // the numbers hiding it.
+        best.points_vary = all_points.iter().any(|p| *p != all_points[0]);
+        best
     }
 
     fn report_workload(workload: &WorkloadCensus, timer_ns: f64) {
         println!("\n== Census: {} ==", workload.name);
         println!(
-            "Wall time {:.1} µs, {} WASM points, {} engine calls",
+            "Wall time {:.1} µs, {} WASM points{}, {} engine calls",
             workload.wall_ns as f64 / 1000.0,
             workload.wasm_points,
+            if workload.points_vary {
+                " (lowest; trials differ, so this workload is not a stable point comparison)"
+            } else {
+                ""
+            },
             workload.engine_calls()
         );
         println!();
@@ -595,14 +616,14 @@ mod measure {
             returns.mean_ns()
         );
         println!(
-            "InvokeResult to_value (host):        {:>4} calls, {:>19.0} ns/call",
-            workload.to_value.calls,
-            workload.to_value.mean_ns()
+            "InvokeResult encode (host):          {:>4} calls, {:>19.0} ns/call",
+            workload.result_encode.calls,
+            workload.result_encode.mean_ns()
         );
         println!(
-            "InvokeResult from_value (host):      {:>4} calls, {:>19.0} ns/call",
-            workload.from_value.calls,
-            workload.from_value.mean_ns()
+            "InvokeResult decode (host):          {:>4} calls, {:>19.0} ns/call",
+            workload.result_decode.calls,
+            workload.result_decode.mean_ns()
         );
 
         let phases = workload.engine_calls() * 4 + size_pass.count + call_info.count * 2 + returns.count;
@@ -659,18 +680,17 @@ mod measure {
              adds {:.0} more.\nHost wall time is the whole harness execution, so the boundary's share of a \
              validator's own work is higher than it reads here.\nA nested call's handler time contains the whole \
              sub-invocation, ABI hops included.",
-            fits.bare_call,
-            fits.response_value + fits.from_value,
+            fits.bare_call, fits.response_decode,
         );
     }
 
     /// Guest points the boundary costs one op, from the probe fits: hop 3 for its argument, then
-    /// hop 4 for its response. A response of one or two bytes is a bare `()`, which the guest
-    /// decodes directly; anything larger arrives as an `InvokeResult` and pays the `Value` detour.
+    /// hop 4 for its response. A response of one or two bytes is a bare `()`; anything larger
+    /// arrives as an `InvokeResult` and pays its framing on top.
     fn op_points(fits: &Fits, arg_bytes: f64, resp_bytes: f64) -> f64 {
         let mut points = fits.bare_call + fits.hop3_arg.slope * arg_bytes;
         if resp_bytes > 2.0 {
-            points += fits.response_value + fits.from_value + fits.state_get_typed.slope * resp_bytes;
+            points += fits.response_decode + fits.state_get_typed.slope * resp_bytes;
         }
         points
     }
@@ -705,7 +725,7 @@ mod measure {
         let resp_bytes = per_call(sum(|op| op.resp_bytes));
         let decode_ns = per_call(sum(|op| op.decode_ns));
         let encode_ns = per_call(sum(|op| op.encode_ns));
-        let to_value_ns = per_call(workload.to_value.ns);
+        let result_encode_ns = per_call(workload.result_encode.ns);
 
         println!("\n== Per hop: {} ==", workload.name);
         println!(
@@ -739,7 +759,7 @@ mod measure {
                 "4 host -> guest, engine responses",
                 calls,
                 resp_bytes,
-                encode_ns + to_value_ns,
+                encode_ns + result_encode_ns,
                 op_points(fits, arg_bytes, resp_bytes) - fits.bare_call - fits.hop3_arg.slope * arg_bytes,
             ),
         ];

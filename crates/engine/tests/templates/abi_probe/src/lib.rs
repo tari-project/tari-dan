@@ -77,12 +77,12 @@ mod abi_probe {
 
         // Buffer strategy for the hop 3 encode ----------------------------------------------
         /// `n` encodes of a realistic `SetState` engine-call argument carrying a `size`-byte
-        /// payload, buffered one of four ways. Nothing but the encode's own buffer differs, so the
+        /// payload, buffered one of five ways. Nothing but the encode's own buffer differs, so the
         /// slopes across `n` price the `encoded_len` pre-pass against the alternatives.
         ///
-        /// 0: `encoded_len` pre-pass, then an exactly sized buffer, which is what `call_engine`
-        /// does today. 1: an empty buffer left to grow. 2 and 3: one 512- or 1024-byte allocation
-        /// up front, growing only for an argument larger than that.
+        /// 0: `encoded_len` pre-pass, then an exactly sized buffer. 1: an empty buffer left to
+        /// grow. 2, 3 and 4: one 512-, 1024- or 4096-byte allocation up front, growing only for an
+        /// argument larger than that.
         pub fn encode_buffered(&self, n: u32, size: u32, strategy: u32) -> u32 {
             let arg = ComponentInvokeArg {
                 component_ref: ComponentRef::Ref(CallerContext::current_component_address()),
@@ -114,9 +114,16 @@ mod abi_probe {
                         acc = acc.wrapping_add(core::hint::black_box(&buf).len() as u32);
                     }
                 },
-                _ => {
+                3 => {
                     for _ in 0..n {
                         let mut buf = Vec::with_capacity(1024);
+                        tari_bor::encode_into_writer(&arg, &mut buf).unwrap();
+                        acc = acc.wrapping_add(core::hint::black_box(&buf).len() as u32);
+                    }
+                },
+                _ => {
+                    for _ in 0..n {
+                        let mut buf = Vec::with_capacity(4096);
                         tari_bor::encode_into_writer(&arg, &mut buf).unwrap();
                         acc = acc.wrapping_add(core::hint::black_box(&buf).len() as u32);
                     }
@@ -181,9 +188,9 @@ mod abi_probe {
             acc
         }
 
-        /// `n` `CallerContextInvoke` calls stopping at the response `Value`. The difference
-        /// against `caller_context_calls` is the `InvokeResult` `from_value` conversion into a
-        /// concrete type, which no change of codec removes.
+        /// `n` `CallerContextInvoke` calls that materialise the response as a `tari_bor::Value`
+        /// instead of decoding it into the concrete type. The difference against
+        /// `caller_context_calls` is what the value tree costs over a direct decode.
         pub fn caller_context_raw(n: u32) -> u32 {
             let mut acc = 0u32;
             for _ in 0..n {
@@ -210,9 +217,9 @@ mod abi_probe {
             acc
         }
 
-        /// `n` `GetState` round-trips stopping at the `InvokeResult`'s own `Value`: hop 4 without
-        /// the `from_value` conversion into a concrete type. The difference against
-        /// `get_state_typed` is that conversion, which no change of codec removes.
+        /// `n` `GetState` round-trips that materialise the response as a `tari_bor::Value` instead
+        /// of decoding it into the concrete type. The difference against `get_state_typed` is what
+        /// the value tree costs over a direct decode.
         pub fn get_state_raw(&self, n: u32) -> u32 {
             let component = CallerContext::current_component_address();
             let mut acc = 0u32;
