@@ -10,6 +10,7 @@ use anyhow::anyhow;
 use futures::StreamExt;
 use log::*;
 use ootle_network::Network;
+use rand::seq::SliceRandom;
 use tari_consensus::{
     check_quorum_certificate_signatures,
     traits::{ConsensusSpec, SyncManager, SyncStatus},
@@ -21,7 +22,7 @@ use tari_ootle_common_types::{
     ShardGroup,
     VersionedSubstateId,
     VotePower,
-    committee::Committee,
+    committee::{Committee, CommitteeMember},
     optional::Optional,
     shard::Shard,
 };
@@ -72,7 +73,6 @@ pub struct RpcStateSyncClientProtocol<TConsensusSpec: ConsensusSpec> {
     state_store: TConsensusSpec::StateStore,
     client_factory: TariValidatorNodeRpcClientFactory,
     signer_service: TConsensusSpec::SignerService,
-    valid_checkpoints: HashMap<ShardGroup, EpochCheckpoint>,
     stats: StateSyncStats,
     skip_sync: bool,
 }
@@ -93,7 +93,6 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             state_store,
             client_factory,
             signer_service,
-            valid_checkpoints: HashMap::new(),
             stats: StateSyncStats::default(),
             skip_sync: false,
         }
@@ -129,35 +128,40 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
         self.stats.total_requests += 1;
 
-        match client
+        let mut checkpoints = match client
             .get_checkpoints(GetCheckpointsRequest {
                 from_epoch: Some(prev_epoch.into()),
                 num_to_return: 1,
+                shard_group: Some(for_shard_group.encode_as_u32()),
             })
             .await
         {
-            Ok(GetCheckpointsResponse { checkpoints }) if checkpoints.is_empty() => Ok(None),
-            Ok(GetCheckpointsResponse { mut checkpoints }) => {
-                match EpochCheckpoint::try_from(checkpoints.pop().expect("checked is_empty")) {
-                    Ok(checkpoint) => {
-                        checkpoint.checked_shard_group().map_err(|err| {
-                            RpcStateSyncError::InvalidResponse(anyhow!(
-                                "Fetched checkpoint for epoch {} has invalid shard group: {err}",
-                                checkpoint.epoch()
-                            ))
-                        })?;
-                        info!(target: LOG_TARGET, "🛜 Checkpoint: {checkpoint}");
-                        self.validate_checkpoint(&checkpoint, prev_committee, prev_epoch)?;
-                        self.state_store.with_write_tx(|tx| checkpoint.save(tx))?;
-                        self.valid_checkpoints.insert(for_shard_group, checkpoint.clone());
-                        Ok(Some(checkpoint))
-                    },
-                    Err(err) => Err(RpcStateSyncError::InvalidResponse(err)),
-                }
-            },
-            Err(RpcError::RequestFailed(err)) if err.is_not_found() => Ok(None),
-            Err(err) => Err(err.into()),
+            Ok(GetCheckpointsResponse { checkpoints }) => checkpoints,
+            Err(RpcError::RequestFailed(err)) if err.is_not_found() => return Ok(None),
+            Err(err) => return Err(err.into()),
+        };
+
+        let Some(checkpoint) = checkpoints.pop() else {
+            return Ok(None);
+        };
+        let checkpoint = EpochCheckpoint::try_from(checkpoint).map_err(RpcStateSyncError::InvalidResponse)?;
+        let shard_group = checkpoint.checked_shard_group().map_err(|err| {
+            RpcStateSyncError::InvalidResponse(anyhow!(
+                "Fetched checkpoint for epoch {} has invalid shard group: {err}",
+                checkpoint.epoch()
+            ))
+        })?;
+        if checkpoint.epoch() != prev_epoch || shard_group != for_shard_group {
+            return Err(RpcStateSyncError::InvalidResponse(anyhow!(
+                "Requested checkpoint for epoch {prev_epoch} shard group {for_shard_group} but peer returned epoch {} \
+                 shard group {shard_group}",
+                checkpoint.epoch()
+            )));
         }
+        info!(target: LOG_TARGET, "🛜 Checkpoint: {checkpoint}");
+        self.validate_checkpoint(&checkpoint, prev_committee, prev_epoch)?;
+        self.state_store.with_write_tx(|tx| checkpoint.save(tx))?;
+        Ok(Some(checkpoint))
     }
 
     #[allow(clippy::too_many_lines)]
@@ -448,11 +452,12 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         Ok(())
     }
 
-    async fn get_sync_committees(
+    async fn get_sync_sources(
         &self,
         local_shard_group: ShardGroup,
         current_epoch: Epoch,
-    ) -> Result<HashMap<ShardGroup, Committee<PeerAddress>>, RpcStateSyncError> {
+        our_vn_addr: &PeerAddress,
+    ) -> Result<HashMap<ShardGroup, SyncSource>, RpcStateSyncError> {
         // We are behind at least one epoch.
         // We get the current substate range, and we ask committees from previous epoch in this range to give us
         // data.
@@ -461,18 +466,30 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             .ok_or_else(|| RpcStateSyncError::NoCommittees(Epoch::zero()))?;
         info!(target: LOG_TARGET,"Previous epoch is {}", prev_epoch);
         // We want to get any committees from the previous epoch that overlap with our shard group in this epoch
-        let committees = self
+        let prev_committees = self
             .epoch_manager
             .get_committees_overlapping_shard_group(prev_epoch, local_shard_group)
             .await?;
 
-        if committees.is_empty() {
+        if prev_committees.is_empty() {
             return Err(RpcStateSyncError::NoCommittees(prev_epoch));
         }
 
-        let committees = committees.into_iter().collect::<HashMap<_, _>>();
-        info!(target: LOG_TARGET, "🛜 Querying {} committee(s) from epoch {}", committees.len(), prev_epoch);
-        Ok(committees)
+        // Every shard this sync requests lies in local_shard_group, and every member of our current committee
+        // holds the previous epoch's state for exactly that range. After a split, members of other current
+        // committees hold only their own sub-range of the previous shard group.
+        let local_committee = self.epoch_manager.get_local_committee(current_epoch).await?;
+        let sources = prev_committees
+            .into_iter()
+            .map(|(shard_group, signing_committee)| {
+                (
+                    shard_group,
+                    SyncSource::new(signing_committee, &local_committee, our_vn_addr),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        info!(target: LOG_TARGET, "🛜 Querying {} committee(s) from epoch {}", sources.len(), prev_epoch);
+        Ok(sources)
     }
 
     fn validate_checkpoint(
@@ -521,8 +538,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         shard: Shard,
         shard_group: ShardGroup,
         epoch: Epoch,
-        prev_committee: &Committee<PeerAddress>,
-        our_vn_addr: &PeerAddress,
+        source: &SyncSource,
     ) -> Result<Option<Version>, RpcStateSyncError> {
         let prev_epoch = epoch
             .checked_sub(Epoch(1))
@@ -532,10 +548,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         let mut last_hard_error = None;
         let mut saw_unavailable_checkpoint = false;
 
-        for member in prev_committee.shuffled() {
-            if *our_vn_addr == member.address {
-                continue;
-            }
+        for member in &source.serving_peers {
             let mut client = match self.establish_rpc_session(&member.address).await {
                 Ok(c) => c,
                 Err(err) => {
@@ -550,7 +563,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
             // fetch checkpoint
             let checkpoint = match self
-                .get_or_fetch_valid_epoch_checkpoint(&mut client, shard_group, prev_committee, prev_epoch)
+                .get_or_fetch_valid_epoch_checkpoint(&mut client, shard_group, &source.signing_committee, prev_epoch)
                 .await
             {
                 Ok(Some(cp)) => cp,
@@ -614,32 +627,21 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         }
 
         Err(RpcStateSyncError::SyncFailedAllPeers {
-            committee_size: prev_committee.len(),
+            num_peers: source.serving_peers.len(),
         })
     }
 
     async fn sync_global_shard(
         &mut self,
         current_epoch: Epoch,
-        shard_group: ShardGroup,
-        prev_committees: &HashMap<ShardGroup, Committee<PeerAddress>>,
-        our_vn_address: &PeerAddress,
+        sources: &HashMap<ShardGroup, SyncSource>,
     ) -> Result<Option<Version>, RpcStateSyncError> {
         let mut last_error = None;
 
-        for (sg, prev_committee) in prev_committees {
-            // TODO: any checkpoint for the previous epoch will justify the global shard sync.
-            //       Currently we'll fetch the checkpoint again even if we already have it if there are more than one
-            // shard groups.
-            let result = self
-                .sync_shard(
-                    Shard::global(),
-                    shard_group,
-                    current_epoch,
-                    prev_committee,
-                    our_vn_address,
-                )
-                .await;
+        for (sg, source) in sources {
+            // Any previous-epoch checkpoint carries the global shard root, so the first shard group to succeed
+            // justifies the whole global shard sync.
+            let result = self.sync_shard(Shard::global(), *sg, current_epoch, source).await;
             match result {
                 Ok(maybe_version) => {
                     let Some(version) = maybe_version else {
@@ -664,7 +666,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         }
 
         Err(RpcStateSyncError::SyncFailedAllPeers {
-            committee_size: prev_committees.len(),
+            num_peers: sources.values().map(|s| s.serving_peers.len()).sum(),
         })
     }
 
@@ -684,8 +686,11 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         };
         let our_vn = self.epoch_manager.get_our_validator_node(current_epoch).await?;
         let local_info = self.epoch_manager.get_local_committee_info(current_epoch).await?;
-        let prev_epoch_committees = match self.get_sync_committees(local_info.shard_group(), current_epoch).await {
-            Ok(committees) => committees,
+        let sync_sources = match self
+            .get_sync_sources(local_info.shard_group(), current_epoch, &our_vn.address)
+            .await
+        {
+            Ok(sources) => sources,
             Err(RpcStateSyncError::NoCommittees(prev_epoch)) => {
                 info!(target: LOG_TARGET, "No committees for the previous epoch {prev_epoch}. This is the first committee.");
                 return Ok(());
@@ -694,9 +699,13 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         };
 
         // Edge case: we're the only VN in a previous committee
-        if prev_epoch_committees.len() == 1 &&
-            prev_epoch_committees.values().all(|committee| {
-                committee.len() == 1 && committee.address_iter().all(|addr| *addr == our_vn.address)
+        if sync_sources.len() == 1 &&
+            sync_sources.values().all(|source| {
+                source.signing_committee.len() == 1 &&
+                    source
+                        .signing_committee
+                        .address_iter()
+                        .all(|addr| *addr == our_vn.address)
             })
         {
             info!(target: LOG_TARGET, "This node is the only Validator in the previous committee - no need to sync.");
@@ -705,17 +714,11 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
         let local_shard_group = local_info.shard_group();
 
-        self.sync_global_shard(
-            current_epoch,
-            ShardGroup::all_shards(local_info.num_preshards()),
-            &prev_epoch_committees,
-            &our_vn.address,
-        )
-        .await?;
+        self.sync_global_shard(current_epoch, &sync_sources).await?;
 
         // Sync data from each committee in range of the committee we're joining.
         // NOTE: we don't have to worry about substates in address range because shard boundaries are fixed.
-        for (shard_group, committee) in prev_epoch_committees {
+        for (shard_group, source) in sync_sources {
             let Some(intersect_shard_group) = shard_group.intersection(&local_shard_group) else {
                 warn!(
                     target: LOG_TARGET,
@@ -724,13 +727,66 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                 continue;
             };
             for shard in intersect_shard_group.shard_iter() {
-                self.sync_shard(shard, shard_group, current_epoch, &committee, &our_vn.address)
-                    .await?;
+                self.sync_shard(shard, shard_group, current_epoch, &source).await?;
             }
         }
 
         self.stats.total_time = timer.elapsed();
         Ok(())
+    }
+}
+
+/// Where to sync one shard group's state from. Checkpoint validity depends only on the quorum signatures of
+/// the committee that produced it, so who serves the bytes is chosen for availability rather than trust.
+struct SyncSource {
+    /// The previous epoch's committee for the shard group. Its quorum threshold and voting powers are the
+    /// only thing a fetched checkpoint is validated against.
+    signing_committee: Committee<PeerAddress>,
+    /// Peers to request the checkpoint and state from, in order of preference, excluding this node.
+    /// Members of our current committee are running consensus and hold the previous epoch's state for our
+    /// whole shard group (either as continuing members or because they synced it from the same checkpoint),
+    /// so they come first; signing-committee members that left at the epoch boundary are the fallback.
+    serving_peers: Vec<CommitteeMember<PeerAddress>>,
+}
+
+impl SyncSource {
+    fn new(
+        signing_committee: Committee<PeerAddress>,
+        local_committee: &Committee<PeerAddress>,
+        our_vn_addr: &PeerAddress,
+    ) -> Self {
+        let signing_addrs = signing_committee.address_iter().collect::<HashSet<_>>();
+        let local_addrs = local_committee.address_iter().collect::<HashSet<_>>();
+
+        let mut continuing = Vec::new();
+        let mut joined = Vec::new();
+        for member in local_committee.iter().filter(|m| m.address != *our_vn_addr) {
+            if signing_addrs.contains(&member.address) {
+                continuing.push(member.clone());
+            } else {
+                joined.push(member.clone());
+            }
+        }
+        let departed = signing_committee
+            .iter()
+            .filter(|m| m.address != *our_vn_addr && !local_addrs.contains(&m.address))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        // Shuffling within each tier spreads load across equally preferred peers.
+        let mut rng = rand::rng();
+        let serving_peers = [continuing, joined, departed]
+            .into_iter()
+            .flat_map(|mut tier| {
+                tier.shuffle(&mut rng);
+                tier
+            })
+            .collect();
+
+        Self {
+            signing_committee,
+            serving_peers,
+        }
     }
 }
 
@@ -1067,16 +1123,12 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
     async fn sync(&mut self, target_epoch: Option<Epoch>) -> Result<(), Self::Error> {
         if let Err(err) = self.sync_inner(target_epoch).await {
             warn!(target: LOG_TARGET, "🛜State sync failed: {err} (stats: {})", self.stats);
-            // Clear the valid checkpoints cache
-            self.valid_checkpoints = HashMap::new();
             self.stats = StateSyncStats::default();
             return Err(err);
         }
 
         info!(target: LOG_TARGET, "🛜State sync completed successfully: {}", self.stats);
 
-        // Clear the valid checkpoints cache
-        self.valid_checkpoints = HashMap::new();
         self.stats = StateSyncStats::default();
         Ok(())
     }

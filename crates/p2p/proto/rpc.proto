@@ -213,6 +213,8 @@ message QuorumCertificates {
 message GetCheckpointsRequest {
   tari.ootle.common.Epoch from_epoch = 1;
   uint32 num_to_return = 2;
+  // When set, returns only the checkpoint for this shard group at from_epoch.
+  optional uint32 shard_group = 3;
 }
 
 message GetCheckpointsResponse {
