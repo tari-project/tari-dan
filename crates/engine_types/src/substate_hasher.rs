@@ -343,9 +343,10 @@ mod tests {
         );
     }
 
-    /// Pins the borsh tag of every variant with a cheaply constructed value, so a variant inserted
-    /// ahead of any of them fails here rather than moving consensus-bound tags silently. The two
-    /// leading bytes are the `SubstateHashMessage` version tag and the value tag.
+    /// Pins the borsh tag of every cheaply constructed variant, which pins the rest transitively: a
+    /// variant inserted anywhere but after `Utxo` shifts one of these tags. `ConfidentialOutput` is
+    /// last, where an append is the only move and is safe. The two leading bytes are the
+    /// `SubstateHashMessage` version tag and the value tag.
     #[test]
     fn value_tags_are_stable_and_shared_by_both_versions() {
         let values: Vec<(u8, SubstateValue)> = vec![
@@ -368,6 +369,13 @@ mod tests {
             (
                 7,
                 SubstateValue::ValidatorFeePool(ValidatorFeePool::new(RistrettoPublicKeyBytes::default(), 5)),
+            ),
+            (
+                8,
+                SubstateValue::Utxo(Utxo {
+                    output: None,
+                    is_frozen: false,
+                }),
             ),
         ];
         for (tag, value) in &values {
