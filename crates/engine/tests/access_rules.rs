@@ -22,6 +22,7 @@ use tari_template_lib::{
             ResourceAuthAction,
             RestrictedAccessRule,
             RuleRequirement,
+            UpdateRule,
         },
         rule,
     },
@@ -1315,6 +1316,226 @@ mod resource_access_rules {
                 reason: "Authorize hook".to_string(),
             });
         })
+    }
+
+    #[test]
+    fn auth_hook_is_locked_by_default() {
+        let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/access_rules"]);
+
+        let (_, owner_proof, owner_key) = test.create_empty_account();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        let result = test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(access_rules_template, "with_auth_hook", args![true, "valid_auth_hook"])
+                .build_and_seal(&owner_key),
+            vec![owner_proof.clone()],
+        );
+
+        let component_address = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+
+        let reason = test.execute_expect_failure(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(component_address, "set_auth_hook", args![None::<String>])
+                .build_and_seal(&owner_key),
+            vec![owner_proof],
+        );
+
+        assert_reject_reason(reason, RuntimeError::AccessDenied {
+            action_ident: ActionIdent::Native(NativeAction::UpdateResourceAuthHook),
+        });
+    }
+
+    #[test]
+    fn a_denying_auth_hook_can_be_removed_by_the_owner() {
+        let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/access_rules"]);
+
+        let (owner_account, owner_proof, owner_key) = test.create_empty_account();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        // `allowed = false` makes `valid_auth_hook` panic on every action, which is the failure this action
+        // exists to recover from.
+        let result = test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(access_rules_template, "with_updatable_auth_hook", args![
+                    false,
+                    "valid_auth_hook",
+                    OWNER
+                ])
+                .build_and_seal(&owner_key),
+            vec![owner_proof.clone()],
+        );
+
+        let component_address = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+
+        let take_and_deposit = || {
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(component_address, "take_tokens", args![10])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(owner_account, "deposit", args![Workspace("tokens")])
+                .build_and_seal(&owner_key)
+        };
+
+        let reason = test.execute_expect_failure(take_and_deposit(), vec![owner_proof.clone()]);
+        assert_reject_reason(reason, RuntimeError::AccessDeniedAuthHook {
+            action_ident: ResourceAuthAction::Deposit.into(),
+            details: "Panic! Access denied for action Deposit".to_string(),
+        });
+
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(component_address, "set_auth_hook", args![None::<String>])
+                .build_and_seal(&owner_key),
+            vec![owner_proof.clone()],
+        );
+
+        test.execute_expect_success(take_and_deposit(), vec![owner_proof]);
+    }
+
+    #[test]
+    fn a_replacement_auth_hook_is_in_force() {
+        let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/access_rules"]);
+
+        let (owner_account, owner_proof, owner_key) = test.create_empty_account();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        // `caller_gated_hook` permits every action, so the resource starts usable. `allowed = false` only
+        // takes effect once `valid_auth_hook` is the hook in force, which is what the swap below installs —
+        // so the denial afterwards can only come from the replacement, not from the hook having been dropped.
+        let result = test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(access_rules_template, "with_updatable_auth_hook", args![
+                    false,
+                    "caller_gated_hook",
+                    OWNER
+                ])
+                .build_and_seal(&owner_key),
+            vec![owner_proof.clone()],
+        );
+
+        let component_address = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+
+        let take_and_deposit = || {
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(component_address, "take_tokens", args![10])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(owner_account, "deposit", args![Workspace("tokens")])
+                .build_and_seal(&owner_key)
+        };
+
+        test.execute_expect_success(take_and_deposit(), vec![owner_proof.clone()]);
+
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(component_address, "set_auth_hook", args![Some("valid_auth_hook")])
+                .build_and_seal(&owner_key),
+            vec![owner_proof.clone()],
+        );
+
+        let reason = test.execute_expect_failure(take_and_deposit(), vec![owner_proof]);
+        assert_reject_reason(reason, RuntimeError::AccessDeniedAuthHook {
+            action_ident: ResourceAuthAction::Deposit.into(),
+            details: "Panic! Access denied for action Deposit".to_string(),
+        });
+    }
+
+    #[test]
+    fn a_replacement_auth_hook_must_have_a_hook_signature() {
+        let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/access_rules"]);
+
+        let (_, owner_proof, owner_key) = test.create_empty_account();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        let result = test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(access_rules_template, "with_updatable_auth_hook", args![
+                    true,
+                    "valid_auth_hook",
+                    OWNER
+                ])
+                .build_and_seal(&owner_key),
+            vec![owner_proof.clone()],
+        );
+
+        let component_address = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+
+        for hook in [
+            "invalid_auth_hook1",
+            "invalid_auth_hook2",
+            "invalid_auth_hook3",
+            "invalid_auth_hook4",
+            "invalid_auth_hook5",
+            "hook_doesnt_exist",
+        ] {
+            let reason = test.execute_expect_failure(
+                Transaction::builder_localnet(Epoch(1))
+                    .call_method(component_address, "set_auth_hook", args![Some(hook)])
+                    .build_and_seal(&owner_key),
+                vec![owner_proof.clone()],
+            );
+
+            assert_reject_reason(reason, RuntimeError::InvalidArgument {
+                argument: "UpdateAuthHookArg",
+                // Partial error text
+                reason: "Authorize hook".to_string(),
+            });
+        }
+    }
+
+    #[test]
+    fn badge_holder_can_update_an_auth_hook_gated_on_their_badge() {
+        let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/access_rules"]);
+
+        let (_, owner_proof, owner_key) = test.create_empty_account();
+        let (user_proof, _, user_key) = test.create_owner_proof();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        let updater: UpdateRule = rule!(non_fungible(user_proof.clone())).into();
+        let result = test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(access_rules_template, "with_updatable_auth_hook", args![
+                    true,
+                    "valid_auth_hook",
+                    updater
+                ])
+                .build_and_seal(&owner_key),
+            vec![owner_proof.clone()],
+        );
+
+        let component_address = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+
+        // The resource owner does not hold the badge, so they cannot touch the hook.
+        let reason = test.execute_expect_failure(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(component_address, "set_auth_hook", args![None::<String>])
+                .build_and_seal(&owner_key),
+            vec![owner_proof],
+        );
+        assert_reject_reason(reason, RuntimeError::AccessDenied {
+            action_ident: ActionIdent::Native(NativeAction::UpdateResourceAuthHook),
+        });
+
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(component_address, "set_auth_hook", args![None::<String>])
+                .build_and_seal(&user_key),
+            vec![user_proof],
+        );
     }
 
     #[test]

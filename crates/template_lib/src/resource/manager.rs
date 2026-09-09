@@ -81,6 +81,7 @@ use crate::{
         SetFreezeStealthUtxosArg,
         StealthTransferResourceArg,
         UpdateAccessRuleArg,
+        UpdateAuthHookArg,
         VaultFreezeFlags,
     },
     models::{Bucket, BucketId, NonFungible, ResourceAddressAllocation},
@@ -956,6 +957,45 @@ impl ResourceManager {
         });
 
         resp.decode().expect("[update_access_rule] Failed")
+    }
+
+    /// Replaces the resource's authorization hook, or removes it when `auth_hook` is `None`. A resource that
+    /// has no hook gains one, so a holder cannot rely on a resource staying hook-free once the updater permits
+    /// a change.
+    ///
+    /// Authorization is gated by the resource's
+    /// [`auth_hook_updater`](tari_template_lib_types::access_rules::ResourceAccessRules::auth_hook_updater),
+    /// which is [`UpdateRule::Locked`](tari_template_lib_types::access_rules::UpdateRule::Locked) unless the
+    /// resource was created with
+    /// [`set_auth_hook_updater`](tari_template_lib_types::access_rules::ResourceAccessRules::set_auth_hook_updater).
+    ///
+    /// The hook being replaced is not consulted, so a hook that denies or panics can still be repaired or
+    /// retired. A new hook must satisfy the same signature checks as one supplied at resource creation, and
+    /// its component must already exist.
+    ///
+    /// # Panics
+    ///
+    /// - The caller does not satisfy the resource's `auth_hook_updater`.
+    /// - `auth_hook` names a component or method that does not exist, or a method whose signature is not that of an
+    ///   authorization hook.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use tari_template_lib::prelude::AuthHook;
+    /// // Repair a broken hook by pointing the resource at a new component.
+    /// resource_manager.set_auth_hook(Some(AuthHook::new(new_component, "authorize".try_into().unwrap())));
+    /// // Retire the hook entirely.
+    /// resource_manager.set_auth_hook(None);
+    /// ```
+    pub fn set_auth_hook(&self, auth_hook: Option<AuthHook>) {
+        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
+            resource_ref: self.resource_address.into(),
+            action: ResourceAction::UpdateAuthHook,
+            args: invoke_args![UpdateAuthHookArg { auth_hook }],
+        });
+
+        resp.decode().expect("[set_auth_hook] Failed")
     }
 
     /// Replaces the resource's metadata map.

@@ -422,12 +422,13 @@ impl ResourceAuthAction {
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode, CborLen)]
+#[derive(Debug, Clone, Default, Encode, Decode, CborLen)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize))]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum UpdateRule {
     #[n(0)]
+    #[default]
     Locked,
     #[n(1)]
     Owner,
@@ -482,6 +483,18 @@ pub struct ResourceAccessRules {
     update_metadata: AccessRule,
     #[n(15)]
     metadata_updater: UpdateRule,
+    /// Who may install, replace or remove the resource's [`AuthHook`](crate::AuthHook). The hook itself is not
+    /// an [`AccessRule`], so this updater stands alone rather than pairing with one.
+    ///
+    /// A hook runs on nearly every resource action, so one that panics or denies unconditionally takes the
+    /// resource offline and strands the balances in its vaults. `Locked` — the default — keeps a hook binding
+    /// for the life of the resource; anything else lets the hook be repaired or retired, at the cost of letting
+    /// whoever satisfies the updater change the rules that existing holders are relying on — up to and
+    /// including giving a hook-free resource a hook.
+    #[n(16)]
+    #[cbor(default)]
+    #[cfg_attr(feature = "serde", serde(default))]
+    auth_hook_updater: UpdateRule,
 }
 
 impl ResourceAccessRules {
@@ -520,6 +533,7 @@ impl ResourceAccessRules {
             deposit_updater: UpdateRule::Locked,
             update_nft_data: AccessRule::AllowAll,
             nft_data_updater: UpdateRule::Owner,
+            auth_hook_updater: UpdateRule::Locked,
         }
     }
 
@@ -542,6 +556,7 @@ impl ResourceAccessRules {
             freeze_updater: UpdateRule::Locked,
             update_metadata: AccessRule::DenyAll,
             metadata_updater: UpdateRule::Locked,
+            auth_hook_updater: UpdateRule::Locked,
         }
     }
 
@@ -611,6 +626,24 @@ impl ResourceAccessRules {
         self
     }
 
+    /// Sets up who can install, replace or remove the resource's authorization hook. Locked by default, which
+    /// makes a hook binding for the life of the resource.
+    pub fn set_auth_hook_updater<U: Into<UpdateRule>>(mut self, updater: U) -> Self {
+        let updater = updater.into();
+        // A `caller_component`/`direct_caller_template` requirement always evaluates to false on a resource, so
+        // an updater carrying one is indistinguishable from `Locked` — the bricking this updater exists to avoid.
+        if let UpdateRule::AccessRule(rule) = &updater {
+            Self::assert_no_caller_requirement(rule);
+        }
+        self.auth_hook_updater = updater;
+        self
+    }
+
+    /// Returns the updater rule that governs who may replace or remove the resource's authorization hook.
+    pub fn auth_hook_updater(&self) -> &UpdateRule {
+        &self.auth_hook_updater
+    }
+
     /// Returns a reference to the access rule for the specified action
     pub fn get_access_rule(&self, action: &ResourceAuthAction) -> &AccessRule {
         match action {
@@ -653,6 +686,51 @@ impl ResourceAccessRules {
             ResourceAuthAction::UpdateMetadata => self.update_metadata = rule,
             ResourceAuthAction::Freeze => self.freeze = rule,
         }
+    }
+
+    /// Writes the rules as a protocol version 0 substate hash preimage: every field but `auth_hook_updater`,
+    /// which version 0 resources do not carry.
+    #[cfg(feature = "borsh")]
+    #[doc(hidden)]
+    pub fn borsh_serialize_v0<W: borsh::io::Write>(&self, writer: &mut W) -> borsh::io::Result<()> {
+        // Destructured so that a field added to the struct fails to compile here rather than being silently
+        // dropped from the version 0 preimage.
+        let Self {
+            mint,
+            mint_updater,
+            burn,
+            burn_updater,
+            recall,
+            recall_updater,
+            withdraw,
+            withdraw_updater,
+            deposit,
+            deposit_updater,
+            update_nft_data,
+            nft_data_updater,
+            freeze,
+            freeze_updater,
+            update_metadata,
+            metadata_updater,
+            auth_hook_updater: _,
+        } = self;
+
+        borsh::BorshSerialize::serialize(mint, writer)?;
+        borsh::BorshSerialize::serialize(mint_updater, writer)?;
+        borsh::BorshSerialize::serialize(burn, writer)?;
+        borsh::BorshSerialize::serialize(burn_updater, writer)?;
+        borsh::BorshSerialize::serialize(recall, writer)?;
+        borsh::BorshSerialize::serialize(recall_updater, writer)?;
+        borsh::BorshSerialize::serialize(withdraw, writer)?;
+        borsh::BorshSerialize::serialize(withdraw_updater, writer)?;
+        borsh::BorshSerialize::serialize(deposit, writer)?;
+        borsh::BorshSerialize::serialize(deposit_updater, writer)?;
+        borsh::BorshSerialize::serialize(update_nft_data, writer)?;
+        borsh::BorshSerialize::serialize(nft_data_updater, writer)?;
+        borsh::BorshSerialize::serialize(freeze, writer)?;
+        borsh::BorshSerialize::serialize(freeze_updater, writer)?;
+        borsh::BorshSerialize::serialize(update_metadata, writer)?;
+        borsh::BorshSerialize::serialize(metadata_updater, writer)
     }
 }
 
@@ -1035,6 +1113,27 @@ mod tests {
         ));
         assert!(rule.contains_caller_component_or_template());
         assert!(!rule.contains_scoped_to_component_or_template());
+    }
+
+    #[test]
+    fn auth_hook_updater_defaults_to_locked() {
+        assert!(matches!(
+            ResourceAccessRules::new().auth_hook_updater(),
+            UpdateRule::Locked
+        ));
+        assert!(matches!(
+            ResourceAccessRules::deny_all().auth_hook_updater(),
+            UpdateRule::Locked
+        ));
+    }
+
+    /// Such an updater always evaluates to false on a resource, so it would be `Locked` wearing a disguise:
+    /// the hook could never be repaired, which is the failure this updater exists to prevent.
+    #[test]
+    #[should_panic(expected = "always evaluate to false on resource rules")]
+    fn auth_hook_updater_rejects_a_caller_requirement() {
+        let address = ComponentAddress::new(ObjectKey::default());
+        ResourceAccessRules::new().set_auth_hook_updater(rule!(caller_component(address)));
     }
 
     #[test]

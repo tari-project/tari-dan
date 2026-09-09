@@ -10,6 +10,7 @@ In this guide, you will:
 - Understand the importance of authorization and access control in smart contract security.
 - Learn how to define and apply access rules for components and their methods.
 - Discover how to set permissions for resources, including minting, burning, and metadata access.
+- Delegate a resource's authorization to a component hook, and keep the ability to repair or retire it.
 - Explore identity management and the different types of callers in the Tari Ootle environment.
 - Follow best practices for securing templates and managing digital assets.
 
@@ -161,6 +162,9 @@ Each `ResourceBuilder` exposes one method per action. All accept `(rule, updater
 - `.update_metadata(rule, updater)` — who can change the metadata (the token symbol always stays immutable).
 - `.update_non_fungible_data(rule, updater)` — who can change the mutable data on individual NFTs (non-fungible only).
 
+A resource can also delegate its decisions to a component method rather than a static rule — see
+[Authorization hooks](#authorization-hooks).
+
 ##### UpdateRule
 
 `UpdateRule` controls who can later change an access rule, and has three variants:
@@ -199,6 +203,7 @@ Calling `ResourceAccessRules::new()` (the default) yields safe baseline rules:
 - `mint`, `burn`, `recall`, `freeze`, `update_metadata`: `DenyAll`, updater `Locked`.
 - `withdraw`, `deposit`: `AllowAll`, updater `Locked`.
 - `update_non_fungible_data`: `AllowAll`, updater `Owner`.
+- The auth hook updater: `Locked` (see [Authorization hooks](#authorization-hooks)).
 
 Locked-by-default means a resource issued with `ResourceAccessRules::new()` and no overrides can never have its
 `recall`, `mint`, etc. silently re-enabled later. To leave room for future tightening or relaxation, pass `OWNER`
@@ -218,6 +223,54 @@ The action is one of `ResourceAuthAction::{Mint, Burn, Recall, Withdraw, Deposit
 If the field's updater is `Locked`, this call fails even for the owner. If the updater is `Owner`, only the resource
 owner can succeed. If the updater is `AccessRule(rule)`, only a caller satisfying `rule` can succeed — the owner
 has **no implicit override**.
+
+##### Authorization hooks
+
+An access rule is a static predicate. When a decision needs to look at live state — a blocklist, a per-holder cap, a
+paused flag — a resource can instead delegate to a **hook**: a method on a component that the engine calls on every
+mint, burn, recall, withdraw, deposit, freeze, metadata update and NFT data update. The hook takes the action and an
+`AuthHookCaller`, returns nothing, and **denies by panicking**.
+
+```rust
+let alloc = CallerContext::allocate_component_address(None);
+let tokens = ResourceBuilder::public_fungible()
+    .with_authorization_hook(alloc.get_address(), "authorize")
+    // Without this, the hook binds for the life of the resource.
+    .with_authorization_hook_updater(OWNER)
+    .initial_supply(1_000_000u64);
+```
+
+The hook must be a non-mutable method returning `()` and taking `(&self, ResourceAuthAction, AuthHookCaller)`; the
+engine rejects the resource at creation otherwise. It is skipped when the acting component *is* the hook's own
+component, and when the hook's component does not exist yet — which is what lets a template allocate the address,
+build the resource, and create the component afterwards.
+
+Because the hook runs on nearly every action, a hook that panics, denies unconditionally, or fails to decode its
+arguments takes the whole resource offline: no transfers, no burns, no metadata changes, and every balance in its
+vaults becomes unspendable. `.with_authorization_hook_updater(...)` is what buys the ability to recover:
+
+```rust
+// Retire a broken hook entirely...
+ResourceManager::get(my_resource).set_auth_hook(None);
+// ...or point the resource at a repaired one.
+ResourceManager::get(my_resource)
+    .set_auth_hook(Some(AuthHook::new(fixed_component, "authorize".try_into().unwrap())));
+```
+
+The updater is `Locked` by default, so a hook stays permanently binding unless the issuer opts out — which is the
+same trust promise `LOCKED` makes for the access rules, and for the same reason: a holder who reads the substate can
+see that the hook governing their tokens can never change. Opting out has a real cost, so make it deliberately:
+
+- Whoever satisfies the updater can retire a hook that holders were relying on, and can give a **hook-free** resource
+  a hook. A resource inspected today as unhooked is not guaranteed to stay that way.
+- The outgoing hook is **not** consulted when it is replaced. That is what makes a denying hook recoverable, and it
+  means the hook cannot defend itself.
+- A replacement is validated exactly like one supplied at creation, so a mistyped method name fails the transaction
+  rather than bricking the resource.
+
+`caller_component(...)` / `direct_caller_template(...)` are rejected in the updater's access rule: they always
+evaluate to false on a resource, so such an updater would be `Locked` wearing a disguise — the hook could never be
+repaired.
 
 ### Identity Management
 
@@ -239,5 +292,7 @@ execution scope, while `caller_component(...)` / `direct_caller_template(...)` r
 - **Principle of Least Privilege:** Grant only the necessary permissions. Avoid `AllowAll` unless it's genuinely intended for public methods.
 - **Clear Ownership:** Define and manage component/resource ownership clearly.
 - **Test Thoroughly:** Always write comprehensive tests to ensure your access rules behave as expected.
+- **Budget for a Broken Hook:** An auth hook runs on nearly every resource action, so a bug in it strands every
+  balance of that resource. Set an updater unless the hook's permanence is itself the guarantee you are selling.
 
 By effectively utilizing access rules, you can ensure the security and integrity of your Tari Ootle Templates and the assets they manage.
