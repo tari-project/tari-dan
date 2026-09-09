@@ -138,6 +138,12 @@ its frame, usable at every auth point it reaches — a resource rule, an ownersh
 only the method it entered through. Weigh that before calling into code you do not control, and gate anything
 that must not be reachable that way on a proof the callee cannot obtain rather than on the caller badge alone.
 
+A resource auth hook is the one call-out you do not choose: any resource may bind a hook, and anyone may deposit
+that resource into an account. The engine therefore runs a hook in a sandboxed frame that may read, emit events
+and update its own component state (when declared `&mut self`), but cannot write any other substate, act on any
+vault or resource, or call another component. The acting component's badge satisfies the hook's own method
+rule, and the sandbox is what stops the hook spending it on the acting component's behalf.
+
 #### Resource Access Rules
 
 Resources can also have access rules, typically governing who can mint, burn, recall, freeze, or update metadata.
@@ -289,10 +295,16 @@ let tokens = ResourceBuilder::public_fungible()
     .initial_supply(1_000_000u64);
 ```
 
-The hook must be a non-mutable method returning `()` and taking `(&self, ResourceAuthAction, AuthHookCaller)`; the
-engine rejects the resource at creation otherwise. It is skipped when the acting component *is* the hook's own
-component, and when the hook's component does not exist yet — which is what lets a template allocate the address,
-build the resource, and create the component afterwards.
+The hook returns `()` and takes `(ResourceAuthAction, AuthHookCaller)`; the engine rejects the resource at creation
+otherwise. It is skipped when the acting component *is* the hook's own component, and when the hook's component does
+not exist yet — which is what lets a template allocate the address, build the resource, and create the component
+afterwards.
+
+A hook frame is confined to its own component: it may take `&mut self` and update that component's state, and the
+engine refuses every other write, new substate, cross-template call, bucket and proof from inside it. That
+confinement is what makes a hook safe to run with the acting component's caller badges. The engine invokes the hook
+on the acting component's behalf without that component choosing to call it, so the badge satisfies the hook's own
+method rule but cannot be spent on any vault or resource from inside the hook.
 
 Because the hook runs on nearly every action, a hook that panics, denies unconditionally, or fails to decode its
 arguments takes the whole resource offline: no transfers, no burns, no metadata changes, and every balance in its

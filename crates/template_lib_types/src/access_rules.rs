@@ -731,7 +731,10 @@ impl Default for ResourceAccessRules {
 /// **Caution, the other way round:** calling out hands the callee your identity as a live badge for the whole of its
 /// frame, usable at every auth point it reaches — a resource rule, an ownership rule, a spend condition — not only at
 /// the method it entered through. Weigh that before calling into code you do not control, and gate the rules that
-/// matter on a proof the callee cannot obtain rather than on the caller badge alone.
+/// matter on a proof the callee cannot obtain rather than on the caller badge alone. A resource auth hook is the one
+/// call-out you do not choose (any resource may bind one, and anyone may deposit that resource into an account), so
+/// the engine confines a hook frame to its own component state: the badge satisfies the hook's method rule but
+/// cannot be spent on any vault or resource from inside the hook.
 ///
 /// `component(addr)` / `template(addr)` are constant on component **method** rules and owner rules (they always
 /// describe the current frame, i.e. the component itself). The builder methods reject them at construction, and the

@@ -214,6 +214,16 @@ pub enum RuntimeError {
     WriteInReadOnlyContext,
     #[error("Host operation '{operation}' is forbidden inside a read-only (spend-script) context")]
     ForbiddenInReadOnlyContext { operation: &'static str },
+    #[error("Write to {id} attempted in a resource auth hook, which may only modify its own component state")]
+    WriteOutsideOwnComponent { id: SubstateId },
+    #[error("Host operation '{operation}' is forbidden inside a resource auth hook")]
+    ForbiddenInAuthHookContext { operation: &'static str },
+    #[error("Recall on resource {resource_address} targeted vault {vault_id}, which holds resource {vault_resource}")]
+    RecallResourceMismatch {
+        vault_id: VaultId,
+        resource_address: ResourceAddress,
+        vault_resource: ResourceAddress,
+    },
     #[error("Spend script rejected the spend: {details}")]
     SpendScriptRejected { details: Box<RuntimeError> },
     #[error("Spend condition not met: {details}")]

@@ -78,7 +78,7 @@ use crate::{
         address_allocation::AllocatedAddress,
         fee_state::FeeState,
         locking::LockedSubstate,
-        scope::{CallFrame, CallScope},
+        scope::{CallFrame, CallScope, FrameWriteMode},
         state_store::WorkingStateStore,
         tracker_auth::Authorization,
         validation::{
@@ -251,10 +251,8 @@ impl<TStore: StateReader> WorkingState<TStore> {
         address: K,
         value: V,
     ) -> Result<(), RuntimeError> {
-        if self.is_read_only_context() {
-            return Err(RuntimeError::WriteInReadOnlyContext);
-        }
         let address = address.into();
+        self.check_write_allowed(&address)?;
         let value = value.into();
         self.enforce_substate_size_limit(&value)?;
         self.current_call_scope_mut()?.add_substate_to_scope(address.clone())?;
@@ -272,10 +270,19 @@ impl<TStore: StateReader> WorkingState<TStore> {
     }
 
     pub fn write_lock_substate(&mut self, addr: SubstateId) -> Result<LockedSubstate, RuntimeError> {
-        if self.is_read_only_context() {
-            return Err(RuntimeError::WriteInReadOnlyContext);
-        }
+        self.check_write_allowed(&addr)?;
         self.lock_substate(addr, LockFlag::Write)
+    }
+
+    /// The single chokepoint for the frame write mode. In `OwnComponent` mode the only permitted write is to the
+    /// component locked at frame push, and that goes through the existing lock rather than a new one, so every
+    /// request for a new write lock or a new substate is refused.
+    fn check_write_allowed(&self, addr: &SubstateId) -> Result<(), RuntimeError> {
+        match self.current_frame_write_mode() {
+            FrameWriteMode::Full => Ok(()),
+            FrameWriteMode::OwnComponent => Err(RuntimeError::WriteOutsideOwnComponent { id: addr.clone() }),
+            FrameWriteMode::ReadOnly => Err(RuntimeError::WriteInReadOnlyContext),
+        }
     }
 
     pub fn unlock_substate(&mut self, lock: LockedSubstate) -> Result<(), RuntimeError> {
@@ -1428,19 +1435,22 @@ impl<TStore: StateReader> WorkingState<TStore> {
         self.call_frames.last().ok_or(RuntimeError::NoActiveCallFrame)
     }
 
-    /// Whether the current call frame is a read-only sandbox (a spend-script predicate frame). When
-    /// true, `write_lock_substate` and `new_substate` reject with `RuntimeError::WriteInReadOnlyContext`.
-    pub fn is_read_only_context(&self) -> bool {
-        self.call_frames.last().map(|f| f.is_read_only()).unwrap_or(false)
+    /// The write mode of the current call frame. Outside any frame (top-level instruction processing) writes
+    /// are unrestricted.
+    pub fn current_frame_write_mode(&self) -> FrameWriteMode {
+        self.call_frames
+            .last()
+            .map(|f| f.write_mode())
+            .unwrap_or(FrameWriteMode::Full)
     }
 
-    /// Marks the current (most recently pushed) call frame as a read-only spend-script sandbox. Must be
-    /// called immediately after the predicate frame is pushed and before the predicate executes.
-    pub fn make_current_frame_read_only(&mut self) -> Result<(), RuntimeError> {
+    /// Restricts the current (most recently pushed) call frame to `mode` and disables its cross-template calls.
+    /// Must be called immediately after the frame is pushed and before its code executes.
+    pub fn restrict_current_frame(&mut self, mode: FrameWriteMode) -> Result<(), RuntimeError> {
         self.call_frames
             .last_mut()
             .ok_or(RuntimeError::NoActiveCallFrame)?
-            .restrict_to_read_only();
+            .restrict(mode);
         Ok(())
     }
 
@@ -1540,6 +1550,7 @@ impl<TStore: StateReader> WorkingState<TStore> {
                     .and_then(|lock| lock.substate_id().as_component_address());
                 let template = *caller.current_template();
                 new_frame.scope_mut().auth_scope_mut().set_caller(component, template);
+                new_frame.inherit_restrictions(caller);
             },
         }
 

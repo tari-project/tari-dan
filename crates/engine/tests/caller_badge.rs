@@ -6,8 +6,12 @@
 //! checkable wherever any other badge is (so a *resource* rule can gate on the caller), and it names only the
 //! immediate caller (so it cannot be forwarded down a call chain).
 
+use tari_engine::runtime::RuntimeError;
+use tari_engine_types::substate::SubstateId;
 use tari_ootle_transaction::args;
 use tari_template_lib::types::{
+    ComponentAddress,
+    ResourceAddress,
     access_rules::ResourceAuthAction,
     constants::{CALLER_COMPONENT_RESOURCE_ADDRESS, DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS},
 };
@@ -161,6 +165,46 @@ fn resource_withdraw_rule_denies_a_caller_from_another_template() {
         vec![test.owner_proof()],
     );
     assert_access_denied_for_action(reason, ResourceAuthAction::Withdraw);
+}
+
+/// A resource auth hook runs with the acting component's caller badges in scope, and the acting component never
+/// chose the hook code: anyone can bind a hook to a token and deposit that token into any account. The hook frame is
+/// therefore confined to its own component state, so those badges cannot be spent on a resource gated on the
+/// depositor.
+#[test]
+fn auth_hook_cannot_spend_the_depositors_caller_badge() {
+    let mut test = TemplateTest::new(CRATE_PATH, [
+        "tests/templates/caller_badge_resource",
+        "tests/templates/caller_badge_hook",
+    ]);
+    let holder_template = test.get_template_address("GatedResource");
+    let attacker_template = test.get_template_address("HookAttacker");
+    let (victim, _, _) = test.create_empty_account();
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(holder_template, "new_mint_gated", args![victim])
+            .put_last_instruction_output_on_workspace("holder")
+            .call_method("holder", "resource_address", args![])
+            .put_last_instruction_output_on_workspace("gated")
+            .call_function(attacker_template, "new", args![Workspace("gated")])
+            .build_and_seal(test.secret_key()),
+        vec![test.owner_proof()],
+    );
+    let gated: ResourceAddress = result.finalize.execution_results[2].decode().unwrap();
+    let attacker: ComponentAddress = result.finalize.execution_results[4].decode().unwrap();
+
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_method(attacker, "take_junk", args![])
+            .put_last_instruction_output_on_workspace("junk")
+            .call_method(victim, "deposit", args![Workspace("junk")])
+            .build_and_seal(test.secret_key()),
+        vec![test.owner_proof()],
+    );
+    assert_reject_reason(&reason, RuntimeError::WriteOutsideOwnComponent {
+        id: SubstateId::Resource(gated),
+    });
 }
 
 /// A caller badge is issued into an authorization scope and is not backed by a resource, so there is no path

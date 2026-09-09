@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 use std::collections::{BTreeMap, HashMap};
 
-use tari_engine::runtime::{ActionIdent, LockError, RuntimeError};
+use tari_engine::runtime::{ActionIdent, RuntimeError};
 use tari_ootle_transaction::{Epoch, Transaction, args};
 use tari_template_lib::{
     args::ComponentAction,
@@ -1225,12 +1225,81 @@ mod resource_access_rules {
             vec![user_proof.clone()],
         );
 
-        assert_reject_reason(
-            result,
-            RuntimeError::LockError(LockError::MultipleWriteLockRequested {
-                address: user_account.into(),
-            }),
+        assert_reject_reason(result, RuntimeError::ForbiddenInAuthHookContext {
+            operation: "call_invoke",
+        });
+    }
+
+    #[test]
+    fn it_allows_hook_to_update_its_own_state() {
+        let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/access_rules"]);
+
+        let (_owner_account, owner_proof, owner_key) = test.create_empty_account();
+        let (user_account, user_proof, user_key) = test.create_empty_account();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        let result = test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(access_rules_template, "with_auth_hook", args![
+                    true,
+                    "counting_auth_hook"
+                ])
+                .build_and_seal(&owner_key),
+            vec![owner_proof.clone()],
         );
+
+        let component_address = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+
+        let result = test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(component_address, "take_tokens", args![10])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(user_account, "deposit", args![Workspace("tokens")])
+                .call_method(component_address, "get_value", args![])
+                .build_and_seal(&user_key),
+            vec![user_proof.clone()],
+        );
+
+        let value = result.finalize.execution_results[3].decode::<u32>().unwrap();
+        assert_eq!(value, 1, "the hook fired once for the deposit");
+    }
+
+    #[test]
+    fn it_disallows_hook_that_writes_outside_its_own_component() {
+        let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/access_rules"]);
+
+        let (_owner_account, owner_proof, owner_key) = test.create_empty_account();
+        let (user_account, user_proof, user_key) = test.create_empty_account();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        let result = test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(access_rules_template, "with_auth_hook", args![
+                    true,
+                    "hook_creates_vault"
+                ])
+                .build_and_seal(&owner_key),
+            vec![owner_proof.clone()],
+        );
+
+        let component_address = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+
+        let result = test.execute_expect_failure(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(component_address, "take_tokens", args![10])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(user_account, "deposit", args![Workspace("tokens")])
+                .build_and_seal(&user_key),
+            vec![user_proof.clone()],
+        );
+
+        assert_reject_reason(result, "attempted in a resource auth hook");
     }
 
     #[test]
@@ -1279,11 +1348,14 @@ mod resource_access_rules {
             vec![user_proof.clone()],
         );
 
-        // Check that the access hook fails (it does not have permission to call set in the state component)
-        // even though the transaction signer has ownership of the object and the previous call to set works.
-        assert_reject_reason(result, RuntimeError::AccessDeniedAuthHook {
+        // Check that the access hook fails: a hook frame may not call out to any other component, even though the
+        // transaction signer has ownership of the object and the previous call to set works.
+        assert_reject_reason(&result, RuntimeError::AccessDeniedAuthHook {
             action_ident: ResourceAuthAction::Deposit.into(),
             details: String::new(),
+        });
+        assert_reject_reason(&result, RuntimeError::ForbiddenInAuthHookContext {
+            operation: "call_invoke",
         });
     }
 
@@ -1294,7 +1366,6 @@ mod resource_access_rules {
         let access_rules_template = test.get_template_address("AccessRulesTest");
 
         [
-            "invalid_auth_hook1",
             "invalid_auth_hook2",
             "invalid_auth_hook3",
             "invalid_auth_hook4",
@@ -1472,7 +1543,6 @@ mod resource_access_rules {
             .unwrap();
 
         for hook in [
-            "invalid_auth_hook1",
             "invalid_auth_hook2",
             "invalid_auth_hook3",
             "invalid_auth_hook4",

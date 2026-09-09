@@ -45,6 +45,25 @@ mod gated_resource {
             .create()
         }
 
+        /// A resource whose mint rule is gated on the caller of whichever component mints it.
+        pub fn new_mint_gated(gate: ComponentAddress) -> Component<Self> {
+            let tokens = ResourceBuilder::public_fungible()
+                .with_owner_rule(OwnerRule::None)
+                .mintable(rule!(caller_component(gate)), LOCKED)
+                .initial_supply(1000u32);
+
+            Component::new(GatedResource {
+                vault: Vault::from_bucket(tokens),
+            })
+            .with_owner_rule(OwnerRule::None)
+            .with_access_rules(ComponentAccessRules::allow_all())
+            .create()
+        }
+
+        pub fn resource_address(&self) -> ResourceAddress {
+            self.vault.resource_address()
+        }
+
         /// Withdraws and immediately returns the tokens, so the call succeeds or fails purely on the
         /// resource's withdraw rule.
         pub fn withdraw_once(&mut self) {

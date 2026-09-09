@@ -307,6 +307,22 @@ impl Display for CallScope {
     }
 }
 
+/// How much of the ledger a call frame may mutate. Ordered from least to most restrictive so that a child frame
+/// can never be less restricted than its parent (`FrameWriteMode::max`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum FrameWriteMode {
+    /// Any substate the frame can lock may be written.
+    Full,
+    /// Only the component the frame is executing on, through the lock taken at push. Every other write funnelling
+    /// through `WorkingState::write_lock_substate` / `new_substate` is rejected, so the frame cannot touch a vault,
+    /// resource or any other component. Resource auth hooks run in this mode: the acting component did not choose
+    /// the hook code, so the hook must not be able to act on the acting component's behalf beyond its own state.
+    OwnComponent,
+    /// No state mutation at all. Spend-script predicate frames run in this mode so they are provably
+    /// side-effect-free.
+    ReadOnly,
+}
+
 #[derive(Debug, Clone)]
 pub struct CallFrame {
     scope: CallScope,
@@ -315,10 +331,7 @@ pub struct CallFrame {
     entity_id: EntityId,
     allow_cross_template_calls: bool,
     allow_migration_calls: bool,
-    /// When set, every state mutation funnelling through `WorkingState::write_lock_substate` /
-    /// `new_substate` is rejected with `RuntimeError::WriteInReadOnlyContext`. Set for spend-script
-    /// predicate frames so they are provably side-effect-free.
-    read_only: bool,
+    write_mode: FrameWriteMode,
 }
 
 impl CallFrame {
@@ -330,7 +343,7 @@ impl CallFrame {
             entity_id,
             allow_cross_template_calls: true,
             allow_migration_calls: false,
-            read_only: false,
+            write_mode: FrameWriteMode::Full,
         }
     }
 
@@ -347,7 +360,7 @@ impl CallFrame {
             entity_id,
             allow_cross_template_calls: true,
             allow_migration_calls: false,
-            read_only: false,
+            write_mode: FrameWriteMode::Full,
         }
     }
 
@@ -364,7 +377,7 @@ impl CallFrame {
             entity_id,
             allow_cross_template_calls: false,
             allow_migration_calls: true,
-            read_only: false,
+            write_mode: FrameWriteMode::Full,
         }
     }
 
@@ -404,17 +417,26 @@ impl CallFrame {
         self.allow_migration_calls
     }
 
-    pub fn is_read_only(&self) -> bool {
-        self.read_only
+    pub fn write_mode(&self) -> FrameWriteMode {
+        self.write_mode
     }
 
-    /// Restricts this frame to a read-only, non-cross-template sandbox, as used for spend-script
-    /// predicate evaluation. The two restrictions are load-bearing in tandem: read-only blocks every
-    /// state write at the lock layer, while disabling cross-template calls prevents the predicate
-    /// from re-entering other templates.
-    pub fn restrict_to_read_only(&mut self) {
-        self.read_only = true;
+    /// Restricts this frame to `mode` (never loosening an existing restriction) and disables cross-template
+    /// calls. The two restrictions are load-bearing in tandem: the write mode blocks state writes at the lock
+    /// layer, while disabling cross-template calls prevents the frame from re-entering other templates, which
+    /// would otherwise run with the identity of this frame as their caller.
+    pub fn restrict(&mut self, mode: FrameWriteMode) {
+        self.write_mode = self.write_mode.max(mode);
         self.allow_cross_template_calls = false;
+    }
+
+    /// A frame is never less restricted than the frame that pushed it: a sandboxed frame must not be able to
+    /// escape its sandbox by calling into a frame that would then write on its behalf.
+    pub fn inherit_restrictions(&mut self, parent: &CallFrame) {
+        self.write_mode = self.write_mode.max(parent.write_mode);
+        if !parent.allow_cross_template_calls {
+            self.allow_cross_template_calls = false;
+        }
     }
 }
 
