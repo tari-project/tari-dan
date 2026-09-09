@@ -289,12 +289,10 @@ ts-rs = { version = "11.0", features = [
     "indexmap-impl",
 ] }
 url = "2.4.1"
-# Capped to 7.1.x. The accepted-module set and memory tunables are consensus-critical and wasmer
-# reshapes both across minor releases, so a bump must be a deliberate, reviewed change. 7.2+ also
-# requires wasm-bindgen >=0.2.120, which cannot coexist with the libp2p fork's `=0.4.58`
-# wasm-bindgen-futures pin.
-wasmer = "~7.1.0"
-wasmer-middlewares = "~7.1.0"
+# Capped to 7.4.x. The accepted-module set and memory tunables are consensus-critical and wasmer
+# reshapes both across minor releases, so a bump must be a deliberate, reviewed change.
+wasmer = "~7.4.0"
+wasmer-middlewares = "~7.4.0"
 zeroize = "1"
 webauthn-rs = { version = "0.5.1", features = ["default"] }
 webauthn-rs-proto = { version = "0.5.1", features = ["default"] }
