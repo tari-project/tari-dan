@@ -64,17 +64,6 @@ impl AccessRule {
             )
         })
     }
-
-    /// Returns `true` if the rule contains `CallerComponent` or `DirectCallerTemplate`, which always evaluate
-    /// to `false` in a current-frame context (resource rules and covenants).
-    pub fn contains_caller_component_or_template(&self) -> bool {
-        self.contains_requirement(&|r| {
-            matches!(
-                r,
-                RuleRequirement::CallerComponent(_) | RuleRequirement::DirectCallerTemplate(_)
-            )
-        })
-    }
 }
 
 /// An enum that represents the possible ways to restrict access to components or resources
@@ -231,11 +220,13 @@ pub enum RuleRequirement {
     /// Requires execution within a specific template (the current frame is that template)
     #[n(3)]
     ScopedToTemplate(#[n(0)] TemplateAddress),
-    /// Requires a call from a specific component: the caller of a component method is that component
+    /// Requires the badge naming a specific component as the caller. Shorthand for
+    /// `NonFungibleAddress(NonFungibleAddress::caller_component_badge(address))`.
     #[n(4)]
     CallerComponent(#[n(0)] ComponentAddress),
-    /// Requires that the immediate caller of a component method is code from a specific template: any component
-    /// instance of it, or any static function of it
+    /// Requires the badge naming a specific template as the immediate caller's: any component instance of it, or any
+    /// static function of it. Shorthand for
+    /// `NonFungibleAddress(NonFungibleAddress::direct_caller_template_badge(address))`.
     #[n(5)]
     DirectCallerTemplate(#[n(0)] TemplateAddress),
 }
@@ -498,15 +489,6 @@ pub struct ResourceAccessRules {
 }
 
 impl ResourceAccessRules {
-    /// Rejects rules that are meaningless in a resource (current-frame) context.
-    fn assert_no_caller_requirement(rule: &AccessRule) {
-        assert!(
-            !rule.contains_caller_component_or_template(),
-            "`caller_component(..)`/`direct_caller_template(..)` always evaluate to false on resource rules; use \
-             `component(..)`/`template(..)` or a proof requirement instead"
-        );
-    }
-
     /// Builds a new set of access rules for a resource.
     ///
     /// By default:
@@ -562,7 +544,6 @@ impl ResourceAccessRules {
 
     /// Sets up who can mint new tokens of the resource
     pub fn mintable<U: Into<UpdateRule>>(mut self, rule: AccessRule, updater: U) -> Self {
-        Self::assert_no_caller_requirement(&rule);
         self.mint = rule;
         self.mint_updater = updater.into();
         self
@@ -570,7 +551,6 @@ impl ResourceAccessRules {
 
     /// Sets up who can burn (destroy) tokens of the resource
     pub fn burnable<U: Into<UpdateRule>>(mut self, rule: AccessRule, updater: U) -> Self {
-        Self::assert_no_caller_requirement(&rule);
         self.burn = rule;
         self.burn_updater = updater.into();
         self
@@ -579,7 +559,6 @@ impl ResourceAccessRules {
     /// Sets up who can recall tokens of the resource.
     /// A recall is the forceful withdrawal of tokens from any external vault
     pub fn recallable<U: Into<UpdateRule>>(mut self, rule: AccessRule, updater: U) -> Self {
-        Self::assert_no_caller_requirement(&rule);
         self.recall = rule;
         self.recall_updater = updater.into();
         self
@@ -588,7 +567,6 @@ impl ResourceAccessRules {
     /// Sets up who can freeze a vault (or UTXO in the case of stealth) containing this resource, preventing
     /// withdrawals.
     pub fn freezable<U: Into<UpdateRule>>(mut self, rule: AccessRule, updater: U) -> Self {
-        Self::assert_no_caller_requirement(&rule);
         self.freeze = rule;
         self.freeze_updater = updater.into();
         self
@@ -596,7 +574,6 @@ impl ResourceAccessRules {
 
     /// Sets up who can withdraw tokens of the resource from any vault
     pub fn withdrawable<U: Into<UpdateRule>>(mut self, rule: AccessRule, updater: U) -> Self {
-        Self::assert_no_caller_requirement(&rule);
         self.withdraw = rule;
         self.withdraw_updater = updater.into();
         self
@@ -604,7 +581,6 @@ impl ResourceAccessRules {
 
     /// Sets up who can deposit tokens of the resource into any vault
     pub fn depositable<U: Into<UpdateRule>>(mut self, rule: AccessRule, updater: U) -> Self {
-        Self::assert_no_caller_requirement(&rule);
         self.deposit = rule;
         self.deposit_updater = updater.into();
         self
@@ -612,7 +588,6 @@ impl ResourceAccessRules {
 
     /// Sets up who can update the mutable data of the tokens in the resource
     pub fn update_non_fungible_data<U: Into<UpdateRule>>(mut self, rule: AccessRule, updater: U) -> Self {
-        Self::assert_no_caller_requirement(&rule);
         self.update_nft_data = rule;
         self.nft_data_updater = updater.into();
         self
@@ -620,7 +595,6 @@ impl ResourceAccessRules {
 
     /// Sets up who can update the resource's metadata. The token symbol remains immutable once set.
     pub fn update_metadata<U: Into<UpdateRule>>(mut self, rule: AccessRule, updater: U) -> Self {
-        Self::assert_no_caller_requirement(&rule);
         self.update_metadata = rule;
         self.metadata_updater = updater.into();
         self
@@ -629,13 +603,7 @@ impl ResourceAccessRules {
     /// Sets up who can install, replace or remove the resource's authorization hook. Locked by default, which
     /// makes a hook binding for the life of the resource.
     pub fn set_auth_hook_updater<U: Into<UpdateRule>>(mut self, updater: U) -> Self {
-        let updater = updater.into();
-        // A `caller_component`/`direct_caller_template` requirement always evaluates to false on a resource, so
-        // an updater carrying one is indistinguishable from `Locked` — the bricking this updater exists to avoid.
-        if let UpdateRule::AccessRule(rule) = &updater {
-            Self::assert_no_caller_requirement(rule);
-        }
-        self.auth_hook_updater = updater;
+        self.auth_hook_updater = updater.into();
         self
     }
 
@@ -746,9 +714,17 @@ impl Default for ResourceAccessRules {
 /// `n_of` constructs.
 ///
 /// `component(addr)` / `template(addr)` require execution within a component/template, while
-/// `caller_component(addr)` / `direct_caller_template(addr)` require a call from that component/template and are
-/// intended for component method access rules. "Direct" means the immediate caller only: if A calls B and B calls C,
-/// C's rule sees B.
+/// `caller_component(addr)` / `direct_caller_template(addr)` require the badge of that component/template, which the
+/// engine stamps into a frame's authorization scope naming its immediate caller. "Direct" means the immediate caller
+/// only: if A calls B and B calls C, C's frame carries B's badge, not A's. Because they are badges they hold for the
+/// lifetime of the frame and are checkable wherever a proof requirement is — component method rules, owner rules,
+/// resource rules and spend conditions alike. They are re-derived at every frame push and are not capturable as a
+/// `Proof`, so a callee cannot forward the identity it was called with.
+///
+/// `any_caller_component` and `any_caller_template` take no address: they ask only whether there was a caller of that
+/// kind. `any_caller_component` is satisfied by any component caller and by no top-level instruction;
+/// `any_caller_template` by any frame below the top level, i.e. by code reached from a template rather than directly
+/// from a transaction instruction.
 ///
 /// **Caution:** `caller_component` / `direct_caller_template` match the immediate caller's identity, which is only as
 /// trustworthy as the code that makes the call. A method that forwards a caller-supplied component and method (a
@@ -757,11 +733,17 @@ impl Default for ResourceAccessRules {
 /// create) and any static function of it (which anyone can call), so it is only as strong as the least careful outgoing
 /// call anywhere in that template.
 ///
+/// **Caution, the other way round:** calling out hands the callee your identity as a live badge for the whole of its
+/// frame, usable at every auth point it reaches — a resource rule, an ownership rule, a spend condition — not only at
+/// the method it entered through. Weigh that before calling into code you do not control, and gate the rules that
+/// matter on a proof the callee cannot obtain rather than on the caller badge alone. A resource auth hook is the one
+/// call-out you do not choose (any resource may bind one, and anyone may deposit that resource into an account), so
+/// the engine confines a hook frame to its own component state: the badge satisfies the hook's method rule but
+/// cannot be spent on any vault or resource from inside the hook.
+///
 /// `component(addr)` / `template(addr)` are constant on component **method** rules and owner rules (they always
-/// describe the current frame, i.e. the component itself), and `caller_component(addr)` /
-/// `direct_caller_template(addr)` always evaluate to `false` on **resource** rules. The builder methods reject both at
-/// construction, and the engine rejects them on component creation, `ComponentAction::SetAccessRules` and
-/// `ResourceAction::UpdateAccessRule`.
+/// describe the current frame, i.e. the component itself). The builder methods reject them at construction, and the
+/// engine rejects them on component creation and `ComponentAction::SetAccessRules`.
 ///
 /// # Examples:
 ///
@@ -784,10 +766,13 @@ impl Default for ResourceAccessRules {
 /// // Restricted access to a template
 /// let template_address = tari_template_lib_types::TemplateAddress::default();
 /// let template_rule = rule!(template(template_address));
-/// // Restricted access to calls from a specific component (component method rules)
+/// // Restricted access to calls from a specific component
 /// let caller_component_rule = rule!(caller_component(component_address));
-/// // Restricted access to calls from a specific template (component method rules)
+/// // Restricted access to calls from a specific template
 /// let caller_template_rule = rule!(direct_caller_template(template_address));
+/// // Restricted to any component caller at all, and to any caller at all
+/// let any_component_caller_rule = rule!(any_caller_component);
+/// let any_caller_rule = rule!(any_caller_template);
 /// // Restricted access to a non-fungible token
 /// let non_fungible_address = tari_template_lib_types::NonFungibleAddress::from_public_key(
 ///     tari_template_lib_types::crypto::RistrettoPublicKeyBytes::default(),
@@ -826,6 +811,10 @@ macro_rules! __restricted_access_rule {
     ($a:ident($($tail:tt)*)) => {
         $crate::access_rules::RestrictedAccessRule::Require($crate::__require_rule!($a($($tail)*)))
     };
+    // Requirements that name no address, e.g. `any_caller_component`.
+    ($a:ident) => {
+        $crate::access_rules::RestrictedAccessRule::Require($crate::__require_rule!($a))
+    };
 }
 
 #[macro_export]
@@ -841,6 +830,10 @@ macro_rules! __require_rule {
     };
     ($a:ident($b:expr)) => {
         $crate::access_rules::RequireRule::Require($crate::__rule_requirement!($a($b)))
+    };
+    // Requirements that name no address, e.g. `any_caller_component`.
+    ($a:ident) => {
+        $crate::access_rules::RequireRule::Require($crate::__rule_requirement!($a))
     };
 }
 
@@ -867,6 +860,12 @@ macro_rules! __rule_requirement {
     (direct_caller_template($x: expr)) => {
         $crate::access_rules::RuleRequirement::DirectCallerTemplate($x)
     };
+    (any_caller_component) => {
+        $crate::access_rules::RuleRequirement::Resource($crate::constants::CALLER_COMPONENT_RESOURCE_ADDRESS)
+    };
+    (any_caller_template) => {
+        $crate::access_rules::RuleRequirement::Resource($crate::constants::DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS)
+    };
 }
 
 #[macro_export]
@@ -884,16 +883,37 @@ macro_rules! __build_vec {
         $crate::__build_vec_inner!(@ { items, $item_fn } $a($b),);
         items
     }};
+
+    (@ {$item_fn:ident} $a:ident, $($tail:tt)*) => {{
+        let mut items = Vec::with_capacity(1 + $crate::__expr_counter!($($tail)*));
+        $crate::__build_vec_inner!(@ { items, $item_fn } $a, $($tail)*);
+        items
+    }};
+
+    (@ {$item_fn:ident} $a:ident $(,)?) => {{
+        let mut items = Vec::new();
+        $crate::__build_vec_inner!(@ { items, $item_fn } $a,);
+        items
+    }};
 }
 
 #[macro_export]
 macro_rules! __build_vec_inner {
+    // Terminator: a no-address item recurses with an empty tail once it is the last in the list.
+    (@ { $this:ident, $item_fn:ident }) => {};
     (@ { $this:ident, $item_fn:ident } $a:ident($e:expr), $($tail:tt)*) => {
         $crate::access_rules::__push(&mut $this, $crate::$item_fn!($a($e)));
         $crate::__build_vec_inner!(@ {$this, $item_fn } $($tail)*);
     };
     (@ { $this:ident, $item_fn:ident } $a:ident($e:expr) $(,)*) => {
         $crate::access_rules::__push(&mut $this, $crate::$item_fn!($a($e)));
+    };
+    (@ { $this:ident, $item_fn:ident } $a:ident, $($tail:tt)*) => {
+        $crate::access_rules::__push(&mut $this, $crate::$item_fn!($a));
+        $crate::__build_vec_inner!(@ {$this, $item_fn } $($tail)*);
+    };
+    (@ { $this:ident, $item_fn:ident } $a:ident $(,)*) => {
+        $crate::access_rules::__push(&mut $this, $crate::$item_fn!($a));
     };
 }
 
@@ -1079,17 +1099,12 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "always evaluate to false on resource rules")]
-    fn resource_rule_rejects_caller_component() {
-        let address = ComponentAddress::new(ObjectKey::default());
-        ResourceAccessRules::new().mintable(rule!(caller_component(address)), LOCKED);
-    }
-
-    #[test]
-    #[should_panic(expected = "always evaluate to false on resource rules")]
-    fn resource_rule_rejects_direct_caller_template() {
-        let address = TemplateAddress::default();
-        ResourceAccessRules::new().withdrawable(rule!(direct_caller_template(address)), LOCKED);
+    fn resource_rule_allows_caller_requirements() {
+        let component = ComponentAddress::new(ObjectKey::default());
+        let template = TemplateAddress::default();
+        ResourceAccessRules::new()
+            .mintable(rule!(caller_component(component)), LOCKED)
+            .withdrawable(rule!(direct_caller_template(template)), LOCKED);
     }
 
     #[test]
@@ -1111,8 +1126,75 @@ mod tests {
             resource(ResourceAddress::new(ObjectKey::default())),
             caller_component(component)
         ));
-        assert!(rule.contains_caller_component_or_template());
         assert!(!rule.contains_scoped_to_component_or_template());
+        assert!(
+            rule!(any_of(
+                resource(ResourceAddress::new(ObjectKey::default())),
+                component(component)
+            ))
+            .contains_scoped_to_component_or_template()
+        );
+    }
+
+    #[test]
+    fn any_caller_sugar_needs_no_constant() {
+        assert_eq!(
+            rule!(any_caller_component),
+            AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(
+                RuleRequirement::Resource(crate::constants::CALLER_COMPONENT_RESOURCE_ADDRESS)
+            )))
+        );
+        assert_eq!(
+            rule!(any_caller_template),
+            AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(
+                RuleRequirement::Resource(crate::constants::DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS)
+            )))
+        );
+    }
+
+    /// The no-address forms have to compose like every other requirement, in any position of a combinator.
+    #[test]
+    fn any_caller_sugar_composes() {
+        let pk = RistrettoPublicKeyBytes::default();
+        let component = ComponentAddress::new(ObjectKey::default());
+
+        let leading = rule!(any_of(any_caller_component, public_key(pk)));
+        let trailing = rule!(any_of(public_key(pk), any_caller_component));
+        assert_ne!(leading, trailing); // ordering is preserved, so these are distinct rules
+        assert!(leading.contains_requirement(&|r| matches!(r, RuleRequirement::Resource(_))));
+        assert!(trailing.contains_requirement(&|r| matches!(r, RuleRequirement::Resource(_))));
+
+        let middle = rule!(all_of(caller_component(component), any_caller_template, public_key(pk)));
+        assert!(middle.contains_requirement(&|r| matches!(r, RuleRequirement::Resource(_))));
+
+        // A bare requirement on its own inside a combinator.
+        assert!(
+            rule!(any_of(any_caller_component)).contains_requirement(&|r| matches!(r, RuleRequirement::Resource(_)))
+        );
+    }
+
+    #[test]
+    fn caller_badges_are_namespaced_by_their_own_resource() {
+        let component = ComponentAddress::new(ObjectKey::default());
+        let template = TemplateAddress::default();
+
+        let component_badge = NonFungibleAddress::caller_component_badge(component);
+        let template_badge = NonFungibleAddress::direct_caller_template_badge(template);
+
+        assert_eq!(
+            *component_badge.resource_address(),
+            crate::constants::CALLER_COMPONENT_RESOURCE_ADDRESS
+        );
+        assert_eq!(
+            *template_badge.resource_address(),
+            crate::constants::DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS
+        );
+        // A component address and a template address are both 32 bytes, so the two badge resources must
+        // keep them apart: an all-zero component must never match an all-zero template.
+        assert_ne!(component_badge, template_badge);
+        assert!(component_badge.resource_address().is_caller_badge());
+        assert!(template_badge.resource_address().is_caller_badge());
+        assert!(component_badge.resource_address().is_system_reserved());
     }
 
     #[test]
@@ -1127,13 +1209,14 @@ mod tests {
         ));
     }
 
-    /// Such an updater always evaluates to false on a resource, so it would be `Locked` wearing a disguise:
-    /// the hook could never be repaired, which is the failure this updater exists to prevent.
+    /// A caller requirement is a badge on a resource rule, so an updater carrying one is satisfiable rather than
+    /// `Locked` wearing a disguise: the component it names can repair the hook, which is what this updater exists
+    /// to guarantee.
     #[test]
-    #[should_panic(expected = "always evaluate to false on resource rules")]
-    fn auth_hook_updater_rejects_a_caller_requirement() {
+    fn auth_hook_updater_accepts_a_caller_requirement() {
         let address = ComponentAddress::new(ObjectKey::default());
-        ResourceAccessRules::new().set_auth_hook_updater(rule!(caller_component(address)));
+        let rules = ResourceAccessRules::new().set_auth_hook_updater(rule!(caller_component(address)));
+        assert!(matches!(rules.auth_hook_updater(), UpdateRule::AccessRule(_)));
     }
 
     #[test]

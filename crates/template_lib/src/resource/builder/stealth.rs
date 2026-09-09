@@ -221,6 +221,11 @@ impl StealthResourceBuilder {
     /// The resource will fail to build if the component's template does not have a method with the correct signature.
     /// Hooks are only run when the resource is acted on by an external component.
     ///
+    /// The hook runs in a sandboxed frame: it may read, emit events and (when declared `&mut self`) update its own
+    /// component state, but it cannot write any other substate, act on any vault or resource, or call another
+    /// component. The acting component's caller badges are in scope for the hook's own method rule, and the sandbox
+    /// is what stops the hook spending them on the acting component's behalf.
+    ///
     /// ## Examples
     ///
     /// Building a resource with a hook from within a component

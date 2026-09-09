@@ -78,8 +78,8 @@ mod spend_scripts {
             engine().create_component(0u32, OwnerRule::default(), AccessRules::allow_all(), None);
         }
 
-        /// Attempts to emit an event, which is on the spend-script deny-list.
-        pub fn try_emit_event(_ctx: SpendContext) {
+        /// Emits an event, which the sandbox permits.
+        pub fn emit_event(_ctx: SpendContext) {
             emit_event("spend_script_test", Metadata::new());
         }
 

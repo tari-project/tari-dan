@@ -9,11 +9,15 @@ use tari_template_abi::{
     rust::{fmt, fmt::Display, prelude::*, str::FromStr, write},
 };
 
-use super::{BinaryTag, ResourceAddress};
+use super::{BinaryTag, ComponentAddress, ResourceAddress, TemplateAddress};
 use crate::{
     MaxString,
     address_prefixes,
-    constants::PUBLIC_IDENTITY_RESOURCE_ADDRESS,
+    constants::{
+        CALLER_COMPONENT_RESOURCE_ADDRESS,
+        DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS,
+        PUBLIC_IDENTITY_RESOURCE_ADDRESS,
+    },
     crypto::RistrettoPublicKeyBytes,
     hex::{fixed_bytes_from_hex, write_hex_fmt},
 };
@@ -272,6 +276,24 @@ impl NonFungibleAddress {
         Self::new(
             PUBLIC_IDENTITY_RESOURCE_ADDRESS,
             NonFungibleId::from_public_key(public_key),
+        )
+    }
+
+    /// The virtual badge naming `address` as the component a frame is executing on behalf of. Stamped into a
+    /// callee's authorization scope by the engine; see [`CALLER_COMPONENT_RESOURCE_ADDRESS`].
+    pub fn caller_component_badge(address: ComponentAddress) -> Self {
+        Self::new(
+            CALLER_COMPONENT_RESOURCE_ADDRESS,
+            NonFungibleId::U256(address.as_object_key().into_array()),
+        )
+    }
+
+    /// The virtual badge naming `address` as the template of a frame's immediate caller. See
+    /// [`DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS`].
+    pub fn direct_caller_template_badge(address: TemplateAddress) -> Self {
+        Self::new(
+            DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS,
+            NonFungibleId::U256(address.into_array()),
         )
     }
 

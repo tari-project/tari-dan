@@ -316,8 +316,19 @@ impl SubstateId {
         matches!(self, Self::NonFungible(addr) if *addr.resource_address() == PUBLIC_IDENTITY_RESOURCE_ADDRESS)
     }
 
+    /// Returns `true` for substate ids the engine reserves and never stores: public-key identities, the caller
+    /// badges stamped into an authorization scope at frame push, and the two resources those badges are namespaced
+    /// by. Nothing can ever be resolved or locked at one of these, so they are neither derived as transaction
+    /// inputs nor brought into a call scope, and a transaction naming one as an input is rejected at validation.
     pub fn is_virtual(&self) -> bool {
-        self.is_public_key_identity()
+        match self {
+            Self::NonFungible(addr) => {
+                let resource = addr.resource_address();
+                resource.is_caller_badge() || *resource == PUBLIC_IDENTITY_RESOURCE_ADDRESS
+            },
+            Self::Resource(addr) => addr.is_caller_badge(),
+            _ => false,
+        }
     }
 
     pub const fn is_vault(&self) -> bool {

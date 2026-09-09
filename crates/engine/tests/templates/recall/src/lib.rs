@@ -94,6 +94,12 @@ mod template {
             }
         }
 
+        /// Recalls under this component's fungible resource rule and hands the bucket back to the caller, who
+        /// decides where it goes.
+        pub fn recall_fungible_to_bucket(&mut self, vault_id: VaultId, amount: Amount) -> Bucket {
+            ResourceManager::get(self.fungible.resource_address()).recall_fungible_amount(vault_id, amount)
+        }
+
         pub fn recall_fungible(&mut self, vault_id: VaultId, amount: Amount) {
             // NOTE: this call will only succeed if the resource is contained in the vault
             let bucket =

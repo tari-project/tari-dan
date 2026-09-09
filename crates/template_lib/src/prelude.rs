@@ -58,7 +58,13 @@ pub use tari_template_lib_types::{
     },
     bytes::Bytes,
     confidential::{ConfidentialOutputStatement, ConfidentialWithdrawProof},
-    constants::{PUBLIC_IDENTITY_RESOURCE_ADDRESS, STEALTH_TARI_RESOURCE_ADDRESS, TARI_TOKEN},
+    constants::{
+        CALLER_COMPONENT_RESOURCE_ADDRESS,
+        DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS,
+        PUBLIC_IDENTITY_RESOURCE_ADDRESS,
+        STEALTH_TARI_RESOURCE_ADDRESS,
+        TARI_TOKEN,
+    },
     crypto::{
         BalanceProofSignature,
         PedersenCommitmentBytes,

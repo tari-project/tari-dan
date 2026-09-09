@@ -170,7 +170,7 @@ use crate::{
         error::{ArgumentValidationError, LimitError},
         locking::{LockError, LockedSubstate},
         pay_fee::PayFee,
-        scope::PushCallFrame,
+        scope::{FrameWriteMode, PushCallFrame},
         tracker::{ComputeAllowance, FinalizedState, StateTracker},
     },
     state_store::StateReader,
@@ -197,9 +197,10 @@ pub struct RuntimeInterfaceImpl<TStore, TTemplateProvider> {
     /// set immediately before invoking the predicate and cleared immediately after, so `spend_context_invoke` (which
     /// re-enters this same interface through the runtime pointer) can serve the `SpendContext` accessors.
     spend_exec_context: Option<SpendScriptExecution>,
-    /// One-shot flag: when set, the next pushed call frame is restricted to a read-only, non-cross-template sandbox
-    /// (used for the spend-script predicate frame). Consumed by `push_call_frame`.
-    restricted_frame_pending: bool,
+    /// One-shot: when set, the next pushed call frame is restricted to this write mode and denied cross-template
+    /// calls. Used for the spend-script predicate frame (`ReadOnly`) and the resource auth hook frame
+    /// (`OwnComponent`). Consumed by `push_call_frame`.
+    restricted_frame_pending: Option<FrameWriteMode>,
 }
 
 impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<Template = LoadedTemplate>>
@@ -224,7 +225,7 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
             blobs,
             runtime_pointer: None,
             spend_exec_context: None,
-            restricted_frame_pending: false,
+            restricted_frame_pending: None,
         };
         runtime.invoke_modules_on_initialize()?;
         Ok(runtime)
@@ -238,40 +239,51 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
     }
 
     fn invoke_modules_on_runtime_call(&mut self, function: &'static str) -> Result<(), RuntimeError> {
-        // Core read-only sandbox enforcement runs first and unconditionally. It deliberately does NOT live in a
+        // Core sandbox enforcement runs first and unconditionally. It deliberately does NOT live in a
         // RuntimeModule: modules are optional, observer-style functionality (fees, call tracking), so making a
         // security invariant depend on one would mean dropping that module silently re-opens the sandbox. This is the
         // single per-host-op entry point, so enforcing here covers every op that routes through it regardless of
         // which modules are registered.
-        self.enforce_read_only_restrictions(function)?;
+        self.enforce_frame_restrictions(function)?;
         for module in self.modules.iter() {
             module.on_runtime_call(&mut self.tracker, function)?;
         }
         Ok(())
     }
 
-    /// Layer (b) of the spend-script sandbox: deny the effectful or non-deterministic host ops that are NOT mediated by
-    /// the write-lock chokepoint (layer (a) in `WorkingState::write_lock_substate` / `new_substate`, which neutralises
-    /// every state write). Together they make a spend-script predicate provably side-effect-free and deterministic.
+    /// Layer (b) of the frame sandbox: deny the effectful or non-deterministic host ops that are NOT mediated by the
+    /// write-lock chokepoint (layer (a) in `WorkingState::write_lock_substate` / `new_substate`, which neutralises
+    /// every state write). Together they make a spend-script predicate provably side-effect-free and deterministic,
+    /// and confine a resource auth hook to its own component state.
     ///
-    /// The list contains only WASM host ops (each backed by an `EngineOp`), because a read-only frame only exists while
-    /// a predicate's WASM is executing — instruction-level operations such as `pay_fee` and `publish_template` have no
-    /// `EngineOp`, run only at the top level, and so can never execute in a read-only context. `call_invoke` is also
-    /// blocked at the frame level (`allow_cross_template_calls == false`) and listed here for defence in depth.
-    fn enforce_read_only_restrictions(&self, function: &'static str) -> Result<(), RuntimeError> {
+    /// Events are permitted in both modes: an event is an output of execution that no later code can observe, and it
+    /// is discarded with the transaction if the frame fails, so it is neither a side effect on state nor a source of
+    /// non-determinism.
+    ///
+    /// The lists contain only WASM host ops (each backed by an `EngineOp`), because a restricted frame only exists
+    /// while template WASM is executing — instruction-level operations such as `pay_fee` and `publish_template` have
+    /// no `EngineOp`, run only at the top level, and so can never execute in a restricted context. `call_invoke` is
+    /// also blocked at the frame level (`allow_cross_template_calls == false`) and listed here for defence in depth.
+    fn enforce_frame_restrictions(&self, function: &'static str) -> Result<(), RuntimeError> {
         const FORBIDDEN_IN_READ_ONLY: &[&str] = &[
             "call_invoke",
             "generate_random_invoke",
             "generate_uuid",
-            "emit_event",
             "proof_invoke",
             "bucket_invoke",
         ];
+        const FORBIDDEN_IN_OWN_COMPONENT: &[&str] = &["call_invoke", "proof_invoke", "bucket_invoke"];
 
-        if self.tracker.is_in_read_only_context() && FORBIDDEN_IN_READ_ONLY.contains(&function) {
-            return Err(RuntimeError::ForbiddenInReadOnlyContext { operation: function });
+        match self.tracker.current_frame_write_mode() {
+            FrameWriteMode::Full => Ok(()),
+            FrameWriteMode::OwnComponent if FORBIDDEN_IN_OWN_COMPONENT.contains(&function) => {
+                Err(RuntimeError::ForbiddenInAuthHookContext { operation: function })
+            },
+            FrameWriteMode::ReadOnly if FORBIDDEN_IN_READ_ONLY.contains(&function) => {
+                Err(RuntimeError::ForbiddenInReadOnlyContext { operation: function })
+            },
+            FrameWriteMode::OwnComponent | FrameWriteMode::ReadOnly => Ok(()),
         }
-        Ok(())
     }
 
     fn invoke_modules_on_before_finalize(&mut self) -> Result<(), RuntimeError> {
@@ -441,19 +453,23 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
             Ok::<_, RuntimeError>(was_in_scope)
         })?;
 
-        // The signature of a call back is (action: ResourceAuthAction, auth_caller: AuthHookCaller)
-        let ret = self
-            .invoke_component_method(auth_hook.component_address, &auth_hook.method, invoke_args![
-                action,
-                auth_caller
-            ])
-            .map_err(|e| match e {
-                RuntimeError::CrossTemplateCallMethodError { details, .. } => RuntimeError::AccessDeniedAuthHook {
-                    action_ident: action.into(),
-                    details: details.to_string(),
-                },
-                _ => e,
-            })?;
+        // The signature of a call back is (action: ResourceAuthAction, auth_caller: AuthHookCaller).
+        // The hook frame carries the acting component's caller badges, and the acting component never chose the hook
+        // code, so the frame is confined to its own component state: it cannot use those badges to act on any vault
+        // or resource, nor call out to a frame that could.
+        self.restricted_frame_pending = Some(FrameWriteMode::OwnComponent);
+        let ret = self.invoke_component_method(auth_hook.component_address, &auth_hook.method, invoke_args![
+            action,
+            auth_caller
+        ]);
+        self.restricted_frame_pending = None;
+        let ret = ret.map_err(|e| match e {
+            RuntimeError::CrossTemplateCallMethodError { details, .. } => RuntimeError::AccessDeniedAuthHook {
+                action_ident: action.into(),
+                details: details.to_string(),
+            },
+            _ => e,
+        })?;
         // Enforce that the return type is actually empty. We cannot rely on InstructionResult::return_type field
         // because that comes from the template definition which is defined by the template author and may not reflect
         // actual behaviour. `is_unit` accepts either `Value::Null` (ciborium/serde encoding of `()`) or
@@ -588,12 +604,6 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
                 reason: format!("Authorize hook '{}' not found", hook),
             })?;
 
-        if func.is_mut {
-            return Err(RuntimeError::InvalidArgument {
-                argument,
-                reason: format!("Authorize hook '{}' cannot be mutable", hook),
-            });
-        }
         if !matches!(func.output, Type::Unit) {
             return Err(RuntimeError::InvalidArgument {
                 argument,
@@ -1063,10 +1073,10 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
         // Make the introspection context reachable for the duration of the call (re-entered via the runtime pointer),
         // and restrict the predicate's frame to a read-only, non-cross-template sandbox.
         self.spend_exec_context = Some(exec);
-        self.restricted_frame_pending = true;
+        self.restricted_frame_pending = Some(FrameWriteMode::ReadOnly);
         let result = self.invoke_template_function(&tf.template, &tf.function, args);
         self.spend_exec_context = None;
-        self.restricted_frame_pending = false;
+        self.restricted_frame_pending = None;
 
         result
             .map(|_| ())
@@ -1387,7 +1397,7 @@ where
                     let component = state.get_component(&component_lock)?;
                     state
                         .authorization()
-                        .require_component_ownership(ComponentAction::SetAccessRules, component.as_ownership())?;
+                        .require_ownership(ComponentAction::SetAccessRules, component.as_ownership())?;
 
                     state.modify_component_with(&component_lock, |component| {
                         if access_rules == *component.access_rules() {
@@ -1568,6 +1578,16 @@ where
                         None => state_mut.id_provider()?.new_resource_address()?,
                     };
 
+                    // The system's resource addresses must stay under the system's control: the genesis resources
+                    // are created once, and the two caller-badge resources must stay empty for the engine's badges
+                    // to be unforgeable.
+                    if resource_address.is_system_reserved() {
+                        return Err(RuntimeError::InvalidArgument {
+                            argument: "resource_address",
+                            reason: format!("Resource address {resource_address} is reserved by the system"),
+                        });
+                    }
+
                     let mut payload = Metadata::from_iter([("resource_type", resource.resource_type().to_string())]);
                     if let Some(symbol) = resource.metadata().get(TOKEN_SYMBOL) {
                         payload.insert(TOKEN_SYMBOL, symbol);
@@ -1731,6 +1751,17 @@ where
                 self.tracker.write_with(|state_mut| {
                     let vault_lock = state_mut.write_lock_substate(arg.vault_id.into())?;
 
+                    // The recall rule that authorized this action belongs to `resource_address`, so it may only
+                    // reach vaults holding that resource.
+                    let vault_resource = *state_mut.get_vault(&vault_lock)?.resource_address();
+                    if vault_resource != resource_address {
+                        return Err(RuntimeError::RecallResourceMismatch {
+                            vault_id: arg.vault_id,
+                            resource_address,
+                            vault_resource,
+                        });
+                    }
+
                     let resource = state_mut.recall_resource_from_vault(&vault_lock, &arg.resource)?;
 
                     let payload = Metadata::from_iter([
@@ -1855,14 +1886,6 @@ where
                         })?;
                 let UpdateAccessRuleArg { action, new_rule } = args.assert_one_arg()?;
 
-                if new_rule.contains_caller_component_or_template() {
-                    return Err(RuntimeError::InvalidArgument {
-                        argument: "new_rule",
-                        reason: "caller_component/direct_caller_template cannot be used on a resource access rule"
-                            .to_string(),
-                    });
-                }
-
                 let resource_lock = self.tracker.write_with(|state_mut| {
                     let resource_lock = state_mut.write_lock_substate(SubstateId::Resource(resource_address))?;
 
@@ -1871,9 +1894,7 @@ where
 
                     let authorized = match updater {
                         UpdateRule::Locked => false,
-                        UpdateRule::Owner => state_mut
-                            .authorization()
-                            .check_ownership_in_current_frame(resource.as_ownership())?,
+                        UpdateRule::Owner => state_mut.authorization().check_ownership(resource.as_ownership())?,
                         UpdateRule::AccessRule(rule) => state_mut.authorization().check_access_rule(rule)?,
                     };
 
@@ -1918,9 +1939,7 @@ where
 
                     let authorized = match updater {
                         UpdateRule::Locked => false,
-                        UpdateRule::Owner => state_mut
-                            .authorization()
-                            .check_ownership_in_current_frame(resource.as_ownership())?,
+                        UpdateRule::Owner => state_mut.authorization().check_ownership(resource.as_ownership())?,
                         UpdateRule::AccessRule(rule) => state_mut.authorization().check_access_rule(rule)?,
                     };
 
@@ -3817,7 +3836,7 @@ where
             let component = state.get_component(locked)?;
             state
                 .authorization()
-                .require_component_ownership(action, component.as_ownership())
+                .require_ownership(action, component.as_ownership())
         })
     }
 
@@ -3854,12 +3873,11 @@ where
 
     fn push_call_frame(&mut self, frame: PushCallFrame) -> Result<(), RuntimeError> {
         self.tracker.push_call_frame(frame)?;
-        // A spend-script predicate is invoked via the generic `call_function` path, so we restrict the frame it just
-        // pushed here rather than threading a flag through that path. The predicate's WASM only runs after this
-        // returns, so the read-only/no-cross-template restriction is in place before any host op can be issued.
-        if self.restricted_frame_pending {
-            self.restricted_frame_pending = false;
-            self.tracker.write_with(|state| state.make_current_frame_read_only())?;
+        // Spend-script predicates and auth hooks are invoked via the generic `call_function` / `call_method` paths,
+        // so we restrict the frame they just pushed here rather than threading a flag through those paths. The WASM
+        // only runs after this returns, so the restriction is in place before any host op can be issued.
+        if let Some(mode) = self.restricted_frame_pending.take() {
+            self.tracker.write_with(|state| state.restrict_current_frame(mode))?;
         }
         Ok(())
     }

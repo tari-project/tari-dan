@@ -331,7 +331,16 @@ mod access_rules_template {
             ResourceManager::get(self.tokens.resource_address()).set_auth_hook(hook);
         }
 
-        pub fn invalid_auth_hook1(&mut self, _action: ResourceAuthAction, _caller: AuthHookCaller) {}
+        /// A mutable hook records each invocation in its own state, the one write a hook frame may make.
+        pub fn counting_auth_hook(&mut self, _action: ResourceAuthAction, _caller: AuthHookCaller) {
+            self.value += 1;
+        }
+
+        /// Attempts a state write outside the hook's own component. The hook frame is confined to its own
+        /// component state, so the engine refuses the vault creation.
+        pub fn hook_creates_vault(&self, _action: ResourceAuthAction, _caller: AuthHookCaller) {
+            let _vault = Vault::new_empty(self.tokens.resource_address());
+        }
 
         pub fn invalid_auth_hook2(&self, _action: String, _caller: AuthHookCaller) {}
 

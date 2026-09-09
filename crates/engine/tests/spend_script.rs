@@ -711,22 +711,30 @@ fn read_only_sandbox_blocks_state_mutation() {
     assert_reject_reason(&reason, "read-only execution context");
 }
 
+/// An event is an output of execution that no later code can observe, so a predicate may emit one without
+/// compromising the sandbox.
 #[test]
-fn sandbox_denies_emit_event() {
+fn sandbox_allows_emit_event() {
     let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
     let script_template = test.get_template_address(SCRIPT_TEMPLATE);
-    let (resx, mint) = mint_utxo(&mut test, script_condition(script_template, "try_emit_event", vec![]));
+    let (resx, mint) = mint_utxo(&mut test, script_condition(script_template, "emit_event", vec![]));
 
     let transfer = spend_into(&mint, key_path(test.to_public_key_bytes()));
-    let reason = test.execute_expect_failure(
+    let result = test.execute_expect_success(
         Transaction::builder_localnet(Epoch(1))
             .stealth_transfer(resx, transfer.statement)
             .finish()
             .seal(test.secret_key()),
         vec![],
     );
-    assert_reject_reason(&reason, "Spend script rejected the spend");
-    assert_reject_reason(&reason, "forbidden inside a read-only");
+    assert!(
+        result
+            .finalize
+            .events
+            .iter()
+            .any(|event| event.topic().ends_with(".spend_script_test")),
+        "the predicate's event is in the transaction's events"
+    );
 }
 
 #[test]

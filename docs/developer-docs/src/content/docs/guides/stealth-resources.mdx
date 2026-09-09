@@ -309,7 +309,7 @@ leaf has no recursion to bound.
 
 | Atom | Gates the spend on |
 |---|---|
-| `AccessRule(rule)` | A native access rule evaluated against the transaction's auth scope (signer badges, resource proofs, component scope, `m_of_n`, …) |
+| `AccessRule(rule)` | A native access rule evaluated against the spending frame's auth scope (signer badges, resource proofs, component scope, caller badges, `m_of_n`, …) |
 | `Builtin(predicate)` | A native, consensus-fixed **local** predicate: a timelock or a hashlock |
 | `Covenant(covenant)` | A native, consensus-fixed constraint on the *spending transfer's* outputs and value flow |
 | `TemplateFunction(tf)` | A stateless WASM predicate &mdash; a **spend script** &mdash; committed as `{template, function, args}` |
