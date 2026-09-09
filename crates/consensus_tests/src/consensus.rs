@@ -1619,7 +1619,7 @@ async fn multishard_validator_fee_claim() {
         .start()
         .await;
     // Create and send publish template transaction
-    let address = derive_fee_pool_address(&claim_bytes, test.num_preshards(), Shard::first());
+    let address = derive_fee_pool_address(&claim_bytes, test.num_preshards(), Shard::first()).unwrap();
     let claim_tx = Transaction::builder_localnet(Epoch(1))
         .claim_validator_fees(address)
         .add_input(address)

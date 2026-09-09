@@ -400,7 +400,8 @@ pub fn apply_leader_fee_to_substate_store<TTx: StateStoreReadTransaction>(
         return Ok(());
     }
 
-    let fee_substate_id = derive_fee_pool_address(claim_public_key_bytes, num_preshards, shard);
+    let fee_substate_id = derive_fee_pool_address(claim_public_key_bytes, num_preshards, shard)
+        .map_err(|err| HotStuffError::InvariantError(err.to_string()))?;
     store.update_in_place(
         &fee_substate_id.into(),
         |value_mut| {

@@ -10,27 +10,12 @@ use std::{
 };
 
 use borsh::BorshSerialize;
-use minicbor::{CborLen, Decode, Encode};
-use serde::{Deserialize, Serialize};
+use minicbor::{CborLen, Decode, Decoder, Encode, decode};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{NumPreshards, SubstateAddress, shard::Shard, uint::U256};
 
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Serialize,
-    Deserialize,
-    BorshSerialize,
-    Encode,
-    Decode,
-    CborLen,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, BorshSerialize, Encode, CborLen)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ShardGroup {
     #[n(0)]
@@ -39,21 +24,67 @@ pub struct ShardGroup {
     end_inclusive: Shard,
 }
 
+/// The wire shape of a [`ShardGroup`], read before `start <= end_inclusive` is checked.
+///
+/// `ShardGroup` promises that ordering to every consumer — `len`, `is_empty`, `shard_iter` and
+/// `to_substate_address_range` all take it as given — so deserialization upholds it exactly as the
+/// constructors do, and a value that violates it is a decode error rather than a `ShardGroup` the
+/// rest of the API cannot describe. `Encode` and `CborLen` stay derived on `ShardGroup`, so this
+/// mirror must keep the same field indices and types; the round-trip tests enforce that.
+#[derive(Deserialize, Decode)]
+struct UncheckedShardGroup {
+    #[n(0)]
+    start: Shard,
+    #[n(1)]
+    end_inclusive: Shard,
+}
+
+fn invalid_bounds_message(start: Shard, end_inclusive: Shard) -> String {
+    format!(
+        "invalid ShardGroup ({}-{}): expected start <= end_inclusive <= {}",
+        start.as_u32(),
+        end_inclusive.as_u32(),
+        Shard::max().as_u32()
+    )
+}
+
+impl<'de> Deserialize<'de> for ShardGroup {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let UncheckedShardGroup { start, end_inclusive } = UncheckedShardGroup::deserialize(deserializer)?;
+        Self::new_checked(start, end_inclusive)
+            .ok_or_else(|| serde::de::Error::custom(invalid_bounds_message(start, end_inclusive)))
+    }
+}
+
+impl<'b, C> Decode<'b, C> for ShardGroup {
+    fn decode(d: &mut Decoder<'b>, ctx: &mut C) -> Result<Self, decode::Error> {
+        let pos = d.position();
+        let UncheckedShardGroup { start, end_inclusive } = UncheckedShardGroup::decode(d, ctx)?;
+        Self::new_checked(start, end_inclusive)
+            .ok_or_else(|| decode::Error::message(invalid_bounds_message(start, end_inclusive)).at(pos))
+    }
+}
+
 impl ShardGroup {
     const MAX_ENCODED_VALUE: u32 = (NumPreshards::MAX.as_u32() << 16) + NumPreshards::MAX.as_u32();
 
     /// Creates a new ShardGroup with the given start and end inclusive shards.
     /// ## Panics
-    /// Panics if the start shard is greater than the end shard.
+    /// Panics if the start shard is greater than the end shard, or the end shard is beyond
+    /// [`Shard::max`].
     pub fn new<T: Into<Shard> + Copy>(start: T, end_inclusive: T) -> Self {
         Self::new_checked(start, end_inclusive)
-            .expect("INVARIANT: start shard must be less than or equal to end_inclusive")
+            .expect("INVARIANT: start shard must be less than or equal to end_inclusive and at most Shard::max()")
     }
 
+    /// Creates a new ShardGroup, returning None unless `start <= end_inclusive <= Shard::max()`.
+    ///
+    /// The upper bound is what keeps `len` and `encode_as_u32` total: a group ending at
+    /// `u32::MAX` satisfies the ordering yet overflows `end_inclusive + 1`.
     pub fn new_checked<T: Into<Shard> + Copy>(start: T, end_inclusive: T) -> Option<Self> {
         let start = start.into();
         let end_inclusive = end_inclusive.into();
-        if start > end_inclusive {
+        if start > end_inclusive || end_inclusive > Shard::max() {
             return None;
         }
         Some(Self { start, end_inclusive })
@@ -113,14 +144,10 @@ impl ShardGroup {
         Self::new_checked(start, end)
     }
 
+    /// Iterates over every shard in the group. Yields nothing when the bounds are inverted, which
+    /// only a [`Self::new_unchecked`] value can be.
     pub fn shard_iter(self) -> impl Iterator<Item = Shard> + 'static {
-        iter::successors(Some(self.start), move |&shard| {
-            if shard == self.end_inclusive {
-                None
-            } else {
-                Some(Shard::from(shard.as_u32() + 1))
-            }
-        })
+        (self.start.as_u32()..=self.end_inclusive.as_u32()).map(Shard::from)
     }
 
     pub fn shard_iter_with_global(self) -> impl Iterator<Item = Shard> + 'static {
@@ -234,6 +261,48 @@ mod tests {
         );
         assert_eq!(ShardGroup::decode_from_u32(ShardGroup::MAX_ENCODED_VALUE + 1), None);
         assert_eq!(ShardGroup::decode_from_u32(u32::MAX), None);
+    }
+
+    #[test]
+    fn it_round_trips_a_valid_group() {
+        let sg = ShardGroup::new(10, 20);
+        let bytes = tari_bor::encode(&sg).unwrap();
+        assert_eq!(tari_bor::decode::<ShardGroup>(&bytes).unwrap(), sg);
+
+        let json = serde_json::to_string(&sg).unwrap();
+        assert_eq!(serde_json::from_str::<ShardGroup>(&json).unwrap(), sg);
+    }
+
+    #[test]
+    fn it_rejects_inverted_bounds_when_deserializing() {
+        let inverted = ShardGroup::new_unchecked(5, 2);
+
+        let bytes = tari_bor::encode(&inverted).unwrap();
+        tari_bor::decode::<ShardGroup>(&bytes).unwrap_err();
+
+        serde_json::from_str::<ShardGroup>(r#"{"start":5,"end_inclusive":2}"#).unwrap_err();
+    }
+
+    #[test]
+    fn it_rejects_an_end_beyond_the_maximum_shard() {
+        assert_eq!(ShardGroup::new_checked(1, Shard::max().as_u32() + 1), None);
+        assert_eq!(ShardGroup::new_checked(0, u32::MAX), None);
+        assert!(ShardGroup::new_checked(1, Shard::max().as_u32()).is_some());
+
+        // `len` is only total because the end is bounded: `u32::MAX + 1` would overflow.
+        let bytes = tari_bor::encode(&ShardGroup::new_unchecked(0, u32::MAX)).unwrap();
+        tari_bor::decode::<ShardGroup>(&bytes).unwrap_err();
+        serde_json::from_str::<ShardGroup>(r#"{"start":0,"end_inclusive":4294967295}"#).unwrap_err();
+    }
+
+    #[test]
+    fn shard_iter_terminates_on_inverted_bounds() {
+        assert_eq!(ShardGroup::new_unchecked(5, 2).shard_iter().count(), 0);
+        assert_eq!(ShardGroup::new(5, 7).shard_iter().collect::<Vec<_>>(), vec![
+            Shard::from(5),
+            Shard::from(6),
+            Shard::from(7)
+        ]);
     }
 
     #[test]
