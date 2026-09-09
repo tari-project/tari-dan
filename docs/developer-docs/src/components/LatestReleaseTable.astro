@@ -1,6 +1,10 @@
 ---
 const repo = "tari-project/tari-ootle";
-const apiUrl = `https://api.github.com/repos/${repo}/releases`;
+// GitHub's list endpoint always returns complete release objects, so there is
+// no cheaper "list then fetch details" sequence. Limiting the page to the
+// newest release is the smallest payload that still yields the latest
+// non-draft release (the list is sorted newest-first).
+const apiUrl = `https://api.github.com/repos/${repo}/releases?per_page=1`;
 
 let release = null;
 let error = null;
