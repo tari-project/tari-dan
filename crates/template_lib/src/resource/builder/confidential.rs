@@ -251,7 +251,21 @@ impl ConfidentialResourceBuilder {
     ///     .with_authorization_hook(*alloc.address(), "my_hook")
     ///     .build();
     /// ```
-    /// Sets up who can replace or remove the resource's authorization hook after creation.
+    pub fn with_authorization_hook<T: TryInto<FunctionName>>(
+        mut self,
+        address: ComponentAddress,
+        auth_callback: T,
+    ) -> Self {
+        self.authorize_hook = Some(AuthHook::new(
+            address,
+            auth_callback
+                .try_into()
+                .unwrap_or_else(|_| panic!("{}", ERR_AUTH_HOOK_FN_NAME_LEN)),
+        ));
+        self
+    }
+
+    /// Sets up who can install, replace or remove the resource's authorization hook after creation.
     ///
     /// A hook is [`LOCKED`](tari_template_lib_types::access_rules::LOCKED) by default: it binds for the life of
     /// the resource, and a hook that panics or denies unconditionally leaves every vault of the resource
@@ -269,20 +283,6 @@ impl ConfidentialResourceBuilder {
     /// ```
     pub fn with_authorization_hook_updater<U: Into<UpdateRule>>(mut self, updater: U) -> Self {
         self.access_rules = self.access_rules.set_auth_hook_updater(updater);
-        self
-    }
-
-    pub fn with_authorization_hook<T: TryInto<FunctionName>>(
-        mut self,
-        address: ComponentAddress,
-        auth_callback: T,
-    ) -> Self {
-        self.authorize_hook = Some(AuthHook::new(
-            address,
-            auth_callback
-                .try_into()
-                .unwrap_or_else(|_| panic!("{}", ERR_AUTH_HOOK_FN_NAME_LEN)),
-        ));
         self
     }
 

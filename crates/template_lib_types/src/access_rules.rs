@@ -483,13 +483,14 @@ pub struct ResourceAccessRules {
     update_metadata: AccessRule,
     #[n(15)]
     metadata_updater: UpdateRule,
-    /// Who may replace or remove the resource's [`AuthHook`](crate::AuthHook). The hook itself is not an
-    /// [`AccessRule`], so this updater stands alone rather than pairing with one.
+    /// Who may install, replace or remove the resource's [`AuthHook`](crate::AuthHook). The hook itself is not
+    /// an [`AccessRule`], so this updater stands alone rather than pairing with one.
     ///
     /// A hook runs on nearly every resource action, so one that panics or denies unconditionally takes the
     /// resource offline and strands the balances in its vaults. `Locked` — the default — keeps a hook binding
     /// for the life of the resource; anything else lets the hook be repaired or retired, at the cost of letting
-    /// whoever satisfies the updater change the rules that existing holders are relying on.
+    /// whoever satisfies the updater change the rules that existing holders are relying on — up to and
+    /// including giving a hook-free resource a hook.
     #[n(16)]
     #[cbor(default)]
     #[cfg_attr(feature = "serde", serde(default))]
@@ -625,10 +626,16 @@ impl ResourceAccessRules {
         self
     }
 
-    /// Sets up who can replace or remove the resource's authorization hook. Locked by default, which makes a
-    /// hook binding for the life of the resource.
+    /// Sets up who can install, replace or remove the resource's authorization hook. Locked by default, which
+    /// makes a hook binding for the life of the resource.
     pub fn set_auth_hook_updater<U: Into<UpdateRule>>(mut self, updater: U) -> Self {
-        self.auth_hook_updater = updater.into();
+        let updater = updater.into();
+        // A `caller_component`/`direct_caller_template` requirement always evaluates to false on a resource, so
+        // an updater carrying one is indistinguishable from `Locked` — the bricking this updater exists to avoid.
+        if let UpdateRule::AccessRule(rule) = &updater {
+            Self::assert_no_caller_requirement(rule);
+        }
+        self.auth_hook_updater = updater;
         self
     }
 
@@ -684,6 +691,7 @@ impl ResourceAccessRules {
     /// Writes the rules as a protocol version 0 substate hash preimage: every field but `auth_hook_updater`,
     /// which version 0 resources do not carry.
     #[cfg(feature = "borsh")]
+    #[doc(hidden)]
     pub fn borsh_serialize_v0<W: borsh::io::Write>(&self, writer: &mut W) -> borsh::io::Result<()> {
         // Destructured so that a field added to the struct fails to compile here rather than being silently
         // dropped from the version 0 preimage.
@@ -1105,6 +1113,27 @@ mod tests {
         ));
         assert!(rule.contains_caller_component_or_template());
         assert!(!rule.contains_scoped_to_component_or_template());
+    }
+
+    #[test]
+    fn auth_hook_updater_defaults_to_locked() {
+        assert!(matches!(
+            ResourceAccessRules::new().auth_hook_updater(),
+            UpdateRule::Locked
+        ));
+        assert!(matches!(
+            ResourceAccessRules::deny_all().auth_hook_updater(),
+            UpdateRule::Locked
+        ));
+    }
+
+    /// Such an updater always evaluates to false on a resource, so it would be `Locked` wearing a disguise:
+    /// the hook could never be repaired, which is the failure this updater exists to prevent.
+    #[test]
+    #[should_panic(expected = "always evaluate to false on resource rules")]
+    fn auth_hook_updater_rejects_a_caller_requirement() {
+        let address = ComponentAddress::new(ObjectKey::default());
+        ResourceAccessRules::new().set_auth_hook_updater(rule!(caller_component(address)));
     }
 
     #[test]

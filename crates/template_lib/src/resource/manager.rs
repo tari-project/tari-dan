@@ -959,7 +959,9 @@ impl ResourceManager {
         resp.decode().expect("[update_access_rule] Failed")
     }
 
-    /// Replaces the resource's authorization hook, or removes it when `auth_hook` is `None`.
+    /// Replaces the resource's authorization hook, or removes it when `auth_hook` is `None`. A resource that
+    /// has no hook gains one, so a holder cannot rely on a resource staying hook-free once the updater permits
+    /// a change.
     ///
     /// Authorization is gated by the resource's
     /// [`auth_hook_updater`](tari_template_lib_types::access_rules::ResourceAccessRules::auth_hook_updater),

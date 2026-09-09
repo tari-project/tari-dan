@@ -392,10 +392,11 @@ mod tests {
             hash_at(ProtocolVersion::V1, &resource(UpdateRule::Locked)),
             hash_at(ProtocolVersion::V1, &resource(UpdateRule::Owner))
         );
-        assert_ne!(
-            hash_at(ProtocolVersion::V0, &resource(UpdateRule::Locked)),
-            hash_at(ProtocolVersion::V1, &resource(UpdateRule::Locked))
-        );
+        // Past the leading version tag, so that wiring V1 to the version 0 preimage would fail here.
+        let value = resource(UpdateRule::Locked);
+        let v0 = borsh::to_vec(&SubstateHashMessage::new(ProtocolVersion::V0, &value)).unwrap();
+        let v1 = borsh::to_vec(&SubstateHashMessage::new(ProtocolVersion::V1, &value)).unwrap();
+        assert_ne!(v0[1..], v1[1..]);
     }
 
     #[test]
