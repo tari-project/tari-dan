@@ -12,17 +12,17 @@ mod mint_attempt {
     pub struct BadgeMintAttempt;
 
     impl BadgeMintAttempt {
-        pub fn mint_caller_component_badge(gate: ComponentAddress) -> Bucket {
+        pub fn mint_caller_component_badge() -> Bucket {
             ResourceManager::get(CALLER_COMPONENT_RESOURCE_ADDRESS).mint_non_fungible(
-                NonFungibleId::from_u256((*gate.as_object_key()).into_array()),
+                NonFungibleId::from_u256([0u8; 32]),
                 &(),
                 &(),
             )
         }
 
-        pub fn mint_direct_caller_template_badge(gate: TemplateAddress) -> Bucket {
+        pub fn mint_direct_caller_template_badge() -> Bucket {
             ResourceManager::get(DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS).mint_non_fungible(
-                NonFungibleId::from_u256(gate.into_array()),
+                NonFungibleId::from_u256([0u8; 32]),
                 &(),
                 &(),
             )

@@ -47,5 +47,10 @@ mod caller {
         pub fn withdraw_via(&self, next: ComponentAddress, holder: ComponentAddress) {
             ComponentManager::get(next).invoke("withdraw_from", args![holder]);
         }
+
+        // A static (template-function) caller has no component instance, only a template identity.
+        pub fn withdraw_from_static(holder: ComponentAddress) {
+            ComponentManager::get(holder).invoke("withdraw_once", args![]);
+        }
     }
 }

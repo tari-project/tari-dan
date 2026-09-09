@@ -1573,7 +1573,7 @@ where
                     // to be unforgeable.
                     if resource_address.is_system_reserved() {
                         return Err(RuntimeError::InvalidArgument {
-                            argument: "address_allocation",
+                            argument: "resource_address",
                             reason: format!("Resource address {resource_address} is reserved by the system"),
                         });
                     }

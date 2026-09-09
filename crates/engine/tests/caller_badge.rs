@@ -7,8 +7,14 @@
 //! immediate caller (so it cannot be forwarded down a call chain).
 
 use tari_ootle_transaction::args;
-use tari_template_lib::types::{ComponentAddress, ObjectKey, access_rules::ResourceAuthAction};
-use tari_template_test_tooling::{TemplateTest, support::assert_error::assert_access_denied_for_action};
+use tari_template_lib::types::{
+    access_rules::ResourceAuthAction,
+    constants::{CALLER_COMPONENT_RESOURCE_ADDRESS, DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS},
+};
+use tari_template_test_tooling::{
+    TemplateTest,
+    support::assert_error::{assert_access_denied_for_action, assert_reject_reason},
+};
 
 const CRATE_PATH: &str = env!("CARGO_MANIFEST_DIR");
 
@@ -117,24 +123,67 @@ fn caller_badge_is_not_inherited_through_an_intermediate_frame() {
     assert_access_denied_for_action(reason, ResourceAuthAction::Withdraw);
 }
 
+/// A static function frame has no component identity, so the template badge is the only one stamped. A
+/// `CallFunction` of the gated template must therefore satisfy `direct_caller_template` on a resource rule.
+#[test]
+fn resource_withdraw_rule_allows_a_static_function_of_the_gated_template() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATES);
+    let caller_template = test.get_template_address("Caller");
+    let holder_template = test.get_template_address("GatedResource");
+
+    test.execute_expect_success(
+        test.transaction()
+            .call_function(holder_template, "new_template_gated", args![caller_template])
+            .put_last_instruction_output_on_workspace("holder")
+            .call_function(caller_template, "withdraw_from_static", args![Workspace("holder")])
+            .build_and_seal(test.secret_key()),
+        vec![test.owner_proof()],
+    );
+}
+
+/// The template badge names the immediate caller's template, so a caller from any other template is denied
+/// even though its own frame is a perfectly ordinary component frame.
+#[test]
+fn resource_withdraw_rule_denies_a_caller_from_another_template() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATES);
+    let caller_template = test.get_template_address("Caller");
+    let holder_template = test.get_template_address("GatedResource");
+
+    // Gated on the holder's own template, which the `Caller` component is not.
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_function(caller_template, "new", args![])
+            .put_last_instruction_output_on_workspace("caller")
+            .call_function(holder_template, "new_template_gated", args![holder_template])
+            .put_last_instruction_output_on_workspace("holder")
+            .call_method("caller", "withdraw_from", args![Workspace("holder")])
+            .build_and_seal(test.secret_key()),
+        vec![test.owner_proof()],
+    );
+    assert_access_denied_for_action(reason, ResourceAuthAction::Withdraw);
+}
+
 /// A caller badge is issued into an authorization scope and is not backed by a resource, so there is no path
 /// from a badge to a `Proof` that a callee could capture and forward. Both badge resource addresses must stay
-/// empty for that to hold.
+/// empty for that to hold: a mint must fail because there is nothing at the address, not for any other reason.
 #[test]
 fn caller_badge_resources_hold_no_tokens() {
     let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/caller_badge_mint_attempt"]);
     let template = test.get_template_address("BadgeMintAttempt");
-    let component = ComponentAddress::new(ObjectKey::default());
 
-    for (function, arg) in [
-        ("mint_caller_component_badge", args![component]),
-        ("mint_direct_caller_template_badge", args![template]),
+    for (function, resource) in [
+        ("mint_caller_component_badge", CALLER_COMPONENT_RESOURCE_ADDRESS),
+        (
+            "mint_direct_caller_template_badge",
+            DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS,
+        ),
     ] {
-        test.execute_expect_failure(
+        let reason = test.execute_expect_failure(
             test.transaction()
-                .call_function(template, function, arg)
+                .call_function(template, function, args![])
                 .build_and_seal(test.secret_key()),
             vec![test.owner_proof()],
         );
+        assert_reject_reason(reason, format!("{resource} not found"));
     }
 }

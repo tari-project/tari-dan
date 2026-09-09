@@ -29,15 +29,27 @@ mod gated_resource {
             .create()
         }
 
+        /// As [`Self::new`], but gated on the caller's *template* so that a static function of `gate`
+        /// satisfies the rule as well as a component instance of it.
+        pub fn new_template_gated(gate: TemplateAddress) -> Component<Self> {
+            let tokens = ResourceBuilder::public_fungible()
+                .with_owner_rule(OwnerRule::None)
+                .withdrawable(rule!(direct_caller_template(gate)), LOCKED)
+                .initial_supply(1000u32);
+
+            Component::new(GatedResource {
+                vault: Vault::from_bucket(tokens),
+            })
+            .with_owner_rule(OwnerRule::None)
+            .with_access_rules(ComponentAccessRules::allow_all())
+            .create()
+        }
+
         /// Withdraws and immediately returns the tokens, so the call succeeds or fails purely on the
         /// resource's withdraw rule.
         pub fn withdraw_once(&mut self) {
             let bucket = self.vault.withdraw(Amount::new(1));
             self.vault.deposit(bucket);
-        }
-
-        pub fn balance(&self) -> Amount {
-            self.vault.balance()
         }
     }
 }
