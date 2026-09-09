@@ -59,7 +59,11 @@ mod tests {
         ComponentAddress,
         NonFungibleAddress,
         ObjectKey,
-        constants::{CALLER_COMPONENT_RESOURCE_ADDRESS, DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS, TARI_TOKEN},
+        constants::{
+            CALLER_COMPONENT_RESOURCE_ADDRESS,
+            DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS,
+            PUBLIC_IDENTITY_RESOURCE_ADDRESS,
+        },
         crypto::RistrettoPublicKeyBytes,
     };
 
@@ -119,10 +123,16 @@ mod tests {
         ));
     }
 
-    /// The genesis resources are ordinary stored substates and must stay nameable.
+    /// The identity *resource* is stored in the genesis state even though its non-fungibles are issued from
+    /// signatures, so it must stay nameable — every account transaction reaches it through
+    /// `get_dependent_substates`, which adds the resource of any non-fungible child.
+    #[test]
+    fn it_accepts_the_identity_resource() {
+        validate(PUBLIC_IDENTITY_RESOURCE_ADDRESS.into()).unwrap();
+    }
+
     #[test]
     fn it_accepts_a_real_substate() {
-        validate(TARI_TOKEN.into()).unwrap();
         validate(ComponentAddress::from_array([2u8; 32]).into()).unwrap();
     }
 }
