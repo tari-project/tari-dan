@@ -39,34 +39,28 @@ struct UncheckedShardGroup {
     end_inclusive: Shard,
 }
 
-impl UncheckedShardGroup {
-    fn check(self) -> Option<ShardGroup> {
-        ShardGroup::new_checked(self.start, self.end_inclusive)
-    }
-
-    fn invalid_bounds_message(&self) -> String {
-        format!(
-            "invalid ShardGroup: start ({}) is greater than end_inclusive ({})",
-            self.start.as_u32(),
-            self.end_inclusive.as_u32()
-        )
-    }
+fn invalid_bounds_message(start: Shard, end_inclusive: Shard) -> String {
+    format!(
+        "invalid ShardGroup: start ({}) is greater than end_inclusive ({})",
+        start.as_u32(),
+        end_inclusive.as_u32()
+    )
 }
 
 impl<'de> Deserialize<'de> for ShardGroup {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let unchecked = UncheckedShardGroup::deserialize(deserializer)?;
-        let message = unchecked.invalid_bounds_message();
-        unchecked.check().ok_or_else(|| serde::de::Error::custom(message))
+        let UncheckedShardGroup { start, end_inclusive } = UncheckedShardGroup::deserialize(deserializer)?;
+        Self::new_checked(start, end_inclusive)
+            .ok_or_else(|| serde::de::Error::custom(invalid_bounds_message(start, end_inclusive)))
     }
 }
 
 impl<'b, C> Decode<'b, C> for ShardGroup {
     fn decode(d: &mut Decoder<'b>, ctx: &mut C) -> Result<Self, decode::Error> {
         let pos = d.position();
-        let unchecked = UncheckedShardGroup::decode(d, ctx)?;
-        let message = unchecked.invalid_bounds_message();
-        unchecked.check().ok_or_else(|| decode::Error::message(message).at(pos))
+        let UncheckedShardGroup { start, end_inclusive } = UncheckedShardGroup::decode(d, ctx)?;
+        Self::new_checked(start, end_inclusive)
+            .ok_or_else(|| decode::Error::message(invalid_bounds_message(start, end_inclusive)).at(pos))
     }
 }
 
