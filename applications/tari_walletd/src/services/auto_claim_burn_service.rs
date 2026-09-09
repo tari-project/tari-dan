@@ -67,7 +67,7 @@ fn claim_after_epoch(mined_in_epoch: Option<u64>) -> Epoch {
 ///
 /// ## Epoch-safety
 /// A claim is only valid once L2 validators have synced the L1 block containing the burn into a
-/// committed epoch. That sync lags the L1 tip by `base_layer_confirmations` (e.g. 1000 blocks on
+/// committed epoch. That sync lags the L1 tip by `base_layer_confirmations` (e.g. 780 blocks on
 /// mainnet), so submitting too early is rejected. Each proof file records the L1 epoch the burn was
 /// mined in (`mined_in_epoch`); this service reads it and only submits once the network reports a
 /// strictly later epoch. Proofs without that field (older L1 wallets) are attempted eagerly and
