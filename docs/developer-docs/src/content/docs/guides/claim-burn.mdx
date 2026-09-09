@@ -53,6 +53,11 @@ The burner then signs an **ownership proof**: a Schnorr signature under the blin
 `H(C ‖ S ‖ sidechain_id)`. This proves knowledge of the commitment opening and binds the burn to both the claimant
 `S` and the target sidechain.
 
+The **sidechain id** identifies which Minotari sidechain the burn is for. It is the public key of the sidechain's
+L1 deployment key, and every validator on that sidechain is configured with the same value. The Ootle itself uses
+a blank sidechain id, so a burn with no sidechain id is a burn for the Ootle. Other sidechains built on Minotari
+each bind burns to their own key.
+
 The wallet bundles everything the Ootle needs into a **claim proof**:
 
 | Field                     | Purpose                                                   |
@@ -196,6 +201,6 @@ This works at the consensus layer rather than in the engine:
   transaction aborts.
 - Two claims for the same burn in the same block are serialised by the same lock: the first wins, the second aborts.
 
-Because the sidechain id is part of the signed ownership message, a burn addressed to one Ootle network cannot be
+Because the sidechain id is part of the signed ownership message, a burn addressed to one sidechain cannot be
 claimed on another, and a burn claimed once on the Ootle leaves a permanent tombstone that no later claim can
 overwrite.
