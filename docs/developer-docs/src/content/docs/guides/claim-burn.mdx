@@ -101,9 +101,9 @@ deleted and the affected range is rescanned, so the store converges on the canon
 
 <Aside type="caution" title="Claims are delayed by the confirmation depth">
   A burn is not claimable until the validators have scanned its block, and validators deliberately scan behind the
-  tip so that only reorg-safe headers are stored. The lag is `base_layer_confirmations`: 1000 blocks on mainnet
-  (about 1.4 days at 2-minute blocks) and 100 blocks on testnets (about 3 hours). The claim must also be submitted
-  in an epoch after the one the burn was mined in. The wallet daemon's auto-claim service waits this out for you.
+  tip so that only reorg-safe headers are stored. The lag is the network's `base_layer_confirmations` constant:
+  on the order of a day on mainnet and a few hours on testnets. The claim must also be submitted in an epoch after
+  the one the burn was mined in. The wallet daemon's auto-claim service waits this out for you.
 </Aside>
 
 ### Two checks per claim
