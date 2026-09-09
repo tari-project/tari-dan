@@ -316,8 +316,12 @@ impl SubstateId {
         matches!(self, Self::NonFungible(addr) if *addr.resource_address() == PUBLIC_IDENTITY_RESOURCE_ADDRESS)
     }
 
+    /// Returns `true` for non-fungibles that the engine issues rather than stores: public-key identities and the
+    /// caller badges stamped into an authorization scope at frame push. They have no substate, so they are never
+    /// resolved as a transaction input nor brought into a call scope.
     pub fn is_virtual(&self) -> bool {
-        self.is_public_key_identity()
+        matches!(self, Self::NonFungible(addr) if addr.resource_address().is_caller_badge()) ||
+            self.is_public_key_identity()
     }
 
     pub const fn is_vault(&self) -> bool {

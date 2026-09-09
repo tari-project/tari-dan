@@ -16,6 +16,8 @@ mod caller {
                 .method("call_bar", rule!(allow_all))
                 .method("call_ping", rule!(allow_all))
                 .method("call_open_bar", rule!(allow_all))
+                .method("withdraw_from", rule!(allow_all))
+                .method("withdraw_via", rule!(allow_all))
                 .default(rule!(deny_all));
 
             Component::new(Caller)
@@ -34,6 +36,16 @@ mod caller {
 
         pub fn call_ping(&self, callee: ComponentAddress) -> u64 {
             ComponentManager::get(callee).call("ping", args![])
+        }
+
+        pub fn withdraw_from(&self, holder: ComponentAddress) {
+            ComponentManager::get(holder).invoke("withdraw_once", args![]);
+        }
+
+        /// Forwards through `next`, so the holder's frame is entered by `next` rather than by this
+        /// component.
+        pub fn withdraw_via(&self, next: ComponentAddress, holder: ComponentAddress) {
+            ComponentManager::get(next).invoke("withdraw_from", args![holder]);
         }
     }
 }

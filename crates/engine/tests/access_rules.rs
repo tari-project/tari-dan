@@ -1662,8 +1662,10 @@ mod resource_access_rules {
         );
     }
 
+    /// A caller requirement is an ordinary badge requirement, so a resource rule may be updated to one: the
+    /// resource's minter becomes "whoever is executing on behalf of this component".
     #[test]
-    fn update_access_rule_rejects_caller_requirement() {
+    fn update_access_rule_accepts_caller_requirement() {
         let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/access_rules"]);
 
         let (owner_proof, _, owner_key) = test.create_owner_proof();
@@ -1686,10 +1688,7 @@ mod resource_access_rules {
             .decode::<ComponentAddress>()
             .unwrap();
 
-        // `update_access_rule` goes through the engine path (not the WASM builder), so it must reject a
-        // caller requirement with a recoverable `InvalidArgument` error rather than asserting/aborting the
-        // node the way a `panic!` in a WASM builder would be unreachable here.
-        let reason = test.execute_expect_failure(
+        test.execute_expect_success(
             Transaction::builder_localnet(Epoch(1))
                 .call_method(component_address, "update_tokens_access_rule", args![
                     ResourceAuthAction::Mint,
@@ -1698,11 +1697,6 @@ mod resource_access_rules {
                 .build_and_seal(&owner_key),
             vec![owner_proof],
         );
-
-        assert_reject_reason(reason, RuntimeError::InvalidArgument {
-            argument: "new_rule",
-            reason: "caller_component/direct_caller_template cannot be used on a resource access rule".to_string(),
-        });
     }
 
     #[test]

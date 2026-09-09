@@ -1387,7 +1387,7 @@ where
                     let component = state.get_component(&component_lock)?;
                     state
                         .authorization()
-                        .require_component_ownership(ComponentAction::SetAccessRules, component.as_ownership())?;
+                        .require_ownership(ComponentAction::SetAccessRules, component.as_ownership())?;
 
                     state.modify_component_with(&component_lock, |component| {
                         if access_rules == *component.access_rules() {
@@ -1567,6 +1567,16 @@ where
                         },
                         None => state_mut.id_provider()?.new_resource_address()?,
                     };
+
+                    // The system's resource addresses must stay under the system's control: the genesis resources
+                    // are created once, and the two caller-badge resources must stay empty for the engine's badges
+                    // to be unforgeable.
+                    if resource_address.is_system_reserved() {
+                        return Err(RuntimeError::InvalidArgument {
+                            argument: "address_allocation",
+                            reason: format!("Resource address {resource_address} is reserved by the system"),
+                        });
+                    }
 
                     let mut payload = Metadata::from_iter([("resource_type", resource.resource_type().to_string())]);
                     if let Some(symbol) = resource.metadata().get(TOKEN_SYMBOL) {
@@ -1855,14 +1865,6 @@ where
                         })?;
                 let UpdateAccessRuleArg { action, new_rule } = args.assert_one_arg()?;
 
-                if new_rule.contains_caller_component_or_template() {
-                    return Err(RuntimeError::InvalidArgument {
-                        argument: "new_rule",
-                        reason: "caller_component/direct_caller_template cannot be used on a resource access rule"
-                            .to_string(),
-                    });
-                }
-
                 let resource_lock = self.tracker.write_with(|state_mut| {
                     let resource_lock = state_mut.write_lock_substate(SubstateId::Resource(resource_address))?;
 
@@ -1871,9 +1873,7 @@ where
 
                     let authorized = match updater {
                         UpdateRule::Locked => false,
-                        UpdateRule::Owner => state_mut
-                            .authorization()
-                            .check_ownership_in_current_frame(resource.as_ownership())?,
+                        UpdateRule::Owner => state_mut.authorization().check_ownership(resource.as_ownership())?,
                         UpdateRule::AccessRule(rule) => state_mut.authorization().check_access_rule(rule)?,
                     };
 
@@ -1918,9 +1918,7 @@ where
 
                     let authorized = match updater {
                         UpdateRule::Locked => false,
-                        UpdateRule::Owner => state_mut
-                            .authorization()
-                            .check_ownership_in_current_frame(resource.as_ownership())?,
+                        UpdateRule::Owner => state_mut.authorization().check_ownership(resource.as_ownership())?,
                         UpdateRule::AccessRule(rule) => state_mut.authorization().check_access_rule(rule)?,
                     };
 
@@ -3817,7 +3815,7 @@ where
             let component = state.get_component(locked)?;
             state
                 .authorization()
-                .require_component_ownership(action, component.as_ownership())
+                .require_ownership(action, component.as_ownership())
         })
     }
 

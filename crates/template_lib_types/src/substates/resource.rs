@@ -35,7 +35,12 @@ use crate::{
     KeyParseError,
     ObjectKey,
     address_prefixes,
-    constants::{PUBLIC_IDENTITY_RESOURCE_ADDRESS, STEALTH_TARI_RESOURCE_ADDRESS},
+    constants::{
+        CALLER_COMPONENT_RESOURCE_ADDRESS,
+        DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS,
+        PUBLIC_IDENTITY_RESOURCE_ADDRESS,
+        STEALTH_TARI_RESOURCE_ADDRESS,
+    },
 };
 
 const TAG: u64 = BinaryTag::ResourceAddress.as_u64();
@@ -75,6 +80,19 @@ impl ResourceAddress {
 
     pub fn is_public_key_resource(&self) -> bool {
         *self == PUBLIC_IDENTITY_RESOURCE_ADDRESS
+    }
+
+    /// Returns `true` for the resource addresses the system reserves. No template may create a resource at one of
+    /// these: the identity and TARI resources are created in the genesis state, and the two caller-badge resources
+    /// are virtual — nothing may exist at them for the engine's badges to be unforgeable.
+    pub fn is_system_reserved(&self) -> bool {
+        *self == PUBLIC_IDENTITY_RESOURCE_ADDRESS || *self == STEALTH_TARI_RESOURCE_ADDRESS || self.is_caller_badge()
+    }
+
+    /// Returns `true` if this is one of the two virtual caller-badge resources: badges of it are issued by the
+    /// engine at frame push and exist only inside an authorization scope.
+    pub fn is_caller_badge(&self) -> bool {
+        *self == CALLER_COMPONENT_RESOURCE_ADDRESS || *self == DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS
     }
 }
 

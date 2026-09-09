@@ -16,6 +16,29 @@ pub const PUBLIC_IDENTITY_RESOURCE_ADDRESS: ResourceAddress = ResourceAddress::n
     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 ]));
 
+/// Resource address of the virtual badge that names the component a frame is executing on behalf of.
+/// A frame pushed by a component method call carries the badge
+/// `nft_<CALLER_COMPONENT_RESOURCE_ADDRESS>_uuid_<caller component address>` in its authorization scope, so
+/// `rule!(caller_component(addr))` — and equivalently `require(NonFungibleAddress)` of that badge — is
+/// re-checkable at every auth point for the lifetime of the frame.
+///
+/// No resource exists at this address and none may be created: the badge is issued by the engine at frame push
+/// and cannot be minted, held in a vault, or captured as a `Proof`.
+/// resource_0100000000000000000000000000000000000000000000000000000000000001
+pub const CALLER_COMPONENT_RESOURCE_ADDRESS: ResourceAddress = ResourceAddress::new(ObjectKey::from_array([
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+]));
+
+/// Resource address of the virtual badge that names the template of a frame's immediate caller. Stamped
+/// alongside [`CALLER_COMPONENT_RESOURCE_ADDRESS`] at every frame push, and the only caller badge a static
+/// function call yields (a function frame has no component identity).
+///
+/// Subject to the same restrictions as [`CALLER_COMPONENT_RESOURCE_ADDRESS`].
+/// resource_0100000000000000000000000000000000000000000000000000000000000002
+pub const DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS: ResourceAddress = ResourceAddress::new(ObjectKey::from_array([
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,
+]));
+
 /// The Tari network native resource address. This token is used for paying network fees, among other things. It is a
 /// fungible resource with a divisibility of 6, meaning that the smallest unit is 0.000001 TARI.
 /// resource_0101010101010101010101010101010101010101010101010101010101010101

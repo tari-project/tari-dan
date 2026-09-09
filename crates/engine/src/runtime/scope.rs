@@ -219,7 +219,7 @@ impl CallScope {
     pub fn include_owned_in_scope(&mut self, values: &IndexedWellKnownTypes) {
         for addr in values.referenced_substates() {
             // These are never able to bring these into scope
-            if addr.is_public_key_identity() || addr.is_transaction_receipt() || addr.is_template() {
+            if addr.is_virtual() || addr.is_transaction_receipt() || addr.is_template() {
                 continue;
             }
             self.add_substate_to_owned(addr);
@@ -229,7 +229,7 @@ impl CallScope {
     pub fn include_refs_in_scope(&mut self, values: &IndexedWellKnownTypes) {
         for addr in values.referenced_substates() {
             // Never able to bring these into scope
-            if addr.is_public_key_identity() || addr.is_vault() || addr.is_read_only() {
+            if addr.is_virtual() || addr.is_vault() || addr.is_read_only() {
                 continue;
             }
             self.add_substate_to_referenced(addr);

@@ -174,15 +174,6 @@ pub(super) struct WorkingState<TStore> {
     confidential_totals: ConfidentialTransactionTotals,
 }
 
-/// The caller identity of a component method access check: the component and/or template that was
-/// current immediately before the callee's frame was pushed. `None` when the method is invoked
-/// directly from a top-level transaction instruction (no caller frame).
-#[derive(Clone, Copy, Debug)]
-pub(super) struct MethodCaller {
-    pub component: Option<ComponentAddress>,
-    pub template: TemplateAddress,
-}
-
 impl<TStore: StateReader> WorkingState<TStore> {
     pub fn new(
         state_store: TStore,
@@ -1274,7 +1265,7 @@ impl<TStore: StateReader> WorkingState<TStore> {
                 })?;
 
             self.authorization()
-                .require_ownership_in_current_frame(NativeAction::WithdrawValidatorFunds, fee_pool.as_ownership())?;
+                .require_ownership(NativeAction::WithdrawValidatorFunds, fee_pool.as_ownership())?;
         }
 
         let pool_mut = self
@@ -1501,22 +1492,6 @@ impl<TStore: StateReader> WorkingState<TStore> {
             .and_then(|lock| lock.substate_id().as_component_address()))
     }
 
-    /// Returns the caller of the current component method, i.e. the component/template that was
-    /// current immediately before the callee's frame was pushed. `None` when the method is invoked
-    /// directly from a top-level transaction instruction (no caller frame).
-    pub fn method_caller(&self) -> Option<MethodCaller> {
-        if self.call_frames.len() < 2 {
-            return None;
-        }
-        let caller = &self.call_frames[self.call_frames.len() - 2];
-        let component = caller
-            .scope()
-            .get_current_component_lock()
-            .and_then(|lock| lock.substate_id().as_component_address());
-        let template = *caller.current_template();
-        Some(MethodCaller { component, template })
-    }
-
     pub fn get_auth_caller(&self, resource_lock: &LockedSubstate) -> Result<AuthHookCaller, RuntimeError> {
         let resource_address =
             resource_lock
@@ -1546,12 +1521,26 @@ impl<TStore: StateReader> WorkingState<TStore> {
         let current = self.current_call_scope()?;
         new_frame.scope_mut().update_from_parent(current);
 
-        if self.call_frame_depth() == 0 {
+        match self.call_frames.last() {
             // If this is the first call frame, then we use the base auth scope (virtual proofs are carried from the
-            // base to the first call scope)
-            new_frame
-                .scope_mut()
-                .set_auth_scope(self.initial_call_scope.auth_scope().clone());
+            // base to the first call scope). A top-level instruction has no caller frame, so there is no caller
+            // identity to stamp: the signer is the caller.
+            None => {
+                new_frame
+                    .scope_mut()
+                    .set_auth_scope(self.initial_call_scope.auth_scope().clone());
+            },
+            // Otherwise stamp the pushing frame's identity into the callee's scope as virtual badges. This is the
+            // callee's only view of who called it, and it is not inherited: the frame the callee pushes in turn gets
+            // the callee's identity, not this one.
+            Some(caller) => {
+                let component = caller
+                    .scope()
+                    .get_current_component_lock()
+                    .and_then(|lock| lock.substate_id().as_component_address());
+                let template = *caller.current_template();
+                new_frame.scope_mut().auth_scope_mut().set_caller(component, template);
+            },
         }
 
         self.call_frames.push(new_frame);
