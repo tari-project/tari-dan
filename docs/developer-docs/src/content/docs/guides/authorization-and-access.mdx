@@ -71,9 +71,9 @@ restricted rule wraps one or more **requirements**:
 - `rule!(non_fungible(address))` / `rule!(public_key(pk))` — the caller presents proof of an NFT, or a signature by the given public key.
 - `rule!(component(address))` — execution is within the given component (the current frame is that component).
 - `rule!(template(address))` — execution is within the given template (the current frame is that template).
-- `rule!(caller_component(address))` — the caller of a component method is the given component.
-- `rule!(direct_caller_template(address))` — the immediate caller of a component method is code from the given
-  template: any component instance of it, or any static function of it.
+- `rule!(caller_component(address))` — the immediate caller is the given component.
+- `rule!(direct_caller_template(address))` — the immediate caller is code from the given template: any component
+  instance of it, or any static function of it.
 - `rule!(any_of(...))`, `rule!(all_of(...))`, `rule!(m_of_n(n, ...))` — combine requirements.
 
 #### Caller vs. current component
@@ -85,10 +85,9 @@ There are two related but distinct ways a rule can reference a component or temp
   the caller. Use them when a method should only run while that component/template is executing, or when
   the same rule is evaluated for resource/ownership checks where the current frame is the actor.
 
-- `caller_component(address)` / `direct_caller_template(address)` ask _"who called this method?"_. These are
-  meaningful on **component method** access rules. The caller is always the **direct** caller: the frame
-  that was current immediately before the callee's frame was pushed. If A calls B and B calls C, C's rule
-  sees B, never A.
+- `caller_component(address)` / `direct_caller_template(address)` ask _"who called into here?"_. The caller is
+  always the **direct** caller: the frame that was current immediately before this frame was pushed. If A
+  calls B and B calls C, C's frame sees B, never A.
 
   `direct_caller_template(address)` is a **package** identity, not an instance identity. It matches any
   component instance of that template, including instances anyone may create through a public
@@ -96,9 +95,33 @@ There are two related but distinct ways a rule can reference a component or temp
   therefore only as strong as the least careful outgoing call anywhere in that template: a method or
   static function that forwards a caller-chosen component and method lets anyone act as the template.
 
-A method invoked directly by a top-level transaction instruction has no caller component/template frame —
-the caller is a signer — so `caller_component` / `direct_caller_template` rules **deny** it. Use a badge, public
-key, or other proof requirement to allow signer-driven calls.
+Caller identity is issued as a **virtual badge**, not evaluated once at the door. When the engine pushes a
+frame it stamps two badges into that frame's authorization scope — one naming the caller's component (when the
+caller has one) and one naming the caller's template. Two things follow:
+
+- The badges are checkable **wherever any other badge is**, and for the **whole lifetime of the frame**: a
+  component method rule, an owner rule, a **resource** rule, or a stealth spend condition. A helper called
+  deeper inside the same frame can still re-assert "we are acting for A".
+- They are **re-derived at every call and never inherited**. A frame cannot pass on the identity it was called
+  with, and there is no way to capture a caller badge as a `Proof` and hand it onward.
+
+A method or function invoked directly by a top-level transaction instruction has no caller frame — the caller
+is a signer — so `caller_component` / `direct_caller_template` rules **deny** it. Use a badge, public key, or
+other proof requirement to allow signer-driven calls.
+
+Requiring the badge **resource** rather than a specific badge asks the weaker question "was there a caller at
+all?":
+
+```rust
+// Satisfied by any component caller, and by no top-level instruction.
+rule!(resource(CALLER_COMPONENT_RESOURCE_ADDRESS))
+// Satisfied by any frame below the top level, i.e. reached from template code
+// rather than directly from a transaction instruction.
+rule!(resource(DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS))
+```
+
+No resource exists at either address and none can be created, so these badges cannot be minted, held in a
+vault, or forged by a template.
 
 **Caution:** `caller_component` / `direct_caller_template` match the immediate caller's identity, which is only as
 trustworthy as the code that makes the call. A method that forwards a caller-supplied component/template and
@@ -109,6 +132,11 @@ owner can migrate the component to any template unless it was created with `Owne
 The same applies to resource auth hooks: the engine invokes the hook with the acting component as the
 caller, and any resource may bind any hook-shaped method. A caller gate on a hook method is therefore never
 sufficient on its own; the hook must check `AuthHookCaller::resource()` against the resources it manages.
+
+**Caution, the other way round:** calling out hands the callee your identity as a live badge for the whole of
+its frame, usable at every auth point it reaches — a resource rule, an ownership rule, a spend condition — not
+only the method it entered through. Weigh that before calling into code you do not control, and gate anything
+that must not be reachable that way on a proof the callee cannot obtain rather than on the caller badge alone.
 
 #### Resource Access Rules
 
@@ -164,6 +192,27 @@ Each `ResourceBuilder` exposes one method per action. All accept `(rule, updater
 
 A resource can also delegate its decisions to a component method rather than a static rule — see
 [Authorization hooks](#authorization-hooks).
+
+##### Gating a resource on the caller
+
+Because caller identity is a badge, `caller_component` / `direct_caller_template` work on resource rules too.
+That lets the gate live on the **resource** rather than on each component that holds it:
+
+```rust
+// These tokens may only be withdrawn — from any vault, in any component —
+// while the acting component is executing on behalf of `treasury`.
+let tokens = ResourceBuilder::public_fungible()
+    .withdrawable(rule!(caller_component(treasury)), LOCKED)
+    .initial_supply(1_000_000u64);
+```
+
+Compare that with putting `rule!(caller_component(treasury))` on a `payout` method of the one component that
+holds the vault. The method gate covers only that holder: any other component holding a vault of the same
+resource withdraws with no check, and the gate cannot be retrofitted onto holders you do not control. The
+resource rule is evaluated on every withdrawal, whichever component performs it.
+
+The rule is checked against the frame that **acts on the resource**, so it reads as "the component touching
+these tokens was called by `treasury`", not "the transaction was signed by `treasury`".
 
 ##### UpdateRule
 
@@ -284,8 +333,8 @@ Callers are identified by various types, depending on the context:
 The `auth` module in `tari_template_lib` provides utilities for working with identities and proofs within your templates.
 
 These identities appear in `rule!` requirements: `component(...)` / `template(...)` refer to the current
-execution scope, while `caller_component(...)` / `direct_caller_template(...)` refer to the method's caller (see
-[Caller vs. current component](#caller-vs-current-component)).
+execution scope, while `caller_component(...)` / `direct_caller_template(...)` refer to the frame's immediate
+caller, carried as a virtual badge (see [Caller vs. current component](#caller-vs-current-component)).
 
 ### Best Practices
 
