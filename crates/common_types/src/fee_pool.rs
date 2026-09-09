@@ -12,8 +12,8 @@ use crate::{NumPreshards, shard::Shard};
 /// grown — every existing pool then migrates to the lower-numbered child shard rather than fanning out by pk bits.
 /// Reserving two bytes lets `NumPreshards` grow to at most `2^16` without changing the layout.
 ///
-/// `shard` must be in `1..=num_preshards`: shard 0 is the global shard and has no index, and an index that does not
-/// fit in `shard_bits` would wrap into another shard's prefix, silently yielding an address in the wrong shard.
+/// `shard` must be in `1..=num_preshards`: shard 0 is the global shard and has no index, and an index outside that
+/// range does not fit in `shard_bits` and aliases another shard's prefix.
 pub fn derive_fee_pool_address(
     public_key_bytes: &RistrettoPublicKeyBytes,
     num_preshards: NumPreshards,
@@ -37,7 +37,7 @@ pub fn derive_fee_pool_address(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("Shard {shard} cannot hold a validator fee pool: expected a shard in 1..={}", .num_preshards.as_u32())]
+#[error("Shard {} cannot hold a validator fee pool: expected a shard in 1..={}", .shard.as_u32(), .num_preshards.as_u32())]
 pub struct InvalidFeePoolShard {
     pub shard: Shard,
     pub num_preshards: NumPreshards,

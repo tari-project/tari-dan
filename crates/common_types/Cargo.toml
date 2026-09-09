@@ -33,6 +33,9 @@ serde = { workspace = true, default-features = true }
 ts-rs = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
+[dev-dependencies]
+serde_json = { workspace = true }
+
 [package.metadata.cargo-machete]
 ignored = ["prost", "prost-types"] # false positive, used in OUT_DIR structs
 
