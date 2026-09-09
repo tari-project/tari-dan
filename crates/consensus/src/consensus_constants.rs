@@ -194,13 +194,14 @@ impl ConsensusConstants {
         epoch_end_spread_blocks: 5,
     };
     pub const MAINNET: Self = Self {
-        // Minotari's own `coinbase_min_maturity` (720) plus one epoch of margin — 13 whole L1 epochs
-        // (`vn_epoch_length` is 60 on mainnet), so the lag lands on an epoch boundary and the only
-        // rounding a claimant sees is the wallet's "strictly past the mined-in epoch" gate. The depth
-        // is deliberately generous because the bound is one-way: a burn claim proved against a header
-        // that a deeper reorg later orphans has already credited L2 state that consensus cannot roll
-        // back, whereas an over-deep lag only costs the claimant time. At mainnet's 2 minute block time
-        // a burn becomes claimable ~26 hours after it is mined.
+        // Minotari's `coinbase_min_maturity` (720) plus 60 blocks (~2 hours) of margin. Must stay a
+        // multiple of the L1 `vn_epoch_length` — 60 today, 10 once the shorter-epoch fork lands — so
+        // the lag ends on an epoch boundary, leaving the wallet's "strictly past the mined-in epoch"
+        // gate as the only rounding a claimant sees. The depth is deliberately generous because the
+        // bound is one-way: a burn claim proved against a header that a deeper reorg later orphans has
+        // already credited L2 state that consensus cannot roll back, whereas an over-deep lag only
+        // costs the claimant time. At mainnet's 2 minute block time a burn becomes claimable
+        // ~26 hours after it is mined.
         base_layer_confirmations: 780,
         committee_size_per_shard_group: 40,
         num_preshards: NumPreshards::current(),
