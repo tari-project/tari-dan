@@ -142,7 +142,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             .map(|pk| NonFungibleAddress::from_public_key(*pk))
             .collect();
         let auth_params = AuthParams {
-            initial_ownership_proofs: Arc::new(initial_ownership_proofs),
+            initial_ownership_proofs,
         };
 
         let processor = TransactionProcessor::new(

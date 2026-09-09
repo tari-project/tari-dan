@@ -782,7 +782,7 @@ impl TemplateTest {
         }
 
         let auth_params = AuthParams {
-            initial_ownership_proofs: Arc::new(proofs.into_iter().collect()),
+            initial_ownership_proofs: proofs.into_iter().collect(),
         };
 
         let processor = TransactionProcessor::new(
