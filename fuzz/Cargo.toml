@@ -13,6 +13,11 @@ license = "BSD-3-Clause"
 [package.metadata]
 cargo-fuzz = true
 
+# This crate is its own workspace root so cargo never walks up past it looking
+# for one (a checkout nested inside another checkout would otherwise resolve
+# against the outer workspace).
+[workspace]
+
 [dependencies]
 libfuzzer-sys = "0.4"
 

@@ -42,7 +42,7 @@ use wasmer::{
     TypedFunction,
     WasmPtr,
     imports,
-    sys::{BaseTunables, CompilerConfig, Cranelift, CraneliftOptLevel, EngineBuilder, Target},
+    sys::{BaseTunables, CompilerConfig, Cranelift, CraneliftOptLevel, EngineBuilder},
     wasmparser::{Parser, Payload},
 };
 
@@ -168,7 +168,7 @@ impl WasmModule {
 
     fn create_engine() -> Engine {
         const MEMORY_PAGE_LIMIT: Pages = Pages(limits::WASM_LIMITS.max_memory_pages as u32);
-        let base = BaseTunables::for_target(&Target::default());
+        let base = BaseTunables::new();
         let tunables = LimitingTunables::new(base, MEMORY_PAGE_LIMIT);
         let mut compiler = Cranelift::new();
         compiler
