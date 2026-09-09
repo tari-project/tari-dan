@@ -41,9 +41,10 @@ struct UncheckedShardGroup {
 
 fn invalid_bounds_message(start: Shard, end_inclusive: Shard) -> String {
     format!(
-        "invalid ShardGroup: start ({}) is greater than end_inclusive ({})",
+        "invalid ShardGroup ({}-{}): expected start <= end_inclusive <= {}",
         start.as_u32(),
-        end_inclusive.as_u32()
+        end_inclusive.as_u32(),
+        Shard::max().as_u32()
     )
 }
 
@@ -69,16 +70,21 @@ impl ShardGroup {
 
     /// Creates a new ShardGroup with the given start and end inclusive shards.
     /// ## Panics
-    /// Panics if the start shard is greater than the end shard.
+    /// Panics if the start shard is greater than the end shard, or the end shard is beyond
+    /// [`Shard::max`].
     pub fn new<T: Into<Shard> + Copy>(start: T, end_inclusive: T) -> Self {
         Self::new_checked(start, end_inclusive)
-            .expect("INVARIANT: start shard must be less than or equal to end_inclusive")
+            .expect("INVARIANT: start shard must be less than or equal to end_inclusive and at most Shard::max()")
     }
 
+    /// Creates a new ShardGroup, returning None unless `start <= end_inclusive <= Shard::max()`.
+    ///
+    /// The upper bound is what keeps `len` and `encode_as_u32` total: a group ending at
+    /// `u32::MAX` satisfies the ordering yet overflows `end_inclusive + 1`.
     pub fn new_checked<T: Into<Shard> + Copy>(start: T, end_inclusive: T) -> Option<Self> {
         let start = start.into();
         let end_inclusive = end_inclusive.into();
-        if start > end_inclusive {
+        if start > end_inclusive || end_inclusive > Shard::max() {
             return None;
         }
         Some(Self { start, end_inclusive })
@@ -275,6 +281,18 @@ mod tests {
         tari_bor::decode::<ShardGroup>(&bytes).unwrap_err();
 
         serde_json::from_str::<ShardGroup>(r#"{"start":5,"end_inclusive":2}"#).unwrap_err();
+    }
+
+    #[test]
+    fn it_rejects_an_end_beyond_the_maximum_shard() {
+        assert_eq!(ShardGroup::new_checked(1, Shard::max().as_u32() + 1), None);
+        assert_eq!(ShardGroup::new_checked(0, u32::MAX), None);
+        assert!(ShardGroup::new_checked(1, Shard::max().as_u32()).is_some());
+
+        // `len` is only total because the end is bounded: `u32::MAX + 1` would overflow.
+        let bytes = tari_bor::encode(&ShardGroup::new_unchecked(0, u32::MAX)).unwrap();
+        tari_bor::decode::<ShardGroup>(&bytes).unwrap_err();
+        serde_json::from_str::<ShardGroup>(r#"{"start":0,"end_inclusive":4294967295}"#).unwrap_err();
     }
 
     #[test]
