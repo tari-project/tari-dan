@@ -160,10 +160,22 @@ where TConsensusSpec: ConsensusSpec
         }
 
         // Check if the source is in a foreign committee
-        let foreign_committee_info = self
+        let Some(foreign_committee_info) = self
             .epoch_manager
             .get_committee_info_by_validator_address(message.epoch, &from)
-            .await?;
+            .await
+            .optional()?
+        else {
+            warn!(
+                target: LOG_TARGET,
+                "❌ FOREIGN PROPOSAL: notification for block {} from {} who is not a registered validator for epoch {}. \
+                 Ignoring.",
+                message.block_id,
+                from,
+                message.epoch,
+            );
+            return Ok(());
+        };
 
         if local_committee_info.shard_group() == foreign_committee_info.shard_group() {
             warn!(
