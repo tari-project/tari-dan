@@ -43,6 +43,7 @@ export default defineConfig({
             { label: "Authorization and Access", link: "/guides/authorization-and-access/" },
             { label: "API Keys for AI Agents", link: "/guides/agent-api-keys/" },
             { label: "Stealth Transfers", link: "/guides/stealth-resources/" },
+            { label: "Claim Burn", link: "/guides/claim-burn/" },
             { label: "Randomness in Templates", link: "/guides/randomness/" },
           ],
         },
