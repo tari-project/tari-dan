@@ -39,6 +39,14 @@ impl DbDecoder<ShardGroup> for ShardGroupCodec {
     fn decode(&self, bytes: &[u8]) -> Result<(ShardGroup, usize), RocksDbStorageError> {
         let (start, n_start) = self.inner.decode(bytes)?;
         let (end, n_end) = self.inner.decode(&bytes[n_start..])?;
-        Ok((ShardGroup::new(start, end), n_start + n_end))
+        let shard_group = ShardGroup::new_checked(start, end).ok_or_else(|| RocksDbStorageError::MalformedData {
+            operation: "ShardGroupCodec::decode",
+            details: format!(
+                "start ({}) is greater than end_inclusive ({})",
+                start.as_u32(),
+                end.as_u32()
+            ),
+        })?;
+        Ok((shard_group, n_start + n_end))
     }
 }
