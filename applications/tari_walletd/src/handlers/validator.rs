@@ -68,9 +68,12 @@ pub async fn handle_get_validator_fees(
 
     let ids = shards
         .into_iter()
-        .map(|shard| derive_fee_pool_address(&claim_public_key, NUM_PRESHARDS, shard))
-        .map(SubstateId::from)
-        .collect::<Vec<_>>();
+        .map(|shard| {
+            derive_fee_pool_address(&claim_public_key, NUM_PRESHARDS, shard)
+                .map(SubstateId::from)
+                .map_err(|err| invalid_params("shard_group", Some(err)))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     let mut fees = HashMap::with_capacity(ids.len());
     const CHUNK_SIZE: usize = 20;
@@ -137,8 +140,11 @@ pub async fn handle_claim_validator_fees(
     let fee_pool_addresses = req
         .shards
         .iter()
-        .map(|shard| derive_fee_pool_address(&claim_public_key, NUM_PRESHARDS, *shard))
-        .collect::<Vec<_>>();
+        .map(|shard| {
+            derive_fee_pool_address(&claim_public_key, NUM_PRESHARDS, *shard)
+                .map_err(|err| invalid_params("shards", Some(err)))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     // build the transaction
     let max_fee = req.max_fee.max(1);
