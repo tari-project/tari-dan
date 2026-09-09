@@ -93,6 +93,33 @@ mod access_rules_template {
             .create()
         }
 
+        /// As `with_auth_hook`, but the hook may be replaced or removed by whoever satisfies `updater`.
+        pub fn with_updatable_auth_hook(
+            allowed: bool,
+            hook: FunctionName,
+            updater: UpdateRule,
+        ) -> Component<AccessRulesTest> {
+            let badges = create_badge_resource(rule!(deny_all));
+
+            let address_alloc = CallerContext::allocate_component_address(None);
+
+            let tokens = ResourceBuilder::public_fungible()
+                .with_authorization_hook(address_alloc.get_address(), hook)
+                .with_authorization_hook_updater(updater)
+                .initial_supply(1000u32);
+
+            Component::new(Self {
+                value: 0,
+                tokens: Vault::from_bucket(tokens),
+                badges: Vault::from_bucket(badges),
+                allowed,
+                attack_component: None,
+            })
+            .with_address_allocation(address_alloc)
+            .with_access_rules(ComponentAccessRules::new().default(rule!(allow_all)))
+            .create()
+        }
+
         pub fn with_auth_hook_attack_component(component_address: ComponentAddress) -> Component<AccessRulesTest> {
             let badges = create_badge_resource(rule!(deny_all));
 
@@ -296,6 +323,12 @@ mod access_rules_template {
             // authorize a restricted cross template call. We're really checking the semantics of cross-template calls,
             // not the auth hook.
             ComponentManager::get(self.attack_component.unwrap()).invoke("set", args![123]);
+        }
+
+        /// Points the managed resource's hook at `hook` on this component, or removes it when `hook` is None.
+        pub fn set_auth_hook(&self, hook: Option<FunctionName>) {
+            let hook = hook.map(|method| AuthHook::new(CallerContext::current_component_address(), method));
+            ResourceManager::get(self.tokens.resource_address()).set_auth_hook(hook);
         }
 
         pub fn invalid_auth_hook1(&mut self, _action: ResourceAuthAction, _caller: AuthHookCaller) {}

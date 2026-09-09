@@ -448,6 +448,27 @@ impl FungibleResourceBuilder {
     ///     .with_authorization_hook(*alloc.address(), "my_hook")
     ///     .build();
     /// ```
+    /// Sets up who can replace or remove the resource's authorization hook after creation.
+    ///
+    /// A hook is [`LOCKED`](tari_template_lib_types::access_rules::LOCKED) by default: it binds for the life of
+    /// the resource, and a hook that panics or denies unconditionally leaves every vault of the resource
+    /// unspendable. Setting an updater buys the ability to repair or retire the hook, at the cost of letting
+    /// whoever satisfies the updater change the rules that existing holders are relying on.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use tari_template_lib::{caller_context::CallerContext, prelude::{OWNER, ResourceBuilder}};
+    /// ResourceBuilder::public_fungible()
+    ///     .with_authorization_hook(CallerContext::current_component_address(), "my_hook")
+    ///     .with_authorization_hook_updater(OWNER)
+    ///     .build();
+    /// ```
+    pub fn with_authorization_hook_updater<U: Into<UpdateRule>>(mut self, updater: U) -> Self {
+        self.access_rules = self.access_rules.set_auth_hook_updater(updater);
+        self
+    }
+
     pub fn with_authorization_hook<T: TryInto<FunctionName>>(
         mut self,
         address: ComponentAddress,

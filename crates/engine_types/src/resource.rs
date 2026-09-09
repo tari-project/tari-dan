@@ -153,6 +153,40 @@ impl Resource {
         self.auth_hook.as_ref()
     }
 
+    /// Replaces the resource's authorization hook, or removes it when `auth_hook` is `None`. The caller is
+    /// responsible for authorizing the change against
+    /// [`ResourceAccessRules::auth_hook_updater`](tari_template_lib::types::access_rules::ResourceAccessRules::auth_hook_updater)
+    /// and for validating the hook's signature.
+    pub fn set_auth_hook(&mut self, auth_hook: Option<AuthHook>) {
+        self.auth_hook = auth_hook;
+    }
+
+    /// Writes the resource as a protocol version 0 substate hash preimage: `ResourceAccessRules` without
+    /// `auth_hook_updater`, which version 0 resources do not carry.
+    pub(crate) fn borsh_serialize_v0<W: borsh::io::Write>(&self, writer: &mut W) -> borsh::io::Result<()> {
+        // Destructured so that a field added to the struct fails to compile here rather than being silently
+        // dropped from the version 0 preimage.
+        let Self {
+            resource_type,
+            owner_rule,
+            access_rules,
+            metadata,
+            total_supply,
+            view_key,
+            auth_hook,
+            divisibility,
+        } = self;
+
+        borsh::BorshSerialize::serialize(resource_type, writer)?;
+        borsh::BorshSerialize::serialize(owner_rule, writer)?;
+        access_rules.borsh_serialize_v0(writer)?;
+        borsh::BorshSerialize::serialize(metadata, writer)?;
+        borsh::BorshSerialize::serialize(total_supply, writer)?;
+        borsh::BorshSerialize::serialize(view_key, writer)?;
+        borsh::BorshSerialize::serialize(auth_hook, writer)?;
+        borsh::BorshSerialize::serialize(divisibility, writer)
+    }
+
     pub fn access_rules(&self) -> &ResourceAccessRules {
         &self.access_rules
     }

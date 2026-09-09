@@ -30,6 +30,7 @@ pub use tari_template_lib_types::constants::XTR;
 pub use tari_template_lib_types::fast_hash::{FastMap, PrehashedMap, indexmap_codec};
 pub use tari_template_lib_types::{
     AccessRule,
+    AuthHook,
     AuthHookCaller,
     ComponentAddress,
     Hash32,

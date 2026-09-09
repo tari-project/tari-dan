@@ -101,6 +101,7 @@ use tari_template_lib::{
         SpendContextAction,
         StealthTransferResourceArg,
         UpdateAccessRuleArg,
+        UpdateAuthHookArg,
         VaultAction,
         VaultCreateProofByFungibleAmountArg,
         VaultCreateProofByNonFungiblesArg,
@@ -578,7 +579,9 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
         Ok(())
     }
 
-    fn check_resource_auth_hook(&mut self, hook: &AuthHook) -> Result<(), RuntimeError> {
+    /// Validates that `hook` names a method with an authorization hook's signature. `argument` names the engine
+    /// argument the hook arrived in, so that a rejection points at the call the caller actually made.
+    fn check_resource_auth_hook(&mut self, argument: &'static str, hook: &AuthHook) -> Result<(), RuntimeError> {
         let template_address = self
             .tracker
             .write_with(|state| state.get_template_for_component(hook.component_address))?;
@@ -586,26 +589,26 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
         let func = template
             .get_function(&hook.method)
             .ok_or(RuntimeError::InvalidArgument {
-                argument: "CreateResourceArg",
+                argument,
                 reason: format!("Authorize hook '{}' not found", hook),
             })?;
 
         if func.is_mut {
             return Err(RuntimeError::InvalidArgument {
-                argument: "CreateResourceArg",
+                argument,
                 reason: format!("Authorize hook '{}' cannot be mutable", hook),
             });
         }
         if !matches!(func.output, Type::Unit) {
             return Err(RuntimeError::InvalidArgument {
-                argument: "CreateResourceArg",
+                argument,
                 reason: format!("Authorize hook '{}' must return unit", hook),
             });
         }
 
         if func.arguments.len() != 3 {
             return Err(RuntimeError::InvalidArgument {
-                argument: "CreateResourceArg",
+                argument,
                 reason: format!(
                     "Authorize hook '{}' must take 3 arguments (incl &self), but found {}",
                     hook,
@@ -619,7 +622,7 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
             Some("ResourceAuthAction")
         ) {
             return Err(RuntimeError::InvalidArgument {
-                argument: "CreateResourceArg",
+                argument,
                 reason: format!("Authorize hook '{}' must take a ResourceAuthAction as argument 1", hook),
             });
         }
@@ -629,7 +632,7 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
             Some("AuthHookCaller")
         ) {
             return Err(RuntimeError::InvalidArgument {
-                argument: "CreateResourceArg",
+                argument,
                 reason: format!("Authorize hook '{}' must take an AuthHookCaller as argument 2", hook),
             });
         }
@@ -1532,7 +1535,7 @@ where
 
                 // Check that auth hook is valid
                 if let Some(hook) = arg.authorize_hook.as_ref() {
-                    self.check_resource_auth_hook(hook)?;
+                    self.check_resource_auth_hook("CreateResourceArg", hook)?;
                 }
 
                 // Charge the initial mint's native verification cost against the payment-funded
@@ -1896,6 +1899,62 @@ where
                         ("action", format!("{:?}", action)),
                     ]);
                     Self::emit_std_event("resource", "update_access_rule", resource_address, payload, state_mut)?;
+
+                    state_mut.unlock_substate(resource_lock)?;
+
+                    Ok(InvokeResult::unit())
+                })
+            },
+            ResourceAction::UpdateAuthHook => {
+                let resource_address =
+                    resource_ref
+                        .as_resource_address()
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            argument: "resource_ref",
+                            reason: "UpdateAuthHook resource action requires a resource address".to_string(),
+                        })?;
+                let UpdateAuthHookArg { auth_hook } = args.assert_one_arg()?;
+
+                let resource_lock = self.tracker.write_with(|state_mut| {
+                    let resource_lock = state_mut.write_lock_substate(SubstateId::Resource(resource_address))?;
+
+                    let resource = state_mut.get_resource(&resource_lock)?;
+                    let updater = resource.access_rules().auth_hook_updater();
+
+                    let authorized = match updater {
+                        UpdateRule::Locked => false,
+                        UpdateRule::Owner => state_mut
+                            .authorization()
+                            .check_ownership_in_current_frame(resource.as_ownership())?,
+                        UpdateRule::AccessRule(rule) => state_mut.authorization().check_access_rule(rule)?,
+                    };
+
+                    if !authorized {
+                        return Err(RuntimeError::AccessDenied {
+                            action_ident: ActionIdent::Native(NativeAction::UpdateResourceAuthHook),
+                        });
+                    }
+
+                    Ok::<_, RuntimeError>(resource_lock)
+                })?;
+
+                // The hook being replaced is not invoked: a hook that denies or panics is the failure this
+                // action exists to repair, so asking it to approve its own removal would defeat the point.
+                if let Some(hook) = auth_hook.as_ref() {
+                    self.check_resource_auth_hook("UpdateAuthHookArg", hook)?;
+                }
+
+                self.tracker.write_with(|state_mut| {
+                    let resource_mut = state_mut.get_resource_mut(&resource_lock)?;
+                    let payload = Metadata::from_iter([
+                        ("resource_type", resource_mut.resource_type().to_string()),
+                        (
+                            "auth_hook",
+                            auth_hook.as_ref().map_or_else(|| "none".to_string(), |h| h.to_string()),
+                        ),
+                    ]);
+                    resource_mut.set_auth_hook(auth_hook);
+                    Self::emit_std_event("resource", "update_auth_hook", resource_address, payload, state_mut)?;
 
                     state_mut.unlock_substate(resource_lock)?;
 

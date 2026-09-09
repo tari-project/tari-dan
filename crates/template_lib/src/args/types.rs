@@ -248,6 +248,10 @@ pub enum ResourceAction {
     /// Un/freezes one or more confidential outputs of a resource
     #[n(13)]
     SetConfidentialOutputsFreeze,
+    /// Replace or remove a resource's authorization hook. Authorization is gated by
+    /// [`ResourceAccessRules::auth_hook_updater`](tari_template_lib_types::access_rules::ResourceAccessRules::auth_hook_updater).
+    #[n(14)]
+    UpdateAuthHook,
 }
 
 /// All the possible minting operation types
@@ -362,6 +366,15 @@ pub struct UpdateAccessRuleArg {
     pub action: ResourceAuthAction,
     #[n(1)]
     pub new_rule: AccessRule,
+}
+
+/// An argument used to replace or remove a resource's authorization hook.
+#[derive(Clone, Debug, Encode, Decode, CborLen)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct UpdateAuthHookArg {
+    /// The hook to install, or `None` to remove the resource's hook entirely.
+    #[n(0)]
+    pub auth_hook: Option<AuthHook>,
 }
 
 /// A convenience enum that allows to specify resource types

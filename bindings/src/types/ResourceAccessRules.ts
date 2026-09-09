@@ -22,4 +22,14 @@ export type ResourceAccessRules = {
   freeze_updater: UpdateRule;
   update_metadata: AccessRule;
   metadata_updater: UpdateRule;
+  /**
+   * Who may replace or remove the resource's [`AuthHook`](crate::AuthHook). The hook itself is not an
+   * [`AccessRule`], so this updater stands alone rather than pairing with one.
+   *
+   * A hook runs on nearly every resource action, so one that panics or denies unconditionally takes the
+   * resource offline and strands the balances in its vaults. `Locked` — the default — keeps a hook binding
+   * for the life of the resource; anything else lets the hook be repaired or retired, at the cost of letting
+   * whoever satisfies the updater change the rules that existing holders are relying on.
+   */
+  auth_hook_updater: UpdateRule;
 };
