@@ -721,6 +721,11 @@ impl Default for ResourceAccessRules {
 /// resource rules and spend conditions alike. They are re-derived at every frame push and are not capturable as a
 /// `Proof`, so a callee cannot forward the identity it was called with.
 ///
+/// `any_caller_component` and `any_caller_template` take no address: they ask only whether there was a caller of that
+/// kind. `any_caller_component` is satisfied by any component caller and by no top-level instruction;
+/// `any_caller_template` by any frame below the top level, i.e. by code reached from a template rather than directly
+/// from a transaction instruction.
+///
 /// **Caution:** `caller_component` / `direct_caller_template` match the immediate caller's identity, which is only as
 /// trustworthy as the code that makes the call. A method that forwards a caller-supplied component and method (a
 /// "proxy" method) delegates that identity, so anyone who can call the proxy can act as the proxied component/template.
@@ -765,6 +770,9 @@ impl Default for ResourceAccessRules {
 /// let caller_component_rule = rule!(caller_component(component_address));
 /// // Restricted access to calls from a specific template
 /// let caller_template_rule = rule!(direct_caller_template(template_address));
+/// // Restricted to any component caller at all, and to any caller at all
+/// let any_component_caller_rule = rule!(any_caller_component);
+/// let any_caller_rule = rule!(any_caller_template);
 /// // Restricted access to a non-fungible token
 /// let non_fungible_address = tari_template_lib_types::NonFungibleAddress::from_public_key(
 ///     tari_template_lib_types::crypto::RistrettoPublicKeyBytes::default(),
@@ -803,6 +811,10 @@ macro_rules! __restricted_access_rule {
     ($a:ident($($tail:tt)*)) => {
         $crate::access_rules::RestrictedAccessRule::Require($crate::__require_rule!($a($($tail)*)))
     };
+    // Requirements that name no address, e.g. `any_caller_component`.
+    ($a:ident) => {
+        $crate::access_rules::RestrictedAccessRule::Require($crate::__require_rule!($a))
+    };
 }
 
 #[macro_export]
@@ -818,6 +830,10 @@ macro_rules! __require_rule {
     };
     ($a:ident($b:expr)) => {
         $crate::access_rules::RequireRule::Require($crate::__rule_requirement!($a($b)))
+    };
+    // Requirements that name no address, e.g. `any_caller_component`.
+    ($a:ident) => {
+        $crate::access_rules::RequireRule::Require($crate::__rule_requirement!($a))
     };
 }
 
@@ -844,6 +860,12 @@ macro_rules! __rule_requirement {
     (direct_caller_template($x: expr)) => {
         $crate::access_rules::RuleRequirement::DirectCallerTemplate($x)
     };
+    (any_caller_component) => {
+        $crate::access_rules::RuleRequirement::Resource($crate::constants::CALLER_COMPONENT_RESOURCE_ADDRESS)
+    };
+    (any_caller_template) => {
+        $crate::access_rules::RuleRequirement::Resource($crate::constants::DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS)
+    };
 }
 
 #[macro_export]
@@ -861,16 +883,37 @@ macro_rules! __build_vec {
         $crate::__build_vec_inner!(@ { items, $item_fn } $a($b),);
         items
     }};
+
+    (@ {$item_fn:ident} $a:ident, $($tail:tt)*) => {{
+        let mut items = Vec::with_capacity(1 + $crate::__expr_counter!($($tail)*));
+        $crate::__build_vec_inner!(@ { items, $item_fn } $a, $($tail)*);
+        items
+    }};
+
+    (@ {$item_fn:ident} $a:ident $(,)?) => {{
+        let mut items = Vec::new();
+        $crate::__build_vec_inner!(@ { items, $item_fn } $a,);
+        items
+    }};
 }
 
 #[macro_export]
 macro_rules! __build_vec_inner {
+    // Terminator: a no-address item recurses with an empty tail once it is the last in the list.
+    (@ { $this:ident, $item_fn:ident }) => {};
     (@ { $this:ident, $item_fn:ident } $a:ident($e:expr), $($tail:tt)*) => {
         $crate::access_rules::__push(&mut $this, $crate::$item_fn!($a($e)));
         $crate::__build_vec_inner!(@ {$this, $item_fn } $($tail)*);
     };
     (@ { $this:ident, $item_fn:ident } $a:ident($e:expr) $(,)*) => {
         $crate::access_rules::__push(&mut $this, $crate::$item_fn!($a($e)));
+    };
+    (@ { $this:ident, $item_fn:ident } $a:ident, $($tail:tt)*) => {
+        $crate::access_rules::__push(&mut $this, $crate::$item_fn!($a));
+        $crate::__build_vec_inner!(@ {$this, $item_fn } $($tail)*);
+    };
+    (@ { $this:ident, $item_fn:ident } $a:ident $(,)*) => {
+        $crate::access_rules::__push(&mut $this, $crate::$item_fn!($a));
     };
 }
 
@@ -1090,6 +1133,43 @@ mod tests {
                 component(component)
             ))
             .contains_scoped_to_component_or_template()
+        );
+    }
+
+    #[test]
+    fn any_caller_sugar_needs_no_constant() {
+        assert_eq!(
+            rule!(any_caller_component),
+            AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(
+                RuleRequirement::Resource(crate::constants::CALLER_COMPONENT_RESOURCE_ADDRESS)
+            )))
+        );
+        assert_eq!(
+            rule!(any_caller_template),
+            AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(
+                RuleRequirement::Resource(crate::constants::DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS)
+            )))
+        );
+    }
+
+    /// The no-address forms have to compose like every other requirement, in any position of a combinator.
+    #[test]
+    fn any_caller_sugar_composes() {
+        let pk = RistrettoPublicKeyBytes::default();
+        let component = ComponentAddress::new(ObjectKey::default());
+
+        let leading = rule!(any_of(any_caller_component, public_key(pk)));
+        let trailing = rule!(any_of(public_key(pk), any_caller_component));
+        assert_ne!(leading, trailing); // ordering is preserved, so these are distinct rules
+        assert!(leading.contains_requirement(&|r| matches!(r, RuleRequirement::Resource(_))));
+        assert!(trailing.contains_requirement(&|r| matches!(r, RuleRequirement::Resource(_))));
+
+        let middle = rule!(all_of(caller_component(component), any_caller_template, public_key(pk)));
+        assert!(middle.contains_requirement(&|r| matches!(r, RuleRequirement::Resource(_))));
+
+        // A bare requirement on its own inside a combinator.
+        assert!(
+            rule!(any_of(any_caller_component)).contains_requirement(&|r| matches!(r, RuleRequirement::Resource(_)))
         );
     }
 

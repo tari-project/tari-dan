@@ -74,6 +74,7 @@ restricted rule wraps one or more **requirements**:
 - `rule!(caller_component(address))` — the immediate caller is the given component.
 - `rule!(direct_caller_template(address))` — the immediate caller is code from the given template: any component
   instance of it, or any static function of it.
+- `rule!(any_caller_component)` / `rule!(any_caller_template)` — there was a caller of that kind, whoever it was.
 - `rule!(any_of(...))`, `rule!(all_of(...))`, `rule!(m_of_n(n, ...))` — combine requirements.
 
 #### Caller vs. current component
@@ -109,19 +110,23 @@ A method or function invoked directly by a top-level transaction instruction has
 is a signer — so `caller_component` / `direct_caller_template` rules **deny** it. Use a badge, public key, or
 other proof requirement to allow signer-driven calls.
 
-Requiring the badge **resource** rather than a specific badge asks the weaker question "was there a caller at
-all?":
+Two further forms ask the weaker question "was there a caller at all?", and take no address:
 
 ```rust
 // Satisfied by any component caller, and by no top-level instruction.
-rule!(resource(CALLER_COMPONENT_RESOURCE_ADDRESS))
+rule!(any_caller_component)
 // Satisfied by any frame below the top level, i.e. reached from template code
 // rather than directly from a transaction instruction.
-rule!(resource(DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS))
+rule!(any_caller_template)
 ```
 
-No resource exists at either address and none can be created, so these badges cannot be minted, held in a
-vault, or forged by a template.
+You never need to name a badge or a reserved address to write a caller rule. If you do need the badge itself
+— to combine it with other requirements by hand — `NonFungibleAddress::caller_component_badge(addr)` and
+`::direct_caller_template_badge(addr)` build it, the same way `NonFungibleAddress::from_public_key(pk)` does
+for a signer.
+
+No resource exists at either badge address and none can be created, so these badges cannot be minted, held in
+a vault, or forged by a template.
 
 **Caution:** `caller_component` / `direct_caller_template` match the immediate caller's identity, which is only as
 trustworthy as the code that makes the call. A method that forwards a caller-supplied component/template and
