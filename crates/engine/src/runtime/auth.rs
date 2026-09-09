@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{fmt::Display, sync::Arc};
+use std::fmt::Display;
 
 use indexmap::IndexSet;
 use tari_template_lib::{
@@ -11,21 +11,21 @@ use tari_template_lib::{
 
 #[derive(Debug, Clone, Default)]
 pub struct AuthParams {
-    pub initial_ownership_proofs: Arc<IndexSet<NonFungibleAddress>>,
+    pub initial_ownership_proofs: IndexSet<NonFungibleAddress>,
 }
 
 #[derive(Debug, Clone)]
 pub struct AuthorizationScope {
     /// Virtual proofs are system-issued non-fungibles that exist for no longer than the execution e.g. derived from
     /// the transaction signer public key
-    virtual_proofs: Arc<IndexSet<NonFungibleAddress>>,
+    virtual_proofs: IndexSet<NonFungibleAddress>,
 
     /// Resource-based proofs
     proofs: IndexSet<ProofId>,
 }
 
 impl AuthorizationScope {
-    pub fn new(virtual_proofs: Arc<IndexSet<NonFungibleAddress>>) -> Self {
+    pub fn new(virtual_proofs: IndexSet<NonFungibleAddress>) -> Self {
         Self {
             virtual_proofs,
             proofs: IndexSet::new(),
@@ -34,7 +34,7 @@ impl AuthorizationScope {
 
     pub fn empty() -> Self {
         Self {
-            virtual_proofs: Arc::new(IndexSet::new()),
+            virtual_proofs: IndexSet::new(),
             proofs: IndexSet::new(),
         }
     }
@@ -77,7 +77,7 @@ impl AuthorizationScope {
 impl Display for AuthorizationScope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Virtual: [")?;
-        for proof in self.virtual_proofs.iter() {
+        for proof in &self.virtual_proofs {
             write!(f, "{}", proof)?;
         }
         write!(f, "], Proofs: [")?;

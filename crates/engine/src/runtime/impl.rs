@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::{Arc, atomic, atomic::AtomicPtr};
+use std::{ptr::NonNull, rc::Rc, sync::Arc};
 
 use log::{warn, *};
 use tari_bor::{MaybeTagged, decode_exact};
@@ -190,10 +190,9 @@ pub struct RuntimeInterfaceImpl<TStore, TTemplateProvider> {
     claim_burn_proof_verifier: Arc<dyn ClaimProofVerifier + Send + Sync + 'static>,
     /// Transaction blob payloads, immutable for the duration of execution. Used to resolve
     /// `InstructionArg::Blob(idx)` references against the surrounding transaction's blobs.
-    blobs: Arc<tari_ootle_transaction::Blobs>,
+    blobs: Rc<tari_ootle_transaction::Blobs>,
     /// A pointer to the runtime that is set after initialization to allow for cross-template calls.
-    /// This is using an atomic pointer simply to make RuntimeInterfaceImpl Send + Sync to satisfy wasmer trait bounds.
-    runtime_pointer: Option<AtomicPtr<Box<dyn RuntimeInterface>>>,
+    runtime_pointer: Option<NonNull<Box<dyn RuntimeInterface>>>,
     /// The introspection context made available to a spend-script predicate for the duration of its evaluation. It is
     /// set immediately before invoking the predicate and cleared immediately after, so `spend_context_invoke` (which
     /// re-enters this same interface through the runtime pointer) can serve the `SpendContext` accessors.
@@ -213,7 +212,7 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
         entity_id_provider: EntityIdProvider,
         modules: ModulesCollection<TStore>,
         claim_burn_proof_verifier: Arc<dyn ClaimProofVerifier + Send + Sync + 'static>,
-        blobs: Arc<tari_ootle_transaction::Blobs>,
+        blobs: Rc<tari_ootle_transaction::Blobs>,
     ) -> Result<Self, RuntimeError> {
         let mut runtime = Self {
             tracker,
@@ -476,12 +475,8 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
 
     fn get_call_runtime(&self) -> Runtime {
         // Load the runtime pointer that must be set by whoever initialized this interface
-        let ptr = self
-            .runtime_pointer
-            .as_ref()
-            .expect("BUG: Runtime pointer not set")
-            .load(atomic::Ordering::Acquire);
-        Runtime::from_pointer(ptr).expect("Runtime pointer is null")
+        let ptr = self.runtime_pointer.expect("BUG: Runtime pointer not set");
+        Runtime::from_pointer(ptr.as_ptr()).expect("Runtime pointer is null")
     }
 
     fn invoke_component_method(
@@ -4183,7 +4178,7 @@ where
     }
 
     fn set_runtime_pointer(&mut self, pointer: *mut Box<dyn RuntimeInterface>) {
-        self.runtime_pointer = Some(AtomicPtr::new(pointer));
+        self.runtime_pointer = NonNull::new(pointer);
     }
 }
 

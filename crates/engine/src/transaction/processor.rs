@@ -227,7 +227,7 @@ where
             });
         }
 
-        let blobs = std::sync::Arc::new(instructions.blobs);
+        let blobs = std::rc::Rc::new(instructions.blobs);
 
         let mut runtime_interface = Box::new(RuntimeInterfaceImpl::initialize(
             tracker,
@@ -236,7 +236,7 @@ where
             entity_id_provider,
             modules,
             claim_burn_proof_verifier,
-            std::sync::Arc::clone(&blobs),
+            std::rc::Rc::clone(&blobs),
         )?) as Box<dyn RuntimeInterface>;
 
         let runtime = Runtime::from_mut(&mut runtime_interface);

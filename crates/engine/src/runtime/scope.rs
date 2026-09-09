@@ -418,7 +418,7 @@ impl CallFrame {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum PushCallFrame {
     ForComponent {
         template_address: TemplateAddress,
