@@ -540,8 +540,10 @@ impl<TSpec: EpochManagerSpec> EpochManagerService<TSpec> {
                 let result = match self.inner.get_epoch_hash(epoch).optional() {
                     Ok(Some(activated)) => Ok(Some(activated)),
                     Ok(None) => self.epoch_events.observed_epoch_boundary_hash(epoch).map_err(|err| {
+                        // `{:#}` keeps anyhow's source chain: the diesel error underneath is the part
+                        // that says why the store was unreadable.
                         EpochManagerError::EpochEventOracleError {
-                            details: err.to_string(),
+                            details: format!("{err:#}"),
                         }
                     }),
                     Err(err) => Err(err),

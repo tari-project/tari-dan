@@ -84,6 +84,11 @@ impl TestEpochManager {
         *self.oracle_visible_epoch.lock().unwrap() = Some(epoch);
     }
 
+    /// Remove the oracle view cap for this validator, standing in for its scanner catching up.
+    pub fn clear_oracle_visible_epoch(&self) {
+        *self.oracle_visible_epoch.lock().unwrap() = None;
+    }
+
     fn oracle_visible_epoch(&self) -> Option<Epoch> {
         *self.oracle_visible_epoch.lock().unwrap()
     }
