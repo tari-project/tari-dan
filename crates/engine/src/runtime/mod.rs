@@ -61,7 +61,7 @@ use tari_engine_types::{
     component::Component,
     confidential::{ClaimBurnOutputData, MinotariBurnClaimProof},
     fees::FeeReceipt,
-    indexed_value::IndexedValue,
+    indexed_value::{IndexedValue, IndexedWellKnownTypes},
     lock::LockFlag,
     published_template::TemplateBlob,
 };
@@ -219,7 +219,7 @@ pub trait RuntimeInterface {
     fn validate_return_value(&self, value: &IndexedValue) -> Result<(), RuntimeError>;
 
     fn push_call_frame(&mut self, frame: PushCallFrame) -> Result<(), RuntimeError>;
-    fn pop_call_frame(&mut self) -> Result<(), RuntimeError>;
+    fn pop_call_frame(&mut self, returned: &IndexedWellKnownTypes) -> Result<(), RuntimeError>;
     fn publish_template(
         &mut self,
         template: TemplateBlob,

@@ -824,12 +824,11 @@ impl<TStore: StateReader> WorkingState<TStore> {
     }
 
     pub fn drop_proof(&mut self, proof_id: ProofId) -> Result<(), RuntimeError> {
-        // Remove it from the auth scope if is in scope
         let call_frame_mut = self.current_call_scope_mut()?;
         if !call_frame_mut.is_proof_in_scope(&proof_id) {
             return Err(RuntimeError::ProofNotFound { proof_id });
         }
-        call_frame_mut.auth_scope_mut().remove_proof(&proof_id);
+        call_frame_mut.remove_proof_from_scope(&proof_id);
 
         // Fetch the proof
         let proof = self
@@ -1320,8 +1319,8 @@ impl<TStore: StateReader> WorkingState<TStore> {
 
         let scope_mut = self.current_call_scope_mut()?;
         for address in next_state.referenced_substates() {
-            // Mark any orphaned objects as owned
-            scope_mut.move_node_to_owned(&address)?
+            // Anything the state references now belongs to the component, not to this frame
+            scope_mut.attach_node_to_component(&address)?
         }
 
         Ok(())
@@ -1526,7 +1525,7 @@ impl<TStore: StateReader> WorkingState<TStore> {
         Ok(())
     }
 
-    pub fn pop_frame(&mut self) -> Result<(), RuntimeError> {
+    pub fn pop_frame(&mut self, returned: &IndexedWellKnownTypes) -> Result<(), RuntimeError> {
         let current_frame = self.call_frames.pop().ok_or(RuntimeError::NoActiveCallFrame)?;
 
         let mut scope = current_frame.into_scope();
@@ -1547,9 +1546,36 @@ impl<TStore: StateReader> WorkingState<TStore> {
             });
         }
 
+        // A bucket or proof this frame created is either consumed here or named in the return value. One that is
+        // still live and unreturned has no owner, so it fails the call. An emptied bucket carries nothing and is
+        // tolerated, matching `validate_finalized`, so that the transaction has one rule for it rather than two.
+        let dangling_buckets = scope
+            .buckets_owed()
+            .filter(|id| self.buckets.get(id).is_some_and(|bucket| !bucket.is_empty()))
+            .filter(|id| !returned.bucket_ids().contains(id))
+            .copied()
+            .collect::<Vec<_>>();
+        if !dangling_buckets.is_empty() {
+            return Err(RuntimeError::UnreturnedBuckets {
+                bucket_ids: dangling_buckets,
+            });
+        }
+
+        let dangling_proofs = scope
+            .proofs_owed()
+            .filter(|id| self.proofs.contains_key(id))
+            .filter(|id| !returned.proof_ids().contains(id))
+            .copied()
+            .collect::<Vec<_>>();
+        if !dangling_proofs.is_empty() {
+            return Err(RuntimeError::UnreturnedProofs {
+                proof_ids: dangling_proofs,
+            });
+        }
+
         // Update the parent call scope
         debug!(target: LOG_TARGET, "pop_frame:\n{}", scope);
-        self.current_call_scope_mut()?.update_from_child_scope(scope);
+        self.current_call_scope_mut()?.update_from_child_scope(scope, returned);
 
         Ok(())
     }
@@ -1988,8 +2014,9 @@ impl<TStore: StateReader> WorkingState<TStore> {
         address: &SubstateId,
         action: T,
     ) -> Result<(), RuntimeError> {
-        // Since we don't propagate _owned_ substate references up the call stack, if the substate is in scope, then it
-        // was created in this scope and therefore owned.
+        // A substate in scope was either created by this frame or is reachable from the component the frame executes
+        // on. Both are private to this frame: a component's substates are dropped from the scope when the frame is
+        // popped, so they stay reachable only through that component.
         if self.current_call_scope()?.is_substate_in_scope(address) {
             return Ok(());
         }

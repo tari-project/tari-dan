@@ -68,10 +68,6 @@ impl AuthorizationScope {
     pub fn contains_proof(&self, proof_id: &ProofId) -> bool {
         self.proofs.contains(proof_id)
     }
-
-    pub(super) fn update_from_child(&mut self, child: AuthorizationScope) {
-        self.proofs.extend(child.proofs);
-    }
 }
 
 impl Display for AuthorizationScope {
