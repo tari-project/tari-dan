@@ -131,6 +131,18 @@ impl HotStuffError {
             _ => None,
         }
     }
+
+    /// True for errors that mean this node is behind its peers and must sync. These are a designed transition out
+    /// of the Running state, not a consensus failure, and must be classified as such wherever consensus errors are
+    /// reported. The state machine (see `state_machine::running`) maps exactly these variants to `NeedSync`.
+    pub fn is_sync_required(&self) -> bool {
+        matches!(
+            self,
+            Self::NeedsSync { .. } |
+                Self::FallenBehind { .. } |
+                Self::ProposalValidationError(ProposalValidationError::FutureEpoch { .. })
+        )
+    }
 }
 
 impl From<EpochManagerError> for HotStuffError {
