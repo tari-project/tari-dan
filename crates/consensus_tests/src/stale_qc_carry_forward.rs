@@ -45,9 +45,7 @@ async fn first_round_votes_dropped_recovers_via_stale_qc_carry_forward() {
         .modify_consensus_constants(|c| {
             // Tight pacemaker so the TC fires quickly inside the test budget.
             c.pacemaker_block_time = Duration::from_secs(3);
-            // Don't let one missed proposal trigger eviction — the whole point is to recover.
             c.missed_proposal_suspend_threshold = 10;
-            c.missed_proposal_evict_threshold = 10;
         })
         .with_message_filter(Box::new(move |_from, _to, msg| {
             // Return false to drop. Drop every Vote message whose vote height is the target.

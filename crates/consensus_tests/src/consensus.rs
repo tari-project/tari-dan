@@ -1687,69 +1687,6 @@ async fn multishard_validator_fee_claim() {
     test.assert_clean_shutdown().await;
 }
 
-// mod dump_data {
-//     use super::*;
-//     use std::fs::File;
-//     use tari_crypto::tari_utilities::hex::from_hex;
-//     use tari_consensus::hotstuff::eviction_proof::convert_block_to_sidechain_block_header;
-//     use tari_state_store_sqlite::SqliteStateStore;
-//
-//    fn asd() {
-//            let store = SqliteStateStore::<PeerAddress>::connect(
-//                "data/swarm/processes/validator-node-01/localnet/data/validator_node/state.db",
-//            )
-//                .unwrap();
-//            let p = store
-//                .with_read_tx(|tx| {
-//                    let block = tari_ootle_storage::consensus_models::Block::get(
-//                        tx,
-//                        &BlockId::try_from(
-//                            from_hex("891d186d2d46b990cc0974dc68734f701eaeb418a1bba487de93905d3986e0e3").unwrap(),
-//                        )
-//                            .unwrap(),
-//                    )?;
-//
-//                    let commit_block = tari_ootle_storage::consensus_models::Block::get(
-//                        tx,
-//                        &BlockId::try_from(
-//                            from_hex("1cdbe5c1a894bcc254b47cf017d4d17608839b7048d1c02162bccd39e7635288").unwrap(),
-//                        )
-//                            .unwrap(),
-//                    )
-//                        .unwrap();
-//
-//                    let mut p = tari_consensus::hotstuff::eviction_proof::generate_eviction_proofs(tx,
-// block.justify(), &[                        commit_block.clone(),
-//                    ])
-//                        .unwrap();
-//
-//                    eprintln!();
-//                    eprintln!("{}", serde_json::to_string_pretty(&commit_block).unwrap());
-//                    eprintln!();
-//                    eprintln!();
-//
-//                    let h = convert_block_to_sidechain_block_header(commit_block.header());
-//
-//                    assert_eq!(h.calculate_hash(), commit_block.header().calculate_hash());
-//                    let b = p[0].proof().header().calculate_block_id();
-//                    assert_eq!(
-//                        p[0].proof().header().calculate_hash(),
-//                        commit_block.header().calculate_hash()
-//                    );
-//                    assert_eq!(b, *commit_block.id().hash());
-//                    Ok::<_, HotStuffError>(p.remove(0))
-//                })
-//                .unwrap();
-//            let f = File::options()
-//                .create(true)
-//                .write(true)
-//                .truncate(true)
-//                .open("/tmp/eviction_proof.json")
-//                .unwrap();
-//            serde_json::to_writer_pretty(f, &p).unwrap();
-//    }
-// }
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn single_transaction_epoch_expired() {
     setup_logger();

@@ -58,7 +58,6 @@ export * from "./types/EntityId";
 export * from "./types/Epoch";
 export * from "./types/Era";
 export * from "./types/Event";
-export * from "./types/EvictNodeAtom";
 export * from "./types/EvidenceInputLockData";
 export * from "./types/Evidence";
 export * from "./types/ExecuteResult";

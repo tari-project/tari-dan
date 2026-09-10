@@ -15,7 +15,6 @@ use tari_ootle_common_types::{
     committee::{Committee, CommitteeInfo},
 };
 use tari_ootle_storage::global::models::ValidatorNode;
-use tari_sidechain::EvictionProof;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::sync::oneshot;
 
@@ -108,10 +107,6 @@ pub enum EpochManagerRequest<TAddr> {
     },
     GetFeeClaimPublicKey {
         reply: Reply<Option<RistrettoPublicKeyBytes>>,
-    },
-    AddIntentToEvictValidator {
-        proof: Box<EvictionProof>,
-        reply: Reply<()>,
     },
     GetRandomCommitteeMemberFromShardGroup {
         epoch: Epoch,

@@ -38,7 +38,6 @@ use tari_ootle_common_types::{
     layer_one_transaction::LayerOneTransactionDef,
 };
 use tari_ootle_storage::global::models::ValidatorNode;
-use tari_sidechain::EvictionProof;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::sync::broadcast;
 
@@ -47,7 +46,6 @@ use crate::{EpochManagerError, EpochManagerEvent, epoch_event_oracle::EpochEvent
 pub trait EpochManagerSpec: Send + 'static {
     type Addr: NodeAddressable + DerivableFromPublicKey + 'static;
     type EpochEventOracle: EpochEventOracle + Send + 'static;
-    type LayerOneSubmitter: LayerOneTransactionSubmitter + Send + Sync + 'static;
 }
 
 pub trait EpochManagerWriter: Send + Sync {
@@ -212,11 +210,6 @@ pub trait EpochManagerReader: Send + Sync {
             })
         }
     }
-
-    fn add_intent_to_evict_validator(
-        &self,
-        proof: EvictionProof,
-    ) -> impl Future<Output = Result<(), EpochManagerError>> + Send;
 
     fn get_random_committee_member(
         &self,

@@ -16,7 +16,6 @@ tari_transaction_components = { workspace = true } # Used for VN registration si
 tari_crypto = { workspace = true } # Used for `.to_vec()` in registration request
 tari_ootle_common_types = { workspace = true }
 tari_shutdown = { workspace = true }
-tari_sidechain = { workspace = true }
 tari_template_lib_types = { workspace = true }
 ootle-network = { workspace = true }
 

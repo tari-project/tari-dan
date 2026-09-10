@@ -31,7 +31,6 @@ use super::{BlockHeaderModel, EpochData, TemplateStatus};
 use crate::{
     atomic::AtomicDb,
     global::{
-        base_layer_db::DbLayer1Transaction,
         models::ValidatorNode,
         template_db::{DbTemplate, DbTemplateUpdate},
     },
@@ -185,12 +184,6 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         epoch_hash: FixedHash,
     ) -> Result<(), Self::Error>;
     fn get_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: Epoch) -> Result<Option<EpochData>, Self::Error>;
-
-    fn insert_layer_one_transaction<T: Serialize>(
-        &self,
-        tx: &mut Self::DbTransaction<'_>,
-        data: DbLayer1Transaction<T>,
-    ) -> Result<(), Self::Error>;
 
     fn insert_block_header(
         &self,

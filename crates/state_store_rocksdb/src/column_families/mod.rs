@@ -26,7 +26,6 @@ pub mod block_transaction_execution;
 pub mod bookkeeping;
 pub mod chain;
 pub mod epoch_checkpoint;
-pub mod evicted_node;
 pub mod foreign_parked_blocks;
 pub mod foreign_proposal;
 pub mod foreign_substate_pledge;

@@ -3,11 +3,10 @@
 
 use minicbor::{CborLen, Decode, Encode};
 use serde::{Deserialize, Serialize};
-use tari_consensus_types::BlockId;
 use tari_ootle_common_types::Epoch;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
-use crate::{StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
+use crate::{StateStoreReadTransaction, StorageError};
 
 #[derive(Debug, Clone, Copy)]
 pub struct ValidatorStatsUpdate<'a> {
@@ -81,46 +80,11 @@ pub struct ValidatorConsensusStats {
 }
 
 impl ValidatorConsensusStats {
-    pub fn get_nodes_to_evict<TTx: StateStoreReadTransaction>(
-        tx: &TTx,
-        block_id: &BlockId,
-        threshold: u64,
-        limit: u64,
-    ) -> Result<Vec<RistrettoPublicKeyBytes>, StorageError> {
-        if limit == 0 {
-            return Ok(Vec::new());
-        }
-        tx.validator_epoch_stats_get_nodes_to_evict(block_id, threshold, limit)
-    }
-
     pub fn get_by_public_key<TTx: StateStoreReadTransaction>(
         tx: &TTx,
         epoch: Epoch,
         public_key: &RistrettoPublicKeyBytes,
     ) -> Result<Self, StorageError> {
         tx.validator_epoch_stats_get(epoch, public_key)
-    }
-
-    pub fn is_node_evicted<TTx: StateStoreReadTransaction>(
-        tx: &TTx,
-        block_id: &BlockId,
-        public_key: &RistrettoPublicKeyBytes,
-    ) -> Result<bool, StorageError> {
-        tx.suspended_nodes_is_evicted(block_id, public_key)
-    }
-
-    pub fn evict_node<TTx: StateStoreWriteTransaction>(
-        tx: &mut TTx,
-        public_key: &RistrettoPublicKeyBytes,
-        evicted_in_block: BlockId,
-    ) -> Result<(), StorageError> {
-        tx.evicted_nodes_evict(public_key, evicted_in_block)
-    }
-
-    pub fn count_number_evicted_nodes<TTx: StateStoreReadTransaction>(
-        tx: &TTx,
-        epoch: Epoch,
-    ) -> Result<u64, StorageError> {
-        tx.evicted_nodes_count(epoch)
     }
 }

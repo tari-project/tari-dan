@@ -15,7 +15,6 @@ use tari_ootle_common_types::layer_one_transaction::{
     ValidatorExitParams,
     ValidatorRegistrationParams,
 };
-use tari_sidechain::EvictionProof;
 use tari_transaction_components::transaction_components::{MemoField, memo_field::TxType};
 use tonic::transport::Channel;
 use url::Url;
@@ -165,27 +164,6 @@ impl MinotariNodes {
         let proof_type = transaction_def.payload_type;
         let mut client = self.connect_wallet().await?;
         match proof_type {
-            LayerOnePayloadType::EvictionProof => {
-                let proof = serde_json::from_value::<EvictionProof>(transaction_def.payload)?;
-                info!(
-                    "Preparing to send an eviction proof transaction to evict {}",
-                    proof.node_to_evict()
-                );
-                let proof_proto = (&proof).into();
-
-                let resp = client
-                    .submit_validator_eviction_proof(grpc::SubmitValidatorEvictionProofRequest {
-                        proof: Some(proof_proto),
-                        fee_per_gram: 10,
-                        message: format!("Validator: Automatically submitted {proof_type} transaction"),
-                        // TODO: sidechain_id support
-                        sidechain_deployment_key: vec![],
-                    })
-                    .await?;
-
-                let resp = resp.into_inner();
-                info!("{} transaction sent successfully (tx_id={})", proof_type, resp.tx_id);
-            },
             LayerOnePayloadType::ValidatorRegistration => {
                 let registration = serde_json::from_value::<ValidatorRegistrationParams>(transaction_def.payload)?;
 

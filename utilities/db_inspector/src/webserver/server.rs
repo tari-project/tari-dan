@@ -112,7 +112,6 @@ pub async fn run(context: HandlerContext) -> anyhow::Result<()> {
         column_families::epoch_checkpoint::EpochCheckpointCf,
         column_families::lock_conflict::LockConflictCf,
         column_families::lock_conflict::LockConflictBlockIdIndex,
-        column_families::evicted_node::EvictedNodeCf,
         column_families::validator_node_epoch_stats::ValidatorNodeEpochStatsCf,
         column_families::diagnostic_no_vote::DiagnosticsNoVoteCf
     );
@@ -185,7 +184,6 @@ pub fn register_all_cfs(context: &mut HandlerContext) -> &mut HandlerContext {
         .register_cf(column_families::chain::PendingParentChildIndex)
         .register_cf(column_families::diagnostic_no_vote::DiagnosticsNoVoteCf)
         .register_cf(column_families::epoch_checkpoint::EpochCheckpointCf)
-        .register_cf(column_families::evicted_node::EvictedNodeCf)
         .register_cf(column_families::finalized_transaction::FinalizedTransactionLinkCf)
         .register_cf(column_families::foreign_parked_blocks::ForeignParkedBlockCf)
         .register_cf(column_families::foreign_parked_blocks::MissingTransactionsModel)

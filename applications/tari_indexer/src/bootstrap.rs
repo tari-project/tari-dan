@@ -88,7 +88,6 @@ use tokio::task;
 use crate::{
     ApplicationConfig,
     IndexerEpochManagerSpec,
-    Noop,
     base_layer::verify_correct_network,
     config::PublishedIndexerConfig,
     dry_run::processor::DryRunTransactionProcessor,
@@ -254,7 +253,6 @@ pub async fn spawn_services(
         global_db.clone(),
         keypair.public_key().to_byte_type(),
         epoch_event_oracle,
-        Noop,
         shutdown.clone(),
     );
 

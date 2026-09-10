@@ -53,8 +53,6 @@ pub struct ConsensusConstants {
     /// The number of missed proposals before a node will immediately send a NEWVIEW to the next leader when the node
     /// who missed the proposals is selected as leader.
     pub missed_proposal_suspend_threshold: u64,
-    /// The number of missed proposals before a EvictNode command is proposed.
-    pub missed_proposal_evict_threshold: u64,
     /// The number of rounds a node must participate before their non-participation is reset. If a peer is offline,
     /// gets suspended and comes online, their missed proposal count (up to a maximum of
     /// `missed_proposal_recovery_threshold`) is decremented for each block that they participate (vote) in. Once
@@ -152,7 +150,6 @@ impl ConsensusConstants {
         num_preshards: NumPreshards::current(),
         pacemaker_block_time: Duration::from_secs(10),
         missed_proposal_suspend_threshold: 5,
-        missed_proposal_evict_threshold: 10,
         missed_proposal_recovery_threshold: 5,
         // Calibrated against 2-core hardware (Esmeralda class), where ~500 LocalOnly stress
         // transactions (~62 weight each, ~31k weight) executed in ~11.5s — i.e. ~2.7k weight/s.
@@ -200,7 +197,6 @@ impl ConsensusConstants {
         num_preshards: NumPreshards::current(),
         pacemaker_block_time: Duration::from_secs(10),
         missed_proposal_suspend_threshold: 5,
-        missed_proposal_evict_threshold: 10,
         missed_proposal_recovery_threshold: 5,
         // Calibrated against 2-core hardware (Esmeralda class), where ~500 LocalOnly stress
         // transactions (~62 weight each, ~31k weight) executed in ~11.5s — i.e. ~2.7k weight/s.
@@ -240,7 +236,6 @@ impl ConsensusConstants {
         num_preshards: NumPreshards::current(),
         pacemaker_block_time: Duration::from_secs(10),
         missed_proposal_suspend_threshold: 5,
-        missed_proposal_evict_threshold: 10,
         missed_proposal_recovery_threshold: 5,
         // Calibrated against 2-core hardware (Esmeralda class), where ~500 LocalOnly stress
         // transactions (~62 weight each, ~31k weight) executed in ~11.5s — i.e. ~2.7k weight/s.
@@ -294,7 +289,6 @@ impl ConsensusConstants {
             num_preshards: NumPreshards::current(),
             pacemaker_block_time: Duration::from_secs(10),
             missed_proposal_suspend_threshold: 5,
-            missed_proposal_evict_threshold: 10,
             missed_proposal_recovery_threshold: 5,
             // Calibrated against 2-core hardware (Esmeralda class), where ~500 LocalOnly stress
             // transactions (~62 weight each, ~31k weight) executed in ~11.5s — i.e. ~2.7k weight/s.

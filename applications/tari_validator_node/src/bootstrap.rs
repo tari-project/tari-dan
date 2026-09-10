@@ -307,7 +307,6 @@ pub async fn spawn_services(
             global_db.clone(),
             keypair.public_key().to_byte_type(),
             epoch_event_oracle,
-            layer_one_transaction_submitter.clone(),
             shutdown.clone(),
         );
 

@@ -5,7 +5,7 @@
 //!
 //! This is the phase the whole tool exists for. A validator executes a block's commands serially,
 //! inside one view, and a machine that cannot finish in time misses the proposal — five of those
-//! and it is suspended, ten and it is evicted. Everything measured here feeds one question: how
+//! and it is suspended. Everything measured here feeds one question: how
 //! long does *this* machine take to execute the worst block the protocol lets it be sent?
 //!
 //! Two budgets bound a block independently, so both are measured:

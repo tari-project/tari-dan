@@ -7,7 +7,6 @@ use tari_consensus_types::{
     HighPc,
     LastSentNewView,
     LastSentVote,
-    LeafBlock,
     ProposalCertificate,
     TimeoutVote,
     TimeoutVoteMessage,
@@ -17,9 +16,9 @@ use tari_ootle_common_types::{Epoch, NodeHeight, committee::Committee, displayab
 use tari_ootle_storage::{StateStore, consensus_models::BookkeepingModel};
 
 use crate::{
-    hotstuff::{HotStuffError, get_leader_for_view},
+    hotstuff::HotStuffError,
     messages::{HotstuffMessage, NewViewMessage},
-    traits::{CertificateStore, ConsensusSpec, OutboundMessaging, ValidatorSignerService},
+    traits::{CertificateStore, ConsensusSpec, LeaderStrategy, OutboundMessaging, ValidatorSignerService},
 };
 
 const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::on_next_sync_view";
@@ -59,7 +58,6 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
             // view, +1 is the next leader that failed, +2 is the next leader that should propose
             let mut timeout_height = current_height + NodeHeight(2);
 
-            let leaf_block = LeafBlock::get(tx, epoch)?;
             // If we leader failure more than once in a row, propose the next higher view
             if let Some((nv_epoch, last_sent_new_view)) = self.last_sent_new_view &&
                 nv_epoch == epoch &&
@@ -67,14 +65,8 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
             {
                 timeout_height = last_sent_new_view + NodeHeight(1);
             }
-            let next_leader = get_leader_for_view(
-                tx,
-                local_committee,
-                &self.leader_strategy,
-                leaf_block.block_id(),
-                // Skipping the next height since the leader failed to propose
-                timeout_height,
-            )?;
+            // Skipping the next height since the leader failed to propose
+            let (next_leader, _) = self.leader_strategy.get_leader(local_committee, timeout_height);
             let high_pc = HighPc::get(tx, epoch)?;
             let high_pc = ProposalCertificate::get(tx, epoch, high_pc.id())?;
             let last_sent_vote = LastSentVote::get(tx, epoch)
@@ -87,7 +79,7 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
         info!(
             target: LOG_TARGET,
             "🌟 Send NEWVIEW to {} {} HighPC: {} Vote[{}]",
-            next_leader.address,
+            next_leader,
             timeout_height,
             high_pc,
             last_sent_vote.display(),
@@ -115,7 +107,7 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
         };
 
         self.outbound_messaging
-            .send(next_leader.address.clone(), HotstuffMessage::new_newview(message))
+            .send(next_leader.clone(), HotstuffMessage::new_newview(message))
             .await?;
 
         self.last_sent_new_view = Some((epoch, timeout_height));

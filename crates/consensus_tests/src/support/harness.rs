@@ -683,7 +683,6 @@ impl TestBuilder {
                     num_preshards: TEST_NUM_PRESHARDS,
                     pacemaker_block_time: DEFAULT_PACEMAKER_BLOCK_TIME,
                     missed_proposal_suspend_threshold: 5,
-                    missed_proposal_evict_threshold: 10,
                     missed_proposal_recovery_threshold: 5,
                     max_transaction_validity_epochs: 100,
                     // Keep the weight budget effectively unbounded in tests so behaviour stays
@@ -708,7 +707,6 @@ impl TestBuilder {
                 },
                 state_tree_cleanup_interval: Duration::from_secs(1000),
                 epoch_gc_interval: Duration::from_secs(1000),
-                enable_eviction_proposal: true,
                 epoch_end_grace_period: Duration::from_secs(1),
                 catch_up_request_timeout: Duration::from_secs(15),
             },
@@ -754,11 +752,6 @@ impl TestBuilder {
                 vote_power: VotePower::of(1),
             });
         }
-        self
-    }
-
-    pub fn add_failure_node<T: Into<TestAddress>>(mut self, node: T) -> Self {
-        self.failure_nodes.push(node.into());
         self
     }
 

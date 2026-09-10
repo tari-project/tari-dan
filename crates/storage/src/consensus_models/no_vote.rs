@@ -90,12 +90,6 @@ pub enum NoVoteReason {
     CommandMerkleRootMismatch,
     #[error("Not all foreign input pledges are present")]
     NotAllForeignInputPledges,
-    #[error("Leader proposed to EVICT a node that should not be evicted")]
-    ShouldNotEvictNode,
-    #[error("Leader proposed to EVICT a node but node is already evicted")]
-    NodeAlreadyEvicted,
-    #[error("Leader proposed to evict a node but it is not permitted to suspend more than f nodes")]
-    CannotEvictNodeBelowQuorumThreshold,
     #[error("Not all inputs and outputs are accepted")]
     NotAllInputsOutputsAccepted,
     #[error("Invalid evidence")]
@@ -147,9 +141,6 @@ impl NoVoteReason {
             Self::StateMerkleRootMismatch => "StateMerkleRootMismatch",
             Self::CommandMerkleRootMismatch => "CommandMerkleRootMismatch",
             Self::NotAllForeignInputPledges => "NotAllForeignInputPledges",
-            Self::NodeAlreadyEvicted => "NodeAlreadyEvicted",
-            Self::ShouldNotEvictNode => "ShouldNotEvictNode",
-            Self::CannotEvictNodeBelowQuorumThreshold => "CannotSuspendNodeBelowQuorumThreshold",
             Self::NotAllInputsOutputsAccepted => "NotAllInputsOutputsAccepted",
             Self::InvalidEvidence { .. } => "InvalidEvidence",
             Self::BlockWeightExceeded { .. } => "BlockWeightExceeded",

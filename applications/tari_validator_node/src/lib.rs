@@ -67,7 +67,6 @@ pub use crate::config::{ApplicationConfig, ValidatorNodeConfig};
 use crate::{
     bootstrap::{Services, spawn_services},
     consensus::spec::ValidatorNodeStateStore,
-    file_l1_submitter::FileLayerOneSubmitter,
     json_rpc::{JsonRpcHandlers, spawn_json_rpc},
     node::ValidatorNode,
 };
@@ -251,7 +250,6 @@ impl EpochManagerSpec for ValidatorNodeEpochManagerSpec {
     #[cfg(feature = "metrics")]
     type EpochEventOracle =
         crate::epoch_metrics::MeteredEpochOracle<EpochOracle<GlobalDb<SqliteGlobalDbAdapter<PeerAddress>>>>;
-    type LayerOneSubmitter = FileLayerOneSubmitter;
 }
 
 #[cfg(test)]

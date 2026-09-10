@@ -33,7 +33,6 @@ use tari_ootle_storage::{
         SubstateChange,
         TransactionRecord,
         TreeRootSummary,
-        ValidatorConsensusStats,
     },
 };
 use tari_ootle_transaction::Network;
@@ -344,47 +343,6 @@ pub(crate) fn filter_diff_for_committee(committee_info: &CommitteeInfo, diff: &S
                 .collect(),
         );
     filtered_diff
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct NextLeader<'a, TAddr> {
-    pub address: &'a TAddr,
-    pub height: NodeHeight,
-    pub vote_to_skip_next: bool,
-}
-
-pub(crate) fn get_leader_for_view<
-    'a,
-    TTx: StateStoreReadTransaction,
-    TLeaderStrategy: LeaderStrategy<TAddr>,
-    TAddr: NodeAddressable,
->(
-    tx: &TTx,
-    committee: &'a Committee<TAddr>,
-    leader_strategy: &TLeaderStrategy,
-    block_id: &BlockId,
-    height: NodeHeight,
-) -> Result<NextLeader<'a, TAddr>, HotStuffError> {
-    let mut num_skipped = 0;
-
-    let (mut leader_addr, mut leader_pk) = leader_strategy.get_leader(committee, height);
-
-    let mut next_height = height;
-    while ValidatorConsensusStats::is_node_evicted(tx, block_id, leader_pk)? {
-        debug!(target: LOG_TARGET, "Validator {} evicted for {}. Checking next validator", leader_addr, next_height);
-        next_height += NodeHeight(1);
-        num_skipped += 1;
-        let (addr, pk) = leader_strategy.get_leader(committee, next_height);
-        leader_addr = addr;
-        leader_pk = pk;
-    }
-    debug!(target: LOG_TARGET, "Validator {} selected as leader at {}", leader_addr, next_height);
-
-    Ok(NextLeader {
-        height: next_height,
-        address: leader_addr,
-        vote_to_skip_next: num_skipped > 0,
-    })
 }
 
 pub fn apply_leader_fee_to_substate_store<TTx: StateStoreReadTransaction>(

@@ -33,7 +33,6 @@ use tari_ootle_storage::{
         TransactionPoolStage,
         TransactionRecord,
         ValidBlock,
-        ValidatorConsensusStats,
         ValidatorStatsUpdate,
     },
 };
@@ -369,52 +368,6 @@ where TConsensusSpec: ConsensusSpec
                     }
 
                     continue;
-                },
-                Command::EvictNode(atom) => {
-                    if ValidatorConsensusStats::is_node_evicted(tx, block.id(), &atom.public_key)? {
-                        warn!(
-                            target: LOG_TARGET,
-                            "❌ NO VOTE: {}", NoVoteReason::NodeAlreadyEvicted
-                        );
-
-                        proposed_block_change_set.set_no_vote(NoVoteReason::NodeAlreadyEvicted);
-                        return Ok(());
-                    }
-
-                    let num_evicted = ValidatorConsensusStats::count_number_evicted_nodes(tx, block.epoch())?;
-                    // TODO: technically, we should not evict more than 1/3 of the voting power, not the number of nodes
-                    // (but this is currently the same thing)
-                    let max_allowed_to_evict = u64::from(local_committee_info.max_failure_shard_group_members())
-                        .saturating_sub(num_evicted)
-                        .saturating_sub(proposed_block_change_set.num_evicted_nodes_this_block() as u64);
-                    if max_allowed_to_evict == 0 {
-                        warn!(
-                            target: LOG_TARGET,
-                            "❌ NO VOTE: {}", NoVoteReason::CannotEvictNodeBelowQuorumThreshold
-                        );
-
-                        proposed_block_change_set.set_no_vote(NoVoteReason::CannotEvictNodeBelowQuorumThreshold);
-                        return Ok(());
-                    }
-
-                    let stats = ValidatorConsensusStats::get_by_public_key(tx, block.epoch(), &atom.public_key)?;
-                    if stats.missed_proposals < self.config.consensus_constants.missed_proposal_evict_threshold {
-                        warn!(
-                            target: LOG_TARGET,
-                            "❌ NO VOTE: {} (actual missed count: {}, threshold: {})", NoVoteReason::ShouldNotEvictNode, stats.missed_proposals, self.config.consensus_constants.missed_proposal_evict_threshold
-                        );
-
-                        proposed_block_change_set.set_no_vote(NoVoteReason::ShouldNotEvictNode);
-                        return Ok(());
-                    }
-
-                    info!(
-                        target: LOG_TARGET,
-                        "💀 EVICTING node: {} with missed count {}",
-                        atom.public_key,
-                        stats.missed_proposals
-                    );
-                    proposed_block_change_set.add_evict_node(atom.public_key);
                 },
                 Command::EndEpoch(atom) => {
                     if !can_propose_epoch_end {
@@ -1728,10 +1681,6 @@ where TConsensusSpec: ConsensusSpec
         for atom in block.all_foreign_proposals() {
             // TODO: we need to keep these ATM to send them if a node needs to catch up
             atom.set_status(tx, ForeignProposalStatus::Confirmed, None)?;
-        }
-
-        for atom in block.all_node_evictions() {
-            atom.mark_as_committed_in_epoch(tx, block.epoch())?;
         }
 
         // NOTE: this must happen before we commit the substate diff because the state transitions use this version

@@ -34,7 +34,6 @@ use tari_ootle_storage::{
         BookkeepingModel,
         Command,
         EndEpochAtom,
-        EvictNodeAtom,
         ForeignProposal,
         ForeignProposalRecord,
         LockedEpoch,
@@ -45,7 +44,6 @@ use tari_ootle_storage::{
         TransactionPoolRecord,
         TransactionPoolStage,
         TransactionRecord,
-        ValidatorConsensusStats,
     },
 };
 use tari_ootle_transaction::TransactionId;
@@ -388,7 +386,7 @@ where TConsensusSpec: ConsensusSpec
         let batch = if should_not_propose_commands {
             ProposalBatch::default()
         } else {
-            self.fetch_next_proposal_batch(tx, local_committee_info, start_of_chain_block)?
+            self.fetch_next_proposal_batch(tx, start_of_chain_block)?
         };
         debug!(target: LOG_TARGET, "🌿 PROPOSE: {} (justify: {}) {batch}", highest_seen_block.height(), justify_block.height());
 
@@ -401,13 +399,7 @@ where TConsensusSpec: ConsensusSpec
                 batch
                     .foreign_proposals
                     .iter()
-                    .map(|fp| Command::ForeignProposal(fp.to_atom()))
-                    .chain(
-                        batch
-                            .evict_nodes
-                            .into_iter()
-                            .map(|public_key| Command::EvictNode(EvictNodeAtom { public_key })),
-                    ),
+                    .map(|fp| Command::ForeignProposal(fp.to_atom())),
             )
         };
 
@@ -655,19 +647,16 @@ where TConsensusSpec: ConsensusSpec
     fn fetch_next_proposal_batch<TTx: StateStoreReadTransaction>(
         &self,
         tx: &TTx,
-        local_committee_info: &CommitteeInfo,
         start_of_chain_block: HighestSeenBlock,
     ) -> Result<ProposalBatch, HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "fetch_next_proposal_batch");
         // A block is budgeted by total command weight (`max_block_weight`), not a flat command count.
-        // Foreign proposals and evict nodes consume part of that budget before local transactions fill the
-        // rest. A foreign proposal is weighted by the substate pledges it carries (the dominant processing
-        // cost when applying it at propose time), on the same scale as transaction input weight, rather
-        // than a flat 10x multiplier.
+        // Foreign proposals consume part of that budget before local transactions fill the rest. A foreign proposal is
+        // weighted by the substate pledges it carries (the dominant processing cost when applying it at propose
+        // time), on the same scale as transaction input weight, rather than a flat 10x multiplier.
         const MAX_FOREIGN_PROPOSALS_PER_BLOCK: usize = 10;
         const FP_BASE_WEIGHT: u64 = 50;
         const FP_PLEDGE_WEIGHT: u64 = 15;
-        const EVICT_NODE_WEIGHT: u64 = 50;
 
         let max_block_weight = self.config.consensus_constants.max_block_weight;
         let max_commands = self.config.consensus_constants.max_commands_in_block;
@@ -688,42 +677,11 @@ where TConsensusSpec: ConsensusSpec
             .map(|fp| FP_BASE_WEIGHT + fp.block_pledge().len() as u64 * FP_PLEDGE_WEIGHT)
             .sum();
 
-        let mut remaining_weight = subtract_weight_checked(Some(max_block_weight), foreign_proposal_weight);
+        let remaining_weight = subtract_weight_checked(Some(max_block_weight), foreign_proposal_weight);
 
-        let evict_nodes = remaining_weight
-            // Disable eviction proposals if not enabled in config
-            .filter(|_| self.config.enable_eviction_proposal)
-            .map(|remaining| {
-                let num_evicted =
-                    ValidatorConsensusStats::count_number_evicted_nodes(tx, start_of_chain_block.epoch())?;
-                // TODO: technically, we should not evict more than 1/3 of the voting power, not the number of nodes
-                // (but this is currently the same thing)
-                let max_allowed_to_evict = u64::from(local_committee_info.max_failure_shard_group_members())
-                    .saturating_sub(num_evicted)
-                    .min(remaining / EVICT_NODE_WEIGHT);
-                ValidatorConsensusStats::get_nodes_to_evict(
-                    tx,
-                    start_of_chain_block.block_id(),
-                    self.config.consensus_constants.missed_proposal_evict_threshold,
-                    max_allowed_to_evict,
-                )
-            })
-            .transpose()?
-            .unwrap_or_default();
-
-        if !evict_nodes.is_empty() {
-            debug!(
-                target: LOG_TARGET,
-                "🌿 Found {} EVICT nodes for next block",
-                evict_nodes.len()
-            )
-        }
-
-        remaining_weight = subtract_weight_checked(remaining_weight, evict_nodes.len() as u64 * EVICT_NODE_WEIGHT);
-
-        // Bound the transaction count so the total command count (foreign proposals + evict + transactions)
+        // Bound the transaction count so the total command count (foreign proposals + transactions)
         // stays under the hard command cap regardless of how light the transactions are.
-        let max_tx_count = max_commands.saturating_sub(foreign_proposals.len() + evict_nodes.len());
+        let max_tx_count = max_commands.saturating_sub(foreign_proposals.len());
 
         let transactions = remaining_weight
             .filter(|_| max_tx_count > 0)
@@ -741,7 +699,6 @@ where TConsensusSpec: ConsensusSpec
         Ok(ProposalBatch {
             foreign_proposals: foreign_proposals.into_iter().map(|fp| fp.into_proposal()).collect(),
             transactions,
-            evict_nodes,
             commands: vec![],
         })
     }
@@ -1114,7 +1071,6 @@ where TConsensusSpec: ConsensusSpec
 struct ProposalBatch {
     pub foreign_proposals: Vec<ForeignProposal>,
     pub transactions: Vec<TransactionPoolRecord>,
-    pub evict_nodes: Vec<RistrettoPublicKeyBytes>,
     pub commands: Vec<Command>,
 }
 
@@ -1122,10 +1078,9 @@ impl Display for ProposalBatch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{} transaction(s), {} foreign proposal(s), {} evict, {} command(s)",
+            "{} transaction(s), {} foreign proposal(s), {} command(s)",
             self.transactions.len(),
             self.foreign_proposals.len(),
-            self.evict_nodes.len(),
             self.commands.len()
         )
     }

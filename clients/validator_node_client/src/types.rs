@@ -282,7 +282,7 @@ pub struct GetBlockResponse {
     /// so only that sum is a meaningful proportion of it.
     pub max_block_execution_points: u64,
     /// Total execution weight of the block's transaction commands: each transaction's weight discounted by how much
-    /// of the work its command stage adds. Foreign proposal and evict commands carry no execution weight and so
+    /// of the work its command stage adds. Foreign proposal commands carry no execution weight and so
     /// contribute nothing.
     pub total_block_execution_weight: u64,
     /// The execution weight a block may carry and still be voted for. Weight stands in for the size, IO and storage
