@@ -85,15 +85,6 @@ pub struct OnReceiveLocalProposalHandler<TConsensusSpec: ConsensusSpec> {
     pending_end_of_epoch: Option<PendingEndOfEpoch>,
 }
 
-/// Whether `process_end_of_epoch` was entered from the commit that produced the EOE or from a
-/// retry of a deferral. Only the caller can tell: the retry takes the pending state before
-/// re-entering, so the callee sees an empty slot either way.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum IsRetry {
-    No,
-    Yes,
-}
-
 #[derive(Debug, Clone)]
 struct PendingEndOfEpoch {
     eoe_block: Block,
@@ -500,7 +491,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             // genesis state.
             let commit_qc = valid_block.justify().clone();
             let next_genesis_state_merkle_root = *valid_block.block().state_merkle_root();
-            self.process_end_of_epoch(eoe_block, commit_qc, next_genesis_state_merkle_root, IsRetry::No)
+            self.process_end_of_epoch(eoe_block, commit_qc, next_genesis_state_merkle_root)
                 .await?;
         }
 
@@ -520,7 +511,6 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         eoe_block: Block,
         commit_qc: ProposalCertificate,
         next_genesis_state_merkle_root: FixedHash,
-        is_retry: IsRetry,
     ) -> Result<(), HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "process-end-of-epoch");
         let prev_epoch = eoe_block.epoch();
@@ -553,23 +543,12 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             .optional()?
             .is_none()
         {
-            // Only the caller knows whether this is the first defer or a retry finding the oracle
-            // still behind — the pending state is taken before the retry re-enters here, so it
-            // cannot be read off `self`. Retries run on a tick for the length of the catch-up, so
-            // only the first defer is news.
-            match is_retry {
-                IsRetry::No => warn!(
-                    target: LOG_TARGET,
-                    "⏳ EOE block {} committed but local oracle has not observed {next_epoch}. \
-                     Deferring next-epoch genesis until oracle catches up.",
-                    eoe_block.id()
-                ),
-                IsRetry::Yes => debug!(
-                    target: LOG_TARGET,
-                    "⏳ EOE block {} still deferred: local oracle has not observed {next_epoch}.",
-                    eoe_block.id()
-                ),
-            }
+            warn!(
+                target: LOG_TARGET,
+                "⏳ EOE block {} committed but local oracle has not observed {next_epoch}. \
+                 Deferring next-epoch genesis until oracle catches up.",
+                eoe_block.id()
+            );
             self.pending_end_of_epoch = Some(PendingEndOfEpoch {
                 eoe_block,
                 commit_qc,
@@ -716,7 +695,6 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             pending.eoe_block,
             pending.commit_qc,
             pending.next_genesis_state_merkle_root,
-            IsRetry::Yes,
         )
         .await?;
         Ok(true)
