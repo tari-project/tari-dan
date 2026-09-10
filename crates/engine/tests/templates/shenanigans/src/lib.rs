@@ -146,6 +146,20 @@ mod template {
             let _auth = stolen_proof.authorize();
         }
 
+        /// Proof ids are a transaction-wide counter, so a third party can name one it was never handed.
+        /// Takes the id as a plain integer, not a `ProofId`: a `ProofId` argument is how a proof is handed over, so
+        /// this frame is given nothing and guesses instead.
+        pub fn try_authorize_proof(&self, proof_id: u32) -> Amount {
+            match Proof::from_id(proof_id.into()).try_authorize() {
+                Ok(_access) => Amount::from(1u64),
+                Err(_) => Amount::zero(),
+            }
+        }
+
+        pub fn read_proof_amount(&self, proof_id: u32) -> Amount {
+            Proof::from_id(proof_id.into()).amount()
+        }
+
         pub fn take_from_a_vault(&mut self, vault_id: VaultId, amount: Amount) {
             let mut vault = Vault::for_test(vault_id.into());
             let stolen = vault.withdraw(amount);
@@ -211,6 +225,18 @@ mod template {
             .with_access_rules(AccessRules::allow_all())
             .with_owner_rule(OwnerRule::ByAccessRule(rule!(allow_all)))
             .create()
+        }
+
+        pub fn create_vault_proof(&self) -> Proof {
+            self.vault.as_ref().unwrap().create_proof()
+        }
+
+        /// Holds a proof of its own across a call into `other`, which is handed nothing and guesses the id.
+        pub fn hold_proof_and_call(&self, other: ComponentAddress, method: String) -> Amount {
+            let proof = self.vault.as_ref().unwrap().create_proof();
+            let result: Amount = ComponentManager::get(other).call(&method, args![0u32]);
+            proof.drop();
+            result
         }
 
         pub fn abandon_bucket(&mut self) {

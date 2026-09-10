@@ -2077,6 +2077,18 @@ where
 
                 self.tracker.write_with(|state_mut| {
                     let vault_lock = state_mut.write_lock_substate(arg.vault_id.into())?;
+
+                    // The freeze rule that authorized this action belongs to `resource_address`, so it may only
+                    // reach vaults holding that resource.
+                    let vault_resource = *state_mut.get_vault(&vault_lock)?.resource_address();
+                    if vault_resource != resource_address {
+                        return Err(RuntimeError::FreezeResourceMismatch {
+                            vault_id: arg.vault_id,
+                            resource_address,
+                            vault_resource,
+                        });
+                    }
+
                     state_mut.set_vault_freeze(&vault_lock, arg.flags)?;
                     let payload =
                         Metadata::from_iter([("vault_id", arg.vault_id.to_string()), ("flags", arg.flags.to_string())]);
@@ -3305,7 +3317,7 @@ where
                 })?;
                 args.assert_no_args("Proof.GetAmount")?;
                 self.tracker.write_with(|state| {
-                    let proof = state.get_proof(proof_id)?;
+                    let proof = state.get_proof_in_scope(proof_id)?;
                     Ok(InvokeResult::encode(&proof.amount())?)
                 })
             },
@@ -3316,7 +3328,7 @@ where
                 })?;
                 args.assert_no_args("Proof.GetResourceAddress")?;
                 self.tracker.write_with(|state| {
-                    let proof = state.get_proof(proof_id)?;
+                    let proof = state.get_proof_in_scope(proof_id)?;
                     Ok(InvokeResult::encode(proof.resource_address())?)
                 })
             },
@@ -3329,7 +3341,7 @@ where
                 args.assert_no_args("Proof.GetResourceType")?;
 
                 self.tracker.write_with(|state| {
-                    let proof = state.get_proof(proof_id)?;
+                    let proof = state.get_proof_in_scope(proof_id)?;
                     Ok(InvokeResult::encode(&proof.resource_type())?)
                 })
             },
@@ -3342,7 +3354,7 @@ where
                 args.assert_no_args("Proof.GetNonFungibles")?;
 
                 self.tracker.write_with(|state| {
-                    let proof = state.get_proof(proof_id)?;
+                    let proof = state.get_proof_in_scope(proof_id)?;
                     let nfts = proof.non_fungible_token_ids();
                     Ok(InvokeResult::encode(&nfts)?)
                 })
@@ -3355,7 +3367,10 @@ where
                 args.assert_no_args("Proof.CreateAccess")?;
 
                 self.tracker.write_with(|state| {
-                    if !state.proof_exists(proof_id) {
+                    // A proof id is a sequential counter shared by the whole transaction, so authority has to come
+                    // from the frame's own scope: a proof it created, was passed as an argument, or a callee handed
+                    // back. Every other live proof in the transaction belongs to someone else.
+                    if !state.proof_exists(proof_id) || !state.current_call_scope()?.is_proof_in_scope(&proof_id) {
                         return Ok(InvokeResult::encode(&Err::<(), _>(NotAuthorized))?);
                     }
                     state.current_call_scope_mut()?.auth_scope_mut().add_proof(proof_id);

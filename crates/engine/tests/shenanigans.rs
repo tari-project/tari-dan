@@ -617,3 +617,65 @@ fn it_does_not_leak_a_callees_address_allocation_into_the_callers_scope() {
 
     assert_reject_reason(reason, RuntimeError::AddressAllocationNotInScope { id: 0 });
 }
+
+#[test]
+fn it_refuses_to_authorize_a_proof_the_frame_does_not_hold() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let victim = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+    let attacker = result.finalize.execution_results[1]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    // The victim holds a proof across a call into the attacker, which is handed nothing and guesses the id.
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_method(victim, "hold_proof_and_call", args![attacker, "try_authorize_proof"])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_eq!(
+        result.finalize.execution_results[0].decode::<Amount>().unwrap(),
+        Amount::zero()
+    );
+}
+
+#[test]
+fn it_refuses_to_read_a_proof_the_frame_does_not_hold() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let victim = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+    let attacker = result.finalize.execution_results[1]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_method(victim, "hold_proof_and_call", args![attacker, "read_proof_amount"])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "Encountered unknown or out of scope proof");
+}
