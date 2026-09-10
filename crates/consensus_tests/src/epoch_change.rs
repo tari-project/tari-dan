@@ -220,6 +220,63 @@ async fn epoch_change_unobserved_next_hash_is_not_voted() {
     test.assert_clean_shutdown().await;
 }
 
+/// A validator whose oracle has scanned the next epoch's boundary block, but has not yet applied the
+/// `EpochChanged` event that activates it, votes for the `EndEpoch`.
+///
+/// This is the counterpart to `epoch_change_unobserved_next_hash_is_not_voted`: there the validator
+/// cannot see the boundary and must abstain; here it can, and abstaining would be a self-inflicted
+/// stall. The two gates are deliberately different questions — "has the epoch ended?" and "can I
+/// verify the hash this block proposes?" — and the boundary block answers both.
+///
+/// The window is real on a lagging node: the scanner writes headers as it crosses them, while the
+/// `EpochChanged` those scans produce queue behind epoch activations that each reassign committees.
+///
+/// The test caps only `current_epoch()` for validator "1", leaving `get_epoch_hash(Epoch(2))`
+/// answering, and asserts every validator — including the capped one — reaches `Epoch(2)`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn epoch_change_observed_boundary_is_voted_before_activation() {
+    setup_logger();
+    let mut test = Test::builder()
+        .modify_config(|cfg| {
+            cfg.epoch_end_grace_period = Duration::from_millis(10);
+        })
+        .modify_consensus_constants(|c| {
+            c.pacemaker_block_time = Duration::from_secs(2);
+        })
+        .with_test_timeout(Duration::from_secs(60))
+        .add_committee(0, vec!["1", "2", "3", "4"])
+        .start()
+        .await;
+
+    let unactivated_addr = TestAddress::new("1");
+
+    test.start_epoch(Epoch(1)).await;
+
+    for _ in 0..3 {
+        test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
+    }
+
+    // Cap only `current_epoch()`. Validator "1"'s oracle still answers `get_epoch_hash(Epoch(2))` —
+    // it has the boundary block — but `em_epoch > current_epoch` is false, so its vote can only come
+    // from that observation.
+    test.get_validator(&unactivated_addr)
+        .epoch_manager
+        .set_oracle_current_epoch_cap(Epoch(1));
+
+    test.start_epoch(Epoch(2)).await;
+
+    for _ in 0..3 {
+        test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
+    }
+
+    wait_for_all_validators_at_epoch(&mut test, Epoch(2), Duration::from_secs(30)).await;
+
+    log::info!("✅ validator with an observed but unactivated boundary voted the EOE and advanced with the committee");
+
+    test.stop();
+    test.assert_clean_shutdown().await;
+}
+
 /// Walks the chain from the leaf of `epoch` looking for a committed `EndEpoch` block.
 fn chain_has_committed_epoch_end<TTx: StateStoreReadTransaction>(
     tx: &TTx,
@@ -330,12 +387,16 @@ async fn epoch_change_no_vote_wedge_escalates_on_future_qc() {
         test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
     }
 
-    // Cap validator "1"'s view of `current_epoch()`. Unlike `set_oracle_visible_epoch` (which
-    // only caps `get_epoch_hash`), this makes the vote-time check
-    // `em_epoch > current_epoch` fail for this validator — reproducing the no-vote path.
+    // Wedge validator "1" at the vote-time gates: the `current_epoch()` cap fails
+    // `em_epoch > current_epoch`, and the oracle cap leaves it without a next-epoch hash to ratify
+    // against. Both are needed — a validator that can still see the Epoch(2) boundary votes for the
+    // EndEpoch on the strength of that observation alone.
     test.get_validator(&lagging_addr)
         .epoch_manager
         .set_oracle_current_epoch_cap(Epoch(1));
+    test.get_validator(&lagging_addr)
+        .epoch_manager
+        .set_oracle_visible_epoch(Epoch(1));
 
     // Take validator "1" offline so the network delivers no messages to/from it. This stops
     // its (now-wedged) view from blocking leader rotation on the honest committee — peers
@@ -382,6 +443,7 @@ async fn epoch_change_no_vote_wedge_escalates_on_future_qc() {
     // Epoch(2) proposals reach validator "1" — each carries an authenticated 2f+1 QC over
     // Epoch(2). The first one trips the probe in `MessageBuffer::next`.
     lagged.epoch_manager.clear_oracle_current_epoch_cap();
+    lagged.epoch_manager.clear_oracle_visible_epoch();
     test.network().go_online(&lagging_addr).await;
 
     // Honest validators keep producing proposals in Epoch(2); send more transactions to
@@ -453,10 +515,15 @@ async fn epoch_change_multi_epoch_lag_escalates_on_future_qc() {
         test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
     }
 
-    // Lag and remove validator "1" before peers cross any epoch boundaries.
+    // Lag and remove validator "1" before peers cross any epoch boundaries. Capping the oracle too
+    // keeps it from ratifying an EndEpoch off an observed boundary, which would let it follow the
+    // epoch change it is supposed to lag behind.
     test.get_validator(&lagging_addr)
         .epoch_manager
         .set_oracle_current_epoch_cap(Epoch(1));
+    test.get_validator(&lagging_addr)
+        .epoch_manager
+        .set_oracle_visible_epoch(Epoch(1));
     test.network().go_offline(lagging_addr.clone()).await;
 
     // First boundary: Epoch(1) → Epoch(2). The honest three commit and roll over.
@@ -489,6 +556,7 @@ async fn epoch_change_multi_epoch_lag_escalates_on_future_qc() {
     // messages reach validator "1". Each carries a 2f+1 QC over Epoch(3) — which would
     // have been discarded outright before the gate was lifted (3 > 1 + 1).
     lagged.epoch_manager.clear_oracle_current_epoch_cap();
+    lagged.epoch_manager.clear_oracle_visible_epoch();
     test.network().go_online(&lagging_addr).await;
 
     for _ in 0..3 {

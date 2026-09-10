@@ -20,6 +20,7 @@ use tari_ootle_common_types::{
     VersionedSubstateId,
     VotePower,
     committee::{Committee, CommitteeInfo},
+    optional::Optional,
 };
 use tari_ootle_storage::{StorageError, global::models::ValidatorNode};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
@@ -81,6 +82,11 @@ impl TestEpochManager {
     /// once a node catches up via sync.
     pub fn set_oracle_visible_epoch(&self, epoch: Epoch) {
         *self.oracle_visible_epoch.lock().unwrap() = Some(epoch);
+    }
+
+    /// Remove the oracle view cap for this validator, standing in for its scanner catching up.
+    pub fn clear_oracle_visible_epoch(&self) {
+        *self.oracle_visible_epoch.lock().unwrap() = None;
     }
 
     fn oracle_visible_epoch(&self) -> Option<Epoch> {
@@ -519,6 +525,10 @@ impl EpochManagerReader for TestEpochManager {
 
     async fn is_within_epoch_end_spread(&self, _current_epoch: Epoch) -> Result<bool, EpochManagerError> {
         Ok(false)
+    }
+
+    async fn get_observed_epoch_hash(&self, epoch: Epoch) -> Result<Option<FixedHash>, EpochManagerError> {
+        self.get_epoch_hash(epoch).await.optional()
     }
 
     async fn get_birthday_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {

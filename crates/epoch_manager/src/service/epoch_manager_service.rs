@@ -534,6 +534,22 @@ impl<TSpec: EpochManagerSpec> EpochManagerService<TSpec> {
                     context,
                 );
             },
+            EpochManagerRequest::GetObservedEpochHash { epoch, reply } => {
+                // An activated epoch's stored hash wins: it is the one the self-healing correction
+                // maintains and that `lock_epoch` freezes once consensus has committed against it.
+                let result = match self.inner.get_epoch_hash(epoch).optional() {
+                    Ok(Some(activated)) => Ok(Some(activated)),
+                    Ok(None) => self.epoch_events.observed_epoch_boundary_hash(epoch).map_err(|err| {
+                        // `{:#}` keeps anyhow's source chain: the diesel error underneath is the part
+                        // that says why the store was unreadable.
+                        EpochManagerError::EpochEventOracleError {
+                            details: format!("{err:#}"),
+                        }
+                    }),
+                    Err(err) => Err(err),
+                };
+                handle(reply, result, context);
+            },
             EpochManagerRequest::GetBirthdayEpoch { reply } => {
                 handle(reply, Ok(self.inner.birthday_epoch()), context);
             },

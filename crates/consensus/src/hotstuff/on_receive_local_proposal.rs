@@ -320,26 +320,30 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         debug!(target: LOG_TARGET, "process_block: [{}] processing block: {}", current_epoch, valid_block);
 
         let em_epoch = self.epoch_manager.current_epoch().await?;
-        // Accept an EndEpoch proposal when our oracle has advanced past `current_epoch`, OR when
-        // the oracle believes we are close enough to the epoch boundary to vote speculatively.
-        // The speculative branch rescues the case where a short base-layer reorg near the lag
-        // horizon leaves our scanner a handful of blocks behind the leader's — without this,
-        // such splits can wedge consensus because every node requires the strict inequality.
-        let can_propose_epoch_end =
-            em_epoch > current_epoch || self.epoch_manager.is_within_epoch_end_spread(current_epoch).await?;
         let is_epoch_end = valid_block.block().is_epoch_end();
 
-        // Our own oracle's view of the next epoch's boundary hash, used by the voter to ratify the hash
-        // carried in an EndEpoch command. `None` if our oracle has not yet observed the next epoch — in
-        // which case the voter abstains rather than lending quorum to an unratified hash.
+        // Our own view of the next epoch's boundary hash, used by the voter to ratify the hash carried
+        // in an EndEpoch command. `None` if we have not observed that boundary — in which case the
+        // voter abstains rather than lending quorum to an unratified hash. Having observed the boundary
+        // is what qualifies a node to ratify, not having activated the epoch: the scanner stores headers
+        // before the resulting `EpochChanged` event is applied, and during a catch-up that event can sit
+        // behind several epoch activations.
         let expected_next_epoch_hash = if is_epoch_end {
             self.epoch_manager
-                .get_epoch_hash(current_epoch + Epoch(1))
-                .await
-                .optional()?
+                .get_observed_epoch_hash(current_epoch + Epoch(1))
+                .await?
         } else {
             None
         };
+
+        // Accept an EndEpoch proposal when our oracle has advanced past `current_epoch`, when we have
+        // scanned the boundary block that ends it, OR when the oracle believes we are close enough to
+        // the boundary to vote speculatively. The latter branches rescue the case where a short
+        // base-layer reorg near the lag horizon leaves our scanner behind the leader's — without them,
+        // such splits can wedge consensus because every node requires the strict inequality.
+        let can_propose_epoch_end = em_epoch > current_epoch ||
+            expected_next_epoch_hash.is_some() ||
+            self.epoch_manager.is_within_epoch_end_spread(current_epoch).await?;
 
         let mut on_ready_to_vote_on_local_block = self.on_ready_to_vote_on_local_block.clone();
 
