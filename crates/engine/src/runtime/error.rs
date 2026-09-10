@@ -76,6 +76,8 @@ pub enum RuntimeError {
     WorkspaceError(#[from] WorkspaceError),
     #[error("Substate '{id}' not found or is not a transaction input")]
     SubstateNotFound { id: SubstateId },
+    #[error("Substate '{id}' was already spent earlier in this transaction")]
+    SubstateAlreadySpent { id: SubstateId },
     #[error("Root substate '{id}' not found")]
     RootSubstateNotFound { id: SubstateId },
     #[error("Referenced substate '{id}' not found")]
