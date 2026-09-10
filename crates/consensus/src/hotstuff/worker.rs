@@ -514,16 +514,18 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 },
 
                 _ = periodic_tasks.tick() => {
-                    // A deferred EOE waits on the epoch row, which the oracle writes as soon as it
-                    // applies the queued EpochChanged for that epoch - between scan batches during a
-                    // catch-up. EpochManagerEvent::EpochChanged only fires once the whole scan
-                    // reaches the lagged tip, so poll the data here rather than waiting for it.
-                    self.try_resume_pending_end_of_epoch().await?;
-
                     if let Err(e) = self.on_task_tick(&epoch_state).await {
                         self.hooks.on_error(&e);
                         error!(target: LOG_TARGET, "🚨Error during periodic task: {}", e);
                     }
+
+                    // A deferred EOE waits on the epoch row, which the oracle writes as soon as it
+                    // applies the queued EpochChanged for that epoch - between scan batches during a
+                    // catch-up. EpochManagerEvent::EpochChanged only fires once the whole scan
+                    // reaches the lagged tip, so poll the data here rather than waiting for it.
+                    // Ordered after `on_task_tick` because a successful resume advances the pacemaker
+                    // past `epoch_state`, which is only refreshed at the top of the next iteration.
+                    self.try_resume_pending_end_of_epoch().await?;
                 },
 
                 _ = self.shutdown.wait() => {

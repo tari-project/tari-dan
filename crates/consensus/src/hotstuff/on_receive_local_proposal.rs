@@ -543,12 +543,22 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             .optional()?
             .is_none()
         {
-            warn!(
-                target: LOG_TARGET,
-                "⏳ EOE block {} committed but local oracle has not observed {next_epoch}. \
-                 Deferring next-epoch genesis until oracle catches up.",
-                eoe_block.id()
-            );
+            // A re-defer means a retry found the oracle still behind, which happens on every tick for
+            // the length of the catch-up. Only the first defer is news; the rest are the same line.
+            if self.pending_end_of_epoch.is_none() {
+                warn!(
+                    target: LOG_TARGET,
+                    "⏳ EOE block {} committed but local oracle has not observed {next_epoch}. \
+                     Deferring next-epoch genesis until oracle catches up.",
+                    eoe_block.id()
+                );
+            } else {
+                debug!(
+                    target: LOG_TARGET,
+                    "⏳ EOE block {} still deferred: local oracle has not observed {next_epoch}.",
+                    eoe_block.id()
+                );
+            }
             self.pending_end_of_epoch = Some(PendingEndOfEpoch {
                 eoe_block,
                 commit_qc,
@@ -684,9 +694,11 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         let Some(pending) = self.pending_end_of_epoch.take() else {
             return Ok(false);
         };
-        info!(
+        // Every attempt logs, and attempts are on a tick, so this stays at debug: a resume that
+        // succeeds announces itself through the genesis it creates.
+        debug!(
             target: LOG_TARGET,
-            "▶️ Resuming deferred end-of-epoch processing for EOE block {}",
+            "▶️ Attempting deferred end-of-epoch processing for EOE block {}",
             pending.eoe_block.id()
         );
         self.process_end_of_epoch(

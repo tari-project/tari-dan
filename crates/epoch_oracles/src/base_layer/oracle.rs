@@ -1404,6 +1404,11 @@ mod tests {
     /// `EpochManagerEvent::EpochChanged` to consensus only from `on_scanning_complete`, i.e. on
     /// `DoneForNow`. So between the first batch and the last, the data a deferred end-of-epoch waits
     /// on is present while the notification that used to trigger its retry is still batches away.
+    ///
+    /// Only the emission half is asserted below — it is the half that lives in this crate. The epoch
+    /// manager's publish-on-`DoneForNow` side is context, guarded by
+    /// `epoch_change_deferred_eoe_resumes_without_scan_completion` in `consensus_tests`, and it is the
+    /// half a future change would most likely move.
     #[tokio::test]
     async fn catch_up_emits_epoch_changed_per_batch_but_done_for_now_only_at_the_tip() {
         let store = InMemoryStore::default();
