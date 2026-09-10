@@ -7,13 +7,10 @@ use std::{
     time::Duration,
 };
 
-use log::warn;
 use serde::{Deserialize, Serialize};
 use tari_consensus::consensus_constants::ConsensusConstants;
 use tari_engine_types::fees::{ExhaustBurnRate, MAX_EXHAUST_BURN_RATE_BPS};
 use tari_ootle_transaction::Network;
-
-const LOG_TARGET: &str = "tari::ootle::consensus_constants_file";
 
 /// Overrides for a LocalNet's consensus constants, applied over the network's built-in values.
 ///
@@ -41,10 +38,6 @@ pub struct ConsensusConstantsFile {
     pub max_block_validation_execution_points: Option<u64>,
     pub exhaust_burn_rate_bps: Option<u16>,
     pub max_transaction_validity_epochs: Option<u64>,
-    /// Accepted and ignored, so that an existing constants file that sets it still loads:
-    /// `deny_unknown_fields` would otherwise reject the whole file.
-    #[serde(skip_serializing)]
-    pub epoch_end_spread_blocks: Option<u64>,
 }
 
 impl ConsensusConstantsFile {
@@ -72,13 +65,6 @@ impl ConsensusConstantsFile {
             max_block_validation_execution_points,
             max_transaction_validity_epochs,
         );
-
-        if self.epoch_end_spread_blocks.is_some() {
-            warn!(
-                target: LOG_TARGET,
-                "⚠️ 'epoch_end_spread_blocks' in the consensus constants file is ignored and can be removed."
-            );
-        }
 
         if let Some(secs) = self.pacemaker_block_time_secs {
             constants.pacemaker_block_time = Duration::from_secs(secs);
