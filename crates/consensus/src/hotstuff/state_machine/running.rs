@@ -6,7 +6,6 @@ use log::*;
 use crate::{
     hotstuff::{
         HotStuffError,
-        ProposalValidationError,
         WorkerExitReason,
         state_machine::{
             check_sync::CheckSync,
@@ -41,9 +40,7 @@ where TSpec: ConsensusSpec
                 info!(target: LOG_TARGET, "Not registered for current epoch ({err})");
                 Ok(ConsensusStateEvent::NotRegisteredForEpoch { epoch })
             },
-            Err(err @ HotStuffError::NeedsSync { .. }) |
-            Err(err @ HotStuffError::FallenBehind { .. }) |
-            Err(err @ HotStuffError::ProposalValidationError(ProposalValidationError::FutureEpoch { .. })) => {
+            Err(err) if err.is_sync_required() => {
                 info!(target: LOG_TARGET, "⚠️ Behind peers, starting sync ({err})");
                 // From the Running state we have no specific target — re-enter CheckSync to
                 // resolve one via the probe/oracle.

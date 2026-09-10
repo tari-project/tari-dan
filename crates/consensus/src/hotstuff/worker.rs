@@ -835,13 +835,13 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     }
 
     async fn on_failure(&mut self, context: &str, err: &HotStuffError) {
-        self.hooks.on_error(err);
         if err.is_sync_required() {
-            info!(target: LOG_TARGET, "⚠️ Behind peers ({}): {}", context, err);
+            debug!(target: LOG_TARGET, "⚠️ Behind peers ({}): {}", context, err);
             self.publish_event(HotstuffEvent::SyncRequired {
                 message: err.to_string(),
             });
         } else {
+            self.hooks.on_error(err);
             self.publish_event(HotstuffEvent::Failure {
                 message: err.to_string(),
             });
