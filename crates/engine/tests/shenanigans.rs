@@ -548,3 +548,72 @@ fn a_proof_outlives_the_authorization_taken_from_it() {
         vec![],
     );
 }
+
+#[test]
+fn it_does_not_leak_a_callees_vaults_into_a_calling_components_scope() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+    let (victim, _, _) = test.create_funded_account();
+    let (attacker_account, _, _) = test.create_empty_account();
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let attacker = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    let vault_id = {
+        let store = test.read_only_state_store();
+        let component = store.get_component(victim).unwrap();
+        let values = IndexedWellKnownTypes::from_value(component.state()).unwrap();
+        values.vault_ids()[0]
+    };
+
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_method(attacker, "call_then_steal_from_vault_as_component", args![
+                victim, vault_id
+            ])
+            .put_last_instruction_output_on_workspace("bucket")
+            .call_method(attacker_account, "deposit", args![Workspace("bucket")])
+            .add_input(vault_id)
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, RuntimeError::SubstateNotOwned {
+        id: vault_id.into(),
+        requested_owner: Box::new(attacker.into()),
+    });
+}
+
+#[test]
+fn it_does_not_leak_a_callees_address_allocation_into_the_callers_scope() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let victim = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    // An allocation is a reservation of an address, and nothing checks that the template consuming one is the
+    // template that made it, so the caller must never be handed one it was not given.
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_function(template_addr, "call_then_use_abandoned_allocation", args![victim, 0u32])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, RuntimeError::AddressAllocationNotInScope { id: 0 });
+}

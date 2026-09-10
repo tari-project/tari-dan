@@ -1579,10 +1579,11 @@ impl<TStore: StateReader> WorkingState<TStore> {
         }
 
         // A bucket or proof this frame created is either consumed here or named in the return value. One that is
-        // still live and unreturned has no owner, so it fails the call.
+        // still live and unreturned has no owner, so it fails the call. An emptied bucket carries nothing and is
+        // tolerated, matching `validate_finalized`, so that the transaction has one rule for it rather than two.
         let dangling_buckets = scope
             .buckets_owed()
-            .filter(|id| self.buckets.contains_key(id))
+            .filter(|id| self.buckets.get(id).is_some_and(|bucket| !bucket.is_empty()))
             .filter(|id| !returned.bucket_ids().contains(id))
             .copied()
             .collect::<Vec<_>>();

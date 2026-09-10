@@ -185,8 +185,10 @@ impl CallScope {
         Ok(())
     }
 
-    /// Records that `address` is now reachable from a component's state, so it stops being an orphan of this frame
-    /// and stays with the component when the frame is popped.
+    /// Records that an orphan of this frame is now reachable from a component's state, so it stays with the
+    /// component when the frame is popped. An address that is already owned — a root id such as a component or
+    /// resource the frame created — keeps its place in `owned` and still crosses to the caller; those are gated by
+    /// access rules rather than by scope.
     pub fn attach_node_to_component(&mut self, address: &SubstateId) -> Result<(), RuntimeError> {
         if self.orphans.swap_remove(address) && !self.component_owned.insert(address.clone()) {
             return Err(RuntimeError::DuplicateSubstate {
@@ -251,8 +253,12 @@ impl CallScope {
     }
 
     /// Merges what a completed child frame hands back into this scope. Only substates the child created and still
-    /// holds loosely, plus the buckets and proofs named in its return value, cross the boundary: everything the child
-    /// could reach through a component's state stays behind with that component.
+    /// holds loosely, plus the buckets, proofs and address allocations named in its return value, cross the
+    /// boundary: everything the child could reach through a component's state stays behind with that component.
+    ///
+    /// An allocation is as much a capability as a bucket — [`WorkingState::use_allocated_address`] gates on scope
+    /// membership alone, and nothing checks that the template consuming an allocation is the one that made it — so
+    /// it crosses on the same terms.
     pub fn update_from_child_scope(&mut self, child: CallScope, returned: &IndexedWellKnownTypes) {
         self.owned.extend(child.owned.iter().cloned());
         for owned in &child.owned {
@@ -268,7 +274,16 @@ impl CallScope {
                 self.add_proof_to_scope(*proof_id);
             }
         }
-        self.address_allocation_scope.extend(child.address_allocation_scope);
+        for allocation in returned.component_address_allocations() {
+            if child.address_allocation_scope.contains(&allocation.id()) {
+                self.address_allocation_scope.insert(allocation.id());
+            }
+        }
+        for allocation in returned.resource_address_allocations() {
+            if child.address_allocation_scope.contains(&allocation.id()) {
+                self.address_allocation_scope.insert(allocation.id());
+            }
+        }
     }
 
     /// The buckets this frame must account for before it is popped: those it holds that its caller did not lend it.
@@ -278,8 +293,9 @@ impl CallScope {
             .filter(|id| !self.inherited_buckets.contains(*id))
     }
 
-    /// The proofs this frame must account for before it is popped: those in its auth scope that its caller did not
-    /// lend it.
+    /// The proofs this frame must account for before it is popped: those it holds and its caller did not lend it.
+    /// Read from `proof_scope` rather than the auth scope, so a proof whose `ProofAccess` has been dropped is still
+    /// owed.
     pub fn proofs_owed(&self) -> impl Iterator<Item = &ProofId> {
         self.proof_scope
             .iter()

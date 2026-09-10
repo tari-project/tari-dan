@@ -356,7 +356,12 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
                 let _ignore = state.get_bucket(*bucket_id)?;
             }
 
+            // `get_bucket` scope-checks; `get_proof` does not, so the frame's own scope is checked here to keep a
+            // returned proof to the same rule as a returned bucket.
             for proof_id in value.proof_ids() {
+                if !state.current_call_scope()?.is_proof_in_scope(proof_id) {
+                    return Err(RuntimeError::ProofNotInScope { proof_id: *proof_id });
+                }
                 let _ignore = state.get_proof(*proof_id)?;
             }
 

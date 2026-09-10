@@ -178,6 +178,30 @@ mod template {
             stolen.withdraw_all()
         }
 
+        /// The same attack from inside a component frame, where the vault is checked against the component the
+        /// frame executes on rather than against the absence of one.
+        pub fn call_then_steal_from_vault_as_component(&self, victim: ComponentAddress, vault_id: VaultId) -> Bucket {
+            let _balances: Vec<(ResourceAddress, Amount)> =
+                ComponentManager::get(victim).call("get_balances", args![]);
+            let mut stolen = Vault::for_test(vault_id.into());
+            stolen.withdraw_all()
+        }
+
+        /// Allocates an address and hands it to nobody, so the allocation is left in this frame when it returns.
+        pub fn allocate_and_abandon(&self) {
+            let _allocation = CallerContext::allocate_component_address(None);
+        }
+
+        /// Calls a victim whose frame leaves an allocation behind, then names that allocation by id and creates a
+        /// component at the address the victim reserved.
+        pub fn call_then_use_abandoned_allocation(victim: ComponentAddress, allocation_id: u32) -> ComponentAddress {
+            let _: () = ComponentManager::get(victim).call("allocate_and_abandon", args![]);
+            let component = Component::new(Self::default())
+                .with_address_allocation(ComponentAddressAllocation::new(allocation_id))
+                .create();
+            *component.address()
+        }
+
         pub fn with_fungible_vault() -> Component<Self> {
             let tokens = ResourceBuilder::public_fungible().initial_supply(1000u32);
             Component::new(Self {
