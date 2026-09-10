@@ -3385,15 +3385,13 @@ where
                 args.assert_no_args("Proof.DropAuthorize")?;
 
                 self.tracker.write_with(|state| {
-                    // Scope before existence, so an id this frame does not hold answers the same whether or not a
-                    // proof is live at it: the ids are a dense counter, and a frame that could tell the two apart
-                    // could enumerate every proof in the transaction.
-                    if !state.current_call_scope()?.is_proof_in_scope(&proof_id) {
-                        return Err(RuntimeError::ProofNotInScope { proof_id });
-                    }
-                    if !state.proof_exists(proof_id) {
-                        return Err(RuntimeError::ProofNotFound { proof_id });
-                    }
+                    // Giving up an authorization only shrinks this frame's own auth scope, so it succeeds for any
+                    // id: an id the frame never authorized is already in the state being asked for. That makes it
+                    // answerless by construction, which is what keeps it from reporting whether a proof is live at
+                    // an id the frame does not hold — the ids are a dense counter, so an answer would enumerate
+                    // every proof in the transaction. `ProofAccess::drop` is the only route here, and a `Drop` has
+                    // nowhere to report a failure, so a rejection would abort the transaction from a drop point
+                    // the template author never wrote.
                     state.current_call_scope_mut()?.auth_scope_mut().remove_proof(&proof_id);
 
                     Ok(InvokeResult::unit())

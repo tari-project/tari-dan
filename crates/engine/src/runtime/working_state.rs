@@ -844,7 +844,7 @@ impl<TStore: StateReader> WorkingState<TStore> {
     pub fn drop_proof(&mut self, proof_id: ProofId) -> Result<(), RuntimeError> {
         let call_frame_mut = self.current_call_scope_mut()?;
         if !call_frame_mut.is_proof_in_scope(&proof_id) {
-            return Err(RuntimeError::ProofNotFound { proof_id });
+            return Err(RuntimeError::ProofNotInScope { proof_id });
         }
         call_frame_mut.remove_proof_from_scope(&proof_id);
 
