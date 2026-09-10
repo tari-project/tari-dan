@@ -363,8 +363,9 @@ where TConsensusSpec: ConsensusSpec
         let mut total_leader_fee = 0u64;
         // When filling a timeout gap with a dummy chain, the candidate effectively extends from justify_block (the
         // dummies are empty blocks that carry justify_block's accumulated_data and state forward — see
-        // `calculate_last_dummy_block`). Anchor accumulated_data, the substate store, and the pending state tree
-        // diff lookup at justify_block to match what validators recompute from the reconstructed dummy chain.
+        // `calculate_last_dummy_block`). Anchor accumulated_data, the substate store, the pending state tree
+        // diff lookup and propose-time foreign proposal processing at justify_block to match what validators
+        // recompute from the reconstructed dummy chain.
         // Otherwise speculative state and leader-fee burn that accumulated on a locally-stored fork above the high QC
         // would be incorrectly carried into the new candidate and validators would reject with either an
         // exhaust-burn mismatch or a state Merkle-root mismatch.
@@ -423,9 +424,13 @@ where TConsensusSpec: ConsensusSpec
             process_newly_justified_block(tx, &justify_block, high_qc_id, local_committee_info, &mut change_set)?;
 
             for fp in &batch.foreign_proposals {
+                // Resolves pending transaction pool records along the chain up to this block, so it must be
+                // the anchor the substate store this call also writes to is built on: the justify block
+                // under a dummy chain, the extended leaf otherwise. A replica passes the block it is
+                // evaluating, whose parent chain runs back through any dummies to the justify block.
                 if let Err(err) = process_foreign_block(
                     tx,
-                    &high_qc_certificate.as_leaf_block(),
+                    &state_anchor_leaf,
                     fp,
                     local_committee_info,
                     &mut substate_store,
