@@ -507,3 +507,19 @@ impl Display for ForeignProposal {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `foreign_proposals_set_status` removes a proposal from the unconfirmed index exactly when it
+    /// leaves the unconfirmed set, and `foreign_proposals_get_all_new` iterates that index. So a
+    /// rejected proposal is only kept out of later blocks while `Invalid` is not unconfirmed.
+    #[test]
+    fn a_rejected_proposal_leaves_the_unconfirmed_set() {
+        assert!(!ForeignProposalStatus::Invalid.is_unconfirmed());
+        assert!(!ForeignProposalStatus::Confirmed.is_unconfirmed());
+        assert!(ForeignProposalStatus::New.is_unconfirmed());
+        assert!(ForeignProposalStatus::Proposed.is_unconfirmed());
+    }
+}

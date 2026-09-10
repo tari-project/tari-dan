@@ -11,7 +11,15 @@ use std::{
 use log::*;
 use ootle_byte_type::ToByteType;
 use tari_common_types::types::FixedHash;
-use tari_consensus_types::{Decision, HighPc, HighestSeenBlock, LeafBlock, ProposalCertificate, TimeoutCertificate};
+use tari_consensus_types::{
+    BlockId,
+    Decision,
+    HighPc,
+    HighestSeenBlock,
+    LeafBlock,
+    ProposalCertificate,
+    TimeoutCertificate,
+};
 use tari_crypto::tari_utilities::epoch_time::EpochTime;
 use tari_engine_types::commit_result::RejectReason;
 use tari_epoch_manager::EpochManagerReader;
@@ -37,6 +45,7 @@ use tari_ootle_storage::{
         EvictNodeAtom,
         ForeignProposal,
         ForeignProposalRecord,
+        ForeignProposalStatus,
         LockedEpoch,
         PendingShardStateTreeDiff,
         TransactionAtom,
@@ -85,6 +94,9 @@ struct NextBlock {
     foreign_proposals: Vec<ForeignProposal>,
     executed_transactions: HashMap<TransactionId, TransactionExecution>,
     lock_conflicts: TransactionLockConflicts,
+    /// Foreign proposals this node rejected while proposing. Recorded by the caller, which holds the write
+    /// transaction, so that they leave the unconfirmed index and are not selected into a later block.
+    invalid_foreign_proposals: Vec<BlockId>,
 }
 
 #[derive(Debug, Clone)]
@@ -185,9 +197,21 @@ where TConsensusSpec: ConsensusSpec
                     foreign_proposals,
                     executed_transactions,
                     lock_conflicts,
+                    invalid_foreign_proposals,
                 } = next_block;
 
                 lock_conflicts.save_for_block(tx, next_block.id())?;
+
+                // Invalid leaves the unconfirmed index, so a proposal rejected here is not selected into a
+                // later block. Selection is what makes such a failure repeat: the batch query returns every
+                // proposal still in that index, and a validation failure is deterministic across leaders.
+                for block_id in invalid_foreign_proposals {
+                    warn!(
+                        target: LOG_TARGET,
+                        "⚠️ Marking foreign proposal {block_id} invalid: it failed validation while proposing"
+                    );
+                    ForeignProposalRecord::set_status_by_id(tx, &block_id, ForeignProposalStatus::Invalid, None)?;
+                }
 
                 // Add executions for this block
                 if !executed_transactions.is_empty() {
@@ -413,6 +437,7 @@ where TConsensusSpec: ConsensusSpec
 
         // NOTE: the block for the change set is not used.
         let mut change_set = ProposedBlockChangeSet::new(start_of_chain_block.as_leaf());
+        let mut invalid_foreign_proposals = Vec::new();
 
         // No need to include evidence from justified block if no transactions are included in the next block
         if !batch.transactions.is_empty() {
@@ -423,27 +448,49 @@ where TConsensusSpec: ConsensusSpec
             // TODO: we dont need to process transactions here that are not in the batch
             process_newly_justified_block(tx, &justify_block, high_qc_id, local_committee_info, &mut change_set)?;
 
+            // A failed `process_foreign_block` leaves whatever it wrote before the error behind, and the
+            // transaction commands below are derived from the change set, so that partial state would shape
+            // atoms no replica reproduces. Restoring this snapshot is what keeps a rejected foreign proposal
+            // from reaching them.
+            let change_set_before_foreign_proposals = change_set.clone();
+
             for fp in &batch.foreign_proposals {
                 // Resolves pending transaction pool records along the chain up to this block, so it must be
                 // the anchor the substate store this call also writes to is built on: the justify block
                 // under a dummy chain, the extended leaf otherwise. A replica passes the block it is
                 // evaluating, whose parent chain runs back through any dummies to the justify block.
-                if let Err(err) = process_foreign_block(
+                let Err(err) = process_foreign_block(
                     tx,
                     &state_anchor_leaf,
                     fp,
                     local_committee_info,
                     &mut substate_store,
                     &mut change_set,
-                ) {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Failed to process foreign proposal: {}. Not proposing...",
-                        err
-                    );
-                    // TODO: should mark as invalid?
+                ) else {
                     continue;
-                }
+                };
+
+                // A validation failure is a property of the proposal itself, so every replica reaches it too
+                // and the block cannot be voted for. Anything else (storage, epoch manager) says nothing
+                // about the proposal and must not condemn it — abandon the proposal and let the next round
+                // retry.
+                let Some(validation_err) = err.validation_error() else {
+                    return Err(err);
+                };
+
+                warn!(
+                    target: LOG_TARGET,
+                    "⚠️❌ Foreign proposal {} failed validation while proposing: {validation_err}. Marking it \
+                     invalid and dropping every foreign proposal from this block.",
+                    fp.to_atom().block_id,
+                );
+
+                invalid_foreign_proposals.push(fp.to_atom().block_id);
+                change_set = change_set_before_foreign_proposals;
+                // The proposals already applied to the discarded change set are not re-applied, so none of
+                // them may be proposed here. They keep their `New` status and are proposed again next round.
+                commands.retain(|cmd| !matches!(cmd, Command::ForeignProposal(_)));
+                break;
             }
 
             // Add all (ABORT) executions that may have resulted from foreign proposals
@@ -648,6 +695,7 @@ where TConsensusSpec: ConsensusSpec
             foreign_proposals: batch.foreign_proposals,
             executed_transactions,
             lock_conflicts,
+            invalid_foreign_proposals,
         })
     }
 
