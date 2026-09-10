@@ -319,14 +319,17 @@ impl ProposedBlockChangeSet {
             .and_then(|change| change.execution.take())
     }
 
-    pub fn take_all_transaction_executions(
-        &mut self,
-    ) -> impl Iterator<Item = (TransactionId, TransactionExecution)> + '_ {
-        self.transaction_changes.drain(..).filter_map(|(tx_id, mut change)| {
+    /// Removes the execution recorded for each transaction and yields it.
+    ///
+    /// The rest of each transaction's change — the pending pool update, foreign pledges, evidence — stays in
+    /// the change set. Those describe state that later commands in the same block are evaluated against, so
+    /// they must outlive the executions that were produced alongside them.
+    pub fn take_transaction_executions(&mut self) -> impl Iterator<Item = (TransactionId, TransactionExecution)> + '_ {
+        self.transaction_changes.iter_mut().filter_map(|(tx_id, change)| {
             change
                 .execution
                 .take()
-                .map(|execution| (tx_id, execution.into_transaction_execution()))
+                .map(|execution| (*tx_id, execution.into_transaction_execution()))
         })
     }
 
@@ -651,7 +654,58 @@ impl TransactionChangeSet {
 mod tests {
     use std::mem::size_of;
 
+    use tari_consensus_types::Decision;
+    use tari_engine_types::commit_result::AbortReason;
+    use tari_ootle_common_types::{Epoch, NumPreshards};
+    use tari_ootle_storage::consensus_models::TransactionPoolStage;
+
     use super::*;
+
+    #[test]
+    fn taking_executions_keeps_the_pending_transaction_update() {
+        let leaf = LeafBlock {
+            block_id: BlockId::zero(),
+            height: NodeHeight(1),
+            epoch: Epoch(1),
+            shard_group: ShardGroup::all_shards(NumPreshards::P256),
+        };
+        let mut change_set = ProposedBlockChangeSet::new(leaf);
+
+        let mut aborted = local_prepared_record();
+        aborted.set_local_decision(Decision::Abort(AbortReason::ExecutionFailure));
+        change_set.set_next_transaction_update(aborted).unwrap();
+
+        assert_eq!(change_set.take_transaction_executions().count(), 0);
+
+        let mut committing = local_prepared_record();
+        change_set.apply_transaction_update(&mut committing);
+        assert!(
+            committing.current_decision().is_abort(),
+            "pending update must survive execution harvesting so later commands in the block see it"
+        );
+    }
+
+    fn local_prepared_record() -> TransactionPoolRecord {
+        TransactionPoolRecord::load(
+            TransactionId::new([1; 32]),
+            Evidence::default(),
+            false,
+            0,
+            None,
+            TransactionPoolStage::LocalPrepared,
+            None,
+            Decision::Commit,
+            None,
+            None,
+            true,
+            Epoch(1),
+            None,
+            time::OffsetDateTime::now_utc(),
+            None,
+            0,
+            0,
+        )
+    }
 
     #[test]
     fn check_max_mem_usage() {

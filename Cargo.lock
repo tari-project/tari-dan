@@ -11874,6 +11874,7 @@ dependencies = [
  "tari_state_tree",
  "tari_template_lib_types",
  "thiserror 2.0.18",
+ "time",
  "tokio",
 ]
 

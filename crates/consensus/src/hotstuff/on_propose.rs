@@ -415,11 +415,13 @@ where TConsensusSpec: ConsensusSpec
 
         // No need to include evidence from justified block if no transactions are included in the next block
         if !batch.transactions.is_empty() {
-            // TODO(protocol-efficiency): We should process any foreign proposals included in this block to include
-            // evidence. And that should determine if they are ready. However this is difficult because we
-            // get the batch from the database which isnt aware of which foreign proposals we're going to
-            // propose. This is why the system currently never proposes foreign proposals affecting a
-            // transaction in the same block for LocalPrepare/LocalAccept.
+            // A replica evaluates this block as: the newly justified block, then the commands in block order
+            // (foreign proposals first, see `Command`'s ordering), all against a single change set. The
+            // commands generated below must be derived from that same sequence, or the proposer commits to
+            // an atom no replica can reproduce and the block is unvotable.
+            // TODO: we dont need to process transactions here that are not in the batch
+            process_newly_justified_block(tx, &justify_block, high_qc_id, local_committee_info, &mut change_set)?;
+
             for fp in &batch.foreign_proposals {
                 if let Err(err) = process_foreign_block(
                     tx,
@@ -440,10 +442,7 @@ where TConsensusSpec: ConsensusSpec
             }
 
             // Add all (ABORT) executions that may have resulted from foreign proposals
-            executed_transactions.extend(change_set.take_all_transaction_executions());
-
-            // TODO: we dont need to process transactions here that are not in the batch
-            process_newly_justified_block(tx, &justify_block, high_qc_id, local_committee_info, &mut change_set)?;
+            executed_transactions.extend(change_set.take_transaction_executions());
         }
 
         let locked_epoch = LockedEpoch::new(
@@ -498,8 +497,10 @@ where TConsensusSpec: ConsensusSpec
                 );
                 break;
             }
-            // Apply the transaction updates (if any) that occurred as a result of the justified block.
-            // This allows us to propose evidence in the next block that relates to transactions in the justified block.
+            // Apply the transaction updates (if any) that the justified block and this block's foreign
+            // proposals produced. This allows us to propose evidence relating to transactions in the
+            // justified block, and to propose a transaction that a foreign proposal in this block has just
+            // moved to ABORT with the decision that move implies.
             change_set.apply_transaction_update(&mut transaction);
             // Capture before the record is moved. The processing work below (incl. execution) is incurred
             // whether or not a command is produced, so accumulate for every processed transaction.
