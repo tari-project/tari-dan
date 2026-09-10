@@ -7,6 +7,7 @@ use std::{
     time::Duration,
 };
 
+use log::warn;
 use serde::{Deserialize, Serialize};
 use tari_consensus::consensus_constants::ConsensusConstants;
 use tari_engine_types::fees::{ExhaustBurnRate, MAX_EXHAUST_BURN_RATE_BPS};
@@ -40,10 +41,8 @@ pub struct ConsensusConstantsFile {
     pub max_block_validation_execution_points: Option<u64>,
     pub exhaust_burn_rate_bps: Option<u16>,
     pub max_transaction_validity_epochs: Option<u64>,
-    /// Accepted and ignored. The leeway this configured could never withhold or grant a vote:
-    /// ratifying an `EndEpoch` independently requires having observed the next epoch's boundary.
-    /// The field is kept because `deny_unknown_fields` would otherwise reject a whole constants
-    /// file that still sets it.
+    /// Accepted and ignored, so that an existing constants file that sets it still loads:
+    /// `deny_unknown_fields` would otherwise reject the whole file.
     #[serde(skip_serializing)]
     pub epoch_end_spread_blocks: Option<u64>,
 }
@@ -75,7 +74,7 @@ impl ConsensusConstantsFile {
         );
 
         if self.epoch_end_spread_blocks.is_some() {
-            log::warn!(
+            warn!(
                 target: LOG_TARGET,
                 "⚠️ 'epoch_end_spread_blocks' in the consensus constants file is ignored and can be removed."
             );
