@@ -898,10 +898,6 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore, TClient: BaseNodeClie
         }
     }
 
-    /// Returns the boundary block hash we have stored for `epoch`, or `None` if we have not scanned
-    /// it. The stored header only counts as the boundary when its height is exactly the epoch's first
-    /// height: a scan range that starts mid-epoch stores a first header that is not the boundary, and
-    /// ratifying against that would compare the wrong hash.
     /// Returns true when our lagged scanner position is within `epoch_end_spread_blocks` of the
     /// next epoch boundary. Used by consensus to accept `EndEpoch` proposals speculatively when
     /// peers' oracles have already crossed and ours is almost there.
