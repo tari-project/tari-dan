@@ -324,13 +324,16 @@ impl ProposedBlockChangeSet {
     /// The rest of each transaction's change — the pending pool update, foreign pledges, evidence — stays in
     /// the change set. Those describe state that later commands in the same block are evaluated against, so
     /// they must outlive the executions that were produced alongside them.
-    pub fn take_transaction_executions(&mut self) -> impl Iterator<Item = (TransactionId, TransactionExecution)> + '_ {
-        self.transaction_changes.iter_mut().filter_map(|(tx_id, change)| {
-            change
-                .execution
-                .take()
-                .map(|execution| (*tx_id, execution.into_transaction_execution()))
-        })
+    pub fn take_transaction_executions(&mut self) -> Vec<(TransactionId, TransactionExecution)> {
+        self.transaction_changes
+            .iter_mut()
+            .filter_map(|(tx_id, change)| {
+                change
+                    .execution
+                    .take()
+                    .map(|execution| (*tx_id, execution.into_transaction_execution()))
+            })
+            .collect()
     }
 
     pub fn add_transaction_execution(
@@ -656,8 +659,9 @@ mod tests {
 
     use tari_consensus_types::Decision;
     use tari_engine_types::commit_result::AbortReason;
-    use tari_ootle_common_types::{Epoch, NumPreshards};
-    use tari_ootle_storage::consensus_models::TransactionPoolStage;
+    use tari_ootle_common_types::{Epoch, NumPreshards, VersionedSubstateId};
+    use tari_ootle_storage::consensus_models::{SubstatePledge, TransactionPoolStage};
+    use tari_template_lib_types::ComponentAddress;
 
     use super::*;
 
@@ -673,15 +677,26 @@ mod tests {
 
         let mut aborted = local_prepared_record();
         aborted.set_local_decision(Decision::Abort(AbortReason::ExecutionFailure));
+        let transaction_id = *aborted.id();
         change_set.set_next_transaction_update(aborted).unwrap();
+        change_set.add_foreign_pledges(&transaction_id, ShardGroup::all_shards(NumPreshards::P256), vec![
+            SubstatePledge::Output {
+                substate_id: VersionedSubstateId::new(SubstateId::Component(ComponentAddress::from_array([1; 32])), 0),
+            },
+        ]);
 
-        assert_eq!(change_set.take_transaction_executions().count(), 0);
+        assert_eq!(change_set.take_transaction_executions().len(), 0);
 
         let mut committing = local_prepared_record();
         change_set.apply_transaction_update(&mut committing);
         assert!(
             committing.current_decision().is_abort(),
             "pending update must survive execution harvesting so later commands in the block see it"
+        );
+        assert_eq!(
+            change_set.get_foreign_pledges(&transaction_id).count(),
+            1,
+            "foreign pledges must survive execution harvesting so the transaction can still be executed"
         );
     }
 
