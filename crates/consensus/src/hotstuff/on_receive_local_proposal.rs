@@ -534,8 +534,8 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         // We still need the local oracle to have observed `next_epoch` to assign its committee /
         // validator set. If it has not yet (rare, given the base-layer scan lag keeps the boundary
-        // block buried), defer; `try_resume_pending_end_of_epoch` retries from `on_epoch_manager_event`
-        // or worker startup.
+        // block buried), defer; the worker retries `try_resume_pending_end_of_epoch` on its periodic
+        // tick, on `EpochManagerEvent::EpochChanged` and at startup.
         if self
             .epoch_manager
             .get_epoch_hash(next_epoch)
@@ -677,9 +677,9 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         self.pending_end_of_epoch.is_some()
     }
 
-    /// Retry deferred end-of-epoch processing. Called by the worker when the local oracle
-    /// observes the new epoch (via `EpochManagerEvent::EpochChanged`). If the oracle is still
-    /// not ready, `process_end_of_epoch` will re-defer.
+    /// Retry deferred end-of-epoch processing. The worker polls this so that the resume happens
+    /// as soon as the oracle has written the epoch row, without waiting for the base-layer scan
+    /// to finish. If the oracle is still not ready, `process_end_of_epoch` will re-defer.
     pub async fn try_resume_pending_end_of_epoch(&mut self) -> Result<bool, HotStuffError> {
         let Some(pending) = self.pending_end_of_epoch.take() else {
             return Ok(false);
