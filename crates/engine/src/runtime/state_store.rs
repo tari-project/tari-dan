@@ -53,6 +53,9 @@ impl<TStore: StateReader> WorkingStateStore<TStore> {
     }
 
     pub fn try_lock(&mut self, id: SubstateId, lock_flag: LockFlag) -> Result<LockId, RuntimeError> {
+        if self.is_spent(&id) {
+            return Err(RuntimeError::SubstateAlreadySpent { id });
+        }
         if !self.exists(&id)? {
             return Err(RuntimeError::SubstateNotFound { id: id.clone() });
         }
@@ -141,7 +144,22 @@ impl<TStore: StateReader> WorkingStateStore<TStore> {
         })
     }
 
+    /// Whether `id` names a UTXO or confidential output this transaction has already spent. The backing store is
+    /// untouched until the transaction commits, so `downed_utxos` and `downed_confidential_outputs` are the whole
+    /// record of what this transaction has spent; every presence and load path consults them so that a spent output
+    /// reads as gone for the rest of the transaction.
+    fn is_spent(&self, id: &SubstateId) -> bool {
+        match id {
+            SubstateId::Utxo(address) => self.downed_utxos.contains(address),
+            SubstateId::ConfidentialOutput(address) => self.downed_confidential_outputs.contains(address),
+            _ => false,
+        }
+    }
+
     pub fn exists(&self, id: &SubstateId) -> Result<bool, RuntimeError> {
+        if self.is_spent(id) {
+            return Ok(false);
+        }
         let exists = self.new_substates.contains_key(id) ||
             self.loaded_substates.contains_key(id) ||
             self.state_store.exists(id)?;
@@ -149,6 +167,11 @@ impl<TStore: StateReader> WorkingStateStore<TStore> {
     }
 
     pub fn insert(&mut self, id: SubstateId, value: SubstateValue) -> Result<(), RuntimeError> {
+        // A spent address reads as absent to `exists`, so this is the check that keeps the substate diff to one
+        // record per address: a down or an up, never both.
+        if self.is_spent(&id) {
+            return Err(RuntimeError::SubstateAlreadySpent { id });
+        }
         if self.exists(&id)? {
             return Err(RuntimeError::DuplicateSubstate { address: id });
         }
@@ -157,6 +180,9 @@ impl<TStore: StateReader> WorkingStateStore<TStore> {
     }
 
     fn load_and_cache(&mut self, id: SubstateId) -> Result<&SubstateValue, RuntimeError> {
+        if self.is_spent(&id) {
+            return Err(RuntimeError::SubstateAlreadySpent { id });
+        }
         if let Some(s) = self.new_substates.get(&id) {
             return Ok(s);
         }

@@ -1076,3 +1076,89 @@ fn transfer_restricted_by_access_rules_component_scope() {
         .collect::<Vec<_>>();
     assert_eq!(utxos.len(), 1);
 }
+
+#[test]
+fn duplicate_inputs_in_one_statement_are_rejected() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let mint = stealth::generate_mint_statement(vec![100u64], 0u64, None);
+    let (_faucet, faucet_resx) = setup(&mut test, &mint, None);
+
+    let input = MaskAndValue {
+        mask: mint.output_masks[0].clone(),
+        value: 100,
+    };
+    // The excess folds the inputs positionally, so listing the one 100 UTXO twice balances a statement that pays
+    // out 200.
+    let transfer = stealth::generate_transfer_data([input.clone(), input], 0u64, Some(200), 0);
+
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .stealth_transfer(faucet_resx, transfer.statement)
+            .finish()
+            .add_signer(&test.to_public_key_bytes(), &mint.output_masks[0])
+            .seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "Duplicate input commitment");
+}
+
+#[test]
+fn two_statements_may_not_spend_the_same_utxo() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let mint = stealth::generate_mint_statement(vec![100u64], 0u64, None);
+    let (_faucet, faucet_resx) = setup(&mut test, &mint, None);
+
+    let input = MaskAndValue {
+        mask: mint.output_masks[0].clone(),
+        value: 100,
+    };
+    let first = stealth::generate_transfer_data([input.clone()], 0u64, Some(100), 0);
+    let second = stealth::generate_transfer_data([input], 0u64, Some(100), 0);
+
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .stealth_transfer(faucet_resx, first.statement)
+            .stealth_transfer(faucet_resx, second.statement)
+            .finish()
+            .add_signer(&test.to_public_key_bytes(), &mint.output_masks[0])
+            .seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "was already spent earlier in this transaction");
+}
+
+#[test]
+fn a_utxo_spent_in_this_transaction_cannot_also_be_burnt() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let mint = stealth::generate_mint_statement(vec![100u64], 0u64, None);
+    let (faucet, faucet_resx) = setup(&mut test, &mint, None);
+
+    let transfer = stealth::generate_transfer_data(
+        [MaskAndValue {
+            mask: mint.output_masks[0].clone(),
+            value: 100,
+        }],
+        0u64,
+        Some(100),
+        0,
+    );
+
+    let commitment = get_commitment_factory().commit_value(&mint.output_masks[0], 100);
+    let utxo_id = UtxoId::from(commitment.to_byte_type());
+    let value_proof = value_proof::generate_value_proof_mask_knowledge(100u64.into(), &mint.output_masks[0]);
+
+    // The burn targets the UTXO the transfer has just spent, which is a down and an up@v+1 of one address.
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .stealth_transfer(faucet_resx, transfer.statement)
+            .call_method(faucet, "burn_utxos", args![vec![(utxo_id, value_proof)]])
+            .finish()
+            .add_signer(&test.to_public_key_bytes(), &mint.output_masks[0])
+            .seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "was already spent earlier in this transaction");
+}
