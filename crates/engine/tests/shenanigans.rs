@@ -640,7 +640,11 @@ fn it_refuses_to_authorize_a_proof_the_frame_does_not_hold() {
     // The victim holds a proof across a call into the attacker, which is handed nothing and guesses the id.
     let result = test.execute_expect_success(
         test.transaction()
-            .call_method(victim, "hold_proof_and_call", args![attacker, "try_authorize_proof"])
+            .call_method(victim, "hold_proof_and_call", args![
+                attacker,
+                "try_authorize_proof",
+                0u32
+            ])
             .build_and_seal(test.secret_key()),
         vec![],
     );
@@ -672,10 +676,58 @@ fn it_refuses_to_read_a_proof_the_frame_does_not_hold() {
 
     let reason = test.execute_expect_failure(
         test.transaction()
-            .call_method(victim, "hold_proof_and_call", args![attacker, "read_proof_amount"])
+            .call_method(victim, "hold_proof_and_call", args![
+                attacker,
+                "read_proof_amount",
+                0u32
+            ])
             .build_and_seal(test.secret_key()),
         vec![],
     );
 
     assert_reject_reason(reason, "Encountered unknown or out of scope proof");
+}
+
+/// `DropAuthorize` can only touch the calling frame's own auth scope, so its answer must not tell a frame whether a
+/// proof is live at an id it does not hold — the ids are a dense counter, so that would enumerate the transaction.
+#[test]
+fn it_does_not_reveal_whether_an_out_of_scope_proof_is_live() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let victim = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+    let attacker = result.finalize.execution_results[1]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    // Id 0 is live and held by the victim; id 7 has no proof at all. Both must draw the same answer.
+    let live = test.execute_expect_failure(
+        test.transaction()
+            .call_method(victim, "hold_proof_and_call", args![
+                attacker,
+                "drop_authorize_proof",
+                0u32
+            ])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    let absent = test.execute_expect_failure(
+        test.transaction()
+            .call_method(attacker, "drop_authorize_proof", args![7u32])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(live, RuntimeError::ProofNotInScope { proof_id: 0.into() });
+    assert_reject_reason(absent, RuntimeError::ProofNotInScope { proof_id: 7.into() });
 }

@@ -3385,6 +3385,12 @@ where
                 args.assert_no_args("Proof.DropAuthorize")?;
 
                 self.tracker.write_with(|state| {
+                    // Scope before existence, so an id this frame does not hold answers the same whether or not a
+                    // proof is live at it: the ids are a dense counter, and a frame that could tell the two apart
+                    // could enumerate every proof in the transaction.
+                    if !state.current_call_scope()?.is_proof_in_scope(&proof_id) {
+                        return Err(RuntimeError::ProofNotInScope { proof_id });
+                    }
                     if !state.proof_exists(proof_id) {
                         return Err(RuntimeError::ProofNotFound { proof_id });
                     }

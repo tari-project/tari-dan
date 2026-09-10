@@ -160,6 +160,14 @@ mod template {
             Proof::from_id(proof_id.into()).amount()
         }
 
+        /// `DropAuthorize` on an id this frame does not hold. It can only ever touch this frame's own auth scope, so
+        /// the answer must not reveal whether a proof is live at that id.
+        pub fn drop_authorize_proof(&self, proof_id: u32) -> Amount {
+            // The guard's `Drop` is the only route to `DropAuthorize`, so one is made and dropped here.
+            drop(tari_template_lib::models::ProofAccess { id: proof_id.into() });
+            Amount::zero()
+        }
+
         pub fn take_from_a_vault(&mut self, vault_id: VaultId, amount: Amount) {
             let mut vault = Vault::for_test(vault_id.into());
             let stolen = vault.withdraw(amount);
@@ -232,9 +240,19 @@ mod template {
         }
 
         /// Holds a proof of its own across a call into `other`, which is handed nothing and guesses the id.
-        pub fn hold_proof_and_call(&self, other: ComponentAddress, method: String) -> Amount {
+        ///
+        /// Authorizes `proof_id` from this frame first, where the proof is in scope. An out-of-scope id and an id
+        /// with no proof at it are indistinguishable to `other` by design, so a `proof_id` naming nothing would
+        /// otherwise draw the same answer as the attack being tested. Failing here says so in words no rejection
+        /// from `other` produces.
+        pub fn hold_proof_and_call(&self, other: ComponentAddress, method: String, proof_id: u32) -> Amount {
             let proof = self.vault.as_ref().unwrap().create_proof();
-            let result: Amount = ComponentManager::get(other).call(&method, args![0u32]);
+            assert!(
+                Proof::from_id(proof_id.into()).try_authorize().is_ok(),
+                "proof id {proof_id} is not held by this frame"
+            );
+
+            let result: Amount = ComponentManager::get(other).call(&method, args![proof_id]);
             proof.drop();
             result
         }
