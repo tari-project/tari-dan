@@ -595,6 +595,15 @@ impl<TStore: StateReader> WorkingState<TStore> {
             .ok_or(RuntimeError::ProofNotFound { proof_id })
     }
 
+    /// Reads a proof the current frame holds. Proof ids come from a counter shared by the whole transaction, so the
+    /// scope check is what keeps one frame from reading the contents of another frame's proof.
+    pub fn get_proof_in_scope(&self, proof_id: ProofId) -> Result<&Proof, RuntimeError> {
+        if !self.current_call_scope()?.is_proof_in_scope(&proof_id) {
+            return Err(RuntimeError::ProofNotInScope { proof_id });
+        }
+        self.get_proof(proof_id)
+    }
+
     pub fn proof_exists(&self, proof_id: ProofId) -> bool {
         self.proofs.contains_key(&proof_id)
     }
@@ -835,7 +844,7 @@ impl<TStore: StateReader> WorkingState<TStore> {
     pub fn drop_proof(&mut self, proof_id: ProofId) -> Result<(), RuntimeError> {
         let call_frame_mut = self.current_call_scope_mut()?;
         if !call_frame_mut.is_proof_in_scope(&proof_id) {
-            return Err(RuntimeError::ProofNotFound { proof_id });
+            return Err(RuntimeError::ProofNotInScope { proof_id });
         }
         call_frame_mut.remove_proof_from_scope(&proof_id);
 

@@ -146,6 +146,27 @@ mod template {
             let _auth = stolen_proof.authorize();
         }
 
+        /// Proof ids are a transaction-wide counter, so a third party can name one it was never handed.
+        /// Takes the id as a plain integer, not a `ProofId`: a `ProofId` argument is how a proof is handed over, so
+        /// this frame is given nothing and guesses instead.
+        pub fn try_authorize_proof(&self, proof_id: u32) -> Amount {
+            match Proof::from_id(proof_id.into()).try_authorize() {
+                Ok(_access) => Amount::from(1u64),
+                Err(_) => Amount::zero(),
+            }
+        }
+
+        pub fn read_proof_amount(&self, proof_id: u32) -> Amount {
+            Proof::from_id(proof_id.into()).amount()
+        }
+
+        /// Gives up an authorization for `proof_id`, whatever this frame holds. `ProofAccess::drop` is the only
+        /// route to the action and its field is public, so the guard is built by hand here to name an arbitrary id.
+        pub fn drop_authorize_proof(&self, proof_id: u32) -> Amount {
+            drop(tari_template_lib::models::ProofAccess { id: proof_id.into() });
+            Amount::zero()
+        }
+
         pub fn take_from_a_vault(&mut self, vault_id: VaultId, amount: Amount) {
             let mut vault = Vault::for_test(vault_id.into());
             let stolen = vault.withdraw(amount);
@@ -211,6 +232,28 @@ mod template {
             .with_access_rules(AccessRules::allow_all())
             .with_owner_rule(OwnerRule::ByAccessRule(rule!(allow_all)))
             .create()
+        }
+
+        pub fn create_vault_proof(&self) -> Proof {
+            self.vault.as_ref().unwrap().create_proof()
+        }
+
+        /// Holds a proof of its own across a call into `other`, which is handed nothing and guesses the id.
+        ///
+        /// Authorizes `proof_id` from this frame first, where the proof is in scope. An out-of-scope id and an id
+        /// with no proof at it are indistinguishable to `other` by design, so a `proof_id` naming nothing would
+        /// otherwise draw the same answer as the attack being tested. Failing here says so in words no rejection
+        /// from `other` produces.
+        pub fn hold_proof_and_call(&self, other: ComponentAddress, method: String, proof_id: u32) -> Amount {
+            let proof = self.vault.as_ref().unwrap().create_proof();
+            assert!(
+                Proof::from_id(proof_id.into()).try_authorize().is_ok(),
+                "proof id {proof_id} is not held by this frame"
+            );
+
+            let result: Amount = ComponentManager::get(other).call(&method, args![proof_id]);
+            proof.drop();
+            result
         }
 
         pub fn abandon_bucket(&mut self) {

@@ -220,6 +220,12 @@ pub enum RuntimeError {
     WriteOutsideOwnComponent { id: SubstateId },
     #[error("Host operation '{operation}' is forbidden inside a resource auth hook")]
     ForbiddenInAuthHookContext { operation: &'static str },
+    #[error("Freeze on resource {resource_address} targeted vault {vault_id}, which holds resource {vault_resource}")]
+    FreezeResourceMismatch {
+        vault_id: VaultId,
+        resource_address: ResourceAddress,
+        vault_resource: ResourceAddress,
+    },
     #[error("Recall on resource {resource_address} targeted vault {vault_id}, which holds resource {vault_resource}")]
     RecallResourceMismatch {
         vault_id: VaultId,

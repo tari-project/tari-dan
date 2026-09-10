@@ -617,3 +617,121 @@ fn it_does_not_leak_a_callees_address_allocation_into_the_callers_scope() {
 
     assert_reject_reason(reason, RuntimeError::AddressAllocationNotInScope { id: 0 });
 }
+
+#[test]
+fn it_refuses_to_authorize_a_proof_the_frame_does_not_hold() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let victim = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+    let attacker = result.finalize.execution_results[1]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    // The victim holds a proof across a call into the attacker, which is handed nothing and guesses the id.
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_method(victim, "hold_proof_and_call", args![
+                attacker,
+                "try_authorize_proof",
+                0u32
+            ])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_eq!(
+        result.finalize.execution_results[0].decode::<Amount>().unwrap(),
+        Amount::zero()
+    );
+}
+
+#[test]
+fn it_refuses_to_read_a_proof_the_frame_does_not_hold() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let victim = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+    let attacker = result.finalize.execution_results[1]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_method(victim, "hold_proof_and_call", args![
+                attacker,
+                "read_proof_amount",
+                0u32
+            ])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "Encountered unknown or out of scope proof");
+}
+
+/// Giving up an authorization answers for any proof id, and leaves the proof with whoever holds it.
+///
+/// The victim gives up its own authorization when the pin's `ProofAccess` temporary drops, so by the time the
+/// attacker runs, proof 0 is in the victim's `proof_scope` and not its `auth_scope`. What this pins is therefore the
+/// holder's `proof_scope` entry surviving the attacker's call, and the call answering at all. The `auth_scope` half
+/// of the isolation is structural — `current_call_scope_mut` is `call_frames.last_mut()`, so a frame has no way to
+/// address another's scope — and observing it would need the victim to hold its guard across the call and then
+/// exercise something gated on the badge, there being no engine query for `auth_scope` membership.
+#[test]
+fn it_answers_a_drop_authorize_for_any_proof_id() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let victim = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+    let attacker = result.finalize.execution_results[1]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    // Id 0 is live and held by the victim, and the victim's own `proof.drop()` after the call still finds it.
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(victim, "hold_proof_and_call", args![
+                attacker,
+                "drop_authorize_proof",
+                0u32
+            ])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    // An id with no proof at it answers the same, rather than aborting from `ProofAccess::drop`.
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(attacker, "drop_authorize_proof", args![7u32])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+}
