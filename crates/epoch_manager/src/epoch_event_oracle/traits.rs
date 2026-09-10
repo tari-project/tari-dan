@@ -3,6 +3,7 @@
 
 use std::future::Future;
 
+use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::Epoch;
 
 use crate::epoch_event_oracle::EpochEvent;
@@ -23,5 +24,16 @@ pub trait EpochEventOracle {
     /// only accepting `EndEpoch` once the epoch has actually changed locally.
     fn is_within_epoch_end_spread(&self, _current_epoch: Epoch) -> bool {
         false
+    }
+
+    /// Returns the boundary hash the oracle has observed for `epoch`, if it has observed one.
+    ///
+    /// This answers "have I seen this epoch's boundary?" independently of whether the corresponding
+    /// `EpochChanged` event has been applied, which lets the voter ratify an `EndEpoch` hash it has
+    /// genuinely scanned while the event is still queued behind an epoch activation. The default
+    /// implementation returns `None`, so an oracle that cannot observe boundaries ahead of its own
+    /// events is unaffected.
+    fn observed_epoch_boundary_hash(&self, _epoch: Epoch) -> Option<FixedHash> {
+        None
     }
 }

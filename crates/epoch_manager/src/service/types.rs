@@ -130,6 +130,10 @@ pub enum EpochManagerRequest<TAddr> {
         current_epoch: Epoch,
         reply: Reply<bool>,
     },
+    GetObservedEpochHash {
+        epoch: Epoch,
+        reply: Reply<Option<FixedHash>>,
+    },
     GetBirthdayEpoch {
         reply: Reply<Option<Epoch>>,
     },

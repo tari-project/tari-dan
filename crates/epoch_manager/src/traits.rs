@@ -238,6 +238,15 @@ pub trait EpochManagerReader: Send + Sync {
         current_epoch: Epoch,
     ) -> impl Future<Output = Result<bool, EpochManagerError>> + Send;
 
+    /// This node's own view of `epoch`'s boundary hash: the hash stored when the epoch was activated
+    /// if it has been, otherwise a boundary the epoch event oracle has observed but not yet activated.
+    /// `None` when this node has seen neither, in which case it has nothing of its own to ratify an
+    /// `EndEpoch` proposal against.
+    fn get_observed_epoch_hash(
+        &self,
+        epoch: Epoch,
+    ) -> impl Future<Output = Result<Option<FixedHash>, EpochManagerError>> + Send;
+
     /// The first epoch for which the network has validators.
     fn get_birthday_epoch(&self) -> impl Future<Output = Result<Option<Epoch>, EpochManagerError>> + Send;
 }

@@ -885,6 +885,17 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore, TClient: BaseNodeClie
         }
     }
 
+    /// Returns the boundary block hash we have stored for `epoch`, or `None` if we have not scanned
+    /// it. The stored header only counts as the boundary when its height is exactly the epoch's first
+    /// height: a scan range that starts mid-epoch stores a first header that is not the boundary, and
+    /// ratifying against that would compare the wrong hash.
+    fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> Option<FixedHash> {
+        let epoch_length = self.cached_epoch_length?;
+        let boundary_height = epoch.as_u64().checked_mul(epoch_length)?;
+        let boundary = self.store.get_first_block_header_in_epoch(epoch).ok()??;
+        (boundary.height == boundary_height).then_some(boundary.block_hash)
+    }
+
     /// Returns true when our lagged scanner position is within `epoch_end_spread_blocks` of the
     /// next epoch boundary. Used by consensus to accept `EndEpoch` proposals speculatively when
     /// peers' oracles have already crossed and ours is almost there.
@@ -1018,6 +1029,12 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore + Send + 'static, TCli
             .as_deref()
             .map(|inner| inner.is_within_epoch_end_spread(current_epoch))
             .unwrap_or(false)
+    }
+
+    fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> Option<FixedHash> {
+        // `inner` is briefly None while a scan task is in flight; the voter then falls back to the
+        // activated epoch hash alone.
+        self.inner.as_deref()?.observed_epoch_boundary_hash(epoch)
     }
 }
 
@@ -1372,6 +1389,49 @@ mod tests {
 
     fn linear_chain(heights: std::ops::RangeInclusive<u64>) -> Vec<BlockHeader> {
         heights.map(|h| make_header(h, h)).collect()
+    }
+
+    #[tokio::test]
+    async fn observed_boundary_hash_is_readable_before_the_epoch_is_activated() {
+        let store = InMemoryStore::default();
+        let chain = linear_chain(0..=20);
+        let client = MockBaseNode::new(chain.clone());
+        let mut inner = make_inner(store.clone(), client, 5);
+
+        // sync_to_tip drops the emitted events, standing in for an epoch manager that has scanned the
+        // boundary but not yet applied the resulting EpochChanged.
+        sync_to_tip(&mut inner).await;
+        assert_eq!(inner.last_scanned_height, 15);
+
+        // Epoch 3 opens at height 15, which we have scanned.
+        assert_eq!(
+            inner.observed_epoch_boundary_hash(Epoch(3)),
+            Some(hash_header(NETWORK, &chain[15]))
+        );
+        // Epoch 4 opens at height 20, above our lagged scan position.
+        assert_eq!(inner.observed_epoch_boundary_hash(Epoch(4)), None);
+    }
+
+    #[tokio::test]
+    async fn observed_boundary_hash_rejects_a_first_header_that_is_not_the_boundary() {
+        let store = InMemoryStore::default();
+        let client = MockBaseNode::new(linear_chain(0..=20));
+        let mut inner = make_inner(store.clone(), client, 5);
+        inner.cached_epoch_length = Some(EPOCH_LENGTH);
+
+        // A scan range opening mid-epoch makes height 12 epoch 2's lowest stored header; the epoch's
+        // boundary at height 10 was never scanned, so there is nothing to ratify against.
+        store
+            .add_block_headers([BlockHeaderModel {
+                epoch: Epoch(2),
+                height: 12,
+                block_hash: FixedHash::default(),
+                kernel_merkle_root: FixedHash::default(),
+                validator_node_merkle_root: FixedHash::default(),
+            }])
+            .unwrap();
+
+        assert_eq!(inner.observed_epoch_boundary_hash(Epoch(2)), None);
     }
 
     #[tokio::test]
