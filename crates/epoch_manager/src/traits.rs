@@ -230,14 +230,6 @@ pub trait EpochManagerReader: Send + Sync {
     /// commits, transitioning into `epoch`.
     fn lock_epoch(&self, epoch: Epoch) -> impl Future<Output = Result<(), EpochManagerError>> + Send;
 
-    /// Asks the epoch event oracle whether `current_epoch` is close enough to ending that
-    /// `EndEpoch` proposals should be accepted speculatively, even if this node has not yet
-    /// received its own `EpochChanged` event. The interpretation of "close" is oracle-specific.
-    fn is_within_epoch_end_spread(
-        &self,
-        current_epoch: Epoch,
-    ) -> impl Future<Output = Result<bool, EpochManagerError>> + Send;
-
     /// This node's own view of `epoch`'s boundary hash: the hash stored when the epoch was activated
     /// if it has been, otherwise a boundary the epoch event oracle has observed but not yet activated.
     /// `None` when this node has seen neither, in which case it has nothing of its own to ratify an

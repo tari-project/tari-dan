@@ -14,18 +14,6 @@ pub trait EpochEventOracle {
     /// returned.
     fn next_epoch_event(&mut self) -> impl Future<Output = Option<EpochEvent>> + Send;
 
-    /// Returns true when, in the oracle's view, `current_epoch` is close enough to ending that
-    /// consensus should speculatively accept an `EndEpoch` proposal even if the oracle has not
-    /// yet emitted the corresponding `EpochChanged` event.
-    ///
-    /// "Close enough" is deliberately oracle-specific: the base-layer oracle measures proximity
-    /// in base-layer blocks, a wall-clock oracle could measure in seconds, etc. The default
-    /// implementation returns `false` (no leeway), which reduces to the strict behaviour of
-    /// only accepting `EndEpoch` once the epoch has actually changed locally.
-    fn is_within_epoch_end_spread(&self, _current_epoch: Epoch) -> bool {
-        false
-    }
-
     /// Returns the boundary hash the oracle has observed for `epoch`, or `None` if it has observed
     /// none. An error means the oracle could not determine either way and must be distinguished from
     /// `None`: a caller that treats a failed lookup as "not observed" turns a broken store into a

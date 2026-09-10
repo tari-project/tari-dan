@@ -392,18 +392,6 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    async fn is_within_epoch_end_spread(&self, current_epoch: Epoch) -> Result<bool, EpochManagerError> {
-        let (tx, rx) = oneshot::channel();
-        self.tx_request
-            .send(EpochManagerRequest::IsWithinEpochEndSpread {
-                current_epoch,
-                reply: tx,
-            })
-            .await
-            .map_err(|_| EpochManagerError::SendError)?;
-        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
-    }
-
     async fn get_observed_epoch_hash(&self, epoch: Epoch) -> Result<Option<FixedHash>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request

@@ -138,12 +138,6 @@ pub struct ConsensusConstants {
     /// consensus sequencing. CONSENSUS RULE: must be uniform network-wide, otherwise nodes
     /// diverge on which transactions may be sequenced.
     pub max_transaction_validity_epochs: u64,
-    /// Number of base-layer blocks of leeway a voter is allowed when accepting `EndEpoch` proposals.
-    /// If the voter's oracle has not yet crossed the next epoch boundary but its lagged scan height
-    /// is within this many blocks of the boundary, the voter accepts `EndEpoch` from peers whose
-    /// oracle has already crossed. Must be uniform network-wide to avoid divergent voting.
-    /// Set to 0 to disable leeway.
-    pub epoch_end_spread_blocks: u64,
 }
 
 impl ConsensusConstants {
@@ -191,7 +185,6 @@ impl ConsensusConstants {
         max_block_validation_execution_points: 7_250_000_000,
         exhaust_burn_rate: ExhaustBurnRate::new(500), // 5%
         max_transaction_validity_epochs: 2160,
-        epoch_end_spread_blocks: 5,
     };
     pub const MAINNET: Self = Self {
         // Minotari's `coinbase_min_maturity` (720) plus 60 blocks (~2 hours) of margin. Must stay a
@@ -240,7 +233,6 @@ impl ConsensusConstants {
         max_block_validation_execution_points: 7_250_000_000,
         exhaust_burn_rate: ExhaustBurnRate::new(500), // 5%
         max_transaction_validity_epochs: 2160,
-        epoch_end_spread_blocks: 10,
     };
     pub const TESTNET: Self = Self {
         base_layer_confirmations: 100,
@@ -281,7 +273,6 @@ impl ConsensusConstants {
         max_block_validation_execution_points: 7_250_000_000,
         exhaust_burn_rate: ExhaustBurnRate::new(500), // 5%
         max_transaction_validity_epochs: 2160,
-        epoch_end_spread_blocks: 5,
     };
 
     pub const fn mainnet() -> Self {
@@ -336,7 +327,6 @@ impl ConsensusConstants {
             max_block_validation_execution_points: 7_250_000_000,
             exhaust_burn_rate: ExhaustBurnRate::new(500), // 5%
             max_transaction_validity_epochs: 2160,
-            epoch_end_spread_blocks: 1,
         }
     }
 

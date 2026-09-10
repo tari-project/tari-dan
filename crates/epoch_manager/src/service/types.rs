@@ -126,10 +126,6 @@ pub enum EpochManagerRequest<TAddr> {
         epoch: Epoch,
         reply: Reply<()>,
     },
-    IsWithinEpochEndSpread {
-        current_epoch: Epoch,
-        reply: Reply<bool>,
-    },
     GetObservedEpochHash {
         epoch: Epoch,
         reply: Reply<Option<FixedHash>>,

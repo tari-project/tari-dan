@@ -17,11 +17,6 @@ pub struct BaseLayerEpochOracleConfig {
     pub sidechain_id: Option<RistrettoPublicKeyBytes>,
     /// Features for the base layer epoch oracle.
     pub features: BaseLayerEpochOracleFeatures,
-    /// Number of base-layer blocks of leeway to allow when voting on `EndEpoch` proposals.
-    /// If our scanner has not yet crossed the next epoch boundary, but our scanned (lagged)
-    /// height is within this many blocks of the boundary, we accept EndEpoch proposals from
-    /// peers whose oracle has already crossed. Set to 0 to disable leeway.
-    pub epoch_end_spread_blocks: u64,
 }
 
 #[derive(Debug, Clone, Copy)]

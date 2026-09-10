@@ -527,13 +527,6 @@ impl<TSpec: EpochManagerSpec> EpochManagerService<TSpec> {
             EpochManagerRequest::LockEpoch { epoch, reply } => {
                 handle(reply, self.inner.lock_epoch(epoch), context);
             },
-            EpochManagerRequest::IsWithinEpochEndSpread { current_epoch, reply } => {
-                handle(
-                    reply,
-                    Ok(self.epoch_events.is_within_epoch_end_spread(current_epoch)),
-                    context,
-                );
-            },
             EpochManagerRequest::GetObservedEpochHash { epoch, reply } => {
                 // An activated epoch's stored hash wins: it is the one the self-healing correction
                 // maintains and that `lock_epoch` freezes once consensus has committed against it.

@@ -38,7 +38,6 @@ pub struct ConsensusConstantsFile {
     pub max_block_validation_execution_points: Option<u64>,
     pub exhaust_burn_rate_bps: Option<u16>,
     pub max_transaction_validity_epochs: Option<u64>,
-    pub epoch_end_spread_blocks: Option<u64>,
 }
 
 impl ConsensusConstantsFile {
@@ -65,7 +64,6 @@ impl ConsensusConstantsFile {
             max_block_execution_points,
             max_block_validation_execution_points,
             max_transaction_validity_epochs,
-            epoch_end_spread_blocks,
         );
 
         if let Some(secs) = self.pacemaker_block_time_secs {

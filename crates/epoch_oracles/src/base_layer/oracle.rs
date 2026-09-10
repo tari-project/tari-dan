@@ -897,29 +897,6 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore, TClient: BaseNodeClie
             self.pending_events.shrink_to(TARGET_CAP);
         }
     }
-
-    /// Returns true when our lagged scanner position is within `epoch_end_spread_blocks` of the
-    /// next epoch boundary. Used by consensus to accept `EndEpoch` proposals speculatively when
-    /// peers' oracles have already crossed and ours is almost there.
-    fn is_within_epoch_end_spread(&self, current_epoch: Epoch) -> bool {
-        if self.config.epoch_end_spread_blocks == 0 {
-            return false;
-        }
-        let epoch_length = self.epoch_length.load(Ordering::Relaxed);
-        if epoch_length == 0 {
-            return false;
-        }
-        let Some(next_start) = current_epoch
-            .as_u64()
-            .checked_add(1)
-            .and_then(|e| e.checked_mul(epoch_length))
-        else {
-            return false;
-        };
-        self.last_scanned_height
-            .saturating_add(self.config.epoch_end_spread_blocks) >=
-            next_start
-    }
 }
 
 impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore + Send + 'static, TClient: BaseNodeClient + 'static>
@@ -1020,15 +997,6 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore + Send + 'static, TCli
     /// This Future is cancel-safe. Returns None if a shutdown is triggered.
     async fn next_epoch_event(&mut self) -> Option<EpochEvent> {
         poll_fn(|cx| self.poll_next_event(cx)).await
-    }
-
-    fn is_within_epoch_end_spread(&self, current_epoch: Epoch) -> bool {
-        // `inner` is briefly None while a scan task is in flight; return false then so voting
-        // falls back to the strict em_epoch > current_epoch check.
-        self.inner
-            .as_deref()
-            .map(|inner| inner.is_within_epoch_end_spread(current_epoch))
-            .unwrap_or(false)
     }
 
     fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> anyhow::Result<Option<FixedHash>> {
@@ -1385,7 +1353,6 @@ mod tests {
                 sync_headers: true,
                 sync_validator_node_changes: false,
             },
-            epoch_end_spread_blocks: 0,
         }
     }
 
