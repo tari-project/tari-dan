@@ -51,21 +51,15 @@ mod transaction_gossip;
 mod transaction_manager;
 mod transaction_pruner;
 
-use std::{convert::Infallible, fs, future, future::Future};
+use std::fs;
 
 use log::*;
 pub use rest_api::ApiDoc;
-use serde::Serialize;
 use tari_common::exit_codes::{ExitCode, ExitError};
-use tari_epoch_manager::{
-    EpochManagerEvent,
-    EpochManagerReader,
-    traits::{EpochManagerSpec, LayerOneTransactionSubmitter},
-};
+use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader, traits::EpochManagerSpec};
 use tari_epoch_oracles::EpochOracle;
 use tari_networking::NetworkingService;
 use tari_ootle_app_utilities::{consensus_constants_file::load_consensus_constants, keypair::setup_keypair_prompt};
-use tari_ootle_common_types::layer_one_transaction::LayerOneTransactionDef;
 use tari_ootle_p2p::PeerAddress;
 use tari_ootle_storage::global::{DbFactory, GlobalDb};
 use tari_ootle_storage_sqlite::{SqliteDbFactory, global::SqliteGlobalDbAdapter};
@@ -253,21 +247,6 @@ pub struct IndexerEpochManagerSpec;
 impl EpochManagerSpec for IndexerEpochManagerSpec {
     type Addr = PeerAddress;
     type EpochEventOracle = EpochOracle<GlobalDb<SqliteGlobalDbAdapter<PeerAddress>>>;
-    type LayerOneSubmitter = Noop;
-}
-
-pub struct Noop;
-
-impl LayerOneTransactionSubmitter for Noop {
-    type Error = Infallible;
-    type Output = ();
-
-    fn submit_transaction<T: Serialize + Send>(
-        &self,
-        _proof: LayerOneTransactionDef<T>,
-    ) -> impl Future<Output = Result<Self::Output, Self::Error>> + Send {
-        future::ready(Ok(()))
-    }
 }
 
 #[cfg(feature = "metrics")]

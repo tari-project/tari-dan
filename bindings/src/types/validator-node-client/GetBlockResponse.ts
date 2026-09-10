@@ -18,7 +18,7 @@ export type GetBlockResponse = {
   max_block_execution_points: bigint;
   /**
    * Total execution weight of the block's transaction commands: each transaction's weight discounted by how much
-   * of the work its command stage adds. Foreign proposal and evict commands carry no execution weight and so
+   * of the work its command stage adds. Foreign proposal commands carry no execution weight and so
    * contribute nothing.
    */
   total_block_execution_weight: bigint;

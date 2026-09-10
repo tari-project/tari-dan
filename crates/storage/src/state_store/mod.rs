@@ -382,20 +382,6 @@ pub trait StateStoreReadTransaction: Sized {
         epoch: Epoch,
         public_key: &RistrettoPublicKeyBytes,
     ) -> Result<ValidatorConsensusStats, StorageError>;
-
-    fn validator_epoch_stats_get_nodes_to_evict(
-        &self,
-        block_id: &BlockId,
-        threshold: u64,
-        limit: u64,
-    ) -> Result<Vec<RistrettoPublicKeyBytes>, StorageError>;
-    // -------------------------------- SuspendedNodes -------------------------------- //
-    fn suspended_nodes_is_evicted(
-        &self,
-        block_id: &BlockId,
-        public_key: &RistrettoPublicKeyBytes,
-    ) -> Result<bool, StorageError>;
-    fn evicted_nodes_count(&self, epoch: Epoch) -> Result<u64, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -617,19 +603,6 @@ pub trait StateStoreWriteTransaction {
         &mut self,
         epoch: Epoch,
         updates: I,
-    ) -> Result<(), StorageError>;
-
-    // -------------------------------- SuspendedNodes -------------------------------- //
-
-    fn evicted_nodes_evict(
-        &mut self,
-        public_key: &RistrettoPublicKeyBytes,
-        evicted_in_block: BlockId,
-    ) -> Result<(), StorageError>;
-    fn evicted_nodes_mark_eviction_as_committed(
-        &mut self,
-        public_key: &RistrettoPublicKeyBytes,
-        epoch: Epoch,
     ) -> Result<(), StorageError>;
 
     // -------------------------------- Epoch cleanup -------------------------------- //

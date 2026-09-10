@@ -83,7 +83,6 @@ impl<TSpec: EpochManagerSpec> EpochManagerService<TSpec> {
         config: EpochManagerConfig,
         global_db: GlobalDb<SqliteGlobalDbAdapter<TSpec::Addr>>,
         epoch_events: TSpec::EpochEventOracle,
-        layer_one_transaction_submitter: TSpec::LayerOneSubmitter,
         node_public_key: RistrettoPublicKeyBytes,
         shutdown: ShutdownSignal,
     ) -> (EpochManagerHandle<TSpec::Addr>, JoinHandle<anyhow::Result<()>>) {
@@ -101,13 +100,7 @@ impl<TSpec: EpochManagerSpec> EpochManagerService<TSpec> {
         let task_handle = tokio::spawn(async move {
             Self {
                 rx_request,
-                inner: EpochManager::new(
-                    config,
-                    global_db,
-                    layer_one_transaction_submitter,
-                    node_public_key,
-                    current_epoch,
-                ),
+                inner: EpochManager::new(config, global_db, node_public_key, current_epoch),
                 tx_events: events,
                 has_epoch_changed: false,
                 is_initial_epoch_sync_complete: false,
@@ -507,9 +500,6 @@ impl<TSpec: EpochManagerSpec> EpochManagerService<TSpec> {
                 handle(reply, self.inner.get_fee_claim_public_key(), context)
             },
 
-            EpochManagerRequest::AddIntentToEvictValidator { proof, reply } => {
-                handle(reply, self.inner.add_intent_to_evict_validator(*proof).await, context)
-            },
             EpochManagerRequest::GetRandomCommitteeMemberFromShardGroup {
                 epoch,
                 shard_group,

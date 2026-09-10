@@ -46,7 +46,6 @@ use tari_ootle_app_utilities::consensus_constants_file::{ConsensusConstantsFile,
 use tari_ootle_common_types::SubstateRequirement;
 use tari_ootle_transaction::Network;
 use tari_ootle_wallet_sdk::models::AccountWithAddress;
-use tari_sidechain::EvictionProof;
 use tari_template_lib_types::Amount;
 use tari_transaction_components::{
     consensus::ConsensusManager,
@@ -110,7 +109,6 @@ pub struct TariWorld {
     /// A receiver wallet address that is used for default one-sided coinbase payments
     pub default_payment_address: TariAddress,
     pub consensus_manager: ConsensusManager,
-    pub eviction_proofs: HashMap<String, EvictionProof>,
 }
 
 impl TariWorld {
@@ -146,7 +144,6 @@ impl TariWorld {
             minotari_wallet_private_key: wallet_private_key,
             default_payment_address,
             consensus_manager: ConsensusManager::builder(L1Network::LocalNet).build(),
-            eviction_proofs: HashMap::new(),
         }
     }
 
@@ -275,11 +272,6 @@ impl TariWorld {
         self.base_nodes
             .get(name)
             .unwrap_or_else(|| panic!("Base node {} not found", name))
-    }
-
-    pub fn add_eviction_proof<T: Into<String>>(&mut self, name: T, eviction_proof: EvictionProof) -> &mut Self {
-        self.eviction_proofs.insert(name.into(), eviction_proof);
-        self
     }
 
     pub fn after(&mut self, _scenario: &Scenario) {

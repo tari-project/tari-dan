@@ -13,7 +13,6 @@ minotari_app_grpc = { workspace = true }
 tari_ootle_common_types = { workspace = true }
 tari_ootle_storage = { workspace = true }
 tari_ootle_storage_sqlite = { workspace = true, optional = true }
-tari_sidechain = { workspace = true }
 tari_template_lib_types = { workspace = true }
 tari_shutdown = { workspace = true }
 ootle_byte_type = { workspace = true, features = ["crypto"] }

@@ -123,8 +123,6 @@ use crate::{
         chain,
         epoch_checkpoint,
         epoch_checkpoint::EpochCheckpointCf,
-        evicted_node,
-        evicted_node::EvictedNodeCf,
         finalized_transaction::FinalizedTransactionLinkCf,
         foreign_parked_blocks::ForeignParkedBlockCf,
         foreign_proposal,
@@ -147,7 +145,6 @@ use crate::{
         transaction::TransactionCf,
         transaction_pool::TransactionPoolCf,
         transaction_pool_state_update,
-        validator_node_epoch_stats,
         validator_node_epoch_stats::ValidatorNodeEpochStatsCf,
     },
     error::RocksDbStorageError,
@@ -2013,102 +2010,6 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         let cf = self.db().cf(ValidatorNodeEpochStatsCf)?;
         let stats = cf.get(&(epoch, *public_key), OPERATION)?;
         Ok(stats)
-    }
-
-    fn validator_epoch_stats_get_nodes_to_evict(
-        &self,
-        block_id: &BlockId,
-        threshold: u64,
-        limit: u64,
-    ) -> Result<Vec<RistrettoPublicKeyBytes>, StorageError> {
-        const OPERATION: &str = "validator_epoch_stats_get_nodes_to_evict";
-        if limit == 0 {
-            return Ok(vec![]);
-        }
-
-        let query = self.db().cf(evicted_node::ByPublicKeyQuery)?;
-        let stats_cf = self.db().cf(validator_node_epoch_stats::ByEpochQuery)?;
-
-        let block = self.blocks_get(block_id)?;
-        let chain = self.get_pending_chain_until(block_id)?;
-
-        let iter = stats_cf.query_prefix_range_iterator(Ordering::default(), &block.epoch());
-
-        let mut nodes_to_evict = vec![];
-        for result in iter {
-            let ((_, public_key), stats) = result?;
-            if stats.missed_proposals < threshold {
-                continue;
-            }
-            let iter = query.query_prefix_range_iterator(Ordering::default(), &public_key);
-            let mut has_proposed = false;
-            for result in iter {
-                let ((_, block_id), data) = result?;
-                if data.is_committed || chain.contains(&block_id) {
-                    // Already proposed - so we don't want to evict again
-                    has_proposed = true;
-                    break;
-                }
-            }
-            if has_proposed {
-                continue;
-            }
-
-            debug!(
-                target: LOG_TARGET,
-                "{OPERATION}: Evicting node {} with missed proposals {}",
-                public_key,
-                stats.missed_proposals
-            );
-            nodes_to_evict.push(public_key);
-        }
-
-        Ok(nodes_to_evict)
-    }
-
-    fn suspended_nodes_is_evicted(
-        &self,
-        block_id: &BlockId,
-        public_key: &RistrettoPublicKeyBytes,
-    ) -> Result<bool, StorageError> {
-        const OPERATION: &str = "suspended_nodes_is_evicted";
-        if !self.blocks_exists(block_id)? {
-            return Err(StorageError::QueryError {
-                reason: format!("{OPERATION}: block {} not found", block_id),
-            });
-        }
-
-        let query = self.db().cf(evicted_node::ByPublicKeyQuery)?;
-        let pending_chain = self.get_pending_chain_until(block_id)?;
-
-        let iter = query.query_prefix_range_iterator(Ordering::default(), public_key);
-
-        for result in iter {
-            let ((_, block_id), value) = result?;
-            if !value.is_committed && !pending_chain.contains(&block_id) {
-                continue;
-            }
-            return Ok(true);
-        }
-
-        Ok(false)
-    }
-
-    fn evicted_nodes_count(&self, epoch: Epoch) -> Result<u64, StorageError> {
-        const OPERATION: &str = "evicted_nodes_count";
-
-        // TODO: we'll need an index just to optimise this query.
-        let cf = self.db().cf(EvictedNodeCf)?;
-        let iter = cf.value_iterator(Ordering::default(), OPERATION);
-        let mut count = 0;
-        for result in iter {
-            let value = result?;
-            if value.epoch == epoch {
-                count += 1;
-            }
-        }
-
-        Ok(count)
     }
 }
 

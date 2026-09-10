@@ -34,12 +34,11 @@ use tari_ootle_storage::{
         TransactionPoolError,
         TransactionPoolRecord,
         TransactionPoolStatusUpdate,
-        ValidatorConsensusStats,
     },
 };
 use tari_ootle_transaction::{Transaction, TransactionId};
 use tari_sidechain::QuorumDecision;
-use tari_template_lib_types::{ClaimedOutputTombstoneAddress, crypto::RistrettoPublicKeyBytes};
+use tari_template_lib_types::ClaimedOutputTombstoneAddress;
 
 use crate::{hotstuff::transaction_manager::TransactionLockConflicts, tracing::TraceTimer};
 
@@ -82,12 +81,6 @@ impl BlockDecision {
         }
     }
 
-    pub fn commit_blocks_with_evictions_iter(&self) -> impl Iterator<Item = &Block> + Clone + '_ {
-        self.commit_blocks
-            .iter()
-            .filter(|block| block.all_node_evictions().next().is_some())
-    }
-
     pub fn highest_qc_view(&self) -> NodeHeight {
         self.high_pc
             .height()
@@ -107,7 +100,6 @@ pub struct ProposedBlockChangeSet {
     proposed_foreign_proposals: Vec<BlockId>,
     proposed_utxo_mints: Vec<ClaimedOutputTombstoneAddress>,
     no_vote_reason: Option<NoVoteReason>,
-    evict_nodes: Vec<RistrettoPublicKeyBytes>,
 }
 
 impl ProposedBlockChangeSet {
@@ -123,7 +115,6 @@ impl ProposedBlockChangeSet {
             proposed_foreign_proposals: Vec::new(),
             proposed_utxo_mints: Vec::new(),
             no_vote_reason: None,
-            evict_nodes: Vec::new(),
         }
     }
 
@@ -216,8 +207,6 @@ impl ProposedBlockChangeSet {
             );
             self.proposed_utxo_mints.shrink_to(MEM_MAX_PROPOSED_UTXO_MINTS_SIZE);
         }
-        // evict_nodes is typically rare, so rather release all memory
-        self.evict_nodes = vec![];
         self.no_vote_reason = None;
     }
 
@@ -259,15 +248,6 @@ impl ProposedBlockChangeSet {
         if let Some(update) = self.transaction_changes.get(tx_rec_mut.id()) {
             update.apply_update(tx_rec_mut);
         }
-    }
-
-    pub fn add_evict_node(&mut self, public_key: RistrettoPublicKeyBytes) -> &mut Self {
-        self.evict_nodes.push(public_key);
-        self
-    }
-
-    pub fn num_evicted_nodes_this_block(&self) -> usize {
-        self.evict_nodes.len()
     }
 
     pub fn add_foreign_pledges(
@@ -532,10 +512,6 @@ impl ProposedBlockChangeSet {
             )?;
         }
 
-        for node in &self.evict_nodes {
-            ValidatorConsensusStats::evict_node(tx, node, self.block.block_id)?;
-        }
-
         Ok(())
     }
 
@@ -590,10 +566,6 @@ impl ProposedBlockChangeSet {
 
         for mint in &self.proposed_utxo_mints {
             debug!(target: LOG_TARGET, "[drop] ProposedUtxoMint: {mint}");
-        }
-
-        for node in &self.evict_nodes {
-            debug!(target: LOG_TARGET, "[drop] EvictNode: {node}");
         }
     }
 }

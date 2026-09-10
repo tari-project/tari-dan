@@ -228,10 +228,6 @@ impl TestEpochManager {
     pub fn get_current_epoch(&self) -> Epoch {
         self.current_epoch
     }
-
-    pub async fn eviction_proofs(&self) -> Vec<tari_sidechain::EvictionProof> {
-        self.state_lock().await.eviction_proofs.clone()
-    }
 }
 
 impl EpochManagerReader for TestEpochManager {
@@ -453,15 +449,6 @@ impl EpochManagerReader for TestEpochManager {
         Ok(())
     }
 
-    async fn add_intent_to_evict_validator(
-        &self,
-        proof: tari_sidechain::EvictionProof,
-    ) -> Result<(), EpochManagerError> {
-        let mut state = self.state_lock().await;
-        state.eviction_proofs.push(proof);
-        Ok(())
-    }
-
     async fn get_random_committee_member(
         &self,
         _epoch: Epoch,
@@ -543,7 +530,6 @@ pub struct TestEpochManagerState {
     pub validator_nodes: HashMap<TestAddress, (ValidatorNode<TestAddress>, ShardGroup)>,
     pub committees: HashMap<ShardGroup, Arc<Committee<TestAddress>>>,
     pub address_shard: HashMap<TestAddress, ShardGroup>,
-    pub eviction_proofs: Vec<tari_sidechain::EvictionProof>,
 }
 
 impl Default for TestEpochManagerState {
@@ -555,7 +541,6 @@ impl Default for TestEpochManagerState {
             validator_nodes: HashMap::new(),
             committees: HashMap::new(),
             address_shard: HashMap::new(),
-            eviction_proofs: Vec::new(),
         }
     }
 }

@@ -10,17 +10,11 @@ use borsh::BorshSerialize;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_consensus_types::{BlockId, Decision};
-use tari_ootle_common_types::{Epoch, ShardGroup, hashing::command_hasher};
+use tari_ootle_common_types::{ShardGroup, hashing::command_hasher};
 use tari_ootle_transaction::TransactionId;
-use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use super::{ForeignProposalAtom, LeaderFee, TransactionRecord};
-use crate::{
-    StateStoreReadTransaction,
-    StateStoreWriteTransaction,
-    StorageError,
-    consensus_models::evidence::Evidence,
-};
+use crate::{StateStoreReadTransaction, StorageError, consensus_models::evidence::Evidence};
 
 #[derive(
     Debug,
@@ -74,6 +68,12 @@ impl Display for TransactionAtom {
     }
 }
 
+/// Discriminants are explicit and load-bearing: a command's hash is its Borsh encoding, and the base
+/// layer recomputes that hash from [`tari_sidechain::Command`] when verifying an end-of-epoch
+/// inclusion proof. Each variant must therefore keep the discriminant its counterpart has there,
+/// which is that enum's declaration order — 6 is absent here because the sidechain enum still
+/// declares a variant this one does not. Renumbering a variant invalidates every proof over it; the
+/// tests at the foot of this module hold the two enums to the same values.
 #[derive(
     Debug,
     Clone,
@@ -86,39 +86,38 @@ impl Display for TransactionAtom {
     minicbor::Decode,
     minicbor::CborLen,
 )]
+#[borsh(use_discriminant = true)]
+#[repr(u8)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Command {
     // Transaction Commands
     /// Request validators to prepare a local-only transaction
     #[n(0)]
-    LocalOnly(#[n(0)] TransactionAtom),
+    LocalOnly(#[n(0)] TransactionAtom) = 0,
     /// Request validators to prepare a transaction.
     #[n(1)]
-    LocalPrepare(#[n(0)] TransactionAtom),
+    LocalPrepare(#[n(0)] TransactionAtom) = 1,
     /// Request validators to  agree that all involved shard groups prepared the transaction and
     /// accept (i.e. accept COMMIT/ABORT decision) a transaction. All foreign inputs are received
     /// and the transaction is executed with the same decision.
     #[n(2)]
-    LocalAccept(#[n(0)] TransactionAtom),
+    LocalAccept(#[n(0)] TransactionAtom) = 2,
     /// Request validators to agree that all involved shard groups agreed to ACCEPT the transaction.
     #[n(3)]
-    AllAccept(#[n(0)] TransactionAtom),
+    AllAccept(#[n(0)] TransactionAtom) = 3,
     /// Request validators to agree that one or more involved shard groups did not agreed to ACCEPT the transaction.
     #[n(4)]
-    SomeAccept(#[n(0)] TransactionAtom),
+    SomeAccept(#[n(0)] TransactionAtom) = 4,
     // Validator node commands
     #[n(5)]
-    ForeignProposal(#[n(0)] ForeignProposalAtom),
-    #[n(6)]
-    EvictNode(#[n(0)] EvictNodeAtom),
+    ForeignProposal(#[n(0)] ForeignProposalAtom) = 5,
     #[n(7)]
-    EndEpoch(#[n(0)] EndEpochAtom),
+    EndEpoch(#[n(0)] EndEpochAtom) = 7,
 }
 
 /// Defines the order in which commands should be processed in a block. "Smallest" comes first and "largest" comes last.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum CommandOrdering<'a> {
-    EvictNode,
     /// Foreign proposals should come first in the block so that they are processed before commands
     ForeignProposal(ShardGroup, &'a BlockId),
     TransactionId(&'a TransactionId),
@@ -133,7 +132,7 @@ impl Command {
             Command::AllAccept(tx) |
             Command::SomeAccept(tx) |
             Command::LocalOnly(tx) => Some(tx),
-            Command::ForeignProposal(_) | Command::EvictNode(_) | Command::EndEpoch(_) => None,
+            Command::ForeignProposal(_) | Command::EndEpoch(_) => None,
         }
     }
 
@@ -147,7 +146,7 @@ impl Command {
         match self {
             Command::LocalOnly(_) | Command::LocalPrepare(_) | Command::LocalAccept(_) => 100,
             Command::AllAccept(_) | Command::SomeAccept(_) => 35,
-            Command::ForeignProposal(_) | Command::EvictNode(_) | Command::EndEpoch(_) => 0,
+            Command::ForeignProposal(_) | Command::EndEpoch(_) => 0,
         }
     }
 
@@ -162,7 +161,6 @@ impl Command {
                 // Order by shard group then by block id
                 CommandOrdering::ForeignProposal(foreign_proposal.shard_group, &foreign_proposal.block_id)
             },
-            Command::EvictNode(_) => CommandOrdering::EvictNode,
             Command::EndEpoch(_) => CommandOrdering::EndEpoch,
         }
     }
@@ -195,13 +193,6 @@ impl Command {
     pub fn foreign_proposal(&self) -> Option<&ForeignProposalAtom> {
         match self {
             Command::ForeignProposal(tx) => Some(tx),
-            _ => None,
-        }
-    }
-
-    pub fn evict_node(&self) -> Option<&EvictNodeAtom> {
-        match self {
-            Command::EvictNode(atom) => Some(atom),
             _ => None,
         }
     }
@@ -306,45 +297,8 @@ impl Display for Command {
             Command::AllAccept(tx) => write!(f, "AllAccept({}, {})", tx.id, tx.decision),
             Command::SomeAccept(tx) => write!(f, "SomeAccept({}, {})", tx.id, tx.decision),
             Command::ForeignProposal(fp) => write!(f, "ForeignProposal {}", fp.block_id),
-            Command::EvictNode(atom) => write!(f, "EvictNode({atom})"),
             Command::EndEpoch(atom) => write!(f, "EndEpoch({atom})"),
         }
-    }
-}
-
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    BorshSerialize,
-    minicbor::Encode,
-    minicbor::Decode,
-    minicbor::CborLen,
-)]
-pub struct EvictNodeAtom {
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
-    #[serde(with = "ootle_serde::hex")]
-    #[n(0)]
-    pub public_key: RistrettoPublicKeyBytes,
-}
-
-impl EvictNodeAtom {
-    pub fn mark_as_committed_in_epoch<TTx: StateStoreWriteTransaction>(
-        &self,
-        tx: &mut TTx,
-        epoch: Epoch,
-    ) -> Result<(), StorageError> {
-        tx.evicted_nodes_mark_eviction_as_committed(&self.public_key, epoch)
-    }
-}
-
-impl Display for EvictNodeAtom {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.public_key)
     }
 }
 
@@ -478,6 +432,91 @@ mod tests {
         assert_eq!(
             Command::EndEpoch(EndEpochAtom::new(FixedHash::zero())).execution_weight_percent(),
             0
+        );
+    }
+}
+
+#[cfg(test)]
+mod borsh_discriminant_tests {
+    use super::*;
+
+    /// The base layer recomputes a command's hash from [`tari_sidechain::Command`] when verifying an
+    /// end-of-epoch inclusion proof, hashing the Borsh encoding. The discriminant each variant here
+    /// serialises to must therefore equal the one the sidechain enum serialises to, which is that
+    /// enum's declaration order. The explicit discriminants exist to hold that correspondence while
+    /// the two enums list different variants.
+    fn transaction_atom() -> TransactionAtom {
+        TransactionAtom {
+            id: TransactionId::default(),
+            decision: Decision::Commit,
+            evidence: Evidence::default(),
+            transaction_fee: 0,
+            leader_fee: None,
+        }
+    }
+
+    fn foreign_proposal_atom() -> ForeignProposalAtom {
+        ForeignProposalAtom {
+            block_id: BlockId::zero(),
+            shard_group: ShardGroup::all_shards(tari_ootle_common_types::NumPreshards::P256),
+        }
+    }
+
+    #[test]
+    fn discriminants_match_the_sidechain_enum() {
+        let cases: [(Command, tari_sidechain::Command); 7] = [
+            (
+                Command::LocalOnly(transaction_atom()),
+                tari_sidechain::Command::LocalOnly,
+            ),
+            (
+                Command::LocalPrepare(transaction_atom()),
+                tari_sidechain::Command::LocalPrepare,
+            ),
+            (
+                Command::LocalAccept(transaction_atom()),
+                tari_sidechain::Command::LocalAccept,
+            ),
+            (
+                Command::AllAccept(transaction_atom()),
+                tari_sidechain::Command::AllAccept,
+            ),
+            (
+                Command::SomeAccept(transaction_atom()),
+                tari_sidechain::Command::SomeAccept,
+            ),
+            (
+                Command::ForeignProposal(foreign_proposal_atom()),
+                tari_sidechain::Command::ForeignProposal,
+            ),
+            (
+                Command::EndEpoch(EndEpochAtom::new(FixedHash::zero())),
+                tari_sidechain::Command::EndEpoch(tari_sidechain::EndEpochAtom::new(FixedHash::zero())),
+            ),
+        ];
+
+        for (ours, theirs) in cases {
+            let mut ours_bytes = Vec::new();
+            BorshSerialize::serialize(&ours, &mut ours_bytes).unwrap();
+            let mut theirs_bytes = Vec::new();
+            BorshSerialize::serialize(&theirs, &mut theirs_bytes).unwrap();
+
+            assert_eq!(
+                ours_bytes[0], theirs_bytes[0],
+                "discriminant mismatch for {ours}: {} != {}",
+                ours_bytes[0], theirs_bytes[0]
+            );
+        }
+    }
+
+    /// The whole command, not just its tag, is what the base layer hashes for an end-of-epoch proof.
+    #[test]
+    fn an_end_epoch_command_hashes_identically_on_both_sides() {
+        let next_epoch_hash = FixedHash::zero();
+
+        assert_eq!(
+            Command::EndEpoch(EndEpochAtom::new(next_epoch_hash)).hash(),
+            tari_sidechain::Command::EndEpoch(tari_sidechain::EndEpochAtom::new(next_epoch_hash)).hash(),
         );
     }
 }

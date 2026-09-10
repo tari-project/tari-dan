@@ -13,14 +13,11 @@ use tari_consensus_types::{
     PcId,
     ProposalCertificate,
     ProposalVote,
-    TimeoutVote,
-    TimeoutVoteMessage,
     ValidatorSignatureBytes,
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_ootle_common_types::{
     Epoch,
-    NodeHeight,
     ProtocolVersion,
     committee::{Committee, CommitteeInfo},
     optional::Optional,
@@ -49,19 +46,24 @@ use crate::{
         ProposalValidationError,
         block_change_set::{BlockDecision, ProposedBlockChangeSet},
         calculate_dummy_blocks_from_justify,
-        commit_proofs::generate_eviction_proofs,
         epoch_state::EpochState,
         error::HotStuffError,
         generate_epoch_checkpoint,
-        get_leader_for_view,
         on_ready_to_vote_on_local_block::OnReadyToVoteOnLocalBlock,
         on_receive_foreign_proposal::OnReceiveForeignProposalHandler,
         pacemaker_handle::PaceMakerHandle,
         transaction_manager::ConsensusTransactionManager,
     },
-    messages::{ForeignProposalNotificationMessage, HotstuffMessage, NewViewMessage, ProposalMessage, VoteMessage},
+    messages::{ForeignProposalNotificationMessage, HotstuffMessage, ProposalMessage, VoteMessage},
     tracing::TraceTimer,
-    traits::{CertificateStore, ConsensusSpec, OutboundMessaging, ValidatorSignerService, hooks::ConsensusHooks},
+    traits::{
+        CertificateStore,
+        ConsensusSpec,
+        LeaderStrategy,
+        OutboundMessaging,
+        ValidatorSignerService,
+        hooks::ConsensusHooks,
+    },
 };
 
 const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::on_receive_local_proposal";
@@ -411,21 +413,6 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         let is_accept_decision = block_decision.is_accept();
 
-        if is_accept_decision {
-            let mut committed_blocks_with_evictions = block_decision.commit_blocks_with_evictions_iter().peekable();
-            if committed_blocks_with_evictions.peek().is_some() {
-                // Generate eviction proofs for the evicted blocks
-                let qc = valid_block.justify();
-                let proofs = self
-                    .store
-                    .with_read_tx(|tx| generate_eviction_proofs(tx, qc, committed_blocks_with_evictions))?;
-                info!(target: LOG_TARGET, "🦶 Generated {} eviction proofs", proofs.len());
-                for proof in proofs {
-                    self.epoch_manager.add_intent_to_evict_validator(proof).await?;
-                }
-            }
-        }
-
         // End of epoch committed? No need to enter the view or send votes
         if !block_decision.is_committed_epoch_end() &&
             let Some(decision) = block_decision.local_decision
@@ -440,32 +427,13 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 .await?;
 
             // Get the leader that will collect votes for this block to justify moving onto the next view
-            let next_leader = self.store.with_read_tx(|tx| {
-                get_leader_for_view(
-                    tx,
-                    local_committee,
-                    &self.leader_strategy,
-                    valid_block.id(),
-                    valid_block.height(),
-                )
-            })?;
+            let (next_leader, _) = self.leader_strategy.get_leader(local_committee, valid_block.height());
 
             // And vote to move onto the next view
-            if next_leader.vote_to_skip_next {
-                self.send_new_view_and_vote_to_leader(
-                    next_leader.height,
-                    next_leader.address,
-                    valid_block.block(),
-                    block_decision.high_pc.clone(),
-                    decision,
-                )
+            self.send_vote_to_leader(next_leader, valid_block.block(), decision)
                 .await?;
-            } else {
-                self.send_vote_to_leader(next_leader.address, valid_block.block(), decision)
-                    .await?;
-                self.store
-                    .with_write_tx(|tx| valid_block.block().as_last_voted().set(tx))?;
-            }
+            self.store
+                .with_write_tx(|tx| valid_block.block().as_last_voted().set(tx))?;
         }
 
         self.hooks.on_local_block_committed(&valid_block);
@@ -727,66 +695,6 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         self.outbound_messaging
             .send(leader.clone(), HotstuffMessage::Vote(message))
-            .await?;
-
-        self.store.with_write_tx(|tx| last_sent_vote.set(tx))?;
-
-        Ok(())
-    }
-
-    async fn send_new_view_and_vote_to_leader(
-        &mut self,
-        timeout_height: NodeHeight,
-        leader: &TConsensusSpec::Addr,
-        block: &Block,
-        high_pc: HighPc,
-        decision: QuorumDecision,
-    ) -> Result<(), HotStuffError> {
-        let _timer =
-            TraceTimer::debug(LOG_TARGET, "send-newview-and-vote").with_excessive_threshold(Duration::from_millis(200));
-
-        let message = self.generate_vote_message(block, decision)?;
-        info!(
-            target: LOG_TARGET,
-            "🔥 NEWVIEW VOTE {:?} for block {} proposed by {} to next leader {:.4}",
-            message.vote.decision,
-            block,
-            block.proposed_by(),
-            leader,
-        );
-
-        let last_sent_vote = LastSentVote::from(message.vote.clone());
-
-        let high_pc = if high_pc.qc_id == block.justify().calculate_id() {
-            block.justify().clone()
-        } else {
-            self.store
-                .with_read_tx(|tx| ProposalCertificate::get(tx, high_pc.epoch(), high_pc.id()))?
-        };
-
-        let msg = TimeoutVoteMessage {
-            epoch: high_pc.epoch(),
-            height: timeout_height,
-        };
-
-        let signature = self.signing_service.sign(&msg);
-        let signature = ValidatorSignatureBytes::new(
-            self.signing_service.public_key().to_byte_type(),
-            signature.to_byte_type(),
-        );
-
-        let message = NewViewMessage {
-            last_vote: Some(message.vote),
-            timeout: TimeoutVote {
-                epoch: high_pc.epoch(),
-                height: timeout_height,
-                signature,
-            },
-            high_pc,
-        };
-
-        self.outbound_messaging
-            .send(leader.clone(), HotstuffMessage::new_newview(message))
             .await?;
 
         self.store.with_write_tx(|tx| last_sent_vote.set(tx))?;

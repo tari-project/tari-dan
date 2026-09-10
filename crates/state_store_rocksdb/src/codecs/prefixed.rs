@@ -24,7 +24,7 @@ pub enum KeyPrefix {
     CommittedParentChildIndex = 10,
     DiagnosticsNoVotes = 11,
     EpochCheckpoints = 12,
-    EvictedNodes = 13,
+    // 13 is unused
     FinalizedTransactionLinks = 14,
     ForeignParkedBlocks = 15,
     MissingTransactions = 16,

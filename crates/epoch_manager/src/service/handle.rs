@@ -16,7 +16,6 @@ use tari_ootle_common_types::{
     committee::{Committee, CommitteeInfo},
 };
 use tari_ootle_storage::global::models::ValidatorNode;
-use tari_sidechain::EvictionProof;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::sync::{broadcast, mpsc, oneshot};
 
@@ -348,18 +347,6 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
             .await
             .map_err(|_| EpochManagerError::SendError)?;
 
-        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
-    }
-
-    async fn add_intent_to_evict_validator(&self, proof: EvictionProof) -> Result<(), EpochManagerError> {
-        let (tx, rx) = oneshot::channel();
-        self.tx_request
-            .send(EpochManagerRequest::AddIntentToEvictValidator {
-                proof: Box::new(proof),
-                reply: tx,
-            })
-            .await
-            .map_err(|_| EpochManagerError::SendError)?;
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
