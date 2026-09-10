@@ -87,8 +87,8 @@ fn attempt_to_overwrite_account() {
     let null: Option<()> = None;
     let overwriting_tx = test.execute_expect_failure(
         Transaction::builder_localnet(Epoch(1))
-            // Create component with the same ID
-            // The create account instruction is idempotent, so we'll call the template directly to force an overwrite attempt
+            // `CreateAccount` is idempotent, so a direct call into the template is the only shape an overwrite
+            // attempt can take
             .call_function(
                 ACCOUNT_TEMPLATE_ADDRESS,
                 "create",
@@ -99,10 +99,7 @@ fn attempt_to_overwrite_account() {
         vec![source_account_proof],
     );
 
-    // Check that the previous transaction failed because of an address collision.
-    assert_reject_reason(overwriting_tx, RuntimeError::ComponentAlreadyExists {
-        address: source_account,
-    });
+    assert_reject_reason(overwriting_tx, "The account constructor cannot be called directly");
 
     let store = test.read_only_state_store();
     let account = store.get_account(source_account).unwrap();
@@ -417,7 +414,7 @@ fn custom_ownership_of_another_keys_account_is_refused() {
 }
 
 #[test]
-fn custom_ownership_via_the_account_template_is_refused() {
+fn the_account_constructor_is_not_callable_as_a_function() {
     let mut test = TemplateTest::new_builtin_only();
     let (_payer_proof, _payer_pk, payer_sk) = test.create_owner_proof();
     let (victim_proof, _victim_pk, _victim_sk) = test.create_owner_proof();
@@ -435,7 +432,24 @@ fn custom_ownership_via_the_account_template_is_refused() {
         vec![],
     );
 
-    assert_reject_reason(reason, "unknown or out of scope signer badge");
+    assert_reject_reason(reason, "The account constructor cannot be called directly");
+}
+
+#[test]
+fn the_account_constructor_is_not_reachable_by_a_cross_template_call() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template = test.get_template_address("Shenanigans");
+    let (_payer_proof, _payer_pk, payer_sk) = test.create_owner_proof();
+    let (victim_proof, _victim_pk, _victim_sk) = test.create_owner_proof();
+
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_function(template, "create_account_for", args![victim_proof])
+            .build_and_seal(&payer_sk),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "The account constructor cannot be called directly");
 }
 
 #[test]

@@ -820,6 +820,13 @@ where
         function: &str,
         args: Vec<InstructionArg>,
     ) -> Result<InstructionResult, TransactionErrorKind> {
+        // An account lives at an address derived from its public key, so which rules a component may be created
+        // there under is that key's decision. `CreateAccount` is the sole route to the constructor and is where
+        // that decision is enforced.
+        if *template_address == ACCOUNT_TEMPLATE_ADDRESS && function == ACCOUNT_CONSTRUCTOR_FUNCTION {
+            return Err(TransactionErrorKind::CannotCallAccountConstructor);
+        }
+
         let template = template_provider
             .get_template(template_address)
             .map_err(|e| TransactionErrorKind::FailedToLoadTemplate {
