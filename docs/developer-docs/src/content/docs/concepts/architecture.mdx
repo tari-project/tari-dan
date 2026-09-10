@@ -1,0 +1,320 @@
+---
+title: Architecture
+description: Node roles, sharding, committees, epochs, and the peer-to-peer layer that make up the Tari Ootle network.
+---
+
+import { basePath } from '../../../helpers/path';
+import { Aside } from "@astrojs/starlight/components";
+
+### Covered in this page
+
+This page covers how the Ootle network is put together:
+- The four node roles and which of them vote.
+- How the state space is sharded, and what a shard group is.
+- A worked example of how 256 shards land in committees.
+- How committees are formed and how validators are assigned to them.
+- How epochs rotate membership.
+- The peer-to-peer transport and message routing.
+
+---
+
+## Node roles
+
+Only one role produces finality. The rest read, index, or serve.
+
+| Node | Votes? | Responsibility |
+|---|---|---|
+| **Validator node** | Yes | Participates in HotStuff consensus and executes transactions for its shard group. |
+| **Indexer** | No | Indexes blocks, transactions, substates, and events; serves queries over REST/JSON-RPC. |
+| **Wallet daemon** | No | Custodies keys, constructs and signs transactions, and submits them via the indexer. |
+| **Base-layer node** | No | An upstream Minotari node. Ootle reads validator registrations and epoch data from it. |
+
+A validator node runs three things at once: the consensus protocol, the execution engine (TVM),
+and a connection to the base layer through the **epoch oracle**
+(`crates/epoch_oracles/src/base_layer/oracle.rs`). The oracle is the seam between the two layers —
+it is what turns "who registered on the base layer" into "who may vote in this epoch."
+
+---
+
+## Sharding
+
+Ootle shards the **state space**, not the contracts. Every possible substate has a deterministic
+address in a 256-bit space, and the network divides that space into fixed slices. That one choice has
+three consequences which shape everything below:
+
+- **A component lives in exactly one shard.** Its address is derived from its identity, not assigned on
+  demand, so a transaction touching only that component is routed to exactly one committee.
+- **Templates are never sharded.** A published template is a *global* substate in shard 0, so every
+  committee can resolve it. Sharding the code would mean replicating it per shard for no benefit.
+- **A transaction that spans shards pays a coordination cost.** It must be sequenced by each involved
+  committee and bound together with pledges — the mechanism in
+  <a href={basePath("/concepts/consensus/")}>Consensus</a>.
+
+### Preshards and shards
+
+The address space is carved into a configurable number of **preshards**. There are 256 of them:
+
+```rust
+// crates/common_types/src/num_preshards.rs
+pub enum NumPreshards {
+    P1 = 1, P2 = 2, P4 = 4, P8 = 8, P16 = 16,
+    P32 = 32, P64 = 64, P128 = 128, P256 = 256,
+}
+impl NumPreshards {
+    pub const MAX: Self = Self::P256;
+    pub const fn current() -> Self { Self::P256 }
+}
+```
+
+A **shard** is one preshard. The number of shards is the number of preshards — 256 — and shards are
+numbered **1 to 256** (`all_shards_iter` yields `1..=as_u32()`). Shard numbering is 1-indexed.
+
+**Shard 0 is reserved as the global shard** (`crates/common_types/src/shard.rs`): it holds global
+substates. The clearest member of that set is a published **template**, which is a global resource
+available to every committee. A substate is global when `SubstateId::is_global()` is true, which is
+exactly the case for templates (`crates/engine_types/src/substate.rs`).
+
+### Shard groups
+
+Committees do not each own a single shard; they own a contiguous run of them — a **shard group**
+(`crates/common_types/src/shard_group.rs`), modelled as an inclusive range `start..=end_inclusive`.
+A shard group promises `start <= end_inclusive`, and a decoded value that violates the ordering is a
+decode error rather than an invalid group.
+
+The 256 shards are distributed across the active committees as evenly as possible:
+
+```rust
+// crates/common_types/src/num_preshards.rs
+pub fn all_shard_groups_iter(&self, num_committees: u32) -> impl Iterator<Item = ShardGroup> {
+    let num_shards = self.as_u32();
+    let num_shards_per_committee = num_shards / num_committees;
+    let mut remainder = num_shards % num_committees;
+    // ... spreads the remainder across the leading groups, 1-indexed
+}
+```
+
+The number of committees scales with how many validators are registered:
+
+```rust
+// crates/epoch_manager/src/service/epoch_manager.rs
+fn calculate_num_committees(num_vns: u64, committee_size: NonZeroU32) -> u32 {
+    // Number of committees is proportional to the number of validators available.
+    cmp::min(cmp::max(1, num_vns / u64::from(committee_size.get())), u64::from(u32::MAX)) as u32
+}
+```
+
+### From an object key to a committee
+
+Four words get used loosely here, and they are worth keeping apart: a **preshard** and a **shard** are
+the same thing (one of the 256 slices of the address space); a **shard group** is a contiguous run of
+shards; and a **committee** is the set of validators that administer one group. A substate belongs to
+exactly one shard, a shard to exactly one group, and a validator to exactly one committee.
+
+<svg viewBox="0 0 900 372" xmlns="http://www.w3.org/2000/svg" style="max-width:900px;width:100%;font-family:system-ui,sans-serif">
+  <defs><marker id="arch-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#6a4dce"/></marker></defs>
+  <rect width="900" height="372" rx="12" fill="#0d1117"/>
+  <text x="450" y="34" text-anchor="middle" fill="#e6edf3" font-size="16" font-weight="bold">From an object key to a committee</text>
+
+  <text x="30" y="60" fill="#8b949e" font-size="11">A substate's address is a 256-bit object key. Its top bits pick the shard; shards are grouped into contiguous shard groups.</text>
+
+  {/* Object key bar */}
+  <rect x="30" y="72" width="840" height="38" rx="6" fill="#1c2333" stroke="#30363d" stroke-width="1"/>
+  <rect x="30" y="72" width="150" height="38" rx="6" fill="#231e40" stroke="#6a4dce" stroke-width="1"/>
+  <text x="105" y="96" text-anchor="middle" fill="#bac5ff" font-size="11" font-weight="bold">top k bits</text>
+  <text x="510" y="96" text-anchor="middle" fill="#8b949e" font-size="11">the object's identity bits (256 &#8722; k)</text>
+  <text x="30" y="134" fill="#6e7681" font-size="10">&#8595; the top k bits select one of 256 shards; those shards are then split into contiguous groups, one per committee</text>
+
+  {/* Group 1 */}
+  <rect x="30" y="150" width="200" height="170" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="130" y="172" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="bold">ShardGroup 1&#8211;64</text>
+  <rect x="42" y="184" width="40" height="28" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <rect x="88" y="184" width="40" height="28" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <rect x="134" y="184" width="40" height="28" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <rect x="180" y="184" width="40" height="28" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <line x1="42" y1="228" x2="218" y2="228" stroke="#30363d" stroke-width="1"/>
+  <text x="130" y="248" text-anchor="middle" fill="#388bfd" font-size="11" font-weight="bold">Committee</text>
+  <circle cx="60" cy="266" r="3" fill="#388bfd"/><circle cx="75" cy="266" r="3" fill="#388bfd"/><circle cx="90" cy="266" r="3" fill="#388bfd"/><circle cx="105" cy="266" r="3" fill="#388bfd"/><circle cx="120" cy="266" r="3" fill="#388bfd"/>
+  <circle cx="135" cy="266" r="3" fill="#388bfd"/><circle cx="150" cy="266" r="3" fill="#388bfd"/><circle cx="165" cy="266" r="3" fill="#388bfd"/><circle cx="180" cy="266" r="3" fill="#388bfd"/><circle cx="195" cy="266" r="3" fill="#388bfd"/>
+  <text x="130" y="290" text-anchor="middle" fill="#8b949e" font-size="9">40 validators, running</text>
+  <text x="130" y="304" text-anchor="middle" fill="#8b949e" font-size="9">HotStuff for this range only</text>
+
+  {/* Group 2 */}
+  <rect x="245" y="150" width="200" height="170" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="345" y="172" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="bold">ShardGroup 65&#8211;128</text>
+  <rect x="257" y="184" width="40" height="28" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <rect x="303" y="184" width="40" height="28" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <rect x="349" y="184" width="40" height="28" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <rect x="395" y="184" width="40" height="28" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <line x1="257" y1="228" x2="433" y2="228" stroke="#30363d" stroke-width="1"/>
+  <text x="345" y="248" text-anchor="middle" fill="#388bfd" font-size="11" font-weight="bold">Committee</text>
+  <circle cx="275" cy="266" r="3" fill="#388bfd"/><circle cx="290" cy="266" r="3" fill="#388bfd"/><circle cx="305" cy="266" r="3" fill="#388bfd"/><circle cx="320" cy="266" r="3" fill="#388bfd"/><circle cx="335" cy="266" r="3" fill="#388bfd"/>
+  <circle cx="350" cy="266" r="3" fill="#388bfd"/><circle cx="365" cy="266" r="3" fill="#388bfd"/><circle cx="380" cy="266" r="3" fill="#388bfd"/><circle cx="395" cy="266" r="3" fill="#388bfd"/><circle cx="410" cy="266" r="3" fill="#388bfd"/>
+  <text x="345" y="290" text-anchor="middle" fill="#8b949e" font-size="9">40 validators, running</text>
+  <text x="345" y="304" text-anchor="middle" fill="#8b949e" font-size="9">HotStuff for this range only</text>
+
+  {/* Group 3 */}
+  <rect x="460" y="150" width="200" height="170" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="560" y="172" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="bold">ShardGroup 129&#8211;192</text>
+  <rect x="472" y="184" width="40" height="28" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <rect x="518" y="184" width="40" height="28" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <rect x="564" y="184" width="40" height="28" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <rect x="610" y="184" width="40" height="28" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <line x1="472" y1="228" x2="648" y2="228" stroke="#30363d" stroke-width="1"/>
+  <text x="560" y="248" text-anchor="middle" fill="#388bfd" font-size="11" font-weight="bold">Committee</text>
+  <circle cx="490" cy="266" r="3" fill="#388bfd"/><circle cx="505" cy="266" r="3" fill="#388bfd"/><circle cx="520" cy="266" r="3" fill="#388bfd"/><circle cx="535" cy="266" r="3" fill="#388bfd"/><circle cx="550" cy="266" r="3" fill="#388bfd"/>
+  <circle cx="565" cy="266" r="3" fill="#388bfd"/><circle cx="580" cy="266" r="3" fill="#388bfd"/><circle cx="595" cy="266" r="3" fill="#388bfd"/><circle cx="610" cy="266" r="3" fill="#388bfd"/><circle cx="625" cy="266" r="3" fill="#388bfd"/>
+  <text x="560" y="290" text-anchor="middle" fill="#8b949e" font-size="9">40 validators, running</text>
+  <text x="560" y="304" text-anchor="middle" fill="#8b949e" font-size="9">HotStuff for this range only</text>
+
+  {/* Group 4 */}
+  <rect x="675" y="150" width="200" height="170" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="775" y="172" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="bold">ShardGroup 193&#8211;256</text>
+  <rect x="687" y="184" width="40" height="28" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <rect x="733" y="184" width="40" height="28" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <rect x="779" y="184" width="40" height="28" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <rect x="825" y="184" width="40" height="28" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <line x1="687" y1="228" x2="863" y2="228" stroke="#30363d" stroke-width="1"/>
+  <text x="775" y="248" text-anchor="middle" fill="#388bfd" font-size="11" font-weight="bold">Committee</text>
+  <circle cx="705" cy="266" r="3" fill="#388bfd"/><circle cx="720" cy="266" r="3" fill="#388bfd"/><circle cx="735" cy="266" r="3" fill="#388bfd"/><circle cx="750" cy="266" r="3" fill="#388bfd"/><circle cx="765" cy="266" r="3" fill="#388bfd"/>
+  <circle cx="780" cy="266" r="3" fill="#388bfd"/><circle cx="795" cy="266" r="3" fill="#388bfd"/><circle cx="810" cy="266" r="3" fill="#388bfd"/><circle cx="825" cy="266" r="3" fill="#388bfd"/><circle cx="840" cy="266" r="3" fill="#388bfd"/>
+  <text x="775" y="290" text-anchor="middle" fill="#8b949e" font-size="9">40 validators, running</text>
+  <text x="775" y="304" text-anchor="middle" fill="#8b949e" font-size="9">HotStuff for this range only</text>
+
+  <text x="450" y="344" text-anchor="middle" fill="#8b949e" font-size="11">Shard 0 is the global shard: published templates live there, outside every committee's range and readable by all of them.</text>
+</svg>
+
+### A worked example
+
+Take `committee_size_per_shard_group = 40` — the value on the live networks — and 160 registered
+validators:
+
+```text
+num_committees   = 160 / 40 = 4
+shards_per_group = 256 / 4  = 64        (no remainder)
+```
+
+Four committees, each owning a contiguous block of 64 shards: 1–64, 65–128, 129–192, 193–256. When the
+count does not divide evenly, the remainder goes to the **first** group: the code's own test for three
+committees produces `1–86`, `87–171`, `172–256`.
+
+Two consequences are easy to miss:
+
+- **A validator serves exactly one shard group.** It cannot propose for, or vote on, state outside its
+  group's address range. Consensus is therefore not one protocol running once; it is one instance *per
+  committee*, running in parallel over disjoint state. That is why the
+  <a href={basePath("/concepts/consensus/")}>Consensus</a> page always speaks of *a* committee, in the
+  singular.
+- **Templates belong to no committee.** They are global substates in shard 0, which is exactly what
+  lets every committee resolve a template in order to execute it. Shard 0 sits outside the `1–256`
+  groups because it is reserved — and that reservation is why shard numbering starts at 1.
+
+---
+
+## Committees
+
+A **committee** is the set of validators responsible for one shard group. It is the unit of
+consensus: HotStuff runs among the members of a committee, and a quorum of that committee finalizes
+its blocks.
+
+The committee size is a per-network constant:
+
+| Network | `committee_size_per_shard_group` |
+|---|---|
+| Mainnet | 40 |
+| Esmeralda (testnet) | 40 |
+| Testnet | 40 |
+| Devnet | 7 (`DEFAULT_DEVNET_COMMITTEE_SIZE`) |
+
+Source: `crates/consensus/src/consensus_constants.rs`. Note that this is a *per-shard-group*
+constant, and the number of groups is derived from the validator count — so these are not the
+"committee sizes" of a single global committee.
+
+### How a validator lands in a shard group
+
+Membership is **deterministic**, not random. Each registered validator derives a shard key that
+falls inside its shard group's address range:
+
+```rust
+// crates/epoch_oracles/src/configured/config.rs
+pub(crate) fn calculate_shard_key(&self) -> SubstateAddress {
+    let range = self.shard_group.to_substate_address_range(NumPreshards::current());
+    let mut hasher = DefaultHasher::new();
+    hasher.write(&self.shard_group.encode_as_u32().to_be_bytes());
+    hasher.write(self.public_key.as_bytes());
+    hasher.write(self.claim_key.as_bytes());
+    hasher.write(&self.registration_epoch.to_be_bytes());
+    let hash = hasher.finish();
+    // ... drops the hash into the low bytes of the shard group's address range
+}
+```
+
+<Aside type="note">
+There is **no verifiable random function (VRF)** and **no sortition** in the Ootle validator set.
+A validator's shard group is a function of its own registration — shard group, public key, claim
+key, and registration epoch — not of a network-wide randomness beacon. You will not find `VRF` or
+`sortition` anywhere in the validator-selection path; the randomness folklore inherited from the
+ERA design documents does not describe what the code does.
+</Aside>
+
+A validator's **claim key** (also called a registration key) is the credential it proves on the base
+layer when it registers. Rotating it is what re-clusters that validator.
+
+---
+
+## Epochs
+
+Time on Ootle is measured in **epochs**. An epoch is a fixed number of base-layer blocks, so the
+epoch clock is really the base layer's clock — Ootle reads the base-layer epoch length through the
+oracle (`crates/epoch_oracles/src/base_layer/oracle.rs`) rather than defining its own.
+
+At each epoch boundary the committee composition is recomputed from the current set of registered
+validators. Members whose registration has lapsed or who have been evicted drop out; newly
+registered validators join. Because a shard key depends on the registration epoch, a validator that
+re-registers can move to a different shard group.
+
+The number of transactions a transaction may remain valid for is bounded separately by
+`max_transaction_validity_epochs` in `crates/consensus/src/consensus_constants.rs` — a transaction
+carries the last epoch it may be sequenced in, and past that it can never land.
+
+---
+
+## The peer-to-peer layer
+
+Ootle nodes talk over **libp2p** (`networking/swarm/src/behaviour.rs`). The transport stack is:
+
+- **TCP** with **Noise** for encryption and authentication (with a network-specific prologue), and
+  **yamux** for stream multiplexing.
+- **QUIC** as an alternative transport.
+- A **relay client** so nodes behind NAT can still be reached.
+
+Messages ride on **gossip topics**, which let a node subscribe only to the traffic it needs:
+
+| Topic | Carries |
+|---|---|
+| `transactions` (`crates/p2p/src/gossip.rs`) | Submitted transactions, propagated to the committees that must sequence them. |
+| `consensus` (`applications/tari_validator_node/src/p2p/services/consensus_gossip/service.rs`) | Consensus messages — proposals, votes, certificates — among committee members. |
+
+Topics can also be **prefixed** per shard group (for example a transaction topic scoped to a range
+of shards). A node routes a prefixed topic on the prefix before the first delimiter, so a validator
+can subscribe to the exact slice of the network it is responsible for
+(`networking/core/src/message_mode.rs`).
+
+This split matters: consensus traffic is confined to a committee, while transaction gossip is
+fanned out to whichever committees hold the inputs. That is the network-level expression of the
+sharding described above — and it is what a <a href={basePath("/concepts/consensus/")}>cross-shard
+transaction</a> has to work against.
+
+---
+
+## Summary
+
+- Four node roles; only **validators** vote.
+- State is sharded into **256 preshards** (shards 1–256), with **shard 0** reserved for global
+  substates such as templates.
+- Shards are grouped into contiguous **shard groups**, one per committee. A validator serves exactly
+  one group, so consensus runs once per committee over disjoint state.
+- Committee size is a constant (**40** on live networks, **7** on devnet); the number of committees
+  scales with the validator count, and a non-dividing remainder goes to the first group.
+- Membership is **deterministic** — no VRF, no sortition.
+- **Epochs** rotate membership, driven by the base layer's block height.
+- Nodes communicate over **libp2p** with topic-scoped gossip.

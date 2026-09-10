@@ -3,6 +3,8 @@ import { defineConfig } from "astro/config";
 import cloudflare from "@astrojs/cloudflare";
 import starlight from "@astrojs/starlight";
 import skills from 'astro-skills';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 
 // https://astro.build/config
 export default defineConfig({
@@ -12,6 +14,10 @@ export default defineConfig({
     imageService: "passthrough",
   }),
   base: '/',
+  markdown: {
+    remarkPlugins: [remarkMath],
+    rehypePlugins: [rehypeKatex],
+  },
   integrations: [
     skills(),
     starlight({
@@ -24,13 +30,33 @@ export default defineConfig({
         { tag: "meta", attrs: { name: "twitter:card", content: "summary_large_image" } },
         { tag: "meta", attrs: { name: "twitter:image", content: "https://ootle.tari.com/og-image.png" } },
       ],
-      customCss: ["./src/styles/global.scss", "./src/styles/custom.scss", "./src/fonts/font-face.css"],
+      customCss: [
+        "katex/dist/katex.min.css",
+        "./src/styles/global.scss",
+        "./src/styles/custom.scss",
+        "./src/fonts/font-face.css",
+      ],
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/tari-project/tari-ootle" }],
       sidebar: [
+        { label: "Getting Started", link: "/guides/getting-started/" },
+        {
+          label: "Concepts",
+          items: [
+            { label: "Overview", link: "/concepts/overview/" },
+            { label: "Architecture", link: "/concepts/architecture/" },
+            { label: "Consensus", link: "/concepts/consensus/" },
+            { label: "State and Execution", link: "/concepts/state-and-execution/" },
+            { label: "Privacy", link: "/concepts/privacy/" },
+            { label: "Privacy in Applications", link: "/concepts/privacy-in-applications/" },
+            { label: "Stablecoins", link: "/concepts/stablecoin/" },
+            { label: "Templates and Assets", link: "/concepts/templates-and-assets/" },
+            { label: "Tokenomics", link: "/concepts/tokenomics/" },
+            { label: "Glossary", link: "/concepts/glossary/" },
+          ],
+        },
         {
           label: "Guides",
           items: [
-            { label: "Getting Started", link: "/guides/getting-started/" },
             { label: "Setup a Wallet", link: "/guides/setup-a-wallet/" },
             { label: "Templates Overview", link: "/guides/template-overview/" },
             { label: "Building a Guessing Game", link: "/guides/build-a-guessing-game/" },

@@ -1,0 +1,415 @@
+---
+title: Privacy
+description: The two privacy layers of Tari Ootle — confidential balances and stealth ownership — and the cryptography that makes them work.
+---
+
+import { basePath } from '../../../helpers/path';
+import { Aside } from "@astrojs/starlight/components";
+
+### Covered in this page
+
+This page covers the cryptography behind private state:
+- The two privacy *layers* — **confidential** (hides amounts) and **stealth** (hides ownership too).
+- **Pedersen commitments**: how a balance is hidden but still provably consistent.
+- **Bulletproofs+**: how the engine proves an encrypted value is in range.
+- **Stealth addresses**: one-time keys derived by Diffie-Hellman.
+- The **balance proof** and **ElGamal viewable balances** for auditing.
+- **Encrypted payloads** for values, masks, and memos.
+- The **threat model** — what is hidden, and what still leaks.
+
+<Aside type="note">
+This page describes the *primitives*. For a step-by-step treatment of building stealth transfers —
+including condition trees, covenants, and runnable examples — see
+<a href={basePath("/guides/stealth-resources/")}>Stealth Transfers</a>.
+</Aside>
+
+---
+
+## Two layers of privacy
+
+Ootle's privacy is not one mechanism but two, and they stack:
+
+| Layer | Hides | Mechanism | Where funds live |
+|---|---|---|---|
+| **Confidential** | The *amount* | Pedersen commitments + range proofs | Vaults (balances) |
+| **Stealth** | The *amount* and the *owner* | Commitments + one-time addresses | UTXOs (unspent outputs) |
+
+A confidential resource keeps balances hidden inside a vault: an observer sees that a vault holds
+*something*, but not how much. A stealth resource goes further — funds are individual UTXOs with
+one-time addresses, so an observer cannot link an output to a person, and cannot read the amount.
+The native token, **TARI**, is a stealth resource.
+
+<svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" style="max-width:900px;width:100%;font-family:system-ui,sans-serif">
+  <rect width="900" height="320" rx="12" fill="#0d1117"/>
+  <text x="450" y="34" text-anchor="middle" fill="#e6edf3" font-size="16" font-weight="bold">Two layers, and what each one hides</text>
+  <text x="450" y="56" text-anchor="middle" fill="#8b949e" font-size="11">Confidential hides a number at a known place. Stealth hides the place as well.</text>
+
+  {/* Confidential panel */}
+  <rect x="30" y="72" width="400" height="180" rx="8" fill="#161b22" stroke="#388bfd" stroke-width="1"/>
+  <text x="50" y="98" fill="#388bfd" font-size="13" font-weight="bold">Confidential</text>
+  <text x="50" y="116" fill="#6e7681" font-size="10">hides the amount</text>
+  <rect x="50" y="128" width="360" height="108" rx="6" fill="#12171f" stroke="#30363d" stroke-width="1"/>
+  <text x="62" y="146" fill="#6e7681" font-size="10">component</text>
+  <rect x="70" y="158" width="170" height="64" rx="6" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <text x="155" y="182" text-anchor="middle" fill="#8b949e" font-size="11">vault</text>
+  <text x="155" y="202" text-anchor="middle" fill="#bac5ff" font-size="10">C = mask&#183;G + v&#183;H</text>
+  <text x="258" y="186" fill="#8b949e" font-size="10">An observer sees the vault</text>
+  <text x="258" y="202" fill="#8b949e" font-size="10">and a transfer, not the balance.</text>
+
+  {/* Stealth panel */}
+  <rect x="470" y="72" width="400" height="180" rx="8" fill="#161b22" stroke="#a371f7" stroke-width="1"/>
+  <text x="490" y="98" fill="#a371f7" font-size="13" font-weight="bold">Stealth</text>
+  <text x="490" y="116" fill="#6e7681" font-size="10">hides the amount <tspan font-style="italic">and</tspan> the owner</text>
+  <rect x="495" y="140" width="96" height="62" rx="6" fill="#1c2333" stroke="#a371f7" stroke-width="1"/>
+  <text x="543" y="166" text-anchor="middle" fill="#8b949e" font-size="10">UTXO</text>
+  <text x="543" y="186" text-anchor="middle" fill="#bac5ff" font-size="10">P, R</text>
+  <rect x="622" y="140" width="96" height="62" rx="6" fill="#1c2333" stroke="#a371f7" stroke-width="1"/>
+  <text x="670" y="166" text-anchor="middle" fill="#8b949e" font-size="10">UTXO</text>
+  <text x="670" y="186" text-anchor="middle" fill="#bac5ff" font-size="10">P, R</text>
+  <rect x="749" y="140" width="96" height="62" rx="6" fill="#1c2333" stroke="#a371f7" stroke-width="1"/>
+  <text x="797" y="166" text-anchor="middle" fill="#8b949e" font-size="10">UTXO</text>
+  <text x="797" y="186" text-anchor="middle" fill="#bac5ff" font-size="10">P, R</text>
+  <text x="490" y="222" fill="#8b949e" font-size="10">An observer sees outputs exist, but not their amount or whose they are.</text>
+
+  <text x="450" y="282" text-anchor="middle" fill="#8b949e" font-size="11">A confidential balance still sits at an address that can be watched. A stealth output has no such address:</text>
+  <text x="450" y="300" text-anchor="middle" fill="#8b949e" font-size="11">it is a one-time key, so there is nothing to watch in the first place.</text>
+</svg>
+
+<Aside type="caution">
+Both layers hide values, but **not everything**. Transaction fees must be paid in a known amount, so
+fees are revealed; and any interaction with a public component can link a transaction to an identity.
+The full list of leaks is in [Threat model](#threat-model) below.
+</Aside>
+
+---
+
+## Pedersen commitments
+
+The foundation is a **Pedersen commitment**. A value $v$ is committed to with a blinding factor
+$\text{mask}$:
+
+$$C = \text{mask} \cdot G + v \cdot H$$
+
+where $G$ and $H$ are independent generators of the Ristretto group. The engine builds these with an
+*extended* Pedersen factory (`crates/engine_types/src/crypto/helpers.rs`):
+
+```rust
+use tari_crypto::ristretto::pedersen::extended_commitment_factory::ExtendedPedersenCommitmentFactory;
+```
+
+Two properties make this the right primitive:
+
+- **Hiding.** For a random `mask`, $C$ reveals nothing about $v$ — an attacker cannot distinguish a
+  commitment to 5 from a commitment to 5000.
+- **Binding and homomorphic.** The scheme is computationally binding (you cannot open $C$ to two
+  different values), and linear: commitments *add*. That is what allows a set of inputs and outputs
+  to be checked without decrypting any of them.
+
+The name of the blinding factor in code is `mask`; the committed value is `value`.
+
+**Why a second generator matters.** The definition is only sound because $G$ and $H$ are independent —
+nobody knows a scalar $x$ with $H = x \cdot G$. If such an $x$ were known, a commitment would collapse
+to a single-generator point $(\text{mask} + x \cdot v) \cdot G$, and a spender could re-open the same
+point as a *different* value by adjusting the mask to compensate. Independence of the two generators is
+exactly what pins a commitment to one value; the extended Pedersen factory in
+`crates/engine_types/src/crypto/helpers.rs` is what supplies the pair.
+
+---
+
+## Range proofs: Bulletproofs+
+
+A commitment hides $v$ but says nothing about it. Without a further check, a malicious spender could
+commit to a *negative* value (which the group arithmetic would happily accept) and mint value from
+nothing. The arithmetic is what makes this real rather than pedantic: values are scalars modulo the
+group order $\ell$, so "$-1$" is the enormous positive number $\ell - 1$. A spender could therefore
+pair a genuine output of $+1$ with a phantom output of $-1$ whose commitment they later discard — the
+balance proof ($\sum \text{in} = \sum \text{out}$, checked on commitments) still holds, but one unit of
+value has been conjured into existence.
+
+Ootle closes this with **range proofs**, and the implementation is **Bulletproofs+** — the more
+efficient successor to the original Bulletproofs:
+
+```rust
+// crates/engine_types/src/crypto/helpers.rs
+use tari_crypto::ristretto::bulletproofs_plus::BulletproofsPlusService;
+
+const BP_BIT_LENGTH: usize = u64::BITS as usize; // 64
+
+static ref RANGE_PROOF_AGG_1_SERVICE: BulletproofsPlusService =
+    BulletproofsPlusService::init(BP_BIT_LENGTH, 1, ExtendedPedersenCommitmentFactory::default()).unwrap();
+```
+
+A range proof demonstrates that the committed value lies in a valid range without revealing it. Two
+implementation facts matter:
+
+- **Aggregation.** Proofs over multiple commitments are batched: the engine keeps services for
+  aggregation factors 1, 2, 4, 8, and 16, and verifies a proof over $n$ commitments at
+  $n$ rounded up to a power of two (`MAX_LAZY_BP_AGG_FACTORS = 16`). Aggregating is what keeps a
+  many-output stealth transfer cheap to verify.
+- **Six-decimal precision.** Values are amounts in TARI's smallest unit; the native token has
+  divisibility 6, so `1 TARI = 1_000_000` base units. The bit length bounds the largest single
+  value at $2^{64}$ base units.
+
+Range proofs are the reason a confirmed transfer can be checked for validity — "no value was
+invented" — without any party learning an amount.
+
+---
+
+## Stealth addresses
+
+Confidential amounts below still leave one thing visible: *which vault*. Stealth transfers remove
+that by never writing the recipient's real key on-chain.
+
+For each output, the sender performs a Diffie-Hellman exchange with the recipient's public key $K$
+and derives a one-time address:
+
+| Step | Expression | Code |
+|---|---|---|
+| Shared secret | $c = H(r \cdot K)$ | `stealth_owner_dh` |
+| Stealth public key | $P = c \cdot G + K$ | `owner_stealth_dh_stealth_address` |
+| Spending key (recipient) | $p = c + k$ | `owner_stealth_dh_secret` |
+| Ephemeral nonce | $R = r \cdot G$ | stored as `sender_public_nonce` |
+
+All of these live in `crates/wallet/crypto/src/kdfs.rs`. Only the recipient, who knows $k$, can
+recompute $c$ from $R$ and derive the spending key $p$; a third party sees $P$ and $R$ and cannot
+connect either to the recipient's public key. The output carries $R$ so the recipient can scan.
+
+The trick that makes this work is a single algebraic identity. The sender forms $r \cdot K$; the
+recipient forms $k \cdot R$. Because $K = k \cdot G$ and $R = r \cdot G$,
+
+$$r \cdot K \;=\; r \cdot (k \cdot G) \;=\; k \cdot (r \cdot G) \;=\; k \cdot R$$
+
+so both sides are computing the *same group element* from different secrets. Neither the sender
+(which knows $r$ but not $k$) nor the recipient (which knows $k$ but not $r$) can reach it alone, yet
+each can reach it with its own key and the other's public value. Hashing that shared point gives $c$ —
+and $c$ is what both hides the recipient and lets only them spend.
+
+<svg viewBox="0 0 900 372" xmlns="http://www.w3.org/2000/svg" style="max-width:900px;width:100%;font-family:system-ui,sans-serif">
+  <defs><marker id="st-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#3fb950"/></marker></defs>
+  <rect width="900" height="372" rx="12" fill="#0d1117"/>
+  <text x="450" y="34" text-anchor="middle" fill="#e6edf3" font-size="16" font-weight="bold">The stealth address exchange</text>
+  <text x="450" y="56" text-anchor="middle" fill="#8b949e" font-size="11">Both sides arrive at the same secret c, from different secrets. Nobody else can reach it.</text>
+
+  {/* Sender */}
+  <rect x="30" y="80" width="250" height="190" rx="8" fill="#161b22" stroke="#388bfd" stroke-width="1"/>
+  <text x="155" y="106" text-anchor="middle" fill="#388bfd" font-size="12" font-weight="bold">Sender</text>
+  <text x="155" y="128" text-anchor="middle" fill="#6e7681" font-size="10">knows r, and the recipient's K</text>
+  <text x="155" y="160" text-anchor="middle" fill="#8b949e" font-size="11">R = r&#183;G</text>
+  <text x="155" y="186" text-anchor="middle" fill="#e6edf3" font-size="11">c = H(r&#183;K)</text>
+  <text x="155" y="212" text-anchor="middle" fill="#8b949e" font-size="11">P = c&#183;G + K</text>
+  <text x="155" y="244" text-anchor="middle" fill="#6e7681" font-size="10">publishes R and P</text>
+
+  {/* Observer */}
+  <rect x="325" y="80" width="250" height="190" rx="8" fill="#12171f" stroke="#484f58" stroke-width="1"/>
+  <text x="450" y="106" text-anchor="middle" fill="#f85149" font-size="12" font-weight="bold">Observer</text>
+  <text x="450" y="128" text-anchor="middle" fill="#6e7681" font-size="10">sees R, P, and the ciphertext</text>
+  <text x="450" y="160" text-anchor="middle" fill="#8b949e" font-size="11">has neither r nor k</text>
+  <text x="450" y="186" text-anchor="middle" fill="#8b949e" font-size="11">cannot form r&#183;K or k&#183;R</text>
+  <text x="450" y="212" text-anchor="middle" fill="#8b949e" font-size="11">cannot link P to K</text>
+  <text x="450" y="244" text-anchor="middle" fill="#6e7681" font-size="10">amount and owner stay hidden</text>
+
+  {/* Recipient */}
+  <rect x="620" y="80" width="250" height="190" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="1"/>
+  <text x="745" y="106" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="bold">Recipient</text>
+  <text x="745" y="128" text-anchor="middle" fill="#6e7681" font-size="10">knows k (so K = k&#183;G)</text>
+  <text x="745" y="160" text-anchor="middle" fill="#e6edf3" font-size="11">c = H(k&#183;R) &#8212; the same c</text>
+  <text x="745" y="186" text-anchor="middle" fill="#8b949e" font-size="11">p = c + k  (spending key)</text>
+  <text x="745" y="212" text-anchor="middle" fill="#8b949e" font-size="11">checks P = c&#183;G + K</text>
+  <text x="745" y="244" text-anchor="middle" fill="#6e7681" font-size="10">scans using R</text>
+
+  {/* Public wire */}
+  <path d="M 155 270 L 155 314 L 745 314 L 745 270" fill="none" stroke="#3fb950" stroke-width="2" marker-end="url(#st-arrow)"/>
+  <line x1="450" y1="314" x2="450" y2="272" stroke="#484f58" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="450" y="338" text-anchor="middle" fill="#8b949e" font-size="10">R and P travel in the clear &#8212; and the observer, tapping that wire, still learns nothing</text>
+</svg>
+
+A **view-only key** can be baked into an address, letting a holder see incoming funds without being
+able to spend them. That is what supports auditable-but-private accounts; the address type carries it
+as `OotleAddress { view_only_key, .. }` (`crates/ootle_address/src/ootle_address.rs`).
+
+---
+
+## The balance proof
+
+Hiding every value creates an obvious problem: how does anyone know value was conserved? The answer
+is a **balance proof** over the whole statement. Because commitments are homomorphic, the protocol
+can prove
+
+$$\sum \text{inputs} = \sum \text{outputs}$$
+
+by checking the corresponding *commitments* rather than the values. If the blinding factors are
+chosen so that the masks cancel, the summed input commitment equals the summed output commitment
+exactly when the cleartext sums are equal.
+
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" style="max-width:900px;width:100%;font-family:system-ui,sans-serif">
+  <rect width="900" height="300" rx="12" fill="#0d1117"/>
+  <text x="450" y="34" text-anchor="middle" fill="#e6edf3" font-size="16" font-weight="bold">Hidden values, checkable commitments</text>
+  <text x="450" y="56" text-anchor="middle" fill="#8b949e" font-size="11">The engine never sees the top row. It checks the bottom row, and the two agree.</text>
+
+  {/* Row 1: cleartext */}
+  <text x="40" y="92" fill="#6e7681" font-size="10">as cleartext &#8212; stays in the wallet, never on chain</text>
+  <rect x="40" y="100" width="70" height="46" rx="6" fill="#161b22" stroke="#484f58" stroke-width="1"/>
+  <text x="75" y="129" text-anchor="middle" fill="#8b949e" font-size="12">5</text>
+  <text x="122" y="129" text-anchor="middle" fill="#6e7681" font-size="14">+</text>
+  <rect x="134" y="100" width="70" height="46" rx="6" fill="#161b22" stroke="#484f58" stroke-width="1"/>
+  <text x="169" y="129" text-anchor="middle" fill="#8b949e" font-size="12">3</text>
+  <text x="216" y="130" text-anchor="middle" fill="#6e7681" font-size="16">=</text>
+  <rect x="228" y="100" width="70" height="46" rx="6" fill="#161b22" stroke="#484f58" stroke-width="1"/>
+  <text x="263" y="129" text-anchor="middle" fill="#8b949e" font-size="12">4</text>
+  <text x="310" y="129" text-anchor="middle" fill="#6e7681" font-size="14">+</text>
+  <rect x="320" y="100" width="70" height="46" rx="6" fill="#161b22" stroke="#484f58" stroke-width="1"/>
+  <text x="355" y="129" text-anchor="middle" fill="#8b949e" font-size="12">4</text>
+  <text x="400" y="130" text-anchor="middle" fill="#6e7681" font-size="16">=</text>
+  <rect x="420" y="100" width="120" height="46" rx="6" fill="#10261a" stroke="#3fb950" stroke-width="1"/>
+  <text x="480" y="129" text-anchor="middle" fill="#3fb950" font-size="11">8 = 8</text>
+
+  {/* Row 2: commitments */}
+  <text x="40" y="182" fill="#8b949e" font-size="10">the same statement, as commitments &#8212; this is what the engine verifies</text>
+  <rect x="40" y="190" width="70" height="46" rx="6" fill="#1c2333" stroke="#a371f7" stroke-width="1"/>
+  <text x="75" y="219" text-anchor="middle" fill="#bac5ff" font-size="12">C&#8321;</text>
+  <text x="122" y="219" text-anchor="middle" fill="#6e7681" font-size="14">+</text>
+  <rect x="134" y="190" width="70" height="46" rx="6" fill="#1c2333" stroke="#a371f7" stroke-width="1"/>
+  <text x="169" y="219" text-anchor="middle" fill="#bac5ff" font-size="12">C&#8322;</text>
+  <text x="216" y="220" text-anchor="middle" fill="#6e7681" font-size="16">=</text>
+  <rect x="228" y="190" width="70" height="46" rx="6" fill="#1c2333" stroke="#a371f7" stroke-width="1"/>
+  <text x="263" y="219" text-anchor="middle" fill="#bac5ff" font-size="12">C&#8323;</text>
+  <text x="310" y="219" text-anchor="middle" fill="#6e7681" font-size="14">+</text>
+  <rect x="320" y="190" width="70" height="46" rx="6" fill="#1c2333" stroke="#a371f7" stroke-width="1"/>
+  <text x="355" y="219" text-anchor="middle" fill="#bac5ff" font-size="12">C&#8324;</text>
+  <text x="400" y="220" text-anchor="middle" fill="#6e7681" font-size="16">=</text>
+  <rect x="420" y="190" width="120" height="46" rx="6" fill="#161b22" stroke="#a371f7" stroke-width="1"/>
+  <text x="480" y="219" text-anchor="middle" fill="#a371f7" font-size="11">points equal</text>
+
+  {/* Explanation panel */}
+  <rect x="570" y="96" width="300" height="170" rx="8" fill="#12171f" stroke="#30363d" stroke-width="1"/>
+  <text x="585" y="120" fill="#3fb950" font-size="11" font-weight="bold">Why this is sound</text>
+  <text x="585" y="144" fill="#8b949e" font-size="10">Commitments are additive, so the</text>
+  <text x="585" y="160" fill="#8b949e" font-size="10">engine can add the points in the lower</text>
+  <text x="585" y="176" fill="#8b949e" font-size="10">row without opening any of them.</text>
+  <text x="585" y="200" fill="#8b949e" font-size="10">If the masks are arranged to cancel,</text>
+  <text x="585" y="216" fill="#8b949e" font-size="10">the two sums are equal exactly when</text>
+  <text x="585" y="232" fill="#8b949e" font-size="10">the hidden values are equal.</text>
+  <text x="585" y="256" fill="#8b949e" font-size="10">Range proofs then stop a negative</text>
+  <text x="585" y="272" fill="#8b949e" font-size="10">value from faking that equality.</text>
+</svg>
+
+The balance proof belongs to the **statement**, not to either side, because it is a claim about both
+at once. It is absent only for a transfer that is revealed-only. The **aggregated range proof** — the
+one described above — belongs to the outputs statement, and covers exactly the output commitments.
+See <a href={basePath("/guides/stealth-resources/")}>Stealth Transfers</a> for the full statement
+layout.
+
+---
+
+## ElGamal viewable balances
+
+Sometimes amounts must be visible to *someone* — an auditor, a regulator, or the issuer of an asset —
+without becoming public. Ootle supports this with an **ElGamal** encrypted balance attached to each
+output when the resource has a view key.
+
+The ciphertext is a pair $(E, R)$; the holder of the view private key $p$ recovers the value point by
+
+$$V = E - p \cdot R$$
+
+and then reverse-looks-up $V$ in a table that maps each small value $v$ to $v \cdot G$:
+
+```rust
+// crates/engine_types/src/crypto/elgamal.rs
+/// The compressed point `V = E - p·R`, which the value lookup table is reverse-searched
+pub fn value_lookup_target(&self, view_private_key: &RistrettoSecretKey) -> RistrettoPublicKeyBytes {
+    let point = &self.encrypted - view_private_key * &self.public_nonce;
+    point.to_byte_type()
+}
+```
+
+The "reverse lookup" is why the scheme targets *amounts* (bounded, enumerable) rather than arbitrary
+data. A `ViewableBalanceProof` accompanies the ciphertext so that a verifier can confirm the
+encrypted amount matches the committed amount — an auditor sees the value, an observer sees only
+that some valid value exists.
+
+<Aside type="tip">
+A view key is a *disclosure* choice, not a weakening of the cryptography: spending still requires the
+spend key, so a view-only holder can audit but not move funds.
+</Aside>
+
+---
+
+## Encrypted payloads
+
+Each stealth output carries an `EncryptedData` payload encrypted with **XChaCha20-Poly1305**, keyed
+from the same Diffie-Hellman exchange used for the stealth address
+(`crates/wallet/crypto/src/encrypted_data.rs`). It holds:
+
+- the **value** (8 bytes),
+- the **mask** (32 bytes) — the Pedersen blinding factor, without which the recipient cannot later
+  spend the output,
+- an optional **memo** (0–255 bytes).
+
+The mask being inside the ciphertext is essential: it is the spending secret for that output, and it
+must reach the recipient privately.
+
+---
+
+## Hashing
+
+Ootle uses **BLAKE2b** with domain separation for its internal hashes
+(`crates/engine_types/src/hashing.rs`): each use-case mixes in a distinct domain tag, so a hash
+produced for one purpose can never be reinterpreted as valid for another. **SHA-256** appears only
+as an interoperability option for hashlocks — so a hashlock secret can be shared with a chain that
+speaks SHA-256, such as Bitcoin.
+
+Spend conditions themselves are committed in a **Merklized condition tree (MAST)**: the output stores
+only a root, and a spend reveals one leaf plus a logarithmic inclusion proof. The alternative spend
+paths stay hidden. The full model — `SpendAuthorization` (key, script, or both) and conjunctions of
+atomic conditions — is in <a href={basePath("/guides/stealth-resources/")}>Stealth Transfers</a>,
+with the types in `crates/template_lib_types/src/stealth/unspent_output.rs`.
+
+---
+
+## Threat model
+
+Privacy on Ootle is a property of *how a transaction is built*, not a blanket guarantee. Here is the
+honest ledger.
+
+**Hidden:**
+
+- Confidential and stealth **amounts** — hidden by commitments.
+- Stealth **ownership** — hidden by one-time addresses; no link to the recipient's real key.
+
+**Revealed by design:**
+
+- **Transaction fees** must be paid in a known amount, so a fee is always plaintext.
+- **Revealed inputs and outputs** are public. If any part of a transfer is revealed, its amount is
+  visible.
+
+**Leakage you can cause:**
+
+- **Signing with a public key.** Calling a component method that checks caller identity forces a
+  signature that links the transaction to you, even if the outputs hide their recipients.
+- **Amount correlation.** If you withdraw exactly the amount you then transfer as a revealed input,
+  the two are linkable.
+- **Graph analysis.** The *structure* of transactions — which inputs were spent, which outputs were
+  created — is public even when owners and amounts are not.
+- **Script-path reveals.** A script-path spend publishes the condition leaf it exercises, which may
+  name keys, a deadline, or a component.
+
+The design guidance that follows from this — prefer spending stealth inputs only, keep revealed
+amounts to the fee, and put one-time keys in condition leaves — is worked through in
+<a href={basePath("/guides/stealth-resources/")}>Stealth Transfers</a> under *Privacy Gotchas*.
+
+---
+
+## Summary
+
+- Two layers: **confidential** hides amounts; **stealth** hides amounts *and* ownership.
+- Amounts are **Pedersen commitments** $C = \text{mask} \cdot G + v \cdot H$, hiding but homomorphic.
+- **Bulletproofs+** range proofs prove values are in range, aggregated for efficiency.
+- **Stealth addresses** use Diffie-Hellman: $c = H(rK)$, $P = cG + K$, $p = c + k$.
+- A statement-level **balance proof** proves $\sum \text{in} = \sum \text{out}$ without revealing values.
+- **ElGamal** viewable balances ($V = E - pR$) let a view key audit without spending power.
+- Payloads are encrypted with **XChaCha20-Poly1305**; internal hashing is **domain-separated BLAKE2b**.
+- **Privacy is conditional**: fees, revealed amounts, identity-linked signatures, and transaction
+  graphs all leak. Design deliberately.
+
+**Next:** what these primitives mean for a real application —
+<a href={basePath("/concepts/privacy-in-applications/")}>Privacy in Applications</a>.

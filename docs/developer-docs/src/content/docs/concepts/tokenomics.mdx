@@ -1,0 +1,273 @@
+---
+title: Tokenomics
+description: The Tari Ootle native token — its resource constant, the one-way burn-to-mint bridge from the base layer, and how transaction fees are distributed.
+---
+
+import { basePath } from '../../../helpers/path';
+import { Aside } from "@astrojs/starlight/components";
+
+### Covered in this page
+
+This page covers the economics of the **Ootle layer** specifically:
+- The L2 native token: what resource it is and the constants that name it.
+- The **burn-to-mint** bridge from the base layer, and why it is one-way.
+- The **claim** mechanism that mints L2 value from a base-layer burn.
+- How transaction **fees** are split between the burn and the validator.
+
+<Aside type="note">
+This page is about the **Ootle L2** only. The supply, emission curve, and monetary policy of the
+base-layer coin belong to the upstream Minotari project and are out of scope here. What matters for
+Ootle is the *bridge*: how value crosses from one layer to the other.
+</Aside>
+
+---
+
+## The native token
+
+Ootle's native token is a **stealth resource**. Its identity is a fixed resource address constant:
+
+```rust
+// crates/template_lib_types/src/constants.rs
+/// The Tari network native resource address. ... fungible resource with a divisibility of 6.
+pub const STEALTH_TARI_RESOURCE_ADDRESS: ResourceAddress =
+    ResourceAddress::new(ObjectKey::from_array([1u8; ObjectKey::LENGTH]));
+
+/// Shorthand version of the `STEALTH_TARI_RESOURCE_ADDRESS` constant
+pub const TARI_TOKEN: ResourceAddress = STEALTH_TARI_RESOURCE_ADDRESS;
+```
+
+| Property | Value |
+|---|---|
+| Symbol | **TARI** (tTARI on testnet, $TARI on mainnet) |
+| Resource constant | `TARI_TOKEN` (alias of `STEALTH_TARI_RESOURCE_ADDRESS`) |
+| Type | Stealth — amounts and owners hidden |
+| Divisibility | 6 |
+| Base unit | microtari: `1 TARI = 1_000_000` microtari (`const TARI: u64 = 1_000_000`) |
+
+Being a stealth resource, TARI does not live in vaults — it exists as UTXOs with hidden amounts and
+one-time addresses, which is why network fees are paid via a revealed output (see
+<a href={basePath("/concepts/privacy/")}>Privacy</a>).
+
+<Aside type="caution">
+`XTR` and `ONE_XTR` are **deprecated aliases** (`#[deprecated(since = "0.24.5", note = "Use
+TARI_TOKEN instead")]`). They still resolve, but new code should use **`TARI_TOKEN`** for the resource
+and **`TARI`** for the unit, and refer to the token as **TARI**. The faucet constants
+(`XTR_FAUCET_*`) and the built-in template name `XtrFaucet` are *not* deprecated — they retain their
+historical spelling.
+</Aside>
+
+---
+
+## The burn-to-mint bridge
+
+Value enters Ootle along a single, **one-way** path: burn on the base layer, claim on Ootle.
+
+$$\text{burn } \text{XTM}_{L1} \;\longrightarrow\; \text{mint } \text{TARI}_{L2}$$
+
+There is **no peg-out**. You cannot burn TARI on Ootle to recreate base-layer coins. The asymmetry is
+deliberate:
+
+<svg viewBox="0 0 900 336" xmlns="http://www.w3.org/2000/svg" style="max-width:900px;width:100%;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="tk-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#484f58"/></marker>
+    <marker id="tk-arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#f85149"/></marker>
+  </defs>
+  <rect width="900" height="336" rx="12" fill="#0d1117"/>
+  <text x="450" y="34" text-anchor="middle" fill="#e6edf3" font-size="16" font-weight="bold">The burn-to-mint bridge, and its missing return leg</text>
+  <text x="450" y="56" text-anchor="middle" fill="#8b949e" font-size="11">Value crosses one way. The claim is the only door, and it only opens inward.</text>
+
+  {/* L1 panel */}
+  <rect x="30" y="74" width="240" height="180" rx="8" fill="#161b22" stroke="#f0883e" stroke-width="1"/>
+  <text x="150" y="100" text-anchor="middle" fill="#f0883e" font-size="12" font-weight="bold">Minotari (L1)</text>
+  <text x="150" y="122" text-anchor="middle" fill="#8b949e" font-size="10">a coin is burned</text>
+  <rect x="70" y="140" width="160" height="56" rx="6" fill="#12171f" stroke="#484f58" stroke-width="1"/>
+  <text x="150" y="164" text-anchor="middle" fill="#8b949e" font-size="10">burned output</text>
+  <text x="150" y="182" text-anchor="middle" fill="#6e7681" font-size="9">gone from L1 supply</text>
+
+  {/* Forward arrow */}
+  <line x1="274" y1="132" x2="396" y2="132" stroke="#484f58" stroke-width="2" marker-end="url(#tk-arrow)"/>
+  <text x="335" y="112" text-anchor="middle" fill="#8b949e" font-size="9">MinotariBurnClaimProof</text>
+  <text x="335" y="124" text-anchor="middle" fill="#6e7681" font-size="9">Merkle proof vs kernels</text>
+
+  {/* L2 panel */}
+  <rect x="400" y="74" width="470" height="180" rx="8" fill="#161b22" stroke="#388bfd" stroke-width="1"/>
+  <text x="420" y="100" fill="#388bfd" font-size="12" font-weight="bold">Ootle (L2) &#8212; one atomic claim</text>
+  <rect x="420" y="112" width="430" height="34" rx="6" fill="#12171f" stroke="#30363d" stroke-width="1"/>
+  <text x="432" y="134" fill="#8b949e" font-size="10">1. Verify the burn proof against the base layer's kernels</text>
+  <rect x="420" y="152" width="430" height="34" rx="6" fill="#12171f" stroke="#30363d" stroke-width="1"/>
+  <text x="432" y="174" fill="#8b949e" font-size="10">2. Tombstone the commitment &#8212; blocks a second claim of it</text>
+  <rect x="420" y="192" width="430" height="34" rx="6" fill="#10261a" stroke="#3fb950" stroke-width="1"/>
+  <text x="432" y="214" fill="#3fb950" font-size="10">3. Mint the stealth UTXO at UtxoAddress::new(TARI_TOKEN, commitment)</text>
+
+  {/* Blocked return */}
+  <line x1="835" y1="282" x2="352" y2="282" stroke="#f85149" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#tk-arrow-red)"/>
+  <line x1="306" y1="274" x2="322" y2="290" stroke="#f85149" stroke-width="2.5"/>
+  <line x1="322" y1="274" x2="306" y2="290" stroke="#f85149" stroke-width="2.5"/>
+  <text x="600" y="302" text-anchor="middle" fill="#f85149" font-size="10">no peg-out &#8212; TARI cannot be burned to recreate a base-layer coin</text>
+</svg>
+
+- **Base-layer supply stays under base-layer control.** Ootle can never inflate the base-layer coin,
+  because it only ever *consumes* it.
+- **Ootle's supply is anchored, not invented.** Every unit of TARI on the L2 corresponds to a burned
+  L1 output; the bridge can only move value inward.
+- **Demand for TARI is tied to the fee market.** Because the only route in is a burn, holding TARI is
+  a claim on Ootle's execution, not on the base layer.
+
+<Aside type="note">
+This is **not** a rollup bridge. There are no state roots posted to the base layer and no
+fraud-or-validity proof over Ootle execution. The bridge moves *value*, one direction, and nothing
+else. See <a href={basePath("/concepts/overview/")}>Overview</a>.
+</Aside>
+
+### The claim
+
+Moving value across the bridge is a **claim**: the holder proves that a base-layer output was burned
+to them, and the engine mints the matching L2 value. The claim carries a `MinotariBurnClaimProof`
+(`crates/engine_types/src/confidential/claim.rs`) — a burn public key, a commitment, an ownership
+proof, and an encoded Merkle proof against the base layer's kernel set.
+
+The engine executes a claim in three steps, atomically
+(`crates/engine/src/runtime/impl.rs`):
+
+```rust
+// 1. verify the claim proof against the base-layer burn
+// 2. Create a tombstone
+let address = ClaimedOutputTombstoneAddress::from_commitment(claim.commitment);
+state_mut.new_substate(address, ClaimedOutputTombstone { value: claim.value })?;
+// 3. Create the stealth UTXO.
+let address = UtxoAddress::new(TARI_TOKEN, claim.commitment.into());
+state_mut.new_substate(address, utxo)?;
+```
+
+1. **Verify** the burn proof.
+2. **Tombstone** the commitment. The tombstone's address is derived *from the commitment itself*
+   (`ClaimedOutputTombstoneAddress::from_commitment`), so a second claim of the same commitment would
+   collide with the existing tombstone and be rejected. This is what makes the claim
+   double-spend-proof.
+3. **Mint** the stealth UTXO at `UtxoAddress::new(TARI_TOKEN, commitment)`.
+
+Because the claim is `Output` → `Utxo` and writes both the tombstone and the UTXO in one substate
+diff, it either completes entirely or not at all.
+
+<Aside type="note">
+The claim proof is checked through a pluggable `ClaimProofVerifier` trait. This repository ships a
+test mock, `AlwaysPassesProofVerifier` (`crates/template_test_tooling/src/mocks.rs`); production
+deployments supply a verifier that validates the base-layer kernel Merkle proof. The verification
+*step* is part of the engine's claim path; the *verifier* is injected.
+</Aside>
+
+### Why minting here does not break supply
+
+The claim mints a stealth UTXO with no matching `increase_total_supply`. That is sound only because
+the genesis TARI resource **disables total supply tracking and denies `Burn`** — so no other path can
+increase or decrease the tracked supply, and the mint cannot create a discrepancy. A resource that
+enabled supply tracking or allowed burns would need a matching supply update here. See
+<a href={basePath("/concepts/privacy-in-applications/")}>Privacy in Applications</a> for how supply
+tracking interacts with mint and burn for ordinary stealth resources.
+
+---
+
+## Fees
+
+Every transaction pays a fee for the metered work it performs (see
+<a href={basePath("/concepts/state-and-execution/")}>State and Execution</a>). The fee is then split
+between a **burn** and the **validator**.
+
+The split is governed by `exhaust_burn_rate`, a per-network constant expressed in basis points:
+
+```rust
+// crates/consensus/src/consensus_constants.rs
+pub exhaust_burn_rate: ExhaustBurnRate,           // 500 bps on every network here
+// ...
+exhaust_burn_rate: ExhaustBurnRate::new(500), // 5%
+```
+
+The burn is a **floor share of everything collected** — overcharge included — and the validator
+receives the remainder:
+
+```rust
+// crates/engine/src/runtime/working_state.rs
+/// The share of `paid` that is burned at `rate`: `⌊paid × rate / 10_000⌋`.
+fn exhaust_burn_share(paid: u64, rate: ExhaustBurnRate) -> u64 {
+    (u128::from(paid) * u128::from(rate.as_bps()) / 10_000) as u64
+}
+```
+
+With the network rate of 500 bps:
+
+$$\text{burn} = \left\lfloor \frac{\text{fee} \times 500}{10{,}000} \right\rfloor = 5\% \text{ of the fee}$$
+
+so **5% of every fee is destroyed** and **95% accrues to the validator** that produced the block. The
+validator's share is held in a `ValidatorFeePool` substate and withdrawn later via
+`ClaimValidatorFees`.
+
+<svg viewBox="0 0 900 256" xmlns="http://www.w3.org/2000/svg" style="max-width:900px;width:100%;font-family:system-ui,sans-serif">
+  <defs><marker id="tk-fee-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#484f58"/></marker></defs>
+  <rect width="900" height="256" rx="12" fill="#0d1117"/>
+  <text x="450" y="34" text-anchor="middle" fill="#e6edf3" font-size="16" font-weight="bold">Where a fee goes</text>
+  <text x="450" y="56" text-anchor="middle" fill="#8b949e" font-size="11">A fixed 500 bps is destroyed; the remainder funds whoever produced the block.</text>
+
+  {/* Fee */}
+  <rect x="50" y="96" width="190" height="72" rx="8" fill="#161b22" stroke="#388bfd" stroke-width="1"/>
+  <text x="145" y="124" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="bold">fee paid</text>
+  <text x="145" y="146" text-anchor="middle" fill="#6e7681" font-size="10">a deterministic metered cost</text>
+
+  {/* Split */}
+  <line x1="242" y1="132" x2="330" y2="132" stroke="#484f58" stroke-width="2" marker-end="url(#tk-fee-arrow)"/>
+  <line x1="330" y1="132" x2="330" y2="86" stroke="#484f58" stroke-width="2"/>
+  <line x1="330" y1="86" x2="406" y2="86" stroke="#484f58" stroke-width="2" marker-end="url(#tk-fee-arrow)"/>
+  <line x1="330" y1="132" x2="330" y2="178" stroke="#484f58" stroke-width="2"/>
+  <line x1="330" y1="178" x2="406" y2="178" stroke="#484f58" stroke-width="2" marker-end="url(#tk-fee-arrow)"/>
+
+  {/* Burn */}
+  <rect x="410" y="54" width="200" height="64" rx="8" fill="#161b22" stroke="#f0883e" stroke-width="1"/>
+  <text x="510" y="80" text-anchor="middle" fill="#f0883e" font-size="12" font-weight="bold">5% burned</text>
+  <text x="510" y="100" text-anchor="middle" fill="#6e7681" font-size="9">removed from L2 supply</text>
+
+  {/* Validator */}
+  <rect x="410" y="146" width="200" height="64" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="1"/>
+  <text x="510" y="172" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="bold">95% to the validator</text>
+  <text x="510" y="192" text-anchor="middle" fill="#6e7681" font-size="9">held in a ValidatorFeePool</text>
+
+  {/* Notes */}
+  <rect x="640" y="54" width="230" height="156" rx="8" fill="#12171f" stroke="#30363d" stroke-width="1"/>
+  <text x="656" y="80" fill="#8b949e" font-size="11" font-weight="bold">The rule</text>
+  <text x="656" y="104" fill="#8b949e" font-size="10">burn = floor(paid &#215; 500 / 10,000)</text>
+  <text x="656" y="122" fill="#8b949e" font-size="10">paid = everything collected,</text>
+  <text x="656" y="140" fill="#8b949e" font-size="10">overcharge included.</text>
+  <text x="656" y="164" fill="#8b949e" font-size="10">The rate is a per-network</text>
+  <text x="656" y="182" fill="#8b949e" font-size="10">constant &#8212; 500 bps on every</text>
+  <text x="656" y="200" fill="#8b949e" font-size="10">network in this repository.</text>
+
+  <text x="450" y="238" text-anchor="middle" fill="#8b949e" font-size="11">There is no priority or throttle layer: a fee is a function of work done, never of a bid for ordering.</text>
+</svg>
+
+<Aside type="tip">
+The burn is a *deflationary* sink on L2 fees: it removes a slice of TARI from circulation on every
+transaction. Because the only way to replace it is to burn more base-layer coins, the fee burn is the
+mechanism that couples Ootle's fee market back to the base layer's supply.
+</Aside>
+
+### What is *not* in the fee model
+
+There is **no priority or throttle layer**. Fees are a deterministic function of metered execution —
+a transaction pays for the work it performs, and there is no market for ordering beyond the protocol's
+own sequencing. Searching the codebase for a fee-priority or throttle concept returns nothing;
+the only rate limiting present is an unrelated wallet API-key limit.
+
+---
+
+## Summary
+
+- The L2 native token is **TARI**, a **stealth** resource addressed by `TARI_TOKEN` /
+  `STEALTH_TARI_RESOURCE_ADDRESS`; `XTR`/`ONE_XTR` are deprecated aliases.
+- Divisibility is 6; `1 TARI = 1_000_000` microtari.
+- Value enters by **burning a base-layer coin and claiming an L2 UTXO** — a strictly **one-way**
+  bridge with no peg-out.
+- A claim verifies a burn proof, writes a **commitment-derived tombstone** (double-claim proof), and
+  mints a stealth UTXO — atomically.
+- **5% of each fee is burned**, the rest accrues to the validator (`exhaust_burn_rate` = 500 bps).
+- There is **no fee priority/throttle** concept; fees are deterministic metering.
+
+**Next:** the A–Z of terms used across this section —
+<a href={basePath("/concepts/glossary/")}>Glossary</a>.

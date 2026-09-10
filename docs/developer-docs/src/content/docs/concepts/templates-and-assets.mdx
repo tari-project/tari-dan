@@ -1,0 +1,231 @@
+---
+title: Templates and Assets
+description: The four resource types on Tari Ootle, what privacy each one provides, and the built-in templates and application patterns you can build on.
+---
+
+import { basePath } from '../../../helpers/path';
+import { Aside } from "@astrojs/starlight/components";
+
+### Covered in this page
+
+This page is the catalogue of what you can build, and how private it is:
+- The **four resource types** and the privacy posture of each.
+- The **built-in templates** shipped with the engine.
+- The recurring **application patterns** — token, NFT, stablecoin, liquidity pool, HTLC, escrow, games — each with a one-line privacy note.
+- Where to go for the mechanics.
+
+<Aside type="note">
+This page is about *shape*, not implementation detail. For authoring a template see
+<a href={basePath("/guides/template-overview/")}>Templates Overview</a>; for the resource API see
+<a href={basePath("/guides/resources/")}>Resources</a>; for the cryptography behind the private
+types see <a href={basePath("/concepts/privacy/")}>Privacy</a>.
+</Aside>
+
+---
+
+## The four resource types
+
+A resource's **type** is the single most important decision for its privacy properties. The engine
+defines exactly four (`crates/template_lib_types/src/resource_type.rs`):
+
+```rust
+pub enum ResourceType {
+    Fungible,      // public, interchangeable
+    NonFungible,   // public, individually identified
+    Confidential,  // amounts hidden, balances in vaults
+    Stealth,       // amounts and owners hidden, funds are UTXOs
+}
+```
+
+| Type | Balances visible? | Owners visible? | Funds live in | Builder |
+|---|---|---|---|---|
+| **Public Fungible** | Yes | Yes | Vaults | `ResourceBuilder::fungible()` |
+| **Public Non-Fungible** | Yes (per NFT) | Yes | Vaults | `ResourceBuilder::non_fungible()` |
+| **Confidential** | No | Yes (the vault's component) | Vaults | `ResourceBuilder::confidential()` |
+| **Stealth** | No | No | UTXOs | `ResourceBuilder::stealth()` |
+
+The four types are easier to hold in the head as a two-by-two. There are two independent questions —
+*can you see the amount?* and *can you see the owner?* — and each type answers them:
+
+<svg viewBox="0 0 900 372" xmlns="http://www.w3.org/2000/svg" style="max-width:900px;width:100%;font-family:system-ui,sans-serif">
+  <rect width="900" height="372" rx="12" fill="#0d1117"/>
+  <text x="450" y="34" text-anchor="middle" fill="#e6edf3" font-size="16" font-weight="bold">The design space of a resource</text>
+  <text x="450" y="56" text-anchor="middle" fill="#8b949e" font-size="11">Two independent questions. Each resource type is one answer.</text>
+
+  {/* Column headers */}
+  <text x="350" y="82" text-anchor="middle" fill="#8b949e" font-size="11">amount visible</text>
+  <text x="650" y="82" text-anchor="middle" fill="#8b949e" font-size="11">amount hidden</text>
+  {/* Row labels */}
+  <text x="190" y="147" text-anchor="end" fill="#8b949e" font-size="11">owner visible</text>
+  <text x="190" y="262" text-anchor="end" fill="#8b949e" font-size="11">owner hidden</text>
+
+  {/* Quadrant: public */}
+  <rect x="200" y="90" width="300" height="115" rx="8" fill="#161b22" stroke="#484f58" stroke-width="1"/>
+  <text x="350" y="128" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="bold">Public</text>
+  <text x="350" y="150" text-anchor="middle" fill="#8b949e" font-size="11">Fungible &#183; Non-Fungible</text>
+  <text x="350" y="174" text-anchor="middle" fill="#6e7681" font-size="10">balances and owners are plaintext</text>
+
+  {/* Quadrant: confidential */}
+  <rect x="500" y="90" width="300" height="115" rx="8" fill="#161b22" stroke="#388bfd" stroke-width="1"/>
+  <text x="650" y="128" text-anchor="middle" fill="#388bfd" font-size="13" font-weight="bold">Confidential</text>
+  <text x="650" y="150" text-anchor="middle" fill="#8b949e" font-size="11">amount hidden, owner known</text>
+  <text x="650" y="174" text-anchor="middle" fill="#6e7681" font-size="10">a balance, hidden inside a vault</text>
+
+  {/* Quadrant: empty */}
+  <rect x="200" y="205" width="300" height="115" rx="8" fill="#0f131a" stroke="#30363d" stroke-width="1" stroke-dasharray="5,3"/>
+  <text x="350" y="256" text-anchor="middle" fill="#484f58" font-size="13" font-weight="bold">&#8212;</text>
+  <text x="350" y="278" text-anchor="middle" fill="#484f58" font-size="10">no resource type here</text>
+
+  {/* Quadrant: stealth */}
+  <rect x="500" y="205" width="300" height="115" rx="8" fill="#161b22" stroke="#a371f7" stroke-width="1"/>
+  <text x="650" y="243" text-anchor="middle" fill="#a371f7" font-size="13" font-weight="bold">Stealth</text>
+  <text x="650" y="265" text-anchor="middle" fill="#8b949e" font-size="11">amount and owner hidden</text>
+  <text x="650" y="289" text-anchor="middle" fill="#6e7681" font-size="10">funds are one-time UTXOs</text>
+
+  <text x="450" y="348" text-anchor="middle" fill="#8b949e" font-size="11">The engine offers three of these four cells. There is no resource type for a public amount with a hidden owner.</text>
+</svg>
+
+### Public Fungible
+
+The baseline: a currency with no privacy. Balances and transfers are plaintext on-chain. It is the
+right choice for assets that *should* be transparent — governance tokens, publicly auditable
+treasuries — and it is cheap, because there is nothing to prove.
+
+### Public Non-Fungible
+
+Like a fungible resource, but each unit has an identity (`NonFungibleId`) and can carry mutable data.
+Ownership and contents are public. This is the type for collectibles, receipts, and access badges —
+tokens whose whole point is that they can be *pointed at*.
+
+### Confidential
+
+The first privacy layer: a fungible resource whose amounts are hidden. Balances sit in vaults as
+**Pedersen commitments**, so an observer can see *that* a vault holds funds but not *how much*.
+Ownership is still tied to the vault's component — so confidential hides the amount, not the
+account. It is the natural fit for a private balance that still interacts with public components.
+
+### Stealth
+
+The strongest layer: a resource whose **outputs are UTXOs** rather than vault balances. Each output
+carries a one-time **stealth address**, so neither the amount nor the owner is linkable on-chain. The
+native token, **TARI**, is stealth. Use stealth when ownership itself is sensitive — payments,
+bearer assets, anything where linking two transactions to the same party would be a problem.
+
+<Aside type="tip">
+The difference in one sentence: **Confidential hides the number; Stealth hides the number and the
+name.** A confidential vault is a known account with an unknown balance; a stealth UTXO is an
+unknown account with an unknown balance.
+</Aside>
+
+---
+
+## Built-in templates
+
+Four templates ship compiled into the engine, always available
+(`crates/template_builtin/src/templates.rs`):
+
+| Template | Purpose |
+|---|---|
+| **Account** | The standard account component: holds vaults, gates withdrawals by owner rule. |
+| **NftFaucet** | Mints a non-fungible resource and hands out NFTs. |
+| **XtrFaucet** | The testnet TARI faucet, used in examples to fund an account. |
+| **TwoResourceLiquidityPool** | An AMM-style pool over two resources — the reference DeFi primitive. |
+
+<Aside type="note">
+The built-in faucet keeps its historical name `XtrFaucet`. `XTR` is a **deprecated alias** for the
+native token; the current identifiers are `TARI_TOKEN` (the resource address constant) and `TARI`
+(the unit). `XTR` still resolves, but new code and manifests should use `TARI_TOKEN` /
+`TARI` and refer to the token as **TARI** (tTARI on testnet, $TARI on mainnet).
+</Aside>
+
+The **Account** template is worth singling out: it is the component most user funds actually sit in,
+and it is the seam between public and private funds. Depositing into an account vault is a public
+move; converting a bucket to stealth UTXOs is the private one. Most privacy questions reduce to
+*which side of the account boundary a transfer happens on*.
+
+---
+
+## Application patterns
+
+Each pattern below is a composition of the four resource types and condition trees. The "privacy
+posture" line is the honest summary of what leaks.
+
+| Pattern | Built from | Privacy posture |
+|---|---|---|
+| **Fungible token** | Public Fungible or Confidential, with a mint authority | Public type is fully transparent; confidential hides balances but not the accounts. |
+| **NFT / collection** | Public Non-Fungible | Public by design — ownership is the point. |
+| **Stablecoin** | Stealth, with a revealed mint/burn boundary | Holder transfers private; supply events revealed so supply is auditable. See <a href={basePath("/concepts/stablecoin/")}>Stablecoins</a>. |
+| **Liquidity pool** | Two resources + a vault pair (see `TwoResourceLiquidityPool`) | Pool reserves are public to be swappable; LP tokens inherit the underlying resources' privacy. |
+| **HTLC / atomic swap** | A stealth output with a two-leaf condition tree (hashlock + timelock) | Amount hidden; the revealed leaf discloses the preimage branch taken. |
+| **Escrow** | A stealth output with a release leaf and a refund leaf; optionally covenants | Funds hidden throughout; only the exercised branch is revealed. |
+| **Guessing game** | A component + a resource vault; hashed commitment to the secret | Game state is public; see <a href={basePath("/concepts/privacy/")}>Privacy</a> for why commitments are cheap to add. |
+| **Bearer asset** | A stealth resource with key-path-only outputs | Fully private: possession is the credential, no registry names an owner. |
+
+Three of those patterns — HTLC, escrow, and atomic swaps — rest on the same mechanism: a spend
+condition that is a *tree* of branches. Understanding the tree explains all three at once.
+
+<svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" style="max-width:900px;width:100%;font-family:system-ui,sans-serif">
+  <rect width="900" height="320" rx="12" fill="#0d1117"/>
+  <text x="450" y="34" text-anchor="middle" fill="#e6edf3" font-size="16" font-weight="bold">How a spend condition is committed</text>
+  <text x="450" y="56" text-anchor="middle" fill="#8b949e" font-size="11">One root goes on chain. The branches stay off it until one is used.</text>
+
+  {/* Root */}
+  <rect x="350" y="72" width="200" height="48" rx="8" fill="#161b22" stroke="#a371f7" stroke-width="1"/>
+  <text x="450" y="101" text-anchor="middle" fill="#a371f7" font-size="12" font-weight="bold">condition root</text>
+  <text x="450" y="138" text-anchor="middle" fill="#6e7681" font-size="10">the only thing stored on the output</text>
+
+  {/* Branches */}
+  <line x1="450" y1="120" x2="230" y2="172" stroke="#484f58" stroke-width="1.5"/>
+  <line x1="450" y1="120" x2="670" y2="172" stroke="#484f58" stroke-width="1.5"/>
+
+  {/* Claim leaf */}
+  <rect x="60" y="172" width="340" height="100" rx="8" fill="#10261a" stroke="#3fb950" stroke-width="1"/>
+  <text x="230" y="196" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="bold">Claim path</text>
+  <rect x="80" y="208" width="140" height="30" rx="4" fill="#1c2333" stroke="#3fb950" stroke-width="1"/>
+  <text x="150" y="228" text-anchor="middle" fill="#8b949e" font-size="10">HashLock(preimage)</text>
+  <text x="228" y="228" text-anchor="middle" fill="#6e7681" font-size="11">and</text>
+  <rect x="240" y="208" width="140" height="30" rx="4" fill="#1c2333" stroke="#3fb950" stroke-width="1"/>
+  <text x="310" y="228" text-anchor="middle" fill="#8b949e" font-size="10">BeforeEpoch(deadline)</text>
+  <text x="230" y="258" text-anchor="middle" fill="#6e7681" font-size="10">spending reveals this leaf and its proof</text>
+
+  {/* Refund leaf */}
+  <rect x="500" y="172" width="340" height="100" rx="8" fill="#161b22" stroke="#388bfd" stroke-width="1"/>
+  <text x="670" y="196" text-anchor="middle" fill="#388bfd" font-size="12" font-weight="bold">Refund path</text>
+  <rect x="520" y="208" width="140" height="30" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <text x="590" y="228" text-anchor="middle" fill="#8b949e" font-size="10">AfterEpoch(deadline)</text>
+  <text x="668" y="228" text-anchor="middle" fill="#6e7681" font-size="11">and</text>
+  <rect x="680" y="208" width="140" height="30" rx="4" fill="#1c2333" stroke="#388bfd" stroke-width="1"/>
+  <text x="750" y="228" text-anchor="middle" fill="#8b949e" font-size="10">AccessRule(funder)</text>
+  <text x="670" y="258" text-anchor="middle" fill="#6e7681" font-size="10">never revealed unless this path is taken</text>
+
+  <text x="450" y="300" text-anchor="middle" fill="#8b949e" font-size="11">Because only the root is published, the unused branch stays secret: a spend opens one door, not the whole policy.</text>
+</svg>
+
+### Choosing a type
+
+A short decision path:
+
+1. **Must an outsider audit the asset?** If yes, start public.
+2. **Must balances be hidden?** Choose **confidential**.
+3. **Must the *owner* be hidden as well?** Choose **stealth**.
+4. **Must an auditor see hidden amounts?** Add a **view key** to a confidential or stealth resource.
+
+Then design the *boundaries*: every application has a few places where value must be revealed — the
+fee, a mint, an interaction with a public pool. The privacy of the whole system is the privacy of its
+leakiest boundary, so identify those first.
+
+---
+
+## Summary
+
+- Four resource types: **Public Fungible**, **Public Non-Fungible**, **Confidential**, **Stealth**.
+- **Confidential hides amounts; Stealth hides amounts and owners.**
+- Four **built-in templates** ship with the engine: `Account`, `NftFaucet`, `XtrFaucet`,
+  `TwoResourceLiquidityPool`.
+- The **Account** template is the seam between public and private funds.
+- The common application patterns — token, NFT, stablecoin, pool, HTLC, escrow, games — are all
+  compositions of these types and condition trees.
+- **Privacy is set by the leakiest boundary**, not by the asset type alone.
+
+**Next:** the economics of the native token —
+<a href={basePath("/concepts/tokenomics/")}>Tokenomics</a>.

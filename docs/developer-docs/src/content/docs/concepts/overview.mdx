@@ -1,0 +1,256 @@
+---
+title: Overview
+description: The big picture of Tari Ootle — what it is, how it relates to the Minotari base layer, and how validators, shards, and templates fit together.
+---
+
+import { basePath } from '../../../helpers/path';
+import { Aside } from "@astrojs/starlight/components";
+
+### Covered in this page
+
+This page is the map before the territory. It covers:
+- What Tari Ootle is, and where it sits in the wider Tari system.
+- The division of labour between the base layer (Minotari) and Ootle.
+- What "anchoring" does — and, just as importantly, does not — mean.
+- The roles of the nodes that make up the network.
+- What "finality" means here, and why two layers are involved.
+- The life of a transaction, stage by stage.
+- How value enters the system.
+
+For the mechanics behind each item, follow the links into the rest of the
+<a href={basePath("/concepts/architecture/")}>Concepts</a> section.
+
+---
+
+## What is Tari Ootle?
+
+Tari Ootle is a **layer-2 execution layer**. It runs WebAssembly smart contracts — called
+**templates** — over a sharded, account-and-object state model, and it anchors its security and
+its supply of the native token to the Minotari base layer.
+
+If you are coming from other ecosystems, the closest mental model is "a smart-contract chain
+that does not produce its own consensus-independent security; it borrows a base layer for identity
+and for the final say on value." Ootle is **not** a rollup: it does not post state roots to the
+base layer, and the base layer does not re-execute or verify Ootle transactions. Ootle runs its
+own Byzantine-fault-tolerant consensus among its own validator set.
+
+Two layers, then, but not two copies of the same thing:
+
+| Layer | Records | Model | Consensus |
+|---|---|---|---|
+| **Minotari** (base layer) | Assets — which coins exist and move | UTXO | Proof of work |
+| **Ootle** (this layer) | State — what a program's data is right now | Objects and components | Chained BFT |
+
+The base layer keeps a ledger of value. Ootle keeps a ledger of state: a key-value map from a
+`SubstateId` to a versioned `Substate` (see
+<a href={basePath("/concepts/state-and-execution/")}>State and Execution</a>). A transaction does
+not move coins from column A to column B so much as it calls a component method and changes the
+state of the objects it touches.
+
+---
+
+## The division of labour
+
+The two layers are split deliberately, by trust surface.
+
+**The base layer does the few hard things.** It is kept simple on purpose — a UTXO chain with a
+weak script — so that there is little on the security anchor to attack. It provides:
+
+- **Identity and registration.** Validator nodes register on the base layer, and that registration
+  is what the Ootle epoch oracle reads to decide who is in a committee this epoch.
+- **The minting source.** The only way to create the Ootle native token is to burn its base-layer
+  counterpart. There is no reverse bridge (see
+  <a href={basePath("/concepts/tokenomics/")}>Tokenomics</a>).
+- **A liveness backstop.** A BFT chain can stall if more than a third of a committee misbehaves.
+  The base layer's proof-of-work provides a reference point that keeps epochs advancing.
+
+**Ootle does the programmable, high-throughput thing.** It owns execution, the sharded state, and
+its own finality, and it isolates the complex, higher-risk logic — arbitrary contracts — away from
+the anchor.
+
+<Aside type="note">
+The base-layer identifiers Ootle consumes — validator registrations, contract (template)
+registrations — are read through an **epoch oracle**. In this repository you will see that
+boundary as `crates/epoch_oracles/src/base_layer/oracle.rs`, which pulls the base-layer epoch
+length and validator set. The base-layer chain itself lives in the upstream Minotari project.
+</Aside>
+
+### The seam, in one picture
+
+Two ledgers, three connections. Notice that only one of them carries value, and it runs one way.
+
+<svg viewBox="0 0 900 390" xmlns="http://www.w3.org/2000/svg" style="max-width:900px;width:100%;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="ov-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#484f58"/></marker>
+    <marker id="ov-arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#3fb950"/></marker>
+  </defs>
+  <rect width="900" height="390" rx="12" fill="#0d1117"/>
+  <text x="450" y="34" text-anchor="middle" fill="#e6edf3" font-size="16" font-weight="bold">Two ledgers and the seam between them</text>
+
+  {/* Base layer */}
+  <rect x="30" y="64" width="330" height="250" rx="8" fill="#161b22" stroke="#f0883e" stroke-width="1"/>
+  <text x="195" y="90" text-anchor="middle" fill="#f0883e" font-size="13" font-weight="bold">Minotari &#8212; base layer</text>
+  <text x="195" y="110" text-anchor="middle" fill="#8b949e" font-size="10">proof of work &#183; UTXO ledger of value</text>
+  <text x="48" y="146" fill="#8b949e" font-size="11">Validator registration</text>
+  <text x="48" y="170" fill="#8b949e" font-size="11">The epoch clock</text>
+  <text x="48" y="194" fill="#8b949e" font-size="11">Coin supply control</text>
+  <text x="48" y="218" fill="#8b949e" font-size="11">Weak script, small attack surface</text>
+  <rect x="46" y="238" width="298" height="62" rx="6" fill="#12171f" stroke="#30363d" stroke-width="1"/>
+  <text x="195" y="260" text-anchor="middle" fill="#8b949e" font-size="11">Kept deliberately simple: the fewer</text>
+  <text x="195" y="278" text-anchor="middle" fill="#8b949e" font-size="11">things on the anchor, the less to attack.</text>
+
+  {/* Ootle */}
+  <rect x="540" y="64" width="330" height="250" rx="8" fill="#161b22" stroke="#388bfd" stroke-width="1"/>
+  <text x="705" y="90" text-anchor="middle" fill="#388bfd" font-size="13" font-weight="bold">Ootle &#8212; execution layer</text>
+  <text x="705" y="110" text-anchor="middle" fill="#8b949e" font-size="10">chained BFT &#183; sharded substate state</text>
+  <text x="558" y="146" fill="#8b949e" font-size="11">Templates (WASM contracts)</text>
+  <text x="558" y="170" fill="#8b949e" font-size="11">Components, vaults, resources</text>
+  <text x="558" y="194" fill="#8b949e" font-size="11">Its own finality, per shard group</text>
+  <text x="558" y="218" fill="#8b949e" font-size="11">Confidential and stealth value</text>
+  <rect x="556" y="238" width="298" height="62" rx="6" fill="#12171f" stroke="#30363d" stroke-width="1"/>
+  <text x="705" y="260" text-anchor="middle" fill="#8b949e" font-size="11">Owns the complex, programmable part,</text>
+  <text x="705" y="278" text-anchor="middle" fill="#8b949e" font-size="11">isolated from the anchor.</text>
+
+  {/* Connection 1: epoch oracle */}
+  <text x="450" y="112" text-anchor="middle" fill="#8b949e" font-size="10">epoch oracle</text>
+  <text x="450" y="126" text-anchor="middle" fill="#6e7681" font-size="9">who may vote, and when</text>
+  <line x1="362" y1="138" x2="536" y2="138" stroke="#484f58" stroke-width="2" marker-end="url(#ov-arrow)"/>
+
+  {/* Connection 2: burn to mint */}
+  <text x="450" y="180" text-anchor="middle" fill="#3fb950" font-size="10">burn L1 coin</text>
+  <text x="450" y="194" text-anchor="middle" fill="#6e7681" font-size="9">&#8594; claim L2 TARI (one way)</text>
+  <line x1="362" y1="206" x2="536" y2="206" stroke="#3fb950" stroke-width="2" marker-end="url(#ov-arrow-green)"/>
+
+  {/* Connection 3: no peg-out */}
+  <text x="450" y="248" text-anchor="middle" fill="#f85149" font-size="10">no peg-out</text>
+  <line x1="536" y1="266" x2="362" y2="266" stroke="#f85149" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#ov-arrow)"/>
+  <line x1="442" y1="258" x2="458" y2="274" stroke="#f85149" stroke-width="2"/>
+  <line x1="458" y1="258" x2="442" y2="274" stroke="#f85149" stroke-width="2"/>
+
+  <text x="450" y="350" text-anchor="middle" fill="#8b949e" font-size="11">The base layer fixes who may validate and when epochs turn over; Ootle owns what the state is and when a change is final.</text>
+</svg>
+
+Three things cross the seam, and it is worth naming what each one is *not*:
+
+- **Membership** flows inward only. The base layer says who is registered; the oracle turns that into
+  committee membership. Ootle never writes membership back.
+- **Value** flows inward only. Burning a base-layer coin is the sole way to create L2 TARI. Nothing
+  flows out.
+- **State** does not cross at all. No state root, no proof, and no transaction is ever posted to the
+  base layer for verification.
+
+---
+
+## The moving parts
+
+Ootle is a network of cooperating node roles. Only one of them votes on state.
+
+| Node | Role |
+|---|---|
+| **Validator node** | Runs the consensus protocol (HotStuff) and executes transactions within its shard group. This is the only role that produces finality. |
+| **Indexer** | Tracks the chain, indexes transactions, substates, and events, and serves queries to clients. It does not vote. |
+| **Wallet daemon** | Holds keys, builds and signs transactions, and talks to the indexer. It does not vote. |
+| **Base-layer node** | The upstream Minotari node. Ootle nodes read registrations and epoch data from it. |
+
+A deeper role-by-role breakdown, together with how nodes are grouped into shards, is in
+<a href={basePath("/concepts/architecture/")}>Architecture</a>.
+
+---
+
+## Finality, briefly
+
+Ootle reaches finality inside its own consensus, not on the base layer. A block becomes
+irreversible when the validator committee's HotStuff chain grows far enough past it — under the
+**three-chain rule**, a block is committed once a chain of three justified blocks is built on
+top of it. Read the mechanism in detail in
+<a href={basePath("/concepts/consensus/")}>Consensus</a>.
+
+The base layer's role in finality is narrower: it decides *membership* (who is allowed to vote this
+epoch) and it is the reference clock that epochs advance against. Safety of a state transition is a
+statement about the Ootle committee; liveness borrows from the base layer.
+
+---
+
+## What "anchoring" does not mean
+
+Because Ootle borrows identity and value from the base layer, it is easy to assume it also borrows
+*verification*. It does not. Four negatives define the boundary:
+
+| Ootle is not… | …which means |
+|---|---|
+| a rollup | No state root is posted to the base layer, so the base layer has no record of Ootle's state. |
+| a validity proof | Ootle transactions are never re-executed on the base layer; there is no fraud proof or SNARK securing execution. |
+| a sidechain needing base-layer finality | Ootle's finality comes from its own committee's three-chain rule, not from proof of work. |
+| a settlement layer for the base coin | Value crosses inward only; the base layer keeps full control of its own supply. |
+
+What Ootle *does* take from the base layer is narrower and more valuable than verification: a **single
+canonical answer to "who is allowed to validate, right now"**, delivered on a clock both layers agree
+on. That answer is what stops one committee from being swapped for another by an attacker, and it is
+the only thing standing between a validator set and an identity free-for-all.
+
+<Aside type="note">
+The trade this buys: Ootle cannot be *silently* corrupted, because producing a conflicting final state
+requires a quorum of a committee drawn from base-layer registrations. The price is that if a
+committee loses more than a third of its members, Ootle stalls until the epoch boundary re-forms it —
+a liveness cost, paid in time, not in safety. See
+<a href={basePath("/concepts/consensus/")}>Consensus</a> for the arithmetic.
+</Aside>
+
+---
+
+## The life of a transaction
+
+The sections that follow each zoom into one stage. In order, a transaction:
+
+1. **Is built and sealed.** A wallet daemon assembles instructions, attaches a separate stream of fee
+   instructions, and signs. The signers' public keys become the transaction's *initial authorization
+   scope* — the badges its access rules are checked against.
+2. **Is submitted and gossiped.** The wallet hands it to an indexer, which checks its shape and
+   propagates it over the `transactions` gossip topic to the committees holding its inputs.
+3. **Is sequenced.** The relevant committee orders it into a block. If the inputs live in more than one
+   shard group, the other groups first **pledge** not to touch them, so the parts commit together or
+   not at all.
+4. **Is executed.** The TVM runs the fee instructions first and checkpoints, then runs the main
+   instructions. Metered work becomes the fee.
+5. **Is committed.** Votes aggregate into a `ProposalCertificate`; the chain advances; the
+   **three-chain rule** makes an earlier block irreversible.
+6. **Is published.** The transaction's `SubstateDiff` writes new substate versions, and the receipt —
+   including events — is served by indexers.
+
+Each stage has a page: <a href={basePath("/concepts/consensus/")}>Consensus</a> for steps 3 and 5,
+<a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> for step 4 and 6, and
+<a href={basePath("/guides/transaction-overview/")}>Transaction Overview</a> for how a client
+performs steps 1 and 2.
+
+---
+
+## Where the value comes from
+
+The native token on Ootle is **TARI** (a stealth resource). It enters the system through a one-way
+path: burn the base-layer coin, claim a matching amount on Ootle. There is no peg-out — you cannot
+burn TARI to recreate base-layer coins — so base-layer supply control stays entirely on the base
+layer, and demand for TARI is anchored to the fee market. See
+<a href={basePath("/concepts/tokenomics/")}>Tokenomics</a>.
+
+---
+
+## Where to go next
+
+The rest of this section follows one thread: how the machine is put together.
+
+- <a href={basePath("/concepts/architecture/")}>Architecture</a> — node roles, sharding, epochs, and the P2P layer.
+- <a href={basePath("/concepts/consensus/")}>Consensus</a> — HotStuff, the three-chain rule, quorums, and cross-shard transactions.
+- <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> — substates, the state tree, the TVM, and fees.
+- <a href={basePath("/concepts/privacy/")}>Privacy</a> — confidential and stealth assets, and the cryptography behind them.
+- <a href={basePath("/concepts/privacy-in-applications/")}>Privacy in Applications</a> — what privacy looks like for a deployed application.
+- <a href={basePath("/concepts/stablecoin/")}>Stablecoins</a> — building an issuance-backed asset from the native primitives.
+- <a href={basePath("/concepts/templates-and-assets/")}>Templates and Assets</a> — the resource types and built-in templates you can build on.
+- <a href={basePath("/concepts/tokenomics/")}>Tokenomics</a> — the native token, the burn bridge, and fee distribution.
+- <a href={basePath("/concepts/glossary/")}>Glossary</a> — an A–Z of the terms used across this section.
+
+<Aside type="tip">
+Every concept in this section is grounded in the codebase. Where a statement maps to a specific
+constant or module, the source path is cited inline, so you can read the implementation alongside
+the prose. Design documents (RFCs and TIPs) predate the current implementation and are **not**
+treated as authoritative here — where they disagree with the code, the code wins.
+</Aside>

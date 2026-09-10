@@ -1,0 +1,384 @@
+---
+title: Consensus
+description: How Tari Ootle reaches finality — chained HotStuff BFT, the three-chain commit rule, quorum mathematics, the pacemaker, and cross-shard transactions.
+---
+
+import { basePath } from '../../../helpers/path';
+import { Aside } from "@astrojs/starlight/components";
+
+### Covered in this page
+
+This page covers the protocol that turns proposed blocks into irreversible state:
+- The consensus model — **chained HotStuff BFT** — and the roles of proposer and voter.
+- The message flow: proposal → vote → quorum certificate.
+- The **three-chain commit rule** and the block-lock that makes it safe.
+- Leader selection by round-robin.
+- The **pacemaker**: view timeouts, `TimeoutCertificate`s, and the new-view message.
+- The quorum mathematics behind the fault tolerance.
+- How a transaction that touches several shards is sequenced.
+
+<Aside type="note">
+The code in this repository implements **HotStuff** — a chained, leader-based Byzantine-fault-tolerant
+protocol (`crates/consensus/src/lib.rs` declares `pub mod hotstuff`). You may have seen the name
+"Cerberus" in older design documents; that word does not appear anywhere in the implementation. Where
+the design folklore and the code disagree, this page follows the code.
+</Aside>
+
+---
+
+## The model
+
+Ootle's validators are not one global committee. The state space is split into shard groups, and each
+shard group is administered by its own **committee** (see
+<a href={basePath("/concepts/architecture/")}>Architecture</a>). Consensus therefore runs many times
+in parallel — once per shard group — over disjoint slices of state.
+
+Each committee runs the same protocol, and the protocol has a single job: agree on an ordered sequence
+of **blocks**, where a block lists the transactions sequenced in one step and commits to the resulting
+state. Agreement is what gives the network its **safety** property — no two honest validators ever
+commit conflicting histories.
+
+A committee of `n` validators with vote power tolerates up to `f` Byzantine members, where
+
+$$f = \left\lfloor \frac{n - 1}{3} \right\rfloor$$
+
+and finalizes a block when a quorum of $n - f = 2f + 1$ members agree. That is the familiar `3f + 1`
+threshold: with `3f + 1` members you can lose `f` and still have `2f + 1` — enough to outvote the
+`f` that may be silent *and* the `f` that may lie.
+
+Put numbers on it. A devnet committee is `DEFAULT_DEVNET_COMMITTEE_SIZE = 7`, giving
+$f = \lfloor 6/3 \rfloor = 2$ and a quorum of `7 − 2 = 5`. A live-network committee of 40 gives
+$f = 13$ and a quorum of 27. In both cases the same counting argument holds: **two quorums must
+intersect in more members than can be faulty**, so at least one shared member is honest — and an
+honest validator votes at most once per view. Enforcing that single rule is the whole job of the
+machinery that follows.
+
+---
+
+## Blocks, views, and certificates
+
+Consensus proceeds in a sequence of **views**. In chained HotStuff, the view number is the block
+height: each new block is a fresh view, and its proposer extends the highest block it knows.
+
+Every block carries a **justify** field: the certificate for its parent. The protocol distinguishes
+two certificates (defined in the `tari_consensus_types` crate):
+
+| Certificate | Short name | Proves |
+|---|---|---|
+| `ProposalCertificate` | **PC** | A quorum voted for a specific block — this is what makes the block *justified*. |
+| `TimeoutCertificate` | **TC** | A quorum timed out in a view, so the next leader may propose a fresh view without extending the old one. |
+
+A block whose justify is a PC sits directly on top of the block that PC certifies. That parent link
+is what "chained" means: a single chain of justified blocks, each one also serving as the vote for
+its parent.
+
+### The round trip
+
+For one view, with a chosen leader:
+
+1. **Propose.** The leader broadcasts a `Block` extending the highest justified block it has seen, with
+   its justify set to that block's certificate.
+2. **Vote.** Each validator validates the proposal and, if it is valid and safe, signs a vote. A
+   validator votes **at most once per view**.
+3. **Certify.** When the leader (or the next leader) collects votes from a quorum, it assembles a
+   `ProposalCertificate`. The block is now justified, and the next leader can extend it.
+
+The vote is the only per-validator action; everything else is a function of collected votes. Because
+votes are aggregated, communication is linear in the committee size rather than quadratic.
+
+<svg viewBox="0 0 900 312" xmlns="http://www.w3.org/2000/svg" style="max-width:900px;width:100%;font-family:system-ui,sans-serif">
+  <defs><marker id="cons-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#484f58"/></marker></defs>
+  <rect width="900" height="312" rx="12" fill="#0d1117"/>
+  <text x="450" y="34" text-anchor="middle" fill="#e6edf3" font-size="16" font-weight="bold">One view, in four steps</text>
+  <text x="450" y="58" text-anchor="middle" fill="#8b949e" font-size="11">A view is a block height. The protocol runs this loop for every view, forever.</text>
+
+  {/* Step 1 */}
+  <rect x="25" y="80" width="190" height="150" rx="8" fill="#161b22" stroke="#388bfd" stroke-width="1"/>
+  <text x="120" y="106" text-anchor="middle" fill="#388bfd" font-size="12" font-weight="bold">1. Propose</text>
+  <text x="39" y="136" fill="#8b949e" font-size="11">The leader broadcasts</text>
+  <text x="39" y="154" fill="#8b949e" font-size="11">a Block extending the</text>
+  <text x="39" y="172" fill="#8b949e" font-size="11">highest justified block.</text>
+  <text x="39" y="200" fill="#6e7681" font-size="10">justify = parent's cert</text>
+
+  {/* Step 2 */}
+  <rect x="245" y="80" width="190" height="150" rx="8" fill="#161b22" stroke="#388bfd" stroke-width="1"/>
+  <text x="340" y="106" text-anchor="middle" fill="#388bfd" font-size="12" font-weight="bold">2. Vote</text>
+  <text x="259" y="136" fill="#8b949e" font-size="11">Each validator checks</text>
+  <text x="259" y="154" fill="#8b949e" font-size="11">the block, then signs —</text>
+  <text x="259" y="172" fill="#8b949e" font-size="11">at most once per view.</text>
+  <text x="259" y="200" fill="#6e7681" font-size="10">one signature each</text>
+
+  {/* Step 3 */}
+  <rect x="465" y="80" width="190" height="150" rx="8" fill="#161b22" stroke="#a371f7" stroke-width="1"/>
+  <text x="560" y="106" text-anchor="middle" fill="#a371f7" font-size="12" font-weight="bold">3. Certify</text>
+  <text x="479" y="136" fill="#8b949e" font-size="11">A quorum of votes is</text>
+  <text x="479" y="154" fill="#8b949e" font-size="11">aggregated into one</text>
+  <text x="479" y="172" fill="#8b949e" font-size="11">ProposalCertificate.</text>
+  <text x="479" y="200" fill="#6e7681" font-size="10">n &#8722; f = 2f + 1 votes</text>
+
+  {/* Step 4 */}
+  <rect x="685" y="80" width="190" height="150" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="1"/>
+  <text x="780" y="106" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="bold">4. Extend</text>
+  <text x="699" y="136" fill="#8b949e" font-size="11">The block is now</text>
+  <text x="699" y="154" fill="#8b949e" font-size="11">justified; the next</text>
+  <text x="699" y="172" fill="#8b949e" font-size="11">leader builds on it.</text>
+  <text x="699" y="200" fill="#6e7681" font-size="10">the chain grows a link</text>
+
+  {/* Arrows */}
+  <line x1="215" y1="155" x2="241" y2="155" stroke="#484f58" stroke-width="2" marker-end="url(#cons-arrow)"/>
+  <line x1="435" y1="155" x2="461" y2="155" stroke="#484f58" stroke-width="2" marker-end="url(#cons-arrow)"/>
+  <line x1="655" y1="155" x2="681" y2="155" stroke="#484f58" stroke-width="2" marker-end="url(#cons-arrow)"/>
+
+  {/* Loop back */}
+  <path d="M 780 230 L 780 262 L 120 262 L 120 234" fill="none" stroke="#484f58" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#cons-arrow)"/>
+  <text x="450" y="254" text-anchor="middle" fill="#8b949e" font-size="10">the loop repeats for every view</text>
+
+  <text x="450" y="292" text-anchor="middle" fill="#8b949e" font-size="11">If the leader is silent, the pacemaker times the view out; a TimeoutCertificate lets the next leader start a fresh view.</text>
+</svg>
+
+---
+
+## The three-chain commit rule
+
+Safety rests on a single rule: **a block is committed once a chain of three justified blocks is built
+on top of it.**
+
+Write the chain as `b ← b' ← b''`:
+
+- `b` is the block to commit.
+- `b'` is justified by a PC over `b` — i.e. a quorum voted for `b`.
+- `b''` is justified by a PC over `b'`.
+
+When a validator receives `b''` and sees the two nested links, it commits `b`. The rule is checked
+literally in the block store:
+
+```rust
+// crates/consensus/src/traits/block_store.rs
+let commit_node = new_locked.justify().calculate_block_id();
+// b''.parent() == b'.id() && b'.parent() == b.id()
+if justified_node.parent() == new_locked.id() && *new_locked.parent() == commit_node {
+    // ✅ Block forms a 3-chain b'' = ..., b' = ..., b = ...
+    // Commit prepare_node (b)
+}
+```
+
+<Aside type="note">
+Three links, not two. A single QC proves only that a quorum voted for a block in one view; a quorum
+could later vote for a conflicting block in a higher view if nothing locked them. The second link is
+the lock, and the third gives the protocol room to *observe* that the lock was set before any block
+below it is treated as final.
+</Aside>
+
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" style="max-width:900px;width:100%;font-family:system-ui,sans-serif">
+  <defs><marker id="cons-arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#484f58"/></marker></defs>
+  <rect width="900" height="300" rx="12" fill="#0d1117"/>
+  <text x="450" y="34" text-anchor="middle" fill="#e6edf3" font-size="16" font-weight="bold">The three-chain commit rule</text>
+  <text x="450" y="58" text-anchor="middle" fill="#8b949e" font-size="11">Each block carries a certificate for its parent. Three links is what makes the bottom one final.</text>
+
+  {/* b */}
+  <rect x="110" y="110" width="180" height="80" rx="8" fill="#10261a" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="200" y="142" text-anchor="middle" fill="#3fb950" font-size="14" font-weight="bold">b</text>
+  <text x="200" y="164" text-anchor="middle" fill="#8b949e" font-size="10">the block to commit</text>
+
+  {/* b' */}
+  <rect x="360" y="110" width="180" height="80" rx="8" fill="#161b22" stroke="#a371f7" stroke-width="1"/>
+  <text x="450" y="142" text-anchor="middle" fill="#a371f7" font-size="14" font-weight="bold">b&#8242;</text>
+  <text x="450" y="164" text-anchor="middle" fill="#8b949e" font-size="10">justified by a PC over b</text>
+
+  {/* b'' */}
+  <rect x="610" y="110" width="180" height="80" rx="8" fill="#161b22" stroke="#a371f7" stroke-width="1"/>
+  <text x="700" y="142" text-anchor="middle" fill="#a371f7" font-size="14" font-weight="bold">b&#8243;</text>
+  <text x="700" y="164" text-anchor="middle" fill="#8b949e" font-size="10">justified by a PC over b&#8242;</text>
+
+  {/* Arrows */}
+  <line x1="290" y1="150" x2="356" y2="150" stroke="#484f58" stroke-width="2" marker-end="url(#cons-arrow2)"/>
+  <line x1="540" y1="150" x2="606" y2="150" stroke="#484f58" stroke-width="2" marker-end="url(#cons-arrow2)"/>
+  <text x="323" y="104" text-anchor="middle" fill="#6e7681" font-size="10">PC over b</text>
+  <text x="573" y="104" text-anchor="middle" fill="#6e7681" font-size="10">PC over b&#8242;</text>
+
+  {/* Green highlight */}
+  <rect x="98" y="98" width="204" height="104" rx="12" fill="none" stroke="#3fb950" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="200" y="228" text-anchor="middle" fill="#3fb950" font-size="11" font-weight="bold">final once b&#8243; exists</text>
+
+  <line x1="40" y1="252" x2="860" y2="252" stroke="#30363d" stroke-width="1"/>
+  <text x="450" y="274" text-anchor="middle" fill="#8b949e" font-size="11">One link proves a quorum voted; two links set the lock; three links give honest validators time to observe the lock before committing.</text>
+</svg>
+
+### Locking
+
+Alongside committing, a validator maintains a **locked block** — the block it is forbidden to
+contradict. When it sees a justified child `b'` of `b`, it advances its lock to `b'` if `b'` is higher
+than the current lock (`LockedBlock` in `crates/consensus/src/traits/block_store.rs`). A validator
+will not vote for a block that conflicts with its lock, even if the new block is in a higher view.
+This is exactly what stops two conflicting chains from both reaching three links.
+
+### Justified, locked, committed
+
+These three words describe three different strengths of "this block is not going away", and they are
+easy to conflate. Each is set by a different event:
+
+| State | Set by | What it means |
+|---|---|---|
+| **Justified** | A `ProposalCertificate` over the block | A quorum has voted for it. It is a candidate the next leader may extend — but nothing prevents a conflicting block from being justified in a higher view. |
+| **Locked** | Advancing the lock when a justified child arrives | This validator must not vote for a block conflicting with it. The lock is what carries the vote across views. |
+| **Committed** | The three-chain rule | Irreversible. `b` is committed once `b''` exists, and no honest validator will ever vote to replace it. |
+
+The progression is one-directional: every committed block was once locked, and every locked block was
+once justified — but the converse does not hold, and a block can sit justified forever if the chain
+stops extending. Committed is the only one that is safe to report to a user as done.
+
+---
+
+## Leader selection
+
+The leader of a view is chosen by **round-robin** over the committee:
+
+```rust
+// applications/tari_validator_node/src/consensus/leader_selection.rs
+fn calculate_leader(&self, committee: &Committee<TAddr>, height: NodeHeight) -> u32 {
+    (height.as_u64() % committee.len() as u64) as u32
+}
+```
+
+Every member takes the proposer role in turn. There is **no verifiable random function and no
+sortition** in leader selection — leadership is a deterministic function of the height and the
+committee, so any validator can compute who is allowed to propose at any height without being told.
+Rotating the role limits how much a single faulty leader can stall progress before the pacemaker
+replaces it.
+
+---
+
+## The pacemaker: timeouts and new views
+
+A leader can be silent — crashed, slow, or censoring. A BFT protocol cannot wait forever, so each
+view is bounded by a timer. This timer is the **pacemaker** (`pacemaker_handle.rs`,
+`pacemaker.rs`), and its interval is a per-network constant:
+
+```rust
+// crates/consensus/src/consensus_constants.rs
+pub pacemaker_block_time: Duration,   // 10s on every network in this repo
+```
+
+When the pacemaker fires for a view and no block has been justified, validators emit a **timeout
+vote**. Once a quorum of timeout votes is collected, they form a `TimeoutCertificate` for that view.
+
+A new-view phase then follows:
+
+1. Validators broadcast a `NewViewMessage` carrying their `high_pc` (the highest proposal certificate
+   seen) and their `high_tc` (the highest timeout certificate) — see
+   `crates/consensus/src/messages/new_view.rs`.
+2. The next leader aggregates these into a fresh view: it proposes a block justified by the highest
+   certificate it observed, so no locked block is skipped.
+
+<Aside type="tip">
+Timeouts are the **liveness** lever; the three-chain rule and the lock are the **safety** lever. Every
+protocol step either moves the chain forward (propose/vote/certify) or un-sticks a stalled view
+(timeout/new-view). The two are deliberately separate so that a misbehaving leader costs liveness, not
+safety.
+</Aside>
+
+---
+
+## Quorum mathematics
+
+The quorum thresholds and the failure tolerance are computed from **vote power**, not head-count, so
+the protocol keeps working if power is ever weighted (today it is one per validator):
+
+```rust
+// crates/common_types/src/committee.rs
+pub fn max_failures(&self) -> VotePower {
+    let power = self.total_power();
+    if power.is_zero() { return VotePower::of(0); }
+    (power - VotePower::of(1)) / 3
+}
+
+/// Returns $n - f$ (i.e. $2f + 1$) where n is the number of committee members.
+pub fn quorum_threshold(&self) -> VotePower {
+    self.total_power() - self.max_failures()
+}
+```
+
+For a committee of `n` equal-power members this is `f = (n - 1) / 3` integer-divided, and a quorum of
+`n - f`. Three consequences follow directly (with vote power $P$ and $f = \lfloor (P - 1) / 3 \rfloor$):
+
+- **Two quorums intersect in a fault-free member.** Any two sets of size `n - f` overlap in at least
+  `n - 2f ≥ f + 1` members, at least one of whom is honest. Two conflicting QCs would require an
+  honest validator to vote twice in one view, which the protocol forbids.
+- **No quorum is reachable with fewer than `2f + 1`.** A proposer cannot certify without a genuine
+  majority, so a minority cannot force a block.
+- **Progress needs `2f + 1` live validators.** If more than `f` are offline, views time out and the
+  chain stalls rather than forking — a liveness failure, not a safety one.
+
+<Aside type="note">
+A "vote" here is a signature over the proposal; a quorum certificate is those signatures
+aggregated. Vote power is currently one per validator: staking-weighted power is **not implemented**
+(`crates/epoch_manager/src/service/epoch_manager.rs` carries the TODO). The quorum code is already
+written in terms of power so that weighting is a change of inputs, not of the rule.
+</Aside>
+
+---
+
+## Cross-shard transactions
+
+A transaction that touches substates in more than one shard group cannot be sequenced by a single
+committee. Ootle handles this with a **pledge** protocol layered over the per-shard consensus.
+
+The transaction is broken into per-shard work. Each involved shard group sequences its own part, and
+the parts are bound together by **pledged inputs** — the substates the other shards promise not to
+touch until this transaction is resolved. The commitment is carried in a `PledgedTransaction`:
+
+```rust
+// crates/consensus/src/hotstuff/transaction_manager/pledged.rs
+pub struct PledgedTransaction {
+    pub transaction: TransactionRecord,
+    pub foreign_pledges: SubstatePledges, // inputs pledged by other shard groups
+    pub local_pledges: SubstatePledges,   // inputs pledged by this shard group
+}
+```
+
+A transaction moves through stages, each carried as a consensus `Command` on the local block:
+
+| Stage | Meaning |
+|---|---|
+| `LocalOnly` | The transaction touches only this shard group; sequence and commit it here. |
+| `LocalPrepare` | This group sequences its part and pledges its inputs, awaiting the foreign parts. |
+| `LocalAccept` | All foreign pledges are in; execute and commit. |
+
+If a foreign shard group has already consumed an input this transaction expected, the local execution
+is rejected with `RejectReason::ForeignPledgeInputConflict` (`crates/engine_types/src/commit_result.rs`)
+rather than committing an inconsistent result. A cross-shard transaction is therefore **atomic**: it
+either commits in every involved shard group or in none.
+
+<Aside type="note">
+You may encounter the phrase "braided" in early descriptions of cross-shard ordering. It does not
+appear in the code; the mechanism the code implements is the pledge/stage protocol described above.
+</Aside>
+
+---
+
+## Safety and liveness in one paragraph
+
+Ootle is **safe** because a block is only final after a three-chain, and a lock prevents honest
+validators from voting to contradict a locked block; two conflicting finalized blocks would need two
+intersecting quorums and a double-voting honest member. Ootle is **live** as long as at most `f`
+members of a committee are faulty, because a quorum can always vote and the pacemaker un-sticks any
+view whose leader fails. The base layer contributes the membership clock — the epoch oracle decides
+*who* is in a committee — but does not participate in, or verify, any Ootle vote.
+
+---
+
+## Summary
+
+- Consensus is **HotStuff**, run **per shard group** by that group's committee.
+- A view = a block height; the leader proposes, validators vote, votes aggregate into a
+  `ProposalCertificate`.
+- A block is committed by the **three-chain rule**; a **lock** keeps honest nodes from contradicting it.
+- Leaders are **round-robin**, `height % committee.len()` — no VRF, no sortition.
+- The **pacemaker** times out stalled views; a quorum of timeout votes forms a `TimeoutCertificate`,
+  and a `NewViewMessage` starts the next view.
+- Quorum tolerance is `f = (power - 1) / 3`; progress needs `2f + 1` live power.
+- **Cross-shard** transactions are pledged input-by-input and committed atomically via the
+  `LocalOnly` / `LocalPrepare` / `LocalAccept` stages.
+
+**Next:** how the committed blocks change state —
+<a href={basePath("/concepts/state-and-execution/")}>State and Execution</a>.

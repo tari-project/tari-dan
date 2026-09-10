@@ -1,0 +1,83 @@
+---
+title: Glossary
+description: An A–Z of the terms used across the Tari Ootle Concepts section, each linked to the page that explains it.
+---
+
+import { basePath } from '../../../helpers/path';
+import { Aside } from "@astrojs/starlight/components";
+
+### Covered in this page
+
+Every term used across the Concepts section, with a one-line definition and a link to where it is
+explained in full. Use your browser's find to jump to a term.
+
+---
+
+| Term | Definition | In depth |
+|---|---|---|
+| **Account** | The standard built-in component that holds vaults and gates withdrawals by owner rule. It is the seam between public and private funds. | <a href={basePath("/concepts/templates-and-assets/")}>Templates and Assets</a> |
+| **Atomic swap** | A cross-party exchange that completes entirely or not at all, typically built from a stealth output with a hashlock/ timelock condition tree. | <a href={basePath("/concepts/privacy-in-applications/")}>Privacy in Applications</a> |
+| **Base layer** | The upstream Minotari chain (proof of work). It supplies validator registration, the epoch clock, and the burned coins that back L2 value. | <a href={basePath("/concepts/overview/")}>Overview</a> |
+| **Base node** | A node of the base layer. Ootle nodes read registrations and epoch data from it; it does not vote on Ootle state. | <a href={basePath("/concepts/architecture/")}>Architecture</a> |
+| **Balance proof** | The statement-level proof that $\sum \text{inputs} = \sum \text{outputs}$ across a stealth transfer, checked over commitments. | <a href={basePath("/concepts/privacy/")}>Privacy</a> |
+| **Bucket** | A transient pile of funds on a transaction's instruction workspace. Unlike a vault, a bucket is **not** a substate and does not persist. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |
+| **Bulletproofs+** | The range-proof system used to show a committed value is in range without revealing it. Aggregated over multiple outputs. | <a href={basePath("/concepts/privacy/")}>Privacy</a> |
+| **Burn claim** | The operation that mints L2 TARI against a burned base-layer output, writing a tombstone and a stealth UTXO atomically. | <a href={basePath("/concepts/tokenomics/")}>Tokenomics</a> |
+| **Committee** | The set of validators administering one shard group. The unit of consensus: HotStuff runs among committee members. | <a href={basePath("/concepts/architecture/")}>Architecture</a> |
+| **Committed** | Irreversible. A block is committed once the three-chain rule is satisfied on top of it — the only state that is safe to report as done. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
+| **Component** | A template instance with persistent state and access rules. A `SubstateId` variant. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |
+| **Confidential** | A resource type (or the privacy layer) that hides **amounts** while ownership remains tied to a vault's component. | <a href={basePath("/concepts/privacy/")}>Privacy</a> |
+| **Condition tree (MAST)** | A Merklized set of alternative spend conditions committed by an output's root; a spend reveals one leaf plus an inclusion proof. | <a href={basePath("/guides/stealth-resources/")}>Stealth Transfers</a> |
+| **Covenant** | A native, consensus-fixed constraint on a spending transfer's outputs and value flow, expressed as a condition-tree atom. | <a href={basePath("/guides/stealth-resources/")}>Stealth Transfers</a> |
+| **Epoch** | A fixed number of base-layer blocks. Ootle's membership and timing rotate on epoch boundaries. | <a href={basePath("/concepts/architecture/")}>Architecture</a> |
+| **Epoch checkpoint** | The per-epoch rollup of every shard's state root, written at an epoch boundary. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |
+| **Epoch oracle** | The seam that reads base-layer validator registrations and epoch length, turning them into Ootle committee membership. | <a href={basePath("/concepts/architecture/")}>Architecture</a> |
+| **Exhaust burn rate** | `exhaust_burn_rate` — the per-network share of each fee that is burned: 500 bps (5%) on every network in this repository. | <a href={basePath("/concepts/tokenomics/")}>Tokenomics</a> |
+| **Finality** | Irreversibility. On Ootle a block is final when its chain reaches the three-chain rule inside its committee — not on the base layer. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
+| **Global shard** | Shard 0, reserved for global substates such as published templates. All other shards are numbered 1–256. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |
+| **HotStuff** | The chained, leader-based BFT protocol Ootle runs per shard group. (The name "Cerberus" from older design docs does not appear in the code.) | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
+| **HTLC** | A hashed timelock contract: a spend condition requiring a preimage before a deadline, with a refund branch after. | <a href={basePath("/concepts/privacy-in-applications/")}>Privacy in Applications</a> |
+| **Indexer** | A non-voting node that indexes blocks, transactions, substates, and events, and serves queries. | <a href={basePath("/concepts/architecture/")}>Architecture</a> |
+| **Jellyfish Merkle Tree** | The per-shard authenticated data structure over substate addresses; its root is the shard's state commitment. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |
+| **Justified** | A block a quorum has voted for, certified by a `ProposalCertificate`. Weaker than locked, and much weaker than committed. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
+| **Leader** | The validator chosen to propose a block for a view. Selected **round-robin** by `height % committee.len()`. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
+| **Liveness** | The property that the chain keeps advancing. Borrowed in part from the base layer; maintained by the pacemaker. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
+| **Lock (locked block)** | The block a validator must not contradict. Advanced when a justified child appears; it is what keeps honest votes consistent across views. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
+| **Microtari** | The base unit of TARI: `1 TARI = 1_000_000` microtari (divisibility 6). Amounts in code and manifests are microtari. | <a href={basePath("/concepts/tokenomics/")}>Tokenomics</a> |
+| **Pacemaker** | The per-view timer that times out a stalled view and triggers a new-view phase. Interval is a per-network constant (10s). | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
+| **Pedersen commitment** | A hiding, binding, homomorphic commitment $C = \text{mask} \cdot G + v \cdot H$, used to conceal amounts. | <a href={basePath("/concepts/privacy/")}>Privacy</a> |
+| **Pledging** | The protocol by which shard groups promise not to touch a transaction's inputs while a cross-shard transaction is in flight. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
+| **Preshard** | One slice of the 256-way-partitioned address space (at most 256 of them; currently 256). A shard is a preshard. | <a href={basePath("/concepts/architecture/")}>Architecture</a> |
+| **ProposalCertificate (PC)** | A quorum's aggregate vote for a block, making the block *justified*. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
+| **Quorum** | The number of validators, `n - f = 2f + 1`, required to certify a block. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
+| **Resource** | The definition of an asset (kind, divisibility, supply, access rules). One of four types: public fungible, public non-fungible, confidential, stealth. | <a href={basePath("/concepts/templates-and-assets/")}>Templates and Assets</a> |
+| **Safety** | The property that no two honest validators commit conflicting histories. Enforced by the lock and the three-chain rule. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
+| **Shard** | One slice of the sharded state space, numbered 1–256. A substate's shard is derived from the top bits of its address. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |
+| **Shard group** | A contiguous run of shards administered by one committee. | <a href={basePath("/concepts/architecture/")}>Architecture</a> |
+| **Shard key** | The deterministic address a validator derives from its registration; it decides which shard group the validator serves. | <a href={basePath("/concepts/architecture/")}>Architecture</a> |
+| **Stablecoin** | An issuance-backed asset built from ordinary primitives: the resource type sets the privacy, and the mint/redeem boundary is where supply is revealed. | <a href={basePath("/concepts/stablecoin/")}>Stablecoins</a> |
+| **Stealth** | The strongest privacy layer, and a resource type: hides both **amounts and owners**, with funds held as UTXOs. | <a href={basePath("/concepts/privacy/")}>Privacy</a> |
+| **Stealth address** | A one-time public key $P = cG + K$ derived by Diffie-Hellman, unlinkable to the recipient's real key. | <a href={basePath("/concepts/privacy/")}>Privacy</a> |
+| **Substate** | A versioned state value: `Substate{substate, version}`. One of ten variants. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |
+| **Substate address** | `ObjectKey(32 bytes) ‖ version(u32 BE)` — the address of a specific substate version. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |
+| **Supply tracking** | Whether a resource keeps a total-supply figure in its resource substate. Enabled, mints and burns reveal value; disabled, burns can stay hidden. | <a href={basePath("/concepts/stablecoin/")}>Stablecoins</a> |
+| **TARI** | The L2 native token — a stealth resource (`TARI_TOKEN`). `XTR` is a deprecated alias. | <a href={basePath("/concepts/tokenomics/")}>Tokenomics</a> |
+| **Template** | Ootle's smart contract: Rust compiled to WASM and published as a **global** substate. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |
+| **Three-chain rule** | The commit rule: a block is final once three justified blocks build on it (`b ← b' ← b''`). | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
+| **TimeoutCertificate (TC)** | A quorum's aggregate timeout for a view, letting the next leader start a fresh view. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
+| **Tombstone** | `ClaimedOutputTombstone`: a marker at a commitment-derived address that prevents a burn claim from being replayed. | <a href={basePath("/concepts/tokenomics/")}>Tokenomics</a> |
+| **TVM** | The Tari Virtual Machine: Wasmer + Cranelift, metering WASM deterministically to produce a fee. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |
+| **Up / Down** | The two substate transitions: `Up` writes a new version, `Down` retires one. `Down` is not deletion — the same `SubstateId` can be re-created. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |
+| **UTXO** | An unspent output. Stealth funds are UTXOs rather than vault balances; the native token is UTXO-based. | <a href={basePath("/concepts/privacy/")}>Privacy</a> |
+| **Validator node** | The only node role that votes and produces finality. Runs consensus and the TVM for its shard group. | <a href={basePath("/concepts/architecture/")}>Architecture</a> |
+| **Vault** | A container of one resource inside a component. A `SubstateId` variant, persistent across transactions. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |
+| **View** | One step of consensus, identified by block height. A leader proposes; validators vote. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
+| **View key** | A key that can decrypt amounts (ElGamal, $V = E - pR$) for auditing **without** the ability to spend. | <a href={basePath("/concepts/privacy/")}>Privacy</a> |
+| **Wallet daemon** | A non-voting node that holds keys, builds and signs transactions, and submits them via the indexer. | <a href={basePath("/concepts/architecture/")}>Architecture</a> |
+
+---
+
+<Aside type="tip">
+If a term you need is missing, the <a href={basePath("/reference/api-overview/")}>Reference</a>
+section and the source paths cited throughout these pages are the authoritative next stop.
+</Aside>
