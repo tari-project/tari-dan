@@ -512,9 +512,10 @@ impl Display for ForeignProposal {
 mod tests {
     use super::*;
 
-    /// `foreign_proposals_set_status` removes a proposal from the unconfirmed index exactly when it
-    /// leaves the unconfirmed set, and `foreign_proposals_get_all_new` iterates that index. So a
-    /// rejected proposal is only kept out of later blocks while `Invalid` is not unconfirmed.
+    /// A tripwire, not coverage of the deletion itself: `foreign_proposals_set_status` drops the
+    /// unconfirmed index entry only when a status leaves the unconfirmed set, and
+    /// `foreign_proposals_get_all_new` iterates that index. Adding `Invalid` to the unconfirmed set would
+    /// silently make a rejected proposal selectable again.
     #[test]
     fn a_rejected_proposal_leaves_the_unconfirmed_set() {
         assert!(!ForeignProposalStatus::Invalid.is_unconfirmed());

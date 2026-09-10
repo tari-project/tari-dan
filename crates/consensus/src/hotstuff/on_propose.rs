@@ -438,6 +438,7 @@ where TConsensusSpec: ConsensusSpec
         // NOTE: the block for the change set is not used.
         let mut change_set = ProposedBlockChangeSet::new(start_of_chain_block.as_leaf());
         let mut invalid_foreign_proposals = Vec::new();
+        let mut dropped_foreign_proposals = false;
 
         // No need to include evidence from justified block if no transactions are included in the next block
         if !batch.transactions.is_empty() {
@@ -452,45 +453,49 @@ where TConsensusSpec: ConsensusSpec
             // transaction commands below are derived from the change set, so that partial state would shape
             // atoms no replica reproduces. Restoring this snapshot is what keeps a rejected foreign proposal
             // from reaching them.
-            let change_set_before_foreign_proposals = change_set.clone();
+            let mut change_set_before_foreign_proposals =
+                (!batch.foreign_proposals.is_empty()).then(|| change_set.clone());
 
             for fp in &batch.foreign_proposals {
                 // Resolves pending transaction pool records along the chain up to this block, so it must be
                 // the anchor the substate store this call also writes to is built on: the justify block
                 // under a dummy chain, the extended leaf otherwise. A replica passes the block it is
                 // evaluating, whose parent chain runs back through any dummies to the justify block.
-                let Err(err) = process_foreign_block(
+                if let Err(err) = process_foreign_block(
                     tx,
                     &state_anchor_leaf,
                     fp,
                     local_committee_info,
                     &mut substate_store,
                     &mut change_set,
-                ) else {
-                    continue;
-                };
+                ) {
+                    // Dropping the proposals is safe for every error class and is what keeps a block whose
+                    // commands no replica can reproduce off the wire. Propagating instead would take the
+                    // whole consensus loop down over a remote committee's proposal.
+                    warn!(
+                        target: LOG_TARGET,
+                        "⚠️❌ Foreign proposal {} failed to process while proposing: {err}. Dropping every \
+                         foreign proposal from this block.",
+                        fp.to_atom().block_id,
+                    );
 
-                // A validation failure is a property of the proposal itself, so every replica reaches it too
-                // and the block cannot be voted for. Anything else (storage, epoch manager) says nothing
-                // about the proposal and must not condemn it — abandon the proposal and let the next round
-                // retry.
-                let Some(validation_err) = err.validation_error() else {
-                    return Err(err);
-                };
+                    // Only a validation failure condemns the proposal: it is a property of the proposal
+                    // itself, so every leader reaches the same verdict. Every other error is a statement
+                    // about this node, and a proposal discarded on one would never be proposed again.
+                    if err.validation_error().is_some() {
+                        invalid_foreign_proposals.push(fp.to_atom().block_id);
+                    }
 
-                warn!(
-                    target: LOG_TARGET,
-                    "⚠️❌ Foreign proposal {} failed validation while proposing: {validation_err}. Marking it \
-                     invalid and dropping every foreign proposal from this block.",
-                    fp.to_atom().block_id,
-                );
-
-                invalid_foreign_proposals.push(fp.to_atom().block_id);
-                change_set = change_set_before_foreign_proposals;
-                // The proposals already applied to the discarded change set are not re-applied, so none of
-                // them may be proposed here. They keep their `New` status and are proposed again next round.
-                commands.retain(|cmd| !matches!(cmd, Command::ForeignProposal(_)));
-                break;
+                    change_set = change_set_before_foreign_proposals
+                        .take()
+                        .expect("snapshot is taken whenever there is a foreign proposal to restore from");
+                    // The proposals already applied to the discarded change set are not re-applied, so none
+                    // of them may be proposed here. They keep their `New` status and are proposed again next
+                    // round.
+                    commands.retain(|cmd| !matches!(cmd, Command::ForeignProposal(_)));
+                    dropped_foreign_proposals = true;
+                    break;
+                }
             }
 
             // Add all (ABORT) executions that may have resulted from foreign proposals
@@ -692,7 +697,14 @@ where TConsensusSpec: ConsensusSpec
 
         Ok(NextBlock {
             block: next_block,
-            foreign_proposals: batch.foreign_proposals,
+            // A proposal the block no longer carries a command for must not ride along on the wire: a
+            // replica that has not seen it stores it as `New` on receipt, which re-seeds the committee with
+            // a proposal this node has just condemned.
+            foreign_proposals: if dropped_foreign_proposals {
+                Vec::new()
+            } else {
+                batch.foreign_proposals
+            },
             executed_transactions,
             lock_conflicts,
             invalid_foreign_proposals,
