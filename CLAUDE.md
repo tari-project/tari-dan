@@ -61,10 +61,12 @@ invariants, the reason for a non-obvious approach, tricky edge cases. They must 
 #### AI agent disclosure (required)
 
 Every PR comment, review, or review reply written by an AI agent must be identified as such. Start the
-comment with a short marker on its own line before any other content, e.g.:
+comment with a short marker on its own line before any other content. Naming the agent is fine, e.g.:
 
 ```
 _Posted by an AI agent._
+_Posted by Claude._
+_Posted by Codex._
 ```
 
 This applies to top-level PR comments, review summaries, and inline review threads alike. Do not bury the
