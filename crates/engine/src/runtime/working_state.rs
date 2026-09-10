@@ -375,6 +375,10 @@ impl<TStore: StateReader> WorkingState<TStore> {
         stmt: &StealthTransferStatement,
         view_key: Option<&RistrettoPublicKey>,
     ) -> Result<ValidatedStealthTransfer, RuntimeError> {
+        // The statement is checked in full before anything is downed, so a statement rejected on its own terms
+        // (duplicate inputs among them) leaves the ledger untouched.
+        let valid_transfer = stealth::validate_transfer(stmt, view_key)?;
+
         for input in &stmt.inputs_statement.inputs {
             let address = UtxoAddress::new(resource_address, input.commitment.into());
             let lock_id = self.store.try_lock(address.clone().into(), LockFlag::Write)?;
@@ -394,7 +398,6 @@ impl<TStore: StateReader> WorkingState<TStore> {
             }
         }
 
-        let valid_transfer = stealth::validate_transfer(stmt, view_key)?;
         Ok(valid_transfer)
     }
 
