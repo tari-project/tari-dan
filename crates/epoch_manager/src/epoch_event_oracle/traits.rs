@@ -26,14 +26,17 @@ pub trait EpochEventOracle {
         false
     }
 
-    /// Returns the boundary hash the oracle has observed for `epoch`, if it has observed one.
+    /// Returns the boundary hash the oracle has observed for `epoch`, or `None` if it has observed
+    /// none. An error means the oracle could not determine either way and must be distinguished from
+    /// `None`: a caller that treats a failed lookup as "not observed" turns a broken store into a
+    /// silent abstention.
     ///
     /// This answers "have I seen this epoch's boundary?" independently of whether the corresponding
     /// `EpochChanged` event has been applied, which lets the voter ratify an `EndEpoch` hash it has
     /// genuinely scanned while the event is still queued behind an epoch activation. The default
     /// implementation returns `None`, so an oracle that cannot observe boundaries ahead of its own
     /// events is unaffected.
-    fn observed_epoch_boundary_hash(&self, _epoch: Epoch) -> Option<FixedHash> {
-        None
+    fn observed_epoch_boundary_hash(&self, _epoch: Epoch) -> anyhow::Result<Option<FixedHash>> {
+        Ok(None)
     }
 }

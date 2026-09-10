@@ -36,7 +36,7 @@ where
         }
     }
 
-    fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> Option<FixedHash> {
+    fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> anyhow::Result<Option<FixedHash>> {
         match self {
             EpochOracle::BaseLayer(base_layer) => base_layer.observed_epoch_boundary_hash(epoch),
             EpochOracle::Configured(configured) => configured.observed_epoch_boundary_hash(epoch),
@@ -55,7 +55,7 @@ where TStore: EpochOracleStore + Send + 'static
         }
     }
 
-    fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> Option<FixedHash> {
+    fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> anyhow::Result<Option<FixedHash>> {
         match self {
             EpochOracle::Configured(configured) => configured.observed_epoch_boundary_hash(epoch),
         }

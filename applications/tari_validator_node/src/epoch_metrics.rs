@@ -156,7 +156,7 @@ impl<O: EpochEventOracle + Send> EpochEventOracle for MeteredEpochOracle<O> {
         self.inner.is_within_epoch_end_spread(current_epoch)
     }
 
-    fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> Option<FixedHash> {
+    fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> anyhow::Result<Option<FixedHash>> {
         self.inner.observed_epoch_boundary_hash(epoch)
     }
 }

@@ -889,11 +889,19 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore, TClient: BaseNodeClie
     /// it. The stored header only counts as the boundary when its height is exactly the epoch's first
     /// height: a scan range that starts mid-epoch stores a first header that is not the boundary, and
     /// ratifying against that would compare the wrong hash.
-    fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> Option<FixedHash> {
-        let epoch_length = self.cached_epoch_length?;
-        let boundary_height = epoch.as_u64().checked_mul(epoch_length)?;
-        let boundary = self.store.get_first_block_header_in_epoch(epoch).ok()??;
-        (boundary.height == boundary_height).then_some(boundary.block_hash)
+    fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> anyhow::Result<Option<FixedHash>> {
+        // The epoch length is only known once a scan has obtained the L1 constants; until then we
+        // cannot say which height opens the epoch.
+        let Some(epoch_length) = self.cached_epoch_length else {
+            return Ok(None);
+        };
+        let Some(boundary_height) = epoch.as_u64().checked_mul(epoch_length) else {
+            return Ok(None);
+        };
+        let Some(boundary) = self.store.get_first_block_header_in_epoch(epoch)? else {
+            return Ok(None);
+        };
+        Ok((boundary.height == boundary_height).then_some(boundary.block_hash))
     }
 
     /// Returns true when our lagged scanner position is within `epoch_end_spread_blocks` of the
@@ -1031,10 +1039,13 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore + Send + 'static, TCli
             .unwrap_or(false)
     }
 
-    fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> Option<FixedHash> {
+    fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> anyhow::Result<Option<FixedHash>> {
         // `inner` is briefly None while a scan task is in flight; the voter then falls back to the
         // activated epoch hash alone.
-        self.inner.as_deref()?.observed_epoch_boundary_hash(epoch)
+        match self.inner.as_deref() {
+            Some(inner) => inner.observed_epoch_boundary_hash(epoch),
+            None => Ok(None),
+        }
     }
 }
 
@@ -1405,11 +1416,11 @@ mod tests {
 
         // Epoch 3 opens at height 15, which we have scanned.
         assert_eq!(
-            inner.observed_epoch_boundary_hash(Epoch(3)),
+            inner.observed_epoch_boundary_hash(Epoch(3)).unwrap(),
             Some(hash_header(NETWORK, &chain[15]))
         );
         // Epoch 4 opens at height 20, above our lagged scan position.
-        assert_eq!(inner.observed_epoch_boundary_hash(Epoch(4)), None);
+        assert_eq!(inner.observed_epoch_boundary_hash(Epoch(4)).unwrap(), None);
     }
 
     #[tokio::test]
@@ -1431,7 +1442,7 @@ mod tests {
             }])
             .unwrap();
 
-        assert_eq!(inner.observed_epoch_boundary_hash(Epoch(2)), None);
+        assert_eq!(inner.observed_epoch_boundary_hash(Epoch(2)).unwrap(), None);
     }
 
     #[tokio::test]

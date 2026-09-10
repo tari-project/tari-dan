@@ -537,11 +537,15 @@ impl<TSpec: EpochManagerSpec> EpochManagerService<TSpec> {
             EpochManagerRequest::GetObservedEpochHash { epoch, reply } => {
                 // An activated epoch's stored hash wins: it is the one the self-healing correction
                 // maintains and that `lock_epoch` freezes once consensus has committed against it.
-                let result = self
-                    .inner
-                    .get_epoch_hash(epoch)
-                    .optional()
-                    .map(|activated| activated.or_else(|| self.epoch_events.observed_epoch_boundary_hash(epoch)));
+                let result = match self.inner.get_epoch_hash(epoch).optional() {
+                    Ok(Some(activated)) => Ok(Some(activated)),
+                    Ok(None) => self.epoch_events.observed_epoch_boundary_hash(epoch).map_err(|err| {
+                        EpochManagerError::EpochEventOracleError {
+                            details: err.to_string(),
+                        }
+                    }),
+                    Err(err) => Err(err),
+                };
                 handle(reply, result, context);
             },
             EpochManagerRequest::GetBirthdayEpoch { reply } => {
