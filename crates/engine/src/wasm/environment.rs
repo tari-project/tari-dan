@@ -218,8 +218,15 @@ impl<T> WasmEnv<T> {
             .ok_or(WasmExecutionError::ExportError(ExportError::IncompatibleType))?;
 
         // with_memory_embedded_len expects a pointer to the payload (i.e. after the length prefix), so we need to add
-        // the size of the length prefix to the pointer
-        let offset_ptr = ptr as u32 + WASM_PTR_SIZE as u32;
+        // the size of the length prefix to the pointer. The global is guest-controlled, so the sum is checked.
+        let offset_ptr =
+            (ptr as u32)
+                .checked_add(WASM_PTR_SIZE as u32)
+                .ok_or(WasmExecutionError::MemoryPointerOutOfRange {
+                    size: 0,
+                    pointer: ptr as u32,
+                    len: WASM_PTR_SIZE as u32,
+                })?;
         // Load ABI from memory
         // SAFETY: WasmEnv is not used concurrently
         unsafe {

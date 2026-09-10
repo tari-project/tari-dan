@@ -1925,11 +1925,16 @@ impl<TStore: StateReader> WorkingState<TStore> {
         let mut total_fee_overcharge = 0;
         // First collect fees that cannot be refunded (we have to take all fees even if they exceed the required amount)
         for resx in self.fee_state.non_refundable_fee_payments_mut_iter() {
-            // PANIC: this is checked by FeeState
             let paid_amount = resx
                 .unlocked_amount()
                 .to_u64_checked()
-                .expect("invalid fee entry in fee state");
+                .ok_or_else(|| RuntimeError::InvariantError {
+                    function: "finalize_fees_and_refunds",
+                    details: format!(
+                        "Non-refundable fee payment {} does not fit in a u64",
+                        resx.unlocked_amount()
+                    ),
+                })?;
 
             debug!(
                 target: LOG_TARGET,
@@ -1956,11 +1961,16 @@ impl<TStore: StateReader> WorkingState<TStore> {
                     "Collecting {} of refundable fees", resx.unlocked_amount()
                 );
 
-                // PANIC: this is checked by FeeState
-                let paid_amount = resx
-                    .unlocked_amount()
-                    .to_u64_checked()
-                    .expect("invalid fee entry in fee state");
+                let paid_amount =
+                    resx.unlocked_amount()
+                        .to_u64_checked()
+                        .ok_or_else(|| RuntimeError::InvariantError {
+                            function: "finalize_fees_and_refunds",
+                            details: format!(
+                                "Refundable fee payment {} does not fit in a u64",
+                                resx.unlocked_amount()
+                            ),
+                        })?;
 
                 // Withdraw only what is needed
                 let amount_to_withdraw = cmp::min(paid_amount, remaining_fees);
@@ -1981,16 +1991,22 @@ impl<TStore: StateReader> WorkingState<TStore> {
             );
             let vault_mut = substates_to_persist
                 .get_mut(&SubstateId::Vault(*refund_vault))
-                .expect("invariant: vault that made fee payment not in changeset")
-                .as_vault_mut()
-                .expect("invariant: substate substate_id for fee refund is not a vault");
+                .and_then(|substate| substate.as_vault_mut())
+                .ok_or_else(|| RuntimeError::InvariantError {
+                    function: "finalize_fees_and_refunds",
+                    details: format!("Refund target {} is not a vault in the changeset", refund_vault),
+                })?;
             vault_mut.resource_container_mut().deposit(resx.withdraw_all()?)?;
         }
 
-        let total_fees_paid = fee_resource
-            .unlocked_amount()
-            .to_u64_checked()
-            .expect("FeeState guarantees that the total fee payments fit in an u64");
+        let total_fees_paid =
+            fee_resource
+                .unlocked_amount()
+                .to_u64_checked()
+                .ok_or_else(|| RuntimeError::InvariantError {
+                    function: "finalize_fees_and_refunds",
+                    details: format!("Collected fees {} do not fit in a u64", fee_resource.unlocked_amount()),
+                })?;
 
         // The burn is a share of what was collected, overcharge included, and leaders receive the rest.
         let exhaust_burn = exhaust_burn_share(total_fees_paid, self.fee_state.burn_rate());

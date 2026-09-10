@@ -477,3 +477,19 @@ fn an_account_for_another_key_may_still_be_created_on_the_default_rules() {
     let vaults = test.read_only_state_store().get_vaults_for_account(account).unwrap();
     assert_eq!(vaults.get(&TARI_TOKEN).unwrap().balance(), 1_000_000_000u64);
 }
+
+/// A proof over a stealth resource locks and unlocks a stealth container, TARI included.
+#[test]
+fn a_proof_over_a_stealth_resource_can_be_created_and_dropped() {
+    let mut test = TemplateTest::new_builtin_only();
+    let (account, account_proof, account_key) = test.create_funded_account();
+
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(account, "create_proof_for_resource", args![TARI_TOKEN])
+            .put_last_instruction_output_on_workspace("proof")
+            .drop_all_proofs_in_workspace()
+            .build_and_seal(&account_key),
+        vec![account_proof],
+    );
+}

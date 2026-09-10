@@ -4,10 +4,13 @@
 use ootle_byte_type::ToByteType;
 use tari_engine_types::{crypto::commit_amount, vault::Vault};
 use tari_ootle_transaction::{Epoch, Transaction, args};
-use tari_template_lib::types::{Amount, ComponentAddress, ResourceType};
+use tari_template_lib::types::{Amount, ComponentAddress, ResourceType, confidential::ConfidentialOutputStatement};
 use tari_template_test_tooling::{
     TemplateTest,
-    support::confidential::{generate_confidential_output_statement, generate_withdraw_proof_with_inputs},
+    support::{
+        assert_error::assert_reject_reason,
+        confidential::{generate_confidential_output_statement, generate_withdraw_proof_with_inputs},
+    },
 };
 
 const CRATE_PATH: &str = env!("CARGO_MANIFEST_DIR");
@@ -144,4 +147,30 @@ fn get_vault_by_resource_type(test: &TemplateTest, component: ComponentAddress, 
             }
         })
         .expect("No vault found for the specified resource type")
+}
+
+/// The confidential resource tracks no supply, so nothing but the vault's own balance bounds a revealed mint.
+#[test]
+fn minting_past_the_maximum_vault_balance_is_rejected() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/fungible"]);
+    let template = test.get_template_address("Fungible");
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template, "with_supply", args![Amount::MAX])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let component: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
+
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_method(component, "confidential_mint_more", args![
+                ConfidentialOutputStatement::mint_revealed(1u32)
+            ])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "would take the resource balance past the maximum");
 }

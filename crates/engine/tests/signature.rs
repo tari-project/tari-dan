@@ -166,3 +166,22 @@ fn check_signature_api() {
         "Expected bad public key to be false"
     );
 }
+
+/// `PublicKey::Zero` is a valid encoding any caller can supply, and this verifier has no Ristretto key to check
+/// against, so verification fails rather than aborting the executor.
+#[test]
+fn check_signature_with_a_zero_public_key() {
+    let (s1, p1) = create_key_pair_from_seed(1);
+    let p1 = PublicKey::from(p1.to_byte_type());
+    let (mut test, _) = setup(vec![p1]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "check_sig", args![PublicKey::Zero, sign_it(&s1)])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert!(!result.finalize.execution_results[0].decode::<bool>().unwrap());
+}
