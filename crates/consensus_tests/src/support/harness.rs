@@ -705,7 +705,6 @@ impl TestBuilder {
                     max_block_execution_points: 4_500_000_000,
                     max_block_validation_execution_points: 5_000_000_000,
                     exhaust_burn_rate: ExhaustBurnRate::new(500),
-                    epoch_end_spread_blocks: 0,
                 },
                 state_tree_cleanup_interval: Duration::from_secs(1000),
                 epoch_gc_interval: Duration::from_secs(1000),

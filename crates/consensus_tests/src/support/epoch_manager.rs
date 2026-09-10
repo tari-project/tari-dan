@@ -523,10 +523,6 @@ impl EpochManagerReader for TestEpochManager {
         Ok(())
     }
 
-    async fn is_within_epoch_end_spread(&self, _current_epoch: Epoch) -> Result<bool, EpochManagerError> {
-        Ok(false)
-    }
-
     async fn get_observed_epoch_hash(&self, epoch: Epoch) -> Result<Option<FixedHash>, EpochManagerError> {
         self.get_epoch_hash(epoch).await.optional()
     }

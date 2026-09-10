@@ -336,14 +336,11 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             None
         };
 
-        // Accept an EndEpoch proposal when our oracle has advanced past `current_epoch`, when we have
-        // scanned the boundary block that ends it, OR when the oracle believes we are close enough to
-        // the boundary to vote speculatively. The latter branches rescue the case where a short
-        // base-layer reorg near the lag horizon leaves our scanner behind the leader's — without them,
-        // such splits can wedge consensus because every node requires the strict inequality.
-        let can_propose_epoch_end = em_epoch > current_epoch ||
-            expected_next_epoch_hash.is_some() ||
-            self.epoch_manager.is_within_epoch_end_spread(current_epoch).await?;
+        // Accept an EndEpoch proposal when our oracle has advanced past `current_epoch`, or when we
+        // have scanned the boundary block that ends it. The second branch rescues the case where a
+        // short base-layer reorg near the lag horizon leaves our scanner behind the leader's — without
+        // it, such splits can wedge consensus because every node requires the strict inequality.
+        let can_propose_epoch_end = em_epoch > current_epoch || expected_next_epoch_hash.is_some();
 
         let mut on_ready_to_vote_on_local_block = self.on_ready_to_vote_on_local_block.clone();
 

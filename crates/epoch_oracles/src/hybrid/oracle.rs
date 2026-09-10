@@ -79,11 +79,6 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore + Send + 'static> Epoc
         }
     }
 
-    fn is_within_epoch_end_spread(&self, current_epoch: Epoch) -> bool {
-        // Epoch timing in hybrid mode is driven by the base-layer scanner; defer to it.
-        self.base_layer.is_within_epoch_end_spread(current_epoch)
-    }
-
     fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> anyhow::Result<Option<FixedHash>> {
         // Epoch boundaries in hybrid mode are scanned by the base-layer oracle; defer to it.
         self.base_layer.observed_epoch_boundary_hash(epoch)

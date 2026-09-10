@@ -658,7 +658,6 @@ async fn create_base_layer_epoch_oracle<TStore: EpochOracleStore + BaseLayerBloc
             scanning_interval: config.epoch_oracle.base_layer.scanning_interval,
             sidechain_id: config.validator_node.sidechain_id.as_ref().map(|p| p.to_byte_type()),
             features,
-            epoch_end_spread_blocks: consensus_constants.epoch_end_spread_blocks,
         },
         config.network,
     ))

@@ -12,6 +12,8 @@ use tari_consensus::consensus_constants::ConsensusConstants;
 use tari_engine_types::fees::{ExhaustBurnRate, MAX_EXHAUST_BURN_RATE_BPS};
 use tari_ootle_transaction::Network;
 
+const LOG_TARGET: &str = "tari::ootle::consensus_constants_file";
+
 /// Overrides for a LocalNet's consensus constants, applied over the network's built-in values.
 ///
 /// Consensus constants have to agree across a network, so this is authored once and handed to every
@@ -38,6 +40,11 @@ pub struct ConsensusConstantsFile {
     pub max_block_validation_execution_points: Option<u64>,
     pub exhaust_burn_rate_bps: Option<u16>,
     pub max_transaction_validity_epochs: Option<u64>,
+    /// Accepted and ignored. The leeway this configured could never withhold or grant a vote:
+    /// ratifying an `EndEpoch` independently requires having observed the next epoch's boundary.
+    /// The field is kept because `deny_unknown_fields` would otherwise reject a whole constants
+    /// file that still sets it.
+    #[serde(skip_serializing)]
     pub epoch_end_spread_blocks: Option<u64>,
 }
 
@@ -65,8 +72,14 @@ impl ConsensusConstantsFile {
             max_block_execution_points,
             max_block_validation_execution_points,
             max_transaction_validity_epochs,
-            epoch_end_spread_blocks,
         );
+
+        if self.epoch_end_spread_blocks.is_some() {
+            log::warn!(
+                target: LOG_TARGET,
+                "⚠️ 'epoch_end_spread_blocks' in the consensus constants file is ignored and can be removed."
+            );
+        }
 
         if let Some(secs) = self.pacemaker_block_time_secs {
             constants.pacemaker_block_time = Duration::from_secs(secs);
