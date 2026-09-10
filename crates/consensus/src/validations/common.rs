@@ -159,7 +159,7 @@ pub(super) fn check_height(block: &Block) -> Result<(), ProposalValidationError>
     }
     let max_certificate_height = block.max_certificate_height();
     // invariant: the block may only advance the view by 1 higher than the justified height
-    if block.height() != max_certificate_height + NodeHeight(1) {
+    if max_certificate_height.checked_add(NodeHeight(1)) != Some(block.height()) {
         return Err(ProposalValidationError::InvalidBlockHeight {
             block_id: *block.id(),
             block_height: block.height(),

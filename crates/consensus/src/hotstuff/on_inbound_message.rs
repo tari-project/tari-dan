@@ -384,11 +384,18 @@ fn msg_relative_view(
 
             if has_processed_first_block {
                 if pc_height > next_height {
-                    let msg_height = msg
-                        .block
-                        .timeout_certificate()
-                        .map(|_| pc_height + NodeHeight(1))
-                        .unwrap_or(pc_height);
+                    let msg_height = if msg.block.timeout_certificate().is_some() {
+                        let Some(height) = pc_height.checked_add(NodeHeight(1)) else {
+                            warn!(
+                                target: LOG_TARGET,
+                                "❗️ Proposal {} has an out-of-range justify height {}. Discarding.", msg.block, pc_height
+                            );
+                            return MessageRelativeView::Discard;
+                        };
+                        height
+                    } else {
+                        pc_height
+                    };
 
                     return MessageRelativeView::Future {
                         epoch,
@@ -439,14 +446,6 @@ fn msg_relative_view(
             }
         },
         HotstuffMessage::NewView(msg) => {
-            // let Some(height) = msg.max_height().checked_add(NodeHeight(1)) else {
-            //     warn!(
-            //         target: LOG_TARGET,
-            //         "❗️ NewView message {} has invalid max height {}. Discarding.", msg, msg.max_height()
-            //     );
-            //     return MessageRelativeView::Discard;
-            // };
-
             let height = msg.max_height();
             if msg.epoch() < current_epoch || (msg.epoch() == current_epoch && height < current_height) {
                 MessageRelativeView::Past {
