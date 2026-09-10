@@ -383,14 +383,19 @@ where TConsensusSpec: ConsensusSpec
         };
 
         let mut total_leader_fee = 0u64;
-        // When filling a timeout gap with a dummy chain, the candidate effectively extends from justify_block (the
-        // dummies are empty blocks that carry justify_block's accumulated_data and state forward — see
-        // `calculate_last_dummy_block`). Anchor accumulated_data, the substate store, the pending state tree
-        // diff lookup and propose-time foreign proposal processing at justify_block to match what validators
-        // recompute from the reconstructed dummy chain.
-        // Otherwise speculative state and leader-fee burn that accumulated on a locally-stored fork above the high QC
-        // would be incorrectly carried into the new candidate and validators would reject with either an
-        // exhaust-burn mismatch or a state Merkle-root mismatch.
+        // The block the candidate extends from, and therefore the point every part of this proposal is read
+        // at. When filling a timeout gap with a dummy chain that is justify_block, not the highest seen block:
+        // the dummies are empty blocks carrying justify_block's accumulated_data and state forward (see
+        // `calculate_last_dummy_block`), so the candidate's parent chain runs back through them to
+        // justify_block and never through a locally-stored fork above the high QC. A validator recomputes
+        // that same chain, so anything read at a fork block is state it does not have: speculative substate
+        // changes and leader-fee burn surface as an exhaust-burn or state Merkle-root mismatch, and pool
+        // records read there carry stages and decisions from blocks the candidate abandons.
+        //
+        // Every read for the candidate follows this anchor — accumulated_data, the substate store, the
+        // pending state tree diff lookup, foreign proposal processing, the proposal batch, the change set and
+        // command generation. They must agree, and `highest_seen_block` is only the right answer for the
+        // non-dummy case, where the two are the same block.
         let state_anchor_leaf = if dummy_block.is_some() {
             justify_block.as_leaf()
         } else {
@@ -410,7 +415,7 @@ where TConsensusSpec: ConsensusSpec
         let batch = if should_not_propose_commands {
             ProposalBatch::default()
         } else {
-            self.fetch_next_proposal_batch(tx, start_of_chain_block)?
+            self.fetch_next_proposal_batch(tx, state_anchor_leaf)?
         };
         debug!(target: LOG_TARGET, "🌿 PROPOSE: {} (justify: {}) {batch}", highest_seen_block.height(), justify_block.height());
 
@@ -428,7 +433,7 @@ where TConsensusSpec: ConsensusSpec
         };
 
         // NOTE: the block for the change set is not used.
-        let mut change_set = ProposedBlockChangeSet::new(start_of_chain_block.as_leaf());
+        let mut change_set = ProposedBlockChangeSet::new(state_anchor_leaf);
         let mut invalid_foreign_proposals = Vec::new();
         let mut dropped_foreign_proposals = false;
 
@@ -560,7 +565,7 @@ where TConsensusSpec: ConsensusSpec
             // for this block, so only count executions newly produced by the command conversion below.
             let had_execution = executed_transactions.contains_key(&tx_id);
             let maybe_command = self.transaction_pool_record_to_command(
-                &start_of_chain_block.as_leaf(),
+                &state_anchor_leaf,
                 // This locked epoch is used to set the transaction LockedEpoch if necessary
                 &locked_epoch,
                 transaction,
@@ -707,7 +712,7 @@ where TConsensusSpec: ConsensusSpec
     fn fetch_next_proposal_batch<TTx: StateStoreReadTransaction>(
         &self,
         tx: &TTx,
-        start_of_chain_block: HighestSeenBlock,
+        state_anchor_leaf: LeafBlock,
     ) -> Result<ProposalBatch, HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "fetch_next_proposal_batch");
         // A block is budgeted by total command weight (`max_block_weight`), not a flat command count.
@@ -722,7 +727,7 @@ where TConsensusSpec: ConsensusSpec
         let max_commands = self.config.consensus_constants.max_commands_in_block;
 
         let foreign_proposals =
-            ForeignProposalRecord::get_all_new(tx, start_of_chain_block.block_id(), MAX_FOREIGN_PROPOSALS_PER_BLOCK)?;
+            ForeignProposalRecord::get_all_new(tx, state_anchor_leaf.block_id(), MAX_FOREIGN_PROPOSALS_PER_BLOCK)?;
 
         if !foreign_proposals.is_empty() {
             debug!(
@@ -750,7 +755,7 @@ where TConsensusSpec: ConsensusSpec
                     tx,
                     weight_budget,
                     max_tx_count,
-                    start_of_chain_block.block_id(),
+                    state_anchor_leaf.block_id(),
                 )
             })
             .transpose()?

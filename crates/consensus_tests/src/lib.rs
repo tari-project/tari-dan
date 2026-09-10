@@ -7,6 +7,8 @@ mod consensus;
 #[cfg(test)]
 mod dummy_blocks;
 #[cfg(test)]
+mod dummy_fill_anchor;
+#[cfg(test)]
 mod epoch_change;
 #[cfg(test)]
 #[cfg(test)]
