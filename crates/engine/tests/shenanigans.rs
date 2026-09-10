@@ -435,3 +435,116 @@ fn it_disallows_withdraws_from_vaults_outside_of_owning_component() {
         requested_owner: Box::new(component.into()),
     });
 }
+
+#[test]
+fn it_does_not_leak_a_callees_vaults_into_the_callers_scope() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+    let (victim, _, _) = test.create_funded_account();
+    let (attacker, _, _) = test.create_empty_account();
+
+    let vault_id = {
+        let store = test.read_only_state_store();
+        let component = store.get_component(victim).unwrap();
+        let values = IndexedWellKnownTypes::from_value(component.state()).unwrap();
+        values.vault_ids()[0]
+    };
+
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_function(template_addr, "call_then_steal_from_vault", args![victim, vault_id])
+            .put_last_instruction_output_on_workspace("bucket")
+            .call_method(attacker, "deposit", args![Workspace("bucket")])
+            .add_input(vault_id)
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    // Calling the victim leaves the attacker's frame without a component context, so the vault is neither in scope
+    // nor owned by a component the attacker is executing on.
+    assert_reject_reason(reason, RuntimeError::NotInComponentContext {
+        action: VaultAction::Withdraw.into(),
+    });
+}
+
+#[test]
+fn it_rejects_a_bucket_that_is_neither_consumed_nor_returned_by_a_call() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let component = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_method(component, "abandon_bucket", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "were neither consumed nor returned by the call");
+}
+
+#[test]
+fn it_rejects_a_proof_that_is_neither_dropped_nor_returned_by_a_call() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let component = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_method(component, "abandon_proof", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "were neither dropped nor returned by the call");
+}
+
+#[test]
+fn a_proof_outlives_the_authorization_taken_from_it() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let component = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(component, "authorize_then_drop_proof", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(component, "authorize_then_return_proof", args![])
+            .put_last_instruction_output_on_workspace("proof")
+            .drop_all_proofs_in_workspace()
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+}

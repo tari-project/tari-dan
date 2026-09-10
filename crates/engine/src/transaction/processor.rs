@@ -569,13 +569,16 @@ where
 
         runtime.interface_mut().update_component_template(new_template)?;
 
-        if let Some(function_def) = migration_function {
+        let returned = if let Some(function_def) = migration_function {
             // Migrate function is defined, so we need to call it
             let result = Self::invoke_template(template, runtime.clone(), &function_def, &final_args)?;
             runtime.interface_mut().validate_return_value(&result.indexed)?;
-        }
+            result.indexed
+        } else {
+            IndexedValue::default()
+        };
 
-        runtime.interface_mut().pop_call_frame()?;
+        runtime.interface_mut().pop_call_frame(returned.well_known_types())?;
 
         Ok(InstructionResult::empty())
     }
@@ -791,7 +794,9 @@ where
                 let result = Self::invoke_template(template, runtime.clone(), &function_def, &resolved_args)?;
 
                 runtime.interface_mut().validate_return_value(&result.indexed)?;
-                runtime.interface_mut().pop_call_frame()?;
+                runtime
+                    .interface_mut()
+                    .pop_call_frame(result.indexed.well_known_types())?;
                 runtime
                     .interface_mut()
                     .set_last_instruction_output(IndexedValue::from_type(&account_address)?)?;
@@ -851,7 +856,9 @@ where
         let result = Self::invoke_template(template, runtime.clone(), &function_def, &resolved_args)?;
 
         runtime.interface_mut().validate_return_value(&result.indexed)?;
-        runtime.interface_mut().pop_call_frame()?;
+        runtime
+            .interface_mut()
+            .pop_call_frame(result.indexed.well_known_types())?;
 
         Ok(result)
     }
@@ -937,7 +944,9 @@ where
         let result = Self::invoke_template(template, runtime.clone(), &function_def, &resolved_args)?;
 
         runtime.interface_mut().validate_return_value(&result.indexed)?;
-        runtime.interface_mut().pop_call_frame()?;
+        runtime
+            .interface_mut()
+            .pop_call_frame(result.indexed.well_known_types())?;
         Ok(result)
     }
 

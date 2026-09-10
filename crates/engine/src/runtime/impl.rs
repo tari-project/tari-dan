@@ -38,7 +38,7 @@ use tari_engine_types::{
     events::Event,
     fees::FeeReceipt,
     hashing::hash_template_code,
-    indexed_value::IndexedValue,
+    indexed_value::{IndexedValue, IndexedWellKnownTypes},
     instruction_result::InstructionResult,
     limits,
     lock::LockFlag,
@@ -3882,8 +3882,8 @@ where
         Ok(())
     }
 
-    fn pop_call_frame(&mut self) -> Result<(), RuntimeError> {
-        self.tracker.pop_call_frame()?;
+    fn pop_call_frame(&mut self, returned: &IndexedWellKnownTypes) -> Result<(), RuntimeError> {
+        self.tracker.pop_call_frame(returned)?;
         Ok(())
     }
 
