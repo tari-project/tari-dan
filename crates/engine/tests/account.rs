@@ -6,7 +6,7 @@ use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey};
 use tari_engine::runtime::{ActionIdent, RuntimeError};
 use tari_ootle_transaction::{Epoch, Transaction, args};
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
-use tari_template_lib::types::{Amount, access_rules::ComponentAccessRules, constants::TARI_TOKEN, rule};
+use tari_template_lib::types::{Amount, OwnerRule, access_rules::ComponentAccessRules, constants::TARI_TOKEN, rule};
 use tari_template_test_tooling::{
     TemplateTest,
     support::assert_error::{assert_access_denied_for_action, assert_reject_reason},
@@ -373,4 +373,93 @@ fn put_into_bucket_rejects_resource_mismatch() {
         format!("{reason}").contains("Resource addresses do not match"),
         "expected ResourceAddressMismatch, got: {reason}"
     );
+}
+
+#[test]
+fn custom_ownership_of_another_keys_account_is_refused() {
+    let mut test = TemplateTest::new_builtin_only();
+    let (_payer_proof, _payer_pk, payer_sk) = test.create_owner_proof();
+    let (_victim_proof, victim_pk, _victim_sk) = test.create_owner_proof();
+
+    // The squatter hands itself the owner rule on the address derived from the victim's key.
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .create_account_custom::<&str>(
+                victim_pk.to_byte_type(),
+                Some(OwnerRule::ByAccessRule(rule!(allow_all))),
+                None,
+                None,
+            )
+            .build_and_seal(&payer_sk),
+        vec![],
+    );
+
+    assert_reject_reason(reason, RuntimeError::SignerBadgeNotInScope {
+        public_key: victim_pk.to_byte_type(),
+    });
+
+    // Custom access rules are gated the same way.
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .create_account_custom::<&str>(
+                victim_pk.to_byte_type(),
+                None,
+                Some(ComponentAccessRules::new().default(rule!(allow_all))),
+                None,
+            )
+            .build_and_seal(&payer_sk),
+        vec![],
+    );
+
+    assert_reject_reason(reason, RuntimeError::SignerBadgeNotInScope {
+        public_key: victim_pk.to_byte_type(),
+    });
+}
+
+#[test]
+fn custom_ownership_via_the_account_template_is_refused() {
+    let mut test = TemplateTest::new_builtin_only();
+    let (_payer_proof, _payer_pk, payer_sk) = test.create_owner_proof();
+    let (victim_proof, _victim_pk, _victim_sk) = test.create_owner_proof();
+
+    let null: Option<()> = None;
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_function(ACCOUNT_TEMPLATE_ADDRESS, "create", args![
+                victim_proof,
+                Some(OwnerRule::ByAccessRule(rule!(allow_all))),
+                null,
+                null
+            ])
+            .build_and_seal(&payer_sk),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "unknown or out of scope signer badge");
+}
+
+#[test]
+fn an_account_for_another_key_may_still_be_created_on_the_default_rules() {
+    let mut test = TemplateTest::new_builtin_only();
+    let (_payer_proof, _payer_pk, payer_sk) = test.create_owner_proof();
+    let (_victim_proof, victim_pk, _victim_sk) = test.create_owner_proof();
+
+    test.execute_expect_success(
+        test.transaction()
+            .create_account(victim_pk.to_byte_type())
+            .put_last_instruction_output_on_workspace("account")
+            .call_method(xtr_faucet_component(), "take", args![Workspace("account")])
+            .build_and_seal(&payer_sk),
+        vec![],
+    );
+
+    let account = *test
+        .read_only_state_store()
+        .all_accounts()
+        .unwrap()
+        .keys()
+        .next()
+        .unwrap();
+    let vaults = test.read_only_state_store().get_vaults_for_account(account).unwrap();
+    assert_eq!(vaults.get(&TARI_TOKEN).unwrap().balance(), 1_000_000_000u64);
 }

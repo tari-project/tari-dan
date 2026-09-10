@@ -51,6 +51,14 @@ mod account_template {
                 .to_public_key()
                 .unwrap_or_else(|| panic!("public_key_token is not a valid public key: {}", public_key_token));
 
+            // The account's address is derived from `public_key`, so replacing the owner rule or the access rules
+            // that key would otherwise get requires that key's signature on the transaction. Creating an account
+            // for someone else on the default rules stays permissionless, which is what lets a sender deposit to
+            // an account that does not exist yet.
+            if owner_rule.is_some() || access_rules.is_some() {
+                CallerContext::get_signer_proof_for_public_key(public_key).drop();
+            }
+
             // The owner of this account is either provided explicitly or defaults to the provided public key.
             let owner_rule = owner_rule.unwrap_or(OwnerRule::ByPublicKey(public_key));
 

@@ -701,6 +701,13 @@ where
                 address: ACCOUNT_TEMPLATE_ADDRESS,
             })?;
 
+        // The derived address belongs to `public_key_address`, so anything that departs from the rules that key
+        // would get requires that key's signature. Creating the account on the default rules stays permissionless
+        // so that a sender can deposit to an account that does not exist yet.
+        if owner_rule.is_some() || access_rules.is_some() {
+            runtime.interface().check_signer_badge_in_scope(*public_key_address)?;
+        }
+
         let account_address = derive_component_address_from_public_key(&ACCOUNT_TEMPLATE_ADDRESS, public_key_address);
 
         let maybe_existing_account = runtime
