@@ -58,6 +58,18 @@ invariants, the reason for a non-obvious approach, tricky edge cases. They must 
 
 - Base branch for PRs is `development`, not `main`
 
+#### AI agent disclosure (required)
+
+Every PR comment, review, or review reply written by an AI agent must be identified as such. Start the
+comment with a short marker on its own line before any other content, e.g.:
+
+```
+_Posted by an AI agent._
+```
+
+This applies to top-level PR comments, review summaries, and inline review threads alike. Do not bury the
+disclosure at the bottom or omit it on short replies.
+
 ### Building
 
 - Standard cargo workspace. Use `-p <package_name>` to build/test specific crates
