@@ -1089,11 +1089,12 @@ fn duplicate_inputs_in_one_statement_are_rejected() {
     };
     // The excess folds the inputs positionally, so listing the one 100 UTXO twice balances a statement that pays
     // out 200.
-    let transfer = stealth::generate_transfer_data([input.clone(), input], 0u64, Some(200), 0);
+    let transfer = stealth::generate_transfer_data([input], 0u64, Some(200), 0);
+    let statement = stealth::spend_first_input_twice(&transfer, &mint.output_masks[0]);
 
     let reason = test.execute_expect_failure(
         test.transaction()
-            .stealth_transfer(faucet_resx, transfer.statement)
+            .stealth_transfer(faucet_resx, statement)
             .finish()
             .add_signer(&test.to_public_key_bytes(), &mint.output_masks[0])
             .seal(test.secret_key()),

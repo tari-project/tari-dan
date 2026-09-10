@@ -1,6 +1,8 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::collections::HashSet;
+
 use ootle_byte_type::ToByteType;
 use tari_crypto::ristretto::RistrettoSecretKey;
 /// The canonical digest for a
@@ -169,9 +171,21 @@ where
 
     let mut inputs_to_spend = Vec::with_capacity(num_inputs);
     let mut agg_input_mask = RistrettoSecretKey::default();
+    let mut seen = HashSet::with_capacity(num_inputs);
     for input in &inputs {
+        let commitment = input.mask_and_value.to_commitment().to_byte_type();
+        // The excess and the aggregate mask both fold the inputs positionally, so a UTXO listed twice would be
+        // spent twice over. Rejecting it here rather than dropping it keeps the caller's mistake legible: the
+        // balance proof signs the mask difference alone, so a statement whose inputs were silently deduplicated
+        // would fail at the validator as an unbalanced proof.
+        if !seen.insert(commitment) {
+            return Err(WalletCryptoError::InvalidArgument {
+                name: "inputs",
+                details: format!("Input commitment {commitment} appears more than once"),
+            });
+        }
         inputs_to_spend.push(StealthInput {
-            commitment: input.mask_and_value.to_commitment().to_byte_type(),
+            commitment,
             witness: input.witness.clone(),
         });
         agg_input_mask = agg_input_mask + &input.mask_and_value.mask;
@@ -342,7 +356,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::OutputWitness;
+    use crate::{MaskAndValue, OutputWitness};
 
     fn create_valid_proof(amount: u64, minimum_value_promise: u64) -> StealthOutputsStatement {
         let mask = RistrettoSecretKey::random(&mut rand::rng());
@@ -368,6 +382,25 @@ mod tests {
     fn it_is_valid_if_proof_is_valid() {
         let proof = create_valid_proof(100, 0);
         validate_stealth_outputs_statement(&proof, None).unwrap();
+    }
+
+    #[test]
+    fn it_refuses_to_spend_one_input_twice() {
+        let mask = RistrettoSecretKey::random(&mut rand::rng());
+        let input = StealthInputWitness::new(MaskAndValue { mask, value: 100 });
+
+        let err = create_transfer_statement(
+            [input.clone(), input],
+            Amount::zero(),
+            &[] as &[StealthOutputWitness],
+            Amount::from(200u64),
+        )
+        .unwrap_err();
+
+        assert!(
+            matches!(err, WalletCryptoError::InvalidArgument { name: "inputs", .. }),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]
