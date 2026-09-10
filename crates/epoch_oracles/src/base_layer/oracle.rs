@@ -889,7 +889,7 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore, TClient: BaseNodeClie
     /// it. The stored header only counts as the boundary when its height is exactly the epoch's first
     /// height: a scan range that starts mid-epoch stores a first header that is not the boundary, and
     /// ratifying against that would compare the wrong hash.
-    fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> anyhow::Result<Option<FixedHash>> {
+    fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> Result<Option<FixedHash>, BaseLayerOracleError> {
         // The epoch length is only known once a scan has obtained the L1 constants; until then we
         // cannot say which height opens the epoch.
         let Some(epoch_length) = self.cached_epoch_length else {
@@ -898,7 +898,11 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore, TClient: BaseNodeClie
         let Some(boundary_height) = epoch.as_u64().checked_mul(epoch_length) else {
             return Ok(None);
         };
-        let Some(boundary) = self.store.get_first_block_header_in_epoch(epoch)? else {
+        let Some(boundary) = self
+            .store
+            .get_first_block_header_in_epoch(epoch)
+            .map_err(BaseLayerOracleError::StoreError)?
+        else {
             return Ok(None);
         };
         Ok((boundary.height == boundary_height).then_some(boundary.block_hash))
@@ -1043,7 +1047,7 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore + Send + 'static, TCli
         // `inner` is briefly None while a scan task is in flight; the voter then falls back to the
         // activated epoch hash alone.
         match self.inner.as_deref() {
-            Some(inner) => inner.observed_epoch_boundary_hash(epoch),
+            Some(inner) => Ok(inner.observed_epoch_boundary_hash(epoch)?),
             None => Ok(None),
         }
     }
