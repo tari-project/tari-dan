@@ -160,10 +160,9 @@ mod template {
             Proof::from_id(proof_id.into()).amount()
         }
 
-        /// `DropAuthorize` on an id this frame does not hold. It can only ever touch this frame's own auth scope, so
-        /// the answer must not reveal whether a proof is live at that id.
+        /// Gives up an authorization for `proof_id`, whatever this frame holds. `ProofAccess::drop` is the only
+        /// route to the action and its field is public, so the guard is built by hand here to name an arbitrary id.
         pub fn drop_authorize_proof(&self, proof_id: u32) -> Amount {
-            // The guard's `Drop` is the only route to `DropAuthorize`, so one is made and dropped here.
             drop(tari_template_lib::models::ProofAccess { id: proof_id.into() });
             Amount::zero()
         }

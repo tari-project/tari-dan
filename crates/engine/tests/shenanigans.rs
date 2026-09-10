@@ -688,11 +688,16 @@ fn it_refuses_to_read_a_proof_the_frame_does_not_hold() {
     assert_reject_reason(reason, "Encountered unknown or out of scope proof");
 }
 
-/// Giving up an authorization is confined to the calling frame's own auth scope, so it answers any id: a frame
-/// cannot un-authorize another frame's proof, and cannot learn from the attempt whether a proof is live at an id it
-/// does not hold.
+/// Giving up an authorization answers for any proof id, and leaves the proof with whoever holds it.
+///
+/// The victim gives up its own authorization when the pin's `ProofAccess` temporary drops, so by the time the
+/// attacker runs, proof 0 is in the victim's `proof_scope` and not its `auth_scope`. What this pins is therefore the
+/// holder's `proof_scope` entry surviving the attacker's call, and the call answering at all. The `auth_scope` half
+/// of the isolation is structural — `current_call_scope_mut` is `call_frames.last_mut()`, so a frame has no way to
+/// address another's scope — and observing it would need the victim to hold its guard across the call and then
+/// exercise something gated on the badge, there being no engine query for `auth_scope` membership.
 #[test]
-fn it_confines_dropping_an_authorization_to_the_calling_frame() {
+fn it_answers_a_drop_authorize_for_any_proof_id() {
     let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
     let template_addr = test.get_template_address(TEMPLATE_NAME);
 
@@ -710,8 +715,7 @@ fn it_confines_dropping_an_authorization_to_the_calling_frame() {
         .decode::<ComponentAddress>()
         .unwrap();
 
-    // Id 0 is live and held by the victim. The attacker dropping its authorization touches only the attacker's own
-    // scope, so the victim's own `proof.drop()` after the call still finds it.
+    // Id 0 is live and held by the victim, and the victim's own `proof.drop()` after the call still finds it.
     test.execute_expect_success(
         test.transaction()
             .call_method(victim, "hold_proof_and_call", args![
