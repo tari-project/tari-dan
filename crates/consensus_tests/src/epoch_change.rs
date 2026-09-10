@@ -277,6 +277,132 @@ async fn epoch_change_observed_boundary_is_voted_before_activation() {
     test.assert_clean_shutdown().await;
 }
 
+/// A validator that deferred its end-of-epoch processing must resume as soon as its oracle has the
+/// epoch row — not when the whole base-layer catch-up finishes.
+///
+/// `process_end_of_epoch` defers when `get_epoch_hash(next_epoch)` finds nothing, and the only retry
+/// used to be `EpochManagerEvent::EpochChanged`. In production that event is published from a single
+/// place, `on_scanning_complete`, which runs on `EpochEvent::DoneForNow` — emitted only once the scan
+/// reaches the lagged tip. But `activate_epoch` writes the epoch row as soon as the queued
+/// `EpochChanged` for that epoch is applied, which during a multi-batch catch-up happens *between*
+/// batches. The row lands early; nothing told consensus to look, so the node sat out the new epoch
+/// for the rest of the scan — a wait that scales with the scanner's lag, not with consensus lag.
+///
+/// The test:
+///   1. Gives validator "1" an observed boundary for `Epoch(2)` but no activated epoch — the exact mid-catch-up state:
+///      it can ratify the `EndEpoch` hash, so it votes and commits the EOE, but `get_epoch_hash(Epoch(2))` is
+///      `NoEpochFound`, so it defers.
+///   2. Asserts the deferral: EOE committed in `Epoch(1)`, no leaf in `Epoch(2)`. This is correct behaviour, not the
+///      bug.
+///   3. Makes `get_epoch_hash(Epoch(2))` start answering — standing in for `activate_epoch` running between scan
+///      batches — *without* publishing `EpochManagerEvent::EpochChanged`. The harness separates these: clearing a cap
+///      emits nothing, only `test.start_epoch()` sends the event.
+///   4. Asserts the node opens `Epoch(2)` anyway.
+///
+/// Step 4 is what fails without the fix and passes with it. It is deliberately fix-agnostic: it
+/// asserts the node resumes off the data, not which mechanism noticed, so it survives a later move
+/// from a polled retry to a narrower activation event.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn epoch_change_deferred_eoe_resumes_without_scan_completion() {
+    setup_logger();
+    let mut test = Test::builder()
+        .modify_config(|cfg| {
+            cfg.epoch_end_grace_period = Duration::from_millis(10);
+        })
+        .modify_consensus_constants(|c| {
+            c.pacemaker_block_time = Duration::from_secs(2);
+        })
+        .with_test_timeout(Duration::from_secs(120))
+        .add_committee(0, vec!["1", "2", "3", "4"])
+        .start()
+        .await;
+
+    let deferring_addr = TestAddress::new("1");
+
+    test.start_epoch(Epoch(1)).await;
+
+    for _ in 0..3 {
+        test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
+    }
+
+    // The mid-catch-up state, which needs both halves set independently:
+    //   - the oracle has scanned the Epoch(2) boundary, so the node can ratify the EndEpoch hash and votes;
+    //   - the epoch is not activated, so `get_epoch_hash(Epoch(2))` is `NoEpochFound` and `process_end_of_epoch` defers
+    //     after the EOE commits.
+    let deferring = test.get_validator(&deferring_addr);
+    deferring.epoch_manager.set_oracle_observed_boundary(Epoch(2));
+    deferring.epoch_manager.set_oracle_visible_epoch(Epoch(1));
+
+    test.start_epoch(Epoch(2)).await;
+
+    for _ in 0..3 {
+        test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
+    }
+
+    wait_for_validators_at_epoch(&mut test, &deferring_addr, Epoch(2), Duration::from_secs(45)).await;
+
+    let deferring = test.get_validator(&deferring_addr);
+    let committed_eoe = deferring
+        .state_store
+        .with_read_tx(|tx| chain_has_committed_epoch_end(tx, Epoch(1)))
+        .unwrap();
+    assert!(
+        committed_eoe,
+        "the deferring validator must have committed the EOE: it observed the boundary, so it ratifies and votes"
+    );
+    let leaf_at_2 = deferring
+        .state_store
+        .with_read_tx(|tx| LeafBlock::get(tx, Epoch(2)))
+        .optional()
+        .unwrap();
+    assert!(
+        leaf_at_2.is_none(),
+        "the validator must defer while its oracle has no Epoch(2) row; got {leaf_at_2:?}"
+    );
+
+    log::info!("✅ deferral reproduced: validator {deferring_addr} committed the EOE with no Epoch(2) genesis");
+
+    // Peers are proposing in Epoch(2) while this node's view is still Epoch(1). Once the cap clears,
+    // their QCs would also satisfy `probe_future_epoch_qc` and escalate to state sync, which would
+    // race the resume and decide the outcome. Taking the node offline leaves exactly one way for it
+    // to reach Epoch(2): noticing its own epoch row.
+    test.network().go_offline(deferring_addr.clone()).await;
+
+    // `activate_epoch` runs between scan batches: the epoch row lands, no event is published.
+    // `clear_oracle_visible_epoch` is the harness equivalent — it does not touch `tx_epoch_events`.
+    test.get_validator(&deferring_addr)
+        .epoch_manager
+        .clear_oracle_visible_epoch();
+
+    wait_for_leaf_at_epoch(&mut test, &deferring_addr, Epoch(2), Duration::from_secs(60)).await;
+
+    log::info!("✅ deferred end-of-epoch resumed off the epoch row alone, with no scan-completion event");
+
+    test.stop();
+    test.assert_clean_shutdown().await;
+}
+
+/// Waits until `addr` has a leaf block in `epoch`, i.e. it created that epoch's genesis.
+async fn wait_for_leaf_at_epoch(test: &mut Test, addr: &TestAddress, epoch: Epoch, timeout: Duration) {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        // Drain block events so receiver buffers don't overflow.
+        let _unused = tokio::time::timeout(Duration::from_millis(100), test.on_block_committed()).await;
+
+        let has_leaf = test
+            .get_validator(addr)
+            .state_store
+            .with_read_tx(|tx| LeafBlock::get(tx, epoch))
+            .optional()
+            .unwrap()
+            .is_some();
+        if has_leaf {
+            return;
+        }
+    }
+    panic!("Timed out waiting for {addr} to open {epoch}");
+}
+
 /// Walks the chain from the leaf of `epoch` looking for a committed `EndEpoch` block.
 fn chain_has_committed_epoch_end<TTx: StateStoreReadTransaction>(
     tx: &TTx,

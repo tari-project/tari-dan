@@ -1395,6 +1395,64 @@ mod tests {
         heights.map(|h| make_header(h, h)).collect()
     }
 
+    /// Pins the ordering the deferred end-of-epoch bug depended on: during a multi-batch catch-up the
+    /// scanner emits an `EpochChanged` for every boundary it crosses *as it crosses it*, while
+    /// `DoneForNow` waits for the lagged tip.
+    ///
+    /// The epoch manager applies each `EpochChanged` on arrival — `activate_epoch` writes the epoch
+    /// row, assigns the validator set and clears the committee cache — but publishes its own
+    /// `EpochManagerEvent::EpochChanged` to consensus only from `on_scanning_complete`, i.e. on
+    /// `DoneForNow`. So between the first batch and the last, the data a deferred end-of-epoch waits
+    /// on is present while the notification that used to trigger its retry is still batches away.
+    #[tokio::test]
+    async fn catch_up_emits_epoch_changed_per_batch_but_done_for_now_only_at_the_tip() {
+        let store = InMemoryStore::default();
+        // Well past the 1000-header batch limit, so the catch-up needs several batches.
+        let client = MockBaseNode::new(linear_chain(0..=3000));
+        let mut inner = make_inner(store, client, 5);
+
+        let mut has_more = inner.scan_blockchain(false).await.unwrap();
+        assert!(has_more, "a 3000-header chain cannot be caught up in one batch");
+
+        let epochs_activated: Vec<u64> = inner
+            .pending_events
+            .iter()
+            .filter_map(|e| match e {
+                EpochEvent::EpochChanged { epoch, .. } => Some(epoch.as_u64()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            epochs_activated.first().copied(),
+            Some(1),
+            "the first batch must already carry the boundaries it crossed; got {epochs_activated:?}"
+        );
+        assert!(
+            !inner
+                .pending_events
+                .iter()
+                .any(|e| matches!(e, EpochEvent::DoneForNow { .. })),
+            "DoneForNow must not be emitted while the scan is still short of the lagged tip"
+        );
+
+        // Drive the remaining batches, keeping only the last batch's events.
+        let mut batches = 1;
+        while has_more {
+            inner.pending_events.clear();
+            has_more = inner.scan_blockchain(has_more).await.unwrap();
+            batches += 1;
+        }
+        assert!(batches > 1, "expected a multi-batch catch-up, ran {batches}");
+
+        assert!(
+            inner
+                .pending_events
+                .iter()
+                .any(|e| matches!(e, EpochEvent::DoneForNow { .. })),
+            "DoneForNow must be emitted once the scan reaches the lagged tip"
+        );
+    }
+
     #[tokio::test]
     async fn observed_boundary_hash_is_readable_before_the_epoch_is_activated() {
         let store = InMemoryStore::default();
