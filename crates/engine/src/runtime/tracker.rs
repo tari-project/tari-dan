@@ -343,8 +343,8 @@ impl<TStore: StateReader> StateTracker<TStore> {
         })
     }
 
-    pub fn pop_call_frame(&mut self) -> Result<(), RuntimeError> {
-        self.write_with(|state| state.pop_frame())
+    pub fn pop_call_frame(&mut self, returned: &IndexedWellKnownTypes) -> Result<(), RuntimeError> {
+        self.write_with(|state| state.pop_frame(returned))
     }
 
     pub fn take_last_instruction_output(&mut self) -> Option<IndexedValue> {

@@ -320,6 +320,10 @@ pub enum RuntimeError {
     LockError(#[from] LockError),
     #[error("{count} substate locks were still active after call")]
     DanglingSubstateLocks { count: usize },
+    #[error("Bucket(s) {} were neither consumed nor returned by the call", .bucket_ids.iter().map(ToString::to_string).collect::<Vec<_>>().join(", "))]
+    UnreturnedBuckets { bucket_ids: Vec<BucketId> },
+    #[error("Proof(s) {} were neither dropped nor returned by the call", .proof_ids.iter().map(ToString::to_string).collect::<Vec<_>>().join(", "))]
+    UnreturnedProofs { proof_ids: Vec<ProofId> },
     #[error("No active call frame")]
     NoActiveCallFrame,
     #[error("Max call depth {max_depth} exceeded")]
