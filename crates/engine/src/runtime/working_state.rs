@@ -1209,7 +1209,13 @@ impl<TStore: StateReader> WorkingState<TStore> {
         address: T,
     ) -> Result<AddressAllocationId, RuntimeError> {
         let id = self.address_allocation_id;
-        self.address_allocation_id += 1;
+        self.address_allocation_id = self
+            .address_allocation_id
+            .checked_add(1)
+            .ok_or(RuntimeError::InvariantError {
+                function: "new_address_allocation",
+                details: "address allocation id counter overflowed".to_string(),
+            })?;
         let current_template = self.current_template().ok().copied();
         self.address_allocations
             .insert(id, AllocatedAddress::new(address.into(), current_template));
@@ -2060,7 +2066,15 @@ impl<TStore: StateReader> WorkingState<TStore> {
                         // If there are no fees left, do not up the fee pool
                         continue;
                     }
-                    Substate::new(existing_state.version() + 1, substate)
+                    let version =
+                        existing_state
+                            .version()
+                            .checked_add(1)
+                            .ok_or_else(|| RuntimeError::InvariantError {
+                                function: "generate_substate_diff",
+                                details: format!("version of substate {id} overflowed"),
+                            })?;
+                    Substate::new(version, substate)
                 },
                 None => Substate::new(0, substate),
             };

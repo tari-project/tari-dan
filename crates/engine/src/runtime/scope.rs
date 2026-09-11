@@ -312,6 +312,10 @@ impl CallScope {
         }
     }
 
+    /// Brings what a caller passed in as arguments into this frame. Buckets and proofs stay the caller's — they are
+    /// recorded as inherited, so this frame need not account for them — but a proof among them also *authorizes*
+    /// here from the moment it arrives, without the frame calling `authorize()` on it. Passing a proof is therefore
+    /// the act of lending the authority it carries.
     pub fn include_refs_in_scope(&mut self, values: &IndexedWellKnownTypes) {
         for addr in values.referenced_substates() {
             // Never able to bring these into scope
