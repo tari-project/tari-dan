@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
+use tari_common_types::types::FixedHash;
 use tari_epoch_manager::epoch_event_oracle::{EpochEvent, EpochEventOracle};
 use tari_ootle_common_types::Epoch;
 use tokio::sync::mpsc;
@@ -78,8 +79,8 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore + Send + 'static> Epoc
         }
     }
 
-    fn is_within_epoch_end_spread(&self, current_epoch: Epoch) -> bool {
-        // Epoch timing in hybrid mode is driven by the base-layer scanner; defer to it.
-        self.base_layer.is_within_epoch_end_spread(current_epoch)
+    fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> anyhow::Result<Option<FixedHash>> {
+        // Epoch boundaries in hybrid mode are scanned by the base-layer oracle; defer to it.
+        self.base_layer.observed_epoch_boundary_hash(epoch)
     }
 }

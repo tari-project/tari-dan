@@ -38,18 +38,16 @@ use tari_ootle_common_types::{
     SubstateAddress,
     VotePower,
     committee::{Committee, CommitteeInfo},
-    layer_one_transaction::{LayerOnePayloadType, LayerOneTransactionDef},
     optional::Optional,
 };
 use tari_ootle_storage::global::{GlobalDb, MetadataKey, models::ValidatorNode};
 use tari_ootle_storage_sqlite::global::SqliteGlobalDbAdapter;
-use tari_sidechain::EvictionProof;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{
     error::EpochManagerError,
     service::{NetworkDescription, ShardGroupInfo, config::EpochManagerConfig},
-    traits::{EpochManagerSpec, LayerOneTransactionSubmitter},
+    traits::EpochManagerSpec,
 };
 
 const LOG_TARGET: &str = "tari::ootle::epoch_manager::base_layer";
@@ -60,7 +58,6 @@ pub struct EpochManager<TSpec: EpochManagerSpec> {
     current_epoch_hash: FixedHash,
     node_public_key: RistrettoPublicKeyBytes,
     current_shard_key: Option<SubstateAddress>,
-    layer_one_submitter: TSpec::LayerOneSubmitter,
     current_epoch: Arc<AtomicU64>,
     birthday_epoch: Option<Epoch>,
     /// Highest epoch whose hash has been locked by a committed EndEpoch block in consensus.
@@ -74,7 +71,6 @@ where TSpec: EpochManagerSpec
     pub fn new(
         config: EpochManagerConfig,
         global_db: GlobalDb<SqliteGlobalDbAdapter<TSpec::Addr>>,
-        layer_one_submitter: TSpec::LayerOneSubmitter,
         node_public_key: RistrettoPublicKeyBytes,
         current_epoch_atomic: Arc<AtomicU64>,
     ) -> Self {
@@ -85,7 +81,6 @@ where TSpec: EpochManagerSpec
             birthday_epoch: None,
             node_public_key,
             current_shard_key: None,
-            layer_one_submitter,
             current_epoch: current_epoch_atomic,
             highest_locked_epoch: Epoch::zero(),
         }
@@ -470,28 +465,6 @@ where TSpec: EpochManagerSpec
         let mut metadata = self.global_db.metadata(&mut tx);
         let fee_claim_public_key = metadata.get_metadata(MetadataKey::EpochManagerFeeClaimPublicKey.as_key_bytes())?;
         Ok(fee_claim_public_key)
-    }
-
-    pub async fn add_intent_to_evict_validator(&self, proof: EvictionProof) -> Result<(), EpochManagerError> {
-        {
-            let mut tx = self.global_db.create_transaction()?;
-            // Currently we store this for ease of debugging, there is no specific need to store this in the database
-            let mut bl = self.global_db.base_layer(&mut tx);
-            bl.insert_eviction_proof(&proof)?;
-            tx.commit()?;
-        }
-
-        let proof = LayerOneTransactionDef {
-            payload_type: LayerOnePayloadType::EvictionProof,
-            payload: proof,
-        };
-
-        self.layer_one_submitter
-            .submit_transaction(proof)
-            .await
-            .map_err(|e| EpochManagerError::FailedToSubmitLayerOneTransaction { details: e.to_string() })?;
-
-        Ok(())
     }
 
     pub fn get_network_description(&self) -> Result<NetworkDescription, EpochManagerError> {

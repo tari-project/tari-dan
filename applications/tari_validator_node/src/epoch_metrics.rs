@@ -23,6 +23,7 @@ use prometheus_client::{
     },
     registry::Registry,
 };
+use tari_common_types::types::FixedHash;
 use tari_epoch_manager::{
     epoch_event_oracle::{EpochEvent, EpochEventOracle},
     service::EpochManagerHandle,
@@ -151,8 +152,8 @@ impl<O: EpochEventOracle + Send> EpochEventOracle for MeteredEpochOracle<O> {
         event
     }
 
-    fn is_within_epoch_end_spread(&self, current_epoch: Epoch) -> bool {
-        self.inner.is_within_epoch_end_spread(current_epoch)
+    fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> anyhow::Result<Option<FixedHash>> {
+        self.inner.observed_epoch_boundary_hash(epoch)
     }
 }
 

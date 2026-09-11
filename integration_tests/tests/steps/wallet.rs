@@ -4,11 +4,11 @@
 use std::time::Duration;
 
 use anyhow::anyhow;
-use cucumber::{gherkin::Step, given, then, when};
+use cucumber::{gherkin::Step, given, when};
 use integration_tests::{claim_proof::CucumberClaimProof, cucumber_log};
 use minotari_app_grpc::{
     tari_rpc,
-    tari_rpc::{GetBalanceRequest, SubmitValidatorEvictionProofRequest, ValidateRequest},
+    tari_rpc::{GetBalanceRequest, ValidateRequest},
 };
 use tari_common_types::{
     burn_proof::EncodedMerkleProof as SidechainEncodedMerkleProof,
@@ -361,25 +361,4 @@ pub async fn check_balance(world: &mut TariWorld, step: &Step, wallet_name: Stri
         }
         iterations += 1;
     }
-}
-
-#[then(expr = "I submit the eviction proof {word} to {word}")]
-#[when(expr = "I submit the eviction proof {word} to {word}")]
-pub async fn submit_eviction(world: &mut TariWorld, step: &Step, eviction_name: String, wallet_name: String) {
-    cucumber_log!("==== Step: {}", step.value);
-    let eviction = world
-        .eviction_proofs
-        .get(&eviction_name)
-        .unwrap_or_else(|| panic!("Eviction proof {} not found", eviction_name));
-    let wallet = world.get_wallet(&wallet_name);
-    let mut client = wallet.create_client().await;
-    client
-        .submit_validator_eviction_proof(SubmitValidatorEvictionProofRequest {
-            proof: Some(eviction.into()),
-            fee_per_gram: 1,
-            message: "Eviction proof in cucumber".to_string(),
-            sidechain_deployment_key: vec![],
-        })
-        .await
-        .unwrap();
 }

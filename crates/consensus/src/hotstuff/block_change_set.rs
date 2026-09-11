@@ -34,12 +34,11 @@ use tari_ootle_storage::{
         TransactionPoolError,
         TransactionPoolRecord,
         TransactionPoolStatusUpdate,
-        ValidatorConsensusStats,
     },
 };
 use tari_ootle_transaction::{Transaction, TransactionId};
 use tari_sidechain::QuorumDecision;
-use tari_template_lib_types::{ClaimedOutputTombstoneAddress, crypto::RistrettoPublicKeyBytes};
+use tari_template_lib_types::ClaimedOutputTombstoneAddress;
 
 use crate::{hotstuff::transaction_manager::TransactionLockConflicts, tracing::TraceTimer};
 
@@ -82,12 +81,6 @@ impl BlockDecision {
         }
     }
 
-    pub fn commit_blocks_with_evictions_iter(&self) -> impl Iterator<Item = &Block> + Clone + '_ {
-        self.commit_blocks
-            .iter()
-            .filter(|block| block.all_node_evictions().next().is_some())
-    }
-
     pub fn highest_qc_view(&self) -> NodeHeight {
         self.high_pc
             .height()
@@ -107,7 +100,6 @@ pub struct ProposedBlockChangeSet {
     proposed_foreign_proposals: Vec<BlockId>,
     proposed_utxo_mints: Vec<ClaimedOutputTombstoneAddress>,
     no_vote_reason: Option<NoVoteReason>,
-    evict_nodes: Vec<RistrettoPublicKeyBytes>,
 }
 
 impl ProposedBlockChangeSet {
@@ -123,7 +115,6 @@ impl ProposedBlockChangeSet {
             proposed_foreign_proposals: Vec::new(),
             proposed_utxo_mints: Vec::new(),
             no_vote_reason: None,
-            evict_nodes: Vec::new(),
         }
     }
 
@@ -216,8 +207,6 @@ impl ProposedBlockChangeSet {
             );
             self.proposed_utxo_mints.shrink_to(MEM_MAX_PROPOSED_UTXO_MINTS_SIZE);
         }
-        // evict_nodes is typically rare, so rather release all memory
-        self.evict_nodes = vec![];
         self.no_vote_reason = None;
     }
 
@@ -259,15 +248,6 @@ impl ProposedBlockChangeSet {
         if let Some(update) = self.transaction_changes.get(tx_rec_mut.id()) {
             update.apply_update(tx_rec_mut);
         }
-    }
-
-    pub fn add_evict_node(&mut self, public_key: RistrettoPublicKeyBytes) -> &mut Self {
-        self.evict_nodes.push(public_key);
-        self
-    }
-
-    pub fn num_evicted_nodes_this_block(&self) -> usize {
-        self.evict_nodes.len()
     }
 
     pub fn add_foreign_pledges(
@@ -319,15 +299,21 @@ impl ProposedBlockChangeSet {
             .and_then(|change| change.execution.take())
     }
 
-    pub fn take_all_transaction_executions(
-        &mut self,
-    ) -> impl Iterator<Item = (TransactionId, TransactionExecution)> + '_ {
-        self.transaction_changes.drain(..).filter_map(|(tx_id, mut change)| {
-            change
-                .execution
-                .take()
-                .map(|execution| (tx_id, execution.into_transaction_execution()))
-        })
+    /// Removes the execution recorded for each transaction and yields it.
+    ///
+    /// The rest of each transaction's change — the pending pool update, foreign pledges, evidence — stays in
+    /// the change set. Those describe state that later commands in the same block are evaluated against, so
+    /// they must outlive the executions that were produced alongside them.
+    pub fn take_transaction_executions(&mut self) -> Vec<(TransactionId, TransactionExecution)> {
+        self.transaction_changes
+            .iter_mut()
+            .filter_map(|(tx_id, change)| {
+                change
+                    .execution
+                    .take()
+                    .map(|execution| (*tx_id, execution.into_transaction_execution()))
+            })
+            .collect()
     }
 
     pub fn add_transaction_execution(
@@ -526,10 +512,6 @@ impl ProposedBlockChangeSet {
             )?;
         }
 
-        for node in &self.evict_nodes {
-            ValidatorConsensusStats::evict_node(tx, node, self.block.block_id)?;
-        }
-
         Ok(())
     }
 
@@ -584,10 +566,6 @@ impl ProposedBlockChangeSet {
 
         for mint in &self.proposed_utxo_mints {
             debug!(target: LOG_TARGET, "[drop] ProposedUtxoMint: {mint}");
-        }
-
-        for node in &self.evict_nodes {
-            debug!(target: LOG_TARGET, "[drop] EvictNode: {node}");
         }
     }
 }
@@ -651,7 +629,70 @@ impl TransactionChangeSet {
 mod tests {
     use std::mem::size_of;
 
+    use tari_consensus_types::Decision;
+    use tari_engine_types::commit_result::AbortReason;
+    use tari_ootle_common_types::{Epoch, NumPreshards, VersionedSubstateId};
+    use tari_ootle_storage::consensus_models::{SubstatePledge, TransactionPoolStage};
+    use tari_template_lib_types::ComponentAddress;
+
     use super::*;
+
+    #[test]
+    fn taking_executions_keeps_the_pending_transaction_update() {
+        let leaf = LeafBlock {
+            block_id: BlockId::zero(),
+            height: NodeHeight(1),
+            epoch: Epoch(1),
+            shard_group: ShardGroup::all_shards(NumPreshards::P256),
+        };
+        let mut change_set = ProposedBlockChangeSet::new(leaf);
+
+        let mut aborted = local_prepared_record();
+        aborted.set_local_decision(Decision::Abort(AbortReason::ExecutionFailure));
+        let transaction_id = *aborted.id();
+        change_set.set_next_transaction_update(aborted).unwrap();
+        change_set.add_foreign_pledges(&transaction_id, ShardGroup::all_shards(NumPreshards::P256), vec![
+            SubstatePledge::Output {
+                substate_id: VersionedSubstateId::new(SubstateId::Component(ComponentAddress::from_array([1; 32])), 0),
+            },
+        ]);
+
+        assert_eq!(change_set.take_transaction_executions().len(), 0);
+
+        let mut committing = local_prepared_record();
+        change_set.apply_transaction_update(&mut committing);
+        assert!(
+            committing.current_decision().is_abort(),
+            "pending update must survive execution harvesting so later commands in the block see it"
+        );
+        assert_eq!(
+            change_set.get_foreign_pledges(&transaction_id).count(),
+            1,
+            "foreign pledges must survive execution harvesting so the transaction can still be executed"
+        );
+    }
+
+    fn local_prepared_record() -> TransactionPoolRecord {
+        TransactionPoolRecord::load(
+            TransactionId::new([1; 32]),
+            Evidence::default(),
+            false,
+            0,
+            None,
+            TransactionPoolStage::LocalPrepared,
+            None,
+            Decision::Commit,
+            None,
+            None,
+            true,
+            Epoch(1),
+            None,
+            time::OffsetDateTime::now_utc(),
+            None,
+            0,
+            0,
+        )
+    }
 
     #[test]
     fn check_max_mem_usage() {

@@ -38,7 +38,6 @@ use tari_ootle_common_types::{
     layer_one_transaction::LayerOneTransactionDef,
 };
 use tari_ootle_storage::global::models::ValidatorNode;
-use tari_sidechain::EvictionProof;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::sync::broadcast;
 
@@ -47,7 +46,6 @@ use crate::{EpochManagerError, EpochManagerEvent, epoch_event_oracle::EpochEvent
 pub trait EpochManagerSpec: Send + 'static {
     type Addr: NodeAddressable + DerivableFromPublicKey + 'static;
     type EpochEventOracle: EpochEventOracle + Send + 'static;
-    type LayerOneSubmitter: LayerOneTransactionSubmitter + Send + Sync + 'static;
 }
 
 pub trait EpochManagerWriter: Send + Sync {
@@ -213,11 +211,6 @@ pub trait EpochManagerReader: Send + Sync {
         }
     }
 
-    fn add_intent_to_evict_validator(
-        &self,
-        proof: EvictionProof,
-    ) -> impl Future<Output = Result<(), EpochManagerError>> + Send;
-
     fn get_random_committee_member(
         &self,
         epoch: Epoch,
@@ -230,13 +223,14 @@ pub trait EpochManagerReader: Send + Sync {
     /// commits, transitioning into `epoch`.
     fn lock_epoch(&self, epoch: Epoch) -> impl Future<Output = Result<(), EpochManagerError>> + Send;
 
-    /// Asks the epoch event oracle whether `current_epoch` is close enough to ending that
-    /// `EndEpoch` proposals should be accepted speculatively, even if this node has not yet
-    /// received its own `EpochChanged` event. The interpretation of "close" is oracle-specific.
-    fn is_within_epoch_end_spread(
+    /// This node's own view of `epoch`'s boundary hash: the hash stored when the epoch was activated
+    /// if it has been, otherwise a boundary the epoch event oracle has observed but not yet activated.
+    /// `None` when this node has seen neither, in which case it has nothing of its own to ratify an
+    /// `EndEpoch` proposal against.
+    fn get_observed_epoch_hash(
         &self,
-        current_epoch: Epoch,
-    ) -> impl Future<Output = Result<bool, EpochManagerError>> + Send;
+        epoch: Epoch,
+    ) -> impl Future<Output = Result<Option<FixedHash>, EpochManagerError>> + Send;
 
     /// The first epoch for which the network has validators.
     fn get_birthday_epoch(&self) -> impl Future<Output = Result<Option<Epoch>, EpochManagerError>> + Send;

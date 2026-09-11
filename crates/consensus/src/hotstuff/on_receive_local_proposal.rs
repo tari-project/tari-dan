@@ -13,14 +13,11 @@ use tari_consensus_types::{
     PcId,
     ProposalCertificate,
     ProposalVote,
-    TimeoutVote,
-    TimeoutVoteMessage,
     ValidatorSignatureBytes,
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_ootle_common_types::{
     Epoch,
-    NodeHeight,
     ProtocolVersion,
     committee::{Committee, CommitteeInfo},
     optional::Optional,
@@ -49,19 +46,24 @@ use crate::{
         ProposalValidationError,
         block_change_set::{BlockDecision, ProposedBlockChangeSet},
         calculate_dummy_blocks_from_justify,
-        commit_proofs::generate_eviction_proofs,
         epoch_state::EpochState,
         error::HotStuffError,
         generate_epoch_checkpoint,
-        get_leader_for_view,
         on_ready_to_vote_on_local_block::OnReadyToVoteOnLocalBlock,
         on_receive_foreign_proposal::OnReceiveForeignProposalHandler,
         pacemaker_handle::PaceMakerHandle,
         transaction_manager::ConsensusTransactionManager,
     },
-    messages::{ForeignProposalNotificationMessage, HotstuffMessage, NewViewMessage, ProposalMessage, VoteMessage},
+    messages::{ForeignProposalNotificationMessage, HotstuffMessage, ProposalMessage, VoteMessage},
     tracing::TraceTimer,
-    traits::{CertificateStore, ConsensusSpec, OutboundMessaging, ValidatorSignerService, hooks::ConsensusHooks},
+    traits::{
+        CertificateStore,
+        ConsensusSpec,
+        LeaderStrategy,
+        OutboundMessaging,
+        ValidatorSignerService,
+        hooks::ConsensusHooks,
+    },
 };
 
 const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::on_receive_local_proposal";
@@ -320,26 +322,27 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         debug!(target: LOG_TARGET, "process_block: [{}] processing block: {}", current_epoch, valid_block);
 
         let em_epoch = self.epoch_manager.current_epoch().await?;
-        // Accept an EndEpoch proposal when our oracle has advanced past `current_epoch`, OR when
-        // the oracle believes we are close enough to the epoch boundary to vote speculatively.
-        // The speculative branch rescues the case where a short base-layer reorg near the lag
-        // horizon leaves our scanner a handful of blocks behind the leader's — without this,
-        // such splits can wedge consensus because every node requires the strict inequality.
-        let can_propose_epoch_end =
-            em_epoch > current_epoch || self.epoch_manager.is_within_epoch_end_spread(current_epoch).await?;
         let is_epoch_end = valid_block.block().is_epoch_end();
 
-        // Our own oracle's view of the next epoch's boundary hash, used by the voter to ratify the hash
-        // carried in an EndEpoch command. `None` if our oracle has not yet observed the next epoch — in
-        // which case the voter abstains rather than lending quorum to an unratified hash.
+        // Our own view of the next epoch's boundary hash, used by the voter to ratify the hash carried
+        // in an EndEpoch command. `None` if we have not observed that boundary — in which case the
+        // voter abstains rather than lending quorum to an unratified hash. Having observed the boundary
+        // is what qualifies a node to ratify, not having activated the epoch: the scanner stores headers
+        // before the resulting `EpochChanged` event is applied, and during a catch-up that event can sit
+        // behind several epoch activations.
         let expected_next_epoch_hash = if is_epoch_end {
             self.epoch_manager
-                .get_epoch_hash(current_epoch + Epoch(1))
-                .await
-                .optional()?
+                .get_observed_epoch_hash(current_epoch + Epoch(1))
+                .await?
         } else {
             None
         };
+
+        // Accept an EndEpoch proposal when our oracle has advanced past `current_epoch`, or when we
+        // have scanned the boundary block that ends it. The second branch rescues the case where a
+        // short base-layer reorg near the lag horizon leaves our scanner behind the leader's — without
+        // it, such splits can wedge consensus because every node requires the strict inequality.
+        let can_propose_epoch_end = em_epoch > current_epoch || expected_next_epoch_hash.is_some();
 
         let mut on_ready_to_vote_on_local_block = self.on_ready_to_vote_on_local_block.clone();
 
@@ -410,21 +413,6 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         let is_accept_decision = block_decision.is_accept();
 
-        if is_accept_decision {
-            let mut committed_blocks_with_evictions = block_decision.commit_blocks_with_evictions_iter().peekable();
-            if committed_blocks_with_evictions.peek().is_some() {
-                // Generate eviction proofs for the evicted blocks
-                let qc = valid_block.justify();
-                let proofs = self
-                    .store
-                    .with_read_tx(|tx| generate_eviction_proofs(tx, qc, committed_blocks_with_evictions))?;
-                info!(target: LOG_TARGET, "🦶 Generated {} eviction proofs", proofs.len());
-                for proof in proofs {
-                    self.epoch_manager.add_intent_to_evict_validator(proof).await?;
-                }
-            }
-        }
-
         // End of epoch committed? No need to enter the view or send votes
         if !block_decision.is_committed_epoch_end() &&
             let Some(decision) = block_decision.local_decision
@@ -439,32 +427,13 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 .await?;
 
             // Get the leader that will collect votes for this block to justify moving onto the next view
-            let next_leader = self.store.with_read_tx(|tx| {
-                get_leader_for_view(
-                    tx,
-                    local_committee,
-                    &self.leader_strategy,
-                    valid_block.id(),
-                    valid_block.height(),
-                )
-            })?;
+            let (next_leader, _) = self.leader_strategy.get_leader(local_committee, valid_block.height());
 
             // And vote to move onto the next view
-            if next_leader.vote_to_skip_next {
-                self.send_new_view_and_vote_to_leader(
-                    next_leader.height,
-                    next_leader.address,
-                    valid_block.block(),
-                    block_decision.high_pc.clone(),
-                    decision,
-                )
+            self.send_vote_to_leader(next_leader, valid_block.block(), decision)
                 .await?;
-            } else {
-                self.send_vote_to_leader(next_leader.address, valid_block.block(), decision)
-                    .await?;
-                self.store
-                    .with_write_tx(|tx| valid_block.block().as_last_voted().set(tx))?;
-            }
+            self.store
+                .with_write_tx(|tx| valid_block.block().as_last_voted().set(tx))?;
         }
 
         self.hooks.on_local_block_committed(&valid_block);
@@ -533,8 +502,8 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         // We still need the local oracle to have observed `next_epoch` to assign its committee /
         // validator set. If it has not yet (rare, given the base-layer scan lag keeps the boundary
-        // block buried), defer; `try_resume_pending_end_of_epoch` retries from `on_epoch_manager_event`
-        // or worker startup.
+        // block buried), defer; the worker retries `try_resume_pending_end_of_epoch` on its periodic
+        // tick, on `EpochManagerEvent::EpochChanged` and at startup.
         if self
             .epoch_manager
             .get_epoch_hash(next_epoch)
@@ -676,16 +645,18 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         self.pending_end_of_epoch.is_some()
     }
 
-    /// Retry deferred end-of-epoch processing. Called by the worker when the local oracle
-    /// observes the new epoch (via `EpochManagerEvent::EpochChanged`). If the oracle is still
-    /// not ready, `process_end_of_epoch` will re-defer.
+    /// Retry deferred end-of-epoch processing. The worker polls this so that the resume happens
+    /// as soon as the oracle has written the epoch row, without waiting for the base-layer scan
+    /// to finish. If the oracle is still not ready, `process_end_of_epoch` will re-defer.
     pub async fn try_resume_pending_end_of_epoch(&mut self) -> Result<bool, HotStuffError> {
         let Some(pending) = self.pending_end_of_epoch.take() else {
             return Ok(false);
         };
-        info!(
+        // Every attempt logs, and attempts are on a tick, so this stays at debug: a resume that
+        // succeeds announces itself through the genesis it creates.
+        debug!(
             target: LOG_TARGET,
-            "▶️ Resuming deferred end-of-epoch processing for EOE block {}",
+            "▶️ Attempting deferred end-of-epoch processing for EOE block {}",
             pending.eoe_block.id()
         );
         self.process_end_of_epoch(
@@ -726,66 +697,6 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         self.outbound_messaging
             .send(leader.clone(), HotstuffMessage::Vote(message))
-            .await?;
-
-        self.store.with_write_tx(|tx| last_sent_vote.set(tx))?;
-
-        Ok(())
-    }
-
-    async fn send_new_view_and_vote_to_leader(
-        &mut self,
-        timeout_height: NodeHeight,
-        leader: &TConsensusSpec::Addr,
-        block: &Block,
-        high_pc: HighPc,
-        decision: QuorumDecision,
-    ) -> Result<(), HotStuffError> {
-        let _timer =
-            TraceTimer::debug(LOG_TARGET, "send-newview-and-vote").with_excessive_threshold(Duration::from_millis(200));
-
-        let message = self.generate_vote_message(block, decision)?;
-        info!(
-            target: LOG_TARGET,
-            "🔥 NEWVIEW VOTE {:?} for block {} proposed by {} to next leader {:.4}",
-            message.vote.decision,
-            block,
-            block.proposed_by(),
-            leader,
-        );
-
-        let last_sent_vote = LastSentVote::from(message.vote.clone());
-
-        let high_pc = if high_pc.qc_id == block.justify().calculate_id() {
-            block.justify().clone()
-        } else {
-            self.store
-                .with_read_tx(|tx| ProposalCertificate::get(tx, high_pc.epoch(), high_pc.id()))?
-        };
-
-        let msg = TimeoutVoteMessage {
-            epoch: high_pc.epoch(),
-            height: timeout_height,
-        };
-
-        let signature = self.signing_service.sign(&msg);
-        let signature = ValidatorSignatureBytes::new(
-            self.signing_service.public_key().to_byte_type(),
-            signature.to_byte_type(),
-        );
-
-        let message = NewViewMessage {
-            last_vote: Some(message.vote),
-            timeout: TimeoutVote {
-                epoch: high_pc.epoch(),
-                height: timeout_height,
-                signature,
-            },
-            high_pc,
-        };
-
-        self.outbound_messaging
-            .send(leader.clone(), HotstuffMessage::new_newview(message))
             .await?;
 
         self.store.with_write_tx(|tx| last_sent_vote.set(tx))?;

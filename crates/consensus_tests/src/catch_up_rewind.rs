@@ -68,12 +68,8 @@ async fn catch_up_rewind_below_leaf_recovers() {
         .modify_consensus_constants(|c| {
             // Tight pacemaker so the three leader failures (and the rewind) happen quickly.
             c.pacemaker_block_time = Duration::from_secs(2);
-            // The whole point is recovery — never evict the isolated node for missed proposals.
+            // The whole point is recovery, so never suspend the isolated node for missed proposals.
             c.missed_proposal_suspend_threshold = 50;
-            c.missed_proposal_evict_threshold = 50;
-        })
-        .modify_config(|config| {
-            config.enable_eviction_proposal = false;
         })
         .with_message_filter(Box::new(move |_from, to, msg| {
             let gap = gap_at_f.load(Ordering::SeqCst);

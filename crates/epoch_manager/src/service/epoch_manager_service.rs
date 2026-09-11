@@ -83,7 +83,6 @@ impl<TSpec: EpochManagerSpec> EpochManagerService<TSpec> {
         config: EpochManagerConfig,
         global_db: GlobalDb<SqliteGlobalDbAdapter<TSpec::Addr>>,
         epoch_events: TSpec::EpochEventOracle,
-        layer_one_transaction_submitter: TSpec::LayerOneSubmitter,
         node_public_key: RistrettoPublicKeyBytes,
         shutdown: ShutdownSignal,
     ) -> (EpochManagerHandle<TSpec::Addr>, JoinHandle<anyhow::Result<()>>) {
@@ -101,13 +100,7 @@ impl<TSpec: EpochManagerSpec> EpochManagerService<TSpec> {
         let task_handle = tokio::spawn(async move {
             Self {
                 rx_request,
-                inner: EpochManager::new(
-                    config,
-                    global_db,
-                    layer_one_transaction_submitter,
-                    node_public_key,
-                    current_epoch,
-                ),
+                inner: EpochManager::new(config, global_db, node_public_key, current_epoch),
                 tx_events: events,
                 has_epoch_changed: false,
                 is_initial_epoch_sync_complete: false,
@@ -507,9 +500,6 @@ impl<TSpec: EpochManagerSpec> EpochManagerService<TSpec> {
                 handle(reply, self.inner.get_fee_claim_public_key(), context)
             },
 
-            EpochManagerRequest::AddIntentToEvictValidator { proof, reply } => {
-                handle(reply, self.inner.add_intent_to_evict_validator(*proof).await, context)
-            },
             EpochManagerRequest::GetRandomCommitteeMemberFromShardGroup {
                 epoch,
                 shard_group,
@@ -527,12 +517,21 @@ impl<TSpec: EpochManagerSpec> EpochManagerService<TSpec> {
             EpochManagerRequest::LockEpoch { epoch, reply } => {
                 handle(reply, self.inner.lock_epoch(epoch), context);
             },
-            EpochManagerRequest::IsWithinEpochEndSpread { current_epoch, reply } => {
-                handle(
-                    reply,
-                    Ok(self.epoch_events.is_within_epoch_end_spread(current_epoch)),
-                    context,
-                );
+            EpochManagerRequest::GetObservedEpochHash { epoch, reply } => {
+                // An activated epoch's stored hash wins: it is the one the self-healing correction
+                // maintains and that `lock_epoch` freezes once consensus has committed against it.
+                let result = match self.inner.get_epoch_hash(epoch).optional() {
+                    Ok(Some(activated)) => Ok(Some(activated)),
+                    Ok(None) => self.epoch_events.observed_epoch_boundary_hash(epoch).map_err(|err| {
+                        // `{:#}` keeps anyhow's source chain: the diesel error underneath is the part
+                        // that says why the store was unreadable.
+                        EpochManagerError::EpochEventOracleError {
+                            details: format!("{err:#}"),
+                        }
+                    }),
+                    Err(err) => Err(err),
+                };
+                handle(reply, result, context);
             },
             EpochManagerRequest::GetBirthdayEpoch { reply } => {
                 handle(reply, Ok(self.inner.birthday_epoch()), context);

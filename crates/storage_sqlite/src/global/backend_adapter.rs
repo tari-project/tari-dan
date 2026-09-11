@@ -55,7 +55,6 @@ use tari_ootle_storage::{
     AtomicDb,
     global::{
         BlockHeaderModel,
-        DbLayer1Transaction,
         DbTemplate,
         DbTemplateUpdate,
         EpochData,
@@ -857,28 +856,6 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             })?;
 
         query_res.map(EpochData::try_from).transpose()
-    }
-
-    fn insert_layer_one_transaction<T: Serialize>(
-        &self,
-        tx: &mut Self::DbTransaction<'_>,
-        data: DbLayer1Transaction<T>,
-    ) -> Result<(), Self::Error> {
-        use crate::global::schema::layer_one_transactions;
-
-        diesel::insert_into(layer_one_transactions::table)
-            .values((
-                layer_one_transactions::epoch.eq(data.epoch.as_u64() as i64),
-                layer_one_transactions::payload_type.eq(data.proof_type.to_string()),
-                layer_one_transactions::payload.eq(serde_json::to_string_pretty(&data.payload)?),
-            ))
-            .execute(tx.connection())
-            .map_err(|source| SqliteStorageError::DieselError {
-                source,
-                operation: "insert::layer_one_transaction",
-            })?;
-
-        Ok(())
     }
 
     fn insert_block_header(

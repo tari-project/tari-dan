@@ -1,6 +1,8 @@
 //    Copyright 2025 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
+use std::collections::BTreeSet;
+
 use log::*;
 use ootle_byte_type::ConvertFromByteType;
 use tari_crypto::{
@@ -171,6 +173,17 @@ pub fn validate_transfer(
 }
 
 fn basic_validations(transfer: &StealthTransferStatement) -> Result<(), ResourceError> {
+    // The excess folds the inputs positionally, so a commitment listed n times contributes n times its value to a
+    // balance proof its spender can still construct, while the spend downs the one UTXO once.
+    let mut seen = BTreeSet::new();
+    for input in &transfer.inputs_statement.inputs {
+        if !seen.insert(input.commitment) {
+            return Err(ResourceError::InvalidSpend {
+                details: format!("Duplicate input commitment {} in transfer statement", input.commitment),
+            });
+        }
+    }
+
     if transfer.inputs_statement.revealed_amount.is_negative() {
         return Err(ResourceError::InvalidBalanceProof {
             details: format!(

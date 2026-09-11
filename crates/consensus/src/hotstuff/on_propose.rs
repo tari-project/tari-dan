@@ -34,7 +34,6 @@ use tari_ootle_storage::{
         BookkeepingModel,
         Command,
         EndEpochAtom,
-        EvictNodeAtom,
         ForeignProposal,
         ForeignProposalRecord,
         LockedEpoch,
@@ -45,7 +44,6 @@ use tari_ootle_storage::{
         TransactionPoolRecord,
         TransactionPoolStage,
         TransactionRecord,
-        ValidatorConsensusStats,
     },
 };
 use tari_ootle_transaction::TransactionId;
@@ -363,8 +361,9 @@ where TConsensusSpec: ConsensusSpec
         let mut total_leader_fee = 0u64;
         // When filling a timeout gap with a dummy chain, the candidate effectively extends from justify_block (the
         // dummies are empty blocks that carry justify_block's accumulated_data and state forward — see
-        // `calculate_last_dummy_block`). Anchor accumulated_data, the substate store, and the pending state tree
-        // diff lookup at justify_block to match what validators recompute from the reconstructed dummy chain.
+        // `calculate_last_dummy_block`). Anchor accumulated_data, the substate store, the pending state tree
+        // diff lookup and propose-time foreign proposal processing at justify_block to match what validators
+        // recompute from the reconstructed dummy chain.
         // Otherwise speculative state and leader-fee burn that accumulated on a locally-stored fork above the high QC
         // would be incorrectly carried into the new candidate and validators would reject with either an
         // exhaust-burn mismatch or a state Merkle-root mismatch.
@@ -387,7 +386,7 @@ where TConsensusSpec: ConsensusSpec
         let batch = if should_not_propose_commands {
             ProposalBatch::default()
         } else {
-            self.fetch_next_proposal_batch(tx, local_committee_info, start_of_chain_block)?
+            self.fetch_next_proposal_batch(tx, start_of_chain_block)?
         };
         debug!(target: LOG_TARGET, "🌿 PROPOSE: {} (justify: {}) {batch}", highest_seen_block.height(), justify_block.height());
 
@@ -400,13 +399,7 @@ where TConsensusSpec: ConsensusSpec
                 batch
                     .foreign_proposals
                     .iter()
-                    .map(|fp| Command::ForeignProposal(fp.to_atom()))
-                    .chain(
-                        batch
-                            .evict_nodes
-                            .into_iter()
-                            .map(|public_key| Command::EvictNode(EvictNodeAtom { public_key })),
-                    ),
+                    .map(|fp| Command::ForeignProposal(fp.to_atom())),
             )
         };
 
@@ -415,15 +408,21 @@ where TConsensusSpec: ConsensusSpec
 
         // No need to include evidence from justified block if no transactions are included in the next block
         if !batch.transactions.is_empty() {
-            // TODO(protocol-efficiency): We should process any foreign proposals included in this block to include
-            // evidence. And that should determine if they are ready. However this is difficult because we
-            // get the batch from the database which isnt aware of which foreign proposals we're going to
-            // propose. This is why the system currently never proposes foreign proposals affecting a
-            // transaction in the same block for LocalPrepare/LocalAccept.
+            // A replica evaluates this block as: the newly justified block, then the commands in block order
+            // (foreign proposals sort before the transaction commands, see `Command`'s ordering), all against
+            // a single change set. The commands generated below must be derived from that same sequence, or
+            // the proposer commits to an atom no replica can reproduce and the block is unvotable.
+            // TODO: we dont need to process transactions here that are not in the batch
+            process_newly_justified_block(tx, &justify_block, high_qc_id, local_committee_info, &mut change_set)?;
+
             for fp in &batch.foreign_proposals {
+                // Resolves pending transaction pool records along the chain up to this block, so it must be
+                // the anchor the substate store this call also writes to is built on: the justify block
+                // under a dummy chain, the extended leaf otherwise. A replica passes the block it is
+                // evaluating, whose parent chain runs back through any dummies to the justify block.
                 if let Err(err) = process_foreign_block(
                     tx,
-                    &high_qc_certificate.as_leaf_block(),
+                    &state_anchor_leaf,
                     fp,
                     local_committee_info,
                     &mut substate_store,
@@ -440,10 +439,7 @@ where TConsensusSpec: ConsensusSpec
             }
 
             // Add all (ABORT) executions that may have resulted from foreign proposals
-            executed_transactions.extend(change_set.take_all_transaction_executions());
-
-            // TODO: we dont need to process transactions here that are not in the batch
-            process_newly_justified_block(tx, &justify_block, high_qc_id, local_committee_info, &mut change_set)?;
+            executed_transactions.extend(change_set.take_transaction_executions());
         }
 
         let locked_epoch = LockedEpoch::new(
@@ -498,8 +494,10 @@ where TConsensusSpec: ConsensusSpec
                 );
                 break;
             }
-            // Apply the transaction updates (if any) that occurred as a result of the justified block.
-            // This allows us to propose evidence in the next block that relates to transactions in the justified block.
+            // Apply the transaction updates (if any) that the justified block and this block's foreign
+            // proposals produced. This allows us to propose evidence relating to transactions in the
+            // justified block, and to propose a transaction that a foreign proposal in this block has just
+            // moved to ABORT with the decision that move implies.
             change_set.apply_transaction_update(&mut transaction);
             // Capture before the record is moved. The processing work below (incl. execution) is incurred
             // whether or not a command is produced, so accumulate for every processed transaction.
@@ -649,19 +647,16 @@ where TConsensusSpec: ConsensusSpec
     fn fetch_next_proposal_batch<TTx: StateStoreReadTransaction>(
         &self,
         tx: &TTx,
-        local_committee_info: &CommitteeInfo,
         start_of_chain_block: HighestSeenBlock,
     ) -> Result<ProposalBatch, HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "fetch_next_proposal_batch");
         // A block is budgeted by total command weight (`max_block_weight`), not a flat command count.
-        // Foreign proposals and evict nodes consume part of that budget before local transactions fill the
-        // rest. A foreign proposal is weighted by the substate pledges it carries (the dominant processing
-        // cost when applying it at propose time), on the same scale as transaction input weight, rather
-        // than a flat 10x multiplier.
+        // Foreign proposals consume part of that budget before local transactions fill the rest. A foreign proposal is
+        // weighted by the substate pledges it carries (the dominant processing cost when applying it at propose
+        // time), on the same scale as transaction input weight, rather than a flat 10x multiplier.
         const MAX_FOREIGN_PROPOSALS_PER_BLOCK: usize = 10;
         const FP_BASE_WEIGHT: u64 = 50;
         const FP_PLEDGE_WEIGHT: u64 = 15;
-        const EVICT_NODE_WEIGHT: u64 = 50;
 
         let max_block_weight = self.config.consensus_constants.max_block_weight;
         let max_commands = self.config.consensus_constants.max_commands_in_block;
@@ -682,42 +677,11 @@ where TConsensusSpec: ConsensusSpec
             .map(|fp| FP_BASE_WEIGHT + fp.block_pledge().len() as u64 * FP_PLEDGE_WEIGHT)
             .sum();
 
-        let mut remaining_weight = subtract_weight_checked(Some(max_block_weight), foreign_proposal_weight);
+        let remaining_weight = subtract_weight_checked(Some(max_block_weight), foreign_proposal_weight);
 
-        let evict_nodes = remaining_weight
-            // Disable eviction proposals if not enabled in config
-            .filter(|_| self.config.enable_eviction_proposal)
-            .map(|remaining| {
-                let num_evicted =
-                    ValidatorConsensusStats::count_number_evicted_nodes(tx, start_of_chain_block.epoch())?;
-                // TODO: technically, we should not evict more than 1/3 of the voting power, not the number of nodes
-                // (but this is currently the same thing)
-                let max_allowed_to_evict = u64::from(local_committee_info.max_failure_shard_group_members())
-                    .saturating_sub(num_evicted)
-                    .min(remaining / EVICT_NODE_WEIGHT);
-                ValidatorConsensusStats::get_nodes_to_evict(
-                    tx,
-                    start_of_chain_block.block_id(),
-                    self.config.consensus_constants.missed_proposal_evict_threshold,
-                    max_allowed_to_evict,
-                )
-            })
-            .transpose()?
-            .unwrap_or_default();
-
-        if !evict_nodes.is_empty() {
-            debug!(
-                target: LOG_TARGET,
-                "🌿 Found {} EVICT nodes for next block",
-                evict_nodes.len()
-            )
-        }
-
-        remaining_weight = subtract_weight_checked(remaining_weight, evict_nodes.len() as u64 * EVICT_NODE_WEIGHT);
-
-        // Bound the transaction count so the total command count (foreign proposals + evict + transactions)
+        // Bound the transaction count so the total command count (foreign proposals + transactions)
         // stays under the hard command cap regardless of how light the transactions are.
-        let max_tx_count = max_commands.saturating_sub(foreign_proposals.len() + evict_nodes.len());
+        let max_tx_count = max_commands.saturating_sub(foreign_proposals.len());
 
         let transactions = remaining_weight
             .filter(|_| max_tx_count > 0)
@@ -735,7 +699,6 @@ where TConsensusSpec: ConsensusSpec
         Ok(ProposalBatch {
             foreign_proposals: foreign_proposals.into_iter().map(|fp| fp.into_proposal()).collect(),
             transactions,
-            evict_nodes,
             commands: vec![],
         })
     }
@@ -1108,7 +1071,6 @@ where TConsensusSpec: ConsensusSpec
 struct ProposalBatch {
     pub foreign_proposals: Vec<ForeignProposal>,
     pub transactions: Vec<TransactionPoolRecord>,
-    pub evict_nodes: Vec<RistrettoPublicKeyBytes>,
     pub commands: Vec<Command>,
 }
 
@@ -1116,10 +1078,9 @@ impl Display for ProposalBatch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{} transaction(s), {} foreign proposal(s), {} evict, {} command(s)",
+            "{} transaction(s), {} foreign proposal(s), {} command(s)",
             self.transactions.len(),
             self.foreign_proposals.len(),
-            self.evict_nodes.len(),
             self.commands.len()
         )
     }

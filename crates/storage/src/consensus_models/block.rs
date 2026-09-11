@@ -53,7 +53,6 @@ use super::{
     BlockDiff,
     BlockPledge,
     BookkeepingModel,
-    EvictNodeAtom,
     ForeignProposalAtom,
     ForeignProposalRecord,
     LockedEpoch,
@@ -282,10 +281,6 @@ impl Block {
 
     pub fn all_foreign_proposals(&self) -> impl Iterator<Item = &ForeignProposalAtom> + '_ {
         self.commands.iter().filter_map(|c| c.foreign_proposal())
-    }
-
-    pub fn all_node_evictions(&self) -> impl Iterator<Item = &EvictNodeAtom> + '_ {
-        self.commands.iter().filter_map(|c| c.evict_node())
     }
 
     pub fn all_local_accept(&self) -> impl Iterator<Item = &TransactionAtom> + '_ {

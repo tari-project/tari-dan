@@ -88,7 +88,6 @@ use tokio::task;
 use crate::{
     ApplicationConfig,
     IndexerEpochManagerSpec,
-    Noop,
     base_layer::verify_correct_network,
     config::PublishedIndexerConfig,
     dry_run::processor::DryRunTransactionProcessor,
@@ -254,7 +253,6 @@ pub async fn spawn_services(
         global_db.clone(),
         keypair.public_key().to_byte_type(),
         epoch_event_oracle,
-        Noop,
         shutdown.clone(),
     );
 
@@ -544,7 +542,7 @@ async fn create_epoch_oracle<TStore: EpochOracleStore + BaseLayerBlockHeaderStor
     }
 }
 
-async fn create_base_layer_epoch_oracle<TStore: EpochOracleStore + BaseLayerBlockHeaderStore + 'static>(
+async fn create_base_layer_epoch_oracle<TStore: EpochOracleStore + BaseLayerBlockHeaderStore + Clone + 'static>(
     config: &ApplicationConfig,
     store: TStore,
     consensus_constants: &ConsensusConstants,
@@ -563,7 +561,6 @@ async fn create_base_layer_epoch_oracle<TStore: EpochOracleStore + BaseLayerBloc
                 sync_headers: false,
                 sync_validator_node_changes: true,
             },
-            epoch_end_spread_blocks: consensus_constants.epoch_end_spread_blocks,
         },
         config.network,
     ))

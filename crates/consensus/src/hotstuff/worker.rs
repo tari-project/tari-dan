@@ -355,9 +355,8 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
 
         // Recovery: if the previous run crashed inside `process_end_of_epoch` (e.g. NoEpochFound
         // because the local oracle was lagging), the EOE block is committed on disk but no
-        // checkpoint was written. Detect that here and seed the deferred-EOE state so the next
-        // EpochChanged event (or this startup if the oracle is already current) finishes the
-        // transition.
+        // checkpoint was written. Detect that here and seed the deferred-EOE state so a later
+        // retry (or this startup if the oracle is already current) finishes the transition.
         self.recover_pending_end_of_epoch(current_epoch).await?;
 
         // Catch up on any epoch change the oracle observed before this worker subscribed to epoch events.
@@ -519,6 +518,14 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                         self.hooks.on_error(&e);
                         error!(target: LOG_TARGET, "🚨Error during periodic task: {}", e);
                     }
+
+                    // A deferred EOE waits on the epoch row, which the oracle writes as soon as it
+                    // applies the queued EpochChanged for that epoch - between scan batches during a
+                    // catch-up. EpochManagerEvent::EpochChanged only fires once the whole scan
+                    // reaches the lagged tip, so poll the data here rather than waiting for it.
+                    // Ordered after `on_task_tick` because a successful resume advances the pacemaker
+                    // past `epoch_state`, which is only refreshed at the top of the next iteration.
+                    self.try_resume_pending_end_of_epoch().await?;
                 },
 
                 _ = self.shutdown.wait() => {
@@ -705,7 +712,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     /// (most likely the previous run crashed inside `process_end_of_epoch` while looking up an
     /// epoch the local oracle had not yet observed). When found, seeds the deferred-EOE state on
     /// the local-proposal handler and immediately attempts to resume; if the oracle is still
-    /// behind, the resume will re-defer and `on_epoch_manager_event` will retry later.
+    /// behind, the resume will re-defer and the worker's periodic retry will pick it up.
     async fn recover_pending_end_of_epoch(&mut self, current_epoch: Epoch) -> Result<(), HotStuffError> {
         let pending = self.state_store.with_read_tx(|tx| {
             // A successful end-of-epoch transition writes a checkpoint for `current_epoch`.
@@ -751,6 +758,22 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         Ok(())
     }
 
+    /// Retries deferred end-of-epoch processing if the local oracle has since observed the next
+    /// epoch. A no-op when nothing is pending, and re-defers if the oracle is still behind.
+    async fn try_resume_pending_end_of_epoch(&mut self) -> Result<(), HotStuffError> {
+        if !self.on_receive_local_proposal.has_pending_end_of_epoch() {
+            return Ok(());
+        }
+        if let Err(err) = self.on_receive_local_proposal.try_resume_pending_end_of_epoch().await {
+            error!(
+                target: LOG_TARGET,
+                "Failed to resume deferred end-of-epoch processing: {err}"
+            );
+            return Err(err);
+        }
+        Ok(())
+    }
+
     async fn on_epoch_manager_event(&mut self, event: EpochManagerEvent) -> Result<(), HotStuffError> {
         match event {
             EpochManagerEvent::EpochChanged {
@@ -783,15 +806,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 // Oracle just observed `epoch`. If we previously deferred end-of-epoch
                 // processing because the oracle was lagging, retry now that the data is
                 // available.
-                if self.on_receive_local_proposal.has_pending_end_of_epoch() &&
-                    let Err(err) = self.on_receive_local_proposal.try_resume_pending_end_of_epoch().await
-                {
-                    error!(
-                        target: LOG_TARGET,
-                        "Failed to resume deferred end-of-epoch processing for {epoch}: {err}"
-                    );
-                    return Err(err);
-                }
+                self.try_resume_pending_end_of_epoch().await?;
             },
         }
 

@@ -89,7 +89,6 @@ use tari_ootle_storage::{
 };
 use tari_ootle_transaction::TransactionId;
 use tari_state_tree::{Child, Nibble, Node, NodeKey, NodeType, StaleTreeNode, StateTreePayload, Version};
-use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{
     cf_api::{CfContext, DbContext},
@@ -120,8 +119,6 @@ use crate::{
         chain::PendingChainIndex,
         diagnostic_no_vote::{DiagnosticsNoVoteCf, DiagnosticsNoVoteData},
         epoch_checkpoint::EpochCheckpointCf,
-        evicted_node,
-        evicted_node::{EvictedNodeCf, EvictedNodeData},
         finalized_transaction,
         finalized_transaction::{FinalizedTransactionLinkCf, FinalizedTransactionLinkData},
         foreign_parked_blocks,
@@ -1718,60 +1715,6 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
                     cf.put(&(epoch, *update.public_key()), &rec, OPERATION)?;
                 },
             }
-        }
-
-        Ok(())
-    }
-
-    fn evicted_nodes_evict(
-        &mut self,
-        public_key: &RistrettoPublicKeyBytes,
-        evicted_in_block: BlockId,
-    ) -> Result<(), StorageError> {
-        const OPERATION: &str = "evicted_nodes_evict";
-
-        let block = self
-            .blocks_get(&evicted_in_block)
-            .optional()?
-            .ok_or_else(|| StorageError::DataInconsistency {
-                details: format!("{OPERATION}: block {evicted_in_block} does not exist"),
-            })?;
-
-        self.db().cf(EvictedNodeCf)?.put(
-            &(*public_key, evicted_in_block),
-            &EvictedNodeData {
-                is_committed: false,
-                epoch: block.epoch(),
-            },
-            OPERATION,
-        )?;
-
-        Ok(())
-    }
-
-    fn evicted_nodes_mark_eviction_as_committed(
-        &mut self,
-        public_key: &RistrettoPublicKeyBytes,
-        // For debugging
-        _epoch: Epoch,
-    ) -> Result<(), StorageError> {
-        const OPERATION: &str = "evicted_nodes_mark_eviction_as_committed";
-
-        let cf = self.db().cf(EvictedNodeCf)?;
-        let query = self.db().cf(evicted_node::ByPublicKeyQuery)?;
-
-        let iter = query.query_prefix_range_iterator(Ordering::Ascending, public_key);
-
-        for result in iter {
-            let (key, value) = result?;
-            cf.put(
-                &key,
-                &EvictedNodeData {
-                    is_committed: true,
-                    epoch: value.epoch,
-                },
-                OPERATION,
-            )?;
         }
 
         Ok(())

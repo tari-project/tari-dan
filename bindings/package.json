@@ -38,6 +38,6 @@
     "prettier": "^3.8.1",
     "shx": "^0.4.0",
     "typescript": "catalog:",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.11"
   }
 }

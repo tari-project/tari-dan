@@ -435,3 +435,303 @@ fn it_disallows_withdraws_from_vaults_outside_of_owning_component() {
         requested_owner: Box::new(component.into()),
     });
 }
+
+#[test]
+fn it_does_not_leak_a_callees_vaults_into_the_callers_scope() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+    let (victim, _, _) = test.create_funded_account();
+    let (attacker, _, _) = test.create_empty_account();
+
+    let vault_id = {
+        let store = test.read_only_state_store();
+        let component = store.get_component(victim).unwrap();
+        let values = IndexedWellKnownTypes::from_value(component.state()).unwrap();
+        values.vault_ids()[0]
+    };
+
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_function(template_addr, "call_then_steal_from_vault", args![victim, vault_id])
+            .put_last_instruction_output_on_workspace("bucket")
+            .call_method(attacker, "deposit", args![Workspace("bucket")])
+            .add_input(vault_id)
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    // Calling the victim leaves the attacker's frame without a component context, so the vault is neither in scope
+    // nor owned by a component the attacker is executing on.
+    assert_reject_reason(reason, RuntimeError::NotInComponentContext {
+        action: VaultAction::Withdraw.into(),
+    });
+}
+
+#[test]
+fn it_rejects_a_bucket_that_is_neither_consumed_nor_returned_by_a_call() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let component = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_method(component, "abandon_bucket", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "were neither consumed nor returned by the call");
+}
+
+#[test]
+fn it_rejects_a_proof_that_is_neither_dropped_nor_returned_by_a_call() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let component = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_method(component, "abandon_proof", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "were neither dropped nor returned by the call");
+}
+
+#[test]
+fn a_proof_outlives_the_authorization_taken_from_it() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let component = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(component, "authorize_then_drop_proof", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(component, "authorize_then_return_proof", args![])
+            .put_last_instruction_output_on_workspace("proof")
+            .drop_all_proofs_in_workspace()
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+}
+
+#[test]
+fn it_does_not_leak_a_callees_vaults_into_a_calling_components_scope() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+    let (victim, _, _) = test.create_funded_account();
+    let (attacker_account, _, _) = test.create_empty_account();
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let attacker = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    let vault_id = {
+        let store = test.read_only_state_store();
+        let component = store.get_component(victim).unwrap();
+        let values = IndexedWellKnownTypes::from_value(component.state()).unwrap();
+        values.vault_ids()[0]
+    };
+
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_method(attacker, "call_then_steal_from_vault_as_component", args![
+                victim, vault_id
+            ])
+            .put_last_instruction_output_on_workspace("bucket")
+            .call_method(attacker_account, "deposit", args![Workspace("bucket")])
+            .add_input(vault_id)
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, RuntimeError::SubstateNotOwned {
+        id: vault_id.into(),
+        requested_owner: Box::new(attacker.into()),
+    });
+}
+
+#[test]
+fn it_does_not_leak_a_callees_address_allocation_into_the_callers_scope() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let victim = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    // An allocation is a reservation of an address, and nothing checks that the template consuming one is the
+    // template that made it, so the caller must never be handed one it was not given.
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_function(template_addr, "call_then_use_abandoned_allocation", args![victim, 0u32])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, RuntimeError::AddressAllocationNotInScope { id: 0 });
+}
+
+#[test]
+fn it_refuses_to_authorize_a_proof_the_frame_does_not_hold() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let victim = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+    let attacker = result.finalize.execution_results[1]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    // The victim holds a proof across a call into the attacker, which is handed nothing and guesses the id.
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_method(victim, "hold_proof_and_call", args![
+                attacker,
+                "try_authorize_proof",
+                0u32
+            ])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_eq!(
+        result.finalize.execution_results[0].decode::<Amount>().unwrap(),
+        Amount::zero()
+    );
+}
+
+#[test]
+fn it_refuses_to_read_a_proof_the_frame_does_not_hold() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let victim = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+    let attacker = result.finalize.execution_results[1]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_method(victim, "hold_proof_and_call", args![
+                attacker,
+                "read_proof_amount",
+                0u32
+            ])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "Encountered unknown or out of scope proof");
+}
+
+/// Giving up an authorization answers for any proof id, and leaves the proof with whoever holds it.
+///
+/// The victim gives up its own authorization when the pin's `ProofAccess` temporary drops, so by the time the
+/// attacker runs, proof 0 is in the victim's `proof_scope` and not its `auth_scope`. What this pins is therefore the
+/// holder's `proof_scope` entry surviving the attacker's call, and the call answering at all. The `auth_scope` half
+/// of the isolation is structural — `current_call_scope_mut` is `call_frames.last_mut()`, so a frame has no way to
+/// address another's scope — and observing it would need the victim to hold its guard across the call and then
+/// exercise something gated on the badge, there being no engine query for `auth_scope` membership.
+#[test]
+fn it_answers_a_drop_authorize_for_any_proof_id() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let victim = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+    let attacker = result.finalize.execution_results[1]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    // Id 0 is live and held by the victim, and the victim's own `proof.drop()` after the call still finds it.
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(victim, "hold_proof_and_call", args![
+                attacker,
+                "drop_authorize_proof",
+                0u32
+            ])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    // An id with no proof at it answers the same, rather than aborting from `ProofAccess::drop`.
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(attacker, "drop_authorize_proof", args![7u32])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+}

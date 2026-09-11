@@ -5,8 +5,7 @@
 //!
 //! The bar is not "the node starts". It is "the node keeps voting": a validator that cannot execute
 //! and vote inside `pacemaker_block_time` misses proposals, and missing
-//! `missed_proposal_suspend_threshold` of them suspends it while
-//! `missed_proposal_evict_threshold` evicts it. Every threshold below is derived from that, against
+//! `missed_proposal_suspend_threshold` of them suspends it. Every threshold below is derived from that, against
 //! the consensus constants for the network being sized for, so a re-tuned constant re-tunes the
 //! verdict with it.
 //!
@@ -109,7 +108,6 @@ pub struct Budgets {
     pub max_commands_in_block: usize,
     pub committee_size_per_shard_group: u32,
     pub missed_proposal_suspend_threshold: u64,
-    pub missed_proposal_evict_threshold: u64,
 }
 
 impl Budgets {
@@ -125,7 +123,6 @@ impl Budgets {
             max_commands_in_block: constants.max_commands_in_block,
             committee_size_per_shard_group: constants.committee_size_per_shard_group,
             missed_proposal_suspend_threshold: constants.missed_proposal_suspend_threshold,
-            missed_proposal_evict_threshold: constants.missed_proposal_evict_threshold,
         }
     }
 }
@@ -279,14 +276,13 @@ fn grade_execution_weight(execution: &ExecutionMeasurement, p: &Projections, b: 
         Grade::Fail => format!(
             "A worst-case valid block ({} weight) takes {:.2}s to execute and a block this node proposes takes \
              {:.2}s, against a {:.0}s view and a {:.1}s propose deadline. This machine will miss proposals under load \
-             — {} missed suspends it, {} evicts it.",
+             — {} missed suspends it.",
             b.max_block_validation_weight,
             p.validation_block_secs,
             p.propose_block_secs,
             b.block_time_secs,
             b.propose_exec_deadline_secs,
             b.missed_proposal_suspend_threshold,
-            b.missed_proposal_evict_threshold,
         ),
         Grade::Warn => format!(
             "Execution alone consumes {:.0}% of a view on a worst-case block, leaving the rest for consensus, storage \

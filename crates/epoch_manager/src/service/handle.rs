@@ -16,7 +16,6 @@ use tari_ootle_common_types::{
     committee::{Committee, CommitteeInfo},
 };
 use tari_ootle_storage::global::models::ValidatorNode;
-use tari_sidechain::EvictionProof;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::sync::{broadcast, mpsc, oneshot};
 
@@ -351,18 +350,6 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    async fn add_intent_to_evict_validator(&self, proof: EvictionProof) -> Result<(), EpochManagerError> {
-        let (tx, rx) = oneshot::channel();
-        self.tx_request
-            .send(EpochManagerRequest::AddIntentToEvictValidator {
-                proof: Box::new(proof),
-                reply: tx,
-            })
-            .await
-            .map_err(|_| EpochManagerError::SendError)?;
-        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
-    }
-
     async fn get_random_committee_member(
         &self,
         epoch: Epoch,
@@ -392,13 +379,10 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    async fn is_within_epoch_end_spread(&self, current_epoch: Epoch) -> Result<bool, EpochManagerError> {
+    async fn get_observed_epoch_hash(&self, epoch: Epoch) -> Result<Option<FixedHash>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send(EpochManagerRequest::IsWithinEpochEndSpread {
-                current_epoch,
-                reply: tx,
-            })
+            .send(EpochManagerRequest::GetObservedEpochHash { epoch, reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?

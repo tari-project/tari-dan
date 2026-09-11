@@ -2,7 +2,6 @@
 //  SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    fs,
     str::FromStr,
     time::{Duration, Instant},
 };
@@ -18,17 +17,10 @@ use integration_tests::{
 };
 use libp2p::Multiaddr;
 use minotari_app_grpc::tari_rpc::{RegisterValidatorNodeRequest, Signature};
-use notify::Watcher;
 use tari_base_node_client::{BaseNodeClient, grpc::GrpcBaseNodeClient};
 use tari_crypto::tari_utilities::ByteArray;
-use tari_ootle_common_types::{
-    Epoch,
-    SubstateAddress,
-    layer_one_transaction::LayerOneTransactionDef,
-    optional::Optional,
-};
+use tari_ootle_common_types::{Epoch, SubstateAddress, optional::Optional};
 use tari_ootle_storage::Ordering;
-use tari_sidechain::EvictionProof;
 use tari_transaction_components::transaction_components::{MemoField, memo_field::TxType};
 use tari_validator_node_client::types::{
     AddPeerRequest,
@@ -37,7 +29,6 @@ use tari_validator_node_client::types::{
     GetTemplateRequest,
     ListBlocksRequest,
 };
-use tokio::{sync::mpsc, time::timeout};
 use tonic::codegen::tokio_stream::StreamExt;
 
 async fn spawn_seed_node(
@@ -638,90 +629,6 @@ async fn then_validator_node_switches_epoch(world: &mut TariWorld, step: &Step, 
         tokio::time::sleep(Duration::from_secs(8)).await;
     }
     panic!("Validator node {vn_name} did not switch to epoch {epoch}");
-}
-
-#[then(expr = "I wait for {word} to list {word} as evicted in {word}")]
-async fn then_i_wait_for_validator_node_to_be_evicted(
-    world: &mut TariWorld,
-    step: &Step,
-    vn_name: String,
-    evict_vn_name: String,
-    proof_name: String,
-) {
-    cucumber_log!("==== Step: {}", step.value);
-    let vn = world.get_validator_node(&vn_name);
-    let evict_vn = world.get_validator_node(&evict_vn_name);
-
-    let (tx, mut rx) = mpsc::channel(10);
-    let l1_tx_path = vn.layer_one_transaction_path();
-    fs::create_dir_all(&l1_tx_path).unwrap();
-
-    if let Some(proof) = scan_for_eviction_proof(&l1_tx_path, evict_vn) {
-        world.add_eviction_proof(proof_name.clone(), proof);
-        return;
-    }
-
-    let mut watcher = notify::RecommendedWatcher::new(
-        move |res| {
-            drop(tx.blocking_send(res));
-        },
-        notify::Config::default(),
-    )
-    .unwrap();
-
-    watcher.watch(&l1_tx_path, notify::RecursiveMode::NonRecursive).unwrap();
-
-    loop {
-        let event = timeout(Duration::from_secs(2000), rx.recv())
-            .await
-            .unwrap_or_else(|_| panic!("Timeout waiting for eviction file at path {}", l1_tx_path.display()))
-            .expect("unexpected channel close")
-            .unwrap_or_else(|err| panic!("Error when watching files {err}"));
-
-        let is_relevant = matches!(
-            event.kind,
-            notify::EventKind::Access(notify::event::AccessKind::Close(notify::event::AccessMode::Write)) |
-                notify::EventKind::Create(_) |
-                notify::EventKind::Modify(notify::event::ModifyKind::Name(notify::event::RenameMode::To))
-        );
-        if !is_relevant {
-            continue;
-        }
-
-        // On Create the file may still be partially written, so scan the directory which
-        // gracefully skips incomplete files and retries on the next event.
-        if let Some(proof) = scan_for_eviction_proof(&l1_tx_path, evict_vn) {
-            watcher.unwatch(&l1_tx_path).unwrap();
-            world.add_eviction_proof(proof_name.clone(), proof);
-            return;
-        }
-    }
-}
-
-/// Scans the directory for an eviction proof file targeting the given validator.
-/// Returns `None` if no matching, fully-written file is found.
-fn scan_for_eviction_proof(
-    dir: &std::path::Path,
-    evict_vn: &integration_tests::validator_node::ValidatorNodeProcess,
-) -> Option<EvictionProof> {
-    for entry in fs::read_dir(dir).ok()?.flatten() {
-        let path = entry.path();
-        if !path.is_file() || path.extension().is_none_or(|ext| ext != "json") {
-            continue;
-        }
-        let Ok(contents) = fs::read(&path) else {
-            continue;
-        };
-        let def = match serde_json::from_slice::<LayerOneTransactionDef<EvictionProof>>(&contents) {
-            Ok(d) => d,
-            Err(_) => continue,
-        };
-        if def.payload.node_to_evict().as_bytes() == evict_vn.public_key.as_bytes() {
-            cucumber_log!("Found eviction proof file: {}", path.display());
-            return Some(def.payload);
-        }
-    }
-    None
 }
 
 #[when(expr = "all validator nodes have started epoch {int}")]

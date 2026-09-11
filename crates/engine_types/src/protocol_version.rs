@@ -56,7 +56,7 @@ impl ProtocolVersion {
             Network::NextNet => &[(Epoch(0), Self::V1)],
             Network::Igor => &[(Epoch(0), Self::V1)],
             Network::Esmeralda => &[(Epoch(0), Self::V0)],
-            Network::LocalNet => &[(Epoch(0), Self::V1)],
+            Network::LocalNet => &[(Epoch(0), Self::V0), (Epoch(5), Self::V1)],
         }
     }
 

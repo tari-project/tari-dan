@@ -914,10 +914,10 @@ impl JsonRpcHandlers {
 /// Sums the execution weight of the block's transaction commands, expression for expression as a replica does when
 /// deciding whether to vote for the block: a transaction's weight, discounted by how much of the work its command
 /// stage actually adds. The result belongs with `max_block_validation_weight` and no other budget — a leader packs
-/// against a lower one under a different rule, spending it on foreign proposals and evictions too.
+/// against a lower one under a different rule, spending it on foreign proposals too.
 ///
-/// Two consequences of following the validation rule: a command carrying no execution weight (a foreign proposal, an
-/// evict) contributes nothing, and the discount floors where the proposer's rounds up, so a light transaction at a
+/// Two consequences of following the validation rule: a command carrying no execution weight (a foreign proposal)
+/// contributes nothing, and the discount floors where the proposer's rounds up, so a light transaction at a
 /// discounted stage can contribute 0 where the leader charged 1.
 ///
 /// Transactions pruned from storage contribute nothing, so an old block's total may read low.

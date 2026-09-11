@@ -27,7 +27,6 @@ pub struct ConsensusConstantsFile {
     pub committee_size_per_shard_group: Option<u32>,
     pub pacemaker_block_time_secs: Option<u64>,
     pub missed_proposal_suspend_threshold: Option<u64>,
-    pub missed_proposal_evict_threshold: Option<u64>,
     pub missed_proposal_recovery_threshold: Option<u64>,
     pub max_block_weight: Option<u64>,
     pub max_commands_in_block: Option<usize>,
@@ -38,7 +37,6 @@ pub struct ConsensusConstantsFile {
     pub max_block_validation_execution_points: Option<u64>,
     pub exhaust_burn_rate_bps: Option<u16>,
     pub max_transaction_validity_epochs: Option<u64>,
-    pub epoch_end_spread_blocks: Option<u64>,
 }
 
 impl ConsensusConstantsFile {
@@ -55,7 +53,6 @@ impl ConsensusConstantsFile {
             base_layer_confirmations,
             committee_size_per_shard_group,
             missed_proposal_suspend_threshold,
-            missed_proposal_evict_threshold,
             missed_proposal_recovery_threshold,
             max_block_weight,
             max_commands_in_block,
@@ -65,7 +62,6 @@ impl ConsensusConstantsFile {
             max_block_execution_points,
             max_block_validation_execution_points,
             max_transaction_validity_epochs,
-            epoch_end_spread_blocks,
         );
 
         if let Some(secs) = self.pacemaker_block_time_secs {

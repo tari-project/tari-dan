@@ -14,7 +14,6 @@ use tari_ootle_storage::{
     consensus_models::{BookkeepingModel, TransactionExecution, TransactionPool},
 };
 use tari_ootle_transaction::{Transaction, TransactionId};
-use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::{
     sync::{broadcast, mpsc, watch},
     task::JoinHandle,
@@ -42,7 +41,6 @@ pub struct ValidatorChannels {
 
 pub struct Validator {
     pub address: TestAddress,
-    pub public_key: RistrettoPublicKeyBytes,
     pub _shard_address: SubstateAddress,
     pub shard_group: ShardGroup,
     pub num_committees: u32,
@@ -64,10 +62,6 @@ impl Validator {
 
     pub fn state_store(&self) -> &TestStore {
         &self.state_store
-    }
-
-    pub fn epoch_manager(&self) -> &TestEpochManager {
-        &self.epoch_manager
     }
 
     pub fn get_transaction_pool_count(&self) -> usize {

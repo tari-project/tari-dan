@@ -146,6 +146,27 @@ mod template {
             let _auth = stolen_proof.authorize();
         }
 
+        /// Proof ids are a transaction-wide counter, so a third party can name one it was never handed.
+        /// Takes the id as a plain integer, not a `ProofId`: a `ProofId` argument is how a proof is handed over, so
+        /// this frame is given nothing and guesses instead.
+        pub fn try_authorize_proof(&self, proof_id: u32) -> Amount {
+            match Proof::from_id(proof_id.into()).try_authorize() {
+                Ok(_access) => Amount::from(1u64),
+                Err(_) => Amount::zero(),
+            }
+        }
+
+        pub fn read_proof_amount(&self, proof_id: u32) -> Amount {
+            Proof::from_id(proof_id.into()).amount()
+        }
+
+        /// Gives up an authorization for `proof_id`, whatever this frame holds. `ProofAccess::drop` is the only
+        /// route to the action and its field is public, so the guard is built by hand here to name an arbitrary id.
+        pub fn drop_authorize_proof(&self, proof_id: u32) -> Amount {
+            drop(tari_template_lib::models::ProofAccess { id: proof_id.into() });
+            Amount::zero()
+        }
+
         pub fn take_from_a_vault(&mut self, vault_id: VaultId, amount: Amount) {
             let mut vault = Vault::for_test(vault_id.into());
             let stolen = vault.withdraw(amount);
@@ -167,6 +188,98 @@ mod template {
             let vault_id = option_env!["VAULT_ID"].expect("VAULT_ID must be set at compile time");
             let mut stolen = Vault::for_test(vault_id.parse().unwrap());
             stolen.withdraw_all()
+        }
+
+        /// Calls a method the victim permits, then withdraws directly from a vault of the victim's it never
+        /// handed over.
+        pub fn call_then_steal_from_vault(victim: ComponentAddress, vault_id: VaultId) -> Bucket {
+            let _balances: Vec<(ResourceAddress, Amount)> =
+                ComponentManager::get(victim).call("get_balances", args![]);
+            let mut stolen = Vault::for_test(vault_id.into());
+            stolen.withdraw_all()
+        }
+
+        /// The same attack from inside a component frame, where the vault is checked against the component the
+        /// frame executes on rather than against the absence of one.
+        pub fn call_then_steal_from_vault_as_component(&self, victim: ComponentAddress, vault_id: VaultId) -> Bucket {
+            let _balances: Vec<(ResourceAddress, Amount)> =
+                ComponentManager::get(victim).call("get_balances", args![]);
+            let mut stolen = Vault::for_test(vault_id.into());
+            stolen.withdraw_all()
+        }
+
+        /// Allocates an address and hands it to nobody, so the allocation is left in this frame when it returns.
+        pub fn allocate_and_abandon(&self) {
+            let _allocation = CallerContext::allocate_component_address(None);
+        }
+
+        /// Calls a victim whose frame leaves an allocation behind, then names that allocation by id and creates a
+        /// component at the address the victim reserved.
+        pub fn call_then_use_abandoned_allocation(victim: ComponentAddress, allocation_id: u32) -> ComponentAddress {
+            let _: () = ComponentManager::get(victim).call("allocate_and_abandon", args![]);
+            let component = Component::new(Self::default())
+                .with_address_allocation(ComponentAddressAllocation::new(allocation_id))
+                .create();
+            *component.address()
+        }
+
+        pub fn with_fungible_vault() -> Component<Self> {
+            let tokens = ResourceBuilder::public_fungible().initial_supply(1000u32);
+            Component::new(Self {
+                vault: Some(Vault::from_bucket(tokens)),
+                ..Default::default()
+            })
+            .with_access_rules(AccessRules::allow_all())
+            .with_owner_rule(OwnerRule::ByAccessRule(rule!(allow_all)))
+            .create()
+        }
+
+        pub fn create_vault_proof(&self) -> Proof {
+            self.vault.as_ref().unwrap().create_proof()
+        }
+
+        /// Holds a proof of its own across a call into `other`, which is handed nothing and guesses the id.
+        ///
+        /// Authorizes `proof_id` from this frame first, where the proof is in scope. An out-of-scope id and an id
+        /// with no proof at it are indistinguishable to `other` by design, so a `proof_id` naming nothing would
+        /// otherwise draw the same answer as the attack being tested. Failing here says so in words no rejection
+        /// from `other` produces.
+        pub fn hold_proof_and_call(&self, other: ComponentAddress, method: String, proof_id: u32) -> Amount {
+            let proof = self.vault.as_ref().unwrap().create_proof();
+            assert!(
+                Proof::from_id(proof_id.into()).try_authorize().is_ok(),
+                "proof id {proof_id} is not held by this frame"
+            );
+
+            let result: Amount = ComponentManager::get(other).call(&method, args![proof_id]);
+            proof.drop();
+            result
+        }
+
+        pub fn abandon_bucket(&mut self) {
+            let _bucket = self.vault.as_mut().unwrap().withdraw(Amount::from(1u64));
+        }
+
+        /// A `ProofAccess` guard leaves the auth scope when it is dropped; the proof it came from is still held and
+        /// may be dropped or returned afterwards.
+        pub fn authorize_then_drop_proof(&self) {
+            let proof = self.vault.as_ref().unwrap().create_proof();
+            {
+                let _auth = proof.authorize();
+            }
+            proof.drop();
+        }
+
+        pub fn authorize_then_return_proof(&self) -> Proof {
+            let proof = self.vault.as_ref().unwrap().create_proof();
+            {
+                let _auth = proof.authorize();
+            }
+            proof
+        }
+
+        pub fn abandon_proof(&mut self) {
+            let _proof = self.vault.as_ref().unwrap().create_proof();
         }
 
         pub fn empty_state_on_component(&self, address: ComponentAddress) {

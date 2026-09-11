@@ -36,16 +36,9 @@ pub fn spawn_service<TSpec: EpochManagerSpec>(
     global_db: GlobalDb<SqliteGlobalDbAdapter<TSpec::Addr>>,
     node_public_key: RistrettoPublicKeyBytes,
     epoch_events: TSpec::EpochEventOracle,
-    layer_one_submitter: TSpec::LayerOneSubmitter,
     shutdown_signal: ShutdownSignal,
 ) -> (EpochManagerHandle<TSpec::Addr>, JoinHandle<anyhow::Result<()>>) {
-    let (epoch_manager_handle, join_handle) = EpochManagerService::<TSpec>::spawn(
-        config,
-        global_db,
-        epoch_events,
-        layer_one_submitter,
-        node_public_key,
-        shutdown_signal,
-    );
+    let (epoch_manager_handle, join_handle) =
+        EpochManagerService::<TSpec>::spawn(config, global_db, epoch_events, node_public_key, shutdown_signal);
     (epoch_manager_handle, join_handle)
 }

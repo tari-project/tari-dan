@@ -13,8 +13,6 @@ use tari_sidechain::{
     ChainLink,
     CommandCommitProof,
     CommitProofElement,
-    EvictNodeAtom,
-    EvictionProof,
     SidechainBlockCommitProof,
     SidechainBlockHeader,
     ValidatorBlockSignature,
@@ -25,48 +23,6 @@ use tari_template_lib_types::crypto::SchnorrSignatureBytes;
 use crate::hotstuff::HotStuffError;
 
 const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::commit_proofs";
-
-pub fn generate_eviction_proofs<'a, TTx, I>(
-    tx: &TTx,
-    tip_qc: &ProposalCertificate,
-    committed_blocks_with_evictions: I,
-) -> Result<Vec<EvictionProof>, HotStuffError>
-where
-    TTx: StateStoreReadTransaction,
-    I: IntoIterator<Item = &'a Block>,
-    I::IntoIter: Clone,
-{
-    let evictions_iter = committed_blocks_with_evictions.into_iter();
-    let num_evictions = evictions_iter.clone().map(|b| b.all_node_evictions().count()).sum();
-
-    let mut proofs = Vec::with_capacity(num_evictions);
-    for block in evictions_iter {
-        // First generate a commit proof for the block which is shared by all EvictionProofs
-        let block_commit_proof = generate_block_commit_proof(tx, tip_qc, block)?;
-
-        for (idx, command) in block.commands().iter().enumerate() {
-            let Some(atom) = command.evict_node() else {
-                continue;
-            };
-            info!(target: LOG_TARGET, "🦶 Generating eviction proof for validator: {atom}");
-            let inclusion_proof = block.compute_command_inclusion_proof(idx)?;
-            let atom = EvictNodeAtom::new(
-                CompressedPublicKey::from_canonical_bytes(atom.public_key.as_bytes()).map_err(|_| {
-                    HotStuffError::InvariantError(format!(
-                        "EvictNodeAtom RistrettoPublicKey non-canonical bytes for public key, in \
-                         generate_eviction_proofs ({:?})",
-                        atom.public_key,
-                    ))
-                })?,
-            );
-            let commit_command_proof = CommandCommitProof::new(atom, block_commit_proof.clone(), inclusion_proof);
-            let proof = EvictionProof::new(commit_command_proof);
-            proofs.push(proof);
-        }
-    }
-
-    Ok(proofs)
-}
 
 pub fn generate_end_of_epoch_commit_proof<TTx: StateStoreReadTransaction>(
     tx: &TTx,

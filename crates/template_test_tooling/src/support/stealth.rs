@@ -8,7 +8,14 @@ use tari_crypto::{
     keys::{PublicKey, SecretKey},
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
-use tari_ootle_wallet_crypto::{MaskAndValue, OutputWitness, StealthInputWitness, StealthOutputWitness, stealth};
+use tari_ootle_wallet_crypto::{
+    MaskAndValue,
+    OutputWitness,
+    StealthInputWitness,
+    StealthOutputWitness,
+    balance_proof::generate_stealth_balance_proof_signature,
+    stealth,
+};
 use tari_template_lib::types::{
     Amount,
     EncryptedData,
@@ -110,6 +117,34 @@ fn generate_stealth_statement_internal(
 
     let stmt = stealth::create_outputs_statement(&output_statements, revealed_output_amount).unwrap();
     (stmt, masks)
+}
+
+/// Rewrites `data` to spend its first input twice, re-signing the balance proof over the doubled input set.
+///
+/// `stealth::create_transfer_statement` refuses to build this, so it is assembled here: the engine has to reject a
+/// double-spent input on its own terms rather than rely on the submitter having used a well-behaved builder. The
+/// spender knows the input mask, so the proof over the doubled set is theirs to construct.
+pub fn spend_first_input_twice(
+    data: &StealthSecretTransferData,
+    input_mask: &RistrettoSecretKey,
+) -> StealthTransferStatement {
+    let mut statement = data.statement.clone();
+    let first = statement.inputs_statement.inputs[0].clone();
+    statement.inputs_statement.inputs.push(first);
+
+    let agg_input_mask = input_mask.clone() + input_mask;
+    let agg_output_mask = data
+        .output_masks
+        .iter()
+        .fold(RistrettoSecretKey::default(), |agg, mask| agg + mask);
+    statement.balance_proof = Some(generate_stealth_balance_proof_signature(
+        &agg_input_mask,
+        &agg_output_mask,
+        &statement.inputs_statement,
+        &statement.outputs_statement,
+    ));
+
+    statement
 }
 
 pub struct StealthSecretTransferData {

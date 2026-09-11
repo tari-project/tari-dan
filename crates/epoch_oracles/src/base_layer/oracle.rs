@@ -5,6 +5,10 @@ use std::{
     collections::{HashMap, VecDeque},
     future::{Future, poll_fn},
     pin::Pin,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     task::{Context, Poll},
 };
 
@@ -81,6 +85,11 @@ type ScanTask<TStore, TClient> = Pin<Box<dyn Future<Output = TaskOutput<TStore, 
 #[allow(clippy::struct_excessive_bools)]
 pub struct BaseLayerOracle<TStore, TClient = GrpcBaseNodeClient> {
     inner: Option<Box<BaseLayerOracleInner<TStore, TClient>>>,
+    /// Handles for the epoch-boundary lookup, held here rather than in `inner` because `inner` is
+    /// owned by the scan task for the whole of each batch — the boundary must stay readable while a
+    /// catch-up is in flight, which is when a lagging voter needs it.
+    store: TStore,
+    epoch_length: Arc<AtomicU64>,
     is_initialized: bool,
     is_done: bool,
     has_more: bool,
@@ -105,16 +114,20 @@ struct BaseLayerOracleInner<TStore, TClient> {
     // instead of being held for the whole batch.
     header_buf: Vec<BlockHeaderModel>,
     network: Network,
-    /// Epoch length in base-layer blocks, cached from consensus constants on the first scan
-    /// that obtains them. `None` until the first scan completes.
-    cached_epoch_length: Option<u64>,
+    /// Epoch length in base-layer blocks, cached from consensus constants on the first scan that
+    /// obtains them. Shared with the owning `BaseLayerOracle`, which reads it while this inner state
+    /// is away in a scan task. Zero until the first scan completes.
+    epoch_length: Arc<AtomicU64>,
 }
 
-impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore + 'static, TClient: BaseNodeClient>
+impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore + Clone + 'static, TClient: BaseNodeClient>
     BaseLayerOracle<TStore, TClient>
 {
     pub fn new(store: TStore, base_node_client: TClient, config: BaseLayerEpochOracleConfig, network: Network) -> Self {
+        let epoch_length = Arc::new(AtomicU64::new(0));
         Self {
+            store: store.clone(),
+            epoch_length: epoch_length.clone(),
             inner: Some(Box::new(BaseLayerOracleInner {
                 config,
                 store,
@@ -128,7 +141,7 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore + 'static, TClient: Ba
                 pending_events: VecDeque::new(),
                 header_buf: Vec::new(),
                 network,
-                cached_epoch_length: None,
+                epoch_length,
             })),
             is_initialized: false,
             is_done: false,
@@ -221,7 +234,7 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore, TClient: BaseNodeClie
                         .base_node_client
                         .get_consensus_constants(tip.height_of_longest_chain)
                         .await?;
-                    self.cached_epoch_length = Some(constants.epoch_length());
+                    self.epoch_length.store(constants.epoch_length(), Ordering::Relaxed);
                     let lagged_height = tip.height_of_longest_chain.saturating_sub(self.config.height_lag);
                     let epoch = constants.height_to_epoch(lagged_height);
                     // If no progress has been made since restarting, we still need to tell the epoch manager that
@@ -463,7 +476,7 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore, TClient: BaseNodeClie
             .base_node_client
             .get_consensus_constants(tip.height_of_longest_chain)
             .await?;
-        self.cached_epoch_length = Some(constants.epoch_length());
+        self.epoch_length.store(constants.epoch_length(), Ordering::Relaxed);
 
         // Acquire and scan this batch's blocks. The validator node needs every header (e.g. for
         // burn-proof validation), so it streams and stores the full contiguous range. The indexer
@@ -884,31 +897,6 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore, TClient: BaseNodeClie
             self.pending_events.shrink_to(TARGET_CAP);
         }
     }
-
-    /// Returns true when our lagged scanner position is within `epoch_end_spread_blocks` of the
-    /// next epoch boundary. Used by consensus to accept `EndEpoch` proposals speculatively when
-    /// peers' oracles have already crossed and ours is almost there.
-    fn is_within_epoch_end_spread(&self, current_epoch: Epoch) -> bool {
-        if self.config.epoch_end_spread_blocks == 0 {
-            return false;
-        }
-        let Some(epoch_length) = self.cached_epoch_length else {
-            return false;
-        };
-        if epoch_length == 0 {
-            return false;
-        }
-        let Some(next_start) = current_epoch
-            .as_u64()
-            .checked_add(1)
-            .and_then(|e| e.checked_mul(epoch_length))
-        else {
-            return false;
-        };
-        self.last_scanned_height
-            .saturating_add(self.config.epoch_end_spread_blocks) >=
-            next_start
-    }
 }
 
 impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore + Send + 'static, TClient: BaseNodeClient + 'static>
@@ -1011,14 +999,42 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore + Send + 'static, TCli
         poll_fn(|cx| self.poll_next_event(cx)).await
     }
 
-    fn is_within_epoch_end_spread(&self, current_epoch: Epoch) -> bool {
-        // `inner` is briefly None while a scan task is in flight; return false then so voting
-        // falls back to the strict em_epoch > current_epoch check.
-        self.inner
-            .as_deref()
-            .map(|inner| inner.is_within_epoch_end_spread(current_epoch))
-            .unwrap_or(false)
+    fn observed_epoch_boundary_hash(&self, epoch: Epoch) -> anyhow::Result<Option<FixedHash>> {
+        Ok(lookup_epoch_boundary_hash(
+            &self.store,
+            self.epoch_length.load(Ordering::Relaxed),
+            epoch,
+        )?)
     }
+}
+
+/// Returns the boundary block hash stored for `epoch`, or `None` if it has not been scanned.
+///
+/// A stored header only counts as the boundary when its height is exactly the epoch's first height:
+/// a scan range that opens mid-epoch stores a first header that is not the boundary, and ratifying
+/// against that would compare the wrong hash. `epoch_length` is zero until a scan has obtained the
+/// L1 constants, before which the opening height is unknown.
+fn lookup_epoch_boundary_hash<TStore: BaseLayerBlockHeaderStore>(
+    store: &TStore,
+    epoch_length: u64,
+    epoch: Epoch,
+) -> Result<Option<FixedHash>, BaseLayerOracleError> {
+    // Zero is the pre-constants state, which a node whose base layer has not reached `start_height`
+    // stays in through initial sync: it has crossed no boundary either, so nothing is observed.
+    if epoch_length == 0 {
+        return Ok(None);
+    }
+    // Epochs are derived as `height / epoch_length`, so the product cannot leave the base layer's
+    // height space unless the epoch is corrupt.
+    let boundary_height = epoch
+        .as_u64()
+        .checked_mul(epoch_length)
+        .ok_or(BaseLayerOracleError::EpochHeightOverflow { epoch, epoch_length })?;
+    Ok(store
+        .get_first_block_header_in_epoch(epoch)
+        .map_err(BaseLayerOracleError::StoreError)?
+        .filter(|boundary| boundary.height == boundary_height)
+        .map(|boundary| boundary.block_hash))
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -1029,6 +1045,8 @@ pub enum BaseLayerOracleError {
     BaseNodeError(#[from] BaseNodeClientError),
     #[error("Invalid base node response: {0}")]
     InvalidBaseNodeResponse(String),
+    #[error("Epoch {epoch} overflows the base layer height space at epoch length {epoch_length}")]
+    EpochHeightOverflow { epoch: Epoch, epoch_length: u64 },
 }
 
 enum BlockchainProgression {
@@ -1044,7 +1062,7 @@ enum BlockchainProgression {
 mod tests {
     use std::{
         collections::{HashMap, VecDeque},
-        sync::{Arc, Mutex},
+        sync::{Arc, Mutex, atomic::AtomicU64},
         time::Duration,
     };
 
@@ -1058,14 +1076,14 @@ mod tests {
         types::{BaseLayerConsensusConstants, BaseLayerMetadata, BaseLayerValidatorNode, SideChainUtxos},
     };
     use tari_common_types::types::FixedHash;
-    use tari_epoch_manager::epoch_event_oracle::EpochEvent;
+    use tari_epoch_manager::epoch_event_oracle::{EpochEvent, EpochEventOracle};
     use tari_node_components::blocks::BlockHeader;
     use tari_ootle_common_types::Epoch;
     use tari_ootle_storage::global::BlockHeaderModel;
     use tari_template_lib::types::crypto::RistrettoPublicKeyBytes;
     use tari_transaction_components::{tari_amount::MicroMinotari, transaction_components::CodeTemplateRegistration};
 
-    use super::{BaseLayerOracleInner, hash_header};
+    use super::{BaseLayerOracle, BaseLayerOracleInner, hash_header, lookup_epoch_boundary_hash};
     use crate::{
         base_layer::{
             BaseLayerBlockHeaderStore,
@@ -1325,23 +1343,26 @@ mod tests {
         header
     }
 
+    fn make_config(height_lag: u64) -> BaseLayerEpochOracleConfig {
+        BaseLayerEpochOracleConfig {
+            start_height: 0,
+            height_lag,
+            scanning_interval: Duration::from_secs(1),
+            sidechain_id: None,
+            features: BaseLayerEpochOracleFeatures {
+                sync_headers: true,
+                sync_validator_node_changes: false,
+            },
+        }
+    }
+
     fn make_inner(
         store: InMemoryStore,
         client: MockBaseNode,
         height_lag: u64,
     ) -> BaseLayerOracleInner<InMemoryStore, MockBaseNode> {
         BaseLayerOracleInner {
-            config: BaseLayerEpochOracleConfig {
-                start_height: 0,
-                height_lag,
-                scanning_interval: Duration::from_secs(1),
-                sidechain_id: None,
-                features: BaseLayerEpochOracleFeatures {
-                    sync_headers: true,
-                    sync_validator_node_changes: false,
-                },
-                epoch_end_spread_blocks: 0,
-            },
+            config: make_config(height_lag),
             store,
             last_scanned_height: 0,
             last_scanned_tip: None,
@@ -1353,7 +1374,7 @@ mod tests {
             pending_events: VecDeque::new(),
             header_buf: Vec::new(),
             network: NETWORK,
-            cached_epoch_length: None,
+            epoch_length: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -1372,6 +1393,119 @@ mod tests {
 
     fn linear_chain(heights: std::ops::RangeInclusive<u64>) -> Vec<BlockHeader> {
         heights.map(|h| make_header(h, h)).collect()
+    }
+
+    /// Pins the ordering the deferred end-of-epoch bug depended on: during a multi-batch catch-up the
+    /// scanner emits an `EpochChanged` for every boundary it crosses *as it crosses it*, while
+    /// `DoneForNow` waits for the lagged tip.
+    ///
+    /// The epoch manager applies each `EpochChanged` on arrival — `activate_epoch` writes the epoch
+    /// row, assigns the validator set and clears the committee cache — but publishes its own
+    /// `EpochManagerEvent::EpochChanged` to consensus only from `on_scanning_complete`, i.e. on
+    /// `DoneForNow`. So between the first batch and the last, the data a deferred end-of-epoch waits
+    /// on is present while the notification that used to trigger its retry is still batches away.
+    ///
+    /// Only the emission half is asserted below — it is the half that lives in this crate. Nothing
+    /// pins the epoch manager's publish-on-`DoneForNow` policy itself: the consensus-side test,
+    /// `epoch_change_deferred_eoe_resumes_without_scan_completion`, runs against `TestEpochManager`
+    /// and so pins the consequence — a deferred end-of-epoch resumes without a scan-completion event
+    /// — not the policy. Making `on_scanning_complete` publish per activation would fail neither test,
+    /// which is the point: consensus must not depend on when that event arrives.
+    #[tokio::test]
+    async fn catch_up_emits_epoch_changed_per_batch_but_done_for_now_only_at_the_tip() {
+        let store = InMemoryStore::default();
+        // Well past the 1000-header batch limit, so the catch-up needs several batches.
+        let client = MockBaseNode::new(linear_chain(0..=3000));
+        let mut inner = make_inner(store, client, 5);
+
+        let mut has_more = inner.scan_blockchain(false).await.unwrap();
+        assert!(has_more, "a 3000-header chain cannot be caught up in one batch");
+
+        let epochs_activated: Vec<u64> = inner
+            .pending_events
+            .iter()
+            .filter_map(|e| match e {
+                EpochEvent::EpochChanged { epoch, .. } => Some(epoch.as_u64()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            epochs_activated.first().copied(),
+            Some(1),
+            "the first batch must already carry the boundaries it crossed; got {epochs_activated:?}"
+        );
+        assert!(
+            !inner
+                .pending_events
+                .iter()
+                .any(|e| matches!(e, EpochEvent::DoneForNow { .. })),
+            "DoneForNow must not be emitted while the scan is still short of the lagged tip"
+        );
+
+        // Drive the remaining batches, keeping only the last batch's events.
+        let mut batches = 1;
+        while has_more {
+            inner.pending_events.clear();
+            has_more = inner.scan_blockchain(has_more).await.unwrap();
+            batches += 1;
+        }
+        assert!(batches > 1, "expected a multi-batch catch-up, ran {batches}");
+
+        assert!(
+            inner
+                .pending_events
+                .iter()
+                .any(|e| matches!(e, EpochEvent::DoneForNow { .. })),
+            "DoneForNow must be emitted once the scan reaches the lagged tip"
+        );
+    }
+
+    #[tokio::test]
+    async fn observed_boundary_hash_is_readable_before_the_epoch_is_activated() {
+        let store = InMemoryStore::default();
+        let chain = linear_chain(0..=20);
+        let client = MockBaseNode::new(chain.clone());
+        let mut oracle = BaseLayerOracle::new(store.clone(), client, make_config(5), NETWORK);
+
+        // Taking `inner` stands in for a scan task owning it: the boundary lookup must not depend on
+        // it, and dropping the emitted events stands in for an epoch manager that has not yet applied
+        // the EpochChanged those scans produced.
+        let mut inner = oracle.inner.take().expect("inner is Some before any scan");
+        sync_to_tip(&mut inner).await;
+        assert_eq!(inner.last_scanned_height, 15);
+        assert!(oracle.inner.is_none());
+
+        // Epoch 3 opens at height 15, which the scan has crossed.
+        assert_eq!(
+            oracle.observed_epoch_boundary_hash(Epoch(3)).unwrap(),
+            Some(hash_header(NETWORK, &chain[15]))
+        );
+        // Epoch 4 opens at height 20, above the lagged scan position.
+        assert_eq!(oracle.observed_epoch_boundary_hash(Epoch(4)).unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn observed_boundary_hash_rejects_a_first_header_that_is_not_the_boundary() {
+        let store = InMemoryStore::default();
+
+        // A scan range opening mid-epoch makes height 12 epoch 2's lowest stored header; the epoch's
+        // boundary at height 10 was never scanned, so there is nothing to ratify against.
+        store
+            .add_block_headers([BlockHeaderModel {
+                epoch: Epoch(2),
+                height: 12,
+                block_hash: FixedHash::default(),
+                kernel_merkle_root: FixedHash::default(),
+                validator_node_merkle_root: FixedHash::default(),
+            }])
+            .unwrap();
+
+        assert_eq!(
+            lookup_epoch_boundary_hash(&store, EPOCH_LENGTH, Epoch(2)).unwrap(),
+            None
+        );
+        // Before the first scan obtains the L1 constants the opening height is unknown.
+        assert_eq!(lookup_epoch_boundary_hash(&store, 0, Epoch(2)).unwrap(), None);
     }
 
     #[tokio::test]

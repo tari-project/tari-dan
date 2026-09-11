@@ -43,6 +43,8 @@ pub enum EpochManagerError {
     },
     #[error("Failed to submit layer one transaction: {details}")]
     FailedToSubmitLayerOneTransaction { details: String },
+    #[error("Epoch event oracle error: {details}")]
+    EpochEventOracleError { details: String },
 }
 
 impl EpochManagerError {

@@ -53,8 +53,6 @@ pub struct ConsensusConstants {
     /// The number of missed proposals before a node will immediately send a NEWVIEW to the next leader when the node
     /// who missed the proposals is selected as leader.
     pub missed_proposal_suspend_threshold: u64,
-    /// The number of missed proposals before a EvictNode command is proposed.
-    pub missed_proposal_evict_threshold: u64,
     /// The number of rounds a node must participate before their non-participation is reset. If a peer is offline,
     /// gets suspended and comes online, their missed proposal count (up to a maximum of
     /// `missed_proposal_recovery_threshold`) is decremented for each block that they participate (vote) in. Once
@@ -138,12 +136,6 @@ pub struct ConsensusConstants {
     /// consensus sequencing. CONSENSUS RULE: must be uniform network-wide, otherwise nodes
     /// diverge on which transactions may be sequenced.
     pub max_transaction_validity_epochs: u64,
-    /// Number of base-layer blocks of leeway a voter is allowed when accepting `EndEpoch` proposals.
-    /// If the voter's oracle has not yet crossed the next epoch boundary but its lagged scan height
-    /// is within this many blocks of the boundary, the voter accepts `EndEpoch` from peers whose
-    /// oracle has already crossed. Must be uniform network-wide to avoid divergent voting.
-    /// Set to 0 to disable leeway.
-    pub epoch_end_spread_blocks: u64,
 }
 
 impl ConsensusConstants {
@@ -158,7 +150,6 @@ impl ConsensusConstants {
         num_preshards: NumPreshards::current(),
         pacemaker_block_time: Duration::from_secs(10),
         missed_proposal_suspend_threshold: 5,
-        missed_proposal_evict_threshold: 10,
         missed_proposal_recovery_threshold: 5,
         // Calibrated against 2-core hardware (Esmeralda class), where ~500 LocalOnly stress
         // transactions (~62 weight each, ~31k weight) executed in ~11.5s — i.e. ~2.7k weight/s.
@@ -191,7 +182,6 @@ impl ConsensusConstants {
         max_block_validation_execution_points: 7_250_000_000,
         exhaust_burn_rate: ExhaustBurnRate::new(500), // 5%
         max_transaction_validity_epochs: 2160,
-        epoch_end_spread_blocks: 5,
     };
     pub const MAINNET: Self = Self {
         // Minotari's `coinbase_min_maturity` (720) plus 60 blocks (~2 hours) of margin. Must stay a
@@ -207,7 +197,6 @@ impl ConsensusConstants {
         num_preshards: NumPreshards::current(),
         pacemaker_block_time: Duration::from_secs(10),
         missed_proposal_suspend_threshold: 5,
-        missed_proposal_evict_threshold: 10,
         missed_proposal_recovery_threshold: 5,
         // Calibrated against 2-core hardware (Esmeralda class), where ~500 LocalOnly stress
         // transactions (~62 weight each, ~31k weight) executed in ~11.5s — i.e. ~2.7k weight/s.
@@ -240,7 +229,6 @@ impl ConsensusConstants {
         max_block_validation_execution_points: 7_250_000_000,
         exhaust_burn_rate: ExhaustBurnRate::new(500), // 5%
         max_transaction_validity_epochs: 2160,
-        epoch_end_spread_blocks: 10,
     };
     pub const TESTNET: Self = Self {
         base_layer_confirmations: 100,
@@ -248,7 +236,6 @@ impl ConsensusConstants {
         num_preshards: NumPreshards::current(),
         pacemaker_block_time: Duration::from_secs(10),
         missed_proposal_suspend_threshold: 5,
-        missed_proposal_evict_threshold: 10,
         missed_proposal_recovery_threshold: 5,
         // Calibrated against 2-core hardware (Esmeralda class), where ~500 LocalOnly stress
         // transactions (~62 weight each, ~31k weight) executed in ~11.5s — i.e. ~2.7k weight/s.
@@ -281,7 +268,6 @@ impl ConsensusConstants {
         max_block_validation_execution_points: 7_250_000_000,
         exhaust_burn_rate: ExhaustBurnRate::new(500), // 5%
         max_transaction_validity_epochs: 2160,
-        epoch_end_spread_blocks: 5,
     };
 
     pub const fn mainnet() -> Self {
@@ -303,7 +289,6 @@ impl ConsensusConstants {
             num_preshards: NumPreshards::current(),
             pacemaker_block_time: Duration::from_secs(10),
             missed_proposal_suspend_threshold: 5,
-            missed_proposal_evict_threshold: 10,
             missed_proposal_recovery_threshold: 5,
             // Calibrated against 2-core hardware (Esmeralda class), where ~500 LocalOnly stress
             // transactions (~62 weight each, ~31k weight) executed in ~11.5s — i.e. ~2.7k weight/s.
@@ -336,7 +321,6 @@ impl ConsensusConstants {
             max_block_validation_execution_points: 7_250_000_000,
             exhaust_burn_rate: ExhaustBurnRate::new(500), // 5%
             max_transaction_validity_epochs: 2160,
-            epoch_end_spread_blocks: 1,
         }
     }
 

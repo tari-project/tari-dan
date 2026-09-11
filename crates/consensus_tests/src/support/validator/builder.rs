@@ -6,7 +6,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use ootle_byte_type::ToByteType;
 use serde::Serialize;
 use tari_common_types::types::PrivateKey;
 use tari_consensus::{
@@ -218,7 +217,7 @@ impl ValidatorBuilder {
 
         let validator = Validator {
             address: self.address.clone(),
-            public_key: self.public_key.to_byte_type(),
+
             _shard_address: self.shard_address,
             shard_group: self.shard_group,
             num_committees: self.num_committees,

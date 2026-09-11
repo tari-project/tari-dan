@@ -560,11 +560,7 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
             },
             // These are not included
             // TODO: validate that these are not included in the foreign proposal
-            Command::AllAccept(_) |
-            Command::SomeAccept(_) |
-            Command::LocalOnly(_) |
-            Command::ForeignProposal(_) |
-            Command::EvictNode(_) => {
+            Command::AllAccept(_) | Command::SomeAccept(_) | Command::LocalOnly(_) | Command::ForeignProposal(_) => {
                 // Disregard
                 continue;
             },

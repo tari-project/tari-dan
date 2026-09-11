@@ -16,8 +16,6 @@ pub struct LayerOneTransactionDef<T> {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum LayerOnePayloadType {
-    /// Payload is a tari_sidechain::EvictionProof
-    EvictionProof,
     /// Payload is a ValidatorRegistrationParams
     ValidatorRegistration,
     /// Payload is a ValidatorExitParams
@@ -34,9 +32,6 @@ impl FromStr for LayerOnePayloadType {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.eq_ignore_ascii_case("evictionproof") {
-            return Ok(Self::EvictionProof);
-        }
         if s.eq_ignore_ascii_case("validatorregistration") {
             return Ok(Self::ValidatorRegistration);
         }
@@ -50,7 +45,6 @@ impl FromStr for LayerOnePayloadType {
 impl Display for LayerOnePayloadType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::EvictionProof => write!(f, "EvictionProof"),
             Self::ValidatorRegistration => write!(f, "ValidatorRegistration"),
             Self::ValidatorExit => write!(f, "ValidatorExit"),
         }

@@ -24,7 +24,20 @@ use crate::runtime::{
 pub struct CallScope {
     orphans: IndexSet<SubstateId>,
     owned: IndexSet<SubstateId>,
+    /// Substates that belong to a component rather than to this frame: seeded at push from the state of the
+    /// component the frame executes on, and extended as orphans are attached to a component's state. They are in
+    /// scope for this frame alone and are dropped when it is popped, so a component's vaults stay reachable only
+    /// from that component.
+    component_owned: IndexSet<SubstateId>,
     referenced: IndexSet<SubstateId>,
+    /// The proofs this frame holds. `auth_scope.proofs()` is the subset that is currently authorizing an action: a
+    /// `ProofAccess` guard leaves that subset when it is dropped while the proof itself is still held, so holding is
+    /// tracked separately from authorizing.
+    proof_scope: IndexSet<ProofId>,
+    /// Buckets and proofs the caller passed in as arguments. They remain the caller's: this frame may leave them
+    /// unconsumed, and the caller keeps them once the frame is popped.
+    inherited_buckets: IndexSet<BucketId>,
+    inherited_proofs: IndexSet<ProofId>,
     component_lock: Option<LockedSubstate>,
     lock_scope: IndexSet<LockId>,
     bucket_scope: IndexSet<BucketId>,
@@ -38,7 +51,11 @@ impl CallScope {
         Self {
             orphans: IndexSet::new(),
             owned: IndexSet::new(),
+            component_owned: IndexSet::new(),
             referenced: IndexSet::new(),
+            proof_scope: IndexSet::new(),
+            inherited_buckets: IndexSet::new(),
+            inherited_proofs: IndexSet::new(),
             component_lock: None,
             lock_scope: IndexSet::new(),
             bucket_scope: IndexSet::new(),
@@ -53,7 +70,11 @@ impl CallScope {
         this
     }
 
+    /// Installs the auth scope this frame starts with. Its proofs came from the frame's caller (the transaction's
+    /// base scope for a top-level instruction), so the caller accounts for them.
     pub(crate) fn set_auth_scope(&mut self, scope: AuthorizationScope) {
+        self.inherited_proofs.extend(scope.proofs().iter().copied());
+        self.proof_scope.extend(scope.proofs().iter().copied());
         self.auth_scope = scope;
     }
 
@@ -66,7 +87,7 @@ impl CallScope {
     }
 
     pub fn is_proof_in_scope(&self, proof_id: &ProofId) -> bool {
-        self.auth_scope.contains_proof(proof_id)
+        self.proof_scope.contains(proof_id)
     }
 
     pub fn is_bucket_in_scope(&self, bucket_id: BucketId) -> bool {
@@ -89,7 +110,10 @@ impl CallScope {
             return true;
         }
 
-        self.owned.contains(address) || self.referenced.contains(address) || self.orphans.contains(address)
+        self.owned.contains(address) ||
+            self.component_owned.contains(address) ||
+            self.referenced.contains(address) ||
+            self.orphans.contains(address)
     }
 
     pub fn add_lock_to_scope(&mut self, lock_id: LockId) {
@@ -116,8 +140,17 @@ impl CallScope {
         self.address_allocation_scope.swap_remove(&id)
     }
 
+    /// Brings a proof into this frame and authorizes it. A proof reaching a frame — created here, passed in as an
+    /// argument, or handed back by a callee — authorizes for the rest of the frame unless the frame drops the
+    /// authorization.
     pub fn add_proof_to_scope(&mut self, proof_id: ProofId) {
+        self.proof_scope.insert(proof_id);
         self.auth_scope_mut().add_proof(proof_id);
+    }
+
+    pub fn remove_proof_from_scope(&mut self, proof_id: &ProofId) {
+        self.proof_scope.swap_remove(proof_id);
+        self.auth_scope.remove_proof(proof_id);
     }
 
     pub fn remove_lock_from_scope(&mut self, lock_id: LockId) -> Result<(), RuntimeError> {
@@ -145,6 +178,19 @@ impl CallScope {
 
     pub fn move_node_to_owned(&mut self, address: &SubstateId) -> Result<(), RuntimeError> {
         if self.orphans.swap_remove(address) && !self.owned.insert(address.clone()) {
+            return Err(RuntimeError::DuplicateSubstate {
+                address: address.clone(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Records that an orphan of this frame is now reachable from a component's state, so it stays with the
+    /// component when the frame is popped. An address that is already owned — a root id such as a component or
+    /// resource the frame created — keeps its place in `owned` and still crosses to the caller; those are gated by
+    /// access rules rather than by scope.
+    pub fn attach_node_to_component(&mut self, address: &SubstateId) -> Result<(), RuntimeError> {
+        if self.orphans.swap_remove(address) && !self.component_owned.insert(address.clone()) {
             return Err(RuntimeError::DuplicateSubstate {
                 address: address.clone(),
             });
@@ -206,14 +252,54 @@ impl CallScope {
         // }
     }
 
-    pub fn update_from_child_scope(&mut self, child: CallScope) {
+    /// Merges what a completed child frame hands back into this scope. Only substates the child created and still
+    /// holds loosely, plus the buckets, proofs and address allocations named in its return value, cross the
+    /// boundary: everything the child could reach through a component's state stays behind with that component.
+    ///
+    /// An allocation is as much a capability as a bucket — [`WorkingState::use_allocated_address`] gates on scope
+    /// membership alone, and nothing checks that the template consuming an allocation is the one that made it — so
+    /// it crosses on the same terms.
+    pub fn update_from_child_scope(&mut self, child: CallScope, returned: &IndexedWellKnownTypes) {
         self.owned.extend(child.owned.iter().cloned());
         for owned in &child.owned {
             self.orphans.swap_remove(owned);
         }
-        self.bucket_scope.extend(child.bucket_scope);
-        self.address_allocation_scope.extend(child.address_allocation_scope);
-        self.auth_scope.update_from_child(child.auth_scope);
+        for bucket_id in returned.bucket_ids() {
+            if child.bucket_scope.contains(bucket_id) {
+                self.bucket_scope.insert(*bucket_id);
+            }
+        }
+        for proof_id in returned.proof_ids() {
+            if child.proof_scope.contains(proof_id) {
+                self.add_proof_to_scope(*proof_id);
+            }
+        }
+        for allocation in returned.component_address_allocations() {
+            if child.address_allocation_scope.contains(&allocation.id()) {
+                self.address_allocation_scope.insert(allocation.id());
+            }
+        }
+        for allocation in returned.resource_address_allocations() {
+            if child.address_allocation_scope.contains(&allocation.id()) {
+                self.address_allocation_scope.insert(allocation.id());
+            }
+        }
+    }
+
+    /// The buckets this frame must account for before it is popped: those it holds that its caller did not lend it.
+    pub fn buckets_owed(&self) -> impl Iterator<Item = &BucketId> {
+        self.bucket_scope
+            .iter()
+            .filter(|id| !self.inherited_buckets.contains(*id))
+    }
+
+    /// The proofs this frame must account for before it is popped: those it holds and its caller did not lend it.
+    /// Read from `proof_scope` rather than the auth scope, so a proof whose `ProofAccess` has been dropped is still
+    /// owed.
+    pub fn proofs_owed(&self) -> impl Iterator<Item = &ProofId> {
+        self.proof_scope
+            .iter()
+            .filter(|id| !self.inherited_proofs.contains(*id))
     }
 
     pub fn include_owned_in_scope(&mut self, values: &IndexedWellKnownTypes) {
@@ -222,7 +308,7 @@ impl CallScope {
             if addr.is_virtual() || addr.is_transaction_receipt() || addr.is_template() {
                 continue;
             }
-            self.add_substate_to_owned(addr);
+            self.component_owned.insert(addr);
         }
     }
 
@@ -237,9 +323,11 @@ impl CallScope {
 
         for bucket_id in values.bucket_ids() {
             self.add_bucket_to_scope(*bucket_id);
+            self.inherited_buckets.insert(*bucket_id);
         }
         for proof_id in values.proof_ids() {
             self.add_proof_to_scope(*proof_id);
+            self.inherited_proofs.insert(*proof_id);
         }
         for allocation in values.component_address_allocations() {
             self.add_address_allocation_to_scope(allocation.id());
@@ -264,6 +352,12 @@ impl Display for CallScope {
                 writeln!(f, "  {}", owned)?;
             }
         }
+        if !self.component_owned.is_empty() {
+            writeln!(f, "Component owned:")?;
+            for owned in &self.component_owned {
+                writeln!(f, "  {}", owned)?;
+            }
+        }
         if !self.referenced.is_empty() {
             writeln!(f, "Referenced:")?;
             for referenced in &self.referenced {
@@ -284,9 +378,9 @@ impl Display for CallScope {
             }
         }
 
-        if !self.auth_scope.proofs().is_empty() {
+        if !self.proof_scope.is_empty() {
             writeln!(f, "Proofs:")?;
-            for proof in self.auth_scope.proofs() {
+            for proof in &self.proof_scope {
                 writeln!(f, "  {}", proof)?;
             }
         }
