@@ -163,7 +163,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
                 let substate_id = SubstateId::from_str(&s.address).map_err(|e| StorageError::DataInconsistency {
                     details: format!("Invalid substate address {}: {}", s.address, e),
                 })?;
-                let version = s.version as u32;
+                let version = s.version as u64;
                 let template_address = s.template_address.map(|h| deserialize_hex_try_from(&h)).transpose()?;
                 let timestamp = s.updated_at;
                 Ok(ListSubstateItem {
@@ -185,7 +185,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
     fn get_substate(
         &mut self,
         address: &SubstateId,
-        version: Option<u32>,
+        version: Option<u64>,
     ) -> Result<Option<SubstateRecord>, StorageError> {
         use crate::storage_sqlite::schema::substates;
 
@@ -193,7 +193,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
             .into_boxed()
             .filter(substates::address.eq(address.to_string()));
         if let Some(version) = version {
-            substate_query = substate_query.filter(substates::version.eq(version as i32));
+            substate_query = substate_query.filter(substates::version.eq(version as i64));
         } else {
             substate_query = substate_query.order_by(substates::version.desc())
         }
@@ -1178,7 +1178,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
 
         row.map(|row| {
             Ok(SubstateCacheEntry {
-                version: row.version.map(|v| v as u32),
+                version: row.version.map(|v| v as u64),
                 substate_result: deserialize_bincode(&row.substate_result)?,
                 cached_at: row.cached_at as u64,
                 verified: row.verified,

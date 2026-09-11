@@ -24,13 +24,13 @@ pub struct SubstateLock {
     #[n(1)]
     transaction_id: TransactionId,
     #[n(2)]
-    version: u32,
+    version: u64,
     #[n(3)]
     is_local_only: bool,
 }
 
 impl SubstateLock {
-    pub fn new(transaction_id: TransactionId, version: u32, lock_type: SubstateLockType, is_local_only: bool) -> Self {
+    pub fn new(transaction_id: TransactionId, version: u64, lock_type: SubstateLockType, is_local_only: bool) -> Self {
         Self {
             transaction_id,
             version,
@@ -47,7 +47,7 @@ impl SubstateLock {
         self.lock_type
     }
 
-    pub fn version(&self) -> u32 {
+    pub fn version(&self) -> u64 {
         self.version
     }
 

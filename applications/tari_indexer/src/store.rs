@@ -104,7 +104,7 @@ pub trait IndexerStoreReadTransaction {
     fn get_substate(
         &mut self,
         address: &SubstateId,
-        version: Option<u32>,
+        version: Option<u64>,
     ) -> Result<Option<SubstateRecord>, StorageError>;
 
     fn get_substates(&mut self, ids: &[SubstateId]) -> Result<HashMap<SubstateId, Substate>, StorageError>;

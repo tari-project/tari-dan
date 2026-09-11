@@ -505,7 +505,7 @@ impl<'a> WriteTransaction<'a> {
         account_address: &ComponentAddress,
         resource_address: &ResourceAddress,
         diff: &SubstateDiff,
-    ) -> Result<Option<(VaultId, u32)>, WalletStorageError> {
+    ) -> Result<Option<(VaultId, u64)>, WalletStorageError> {
         for (id, substate) in diff.up_iter() {
             let Some(vault_id) = id.as_vault_id() else {
                 continue;
@@ -829,7 +829,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 substates::module_name.eq(&module_name),
                 substates::template_address.eq(template_addr.map(|a| a.to_string())),
                 substates::referenced_substates.eq(serialize_json(&referenced_substates)?),
-                substates::version.eq(substate_id.version() as i32),
+                substates::version.eq(substate_id.version() as i64),
             ))
             .on_conflict(substates::address)
             .do_update()
@@ -837,7 +837,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 substates::module_name.eq(&module_name),
                 substates::template_address.eq(template_addr.map(|a| a.to_string())),
                 substates::referenced_substates.eq(serialize_json(&referenced_substates)?),
-                substates::version.eq(substate_id.version() as i32),
+                substates::version.eq(substate_id.version() as i64),
             ))
             .execute(self.connection())
             .map_err(|e| WalletStorageError::general("substates_upsert_root", e))?;
@@ -858,14 +858,14 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 substates::address.eq(address.substate_id().to_string()),
                 substates::parent_address.eq(Some(parent.to_string())),
                 substates::referenced_substates.eq(serialize_json(&referenced_substates)?),
-                substates::version.eq(address.version() as i32),
+                substates::version.eq(address.version() as i64),
             ))
             .on_conflict(substates::address)
             .do_update()
             .set((
                 substates::parent_address.eq(Some(parent.to_string())),
                 substates::referenced_substates.eq(serialize_json(&referenced_substates)?),
-                substates::version.eq(address.version() as i32),
+                substates::version.eq(address.version() as i64),
             ))
             .execute(self.connection())
             .map_err(|e| WalletStorageError::general("substates_upsert_child", e))?;
@@ -1040,7 +1040,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         let values = (
             vaults::account_id.eq(account_id),
             vaults::address.eq(vault.id.to_string()),
-            vaults::vault_version.eq(i32::try_from(vault.vault_version)
+            vaults::vault_version.eq(i64::try_from(vault.vault_version)
                 .map_err(|e| WalletStorageError::bad_query("vaults_insert", format!("invalid vault version: {e}")))?),
             vaults::revealed_balance.eq(vault.revealed_balance.to_string()),
             vaults::confidential_balance.eq(vault.confidential_balance.to_string()),
@@ -1060,14 +1060,14 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     fn vaults_update(
         &mut self,
         vault_id: VaultId,
-        vault_version: u32,
+        vault_version: u64,
         revealed_balance: Amount,
         confidential_balance: Amount,
     ) -> Result<(), WalletStorageError> {
         use crate::schema::vaults;
 
         let changeset = (
-            vaults::vault_version.eq(i32::try_from(vault_version)
+            vaults::vault_version.eq(i64::try_from(vault_version)
                 .map_err(|e| WalletStorageError::bad_query("vaults_update", format!("invalid vault version: {e}")))?),
             vaults::revealed_balance.eq(revealed_balance.to_string()),
             vaults::confidential_balance.eq(confidential_balance.to_string()),
@@ -1120,7 +1120,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             account_balance_changes::resource_id.eq(resource_id),
             account_balance_changes::account_address.eq(change.account_address.to_string()),
             account_balance_changes::vault_address.eq(change.vault_address.as_ref().map(ToString::to_string)),
-            account_balance_changes::vault_version.eq(change.vault_version.map(i64::from)),
+            account_balance_changes::vault_version.eq(change.vault_version.map(|v| v as i64)),
             account_balance_changes::resource_address.eq(change.resource_address.to_string()),
             account_balance_changes::token_symbol.eq(&change.token_symbol),
             account_balance_changes::divisibility.eq(i32::from(change.divisibility)),
@@ -1201,7 +1201,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         let vault_address = vault_address.to_string();
         let maybe_existing = account_balance_changes::table
             .filter(account_balance_changes::vault_address.eq(Some(vault_address)))
-            .filter(account_balance_changes::vault_version.eq(Some(i64::from(vault_version))))
+            .filter(account_balance_changes::vault_version.eq(Some(vault_version as i64)))
             .select((
                 account_balance_changes::id,
                 account_balance_changes::source_type,
@@ -1366,7 +1366,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     fn balance_changes_attribute_transaction(
         &mut self,
         vault_id: &VaultId,
-        vault_version: u32,
+        vault_version: u64,
         transaction_id: TransactionId,
     ) -> Result<bool, WalletStorageError> {
         const OPERATION: &str = "balance_changes_attribute_transaction";
@@ -1388,7 +1388,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         let updated = diesel::update(
             account_balance_changes::table
                 .filter(account_balance_changes::vault_address.eq(Some(vault_address)))
-                .filter(account_balance_changes::vault_version.eq(Some(i64::from(vault_version))))
+                .filter(account_balance_changes::vault_version.eq(Some(vault_version as i64)))
                 .filter(account_balance_changes::transaction_id.is_null()),
         )
         .set((

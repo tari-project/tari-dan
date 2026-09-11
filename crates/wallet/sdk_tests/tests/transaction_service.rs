@@ -113,7 +113,7 @@ impl WalletNetworkInterface for ScriptedNetwork {
     async fn query_substate(
         &self,
         _address: &SubstateId,
-        _version: Option<u32>,
+        _version: Option<u64>,
         _local_search_only: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
         panic!("ScriptedNetwork::query_substate called")

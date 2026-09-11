@@ -183,7 +183,7 @@ where TSpec: WalletSdkSpec
         &self,
         account_address: ComponentAddress,
         vault_id: VaultId,
-        vault_version: u32,
+        vault_version: u64,
         latest_vault: &Vault,
         updated_nft_data: HashMap<NonFungibleId, NonFungibleContainer>,
         source: BalanceChangeSource,

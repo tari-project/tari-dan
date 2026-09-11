@@ -141,7 +141,7 @@ impl Evidence {
         })
     }
 
-    pub fn all_outputs_iter(&self) -> impl Iterator<Item = (&ShardGroup, &SubstateId, &u32)> {
+    pub fn all_outputs_iter(&self) -> impl Iterator<Item = (&ShardGroup, &SubstateId, &u64)> {
         self.evidence.iter().flat_map(|(sg, evidence)| {
             evidence
                 .outputs
@@ -448,7 +448,7 @@ pub struct ShardGroupEvidence {
     #[cfg_attr(feature = "ts", ts(type = "Record<string, number>"))]
     #[n(1)]
     #[cbor(with = "tari_bor::adapters::indexmap_codec")]
-    outputs: IndexMap<SubstateId, u32>,
+    outputs: IndexMap<SubstateId, u64>,
     #[cfg_attr(feature = "ts", ts(type = "string | null"))]
     #[n(2)]
     prepare_qc: Option<PcId>,
@@ -462,7 +462,7 @@ impl ShardGroupEvidence {
         self.insert(lock.substate_id().clone(), lock.version_to_lock(), lock.lock_type())
     }
 
-    pub fn insert(&mut self, substate_id: SubstateId, version_to_lock: u32, lock_type: SubstateLockType) -> &mut Self {
+    pub fn insert(&mut self, substate_id: SubstateId, version_to_lock: u64, lock_type: SubstateLockType) -> &mut Self {
         if lock_type.is_input() {
             self.inputs.insert_sorted(
                 substate_id,
@@ -482,7 +482,7 @@ impl ShardGroupEvidence {
         self
     }
 
-    pub fn insert_output(&mut self, substate_id: SubstateId, version: u32) -> &mut Self {
+    pub fn insert_output(&mut self, substate_id: SubstateId, version: u64) -> &mut Self {
         self.outputs.insert_sorted(substate_id, version);
         self
     }
@@ -514,7 +514,7 @@ impl ShardGroupEvidence {
         })
     }
 
-    pub fn outputs(&self) -> &IndexMap<SubstateId, u32> {
+    pub fn outputs(&self) -> &IndexMap<SubstateId, u64> {
         &self.outputs
     }
 
@@ -540,7 +540,7 @@ impl ShardGroupEvidence {
         self.outputs.sort_keys();
     }
 
-    pub fn contains_pledge(&self, substate_id: &SubstateId, version: u32, is_input: bool) -> bool {
+    pub fn contains_pledge(&self, substate_id: &SubstateId, version: u64, is_input: bool) -> bool {
         if is_input {
             return self
                 .inputs
@@ -640,7 +640,8 @@ pub struct EvidenceInputLockData {
     #[n(0)]
     pub is_write: bool,
     #[n(1)]
-    pub version: u32,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub version: u64,
 }
 
 impl EvidenceInputLockData {
@@ -805,11 +806,11 @@ mod tests {
         );
         assert_eq!(
             evidence1.get(&sg1).unwrap().outputs.get(&seed_substate_id(2)),
-            Some(&0u32)
+            Some(&0u64)
         );
         assert_eq!(
             evidence1.get(&sg1).unwrap().outputs.get(&seed_substate_id(2)),
-            Some(&0u32)
+            Some(&0u64)
         );
     }
 }

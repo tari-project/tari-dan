@@ -15,7 +15,7 @@ use crate::storage_sqlite::{schema::utxos, serialization::deserialize_bincode};
 #[diesel(table_name = utxos)]
 pub(crate) struct UtxoRecordUpdate {
     pub epoch: Option<i64>,
-    pub version: Option<i32>,
+    pub version: Option<i64>,
     pub output: Option<Option<Vec<u8>>>,
     pub state_version: Option<i64>,
     pub is_spent: Option<bool>,
@@ -28,7 +28,7 @@ pub(crate) struct UtxoRecordUpdate {
 pub(crate) struct UtxoRecordInsert {
     pub commitment: String,
     pub public_nonce: String,
-    pub version: i32,
+    pub version: i64,
     pub shard: i32,
     pub resource_address: String,
     pub state_version: i64,
@@ -45,7 +45,7 @@ pub(crate) struct UtxoRecord {
     pub _id: i32,
     pub commitment: String,
     pub _public_nonce: String,
-    pub version: i32,
+    pub version: i64,
     pub resource_address: String,
     pub _shard: i32,
     pub state_version: i64,
@@ -69,7 +69,7 @@ impl UtxoRecord {
                         StateVersion::new(self.state_version as u64),
                         WalletUtxoUpdate::Burnt(UtxoBurnt {
                             id,
-                            version: self.version as u32,
+                            version: self.version as u64,
                         }),
                     ))
                 } else {
@@ -77,7 +77,7 @@ impl UtxoRecord {
                         StateVersion::new(self.state_version as u64),
                         WalletUtxoUpdate::Spent(UtxoSpent {
                             id,
-                            version: self.version as u32,
+                            version: self.version as u64,
                         }),
                     ))
                 }

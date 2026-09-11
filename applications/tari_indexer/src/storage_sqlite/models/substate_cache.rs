@@ -8,7 +8,7 @@ use tari_indexer_lib::substate_cache::caches_nonexistence;
 pub(crate) struct SubstateCacheRow {
     #[allow(dead_code)]
     pub substate_id: String,
-    pub version: Option<i32>,
+    pub version: Option<i64>,
     pub verified: bool,
     pub substate_result: Vec<u8>,
     pub cached_at: i64,
@@ -23,9 +23,9 @@ pub(crate) struct SubstateCacheRow {
 #[derive(Debug, Clone)]
 pub struct SubstateCacheInvalidation {
     substate_id: SubstateId,
-    retires_up_to: Option<u32>,
+    retires_up_to: Option<u64>,
     retires_nonexistence: bool,
-    observed_version: u32,
+    observed_version: u64,
     spent: bool,
 }
 
@@ -37,7 +37,7 @@ impl SubstateCacheInvalidation {
     /// retraction of a cached nonexistence. Where nothing caches that, it carries nothing, and is
     /// not one of these at all: emitting it would put a journal row on the sync path for every
     /// created-once substate in the stream and buy nothing with it.
-    pub fn created(substate_id: &SubstateId, version: u32) -> Option<Self> {
+    pub fn created(substate_id: &SubstateId, version: u64) -> Option<Self> {
         let retires_up_to = version.checked_sub(1);
         let retires_nonexistence = caches_nonexistence(substate_id);
         if retires_up_to.is_none() && !retires_nonexistence {
@@ -56,7 +56,7 @@ impl SubstateCacheInvalidation {
     ///
     /// A destroy leaves a cached nonexistence alone. `DoesNotExist` says the substate has no live
     /// version, which a destroy makes more true rather than less.
-    pub fn destroyed(substate_id: SubstateId, version: u32) -> Self {
+    pub fn destroyed(substate_id: SubstateId, version: u64) -> Self {
         Self {
             substate_id,
             retires_up_to: Some(version),
@@ -72,7 +72,7 @@ impl SubstateCacheInvalidation {
 
     /// The version the stream showed the substate at: created at it, or destroyed at it. A head
     /// below this is one the substate has already been watched past, whoever offers it.
-    pub fn observed_version(&self) -> u32 {
+    pub fn observed_version(&self) -> u64 {
         self.observed_version
     }
 
@@ -85,7 +85,7 @@ impl SubstateCacheInvalidation {
     }
 
     /// The highest cached head version this retires, if any.
-    pub fn retires_up_to(&self) -> Option<u32> {
+    pub fn retires_up_to(&self) -> Option<u64> {
         self.retires_up_to
     }
 

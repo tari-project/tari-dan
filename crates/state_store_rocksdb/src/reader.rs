@@ -356,7 +356,7 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a, R: RocksRea
         &self,
         end_block: &BlockId,
         substate_id: &SubstateId,
-        version: Option<u32>,
+        version: Option<u64>,
     ) -> Result<Option<BlockDiffKey>, RocksDbStorageError> {
         let applicable_blocks = self.get_pending_chain_until(end_block)?;
 
@@ -1482,7 +1482,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         Ok(substates)
     }
 
-    fn substates_get_max_version_for_substate(&self, substate_id: &SubstateId) -> Result<(u32, bool), StorageError> {
+    fn substates_get_max_version_for_substate(&self, substate_id: &SubstateId) -> Result<(u64, bool), StorageError> {
         const OPERATION: &str = "substates_get_max_version_for_substate";
         let index_cf = self.db().cf(substate::HeadIndex)?;
         let data = index_cf.get(substate_id, OPERATION)?;
@@ -2015,6 +2015,6 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
 
 /// Orders two changes for the same substate within a branch. A substate version is only ever DOWNed after it is UPed,
 /// so a DOWN supersedes the UP of the same version.
-fn block_diff_change_order(key: &BlockDiffKey) -> (u32, bool) {
+fn block_diff_change_order(key: &BlockDiffKey) -> (u64, bool) {
     (key.version, !key.is_up)
 }

@@ -32,7 +32,7 @@ impl SubstateUpdateBatch {
 pub enum SubstateTransition {
     Up {
         id: SubstateId,
-        version: u32,
+        version: u64,
         substate_or_hash: SubstateValueOrHash,
     },
     Down {

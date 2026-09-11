@@ -53,14 +53,14 @@ pub struct UtxoUnspent {
 pub struct UtxoSpent {
     #[prost(bytes, tag = "1")]
     pub id: Vec<u8>,
-    #[prost(uint32, tag = "2")]
-    pub version: u32,
+    #[prost(uint64, tag = "2")]
+    pub version: u64,
 }
 
 #[derive(::prost::Message, serde::Serialize, serde::Deserialize)]
 pub struct UtxoBurnt {
     #[prost(bytes, tag = "1")]
     pub id: Vec<u8>,
-    #[prost(uint32, tag = "2")]
-    pub version: u32,
+    #[prost(uint64, tag = "2")]
+    pub version: u64,
 }

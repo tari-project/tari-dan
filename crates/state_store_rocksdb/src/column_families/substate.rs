@@ -64,7 +64,7 @@ pub struct HeadIndex;
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, CborLen)]
 pub struct SubstateHeadData {
     #[n(0)]
-    pub version: u32,
+    pub version: u64,
     #[n(1)]
     pub is_up: bool,
 }

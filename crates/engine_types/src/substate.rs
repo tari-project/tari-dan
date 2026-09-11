@@ -72,11 +72,12 @@ pub struct Substate {
     #[n(0)]
     substate: SubstateValue,
     #[n(1)]
-    version: u32,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    version: u64,
 }
 
 impl Substate {
-    pub fn new<T: Into<SubstateValue>>(version: u32, substate: T) -> Self {
+    pub fn new<T: Into<SubstateValue>>(version: u64, substate: T) -> Self {
         Self {
             substate: substate.into(),
             version,
@@ -95,7 +96,7 @@ impl Substate {
         self.substate
     }
 
-    pub fn version(&self) -> u32 {
+    pub fn version(&self) -> u64 {
         self.version
     }
 
@@ -111,7 +112,7 @@ impl Substate {
         hash_substate(network, self.substate_value(), self.version, epoch)
     }
 
-    pub fn previous_version(&self) -> Option<u32> {
+    pub fn previous_version(&self) -> Option<u64> {
         self.version.checked_sub(1)
     }
 }
@@ -119,7 +120,7 @@ impl Substate {
 /// Hashes a substate into its canonical value hash. The `epoch` argument binds the schema version
 /// (derived from `network` and epoch via `ProtocolVersion::at`) into the hash preimage, so substates
 /// produced under different schema versions can never collide in the JMT.
-pub fn hash_substate(network: Network, substate: &SubstateValue, version: u32, epoch: Epoch) -> Hash32 {
+pub fn hash_substate(network: Network, substate: &SubstateValue, version: u64, epoch: Epoch) -> Hash32 {
     let proto_version = ProtocolVersion::at(network, epoch);
     substate_value_hasher32()
         .chain(&substate.as_hash_message(proto_version))
@@ -981,7 +982,7 @@ pub struct SubstateDiff {
     #[n(0)]
     up_substates: Vec<(SubstateId, Substate)>,
     #[n(1)]
-    down_substates: Vec<(SubstateId, u32)>,
+    down_substates: Vec<(SubstateId, u64)>,
     #[n(2)]
     fee_withdrawals: Vec<ValidatorFeeWithdrawal>,
 }
@@ -1014,11 +1015,11 @@ impl SubstateDiff {
         self
     }
 
-    pub fn down(&mut self, id: SubstateId, version: u32) {
+    pub fn down(&mut self, id: SubstateId, version: u64) {
         self.down_substates.push((id, version));
     }
 
-    pub fn extend_down(&mut self, iter: impl Iterator<Item = (SubstateId, u32)>) -> &mut Self {
+    pub fn extend_down(&mut self, iter: impl Iterator<Item = (SubstateId, u64)>) -> &mut Self {
         self.down_substates.extend(iter);
         self
     }
@@ -1031,7 +1032,7 @@ impl SubstateDiff {
         self.up_substates.into_iter()
     }
 
-    pub fn down_iter(&self) -> impl Iterator<Item = &(SubstateId, u32)> + '_ {
+    pub fn down_iter(&self) -> impl Iterator<Item = &(SubstateId, u64)> + '_ {
         self.down_substates.iter()
     }
 

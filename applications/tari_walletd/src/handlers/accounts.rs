@@ -1946,7 +1946,7 @@ mod balance_change_handler_tests {
         // fsyncs dominate the test and scale with disk latency on CI.
         store
             .with_write_tx(|tx| {
-                for version in 2..=206u32 {
+                for version in 2..=206u64 {
                     tx.balance_changes_insert(
                         BalanceChangeSnapshot {
                             account_address: account,
@@ -1955,8 +1955,8 @@ mod balance_change_handler_tests {
                             resource_address: second_resource,
                             token_symbol: Some("TWO".to_string()),
                             divisibility: 2,
-                            revealed_before: Amount::from(199u64 + u64::from(version)),
-                            revealed_after: Amount::from(200u64 + u64::from(version)),
+                            revealed_before: Amount::from(199u64 + version),
+                            revealed_after: Amount::from(200u64 + version),
                             confidential_before: Amount::zero(),
                             confidential_after: Amount::zero(),
                         },

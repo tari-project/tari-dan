@@ -43,7 +43,8 @@ pub struct ListSubstateItem {
     pub substate_id: SubstateId,
     #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>))]
     pub module_name: Option<String>,
-    pub version: u32,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub version: u64,
     #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>))]
     pub template_address: Option<TemplateAddress>,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
@@ -58,7 +59,8 @@ pub struct ListSubstateItem {
 )]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 pub struct GetSubstateRequest {
-    pub version: Option<u32>,
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+    pub version: Option<u64>,
     #[serde(default)]
     pub local_search_only: bool,
 }
@@ -71,7 +73,8 @@ pub struct GetSubstateRequest {
 )]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 pub struct GetSubstateResponse {
-    pub version: u32,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub version: u64,
     #[cfg_attr(feature = "utoipa", schema(value_type = Object))]
     pub substate: SubstateValue,
     /// True when the indexer verified this substate's value against the shard group committee (via a
@@ -109,14 +112,16 @@ pub struct GetSubstatesResponse {
 pub struct InspectSubstateRequest {
     #[cfg_attr(feature = "utoipa", schema(value_type = String))]
     pub address: SubstateId,
-    pub version: Option<u32>,
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+    pub version: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 pub struct InspectSubstateResponse {
-    pub version: u32,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub version: u64,
     #[cfg_attr(feature = "utoipa", schema(value_type = Object))]
     pub substate: SubstateValue,
 }
@@ -519,7 +524,8 @@ pub struct GetNonFungiblesResponse {
 pub struct NonFungibleSubstate {
     #[cfg_attr(feature = "utoipa", schema(value_type = String))]
     pub address: NonFungibleAddress,
-    pub version: u32,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub version: u64,
     #[cfg_attr(feature = "utoipa", schema(value_type = Object))]
     pub substate: SubstateValue,
 }
@@ -666,14 +672,16 @@ pub struct UtxoUnspent {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct UtxoSpent {
     pub id: UtxoId,
-    pub version: u32,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub version: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct UtxoBurnt {
     pub id: UtxoId,
-    pub version: u32,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub version: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -951,7 +959,8 @@ pub struct GetTransactionReceiptResponse {
 pub struct GetResourceResponse {
     #[cfg_attr(feature = "utoipa", schema(value_type = Object))]
     pub resource: Resource,
-    pub version: u32,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub version: u64,
     #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>))]
     pub total_supply: Option<Amount>,
 }

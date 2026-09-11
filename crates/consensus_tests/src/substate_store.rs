@@ -236,7 +236,7 @@ fn a_substate_with_no_live_version_is_not_fatal_to_input_resolution() {
     );
 }
 
-fn add_substate(store: &TestStore, seed: u8, version: u32) -> VersionedSubstateId {
+fn add_substate(store: &TestStore, seed: u8, version: u64) -> VersionedSubstateId {
     let id = new_substate_id(seed);
     let value = new_substate_value(seed);
     let mut batch = SubstateUpdateBatch::new(Network::LocalNet, Epoch::zero());
@@ -285,7 +285,7 @@ fn new_substate_id(seed: u8) -> SubstateId {
     ComponentAddress::from_array([seed; ObjectKey::LENGTH]).into()
 }
 
-fn new_substate(seed: u8, version: u32) -> Substate {
+fn new_substate(seed: u8, version: u64) -> Substate {
     Substate::new(version, new_substate_value(seed))
 }
 

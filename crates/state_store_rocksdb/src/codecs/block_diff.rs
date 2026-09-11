@@ -29,7 +29,7 @@ impl DbEncoder<BlockDiffKey> for BlockDiffKeyCodec<BlockIdSeqSubstateIdVersion> 
         let len = BlockId::byte_size() + // block_id
             4 + // sequence
             self.substate_id_codec.encode_len(&value.substate_id)? + // substate_id
-            4 + // version
+            8 + // version
             1; // is_up
         Ok(len)
     }
@@ -82,11 +82,11 @@ impl DbDecoder<BlockDiffKey> for BlockDiffKeyCodec<BlockIdSeqSubstateIdVersion> 
         let (substate_id, n) = self.substate_id_codec.decode(&bytes[offset..])?;
         offset += n;
 
-        let version_bytes: [u8; 4] = take_fixed(&bytes[offset..]).ok_or_else(|| RocksDbStorageError::DecodeError {
-            source: anyhow!("BlockIdSubstateIdVersionCodec: Invalid bytes for u32"),
+        let version_bytes: [u8; 8] = take_fixed(&bytes[offset..]).ok_or_else(|| RocksDbStorageError::DecodeError {
+            source: anyhow!("BlockIdSubstateIdVersionCodec: Invalid bytes for u64"),
         })?;
-        let version = u32::from_be_bytes(version_bytes);
-        offset += 4;
+        let version = u64::from_be_bytes(version_bytes);
+        offset += 8;
 
         let is_up_byte = bytes.get(offset).ok_or_else(|| RocksDbStorageError::DecodeError {
             source: anyhow!("BlockIdSubstateIdVersionCodec: not enough bytes for bool"),
@@ -110,7 +110,7 @@ impl DbEncoder<BlockDiffKey> for BlockDiffKeyCodec<SubstateIdBlockIdVersionSeq> 
     fn encode_len(&self, value: &BlockDiffKey) -> Result<usize, RocksDbStorageError> {
         let len = self.substate_id_codec.encode_len(&value.substate_id)? + // substate_id
             BlockId::byte_size() + // block_id
-            4 + // version
+            8 + // version
             1 + // is_up
             4; // sequence
         Ok(len)
@@ -163,11 +163,11 @@ impl DbDecoder<BlockDiffKey> for BlockDiffKeyCodec<SubstateIdBlockIdVersionSeq> 
         let block_id = FixedHash::new(block_id_bytes);
         offset += HASH_LEN;
 
-        let version_bytes: [u8; 4] = take_fixed(&bytes[offset..]).ok_or_else(|| RocksDbStorageError::DecodeError {
-            source: anyhow!("BlockIdSubstateIdVersionCodec: Invalid bytes for u32"),
+        let version_bytes: [u8; 8] = take_fixed(&bytes[offset..]).ok_or_else(|| RocksDbStorageError::DecodeError {
+            source: anyhow!("BlockIdSubstateIdVersionCodec: Invalid bytes for u64"),
         })?;
-        let version = u32::from_be_bytes(version_bytes);
-        offset += 4;
+        let version = u64::from_be_bytes(version_bytes);
+        offset += 8;
 
         let is_up_byte = bytes.get(offset).ok_or_else(|| RocksDbStorageError::DecodeError {
             source: anyhow!("BlockIdSubstateIdVersionCodec: not enough bytes for bool"),

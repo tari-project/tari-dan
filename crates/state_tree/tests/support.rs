@@ -17,7 +17,7 @@ use tari_template_lib_types::{ComponentAddress, Hash32, ObjectKey};
 pub fn make_value(seed: u8) -> VersionedSubstateId {
     VersionedSubstateId::new(
         SubstateId::Component(ComponentAddress::new(ObjectKey::from_array([seed; ObjectKey::LENGTH]))),
-        u32::from(seed),
+        u64::from(seed),
     )
 }
 

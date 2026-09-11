@@ -74,11 +74,11 @@ pub enum StealthUtxoFrame {
     },
     Spent {
         id: UtxoId,
-        version: u32,
+        version: u64,
     },
     Burnt {
         id: UtxoId,
-        version: u32,
+        version: u64,
     },
     /// Terminates a shard's updates. `max_state_version` is the resume point for the shard, chosen
     /// by the indexer: the last delivered state version while the shard has more to drain, and the

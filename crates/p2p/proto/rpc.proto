@@ -98,7 +98,7 @@ message GetSubstateRequest {
 
 message GetSubstateResponse {
   bytes address = 1;
-  uint32 version = 2;
+  uint64 version = 2;
   // Encoded Substate
   bytes substate = 3;
   SubstateStatus status = 4;
@@ -145,7 +145,7 @@ enum PayloadResultStatus {
 // Minimal substate data
 message SubstateData {
   bytes substate_id = 1;
-  uint32 version = 2;
+  uint64 version = 2;
   oneof substate_value_or_hash {
     bytes value = 3;
     bytes hash = 4;
@@ -169,7 +169,7 @@ message SubstateCreate {
 
 message SubstateDestroy {
   bytes substate_id = 1;
-  uint32 version = 2;
+  uint64 version = 2;
 }
 
 message SyncBlocksRequest {

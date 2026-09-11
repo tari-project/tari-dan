@@ -55,7 +55,7 @@ diesel::table! {
         state_version -> BigInt,
         epoch -> BigInt,
         substate_id -> Text,
-        version -> Integer,
+        version -> BigInt,
         substate_type -> Text,
         is_up -> Bool,
         value_hash -> Nullable<Text>,
@@ -67,7 +67,7 @@ diesel::table! {
     substates (id) {
         id -> Integer,
         address -> Text,
-        version -> Integer,
+        version -> BigInt,
         data -> Text,
         template_address -> Nullable<Text>,
         module_name -> Nullable<Text>,
@@ -114,7 +114,7 @@ diesel::table! {
         id -> Integer,
         commitment -> Text,
         public_nonce -> Text,
-        version -> Integer,
+        version -> BigInt,
         resource_address -> Text,
         shard -> Integer,
         state_version -> BigInt,
@@ -143,7 +143,7 @@ diesel::table! {
 diesel::table! {
     substate_cache (substate_id) {
         substate_id -> Text,
-        version -> Nullable<Integer>,
+        version -> Nullable<BigInt>,
         verified -> Bool,
         substate_result -> Binary,
         cached_at -> BigInt,
@@ -154,7 +154,7 @@ diesel::table! {
     substate_cache_invalidations (substate_id) {
         substate_id -> Text,
         state_version -> BigInt,
-        substate_version -> Integer,
+        substate_version -> BigInt,
         spent -> Bool,
         invalidated_at -> BigInt,
     }

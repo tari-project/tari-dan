@@ -117,7 +117,7 @@ pub fn transaction_id_from_seed(seed: u32) -> TransactionId {
     TransactionId::new(buf)
 }
 
-pub fn build_substate_record(substate_id: &SubstateId, version: u32, state_version: Version) -> SubstateRecord {
+pub fn build_substate_record(substate_id: &SubstateId, version: u64, state_version: Version) -> SubstateRecord {
     let entity_id = substate_id.to_object_key().as_entity_id();
     let value = build_substate_value(Some(entity_id));
     let at_epoch = Epoch::zero();
@@ -245,7 +245,7 @@ pub fn gen_substates(
     state_version: Version,
     shard: Shard,
     n: usize,
-    substate_version: u32,
+    substate_version: u64,
 ) -> impl Iterator<Item = SubstateRecord> {
     (0..n).map(move |_| {
         let substate_id = random_substate_id_for_shard(shard);
@@ -262,7 +262,7 @@ pub fn gen_substates_for_shards(
     epoch: Epoch,
     state_version: Version,
     shard_range: impl IntoIterator<Item = u32>,
-    substate_version: u32,
+    substate_version: u64,
 ) -> impl Iterator<Item = SubstateRecord> {
     shard_range.into_iter().map(move |i| {
         let substate_id = substate_id_seed(i);

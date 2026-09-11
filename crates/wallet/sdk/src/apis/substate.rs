@@ -300,7 +300,7 @@ where
     pub async fn fetch_substate_from_network(
         &self,
         address: &SubstateId,
-        version_hint: Option<u32>,
+        version_hint: Option<u64>,
     ) -> Result<ValidatorScanResult, SubstateApiError> {
         debug!(
             target: LOG_TARGET,

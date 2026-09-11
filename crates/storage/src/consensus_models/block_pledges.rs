@@ -91,7 +91,7 @@ impl BlockPledge {
     pub(crate) fn add_substate_pledge(
         &mut self,
         substate_id: SubstateId,
-        version: u32,
+        version: u64,
         substate_value: SubstateValue,
     ) -> &mut Self {
         self.pledges.insert(substate_id, Substate::new(version, substate_value));
@@ -202,7 +202,7 @@ impl SubstatePledge {
             self.substate_id() == req.substate_id()
     }
 
-    pub fn satisfies_substate_and_version(&self, substate_id: &SubstateId, version: u32) -> bool {
+    pub fn satisfies_substate_and_version(&self, substate_id: &SubstateId, version: u64) -> bool {
         self.versioned_substate_id().version() == version && self.substate_id() == substate_id
     }
 

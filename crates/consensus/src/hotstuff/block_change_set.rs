@@ -721,9 +721,9 @@ mod tests {
             mem_new_sequence_transactions +
             mem_proposed_foreign_proposals +
             mem_proposed_utxo_mints;
-        // Last checked: 2024-06-03 (13,368000 bytes)
+        // Last checked: 2026-09-11 (14,328000 bytes)
         assert!(
-            total_mem < 14 * 1_000_000,
+            total_mem < 15 * 1_000_000,
             "Estimated max memory usage of ProposedBlockChangeSet is too high: {} bytes",
             total_mem
         );

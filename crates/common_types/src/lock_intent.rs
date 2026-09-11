@@ -13,8 +13,8 @@ use crate::{SubstateAddress, ToSubstateAddress, VersionedSubstateIdRef};
 pub trait LockIntent {
     fn substate_id(&self) -> &SubstateId;
     fn lock_type(&self) -> SubstateLockType;
-    fn version_to_lock(&self) -> u32;
-    fn requested_version(&self) -> Option<u32>;
+    fn version_to_lock(&self) -> u64;
+    fn requested_version(&self) -> Option<u64>;
 
     fn to_versioned_substate_id_ref(&self) -> VersionedSubstateIdRef<'_> {
         VersionedSubstateIdRef::new(self.substate_id(), self.version_to_lock())

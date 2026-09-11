@@ -10,7 +10,7 @@ const LOG_TARGET: &str = "tari::ootle::wallet_sdk::models::vault";
 pub struct VaultModel {
     pub account_address: ComponentAddress,
     pub id: VaultId,
-    pub vault_version: u32,
+    pub vault_version: u64,
     pub resource_address: ResourceAddress,
     pub resource_type: ResourceType,
     pub confidential_balance: Amount,

@@ -206,9 +206,9 @@ diesel::table! {
         address -> Text,
         parent_address -> Nullable<Text>,
         referenced_substates -> Text,
-        version -> Integer,
         template_address -> Nullable<Text>,
         created_at -> Timestamp,
+        version -> BigInt,
     }
 }
 
@@ -290,11 +290,11 @@ diesel::table! {
         resource_type -> Text,
         revealed_balance -> Text,
         confidential_balance -> Text,
-        vault_version -> Integer,
         token_symbol -> Nullable<Text>,
         divisibility -> Integer,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        vault_version -> BigInt,
     }
 }
 

@@ -137,7 +137,7 @@ impl<'a, TTx: StateStoreReadTransaction> SubstateProofGenerator<'a, TTx> {
 pub fn verify_substate_value_proof_against_root(
     value_proof_bytes: &[u8],
     substate_id: &SubstateId,
-    version: u32,
+    version: u64,
     value: Option<&SubstateValue>,
     network: Network,
     proof_epoch: Epoch,

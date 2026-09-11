@@ -69,7 +69,7 @@ pub fn caches_nonexistence(id: &SubstateId) -> bool {
 #[derive(Debug, Clone)]
 pub struct SubstateCacheEntry {
     /// The substate's head version, or `None` when the substate does not exist.
-    pub version: Option<u32>,
+    pub version: Option<u64>,
     pub substate_result: SubstateResult,
     pub cached_at: u64,
     /// True if the value was committee-verified when it was fetched. Never true for a substate that
@@ -86,7 +86,7 @@ impl SubstateCacheEntry {
     /// and upping a substate downs its predecessor - or it is above it, which the cache knows
     /// nothing about. Nonexistence names no version and answers nothing about one: a destroyed
     /// substate whose history has been pruned reports the same thing as one never created.
-    pub fn answer_at(self, version: Option<u32>) -> Option<Self> {
+    pub fn answer_at(self, version: Option<u64>) -> Option<Self> {
         let Some(version) = version else {
             return Some(self);
         };
@@ -105,7 +105,7 @@ impl SubstateCacheEntry {
 #[derive(Debug, Clone, Copy)]
 pub struct SubstateCacheEntryRef<'a> {
     /// The substate's head version, or `None` when the substate does not exist.
-    pub version: Option<u32>,
+    pub version: Option<u64>,
     pub substate_result: &'a SubstateResult,
     pub cached_at: u64,
     pub verified: bool,
@@ -152,7 +152,7 @@ pub trait SubstateCache: Send + Sync {
 mod tests {
     use super::*;
 
-    fn head(version: Option<u32>) -> SubstateCacheEntry {
+    fn head(version: Option<u64>) -> SubstateCacheEntry {
         SubstateCacheEntry {
             version,
             substate_result: version.map_or(SubstateResult::DoesNotExist, |version| SubstateResult::Down { version }),

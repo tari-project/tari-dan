@@ -45,5 +45,5 @@ message SubstateRequirement {
 }
 
 message OptionalVersion {
-  uint32 version = 1;
+  uint64 version = 1;
 }
