@@ -220,10 +220,10 @@ A Merkle tree gives two things a blockchain state store needs:
 2. **Inclusion and exclusion proofs** — a proof that a substate (or the *absence* of one) is consistent
    with a published root. This is what lets a client verify state without trusting an indexer.
 
-At each epoch boundary, the per-shard state roots are gathered into an `EpochCheckpoint` carrying a
-`TreeRootSummary` per shard
-(`crates/storage/src/consensus_models/epoch_checkpoint.rs`). The checkpoint is the anchor between an
-epoch's accumulated execution and the base layer, as described at the end of this page.
+At each epoch boundary, a committee creates an `EpochCheckpoint` carrying a `TreeRootSummary` for the
+global shard and for each shard in that committee's shard group
+(`crates/storage/src/consensus_models/epoch_checkpoint.rs`). The checkpoint commits the group's state
+at the end of the epoch and is used to validate and synchronize state across epoch changes.
 
 ---
 
@@ -364,12 +364,13 @@ leaves no state change behind.
 
 ---
 
-## Anchoring to the base layer
+## Epoch checkpoints and the base layer
 
-Ootle's state is committed by its own consensus, block by block. At **epoch boundaries**, an
-`EpochCheckpoint` rolls up the per-shard state roots and the epoch's evidence. The base layer's role
-is to be the **clock and the membership register**: the epoch length and the validator set are read
-from the base layer through the epoch oracle
+Ootle's state is committed by its own consensus, block by block. At an **epoch boundary**, each
+committee's `EpochCheckpoint` records the global-shard root, the roots for that committee's shard
+group, and the end-of-epoch commit proof. The base layer's role is to be the **clock and the
+membership register**: the epoch length and the validator set are read from the base layer through
+the epoch oracle
 (`crates/epoch_oracles/src/base_layer/oracle.rs`).
 
 The division is deliberate: the base layer fixes *who* may validate and *when* epochs turn over;
@@ -390,7 +391,8 @@ the base layer for verification — the base layer does not re-execute Ootle tra
 - `Up` writes a new version; `Down` retires one — and a downed substate **can be re-created**.
 - The **TVM** runs WASM (Wasmer + Cranelift) with deterministic operator metering that becomes the fee.
 - **Fee instructions run first**, then the state is checkpointed, then the main instructions run.
-- Epoch checkpoints roll up state roots; the base layer supplies the clock and membership.
+- Each committee's epoch checkpoint covers its shard group plus the global shard; the base layer
+  supplies the clock and membership but does not receive the checkpoint.
 
 **Next:** the cryptography that lets state carry hidden value —
 <a href={basePath("/concepts/privacy/")}>Privacy</a>.

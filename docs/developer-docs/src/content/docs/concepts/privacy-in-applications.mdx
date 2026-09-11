@@ -111,7 +111,7 @@ bucket into stealth UTXOs:
 let bucket = ResourceBuilder::stealth()
     .with_token_symbol("USDX")
     .mintable(rule!(...), LOCKED)
-    .initial_supply(1_000_000);
+    .initial_supply(1_000_000u64);
 
 // Convert the minted supply into stealth UTXOs; any revealed remainder comes back as a bucket.
 let revealed_bucket = bucket.stealth_transfer(mint_statement);
@@ -151,7 +151,7 @@ The issuer can be given a **view key** on the resource:
 ```rust
 ResourceBuilder::stealth()
     .with_view_key(auditor_public_key)
-    .initial_supply(1_000_000);
+    .initial_supply(1_000_000u64);
 ```
 
 With a view key, every output carries a `ViewableBalanceProof`, letting the holder of the view
@@ -167,15 +167,16 @@ The stablecoin is one instance of a small set of patterns that recur across priv
 
 ### Issuer-centric account model
 
-Put privileged operations (mint, burn, freeze, set view key) behind **access rules** on the resource
-and its administrative component, and make ordinary transfers key-only. The issuer holds the mint
-authority; holders hold spend keys. Because the authority is expressed as an `AccessRule`, it can be a
-single key, a multisig, or a component badge — the pattern scales from one operator to a governed
-issuer. See <a href={basePath("/guides/authorization-and-access/")}>Authorization and Access</a>.
+Put privileged operations (mint, burn, and freeze) behind **access rules** on the resource and its
+administrative component, and make ordinary transfers key-only. The issuer holds the mint authority;
+holders hold spend keys. Because the authority is expressed as an `AccessRule`, it can be a single
+key, a multisig, or a component badge — the pattern scales from one operator to a governed issuer.
+See <a href={basePath("/guides/authorization-and-access/")}>Authorization and Access</a>.
 
 ### Selective disclosure via view keys
 
-Any asset can opt into auditor visibility by carrying a view key. This turns "private" into
+A confidential or stealth resource can opt into auditor visibility by carrying a view key. The key
+is fixed when the resource is created and cannot currently be rotated. This turns "private" into
 "private to the public, transparent to whoever you designate" — the configuration most regulated
 issuers actually want, and one the primitive supports natively rather than bolted on.
 

@@ -30,7 +30,7 @@ explained in full. Use your browser's find to jump to a term.
 | **Condition tree (MAST)** | A Merklized set of alternative spend conditions committed by an output's root; a spend reveals one leaf plus an inclusion proof. | <a href={basePath("/guides/stealth-resources/")}>Stealth Transfers</a> |
 | **Covenant** | A native, consensus-fixed constraint on a spending transfer's outputs and value flow, expressed as a condition-tree atom. | <a href={basePath("/guides/stealth-resources/")}>Stealth Transfers</a> |
 | **Epoch** | A fixed number of base-layer blocks. Ootle's membership and timing rotate on epoch boundaries. | <a href={basePath("/concepts/architecture/")}>Architecture</a> |
-| **Epoch checkpoint** | The per-epoch rollup of every shard's state root, written at an epoch boundary. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |
+| **Epoch checkpoint** | A committee's end-of-epoch commit proof plus state roots for its shard group and the global shard. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |
 | **Epoch oracle** | The seam that reads base-layer validator registrations and epoch length, turning them into Ootle committee membership. | <a href={basePath("/concepts/architecture/")}>Architecture</a> |
 | **Exhaust burn rate** | `exhaust_burn_rate` — the per-network share of each fee that is burned: 500 bps (5%) on every network in this repository. | <a href={basePath("/concepts/tokenomics/")}>Tokenomics</a> |
 | **Finality** | Irreversibility. On Ootle a block is final when its chain reaches the three-chain rule inside its committee — not on the base layer. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
@@ -49,7 +49,7 @@ explained in full. Use your browser's find to jump to a term.
 | **Pledging** | The protocol by which shard groups promise not to touch a transaction's inputs while a cross-shard transaction is in flight. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
 | **Preshard** | One slice of the 256-way-partitioned address space (at most 256 of them; currently 256). A shard is a preshard. | <a href={basePath("/concepts/architecture/")}>Architecture</a> |
 | **ProposalCertificate (PC)** | A quorum's aggregate vote for a block, making the block *justified*. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
-| **Quorum** | The number of validators, `n - f = 2f + 1`, required to certify a block. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
+| **Quorum** | The `n - f` vote-power threshold required to certify a block, where `f = floor((n - 1) / 3)`. It equals `2f + 1` when `n = 3f + 1`. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
 | **Resource** | The definition of an asset (kind, divisibility, supply, access rules). One of four types: public fungible, public non-fungible, confidential, stealth. | <a href={basePath("/concepts/templates-and-assets/")}>Templates and Assets</a> |
 | **Safety** | The property that no two honest validators commit conflicting histories. Enforced by the lock and the three-chain rule. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
 | **Shard** | One slice of the sharded state space, numbered 1–256. A substate's shard is derived from the top bits of its address. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |

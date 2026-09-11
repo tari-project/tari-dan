@@ -161,8 +161,8 @@ A deeper role-by-role breakdown, together with how nodes are grouped into shards
 
 Ootle reaches finality inside its own consensus, not on the base layer. A block becomes
 irreversible when the validator committee's HotStuff chain grows far enough past it — under the
-**three-chain rule**, a block is committed once a chain of three justified blocks is built on
-top of it. Read the mechanism in detail in
+**three-chain rule**, the oldest block in a consecutive three-block chain is committed. Read the
+mechanism in detail in
 <a href={basePath("/concepts/consensus/")}>Consensus</a>.
 
 The base layer's role in finality is narrower: it decides *membership* (who is allowed to vote this
@@ -207,7 +207,8 @@ The sections that follow each zoom into one stage. In order, a transaction:
    instructions, and signs. The signers' public keys become the transaction's *initial authorization
    scope* — the badges its access rules are checked against.
 2. **Is submitted and gossiped.** The wallet hands it to an indexer, which checks its shape and
-   propagates it over the `transactions` gossip topic to the committees holding its inputs.
+   publishes it on the network-wide `transactions` gossip topic. Every validator receives it; only
+   validators in committees holding one of its inputs pass it to consensus.
 3. **Is sequenced.** The relevant committee orders it into a block. If the inputs live in more than one
    shard group, the other groups first **pledge** not to touch them, so the parts commit together or
    not at all.

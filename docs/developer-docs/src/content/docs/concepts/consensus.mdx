@@ -42,9 +42,10 @@ A committee of `n` validators with vote power tolerates up to `f` Byzantine memb
 
 $$f = \left\lfloor \frac{n - 1}{3} \right\rfloor$$
 
-and finalizes a block when a quorum of $n - f = 2f + 1$ members agree. That is the familiar `3f + 1`
-threshold: with `3f + 1` members you can lose `f` and still have `2f + 1` — enough to outvote the
-`f` that may be silent *and* the `f` that may lie.
+and finalizes a block when a quorum of $n - f$ members agree. When $n = 3f + 1$, this is the familiar
+$2f + 1$ threshold: you can lose `f` members and still have enough votes to outvote the `f` that may
+be silent *and* the `f` that may lie. The implementation uses $n - f$ directly, including when the
+committee size is not exactly $3f + 1$.
 
 Put numbers on it. A devnet committee is `DEFAULT_DEVNET_COMMITTEE_SIZE = 7`, giving
 $f = \lfloor 6/3 \rfloor = 2$ and a quorum of `7 − 2 = 5`. A live-network committee of 40 gives
@@ -114,7 +115,7 @@ votes are aggregated, communication is linear in the committee size rather than 
   <text x="479" y="136" fill="#8b949e" font-size="11">A quorum of votes is</text>
   <text x="479" y="154" fill="#8b949e" font-size="11">aggregated into one</text>
   <text x="479" y="172" fill="#8b949e" font-size="11">ProposalCertificate.</text>
-  <text x="479" y="200" fill="#6e7681" font-size="10">n &#8722; f = 2f + 1 votes</text>
+  <text x="479" y="200" fill="#6e7681" font-size="10">n &#8722; f votes</text>
 
   {/* Step 4 */}
   <rect x="685" y="80" width="190" height="150" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="1"/>
@@ -140,8 +141,8 @@ votes are aggregated, communication is linear in the committee size rather than 
 
 ## The three-chain commit rule
 
-Safety rests on a single rule: **a block is committed once a chain of three justified blocks is built
-on top of it.**
+Safety rests on a single rule: **a block is committed once it is the oldest block in a consecutive
+three-block chain.**
 
 Write the chain as `b ← b' ← b''`:
 
@@ -163,17 +164,17 @@ if justified_node.parent() == new_locked.id() && *new_locked.parent() == commit_
 ```
 
 <Aside type="note">
-Three links, not two. A single QC proves only that a quorum voted for a block in one view; a quorum
-could later vote for a conflicting block in a higher view if nothing locked them. The second link is
-the lock, and the third gives the protocol room to *observe* that the lock was set before any block
-below it is treated as final.
+Three consecutive blocks, joined by two parent links. A single QC proves only that a quorum voted for
+a block in one view; a quorum could later vote for a conflicting block in a higher view if nothing
+locked them. Extending the chain sets the lock, and the third block gives the protocol room to
+*observe* that the lock was set before the oldest block is treated as final.
 </Aside>
 
 <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" style="max-width:900px;width:100%;font-family:system-ui,sans-serif">
   <defs><marker id="cons-arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#484f58"/></marker></defs>
   <rect width="900" height="300" rx="12" fill="#0d1117"/>
   <text x="450" y="34" text-anchor="middle" fill="#e6edf3" font-size="16" font-weight="bold">The three-chain commit rule</text>
-  <text x="450" y="58" text-anchor="middle" fill="#8b949e" font-size="11">Each block carries a certificate for its parent. Three links is what makes the bottom one final.</text>
+  <text x="450" y="58" text-anchor="middle" fill="#8b949e" font-size="11">Each block carries a certificate for its parent. Three consecutive blocks make the oldest one final.</text>
 
   {/* b */}
   <rect x="110" y="110" width="180" height="80" rx="8" fill="#10261a" stroke="#3fb950" stroke-width="1.5"/>
@@ -292,7 +293,7 @@ pub fn max_failures(&self) -> VotePower {
     (power - VotePower::of(1)) / 3
 }
 
-/// Returns $n - f$ (i.e. $2f + 1$) where n is the number of committee members.
+/// Returns $n - f$, where n is the total committee vote power.
 pub fn quorum_threshold(&self) -> VotePower {
     self.total_power() - self.max_failures()
 }
@@ -304,10 +305,10 @@ For a committee of `n` equal-power members this is `f = (n - 1) / 3` integer-div
 - **Two quorums intersect in a fault-free member.** Any two sets of size `n - f` overlap in at least
   `n - 2f ≥ f + 1` members, at least one of whom is honest. Two conflicting QCs would require an
   honest validator to vote twice in one view, which the protocol forbids.
-- **No quorum is reachable with fewer than `2f + 1`.** A proposer cannot certify without a genuine
-  majority, so a minority cannot force a block.
-- **Progress needs `2f + 1` live validators.** If more than `f` are offline, views time out and the
-  chain stalls rather than forking — a liveness failure, not a safety one.
+- **No quorum is reachable with fewer than `n - f`.** A proposer cannot certify without the threshold
+  computed from the committee's total vote power, so a minority cannot force a block.
+- **Progress needs `n - f` live vote power.** If the live power drops below that threshold, views time
+  out and the chain stalls rather than forking — a liveness failure, not a safety one.
 
 <Aside type="note">
 A "vote" here is a signature over the proposal; a quorum certificate is those signatures
@@ -382,7 +383,7 @@ view whose leader fails. The base layer contributes the membership clock — the
 - Leaders are **round-robin**, `height % committee.len()` — no VRF, no sortition.
 - The **pacemaker** times out stalled views; a quorum of timeout votes forms a `TimeoutCertificate`,
   and a `NewViewMessage` starts the next view.
-- Quorum tolerance is `f = (power - 1) / 3`; progress needs `2f + 1` live power.
+- Quorum tolerance is `f = (power - 1) / 3`; the quorum and liveness threshold is `power - f`.
 - **Cross-shard** transactions are pledged input-by-input and driven to a shared decision through the
   `LocalOnly` / `LocalPrepare` / `LocalAccept` stages, finalised by `AllAccept` / `SomeAccept`.
 

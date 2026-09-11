@@ -92,7 +92,7 @@ Four parties, and the authority never travels with the funds:
   <text x="150" y="84" text-anchor="middle" fill="#f0883e" font-size="13" font-weight="bold">Issuer component</text>
   <text x="41" y="112" fill="#8b949e" font-size="11">mint() &#8212; gated by an AccessRule</text>
   <text x="41" y="134" fill="#8b949e" font-size="11">burn() &#8212; gated by an AccessRule</text>
-  <text x="41" y="156" fill="#8b949e" font-size="11">set_view_key() &#8212; rotate auditor</text>
+  <text x="41" y="156" fill="#8b949e" font-size="11">view key fixed at resource creation</text>
   <text x="41" y="184" fill="#8b949e" font-size="11">Holds authority, not funds.</text>
 
   {/* Resource */}
@@ -176,7 +176,7 @@ let initial_bucket = ResourceBuilder::stealth()
     // Give the auditor the ability to decrypt amounts, and nothing else.
     .with_view_key(auditor_public_key)
     // Mint is revealed: total_supply is updated in the clear.
-    .initial_supply(1_000_000);
+    .initial_supply(1_000_000u64);
 ```
 
 `initial_supply` returns a **`Bucket`** carrying a *cleartext* amount, and the engine increments
