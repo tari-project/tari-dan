@@ -746,6 +746,10 @@ fn debug_handler<T: Send + 'static>(mut env: FunctionEnvMut<WasmEnv<T>>, arg_ptr
 /// report the trap that follows it. Only a template function invocation may record one: the
 /// `tari_alloc`/`tari_free` the engine drives around a call are template code too, and a panic
 /// planted from there would be attributed to the next call that traps.
+///
+/// `Self::alloc_response` suspends that window while it writes an engine call's response through
+/// the template's `tari_alloc`, so a panic raised inside that allocation reaches the transaction as
+/// a plain runtime error with no message attached.
 fn on_panic_handler<T: Send + 'static>(
     mut env: FunctionEnvMut<WasmEnv<T>>,
     msg_ptr: WasmPtr<u8>,

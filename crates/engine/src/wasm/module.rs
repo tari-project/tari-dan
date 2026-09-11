@@ -68,7 +68,7 @@ impl WasmModule {
     }
 
     pub fn load_template_from_code(code: &[u8]) -> Result<LoadedTemplate, TemplateLoaderError> {
-        reject_start_section(code).map_err(WasmExecutionError::from)?;
+        validate_module_structure(code).map_err(WasmExecutionError::from)?;
         let engine = Self::create_engine();
         let module = wasmer::Module::new(&engine, code)?;
         Self::finalize_loaded_module(engine, module, code.len())
@@ -337,34 +337,30 @@ fn reject_disallowed_custom_sections(code: &[u8]) -> Result<(), WasmValidationEr
     Ok(())
 }
 
-/// The signature every template entrypoint has: `(call_info_ptr: i32, call_info_len: i32) -> i32`,
-/// matching [`MainFunction`].
-fn main_function_signature() -> FunctionType {
-    FunctionType::new([wasmer::Type::I32, wasmer::Type::I32], [wasmer::Type::I32])
-}
-
 /// Checks a module's exports against the template ABI, reading them off the module rather than an
-/// instance: the memory the engine reads and writes, the entrypoint it calls, and that the module
-/// exports no function beyond the three the ABI defines.
+/// instance: the memory the engine reads and writes, the three functions it calls and their
+/// signatures, and that the module exports no other function.
 fn validate_module_exports(module: &wasmer::Module, main_fn: &str) -> Result<(), WasmExecutionError> {
-    fn is_func_permitted(name: &str, main_fn: &str) -> bool {
-        name == main_fn || name == "tari_alloc" || name == "tari_free"
-    }
+    // `(call_info_ptr: i32, call_info_len: i32) -> i32`, matching [`MainFunction`].
+    let expected_main = FunctionType::new([wasmer::Type::I32, wasmer::Type::I32], [wasmer::Type::I32]);
+    // `(len: i32) -> i32` and `(ptr: i32)`, matching `WasmAllocFn` and `WasmFreeFn`.
+    let expected_alloc = FunctionType::new([wasmer::Type::I32], [wasmer::Type::I32]);
+    let expected_free = FunctionType::new([wasmer::Type::I32], []);
 
     let mut memory_export = false;
     let mut main_signature = None;
+    let mut alloc_signature = None;
+    let mut free_signature = None;
 
     for export in module.exports() {
         match export.ty() {
-            ExternType::Function(signature) => {
-                if !is_func_permitted(export.name(), main_fn) {
-                    return Err(WasmExecutionError::UnexpectedAbiFunction {
-                        name: export.name().to_string(),
-                    });
-                }
-                if export.name() == main_fn {
-                    main_signature = Some(signature.clone());
-                }
+            ExternType::Function(signature) => match export.name() {
+                name if name == main_fn => main_signature = Some(signature.clone()),
+                "tari_alloc" => alloc_signature = Some(signature.clone()),
+                "tari_free" => free_signature = Some(signature.clone()),
+                name => {
+                    return Err(WasmExecutionError::UnexpectedAbiFunction { name: name.to_string() });
+                },
             },
             ExternType::Memory(_) => {
                 memory_export |= export.name() == "memory";
@@ -380,34 +376,57 @@ fn validate_module_exports(module: &wasmer::Module, main_fn: &str) -> Result<(),
         .into());
     }
 
-    let expected = main_function_signature();
-    match main_signature {
+    validate_export_signature(main_fn, main_signature.as_ref(), &expected_main)?;
+    validate_export_signature("tari_alloc", alloc_signature.as_ref(), &expected_alloc)?;
+    validate_export_signature("tari_free", free_signature.as_ref(), &expected_free)?;
+
+    Ok(())
+}
+
+/// The engine calls each ABI function by name and by type, so a module that exports one under
+/// another signature — or not at all — is refused at admission rather than on its first call.
+fn validate_export_signature(
+    name: &str,
+    signature: Option<&FunctionType>,
+    expected: &FunctionType,
+) -> Result<(), WasmValidationError> {
+    match signature {
         Some(signature) if signature == expected => Ok(()),
         Some(signature) => Err(WasmValidationError::InvalidExportSignature {
-            name: main_fn.to_string(),
+            name: name.to_string(),
             signature: signature.to_string(),
             expected: expected.to_string(),
-        }
-        .into()),
-        None => Err(WasmValidationError::MissingExport {
-            name: main_fn.to_string(),
-        }
-        .into()),
+        }),
+        None => Err(WasmValidationError::MissingExport { name: name.to_string() }),
     }
 }
 
-/// Rejects a module that declares a start function.
+/// Checks what only the module bytes show: that the module declares no start function and no more
+/// tables than the limit.
 ///
 /// A start function runs on every instantiation, before the engine has installed this call's
 /// metering allowance and outside any invocation it could attribute effects to. Templates have no
 /// use for one: the engine only ever enters a template through its `<name>_main` export.
-fn reject_start_section(code: &[u8]) -> Result<(), WasmValidationError> {
+///
+/// Each table's element count is bounded by the tunables, which see one table at a time; the number
+/// of tables is what bounds the storage all of them together claim at instantiation.
+fn validate_module_structure(code: &[u8]) -> Result<(), WasmValidationError> {
     for payload in Parser::new(0).parse_all(code) {
         // Malformed wasm: stop and let the cranelift compile in
         // `load_template_from_code` report the canonical CompileError.
         let Ok(payload) = payload else { break };
-        if matches!(payload, Payload::StartSection { .. }) {
-            return Err(WasmValidationError::StartSectionNotAllowed);
+        match payload {
+            Payload::StartSection { .. } => return Err(WasmValidationError::StartSectionNotAllowed),
+            Payload::TableSection(reader) => {
+                let count = reader.count() as usize;
+                if count > limits::WASM_LIMITS.max_tables {
+                    return Err(WasmValidationError::TooManyTables {
+                        count,
+                        max_tables: limits::WASM_LIMITS.max_tables,
+                    });
+                }
+            },
+            _ => {},
         }
     }
     Ok(())

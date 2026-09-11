@@ -33,9 +33,10 @@ fn wat_bytes(bytes: &[u8]) -> String {
 /// A module carrying everything the loader requires of a template — the ABI section, the memory,
 /// the entrypoint and the allocator pair — with `parts` splicing in whatever the test is about.
 ///
-/// `tari_alloc` hands out one fixed region: the engine stages a single `CallInfo` per call, and
-/// nothing here allocates again. `Buggy_main` returns a pointer to the `[u32 alloc_len][payload]`
-/// pair at offset 16, whose payload is the encoded unit the declared return type expects.
+/// `tari_alloc` hands out one fixed region, at offset 1024: the engine stages a single `CallInfo`
+/// per call, and nothing here allocates again. `Buggy_main` returns a pointer to the
+/// `[u32 alloc_len][payload]` pair at offset 16 — clear of that region — whose payload is the
+/// encoded unit the declared return type expects.
 fn template_module(parts: &str) -> Vec<u8> {
     let wat = format!(
         r#"
@@ -214,6 +215,49 @@ fn rejects_a_malformed_template_def_section() {
     .unwrap();
     let err = validation_error(&code);
     assert!(err.contains("decode template definition"), "unexpected error: {err}");
+}
+
+#[test]
+fn rejects_more_tables_than_the_limit() {
+    let tables = "(table 1 funcref)\n".repeat(limits::WASM_LIMITS.max_tables + 1);
+    let code = template_module(&format!(
+        r#"
+        {ABI_EXPORTS}
+        {tables}
+        "#
+    ));
+
+    let err = validation_error(&code);
+    assert!(err.contains("tables"), "unexpected error: {err}");
+}
+
+/// The engine calls `tari_alloc` and `tari_free` on every invocation, so a module that exports
+/// neither — or exports them under another signature — is refused at admission.
+#[test]
+fn rejects_a_missing_or_mistyped_allocator() {
+    let code = wat::parse_str(format!(
+        r#"
+        (module
+          (memory (export "memory") 1)
+          (func (export "Buggy_main") (param i32 i32) (result i32) (i32.const 20))
+          (@custom "tari_tdef" "{}")
+        )
+        "#,
+        wat_bytes(TEMPLATE_DEF)
+    ))
+    .unwrap();
+    let err = validation_error(&code);
+    assert!(err.contains("tari_alloc"), "unexpected error: {err}");
+
+    let code = template_module(
+        r#"
+        (func (export "tari_alloc") (param i64) (result i32) (i32.const 1024))
+        (func (export "tari_free") (param i32))
+        (func (export "Buggy_main") (param i32 i32) (result i32) (i32.const 20))
+        "#,
+    );
+    let err = validation_error(&code);
+    assert!(err.contains("tari_alloc"), "unexpected error: {err}");
 }
 
 #[test]

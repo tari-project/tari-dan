@@ -132,6 +132,8 @@ pub enum WasmValidationError {
     DisallowedCustomSection { name: String },
     #[error("Module declares a start function, which templates may not do")]
     StartSectionNotAllowed,
+    #[error("Module declares {count} tables, the maximum is {max_tables}")]
+    TooManyTables { count: usize, max_tables: usize },
     #[error("Module does not export `{name}`")]
     MissingExport { name: String },
     #[error("Export `{name}` has signature `{signature}`, expected `{expected}`")]

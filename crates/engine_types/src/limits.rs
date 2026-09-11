@@ -10,6 +10,11 @@ pub struct WasmLimits {
     pub max_functions: usize,
     /// Maximum memory size in pages (64KiB each)
     pub max_memory_pages: usize,
+    /// Maximum number of tables a module may declare. Each table's elements are bounded by
+    /// [`WasmLimits::max_table_elements`], so together the two bound the host storage a module's
+    /// tables can claim at instantiation. `rustc`'s wasm32 output declares one table, its
+    /// `__indirect_function_table`.
+    pub max_tables: usize,
     /// Maximum number of elements in a table. Every table a module declares is capped at this many
     /// entries, whether or not the module declares a maximum of its own: a table's storage is a
     /// host-side `Vec` of function references, so an uncapped `table.grow` is a host allocation
@@ -23,6 +28,7 @@ pub const WASM_LIMITS: WasmLimits = WasmLimits {
     max_function_name_length: 256,
     max_functions: 8192,
     max_memory_pages: 32, // ~2MiB = 32 * 64KiB
+    max_tables: 4,
     max_table_elements: 16_384,
 };
 
@@ -175,6 +181,10 @@ pub struct EngineLimits {
     pub max_internal_call_size: usize,
     pub max_logs: usize,
     pub max_log_size_bytes: usize,
+    /// Maximum number of `tari_debug` messages one template instance may write. Debug output is
+    /// validator I/O that never reaches the transaction result, so it carries its own budget rather
+    /// than drawing on [`EngineLimits::max_logs`].
+    pub max_debug_messages: usize,
     pub max_events: usize,
     pub max_panic_message_size: usize,
     pub max_template_binary_size_bytes: usize,
@@ -190,6 +200,7 @@ pub const ENGINE_LIMITS: EngineLimits = EngineLimits {
     max_internal_call_size: 1024 * 1024, // 1 MiB
     max_logs: 256,
     max_log_size_bytes: 32 * 1024, // 32 KiB
+    max_debug_messages: 256,
     max_events: 256,
     max_panic_message_size: 32 * 1024,              // 32 KiB
     max_template_binary_size_bytes: 3 * 512 * 1024, // 1.5 MiB

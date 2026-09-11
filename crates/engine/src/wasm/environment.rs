@@ -77,10 +77,9 @@ impl<T> WasmEnv<T> {
     /// may be written.
     ///
     /// Debug output is validator I/O a template pays almost nothing for — one host call, whatever
-    /// it writes — and it never reaches the transaction result, so it is budgeted here rather than
-    /// against the transaction's logs.
+    /// it writes — and it never reaches the transaction result, so it carries its own budget.
     pub(super) fn allow_debug_message(&mut self) -> bool {
-        if self.debug_messages_written >= limits::ENGINE_LIMITS.max_logs {
+        if self.debug_messages_written >= limits::ENGINE_LIMITS.max_debug_messages {
             return false;
         }
         self.debug_messages_written += 1;
