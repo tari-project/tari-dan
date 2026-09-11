@@ -14,11 +14,7 @@ use tari_template_lib::{
     },
 };
 
-use crate::runtime::{
-    AuthorizationScope,
-    RuntimeError,
-    locking::{LockError, LockedSubstate},
-};
+use crate::runtime::{AuthorizationScope, RuntimeError, locking::LockedSubstate};
 
 #[derive(Debug, Clone)]
 pub struct CallScope {
@@ -76,10 +72,6 @@ impl CallScope {
         self.inherited_proofs.extend(scope.proofs().iter().copied());
         self.proof_scope.extend(scope.proofs().iter().copied());
         self.auth_scope = scope;
-    }
-
-    pub fn is_lock_in_scope(&self, lock_id: LockId) -> bool {
-        self.lock_scope.contains(&lock_id)
     }
 
     pub fn lock_scope(&self) -> &IndexSet<LockId> {
@@ -153,11 +145,11 @@ impl CallScope {
         self.auth_scope.remove_proof(proof_id);
     }
 
-    pub fn remove_lock_from_scope(&mut self, lock_id: LockId) -> Result<(), RuntimeError> {
-        if !self.lock_scope.swap_remove(&lock_id) {
-            return Err(RuntimeError::LockError(LockError::LockIdNotFound { lock_id }));
-        }
-        Ok(())
+    /// Releases `lock_id` from this frame, reporting whether the frame held it. A frame may release a lock its
+    /// caller took — a component lock is taken by the caller and released when the frame it was pushed into is
+    /// popped — so the caller of this searches the frame stack rather than assuming the current frame.
+    pub fn remove_lock_from_scope(&mut self, lock_id: LockId) -> bool {
+        self.lock_scope.swap_remove(&lock_id)
     }
 
     pub fn get_current_component_lock(&self) -> Option<&LockedSubstate> {

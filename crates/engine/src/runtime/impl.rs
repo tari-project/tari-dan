@@ -3450,9 +3450,7 @@ where
 
             WorkspaceAction::DropAllProofs => {
                 args.assert_no_args("WorkspaceAction::DropAllProofs")?;
-                let proofs = self
-                    .tracker
-                    .with_workspace_mut(|workspace| workspace.drain_all_proofs());
+                let proofs = self.tracker.with_workspace_mut(|workspace| workspace.take_all_proofs());
 
                 self.tracker.write_with(|state| {
                     for proof_id in proofs {
@@ -3475,7 +3473,7 @@ where
                 args.assert_no_args("WorkspaceAction::DropAll")?;
                 let proofs = self.tracker.with_workspace_mut(|workspace| {
                     workspace.clear_items();
-                    workspace.drain_all_proofs()
+                    workspace.take_all_proofs()
                 });
 
                 self.tracker.write_with(|state| {
