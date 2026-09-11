@@ -14,6 +14,9 @@ pub enum HotstuffEvent {
     },
     #[error("Consensus failure: {message}")]
     Failure { message: String },
+    /// This node is behind its peers and is leaving consensus to sync. A designed transition, not a failure.
+    #[error("Sync required: {message}")]
+    SyncRequired { message: String },
     #[error("Leader timeout: height {height}")]
     LeaderTimeout { height: NodeHeight },
     #[error("Block {block} has been parked ({num_missing_txs} missing, {num_awaiting_txs} awaiting execution)")]

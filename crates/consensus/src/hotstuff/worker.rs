@@ -835,11 +835,18 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     }
 
     async fn on_failure(&mut self, context: &str, err: &HotStuffError) {
-        self.hooks.on_error(err);
-        self.publish_event(HotstuffEvent::Failure {
-            message: err.to_string(),
-        });
-        error!(target: LOG_TARGET, "Error ({}): {}", context, err);
+        if err.is_sync_required() {
+            debug!(target: LOG_TARGET, "⚠️ Behind peers ({}): {}", context, err);
+            self.publish_event(HotstuffEvent::SyncRequired {
+                message: err.to_string(),
+            });
+        } else {
+            self.hooks.on_error(err);
+            self.publish_event(HotstuffEvent::Failure {
+                message: err.to_string(),
+            });
+            error!(target: LOG_TARGET, "Error ({}): {}", context, err);
+        }
         if let Err(e) = self.pacemaker.stop().await {
             error!(target: LOG_TARGET, "Error while stopping pacemaker: {}", e);
         }

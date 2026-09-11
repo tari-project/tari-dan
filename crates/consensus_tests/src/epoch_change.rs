@@ -484,7 +484,7 @@ async fn wait_for_all_validators_at_epoch(test: &mut Test, epoch: Epoch, timeout
 ///    base-layer scanner caught up). The next Epoch(2) Proposal that the network delivers to it goes through
 ///    `MessageBuffer::next`, where the probe verifies the embedded QC against the Epoch(2) committee and raises
 ///    `HotStuffError::NeedsSync`.
-/// 5. We assert on the resulting `HotstuffEvent::Failure` event — its message identifies the QC-based reason. No
+/// 5. We assert on the resulting `HotstuffEvent::SyncRequired` event — its message identifies the QC-based reason. No
 ///    time-based sleeps: the assertion fires deterministically when an authenticated Epoch(2) QC reaches the validator.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn epoch_change_no_vote_wedge_escalates_on_future_qc() {
@@ -561,7 +561,7 @@ async fn epoch_change_no_vote_wedge_escalates_on_future_qc() {
     log::info!("✅ wedge reproduced: validator {lagging_addr} stuck on Epoch(1) while peers committed Epoch(2)");
 
     // Subscribe to validator "1"'s event stream BEFORE clearing the oracle cap and going
-    // online, so we don't miss the Failure event the worker publishes when it raises
+    // online, so we don't miss the SyncRequired event the worker publishes when it raises
     // `HotStuffError::NeedsSync`.
     let mut events = lagged.events.resubscribe();
 
@@ -578,12 +578,12 @@ async fn epoch_change_no_vote_wedge_escalates_on_future_qc() {
         test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
     }
 
-    // Wait for the Failure event whose message identifies the QC-based escalation. This is
+    // Wait for the SyncRequired event whose message identifies the QC-based escalation. This is
     // deterministic — fires on the first authenticated Epoch(2) QC that arrives.
     let outcome = tokio::time::timeout(Duration::from_secs(20), async {
         loop {
             match events.recv().await {
-                Ok(HotstuffEvent::Failure { message }) if message.contains("Received valid 2f+1 QC") => {
+                Ok(HotstuffEvent::SyncRequired { message }) if message.contains("Received valid 2f+1 QC") => {
                     return message;
                 },
                 Ok(_) => continue,
@@ -692,7 +692,7 @@ async fn epoch_change_multi_epoch_lag_escalates_on_future_qc() {
     let outcome = tokio::time::timeout(Duration::from_secs(20), async {
         loop {
             match events.recv().await {
-                Ok(HotstuffEvent::Failure { message }) if message.contains("Received valid 2f+1 QC") => {
+                Ok(HotstuffEvent::SyncRequired { message }) if message.contains("Received valid 2f+1 QC") => {
                     return message;
                 },
                 Ok(_) => continue,
