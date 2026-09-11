@@ -10,6 +10,11 @@ pub struct WasmLimits {
     pub max_functions: usize,
     /// Maximum memory size in pages (64KiB each)
     pub max_memory_pages: usize,
+    /// Maximum number of globals a module may declare. Each one occupies a slot in the instance's
+    /// VM context, which is built at every instantiation, while declaring one costs a handful of
+    /// bytes — so the count is bounded rather than left to the binary size. `rustc`'s wasm32 output
+    /// declares a handful, its stack pointer among them.
+    pub max_globals: usize,
     /// Maximum number of tables a module may declare. Each table's elements are bounded by
     /// [`WasmLimits::max_table_elements`], so together the two bound the host storage a module's
     /// tables can claim at instantiation. `rustc`'s wasm32 output declares one table, its
@@ -28,6 +33,7 @@ pub const WASM_LIMITS: WasmLimits = WasmLimits {
     max_function_name_length: 256,
     max_functions: 8192,
     max_memory_pages: 32, // ~2MiB = 32 * 64KiB
+    max_globals: 1024,
     max_tables: 4,
     max_table_elements: 16_384,
 };

@@ -401,15 +401,17 @@ fn validate_export_signature(
     }
 }
 
-/// Checks what only the module bytes show: that the module declares no start function and no more
-/// tables than the limit.
+/// Checks what only the module bytes show: that the module declares no start function, and no more
+/// tables or globals than the limits.
 ///
 /// A start function runs on every instantiation, before the engine has installed this call's
 /// metering allowance and outside any invocation it could attribute effects to. Templates have no
 /// use for one: the engine only ever enters a template through its `<name>_main` export.
 ///
-/// Each table's element count is bounded by the tunables, which see one table at a time; the number
-/// of tables is what bounds the storage all of them together claim at instantiation.
+/// Tables and globals are both host storage built at every instantiation and claimed by a
+/// declaration far smaller than what it claims. Each table's element count is bounded by the
+/// tunables, which see one table at a time, so the number of tables is what bounds the storage all
+/// of them together claim; a global's slot is fixed, so its count is the whole bound.
 fn validate_module_structure(code: &[u8]) -> Result<(), WasmValidationError> {
     for payload in Parser::new(0).parse_all(code) {
         // Malformed wasm: stop and let the cranelift compile in
@@ -423,6 +425,15 @@ fn validate_module_structure(code: &[u8]) -> Result<(), WasmValidationError> {
                     return Err(WasmValidationError::TooManyTables {
                         count,
                         max_tables: limits::WASM_LIMITS.max_tables,
+                    });
+                }
+            },
+            Payload::GlobalSection(reader) => {
+                let count = reader.count() as usize;
+                if count > limits::WASM_LIMITS.max_globals {
+                    return Err(WasmValidationError::TooManyGlobals {
+                        count,
+                        max_globals: limits::WASM_LIMITS.max_globals,
                     });
                 }
             },

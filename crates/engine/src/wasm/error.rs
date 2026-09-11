@@ -134,6 +134,8 @@ pub enum WasmValidationError {
     StartSectionNotAllowed,
     #[error("Module declares {count} tables, the maximum is {max_tables}")]
     TooManyTables { count: usize, max_tables: usize },
+    #[error("Module declares {count} globals, the maximum is {max_globals}")]
+    TooManyGlobals { count: usize, max_globals: usize },
     #[error("Module does not export `{name}`")]
     MissingExport { name: String },
     #[error("Export `{name}` has signature `{signature}`, expected `{expected}`")]

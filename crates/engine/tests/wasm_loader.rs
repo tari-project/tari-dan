@@ -231,6 +231,20 @@ fn rejects_more_tables_than_the_limit() {
     assert!(err.contains("tables"), "unexpected error: {err}");
 }
 
+#[test]
+fn rejects_more_globals_than_the_limit() {
+    let globals = "(global i32 (i32.const 0))\n".repeat(limits::WASM_LIMITS.max_globals + 1);
+    let code = template_module(&format!(
+        r#"
+        {ABI_EXPORTS}
+        {globals}
+        "#
+    ));
+
+    let err = validation_error(&code);
+    assert!(err.contains("globals"), "unexpected error: {err}");
+}
+
 /// The engine calls `tari_alloc` and `tari_free` on every invocation, so a module that exports
 /// neither — or exports them under another signature — is refused at admission.
 #[test]
