@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.1.4",
-    "@astrojs/markdown-remark": "^7.3.1",
     "@astrojs/starlight": "^0.41.3",
     "astro": "^7.3.2",
     "astro-skills": "^0.1.1",
