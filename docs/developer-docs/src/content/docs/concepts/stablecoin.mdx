@@ -1,0 +1,411 @@
+---
+title: Stablecoins
+description: How to build a stablecoin on Tari Ootle from its native primitives — the resource type to choose, how issuance and redemption work, and exactly where the privacy holds and where it leaks.
+---
+
+import { basePath } from '../../../helpers/path';
+import { Aside } from "@astrojs/starlight/components";
+
+### Covered in this page
+
+This page assembles a stablecoin out of primitives Ootle already has:
+- Why a stablecoin is a **resource plus an issuance component**, not a new protocol feature.
+- The design tension between **auditable supply** and **private transfers**, and how the resource model resolves it.
+- Choosing a **resource type** — public, confidential, or stealth — and what each choice costs.
+- The **issue → transfer → redeem** lifecycle, and the proof each step needs.
+- The two auditability knobs: **supply tracking** and **view keys**.
+- A precise answer to *where the privacy is, and where it leaks*.
+
+<Aside type="note">
+Everything on this page is derived from code in this repository. It describes a **design pattern**, not
+any particular deployed token. Third-party stablecoin projects are external work: they are linked as
+background only, and are never treated as authoritative for how Ootle behaves.
+</Aside>
+
+---
+
+## A stablecoin is a resource, not a primitive
+
+There is no `stablecoin` module in Ootle, and there does not need to be. A stablecoin is a
+**resource** — the definition of an asset — plus a component that holds the authority to create and
+destroy its units. Everything a stablecoin *is* on Ootle is expressed in three decisions:
+
+1. **Which `ResourceType`** the units use — this is what fixes the privacy properties.
+2. **Who may mint and burn** — an `AccessRule` on the resource and on the issuing component.
+3. **Who may see what** — the resource's *view key*, if any, and where the flow is forced to reveal.
+
+The peg itself — what the token is worth, and which reserves stand behind it — is **not modelled by
+the protocol**. Ootle stores the resource and its supply; it holds no price feed, and it cannot
+attest that a reserve exists. Backing is an issuer-side claim, published off-protocol.
+
+---
+
+## The design tension
+
+A stablecoin has two requirements that pull in opposite directions:
+
+| Requirement | Who needs it | What it wants |
+|---|---|---|
+| **Transactional privacy** | Holders | Balances and transfers should not be public. |
+| **Provable supply** | The issuer | The total number of units in circulation should be checkable. |
+
+Ootle resolves the conflict by separating them in time and in place: **transfers are private; the
+supply boundary is not.**
+
+That is not a convention layered on top — it falls out of how supply is tracked. A resource keeps its
+`total_supply` in its **resource substate** and increments or decrements it as value crosses the
+boundary. Because stealth outputs commit to their amounts, the engine cannot reconstruct supply by
+summing balances — so the value entering or leaving circulation has to be visible *at the moment it
+crosses*. Inside the boundary, nothing is.
+
+---
+
+## Choosing the resource type
+
+The `ResourceType` is the single most consequential choice. It is set when the resource is created
+and it does not change.
+
+| Type | Amounts hidden | Owners hidden | Supply boundary | Fit for a stablecoin |
+|---|---|---|---|---|
+| **Public Fungible** | No | No | Trivially auditable | A deposit receipt or a fully transparent instrument. Offers no privacy at all. |
+| **Confidential** | Yes | No | Revealed at mint/burn | Balances hidden, but funds sit in **named** vaults — an observer sees *which* account moved, just not *how much*. |
+| **Stealth** | Yes | Yes | Revealed at mint/burn | The payments-grade choice: funds are UTXOs with one-time addresses, so neither amount nor counterparty is readable. |
+
+A payments stablecoin wants **stealth**: privacy fails the moment an observer can link a transfer to a
+person, and a confidential vault leaks exactly that. A stablecoin meant to be transparent by design —
+a regulated deposit token with published balances — can use a public fungible resource and skip the
+cryptography entirely. See <a href={basePath("/concepts/templates-and-assets/")}>Templates and
+Assets</a> for the full comparison of the four types.
+
+---
+
+## The architecture
+
+Four parties, and the authority never travels with the funds:
+
+<svg viewBox="0 0 900 476" xmlns="http://www.w3.org/2000/svg" style="max-width:900px;width:100%;font-family:system-ui,sans-serif">
+  <rect width="900" height="476" rx="12" fill="#0d1117"/>
+  <text x="450" y="34" text-anchor="middle" fill="#e6edf3" font-size="16" font-weight="bold">Anatomy of a stablecoin on Ootle</text>
+
+  {/* Issuer component */}
+  <rect x="25" y="58" width="250" height="150" rx="8" fill="#161b22" stroke="#f0883e" stroke-width="1"/>
+  <text x="150" y="84" text-anchor="middle" fill="#f0883e" font-size="13" font-weight="bold">Issuer component</text>
+  <text x="41" y="112" fill="#8b949e" font-size="11">mint() &#8212; gated by an AccessRule</text>
+  <text x="41" y="134" fill="#8b949e" font-size="11">burn() &#8212; gated by an AccessRule</text>
+  <text x="41" y="156" fill="#8b949e" font-size="11">view key fixed at resource creation</text>
+  <text x="41" y="184" fill="#8b949e" font-size="11">Holds authority, not funds.</text>
+
+  {/* Resource */}
+  <rect x="320" y="58" width="250" height="150" rx="8" fill="#161b22" stroke="#388bfd" stroke-width="1"/>
+  <text x="445" y="84" text-anchor="middle" fill="#388bfd" font-size="13" font-weight="bold">Stealth resource: USDX</text>
+  <text x="336" y="112" fill="#8b949e" font-size="11">ResourceType::Stealth</text>
+  <text x="336" y="134" fill="#8b949e" font-size="11">divisibility 6</text>
+  <text x="336" y="156" fill="#8b949e" font-size="11">total_supply (tracked)</text>
+  <text x="336" y="178" fill="#8b949e" font-size="11">view_key (optional)</text>
+
+  {/* Auditor */}
+  <rect x="615" y="58" width="250" height="150" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="1"/>
+  <text x="740" y="84" text-anchor="middle" fill="#3fb950" font-size="13" font-weight="bold">Auditor / regulator</text>
+  <text x="631" y="112" fill="#8b949e" font-size="11">holds the view private key p</text>
+  <text x="631" y="134" fill="#8b949e" font-size="11">recovers amounts: V = E &#8722; pR</text>
+  <text x="631" y="156" fill="#8b949e" font-size="11">cannot spend (no spend key)</text>
+  <text x="631" y="178" fill="#8b949e" font-size="11">reconciles outputs vs supply</text>
+
+  {/* Arrows */}
+  <defs><marker id="sc-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#484f58"/></marker></defs>
+  <line x1="275" y1="133" x2="316" y2="133" stroke="#484f58" stroke-width="2" marker-end="url(#sc-arrow)"/>
+  <text x="295" y="124" text-anchor="middle" fill="#8b949e" font-size="9">rules</text>
+  <line x1="570" y1="133" x2="611" y2="133" stroke="#484f58" stroke-width="2" marker-end="url(#sc-arrow)"/>
+  <text x="590" y="124" text-anchor="middle" fill="#8b949e" font-size="9">audits</text>
+
+  {/* Holders */}
+  <rect x="25" y="240" width="840" height="176" rx="10" fill="#10151c" stroke="#30363d" stroke-width="1"/>
+  <text x="445" y="264" text-anchor="middle" fill="#8b949e" font-size="12" font-weight="bold">HOLDERS</text>
+
+  <rect x="45" y="282" width="230" height="80" rx="6" fill="#1c2333" stroke="#388bfd" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="59" y="304" fill="#388bfd" font-size="12" font-weight="bold">Holder A</text>
+  <text x="59" y="324" fill="#8b949e" font-size="11">stealth UTXO</text>
+  <text x="59" y="344" fill="#8b949e" font-size="11">C = mask&#183;G + value&#183;H</text>
+
+  <rect x="320" y="282" width="230" height="80" rx="6" fill="#1c2333" stroke="#388bfd" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="334" y="304" fill="#388bfd" font-size="12" font-weight="bold">Holder B</text>
+  <text x="334" y="324" fill="#8b949e" font-size="11">stealth UTXO</text>
+  <text x="334" y="344" fill="#8b949e" font-size="11">one-time address</text>
+
+  <rect x="595" y="282" width="250" height="80" rx="6" fill="#12171f" stroke="#3fb950" stroke-width="1" stroke-dasharray="3,3"/>
+  <text x="609" y="304" fill="#3fb950" font-size="12" font-weight="bold">Every output carries</text>
+  <text x="609" y="324" fill="#8b949e" font-size="11">a ViewableBalanceProof</text>
+  <text x="609" y="344" fill="#8b949e" font-size="11">that the auditor can verify</text>
+
+  <line x1="275" y1="322" x2="316" y2="322" stroke="#484f58" stroke-width="2" marker-end="url(#sc-arrow)"/>
+
+  <text x="445" y="392" text-anchor="middle" fill="#8b949e" font-size="11">Holder-to-holder transfers are stealth transfers: amounts and owners are both hidden.</text>
+
+  {/* Legend */}
+  <rect x="25" y="428" width="840" height="32" rx="6" fill="#161b22"/>
+  <rect x="41" y="437" width="12" height="12" rx="2" fill="none" stroke="#f0883e" stroke-width="1"/>
+  <text x="59" y="448" fill="#8b949e" font-size="11">Issuer authority</text>
+  <rect x="205" y="437" width="12" height="12" rx="2" fill="none" stroke="#388bfd" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="223" y="448" fill="#8b949e" font-size="11">Hidden value (stealth)</text>
+  <rect x="415" y="437" width="12" height="12" rx="2" fill="none" stroke="#3fb950" stroke-width="1"/>
+  <text x="433" y="448" fill="#8b949e" font-size="11">Selective disclosure</text>
+</svg>
+
+- The **issuer component** holds mint and burn authority. Because that authority is an `AccessRule`, it
+  can be a single key, a multisig, or a badge held by another component — the pattern scales from one
+  operator to a governed issuer without changing the resource. See
+  <a href={basePath("/guides/authorization-and-access/")}>Authorization and Access</a>.
+- The **resource substate** is the asset definition plus the tracked `total_supply`. It names no
+  owner; ownership lives in the UTXOs.
+- **Holders** hold stealth UTXOs. There is no registry that says who holds what.
+- The **auditor** holds a view key: enough to decrypt amounts, not enough to spend.
+
+---
+
+## Issuance
+
+Creating supply is the one step that must be public. The builder wires the authority together:
+
+```rust
+// crates/template_lib/src/resource/builder/stealth.rs
+let initial_bucket = ResourceBuilder::stealth()
+    .with_token_symbol("USDX")
+    .with_divisibility(6)
+    // Only whoever satisfies this rule may ever create supply.
+    .mintable(rule!(resource(mint_badge)), LOCKED)
+    // Give the auditor the ability to decrypt amounts, and nothing else.
+    .with_view_key(auditor_public_key)
+    // Mint is revealed: total_supply is updated in the clear.
+    .initial_supply(1_000_000u64);
+```
+
+`initial_supply` returns a **`Bucket`** carrying a *cleartext* amount, and the engine increments
+`total_supply` by that amount. The funds are public at this instant. They become private the moment
+the bucket is converted into stealth UTXOs:
+
+```rust
+// Moving the minted supply out of the clear. Any revealed remainder comes back as a bucket.
+let revealed_remainder = initial_bucket.stealth_transfer(mint_statement);
+```
+
+After that call the supply lives as stealth UTXOs, and the amounts are commitments.
+
+<Aside type="tip">
+The mint is deliberately the leaky step. It is also the auditing hook: because the amount is revealed
+exactly once, at the boundary, the issuer and the auditor can reconcile *what entered circulation*
+without ever seeing *where it went*. See
+<a href={basePath("/concepts/privacy/")}>Privacy</a> for why a commitment cannot be summed back into a
+supply figure.
+</Aside>
+
+---
+
+## Holder-to-holder transfers
+
+This is where the privacy lives, and it is the ordinary stealth transfer:
+
+- The sender spends one or more stealth UTXOs and creates new ones.
+- The engine verifies the statement-level **balance proof** $\sum \text{in} = \sum \text{out}$ over the
+  commitments, so value is conserved.
+- **Range proofs** on the outputs ensure no single commitment hides a value outside
+  `[minimum_value_promise, 2^64 − 1]`, which is what stops a spender from committing to a negative
+  amount.
+
+Neither the amounts nor the parties are readable on-chain. The mechanics — condition trees, covenants,
+and the runnable example — are in
+<a href={basePath("/guides/stealth-resources/")}>Stealth Transfers</a>.
+
+---
+
+## Redemption
+
+Redeeming has to decrement `total_supply`, and to do that the engine must learn the value being
+removed. For a tracked stealth resource, burning a UTXO therefore requires a **`CommitmentValueProof`**
+per commitment — a proof that reveals the *value* and nothing else:
+
+```rust
+// crates/template_lib/src/models/bucket.rs
+pub fn burn_with_value_proofs(
+    &self,
+    value_proofs: BTreeMap<PedersenCommitmentBytes, CommitmentValueProof>,
+) { /* ... */ }
+```
+
+Constructing that proof requires either the commitment's **mask** (which belongs to the UTXO's owner)
+or the **secret view key** (which belongs to the auditor). Redemption is therefore gated on one of
+those two parties — it is not something an arbitrary third party can trigger.
+
+<Aside type="caution">
+The burn reveals a *value*, not a *holder*. An observer learns that `n` units left circulation, not
+who redeemed them. That is the intended shape: supply is accountable, the account is not.
+</Aside>
+
+---
+
+## The two auditability knobs
+
+### Supply tracking
+
+By default a resource tracks its total supply, which is what forces the revealed boundary. A token that
+does not need a supply figure can opt out:
+
+```rust
+ResourceBuilder::stealth()
+    .with_token_symbol("USDX")
+    .disable_total_supply_tracking();
+```
+
+With tracking off, burns need no value proof and burnt amounts stay hidden — at the cost of there
+being no on-chain supply number to point at. This single call is the trade-off between auditability
+and privacy distilled to one line.
+
+<Aside type="note">
+The native token is the special case that shows the rule from the other side: the genesis TARI resource
+disables total-supply tracking *and* denies `Burn`, which is what lets its burn-to-mint bridge mint
+UTXOs without a matching supply update. See
+<a href={basePath("/concepts/tokenomics/")}>Tokenomics</a>.
+</Aside>
+
+### View keys
+
+A view key turns "private" into "private to the public, transparent to whoever you designate." Every
+output of a view-keyed resource carries a `ViewableBalanceProof` and an ElGamal ciphertext; the holder
+of the view private key recovers each amount by
+
+$$V = E - p \cdot R$$
+
+and reverse-looks-up the value in the small-value table. The auditor can then sum the outputs and
+compare against the tracked `total_supply`. **View is separable from control**: the auditor can verify
+every amount and still cannot move a single unit. That split is the compliance story, and it is a
+first-class property of the primitive rather than a bolt-on.
+
+---
+
+## Where the privacy holds, and where it leaks
+
+<svg viewBox="0 0 900 344" xmlns="http://www.w3.org/2000/svg" style="max-width:900px;width:100%;font-family:system-ui,sans-serif">
+  <rect width="900" height="344" rx="12" fill="#0d1117"/>
+  <text x="450" y="34" text-anchor="middle" fill="#e6edf3" font-size="16" font-weight="bold">The privacy boundary of a stablecoin</text>
+
+  {/* Mint */}
+  <rect x="30" y="58" width="250" height="176" rx="8" fill="#161b22" stroke="#f0883e" stroke-width="1"/>
+  <text x="155" y="84" text-anchor="middle" fill="#f0883e" font-size="13" font-weight="bold">MINT &#8212; public</text>
+  <text x="46" y="114" fill="#8b949e" font-size="11">the amount is revealed</text>
+  <text x="46" y="136" fill="#8b949e" font-size="11">+ total_supply</text>
+  <text x="46" y="158" fill="#8b949e" font-size="11">a Bucket comes back</text>
+  <text x="46" y="180" fill="#8b949e" font-size="11">in the clear</text>
+  <text x="46" y="208" fill="#8b949e" font-size="11">supply is stored, not summed</text>
+
+  {/* Transfers */}
+  <rect x="325" y="58" width="250" height="176" rx="8" fill="#1c2333" stroke="#388bfd" stroke-width="1" stroke-dasharray="5,3"/>
+  <text x="450" y="84" text-anchor="middle" fill="#388bfd" font-size="13" font-weight="bold">TRANSFERS &#8212; private</text>
+  <text x="341" y="114" fill="#8b949e" font-size="11">stealth UTXOs</text>
+  <text x="341" y="136" fill="#8b949e" font-size="11">amounts hidden</text>
+  <text x="341" y="158" fill="#8b949e" font-size="11">owners hidden</text>
+  <text x="341" y="180" fill="#8b949e" font-size="11">balance proof &#931;in = &#931;out</text>
+  <text x="341" y="208" fill="#8b949e" font-size="11">range proofs on every output</text>
+
+  {/* Redeem */}
+  <rect x="620" y="58" width="250" height="176" rx="8" fill="#161b22" stroke="#f0883e" stroke-width="1"/>
+  <text x="745" y="84" text-anchor="middle" fill="#f0883e" font-size="13" font-weight="bold">REDEEM &#8212; revealed</text>
+  <text x="636" y="114" fill="#8b949e" font-size="11">CommitmentValueProof</text>
+  <text x="636" y="136" fill="#8b949e" font-size="11">&#8722; total_supply</text>
+  <text x="636" y="158" fill="#8b949e" font-size="11">needs the mask (owner)</text>
+  <text x="636" y="180" fill="#8b949e" font-size="11">or the view key (auditor)</text>
+  <text x="636" y="208" fill="#8b949e" font-size="11">or track no supply at all</text>
+
+  {/* Flow arrows */}
+  <defs><marker id="sc-arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#484f58"/></marker></defs>
+  <line x1="280" y1="146" x2="321" y2="146" stroke="#484f58" stroke-width="2" marker-end="url(#sc-arrow2)"/>
+  <line x1="575" y1="146" x2="616" y2="146" stroke="#484f58" stroke-width="2" marker-end="url(#sc-arrow2)"/>
+
+  <text x="450" y="256" text-anchor="middle" fill="#8b949e" font-size="11">Value is revealed only where it crosses the supply boundary. Between those points it is a normal stealth resource.</text>
+
+  {/* Caveat */}
+  <rect x="30" y="272" width="840" height="56" rx="8" fill="#161b22" stroke="#f85149" stroke-width="1"/>
+  <text x="450" y="294" text-anchor="middle" fill="#f85149" font-size="12" font-weight="bold">Always revealed, in every case:</text>
+  <text x="450" y="314" text-anchor="middle" fill="#8b949e" font-size="11">the transaction fee, and any call to a component that checks the caller&#8217;s identity (it forces a signature).</text>
+</svg>
+
+Read the diagram as a boundary, not a label: **the asset type sets the ceiling, the workflow sets the
+floor.** A stealth stablecoin whose redemption path is a public component call is only as private as
+that call.
+
+**Hidden:**
+
+- Amounts, on every holder transfer.
+- Counterparties, because funds never sit in a named vault.
+
+**Revealed by design:**
+
+- Every **mint** and, unless tracking is disabled, every **burn** — the supply boundary.
+- Every **transaction fee** (fees must be paid in a known amount).
+
+**Leakage the workflow can cause:**
+
+- **Identity-linked calls.** Interacting with a component that authorizes on the caller's public key
+  attaches a signature to the transaction, linking it to you even when the outputs hide their
+  recipients.
+- **Value and timing correlation.** A revealed mint of `n` followed by a stealth transfer of
+  approximately `n` in the same block is a correlation an observer can make.
+- **Public-side hops.** Any step that routes funds through a public resource — a fee top-up, a swap
+  against a public pool — leaves a plaintext trace.
+
+The design rule that falls out of this: keep revealed amounts to the fee and the supply boundary,
+spend only stealth inputs, and route privileged operations through the issuer component rather than
+through public state.
+
+---
+
+## A reference lifecycle
+
+1. **Deploy.** The issuer component is published and holds the mint/burn badge; the stealth resource
+   is created with a view key and supply tracking on.
+2. **Issue.** `mint()` produces a revealed amount and increments `total_supply`; the bucket is
+   immediately converted to stealth UTXOs.
+3. **Circulate.** Holders transfer UTXOs privately. The chain sees commitments and proofs, never
+   amounts or identities.
+4. **Redeem.** A holder (or the auditor, with the view key) burns a UTXO against a
+   `CommitmentValueProof`; `total_supply` decrements and the value is disclosed once.
+5. **Audit.** The auditor decrypts output amounts with the view key and reconciles them against
+   `total_supply` — a full reconciliation with no spending power and no public disclosure.
+
+---
+
+## Summary
+
+- A stablecoin on Ootle is a **stealth resource** plus a component holding **mint/burn authority** —
+  the peg and its reserves are off-protocol, and the protocol holds no price.
+- **Transfers are private; the supply boundary is revealed.** That split is forced by how supply is
+  tracked, not layered on by convention.
+- **Mint** returns a revealed bucket; converting it to stealth UTXOs is where privacy begins.
+- **Redeem** needs a `CommitmentValueProof`, which requires the owner's mask or the auditor's view key.
+- **`disable_total_supply_tracking()`** trades the on-chain supply figure for fully hidden burns.
+- **View keys** give audit without spending power: $V = E - pR$.
+- The asset type sets the privacy ceiling; the **workflow** decides how much of it you actually keep —
+  fees and identity-checking calls leak in every configuration.
+
+**Next:** the resource types and built-in templates these pieces are built from —
+<a href={basePath("/concepts/templates-and-assets/")}>Templates and Assets</a>. For the general
+patterns a private application reuses, see
+<a href={basePath("/concepts/privacy-in-applications/")}>Privacy in Applications</a>.
+
+---
+
+## References and further reading
+
+- Resource builders: `crates/template_lib/src/resource/builder/stealth.rs`,
+  `crates/template_lib/src/resource/builder/mod.rs`.
+- Bucket operations: `crates/template_lib/src/models/bucket.rs`.
+- Supply tracking: `crates/engine_types/src/resource.rs` (`total_supply`, `increase_total_supply`),
+  driven from `crates/engine/src/runtime/working_state.rs`.
+- Supply-tracking switch on the native token: <a href={basePath("/concepts/tokenomics/")}>Tokenomics</a>.
+- The cryptography underneath: <a href={basePath("/concepts/privacy/")}>Privacy</a>.
+- Stealth transfers in practice: <a href={basePath("/guides/stealth-resources/")}>Stealth Transfers</a>.
+
+<Aside type="note">
+**External, unofficial.** A third-party stablecoin implementation exists outside this repository at
+[tari-project/stable-coin](https://github.com/tari-project/stable-coin). It is not part of this
+codebase, is not covered by this documentation, and its design and audit status are not statements
+about Ootle.
+</Aside>

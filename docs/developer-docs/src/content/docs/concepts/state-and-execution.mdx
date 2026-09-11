@@ -1,0 +1,398 @@
+---
+title: State and Execution
+description: How Tari Ootle models state as versioned substates, commits it with Jellyfish Merkle trees, and executes templates deterministically in the TVM.
+---
+
+import { basePath } from '../../../helpers/path';
+import { Aside } from "@astrojs/starlight/components";
+
+### Covered in this page
+
+This page covers what a "state" actually is on Ootle, and how a transaction changes it:
+- The state model: `SubstateId` → versioned `Substate`.
+- The ten kinds of substate, and the containers (components, resources, vaults, buckets) built from them.
+- How a 256-bit address space is sharded, and how a substate's address is formed.
+- The per-shard **Jellyfish Merkle Tree** and the state root it commits to.
+- Versioning: the `Up` / `Down` transition model, and why `Down` is not deletion.
+- The **TVM**: the WASM runtime, deterministic metering, and how execution becomes a fee.
+- Why fee instructions run before the transaction's own instructions.
+- How Ootle anchors its state to the base layer at epoch boundaries.
+
+---
+
+## The state model
+
+Ootle state is a map from an **identity** to a versioned **value**:
+
+$$\text{SubstateId} \longrightarrow \text{Substate}\{\ \text{substate},\ \text{version}\ \}$$
+
+The identity is a `SubstateId` — a typed address. The value is a `Substate`, which pairs the payload
+with a monotonically increasing `version` (`crates/engine_types/src/substate.rs`). A transaction does
+not mutate state in place; it produces a new version of each substate it touched, leaving the old
+version as history.
+
+### Ten kinds of substate
+
+A `SubstateId` is one of ten variants. Two of them are the containers most application code deals with;
+the rest are system and asset types:
+
+```rust
+// crates/engine_types/src/substate.rs
+pub enum SubstateId {
+    Component(ComponentAddress),
+    Resource(ResourceAddress),
+    Vault(VaultId),
+    ClaimedOutputTombstone(ClaimedOutputTombstoneAddress),
+    NonFungible(NonFungibleAddress),
+    TransactionReceipt(TransactionReceiptAddress),
+    Template(PublishedTemplateAddress),
+    ValidatorFeePool(ValidatorFeePoolAddress),
+    Utxo(UtxoAddress),
+    ConfidentialOutput(ConfidentialOutputAddress),
+}
+```
+
+| Substate | Holds |
+|---|---|
+| **Component** | An instance of a template: its state, access rules, and vault references. |
+| **Resource** | A resource definition: kind (fungible/NFT/confidential/stealth), divisibility, total supply, access rules. |
+| **Vault** | A container of a specific resource inside a component. |
+| **Template** | A published WASM template — a **global** substate. |
+| **NonFungible** | A single NFT. |
+| **Utxo** | An unspent output, including stealth outputs. |
+| **ConfidentialOutput** | A confidential output created by a burn claim. |
+| **ClaimedOutputTombstone** | A marker recording that a commitment has been claimed, preventing re-claim. |
+| **TransactionReceipt** | The receipt for a transaction. |
+| **ValidatorFeePool** | Accumulated fees for a validator. |
+
+<Aside type="note">
+A **bucket** — a transient pile of funds on the instruction workspace — is *not* a substate. It
+exists only for the duration of a transaction; when it is deposited into a vault, or the transaction
+ends, the bucket is gone. Vaults are persistent substates; buckets are not.
+</Aside>
+
+### Components, resources, vaults
+
+The three containers that most template code manipulates:
+
+- A **Component** is a struct instance with persistent fields. Its substate holds the serialized state
+  plus the access rules that govern who may call its methods.
+- A **Resource** is the definition of an asset. Its kind is the key distinction for privacy: a
+  **Confidential** resource hides amounts (balances are commitments), while a **Stealth** resource
+  hides both amount and owner (funds live as UTXOs, not in vaults). See
+  <a href={basePath("/concepts/privacy/")}>Privacy</a> and
+  <a href={basePath("/concepts/templates-and-assets/")}>Templates and Assets</a>.
+- A **Vault** holds a quantity of one resource, inside one component. Moving funds between components
+  is vault-to-vault; the unit of movement on the instruction workspace is the **bucket**.
+
+The containment relationship is worth stating once, because the vocabulary is circular until you see
+which thing holds which:
+
+| Container | Holds | Is it a substate? |
+|---|---|---|
+| **Component** | its own state, its access rules, and references to its vaults | Yes — the persistent instance. |
+| **Vault** | the amount of exactly **one** resource | Yes — lives inside a component. |
+| **Bucket** | an amount of one resource, transiently | **No** — it exists only during execution. |
+| **Resource** | the *definition*: kind, divisibility, supply, access rules | Yes — separate from any vault holding it. |
+| **NonFungible** | one NFT, belonging to a resource | Yes. |
+| **Utxo** | one unspent stealth output, belonging to a resource | Yes. |
+
+Read the middle two rows together: the **resource** is the definition and the **vault** is a holding of
+it, so many vaults across many components can hold the same resource. The resource's total supply is
+what makes those holdings add up.
+
+---
+
+## Addresses and shards
+
+### The address is a commitment to identity
+
+A substate's address is not a counter — it is derived from its identity. Ootle forms it as a
+**32-byte object key** concatenated with the **version** as a big-endian `u32`:
+
+```rust
+// crates/common_types/src/substate_address.rs
+pub const LENGTH: usize = ObjectKey::LENGTH + size_of::<u32>(); // 32 + 4 = 36 bytes
+
+pub fn from_object_key(object_key: &ObjectKey, version: u32) -> Self {
+    // concatenate (entity_id, component_key), and version
+    buf[..ObjectKey::LENGTH].copy_from_slice(object_key);
+    buf[ObjectKey::LENGTH..].copy_from_slice(&version.to_be_bytes());
+    // ...
+}
+```
+
+So a `SubstateAddress` is $256 + 32 = 288$ bits: it identifies both *which* substate and *which
+version* of it.
+
+### From address to shard
+
+The 256-bit object key is the address space, divided into `N = 2^k` equal shards. The shard number is
+read from the **top `k` bits** of the key:
+
+```rust
+// crates/common_types/src/substate_address.rs
+pub fn to_shard(&self, num_shards: NumPreshards) -> Shard {
+    if num_shards.is_one() { return Shard::first(); }
+    let shift = u8::BITS - num_shards.as_u32().trailing_zeros();
+    let mask = u8::MAX << shift;
+    Shard::from_u32(u32::from((self.0[0] & mask) >> shift) + 1) // +1: shard numbers are 1-indexed
+}
+```
+
+Two facts follow, both confirmed in code:
+
+- The number of preshards is **256** (`NumPreshards::current() == P256`), so the network has 256
+  shards, numbered **1 to 256**.
+- **Shard 0 is the global shard.** It holds global substates — templates and other
+  `SubstateId::is_global()` values. Shards are numbered from 1 precisely because 0 is reserved.
+
+<svg viewBox="0 0 900 344" xmlns="http://www.w3.org/2000/svg" style="max-width:900px;width:100%;font-family:system-ui,sans-serif">
+  <defs><marker id="sa-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#484f58"/></marker></defs>
+  <rect width="900" height="344" rx="12" fill="#0d1117"/>
+  <text x="450" y="34" text-anchor="middle" fill="#e6edf3" font-size="16" font-weight="bold">From a bit string to a shard</text>
+  <text x="450" y="56" text-anchor="middle" fill="#8b949e" font-size="11">A SubstateAddress is 288 bits. Only the first byte of the object key picks the shard. (Schematic &#8212; not to scale.)</text>
+
+  {/* Full address bar */}
+  <rect x="40" y="80" width="728" height="50" rx="6" fill="#1c2333" stroke="#30363d" stroke-width="1"/>
+  <rect x="40" y="80" width="112" height="50" rx="6" fill="#231e40" stroke="#6a4dce" stroke-width="1.5"/>
+  <text x="96" y="110" text-anchor="middle" fill="#bac5ff" font-size="11" font-weight="bold">first byte</text>
+  <text x="450" y="110" text-anchor="middle" fill="#8b949e" font-size="11">the object key's remaining identity bits</text>
+  <rect x="774" y="80" width="86" height="50" rx="6" fill="#161b22" stroke="#f0883e" stroke-width="1"/>
+  <text x="817" y="102" text-anchor="middle" fill="#f0883e" font-size="11" font-weight="bold">version</text>
+  <text x="817" y="118" text-anchor="middle" fill="#6e7681" font-size="9">u32 BE</text>
+  <text x="404" y="150" text-anchor="middle" fill="#6e7681" font-size="10">ObjectKey &#8212; 32 bytes / 256 bits</text>
+  <text x="817" y="150" text-anchor="middle" fill="#6e7681" font-size="10">+ 4 bytes</text>
+
+  {/* Arrow down from the first byte */}
+  <line x1="96" y1="136" x2="96" y2="176" stroke="#484f58" stroke-width="2" marker-end="url(#sa-arrow)"/>
+
+  {/* Byte expansion */}
+  <text x="40" y="202" fill="#8b949e" font-size="10">the first byte, expanded &#8212; 8 bits = 256 values</text>
+  <rect x="40" y="212" width="36" height="36" rx="4" fill="#231e40" stroke="#6a4dce" stroke-width="1"/>
+  <rect x="78" y="212" width="36" height="36" rx="4" fill="#231e40" stroke="#6a4dce" stroke-width="1"/>
+  <rect x="116" y="212" width="36" height="36" rx="4" fill="#231e40" stroke="#6a4dce" stroke-width="1"/>
+  <rect x="154" y="212" width="36" height="36" rx="4" fill="#231e40" stroke="#6a4dce" stroke-width="1"/>
+  <rect x="192" y="212" width="36" height="36" rx="4" fill="#231e40" stroke="#6a4dce" stroke-width="1"/>
+  <rect x="230" y="212" width="36" height="36" rx="4" fill="#231e40" stroke="#6a4dce" stroke-width="1"/>
+  <rect x="268" y="212" width="36" height="36" rx="4" fill="#231e40" stroke="#6a4dce" stroke-width="1"/>
+  <rect x="306" y="212" width="36" height="36" rx="4" fill="#231e40" stroke="#6a4dce" stroke-width="1"/>
+  <text x="191" y="270" text-anchor="middle" fill="#bac5ff" font-size="10">with 256 preshards, k = 8: every bit is used</text>
+  <text x="191" y="286" text-anchor="middle" fill="#8b949e" font-size="10">shard = byte value + 1, so 1..=256</text>
+
+  {/* Stable-across-updates panel */}
+  <rect x="520" y="200" width="340" height="94" rx="8" fill="#12171f" stroke="#30363d" stroke-width="1"/>
+  <text x="540" y="224" fill="#388bfd" font-size="11" font-weight="bold">Stable across updates</text>
+  <text x="540" y="246" fill="#8b949e" font-size="10">The version is the last 4 bytes, so it plays</text>
+  <text x="540" y="262" fill="#8b949e" font-size="10">no part in the shard computation. A substate</text>
+  <text x="540" y="278" fill="#8b949e" font-size="10">keeps its shard &#8212; and its committee &#8212; for life.</text>
+
+  <text x="450" y="322" text-anchor="middle" fill="#8b949e" font-size="11">The address is derived from an identity, not assigned; anyone can compute a substate's shard from the address alone.</text>
+</svg>
+
+A validator can compute a substate's shard directly from its address, without any lookup — which is
+how transactions are routed to the committee that owns the relevant state. See
+<a href={basePath("/concepts/architecture/")}>Architecture</a> for how shards are grouped into
+committees.
+
+<Aside type="tip">
+Because the shard is a function of the top bits of the object key, a substate's shard is stable for
+the life of the object: only the 4-byte version suffix changes across updates, and the version is not
+part of the shard computation.
+</Aside>
+
+---
+
+## The state tree
+
+Each shard maintains a **Jellyfish Merkle Tree** over its substate addresses. The state tree crate
+wraps a Jellyfish implementation:
+
+```rust
+// crates/state_tree/src/lib.rs
+pub use tari_jellyfish::*;
+```
+
+A Merkle tree gives two things a blockchain state store needs:
+
+1. **A single commitment per shard** — the **state root**. Bumping any substate changes the root, so
+   a block can commit to the entire state of a shard with 32 bytes.
+2. **Inclusion and exclusion proofs** — a proof that a substate (or the *absence* of one) is consistent
+   with a published root. This is what lets a client verify state without trusting an indexer.
+
+At each epoch boundary, a committee creates an `EpochCheckpoint` carrying a `TreeRootSummary` for the
+global shard and for each shard in that committee's shard group
+(`crates/storage/src/consensus_models/epoch_checkpoint.rs`). The checkpoint commits the group's state
+at the end of the epoch and is used to validate and synchronize state across epoch changes.
+
+---
+
+## Versioning: `Up` and `Down`
+
+A transaction's effects are summarized as a **`SubstateDiff`**: the substates written (`up`) and the
+version numbers retired (`down`), plus any fee withdrawals:
+
+```rust
+// crates/engine_types/src/substate.rs
+pub struct SubstateDiff {
+    up_substates: Vec<(SubstateId, Substate)>,
+    down_substates: Vec<(SubstateId, u32)>,
+    fee_withdrawals: Vec<ValidatorFeeWithdrawal>,
+}
+```
+
+`Up` and `Down` are **transitions applied to a version**, not permanent states of an object:
+
+| Transition | Effect |
+|---|---|
+| **Up** | A new version of a substate is written, with `version + 1`. |
+| **Down** | A substate version is marked unavailable at the consensus level. |
+
+<Aside type="caution">
+`Down` does **not** mean the object can never exist again. A substate that has been downed can be
+**re-created in place** — the pending substate store explicitly logs *"Re-creating DOWNed substate in
+place"* when a later transaction writes to the same `SubstateId`
+(`crates/consensus/src/hotstuff/substate_store/pending_store.rs`). Treat `Down` as "this version is
+retired", not "this identity is dead". This is a common source of confusion in older descriptions of
+the system, which describe a one-way `Empty → Up → Down` lifecycle; the code has no such `Empty`
+variant.
+</Aside>
+
+<svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" style="max-width:900px;width:100%;font-family:system-ui,sans-serif">
+  <defs>
+    <marker id="vd-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#3fb950"/></marker>
+    <marker id="vd-arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#f85149"/></marker>
+  </defs>
+  <rect width="900" height="320" rx="12" fill="#0d1117"/>
+  <text x="450" y="34" text-anchor="middle" fill="#e6edf3" font-size="16" font-weight="bold">Up and Down are transitions, not states</text>
+  <text x="450" y="56" text-anchor="middle" fill="#8b949e" font-size="11">One identity, four versions. The identity is fixed; only the version number moves.</text>
+
+  {/* Timeline */}
+  <line x1="40" y1="186" x2="860" y2="186" stroke="#30363d" stroke-width="1"/>
+
+  {/* Version boxes */}
+  <rect x="80" y="130" width="120" height="56" rx="8" fill="#161b22" stroke="#388bfd" stroke-width="1"/>
+  <text x="140" y="156" text-anchor="middle" fill="#388bfd" font-size="13" font-weight="bold">v1</text>
+  <text x="140" y="174" text-anchor="middle" fill="#6e7681" font-size="9">version 1</text>
+
+  <rect x="280" y="130" width="120" height="56" rx="8" fill="#161b22" stroke="#388bfd" stroke-width="1"/>
+  <text x="340" y="156" text-anchor="middle" fill="#388bfd" font-size="13" font-weight="bold">v2</text>
+  <text x="340" y="174" text-anchor="middle" fill="#6e7681" font-size="9">version 2</text>
+
+  <rect x="480" y="130" width="120" height="56" rx="8" fill="#161b22" stroke="#388bfd" stroke-width="1"/>
+  <text x="540" y="156" text-anchor="middle" fill="#388bfd" font-size="13" font-weight="bold">v3</text>
+  <text x="540" y="174" text-anchor="middle" fill="#6e7681" font-size="9">version 3</text>
+
+  <rect x="680" y="130" width="120" height="56" rx="8" fill="#10261a" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="740" y="156" text-anchor="middle" fill="#3fb950" font-size="13" font-weight="bold">v4</text>
+  <text x="740" y="174" text-anchor="middle" fill="#6e7681" font-size="9">version 4, same id</text>
+
+  {/* Up arrows */}
+  <line x1="202" y1="158" x2="276" y2="158" stroke="#3fb950" stroke-width="2" marker-end="url(#vd-arrow)"/>
+  <line x1="402" y1="158" x2="476" y2="158" stroke="#3fb950" stroke-width="2" marker-end="url(#vd-arrow)"/>
+  <line x1="602" y1="158" x2="676" y2="158" stroke="#3fb950" stroke-width="2" marker-end="url(#vd-arrow)"/>
+  <text x="240" y="180" text-anchor="middle" fill="#3fb950" font-size="10">Up</text>
+  <text x="440" y="180" text-anchor="middle" fill="#3fb950" font-size="10">Up</text>
+  <text x="640" y="180" text-anchor="middle" fill="#3fb950" font-size="10">Up</text>
+
+  {/* Down arrow from v3 */}
+  <line x1="540" y1="190" x2="540" y2="234" stroke="#f85149" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#vd-arrow-red)"/>
+  <text x="540" y="254" text-anchor="middle" fill="#f85149" font-size="10" font-weight="bold">Down &#8212; this version is retired</text>
+  <text x="540" y="268" text-anchor="middle" fill="#6e7681" font-size="10">the identity is not destroyed</text>
+
+  <text x="450" y="298" text-anchor="middle" fill="#8b949e" font-size="11">A later write to the same SubstateId starts a new version in place. There is no Empty state between the Down and the next Up.</text>
+</svg>
+
+The practical consequence: a component can be removed and later a new version created at the same
+address, and the state tree records the whole history rather than an irreversible deletion.
+
+---
+
+## The TVM: execution
+
+Ootle executes WASM templates in the **Tari Virtual Machine (TVM)**, built on **Wasmer** with the
+**Cranelift** compiler backend (`crates/engine/Cargo.toml` enables the `cranelift` feature).
+
+### Deterministic metering
+
+Blockchain execution must be deterministic and resource-bounded: every validator has to compute
+exactly the same result and charge exactly the same cost. Wasmer's `Metering` middleware enforces
+this by charging each WASM operator a fixed cost as it executes:
+
+```rust
+// crates/engine/src/wasm/metering.rs
+Metering::new(limit, cost_function)
+fn cost_function(op: &Operator) -> u64 { /* deterministic per-operator cost */ }
+```
+
+When the meter is exhausted, execution traps. Because the cost function is a pure function of the
+instruction stream, two validators running the same template with the same inputs exhaust the meter
+at the same instruction and produce the same result. Gas is therefore *counted deterministically*,
+not estimated.
+
+### From metering to fees
+
+Metered work is converted to a fee through a `WasmMeteringRate`
+(`crates/engine/src/fees/fee_table.rs`). The transaction pays for the work it actually performs —
+there is no priority bidding layer in the fee model; a transaction either covers its metered cost or
+is rejected. Fee *distribution* is covered in
+<a href={basePath("/concepts/tokenomics/")}>Tokenomics</a>.
+
+---
+
+## The instruction flow
+
+A transaction is a sequence of instructions. Crucially, it carries **two** instruction streams: fee
+instructions and the transaction's own instructions. The engine executes them in a fixed order:
+
+```rust
+// crates/engine/src/transaction/processor.rs
+let (mut runtime, fee_exec_results) =
+    Self::process_instructions(&template_provider, runtime, instructions.fee, &blobs);
+// ... check fee payment ...
+// then run the main instructions against a state checkpointed after fee payment
+```
+
+1. **Fee instructions run first.** They withdraw funds and pay the fee.
+2. **The state is checkpointed** at the end of fee payment.
+3. **Main instructions run.** If they fail, the state is rolled back to the checkpoint — the fee is
+   still charged, but the transaction's effects are discarded.
+
+This ordering is what makes fee payment unconditional: a transaction cannot avoid paying by failing
+half-way through its own logic. The checkpoint is why a reverted transaction still costs money but
+leaves no state change behind.
+
+---
+
+## Epoch checkpoints and the base layer
+
+Ootle's state is committed by its own consensus, block by block. At an **epoch boundary**, each
+committee's `EpochCheckpoint` records the global-shard root, the roots for that committee's shard
+group, and the end-of-epoch commit proof. The base layer's role is to be the **clock and the
+membership register**: the epoch length and the validator set are read from the base layer through
+the epoch oracle
+(`crates/epoch_oracles/src/base_layer/oracle.rs`).
+
+The division is deliberate: the base layer fixes *who* may validate and *when* epochs turn over;
+Ootle owns *what* the state is and *when* a change is final. Ootle does not post its state roots to
+the base layer for verification — the base layer does not re-execute Ootle transactions (see
+<a href={basePath("/concepts/overview/")}>Overview</a>).
+
+---
+
+## Summary
+
+- State is a map from a typed `SubstateId` to a versioned `Substate{substate, version}`.
+- There are **ten** substate variants; **templates are global**, and **buckets are not substates** at all.
+- A `SubstateAddress` is `ObjectKey(32 bytes) ‖ version(u32 BE)` = 288 bits.
+- Shards are derived from the **top bits** of the object key; there are **256** shards, numbered
+  **1–256**, with **shard 0** reserved for global state.
+- Each shard keeps a **Jellyfish Merkle Tree**; its root is the shard's state commitment.
+- `Up` writes a new version; `Down` retires one — and a downed substate **can be re-created**.
+- The **TVM** runs WASM (Wasmer + Cranelift) with deterministic operator metering that becomes the fee.
+- **Fee instructions run first**, then the state is checkpointed, then the main instructions run.
+- Each committee's epoch checkpoint covers its shard group plus the global shard; the base layer
+  supplies the clock and membership but does not receive the checkpoint.
+
+**Next:** the cryptography that lets state carry hidden value —
+<a href={basePath("/concepts/privacy/")}>Privacy</a>.

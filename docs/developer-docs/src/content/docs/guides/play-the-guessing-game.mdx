@@ -149,7 +149,7 @@ your account, creating the account on-chain if it doesn't exist yet.
 To create a new instance of the guessing game, call the template's `new` constructor using `call_function`:
 
 ```rust
-use tari_template_lib_types::{TemplateAddress, constants::XTR};
+use tari_template_lib_types::{TemplateAddress, constants::TARI_TOKEN};
 
 // template_addr comes from publishing your template (see Publishing Templates)
 let unsigned_tx = TransactionBuilder::new(provider.network())
@@ -171,10 +171,10 @@ let component_addr = receipt.diff_summary.upped
     .expect("component address in receipt");
 
 // The prize resource the constructor created
-// (every resource except XTR is the game resource)
+// (every resource except TARI_TOKEN is the game resource)
 let resource_addr = receipt.diff_summary.upped
     .iter()
-    .find_map(|s| s.substate_id.as_resource_address().filter(|a| *a != XTR))
+    .find_map(|s| s.substate_id.as_resource_address().filter(|a| *a != TARI_TOKEN))
     .expect("resource address in receipt");
 ```
 

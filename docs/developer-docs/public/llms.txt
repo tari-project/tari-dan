@@ -8,6 +8,19 @@
 - [Getting Started](https://ootle.tari.com/guides/getting-started/): Prerequisites and first steps
 - [Setup a Wallet](https://ootle.tari.com/guides/setup-a-wallet/): Install and configure a wallet for publishing templates
 
+## Concepts
+
+- [Overview](https://ootle.tari.com/concepts/overview/): The big picture — Ootle and the base layer, node roles, and finality
+- [Architecture](https://ootle.tari.com/concepts/architecture/): Node roles, sharding, committees, epochs, and the P2P layer
+- [Consensus](https://ootle.tari.com/concepts/consensus/): Chained HotStuff BFT, the three-chain rule, quorums, and cross-shard transactions
+- [State and Execution](https://ootle.tari.com/concepts/state-and-execution/): Substates, the Jellyfish Merkle tree, the TVM, and fees
+- [Privacy](https://ootle.tari.com/concepts/privacy/): Pedersen commitments, Bulletproofs+, stealth addresses, view keys, and the threat model
+- [Privacy in Applications](https://ootle.tari.com/concepts/privacy-in-applications/): What privacy means for a deployed application — bearer assets, HTLCs, atomic swaps, and escrow
+- [Stablecoins](https://ootle.tari.com/concepts/stablecoin/): Building a stablecoin from Ootle primitives — issuance, redemption, supply auditing, and the privacy boundary
+- [Templates and Assets](https://ootle.tari.com/concepts/templates-and-assets/): The four resource types, built-in templates, and application patterns
+- [Tokenomics](https://ootle.tari.com/concepts/tokenomics/): The native token, the one-way burn-to-mint bridge, and fee distribution
+- [Glossary](https://ootle.tari.com/concepts/glossary/): An A–Z of the terms used across the Concepts section
+
 ## Guides
 
 - [Templates Overview](https://ootle.tari.com/guides/template-overview/): The `#[template]` macro, constructors, state, and component lifecycle
@@ -18,6 +31,10 @@
 - [Tari CLI](https://ootle.tari.com/guides/cli/): Command-line tools for development
 - [Resources](https://ootle.tari.com/guides/resources/): Fungible, non-fungible, confidential, and stealth resource types
 - [Authorization and Access](https://ootle.tari.com/guides/authorization-and-access/): `rule!` macro, `ComponentAccessRules`, `OwnerRule`, `CallerContext`
+- [Testing Your Template](https://ootle.tari.com/guides/testing-templates/): Unit-test templates with the template test tooling
+- [Stealth Transfers](https://ootle.tari.com/guides/stealth-resources/): Private transfers — commitments, stealth addresses, and condition trees
+- [API Keys for AI Agents](https://ootle.tari.com/guides/agent-api-keys/): Issue and use API keys for agent-driven wallets
+- [Randomness in Templates](https://ootle.tari.com/guides/randomness/): Sources of randomness available inside a template
 
 ## Reference
 
