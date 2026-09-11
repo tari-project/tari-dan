@@ -130,8 +130,9 @@ fn generate_output_id(transaction_hash: &Hash32, n: u32) -> Hash32 {
 pub struct ObjectIds {
     max_ids: usize,
     current_id: AtomicU32,
-    bucket_id: AtomicU32,
-    proof_id: AtomicU32,
+    /// Buckets and proofs draw from one counter: both are transient handles held in the same runtime
+    /// scope, and a shared space keeps a bucket id from ever colliding with a proof id.
+    bucket_or_proof_id: AtomicU32,
     uuid: AtomicU32,
 }
 
@@ -140,8 +141,7 @@ impl ObjectIds {
         Self {
             max_ids,
             current_id: AtomicU32::new(0),
-            bucket_id: AtomicU32::new(0),
-            proof_id: AtomicU32::new(0),
+            bucket_or_proof_id: AtomicU32::new(0),
             uuid: AtomicU32::new(0),
         }
     }
@@ -155,11 +155,15 @@ impl ObjectIds {
     }
 
     pub fn next_bucket_id(&self) -> BucketId {
-        self.bucket_id.fetch_add(1, atomic::Ordering::SeqCst).into()
+        self.next_bucket_or_proof_id().into()
     }
 
     pub fn next_proof_id(&self) -> ProofId {
-        self.proof_id.fetch_add(1, atomic::Ordering::SeqCst).into()
+        self.next_bucket_or_proof_id().into()
+    }
+
+    fn next_bucket_or_proof_id(&self) -> u32 {
+        self.bucket_or_proof_id.fetch_add(1, atomic::Ordering::SeqCst)
     }
 
     pub fn next_uuid_id(&self) -> u32 {
@@ -172,8 +176,7 @@ impl Clone for ObjectIds {
         Self {
             max_ids: self.max_ids,
             current_id: AtomicU32::new(self.current_id.load(atomic::Ordering::SeqCst)),
-            bucket_id: AtomicU32::new(self.bucket_id.load(atomic::Ordering::SeqCst)),
-            proof_id: AtomicU32::new(self.proof_id.load(atomic::Ordering::SeqCst)),
+            bucket_or_proof_id: AtomicU32::new(self.bucket_or_proof_id.load(atomic::Ordering::SeqCst)),
             uuid: AtomicU32::new(self.uuid.load(atomic::Ordering::SeqCst)),
         }
     }
