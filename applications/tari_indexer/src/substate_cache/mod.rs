@@ -310,7 +310,7 @@ mod tests {
     }
 
     async fn cache_with_head(
-        version: u32,
+        version: u64,
         confirm_shard: bool,
     ) -> (tempfile::TempDir, SqliteSubstateCache, SubstateId) {
         let dir = tempfile::tempdir().unwrap();
@@ -429,7 +429,7 @@ mod tests {
         assert!(head_cache.read(&head_id).await.unwrap().is_some());
     }
 
-    async fn write_head(cache: &SqliteSubstateCache, id: &SubstateId, version: u32, watermark: u64) {
+    async fn write_head(cache: &SqliteSubstateCache, id: &SubstateId, version: u64, watermark: u64) {
         let result = SubstateResult::Down { version };
         cache
             .write(
@@ -448,7 +448,7 @@ mod tests {
 
     /// A committee member answering that `version` is live, as against the `Down` [`write_head`]
     /// records.
-    async fn write_live_head(cache: &SqliteSubstateCache, id: &SubstateId, version: u32, watermark: u64) {
+    async fn write_live_head(cache: &SqliteSubstateCache, id: &SubstateId, version: u64, watermark: u64) {
         use tari_engine_types::{
             non_fungible::NonFungibleContainer,
             substate::{Substate, SubstateValue},

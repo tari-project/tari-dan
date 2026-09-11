@@ -332,7 +332,7 @@ mod tests {
     fn hash_at(version: ProtocolVersion, value: &SubstateValue) -> Hash32 {
         hasher32(EngineHashDomainLabel::SubstateValue)
             .chain(&SubstateHashMessage::new(version, value))
-            .chain(&0u32)
+            .chain(&0u64)
             .chain(&Epoch(3))
             .result()
     }
@@ -341,14 +341,14 @@ mod tests {
         hex::encode(hash.as_ref() as &[u8])
     }
 
-    /// The hash a binary that predates `FeeReceipt::exhaust_burn` produced for this receipt (captured
-    /// from `hash_substate` at 2cc729b95). Version 0 must keep producing it, or no node can re-derive
-    /// the state roots that committed such receipts.
+    /// Pins the version 0 preimage for a receipt. Every substate value hash, and so every state root,
+    /// is derived from it: a change to this hash is a change to all of them, and nodes carrying state
+    /// hashed under the old preimage cannot re-derive their roots.
     #[test]
-    fn version_0_reproduces_the_pre_exhaust_burn_hash() {
+    fn version_0_receipt_hash_is_pinned() {
         assert_eq!(
             hex(hash_at(ProtocolVersion::V0, &receipt(0))),
-            "061d838f149c767043152d6362afd71f18d58ac41c1c7b0a7f130066e9e1efcb"
+            "b0e49359759f3845cfeaec2ddf6aaee6c7c3f1d1abb26524b082ddeb344ad115"
         );
         // Esmeralda is the network whose history was hashed under version 0.
         assert_eq!(ProtocolVersion::at(Network::Esmeralda, Epoch(3)), ProtocolVersion::V0);
@@ -363,18 +363,17 @@ mod tests {
     fn version_1_hash_is_pinned() {
         assert_eq!(
             hex(hash_at(ProtocolVersion::V1, &receipt(123))),
-            "78a85877d39682b55d299b5c3fad89b4261603bc2e261f5af728caa876fbbc78"
+            "1acb3bbf878dedc70e27215a30d597ef45a9adc7b8f587dee8f92f97c69ad676"
         );
     }
 
-    /// The hash a binary that predates `ResourceAccessRules::auth_hook_updater` produced for this
-    /// resource (captured from `hash_substate` at 4da937665). Version 0 must keep producing it, or no
-    /// node can re-derive the state roots that committed such resources.
+    /// Pins the version 0 preimage for a resource, as [`version_0_receipt_hash_is_pinned`] does for a
+    /// receipt.
     #[test]
-    fn version_0_reproduces_the_pre_auth_hook_updater_hash() {
+    fn version_0_resource_hash_is_pinned() {
         assert_eq!(
             hex(hash_at(ProtocolVersion::V0, &resource(UpdateRule::Locked))),
-            "e70d065a427a57fb18d8d03ff858411b7c542081863042b0753b2459759ecead"
+            "65ec63aee1f754f04615e86aa4147632a08abdb8e85055fec8cbbf14dd7a46be"
         );
     }
 

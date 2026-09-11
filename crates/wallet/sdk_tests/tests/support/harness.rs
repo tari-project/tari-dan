@@ -229,7 +229,7 @@ impl WalletNetworkInterface for CannedTransactionResultInterface {
     async fn query_substate(
         &self,
         _address: &SubstateId,
-        _version: Option<u32>,
+        _version: Option<u64>,
         _local_search_only: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
         panic!("CannedTransactionResultInterface called")
@@ -321,7 +321,7 @@ impl WalletNetworkInterface for PanicNetworkInterface {
     async fn query_substate(
         &self,
         _address: &SubstateId,
-        _version: Option<u32>,
+        _version: Option<u64>,
         _local_search_only: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
         panic!("PanicNetworkInterface called")

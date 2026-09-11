@@ -61,7 +61,7 @@ impl SubstateChange {
         }
     }
 
-    pub fn version(&self) -> u32 {
+    pub fn version(&self) -> u64 {
         self.versioned_substate_id().version()
     }
 

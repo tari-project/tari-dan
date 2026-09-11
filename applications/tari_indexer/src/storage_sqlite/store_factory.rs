@@ -1097,7 +1097,7 @@ mod tests {
     async fn put_entry(
         store: &SqliteIndexerStore,
         id: &SubstateId,
-        version: u32,
+        version: u64,
         verified: bool,
         cached_at: u64,
         watermark: u64,
@@ -1122,13 +1122,13 @@ mod tests {
             .unwrap()
     }
 
-    async fn put(store: &SqliteIndexerStore, id: &SubstateId, version: u32, watermark: u64) -> bool {
+    async fn put(store: &SqliteIndexerStore, id: &SubstateId, version: u64, watermark: u64) -> bool {
         put_entry(store, id, version, true, now_secs(), watermark).await
     }
 
     /// A committee member answering that `version` is live, as against the `Down` every other put
     /// helper here records.
-    async fn put_up(store: &SqliteIndexerStore, id: &SubstateId, version: u32, watermark: u64) -> bool {
+    async fn put_up(store: &SqliteIndexerStore, id: &SubstateId, version: u64, watermark: u64) -> bool {
         use tari_engine_types::{
             non_fungible::NonFungibleContainer,
             substate::{Substate, SubstateValue},
@@ -1161,7 +1161,7 @@ mod tests {
 
     /// The cached head version. `None` covers both no row at all and a row recording that the
     /// substate does not exist; use [`read_entry`] where the two must be told apart.
-    async fn read(store: &SqliteIndexerStore, id: &SubstateId) -> Option<u32> {
+    async fn read(store: &SqliteIndexerStore, id: &SubstateId) -> Option<u64> {
         read_entry(store, id).await.and_then(|entry| entry.version)
     }
 

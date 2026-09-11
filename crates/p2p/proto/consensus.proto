@@ -238,7 +238,7 @@ message MissingTransactionsResponse {
 
 message Substate {
   bytes substate_id = 1;
-  uint32 version = 2;
+  uint64 version = 2;
   bytes substate = 3;
 
   // Required

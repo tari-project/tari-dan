@@ -169,7 +169,7 @@ pub struct UpSubstate {
     /// The substate id (canonical string form).
     pub substate_id: String,
     /// The created version.
-    pub version: u32,
+    pub version: u64,
 }
 
 /// A boundary diff summary — the ids + versions of created/destroyed substates (not their bodies).
@@ -178,7 +178,7 @@ pub struct DiffSummary {
     /// Created (`up`) substates.
     pub up: Vec<UpSubstate>,
     /// Destroyed (`down`) substates as `(id, version)`.
-    pub down: Vec<(String, u32)>,
+    pub down: Vec<(String, u64)>,
 }
 
 /// A boundary event summary — the engine [`tari_engine_types::events::Event`] flattened to strings.

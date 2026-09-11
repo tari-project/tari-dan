@@ -214,7 +214,7 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
     pub fn update_vault_balance_and_record_change(
         &self,
         vault_address: VaultId,
-        vault_version: u32,
+        vault_version: u64,
         revealed_balance: Amount,
         confidential_balance: Amount,
         source: BalanceChangeSource,
@@ -341,7 +341,7 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
     pub fn attribute_balance_change_to_transaction(
         &self,
         vault_id: &VaultId,
-        vault_version: u32,
+        vault_version: u64,
         transaction_id: TransactionId,
     ) -> Result<bool, AccountsApiError> {
         let attributed = self
@@ -497,7 +497,7 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
         &self,
         account_address: ComponentAddress,
         vault_address: VaultId,
-        vault_version: u32,
+        vault_version: u64,
         resource_address: ResourceAddress,
         resource_type: ResourceType,
         token_symbol: Option<String>,

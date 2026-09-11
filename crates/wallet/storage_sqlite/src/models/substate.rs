@@ -20,16 +20,16 @@ pub struct Substate {
     pub address: String,
     pub parent_address: Option<String>,
     pub referenced_substates: String,
-    pub version: i32,
     pub template_address: Option<String>,
     pub created_at: PrimitiveDateTime,
+    pub version: i64,
 }
 
 impl Substate {
     pub fn try_to_record(&self) -> Result<SubstateModel, WalletStorageError> {
         Ok(SubstateModel {
             module_name: self.module_name.clone(),
-            substate_id: VersionedSubstateId::new(SubstateId::from_str(&self.address).unwrap(), self.version as u32),
+            substate_id: VersionedSubstateId::new(SubstateId::from_str(&self.address).unwrap(), self.version as u64),
             parent_address: self.parent_address.as_ref().map(|s| s.parse().unwrap()),
             referenced_substates: deserialize_json(&self.referenced_substates)?,
             template_address: self

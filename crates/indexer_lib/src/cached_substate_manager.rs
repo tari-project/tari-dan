@@ -210,7 +210,7 @@ where
     pub async fn get_substate(
         &self,
         substate_id: &SubstateId,
-        specific_version: Option<u32>,
+        specific_version: Option<u64>,
     ) -> Result<SubstateLookupResult, IndexerError> {
         debug!(target: LOG_TARGET, "get_substate: {}v{}", substate_id, specific_version.display());
         let cache_res = self
@@ -510,7 +510,7 @@ where
     async fn fetch_substate_from_committee(
         &self,
         substate_id: &SubstateId,
-        specific_version: Option<u32>,
+        specific_version: Option<u64>,
     ) -> Result<SubstateLookupResult, IndexerError> {
         let requirement = SubstateRequirementRef::new(substate_id, specific_version);
         let lookup_result = self.get_specific_substate_from_committee(requirement).await?;
@@ -632,7 +632,7 @@ where
     async fn verify_substate_proof(
         &self,
         substate_id: &SubstateId,
-        version: u32,
+        version: u64,
         value: Option<&SubstateValue>,
         proof: SubstateProofData,
     ) -> Result<(), IndexerError> {

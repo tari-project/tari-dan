@@ -104,7 +104,7 @@ pub struct BalanceChange {
 pub struct BalanceChangeSnapshot {
     pub account_address: ComponentAddress,
     pub vault_address: Option<VaultId>,
-    pub vault_version: Option<u32>,
+    pub vault_version: Option<u64>,
     pub resource_address: ResourceAddress,
     pub token_symbol: Option<String>,
     pub divisibility: u8,

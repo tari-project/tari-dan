@@ -130,12 +130,12 @@ pub enum SubstateResult {
     #[n(2)]
     Down {
         #[n(0)]
-        version: u32,
+        version: u64,
     },
 }
 
 impl SubstateResult {
-    pub fn version(&self) -> Option<u32> {
+    pub fn version(&self) -> Option<u64> {
         match self {
             SubstateResult::Up { substate, .. } => Some(substate.version()),
             SubstateResult::Down { version, .. } => Some(*version),

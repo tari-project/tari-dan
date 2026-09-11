@@ -83,7 +83,7 @@ impl IndexerProcess {
         &self,
         world: &TariWorld,
         output_ref: String,
-        version: u32,
+        version: u64,
     ) -> Result<GetSubstateResponse, tari_indexer_client::error::IndexerRestClientError> {
         let address = get_address_from_output(world, output_ref);
         let client = self.get_indexer_client();

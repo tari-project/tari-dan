@@ -119,7 +119,7 @@ pub struct AccountCreatedEvent {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct AccountChangedEvent {
     pub account_address: ComponentAddress,
-    pub version: u32,
+    pub version: u64,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

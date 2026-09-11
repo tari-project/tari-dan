@@ -158,7 +158,7 @@ fn setup_store_at(path: impl AsRef<Path>) -> (SqliteWalletStore, VaultId, VaultI
 
 fn balance_change_snapshot(
     current: &VaultModel,
-    vault_version: u32,
+    vault_version: u64,
     revealed_after: Amount,
     confidential_after: Amount,
 ) -> BalanceChangeSnapshot {
@@ -187,7 +187,7 @@ fn temporary_database_path() -> std::path::PathBuf {
 fn record_change(
     store: &SqliteWalletStore,
     vault_address: VaultId,
-    vault_version: u32,
+    vault_version: u64,
     revealed_after: Amount,
     confidential_after: Amount,
     source: BalanceChangeSource,

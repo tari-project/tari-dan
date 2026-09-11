@@ -56,7 +56,7 @@ pub trait WalletNetworkInterface {
     fn query_substate(
         &self,
         address: &SubstateId,
-        version: Option<u32>,
+        version: Option<u64>,
         local_search_only: bool,
     ) -> impl Future<Output = Result<SubstateQueryResult, Self::Error>> + Send;
 
@@ -122,7 +122,7 @@ pub trait WalletNetworkInterface {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SubstateQueryResult {
-    pub version: u32,
+    pub version: u64,
     pub substate: SubstateValue,
 }
 

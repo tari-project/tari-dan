@@ -716,7 +716,7 @@ pub fn find_output_version(
     world: &mut TariWorld,
     output_ref: &str,
     output_component_substate_id: SubstateId,
-) -> anyhow::Result<Option<u32>> {
+) -> anyhow::Result<Option<u64>> {
     let outputs_name = output_ref.split('/').next().ok_or(anyhow!("Output must have a name"))?;
     Ok(world
         .outputs

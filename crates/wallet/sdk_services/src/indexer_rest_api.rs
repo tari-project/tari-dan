@@ -98,7 +98,7 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
     async fn query_substate(
         &self,
         substate_id: &SubstateId,
-        version: Option<u32>,
+        version: Option<u64>,
         local_search_only: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
         let client = self.get_client()?;

@@ -952,7 +952,7 @@ impl TransactionPoolRecord {
     ) -> Result<bool, StorageError>
     where
         TTx: StateStoreReadTransaction,
-        TObj: IntoIterator<Item = (&'a SubstateId, Option<(u32, SubstateLockType)>)>,
+        TObj: IntoIterator<Item = (&'a SubstateId, Option<(u64, SubstateLockType)>)>,
     {
         for (substate_id, data) in involved_objects {
             let Some((version, lock_type)) = data else {

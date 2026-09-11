@@ -146,7 +146,7 @@ pub struct FetchedSubstate {
     pub substate_id: String,
     /// The substate version the indexer returned (carried for the host; the resolver folds
     /// unversioned inputs).
-    pub version: u32,
+    pub version: u64,
     /// The indexer's `SubstateValue` JSON, passed through verbatim.
     pub substate_value: serde_json::Value,
 }

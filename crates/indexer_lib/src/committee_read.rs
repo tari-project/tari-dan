@@ -169,7 +169,7 @@ mod tests {
 
     use super::*;
 
-    fn down(version: u32) -> SubstateResult {
+    fn down(version: u64) -> SubstateResult {
         SubstateResult::Down { version }
     }
 

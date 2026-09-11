@@ -15,7 +15,7 @@ pub enum UtxoUpdateRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UtxoUnspent {
     pub address: UtxoAddress,
-    pub version: u32,
+    pub version: u64,
     pub shard: Shard,
     pub state_version: StateVersion,
     pub utxo_output: UtxoOutput,
@@ -25,7 +25,7 @@ pub struct UtxoUnspent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UtxoSpent {
     pub address: UtxoAddress,
-    pub version: u32,
+    pub version: u64,
     pub shard: Shard,
     pub state_version: StateVersion,
 }

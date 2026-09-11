@@ -255,7 +255,7 @@ async fn indexer_scans_network_events_for_resource(world: &mut TariWorld, indexe
 async fn assert_indexer_substate_version(
     world: &mut TariWorld,
     indexer_name: String,
-    version: u32,
+    version: u64,
     output_ref: String,
 ) {
     let indexer = world.indexers.get(&indexer_name).unwrap();

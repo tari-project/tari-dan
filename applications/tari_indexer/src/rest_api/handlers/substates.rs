@@ -48,7 +48,7 @@ fn substate_lookup_error(e: SubstateManagerError) -> ErrorResponse {
     params(
         ("substate_id" = String, Path, description = "The substate ID to fetch"),
         ("local_search_only" = bool, Query, description = "If true, only search local storage for the substate"),
-        ("version" = Option<u32>, Query, description = "Minimum version of the substate to fetch"),
+        ("version" = Option<u64>, Query, description = "Minimum version of the substate to fetch"),
     ),
     responses(
         (status = 200, description = "Substate details", body = GetSubstateResponse),

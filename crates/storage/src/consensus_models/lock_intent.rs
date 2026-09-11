@@ -68,7 +68,7 @@ impl VersionedSubstateIdLockIntent {
         self.versioned_substate_id.substate_id()
     }
 
-    pub fn version(&self) -> u32 {
+    pub fn version(&self) -> u64 {
         self.versioned_substate_id.version()
     }
 
@@ -110,11 +110,11 @@ impl LockIntent for VersionedSubstateIdLockIntent {
         self.lock_type
     }
 
-    fn version_to_lock(&self) -> u32 {
+    fn version_to_lock(&self) -> u64 {
         self.version()
     }
 
-    fn requested_version(&self) -> Option<u32> {
+    fn requested_version(&self) -> Option<u64> {
         if self.require_version {
             Some(self.version())
         } else {
@@ -132,11 +132,11 @@ impl LockIntent for &VersionedSubstateIdLockIntent {
         self.lock_type
     }
 
-    fn version_to_lock(&self) -> u32 {
+    fn version_to_lock(&self) -> u64 {
         self.version()
     }
 
-    fn requested_version(&self) -> Option<u32> {
+    fn requested_version(&self) -> Option<u64> {
         if self.require_version {
             Some(self.version())
         } else {
@@ -155,11 +155,11 @@ impl AsRef<SubstateId> for VersionedSubstateIdLockIntent {
 pub struct RequireLockIntentRef<'a> {
     substate_id: &'a SubstateId,
     lock_type: SubstateLockType,
-    version_to_lock: u32,
+    version_to_lock: u64,
 }
 
 impl<'a> RequireLockIntentRef<'a> {
-    pub fn new(substate_id: &'a SubstateId, version_to_lock: u32, lock: SubstateLockType) -> Self {
+    pub fn new(substate_id: &'a SubstateId, version_to_lock: u64, lock: SubstateLockType) -> Self {
         Self {
             substate_id,
             lock_type: lock,
@@ -187,11 +187,11 @@ impl LockIntent for RequireLockIntentRef<'_> {
         self.lock_type
     }
 
-    fn version_to_lock(&self) -> u32 {
+    fn version_to_lock(&self) -> u64 {
         self.version_to_lock
     }
 
-    fn requested_version(&self) -> Option<u32> {
+    fn requested_version(&self) -> Option<u64> {
         Some(self.version_to_lock)
     }
 }
@@ -209,14 +209,14 @@ impl fmt::Display for RequireLockIntentRef<'_> {
 #[derive(Debug, Clone)]
 pub struct SubstateRequirementLockIntent {
     substate_requirement: SubstateRequirement,
-    version_to_lock: u32,
+    version_to_lock: u64,
     lock_type: SubstateLockType,
 }
 
 impl SubstateRequirementLockIntent {
     pub fn new<T: Into<SubstateRequirement>>(
         substate_requirement: T,
-        version_to_lock: u32,
+        version_to_lock: u64,
         lock: SubstateLockType,
     ) -> Self {
         Self {
@@ -226,15 +226,15 @@ impl SubstateRequirementLockIntent {
         }
     }
 
-    pub fn read<T: Into<SubstateRequirement>>(substate_id: T, version_to_lock: u32) -> Self {
+    pub fn read<T: Into<SubstateRequirement>>(substate_id: T, version_to_lock: u64) -> Self {
         Self::new(substate_id, version_to_lock, SubstateLockType::Read)
     }
 
-    pub fn write<T: Into<SubstateRequirement>>(substate_id: T, version_to_lock: u32) -> Self {
+    pub fn write<T: Into<SubstateRequirement>>(substate_id: T, version_to_lock: u64) -> Self {
         Self::new(substate_id, version_to_lock, SubstateLockType::Write)
     }
 
-    pub fn output<T: Into<SubstateRequirement>>(substate_id: T, version_to_lock: u32) -> Self {
+    pub fn output<T: Into<SubstateRequirement>>(substate_id: T, version_to_lock: u64) -> Self {
         Self::new(substate_id, version_to_lock, SubstateLockType::Output)
     }
 
@@ -254,7 +254,7 @@ impl SubstateRequirementLockIntent {
         self.substate_requirement.substate_id()
     }
 
-    pub fn version_to_lock(&self) -> u32 {
+    pub fn version_to_lock(&self) -> u64 {
         self.version_to_lock
     }
 
@@ -280,11 +280,11 @@ impl LockIntent for &SubstateRequirementLockIntent {
         self.lock_type
     }
 
-    fn version_to_lock(&self) -> u32 {
+    fn version_to_lock(&self) -> u64 {
         self.version_to_lock
     }
 
-    fn requested_version(&self) -> Option<u32> {
+    fn requested_version(&self) -> Option<u64> {
         self.substate_requirement.version()
     }
 }
@@ -298,11 +298,11 @@ impl LockIntent for SubstateRequirementLockIntent {
         self.lock_type
     }
 
-    fn version_to_lock(&self) -> u32 {
+    fn version_to_lock(&self) -> u64 {
         self.version_to_lock
     }
 
-    fn requested_version(&self) -> Option<u32> {
+    fn requested_version(&self) -> Option<u64> {
         self.substate_requirement.version()
     }
 }

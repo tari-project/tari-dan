@@ -37,7 +37,8 @@ pub struct SubstateRecord {
     #[n(0)]
     pub substate_id: SubstateId,
     #[n(1)]
-    pub version: u32,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub version: u64,
     #[n(2)]
     pub substate_value: Option<SubstateValue>,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
@@ -54,7 +55,7 @@ impl SubstateRecord {
     pub fn new<V: Into<SubstateValueOrHash>>(
         network: Network,
         substate_id: SubstateId,
-        version: u32,
+        version: u64,
         value: V,
         created: SubstateCreated,
     ) -> Self {
@@ -111,7 +112,7 @@ impl SubstateRecord {
             .unwrap_or_else(|| self.state_hash.into())
     }
 
-    pub fn version(&self) -> u32 {
+    pub fn version(&self) -> u64 {
         self.version
     }
 
@@ -262,7 +263,7 @@ impl SubstateRecord {
     pub fn get_latest_version<TTx: StateStoreReadTransaction>(
         tx: &TTx,
         substate_id: &SubstateId,
-    ) -> Result<(u32, bool), StorageError> {
+    ) -> Result<(u64, bool), StorageError> {
         tx.substates_get_max_version_for_substate(substate_id)
     }
 
@@ -291,7 +292,7 @@ pub struct SubstateCreate {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubstateDestroy {
     pub substate_id: SubstateId,
-    pub version: u32,
+    pub version: u64,
 }
 
 impl SubstateDestroy {
@@ -352,7 +353,7 @@ impl SubstateValueOrHash {
         }
     }
 
-    pub fn to_value_hash(&self, network: Network, version: u32, epoch: Epoch) -> Hash32 {
+    pub fn to_value_hash(&self, network: Network, version: u64, epoch: Epoch) -> Hash32 {
         match &self {
             SubstateValueOrHash::Value(v) => hash_substate(network, v, version, epoch),
             SubstateValueOrHash::Hash(hash) => *hash,
@@ -375,7 +376,7 @@ impl From<Hash32> for SubstateValueOrHash {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubstateData {
     pub substate_id: SubstateId,
-    pub version: u32,
+    pub version: u64,
     pub value: SubstateValueOrHash,
     #[serde(default)]
     pub template_metadata: Option<PublishedTemplateMetadata>,
@@ -435,7 +436,7 @@ impl SubstateUpdateProof {
         }
     }
 
-    pub fn version(&self) -> u32 {
+    pub fn version(&self) -> u64 {
         match self {
             Self::Create(create) => create.substate.version,
             Self::Destroy(destroyed) => destroyed.version,

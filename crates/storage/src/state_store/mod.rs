@@ -273,7 +273,7 @@ pub trait StateStoreReadTransaction: Sized {
         I: IntoIterator<Item = &'a SubstateId>,
         I::IntoIter: ExactSizeIterator;
     /// Returns (version, is_up)
-    fn substates_get_max_version_for_substate(&self, substate_id: &SubstateId) -> Result<(u32, bool), StorageError>;
+    fn substates_get_max_version_for_substate(&self, substate_id: &SubstateId) -> Result<(u64, bool), StorageError>;
     fn substates_any_exist<'a, I>(&self, substates: I) -> Result<bool, StorageError>
     where I: IntoIterator<Item = VersionedSubstateIdRef<'a>>;
 

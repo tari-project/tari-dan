@@ -112,7 +112,7 @@ impl TransactionReceipt {
             upped: upped
                 .map(|substate_id| UpSubstate {
                     substate_id: substate_id.clone(),
-                    version: u32::MAX,
+                    version: u64::MAX,
                     value_hash: Hash32::from_array([0xff; Hash32::LENGTH]),
                 })
                 .collect(),
@@ -227,7 +227,8 @@ pub struct UpSubstate {
     #[n(0)]
     pub substate_id: SubstateId,
     #[n(1)]
-    pub version: u32,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub version: u64,
     #[n(2)]
     pub value_hash: Hash32,
 }

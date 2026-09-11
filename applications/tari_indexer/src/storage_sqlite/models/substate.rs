@@ -39,7 +39,7 @@ use crate::{
 pub struct SubstateRecord {
     pub id: i32,
     pub address: String,
-    pub version: i32,
+    pub version: i64,
     pub data: String,
     pub template_address: Option<String>,
     pub module_name: Option<String>,
@@ -57,7 +57,7 @@ impl TryFrom<SubstateRecord> for SubstateResponse {
                 item: "Substate",
                 details: format!("Invalid substate address {}: {}", row.address, e),
             })?,
-            version: row.version as u32,
+            version: row.version as u64,
             substate: deserialize_json(&row.data)?,
         })
     }
@@ -67,7 +67,7 @@ impl TryFrom<SubstateRecord> for SubstateResponse {
 #[diesel(table_name = substates)]
 pub struct NewSubstate {
     pub address: String,
-    pub version: i32,
+    pub version: i64,
     pub data: String,
     pub template_address: Option<String>,
     pub module_name: Option<String>,

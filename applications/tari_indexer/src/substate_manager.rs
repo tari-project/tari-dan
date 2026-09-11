@@ -68,7 +68,7 @@ use crate::{
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SubstateResponse {
     pub id: SubstateId,
-    pub version: u32,
+    pub version: u64,
     pub substate: SubstateValue,
 }
 
@@ -375,7 +375,7 @@ impl SubstateManager {
     async fn get_substate_from_db(
         &self,
         substate_address: &SubstateId,
-        version: Option<u32>,
+        version: Option<u64>,
     ) -> Result<Option<SubstateResponse>, SubstateManagerError> {
         let substate_address = substate_address.clone();
         let row = self
@@ -409,7 +409,7 @@ pub enum SubstateManagerError {
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
     #[error("Input substate {substate_id} (v{version}) is down")]
-    InputSubstateIsDown { substate_id: SubstateId, version: u32 },
+    InputSubstateIsDown { substate_id: SubstateId, version: u64 },
     #[error("Input substate {substate_id} does not exist")]
     InputSubstateDoesNotExist { substate_id: SubstateId },
 }

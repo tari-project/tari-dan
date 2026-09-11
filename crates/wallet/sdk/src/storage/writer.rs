@@ -130,7 +130,7 @@ pub trait WalletStoreWriter: CommittableStore {
     fn vaults_update(
         &mut self,
         vault_id: VaultId,
-        vault_version: u32,
+        vault_version: u64,
         revealed_balance: Amount,
         confidential_balance: Amount,
     ) -> Result<(), WalletStorageError>;
@@ -142,7 +142,7 @@ pub trait WalletStoreWriter: CommittableStore {
     fn balance_changes_attribute_transaction(
         &mut self,
         vault_id: &VaultId,
-        vault_version: u32,
+        vault_version: u64,
         transaction_id: TransactionId,
     ) -> Result<bool, WalletStorageError>;
     fn vaults_lock_revealed_funds(

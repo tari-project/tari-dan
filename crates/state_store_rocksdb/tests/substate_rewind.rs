@@ -22,7 +22,7 @@ fn substate_id(seed: u8) -> SubstateId {
     SubstateId::Component(ComponentAddress::from_array([seed; ObjectKey::LENGTH]))
 }
 
-fn shard_for(id: &SubstateId, version: u32) -> Shard {
+fn shard_for(id: &SubstateId, version: u64) -> Shard {
     VersionedSubstateIdRef::new(id, version).to_shard(num_preshards())
 }
 

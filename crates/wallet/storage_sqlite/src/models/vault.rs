@@ -20,11 +20,11 @@ pub struct Vault {
     pub resource_type: String,
     pub revealed_balance: String,
     pub confidential_balance: String,
-    pub vault_version: i32,
     pub token_symbol: Option<String>,
     pub divisibility: i32,
     pub created_at: PrimitiveDateTime,
     pub updated_at: PrimitiveDateTime,
+    pub vault_version: i64,
 }
 
 impl Vault {
@@ -40,7 +40,7 @@ impl Vault {
                 item: "vault.address",
                 details: e.to_string(),
             })?,
-            vault_version: u32::try_from(self.vault_version).map_err(|e| WalletStorageError::DecodingError {
+            vault_version: u64::try_from(self.vault_version).map_err(|e| WalletStorageError::DecodingError {
                 operation: "try_into_vault",
                 item: "vault.vault_version",
                 details: e.to_string(),

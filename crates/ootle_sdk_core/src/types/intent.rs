@@ -30,7 +30,7 @@ pub struct InputRef {
     /// The canonical substate id, e.g. `component_<hex>` / `resource_<hex>`.
     pub substate_id: String,
     /// The optional explicit version.
-    pub version: Option<u32>,
+    pub version: Option<u64>,
 }
 
 impl InputRef {
@@ -43,7 +43,7 @@ impl InputRef {
     }
 
     /// Builds a versioned input ref.
-    pub fn versioned(substate_id: impl Into<String>, version: u32) -> Self {
+    pub fn versioned(substate_id: impl Into<String>, version: u64) -> Self {
         Self {
             substate_id: substate_id.into(),
             version: Some(version),

@@ -19,11 +19,12 @@ pub struct SubstateRequirement {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub substate_id: SubstateId,
     #[n(1)]
-    pub version: Option<u32>,
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+    pub version: Option<u64>,
 }
 
 impl SubstateRequirement {
-    pub const fn new(address: SubstateId, version: Option<u32>) -> Self {
+    pub const fn new(address: SubstateId, version: Option<u64>) -> Self {
         Self {
             substate_id: address,
             version,
@@ -37,7 +38,7 @@ impl SubstateRequirement {
         }
     }
 
-    pub fn versioned<T: Into<SubstateId>>(id: T, version: u32) -> Self {
+    pub fn versioned<T: Into<SubstateId>>(id: T, version: u64) -> Self {
         Self {
             substate_id: id.into(),
             version: Some(version),
@@ -56,11 +57,11 @@ impl SubstateRequirement {
         Self::unversioned(self.substate_id)
     }
 
-    pub fn version(&self) -> Option<u32> {
+    pub fn version(&self) -> Option<u64> {
         self.version
     }
 
-    pub fn with_version(self, version: u32) -> VersionedSubstateId {
+    pub fn with_version(self, version: u64) -> VersionedSubstateId {
         VersionedSubstateId::new(self.substate_id, version)
     }
 
@@ -191,15 +192,15 @@ impl Borrow<SubstateId> for SubstateRequirement {
 #[derive(Debug, Clone, Copy)]
 pub struct SubstateRequirementRef<'a> {
     pub substate_id: &'a SubstateId,
-    pub version: Option<u32>,
+    pub version: Option<u64>,
 }
 
 impl<'a> SubstateRequirementRef<'a> {
-    pub fn new(substate_id: &'a SubstateId, version: Option<u32>) -> Self {
+    pub fn new(substate_id: &'a SubstateId, version: Option<u64>) -> Self {
         Self { substate_id, version }
     }
 
-    pub fn versioned(substate_id: &'a SubstateId, version: u32) -> Self {
+    pub fn versioned(substate_id: &'a SubstateId, version: u64) -> Self {
         Self::new(substate_id, Some(version))
     }
 
@@ -211,7 +212,7 @@ impl<'a> SubstateRequirementRef<'a> {
         SubstateRequirement::new(self.substate_id.clone(), self.version)
     }
 
-    pub fn with_version(self, version: u32) -> VersionedSubstateIdRef<'a> {
+    pub fn with_version(self, version: u64) -> VersionedSubstateIdRef<'a> {
         VersionedSubstateIdRef::new(self.substate_id, version)
     }
 
@@ -220,7 +221,7 @@ impl<'a> SubstateRequirementRef<'a> {
         self.with_version(v)
     }
 
-    pub fn version(&self) -> Option<u32> {
+    pub fn version(&self) -> Option<u64> {
         self.version
     }
 
@@ -319,11 +320,12 @@ pub struct VersionedSubstateId {
     #[n(0)]
     substate_id: SubstateId,
     #[n(1)]
-    version: u32,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    version: u64,
 }
 
 impl VersionedSubstateId {
-    pub fn new<T: Into<SubstateId>>(substate_id: T, version: u32) -> Self {
+    pub fn new<T: Into<SubstateId>>(substate_id: T, version: u64) -> Self {
         Self {
             substate_id: substate_id.into(),
             version,
@@ -342,7 +344,7 @@ impl VersionedSubstateId {
         self.substate_id
     }
 
-    pub fn version(&self) -> u32 {
+    pub fn version(&self) -> u64 {
         self.version
     }
 
@@ -444,11 +446,11 @@ impl AsRef<SubstateId> for VersionedSubstateId {
 #[derive(Debug, Clone, Copy)]
 pub struct VersionedSubstateIdRef<'a> {
     pub substate_id: &'a SubstateId,
-    pub version: u32,
+    pub version: u64,
 }
 
 impl<'a> VersionedSubstateIdRef<'a> {
-    pub fn new(substate_id: &'a SubstateId, version: u32) -> Self {
+    pub fn new(substate_id: &'a SubstateId, version: u64) -> Self {
         Self { substate_id, version }
     }
 
@@ -463,7 +465,7 @@ impl<'a> VersionedSubstateIdRef<'a> {
         self.substate_id
     }
 
-    pub fn version(&self) -> u32 {
+    pub fn version(&self) -> u64 {
         self.version
     }
 
