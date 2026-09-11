@@ -20,6 +20,7 @@ mod template {
             self.data = data;
         }
 
+
         pub fn request_random_bytes(len: u32) -> Vec<u8> {
             rand::random_bytes(len)
         }

@@ -1866,6 +1866,7 @@ where
                             nf_id: addr.id().clone(),
                         })?;
                     contents.set_mutable_data(arg.data);
+                    state_mut.enforce_size_limit_of(&locked)?;
 
                     let payload = Metadata::from_iter([("resource_type", ResourceType::NonFungible.to_string())]);
                     Self::emit_std_event(
@@ -2029,6 +2030,7 @@ where
                     if let Some(symbol) = resource_mut.token_symbol() {
                         payload.insert(TOKEN_SYMBOL, symbol);
                     }
+                    state_mut.enforce_size_limit_of(&resource_lock)?;
                     Self::emit_std_event("resource", "update_metadata", resource_address, payload, state_mut)?;
 
                     state_mut.unlock_substate(resource_lock)?;
