@@ -195,9 +195,8 @@ shards_per_group = 256 / 4  = 64        (no remainder)
 
 Four committees, each owning a contiguous block of 64 shards: 1–64, 65–128, 129–192, 193–256. When the
 count does not divide evenly, the remainder is spread across the **leading** groups — one extra shard
-to each of the first `remainder` groups, in order. The code's own test pins this both ways: three
-committees split 256 into 86 + 85 + 85 (remainder 1), and six committees into
-43 + 43 + 43 + 43 + 42 + 42 (remainder 4).
+to each of the first `remainder` groups, in order. Three committees give $256 = 3 \times 85 + 1$, so
+the split is 86 + 85 + 85; six give $256 = 6 \times 42 + 4$, so 43 + 43 + 43 + 43 + 42 + 42.
 
 Two consequences are easy to miss:
 

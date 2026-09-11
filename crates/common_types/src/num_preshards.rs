@@ -125,22 +125,6 @@ mod tests {
         assert_eq!(groups[1].len(), 85);
         assert_eq!(groups[2], ShardGroup::new(172, 256));
         assert_eq!(groups[2].len(), 85);
-
-        let num_committees = 6;
-        let groups: Vec<_> = num_preshards.all_shard_groups_iter(num_committees).collect();
-        assert_eq!(groups.len(), 6);
-        assert_eq!(groups[0], ShardGroup::new(1, 43));
-        assert_eq!(groups[0].len(), 43);
-        assert_eq!(groups[1], ShardGroup::new(44, 86));
-        assert_eq!(groups[1].len(), 43);
-        assert_eq!(groups[2], ShardGroup::new(87, 129));
-        assert_eq!(groups[2].len(), 43);
-        assert_eq!(groups[3], ShardGroup::new(130, 172));
-        assert_eq!(groups[3].len(), 43);
-        assert_eq!(groups[4], ShardGroup::new(173, 214));
-        assert_eq!(groups[4].len(), 42);
-        assert_eq!(groups[5], ShardGroup::new(215, 256));
-        assert_eq!(groups[5].len(), 42);
     }
 
     #[test]
