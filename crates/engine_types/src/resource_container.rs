@@ -275,12 +275,14 @@ impl ResourceContainer {
 
         match (self, other) {
             (
-                Self::Fungible { amount, .. },
+                Self::Fungible {
+                    amount, locked_amount, ..
+                },
                 Self::Fungible {
                     amount: other_amount, ..
                 },
             ) => {
-                *amount = checked_add(*amount, other_amount, "deposit")?;
+                *amount = checked_deposit(*amount, *locked_amount, other_amount)?;
             },
             (
                 Self::NonFungible { token_ids, .. },
@@ -302,6 +304,7 @@ impl ResourceContainer {
                 Self::Confidential {
                     commitments,
                     revealed_amount,
+                    locked_revealed_amount,
                     ..
                 },
                 Self::Confidential {
@@ -317,16 +320,20 @@ impl ResourceContainer {
                         ));
                     }
                 }
-                *revealed_amount = checked_add(*revealed_amount, other_amount, "deposit")?;
+                *revealed_amount = checked_deposit(*revealed_amount, *locked_revealed_amount, other_amount)?;
             },
             (
-                Self::Stealth { revealed_amount, .. },
+                Self::Stealth {
+                    revealed_amount,
+                    locked_amount,
+                    ..
+                },
                 Self::Stealth {
                     revealed_amount: other_amount,
                     ..
                 },
             ) => {
-                *revealed_amount = checked_add(*revealed_amount, other_amount, "deposit")?;
+                *revealed_amount = checked_deposit(*revealed_amount, *locked_amount, other_amount)?;
             },
             (this, other) => {
                 return Err(ResourceError::ResourceTypeMismatch {
@@ -665,7 +672,8 @@ impl ResourceContainer {
                     });
                 }
                 let newly_locked_commitments = mem::take(commitments);
-                let newly_locked_revealed_amount = *revealed_amount;
+                // Sets to zero and returns the amount
+                let newly_locked_revealed_amount = mem::take(revealed_amount);
                 locked_commitments.extend(newly_locked_commitments.iter().copied());
                 *locked_revealed_amount += newly_locked_revealed_amount;
 
@@ -946,6 +954,17 @@ fn checked_add(amount: Amount, other: Amount, operate: &'static str) -> Result<A
     amount
         .checked_add(other)
         .ok_or(ResourceError::BalanceOverflow { operate, amount: other })
+}
+
+/// Returns the new unlocked balance for a deposit of `deposit` into a container holding `unlocked` and `locked`.
+///
+/// A container's balance is the two fields together, so [`Amount::MAX`] bounds their sum rather than either one.
+/// Deposit is the only operation that raises that sum — locking and unlocking move value between the fields and
+/// leave it alone — so bounding it here is what keeps every one of those moves in range.
+fn checked_deposit(unlocked: Amount, locked: Amount, deposit: Amount) -> Result<Amount, ResourceError> {
+    let new_unlocked = checked_add(unlocked, deposit, "deposit")?;
+    checked_add(new_unlocked, locked, "deposit")?;
+    Ok(new_unlocked)
 }
 
 #[derive(Debug, thiserror::Error)]

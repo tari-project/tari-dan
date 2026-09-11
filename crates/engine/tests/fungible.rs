@@ -174,3 +174,80 @@ fn minting_past_the_maximum_vault_balance_is_rejected() {
 
     assert_reject_reason(reason, "would take the resource balance past the maximum");
 }
+
+/// A locked balance is still part of the container's balance, so the maximum applies to the two together.
+#[test]
+fn minting_past_the_maximum_is_rejected_while_part_of_the_vault_is_locked() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/fungible"]);
+    let template = test.get_template_address("Fungible");
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template, "with_supply", args![Amount::from(100u64)])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let component: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
+
+    // Locking moves 50 out of the unlocked field, so a mint sized to fit there alone still takes the vault's
+    // balance past the maximum once the locked half is counted. The second lock is the operation the bound
+    // protects: it adds the unlocked field onto the locked one.
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_method(component, "create_confidential_proof_by_amount", args![Amount::from(
+                50u64
+            )])
+            .put_last_instruction_output_on_workspace("proof")
+            .call_method(component, "confidential_mint_more", args![
+                ConfidentialOutputStatement::mint_revealed(Amount::MAX - Amount::from(50u64))
+            ])
+            .call_method(component, "create_confidential_proof_by_amount", args![Amount::MAX])
+            .put_last_instruction_output_on_workspace("proof2")
+            .drop_all_proofs_in_workspace()
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "would take the resource balance past the maximum");
+}
+
+/// Taking a proof over a vault and dropping it again moves its balance between the container's locked and
+/// unlocked fields and leaves the total where it was.
+#[test]
+fn a_proof_over_a_confidential_vault_preserves_the_balance() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/fungible"]);
+    let template = test.get_template_address("Fungible");
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template, "with_supply", args![Amount::from(100u64)])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let component: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
+
+    // `lock_all` requires a commitment, so move 60 of the 100 revealed into one, leaving 40 revealed.
+    let to_commitment = generate_withdraw_proof_with_inputs(&[], 60u64, 60, None, 0u64);
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(component, "convert", args![to_commitment.proof])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    let vault = get_confidential_vault(&test, component);
+    let before = vault.balance() + vault.locked_balance();
+
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(component, "create_confidential_proof", args![])
+            .put_last_instruction_output_on_workspace("proof")
+            .drop_all_proofs_in_workspace()
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    let vault = get_confidential_vault(&test, component);
+    assert_eq!(vault.balance() + vault.locked_balance(), before);
+    assert_eq!(vault.balance(), before);
+}

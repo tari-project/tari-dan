@@ -219,14 +219,13 @@ impl<T> WasmEnv<T> {
 
         // with_memory_embedded_len expects a pointer to the payload (i.e. after the length prefix), so we need to add
         // the size of the length prefix to the pointer. The global is guest-controlled, so the sum is checked.
-        let offset_ptr =
-            (ptr as u32)
-                .checked_add(WASM_PTR_SIZE as u32)
-                .ok_or(WasmExecutionError::MemoryPointerOutOfRange {
-                    size: 0,
-                    pointer: ptr as u32,
-                    len: WASM_PTR_SIZE as u32,
-                })?;
+        let Some(offset_ptr) = (ptr as u32).checked_add(WASM_PTR_SIZE as u32) else {
+            return Err(WasmExecutionError::MemoryPointerOutOfRange {
+                size: self.get_memory()?.view(store).data_size(),
+                pointer: ptr as u32,
+                len: WASM_PTR_SIZE as u32,
+            });
+        };
         // Load ABI from memory
         // SAFETY: WasmEnv is not used concurrently
         unsafe {

@@ -75,6 +75,18 @@ mod template {
             self.confidential.deposit(bucket);
         }
 
+        pub fn create_confidential_proof_by_amount(&self, amount: Amount) -> Proof {
+            self.confidential.create_proof_by_amount(amount)
+        }
+
+        pub fn create_confidential_proof(&self) -> Proof {
+            self.confidential.create_proof()
+        }
+
+        pub fn confidential_balance(&self) -> Amount {
+            self.confidential.balance()
+        }
+
         pub fn fungible_withdraw(&self, amount: Amount) -> Bucket {
             self.fungible.withdraw(amount)
         }
