@@ -2172,6 +2172,17 @@ impl<TStore: StateReader> WorkingState<TStore> {
         }
 
         let revealed_funds_bucket = revealed_funds_bucket_id.map(|id| self.take_bucket(id)).transpose()?;
+        // The bucket is consumed whole by the transfer, so funds a proof has locked in it would be destroyed while
+        // the proof still names it.
+        if let (Some(bucket_id), Some(bucket)) = (revealed_funds_bucket_id, revealed_funds_bucket.as_ref()) &&
+            bucket.has_locked_funds()
+        {
+            return Err(RuntimeError::InvalidOpLockedBucket {
+                op: "stealth transfer from",
+                bucket_id,
+                locked_amount: bucket.locked_amount(),
+            });
+        }
         if let Some(ref bucket) = revealed_funds_bucket &&
             *bucket.resource_address() != resource_address
         {
