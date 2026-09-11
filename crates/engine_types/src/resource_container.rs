@@ -666,9 +666,11 @@ impl ResourceContainer {
                 locked_revealed_amount,
                 ..
             } => {
-                if commitments.is_empty() {
+                // A confidential container carries value in two places, so it is empty only when both are.
+                // `mint_revealed` alone produces a vault with a revealed balance and no commitments.
+                if commitments.is_empty() && revealed_amount.is_zero() {
                     return Err(ResourceError::InsufficientBalance {
-                        details: "lock_all: resource container contained no commitments".to_string(),
+                        details: "lock_all: resource container contained no commitments or revealed funds".to_string(),
                     });
                 }
                 let newly_locked_commitments = mem::take(commitments);

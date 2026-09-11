@@ -211,6 +211,39 @@ fn minting_past_the_maximum_is_rejected_while_part_of_the_vault_is_locked() {
     assert_reject_reason(reason, "would take the resource balance past the maximum");
 }
 
+/// A confidential vault carries value as commitments and as a revealed balance, and either alone is enough to
+/// take a proof over. `mint_revealed` produces a vault with a revealed balance and no commitments.
+#[test]
+fn a_proof_over_a_confidential_vault_holding_only_revealed_funds() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/fungible"]);
+    let template = test.get_template_address("Fungible");
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template, "with_supply", args![Amount::from(100u64)])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let component: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
+
+    let vault = get_confidential_vault(&test, component);
+    assert!(vault.get_confidential_commitments().unwrap().is_empty());
+    let before = vault.balance();
+
+    test.execute_expect_success(
+        test.transaction()
+            .call_method(component, "create_confidential_proof", args![])
+            .put_last_instruction_output_on_workspace("proof")
+            .drop_all_proofs_in_workspace()
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    let vault = get_confidential_vault(&test, component);
+    assert_eq!(vault.balance(), before);
+    assert!(vault.locked_balance().is_zero());
+}
+
 /// Taking a proof over a vault and dropping it again moves its balance between the container's locked and
 /// unlocked fields and leaves the total where it was.
 #[test]
