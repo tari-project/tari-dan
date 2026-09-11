@@ -1030,7 +1030,8 @@ mod resource_access_rules {
             vec![user_proof.clone()],
         );
 
-        assert_reject_reason(reason, RuntimeError::InvalidOpDepositLockedBucket {
+        assert_reject_reason(reason, RuntimeError::InvalidOpLockedBucket {
+            op: "deposit",
             // badges is the 1st bucket
             bucket_id: 0.into(),
             locked_amount: Amount::from(2u64),
@@ -1409,6 +1410,49 @@ mod resource_access_rules {
         );
 
         assert_reject_reason(result, "attempted in a resource auth hook");
+    }
+
+    /// Mint takes the resource's write lock. The hook guards that resource and may legitimately read it, so the
+    /// lock must not be held across the hook call.
+    #[test]
+    fn it_allows_a_hook_to_read_the_resource_it_guards() {
+        let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/access_rules"]);
+
+        let (_owner_account, owner_proof, owner_key) = test.create_empty_account();
+        let (user_account, user_proof, user_key) = test.create_empty_account();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        let result = test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(access_rules_template, "with_mintable_auth_hook", args![
+                    "hook_reads_own_resource"
+                ])
+                .build_and_seal(&owner_key),
+            vec![owner_proof.clone()],
+        );
+
+        let token_resource = result
+            .finalize
+            .result
+            .any_accept()
+            .unwrap()
+            .up_iter()
+            .filter_map(|(addr, s)| s.substate_value().as_resource().map(|r| (addr, r)))
+            .find(|(_, r)| !r.resource_type().is_non_fungible())
+            .map(|(addr, _)| addr.as_resource_address().unwrap())
+            .unwrap();
+
+        // `mint_resource` is a function rather than a method, so the mint acts on the resource from outside the
+        // hook's own component and the hook runs.
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(access_rules_template, "mint_resource", args![token_resource])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(user_account, "deposit", args![Workspace("tokens")])
+                .build_and_seal(&user_key),
+            vec![user_proof.clone()],
+        );
     }
 
     #[test]

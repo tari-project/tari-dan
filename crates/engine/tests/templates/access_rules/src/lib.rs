@@ -93,6 +93,31 @@ mod access_rules_template {
             .create()
         }
 
+        /// As `with_auth_hook`, but anyone may mint and burn the tokens, so the hook can be exercised on the
+        /// resource actions that take the resource's write lock.
+        pub fn with_mintable_auth_hook(hook: FunctionName) -> Component<AccessRulesTest> {
+            let badges = create_badge_resource(rule!(deny_all));
+
+            let address_alloc = CallerContext::allocate_component_address(None);
+
+            let tokens = ResourceBuilder::public_fungible()
+                .with_authorization_hook(address_alloc.get_address(), hook)
+                .mintable(rule!(allow_all), LOCKED)
+                .burnable(rule!(allow_all), LOCKED)
+                .initial_supply(1000u32);
+
+            Component::new(Self {
+                value: 0,
+                tokens: Vault::from_bucket(tokens),
+                badges: Vault::from_bucket(badges),
+                allowed: true,
+                attack_component: None,
+            })
+            .with_address_allocation(address_alloc)
+            .with_access_rules(ComponentAccessRules::new().default(rule!(allow_all)))
+            .create()
+        }
+
         /// As `with_auth_hook`, but the hook may be replaced or removed by whoever satisfies `updater`.
         pub fn with_updatable_auth_hook(
             allowed: bool,
@@ -340,6 +365,17 @@ mod access_rules_template {
         /// component state, so the engine refuses the vault creation.
         pub fn hook_creates_vault(&self, _action: ResourceAuthAction, _caller: AuthHookCaller) {
             let _vault = Vault::new_empty(self.tokens.resource_address());
+        }
+
+        /// Reads the resource the hook guards. A resource action that write-locks the resource must release that
+        /// lock across the hook call, or this read is refused.
+        pub fn hook_reads_own_resource(&self, action: ResourceAuthAction, _caller: AuthHookCaller) {
+            let manager = ResourceManager::get(self.tokens.resource_address());
+            assert_eq!(
+                manager.resource_type(),
+                ResourceType::Fungible,
+                "hook read the wrong resource for action {action:?}"
+            );
         }
 
         pub fn invalid_auth_hook2(&self, _action: String, _caller: AuthHookCaller) {}

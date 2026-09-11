@@ -557,9 +557,11 @@ impl<TStore: StateReader> WorkingState<TStore> {
             Self::enforce_substate_size_limit(id, value)?;
         }
 
-        if self.buckets.iter().any(|(_, b)| !b.is_empty()) {
+        // An emptied bucket carries nothing and is tolerated, so the count is of those that are not empty.
+        let dangling_buckets = self.buckets.iter().filter(|(_, bucket)| !bucket.is_empty()).count();
+        if dangling_buckets > 0 {
             return Err(TransactionCommitError::DanglingBuckets {
-                count: self.buckets.len(),
+                count: dangling_buckets,
             }
             .into());
         }
@@ -579,7 +581,9 @@ impl<TStore: StateReader> WorkingState<TStore> {
         }
 
         for (vault_id, vault) in self.store.new_vaults() {
-            if !vault.locked_balance().is_zero() {
+            // A confidential vault's locked value is a set of commitments whose amounts are hidden, so the locked
+            // balance alone reports zero for it.
+            if vault.has_locked_funds() {
                 return Err(TransactionCommitError::DanglingLockedValueInVault {
                     vault_id,
                     locked_amount: vault.locked_balance(),
@@ -792,7 +796,8 @@ impl<TStore: StateReader> WorkingState<TStore> {
         // it. Callers reject this earlier to avoid charging for a burn that cannot succeed; the check lives here so
         // that it holds for every caller.
         if bucket.has_locked_funds() {
-            return Err(RuntimeError::InvalidOpDepositLockedBucket {
+            return Err(RuntimeError::InvalidOpLockedBucket {
+                op: "burn",
                 bucket_id,
                 locked_amount: bucket.locked_amount(),
             });
@@ -1511,15 +1516,17 @@ impl<TStore: StateReader> WorkingState<TStore> {
         Ok(frame.current_template_name())
     }
 
-    pub fn id_provider(&self) -> Result<IdProvider<'_>, RuntimeError> {
-        self.call_frames
+    pub fn id_provider(&mut self) -> Result<IdProvider<'_>, RuntimeError> {
+        let entity_id = self
+            .call_frames
             .last()
-            .map(|frame| IdProvider::new(frame.entity_id(), self.transaction_hash, &self.object_ids))
-            .ok_or(RuntimeError::NoActiveCallFrame)
+            .map(|frame| frame.entity_id())
+            .ok_or(RuntimeError::NoActiveCallFrame)?;
+        Ok(IdProvider::new(entity_id, self.transaction_hash, &mut self.object_ids))
     }
 
-    pub fn id_provider_for_entity(&self, entity_id: EntityId) -> IdProvider<'_> {
-        IdProvider::new(entity_id, self.transaction_hash, &self.object_ids)
+    pub fn id_provider_for_entity(&mut self, entity_id: EntityId) -> IdProvider<'_> {
+        IdProvider::new(entity_id, self.transaction_hash, &mut self.object_ids)
     }
 
     pub fn new_bucket_id(&mut self) -> BucketId {
@@ -2167,6 +2174,17 @@ impl<TStore: StateReader> WorkingState<TStore> {
         }
 
         let revealed_funds_bucket = revealed_funds_bucket_id.map(|id| self.take_bucket(id)).transpose()?;
+        // The bucket is consumed whole by the transfer, so funds a proof has locked in it would be destroyed while
+        // the proof still names it.
+        if let (Some(bucket_id), Some(bucket)) = (revealed_funds_bucket_id, revealed_funds_bucket.as_ref()) &&
+            bucket.has_locked_funds()
+        {
+            return Err(RuntimeError::InvalidOpLockedBucket {
+                op: "stealth transfer from",
+                bucket_id,
+                locked_amount: bucket.locked_amount(),
+            });
+        }
         if let Some(ref bucket) = revealed_funds_bucket &&
             *bucket.resource_address() != resource_address
         {

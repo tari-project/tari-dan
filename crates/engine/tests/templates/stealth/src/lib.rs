@@ -63,6 +63,13 @@ mod template {
             .create()
         }
 
+        /// Returns the bucket alongside a proof that locks its funds, so a caller can hand a partially locked
+        /// bucket to an instruction that consumes buckets whole.
+        pub fn lock_bucket(bucket: Bucket) -> (Bucket, Proof) {
+            let proof = bucket.create_proof();
+            (bucket, proof)
+        }
+
         pub fn take_funds(&self, amount: Amount) -> Bucket {
             self.supply_vault.withdraw(amount)
         }

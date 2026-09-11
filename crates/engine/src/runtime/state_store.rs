@@ -297,6 +297,24 @@ impl<TStore: StateReader> WorkingStateStore<TStore> {
         })
     }
 
+    /// The value this transaction currently has for `id`: what it has written, else what it has loaded, else the
+    /// backing store. Unlike [`Self::get_unmodified_substate`] this sees a substate the transaction created, and
+    /// unlike the locked accessors it needs no lock, so it is only for reads of immutable fields.
+    pub(super) fn get_latest_substate(&self, id: &SubstateId) -> Result<&SubstateValue, RuntimeError> {
+        if let Some(value) = self.new_substates.get(id) {
+            return Ok(value);
+        }
+        if let Some(substate) = self.loaded_substates.get(id) {
+            return Ok(substate.substate_value());
+        }
+        let substate = self
+            .state_store
+            .get_state(id)
+            .optional()?
+            .ok_or_else(|| RuntimeError::SubstateNotFound { id: id.clone() })?;
+        Ok(substate.substate_value())
+    }
+
     pub(super) fn get_unmodified_substate(&self, id: &SubstateId) -> Result<&Substate, RuntimeError> {
         match self.loaded_substates.get(id) {
             Some(substate) => Ok(substate),

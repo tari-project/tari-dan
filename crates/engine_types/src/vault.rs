@@ -121,6 +121,12 @@ impl Vault {
         self.resource_container.locked_amount()
     }
 
+    /// Whether any funds in this vault are locked, e.g. by a proof. See
+    /// [`ResourceContainer::has_locked_funds`] for why the balance alone cannot answer this.
+    pub fn has_locked_funds(&self) -> bool {
+        self.resource_container.has_locked_funds()
+    }
+
     pub fn get_commitment_count(&self) -> u64 {
         self.resource_container.get_commitment_count()
     }

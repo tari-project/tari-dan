@@ -125,6 +125,7 @@ use tari_template_lib::{
         Metadata,
         NonFungibleAddress,
         OwnerRule,
+        ResourceAddress,
         ResourceInfo,
         ResourceType,
         SubstateOwnerRule,
@@ -544,11 +545,21 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
         })
     }
 
-    /// It is invalid to burn a bucket that has locked funds (e.g. by a proof). Burning downs only the unlocked
-    /// commitments, so a locked one would be left live with nothing referencing it.
-    fn check_bucket_is_burnable(bucket_id: BucketId, bucket: &Bucket) -> Result<(), RuntimeError> {
+    /// Takes a resource's write lock back after its auth hook has run. A hook must be able to read the resource it
+    /// guards, so the lock cannot be held across the call; the hook frame cannot write, so what it reads is what
+    /// the operation goes on to alter.
+    fn relock_resource_for_write(&mut self, resource_address: ResourceAddress) -> Result<LockedSubstate, RuntimeError> {
+        self.tracker
+            .write_with(|state_mut| state_mut.write_lock_substate(SubstateId::Resource(resource_address)))
+    }
+
+    /// A bucket with funds locked by a proof may only be held, never consumed. Every operation that empties one —
+    /// deposit, burn, join, fee payment — operates on the unlocked funds alone, so consuming a locked bucket would
+    /// destroy the locked portion while the proof still points at it.
+    fn check_bucket_is_unlocked(op: &'static str, bucket_id: BucketId, bucket: &Bucket) -> Result<(), RuntimeError> {
         if bucket.has_locked_funds() {
-            return Err(RuntimeError::InvalidOpDepositLockedBucket {
+            return Err(RuntimeError::InvalidOpLockedBucket {
+                op,
                 bucket_id,
                 locked_amount: bucket.locked_amount(),
             });
@@ -1094,7 +1105,7 @@ where
     TStore: StateReader + Clone + 'static,
     TTemplateProvider: TemplateProvider<Template = LoadedTemplate>,
 {
-    fn next_entity_id(&self) -> Result<EntityId, RuntimeError> {
+    fn next_entity_id(&mut self) -> Result<EntityId, RuntimeError> {
         let id = self.entity_id_provider.next_entity_id()?;
         Ok(id)
     }
@@ -1447,11 +1458,13 @@ where
 
                 args.assert_no_args("Component::GetOwnerRule")?;
 
-                // The owner rule can never change so we'll just fetch the component
+                // The owner rule can never change, so this reads the component without locking it. It must read
+                // what the transaction has, not what the store had: a component created earlier in this same
+                // transaction is not in the store yet.
                 self.tracker.write_with(|state_mut| {
-                    let substate = state_mut.store().get_unmodified_substate(&component_address.into())?;
-                    let component = substate
-                        .substate_value()
+                    let component = state_mut
+                        .store()
+                        .get_latest_substate(&component_address.into())?
                         .component()
                         .ok_or(RuntimeError::InvariantError {
                             function: "GetOwnerProof",
@@ -1670,7 +1683,7 @@ where
                         })?;
                 let mint_resource: MintResourceArg = args.assert_one_arg()?;
 
-                let (resource_lock, maybe_auth_hook, auth_caller, has_view_key, tracks_supply) =
+                let (maybe_auth_hook, auth_caller, has_view_key, tracks_supply) =
                     self.tracker.write_with(|state_mut| {
                         let resource_lock = state_mut.write_lock_substate(SubstateId::Resource(resource_address))?;
 
@@ -1685,18 +1698,16 @@ where
                         let auth_caller = state_mut.get_auth_caller(&resource_lock)?;
                         let has_view_key = resource.view_key().is_some();
                         let tracks_supply = resource.is_supply_tracking_enabled();
-                        Ok::<_, RuntimeError>((
-                            resource_lock,
-                            resource.auth_hook().cloned(),
-                            auth_caller,
-                            has_view_key,
-                            tracks_supply,
-                        ))
+                        let auth_hook = resource.auth_hook().cloned();
+                        state_mut.unlock_substate(resource_lock)?;
+                        Ok::<_, RuntimeError>((auth_hook, auth_caller, has_view_key, tracks_supply))
                     })?;
 
                 if let Some(auth_hook) = maybe_auth_hook {
                     self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Mint)?;
                 }
+
+                let resource_lock = self.relock_resource_for_write(resource_address)?;
 
                 // Charge the mint's native verification cost against the payment-funded allowance
                 // before its proof crypto runs.
@@ -1992,7 +2003,7 @@ where
 
                 Self::check_token_symbol_length(&new_metadata)?;
 
-                let (resource_lock, maybe_auth_hook, auth_caller) = self.tracker.write_with(|state_mut| {
+                let (maybe_auth_hook, auth_caller) = self.tracker.write_with(|state_mut| {
                     let resource_lock = state_mut.write_lock_substate(SubstateId::Resource(resource_address))?;
 
                     let resource = state_mut.get_resource(&resource_lock)?;
@@ -2014,12 +2025,16 @@ where
                     }
 
                     let auth_caller = state_mut.get_auth_caller(&resource_lock)?;
-                    Ok::<_, RuntimeError>((resource_lock, resource.auth_hook().cloned(), auth_caller))
+                    let auth_hook = resource.auth_hook().cloned();
+                    state_mut.unlock_substate(resource_lock)?;
+                    Ok::<_, RuntimeError>((auth_hook, auth_caller))
                 })?;
 
                 if let Some(auth_hook) = maybe_auth_hook {
                     self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::UpdateMetadata)?;
                 }
+
+                let resource_lock = self.relock_resource_for_write(resource_address)?;
 
                 self.tracker.write_with(|state_mut| {
                     let resource_mut = state_mut.get_resource_mut(&resource_lock)?;
@@ -2469,13 +2484,7 @@ where
 
                 self.tracker.write_with(move |state_mut| {
                     let bucket = state_mut.take_bucket(bucket_id)?;
-                    // It is invalid to deposit a bucket that has locked funds
-                    if bucket.has_locked_funds() {
-                        return Err(RuntimeError::InvalidOpDepositLockedBucket {
-                            bucket_id,
-                            locked_amount: bucket.locked_amount(),
-                        });
-                    }
+                    Self::check_bucket_is_unlocked("deposit", bucket_id, &bucket)?;
 
                     // Emit a builtin event for the deposit
                     let payload = Metadata::from_iter([
@@ -3107,6 +3116,7 @@ where
 
                 self.tracker.write_with(|state| {
                     let other_bucket = state.take_bucket(other_bucket_id)?;
+                    Self::check_bucket_is_unlocked("join", other_bucket_id, &other_bucket)?;
                     let bucket = state.get_bucket_mut(bucket_id)?;
                     bucket.join(other_bucket)?;
                     Ok(InvokeResult::encode(&bucket_id)?)
@@ -3120,15 +3130,15 @@ where
 
                 let arg: BurnBucketArg = args.assert_one_arg()?;
 
-                let (resource_lock, maybe_auth_hook, auth_caller, tracks_supply) =
+                let (resource_address, maybe_auth_hook, auth_caller, tracks_supply) =
                     self.tracker.write_with(|state_mut| {
                         let bucket = state_mut.get_bucket(bucket_id)?;
                         // Reject a burn that cannot succeed before the auth hook runs or anything is charged for it.
                         // This is re-checked after the hook, which may lock funds itself.
-                        Self::check_bucket_is_burnable(bucket_id, bucket)?;
+                        Self::check_bucket_is_unlocked("burn", bucket_id, bucket)?;
 
-                        let resource_lock =
-                            state_mut.write_lock_substate(SubstateId::Resource(*bucket.resource_address()))?;
+                        let resource_address = *bucket.resource_address();
+                        let resource_lock = state_mut.write_lock_substate(SubstateId::Resource(resource_address))?;
 
                         let resource = state_mut.get_resource(&resource_lock)?;
 
@@ -3139,24 +3149,24 @@ where
                         )?;
 
                         let auth_caller = state_mut.get_auth_caller(&resource_lock)?;
-                        Ok::<_, RuntimeError>((
-                            resource_lock,
-                            resource.auth_hook().cloned(),
-                            auth_caller,
-                            resource.is_supply_tracking_enabled(),
-                        ))
+                        let auth_hook = resource.auth_hook().cloned();
+                        let tracks_supply = resource.is_supply_tracking_enabled();
+                        state_mut.unlock_substate(resource_lock)?;
+                        Ok::<_, RuntimeError>((resource_address, auth_hook, auth_caller, tracks_supply))
                     })?;
 
                 if let Some(auth_hook) = maybe_auth_hook {
                     self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Burn)?;
                 }
 
+                let resource_lock = self.relock_resource_for_write(resource_address)?;
+
                 // The hook may have altered the bucket, so it is re-inspected after the hook runs and before
                 // anything is charged: a hook that locked funds makes the burn fail, and the charge must cover the
                 // proofs actually verified below rather than those held when the hook was scheduled.
                 let value_proof_points = self.tracker.write_with(|state_mut| {
                     let bucket = state_mut.get_bucket(bucket_id)?;
-                    Self::check_bucket_is_burnable(bucket_id, bucket)?;
+                    Self::check_bucket_is_unlocked("burn", bucket_id, bucket)?;
                     if !tracks_supply {
                         return Ok::<_, RuntimeError>(0);
                     }
@@ -3574,10 +3584,9 @@ where
 
     fn generate_uuid(&mut self) -> Result<[u8; 32], RuntimeError> {
         self.invoke_modules_on_runtime_call("generate_uuid")?;
-        self.tracker.read_with(|state| {
+        self.tracker.write_with(|state| {
             let epoch_hash = state.get_current_epoch_hash()?;
-            let id_provider = state.id_provider()?;
-            Ok(id_provider.new_uuid(&epoch_hash)?)
+            Ok(state.id_provider()?.new_uuid(&epoch_hash)?)
         })
     }
 
@@ -3765,11 +3774,11 @@ where
                         })
                         .transpose()?;
 
-                    let template = state.current_template()?;
-                    let id_provider = state.id_provider()?;
+                    let template = *state.current_template()?;
+                    let mut id_provider = state.id_provider()?;
                     let address = public_key
                         .as_ref()
-                        .map(|public_key| id_provider.derive_new_component_address(template, public_key))
+                        .map(|public_key| id_provider.derive_new_component_address(&template, public_key))
                         .unwrap_or_else(|| id_provider.new_component_address())?;
 
                     let id = state.new_address_allocation(address)?;
@@ -4027,29 +4036,25 @@ where
         entity_id: EntityId,
         workspace_id: WorkspaceId,
     ) -> Result<AllocateAddressResult, RuntimeError> {
-        self.tracker.write_with(|state| {
-            let id_provider = state.id_provider_for_entity(entity_id);
-
-            match substate_type {
-                AllocatableAddressType::Component => {
-                    let address = id_provider.new_component_address()?;
-                    let id = state.new_address_allocation(address)?;
-                    let value = IndexedValue::from_type(&ComponentAddressAllocation::new(id))?;
-                    state.workspace_mut().insert(workspace_id, value)?;
-                    Ok(AllocateAddressResult::ComponentAddress(
-                        ComponentAddressAllocation::new(id),
-                    ))
-                },
-                AllocatableAddressType::Resource => {
-                    let address = id_provider.new_resource_address()?;
-                    let id = state.new_address_allocation(address)?;
-                    let value = IndexedValue::from_type(&ResourceAddressAllocation::new(id))?;
-                    state.workspace_mut().insert(workspace_id, value)?;
-                    Ok(AllocateAddressResult::ResourceAddress(ResourceAddressAllocation::new(
-                        id,
-                    )))
-                },
-            }
+        self.tracker.write_with(|state| match substate_type {
+            AllocatableAddressType::Component => {
+                let address = state.id_provider_for_entity(entity_id).new_component_address()?;
+                let id = state.new_address_allocation(address)?;
+                let value = IndexedValue::from_type(&ComponentAddressAllocation::new(id))?;
+                state.workspace_mut().insert(workspace_id, value)?;
+                Ok(AllocateAddressResult::ComponentAddress(
+                    ComponentAddressAllocation::new(id),
+                ))
+            },
+            AllocatableAddressType::Resource => {
+                let address = state.id_provider_for_entity(entity_id).new_resource_address()?;
+                let id = state.new_address_allocation(address)?;
+                let value = IndexedValue::from_type(&ResourceAddressAllocation::new(id))?;
+                state.workspace_mut().insert(workspace_id, value)?;
+                Ok(AllocateAddressResult::ResourceAddress(ResourceAddressAllocation::new(
+                    id,
+                )))
+            },
         })
     }
 
@@ -4129,6 +4134,7 @@ where
                             reason: format!("PayFee::FromBucket: Expected workspace ID to contain a BucketId: {e}"),
                         })?;
                     let bucket = state_mut.take_bucket(input_bucket)?;
+                    Self::check_bucket_is_unlocked("pay a fee from", input_bucket, &bucket)?;
 
                     // No refunds
                     state_mut.pay_fee(bucket.take_all(), None)?;

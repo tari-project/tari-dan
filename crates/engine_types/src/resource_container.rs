@@ -527,17 +527,14 @@ impl ResourceContainer {
                         ));
                     }
 
-                    if *revealed_amount < validated_proof.change_revealed_amount {
-                        return Err(ResourceError::InsufficientBalance {
-                            details: format!(
-                                "withdraw_confidential: resource container did not contain enough revealed funds for \
-                                 change. Required: {}, Available: {}",
-                                validated_proof.change_revealed_amount, revealed_amount
-                            ),
-                        });
-                    }
-
-                    *revealed_amount += validated_proof.change_revealed_amount;
+                    // The change's revealed amount returns to the container, so the balance proof — not a
+                    // sufficiency check — is what constrains it. Only the sum can fail here.
+                    *revealed_amount = revealed_amount
+                        .checked_add(validated_proof.change_revealed_amount)
+                        .ok_or(ResourceError::BalanceOverflow {
+                            operate: "withdraw_confidential change",
+                            amount: validated_proof.change_revealed_amount,
+                        })?;
                     created_outputs.push((change_commitment, change.into_output_body()));
                 }
 

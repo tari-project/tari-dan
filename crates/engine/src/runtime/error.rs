@@ -303,8 +303,12 @@ pub enum RuntimeError {
     InvalidReturnValue(IndexedValueError),
     #[error("Attempt to pop auth scope stack but it was empty")]
     AuthScopeStackEmpty,
-    #[error("Invalid deposit of bucket {bucket_id} has locked value amounting to {locked_amount}")]
-    InvalidOpDepositLockedBucket { bucket_id: BucketId, locked_amount: Amount },
+    #[error("Cannot {op} bucket {bucket_id}: it has funds locked by a proof (revealed amount {locked_amount})")]
+    InvalidOpLockedBucket {
+        op: &'static str,
+        bucket_id: BucketId,
+        locked_amount: Amount,
+    },
     #[error("Duplicate substate {address}")]
     DuplicateSubstate { address: SubstateId },
     #[error("Substate {id} is orphaned")]
@@ -449,12 +453,10 @@ pub enum TransactionCommitError {
          instruction"
     )]
     DanglingProofs { count: usize },
-    #[error("Locked value (amount: {locked_amount}) remaining in vault {vault_id}")]
+    #[error("Locked value (revealed amount: {locked_amount}) remaining in vault {vault_id}")]
     DanglingLockedValueInVault { vault_id: VaultId, locked_amount: Amount },
     #[error("{count} dangling address allocations remain after transaction execution")]
     DanglingAddressAllocations { count: usize },
-    #[error("{count} dangling items in workspace after transaction execution")]
-    WorkspaceNotEmpty { count: usize },
     #[error(transparent)]
     StateStoreError(#[from] StateStoreError),
     #[error(transparent)]
