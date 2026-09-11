@@ -1077,7 +1077,7 @@ fn template_load_fee_charged_once_per_template_per_transaction() {
     // Single State call — establishes the baseline TemplateLoad fee for {Account, State}.
     let single = test.execute_expect_success(
         Transaction::builder_localnet(Epoch(1))
-            .pay_fee_from_component(account, 1000u64)
+            .pay_fee_from_component(account, 2000u64)
             .call_method(state, "set", args![1u32])
             .build_and_seal(&private_key),
         vec![owner_token.clone()],
@@ -1087,7 +1087,7 @@ fn template_load_fee_charged_once_per_template_per_transaction() {
     // would scale with call count; with dedup it must match the single-call baseline.
     let many = test.execute_expect_success(
         test.transaction()
-            .pay_fee_from_component(account, 1000u64)
+            .pay_fee_from_component(account, 2000u64)
             .call_method(state, "set", args![1u32])
             .call_method(state, "set", args![2u32])
             .call_method(state, "set", args![3u32])

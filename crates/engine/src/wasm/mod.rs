@@ -22,6 +22,7 @@ pub use cache::{
     WasmModuleCache,
 };
 
+mod bulk_metering;
 mod metering;
 mod process;
 

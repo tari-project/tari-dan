@@ -421,3 +421,71 @@ fn points_spent_in_tari_alloc_are_charged() {
     // from the allocator's loop.
     assert!(points > 100_000, "only {points} points were charged");
 }
+
+/// `memory.copy` is one operator whose work is a runtime operand, so its charge must follow the
+/// length it is given rather than the flat cost of the instruction.
+#[test]
+fn memory_copy_points_scale_with_the_bytes_copied() {
+    fn points_for_copy_of(len: u32) -> u64 {
+        let code = template_module(&format!(
+            r#"
+            (func (export "tari_alloc") (param i32) (result i32) (i32.const 1024))
+            (func (export "tari_free") (param i32))
+            (func (export "Buggy_main") (param i32 i32) (result i32)
+              (memory.copy (i32.const 65536) (i32.const 0) (i32.const {len}))
+              (i32.const 20))
+            "#
+        ));
+        load_and_call(code).expect("call failed")
+    }
+
+    let empty = points_for_copy_of(0);
+    let one_page = points_for_copy_of(65_536);
+
+    assert_eq!(
+        one_page - empty,
+        65_536,
+        "a 64 KiB copy cost {one_page} points against {empty} for an empty one"
+    );
+}
+
+/// A copy small enough to be what a template actually does stays close to the flat cost, so the
+/// length-proportional charge does not price ordinary code out of the budget.
+#[test]
+fn a_small_memory_copy_stays_cheap() {
+    let code = template_module(
+        r#"
+        (func (export "tari_alloc") (param i32) (result i32) (i32.const 1024))
+        (func (export "tari_free") (param i32))
+        (func (export "Buggy_main") (param i32 i32) (result i32)
+          (memory.copy (i32.const 65536) (i32.const 0) (i32.const 32))
+          (i32.const 20))
+        "#,
+    );
+
+    let points = load_and_call(code).expect("call failed");
+    assert!(points < 1_000, "a 32-byte copy cost {points} points");
+}
+
+/// The length charge is emitted before the copy runs, so a length no budget can cover fails on the
+/// meter rather than on wasmer's bounds check — the meter is what bounds the CPU a transaction may
+/// claim, and a bounds trap would mean the copy was attempted first.
+#[test]
+fn an_unbounded_memory_copy_traps_on_the_meter() {
+    let code = template_module(
+        r#"
+        (func (export "tari_alloc") (param i32) (result i32) (i32.const 1024))
+        (func (export "tari_free") (param i32))
+        (func (export "Buggy_main") (param i32 i32) (result i32)
+          (memory.copy (i32.const 0) (i32.const 0) (i32.const -1))
+          (i32.const 20))
+        "#,
+    );
+
+    let reason = load_and_call(code).expect_err("an unbounded copy was accepted");
+    let reason = reason.to_string();
+    assert!(
+        !reason.contains("out of bounds") && reason.contains("unreachable"),
+        "the copy did not trap on the meter: {reason}"
+    );
+}

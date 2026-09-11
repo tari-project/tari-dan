@@ -52,8 +52,8 @@ use tari_template_lib::{
     },
     types::engine_args::IntrinsicInvokeArg,
 };
+use tari_wasmer_middlewares::metering::{MeteringPoints, get_remaining_points, set_remaining_points};
 use wasmer::{AsStoreMut, AsStoreRef, Function, FunctionEnv, FunctionEnvMut, Instance, Store, WasmPtr, imports};
-use wasmer_middlewares::metering::{MeteringPoints, get_remaining_points, set_remaining_points};
 
 use crate::{
     abi_metrics,

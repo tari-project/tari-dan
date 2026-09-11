@@ -157,7 +157,7 @@ impl<T> WasmEnv<T> {
     /// marks them synced. Returns `None` when no invocation is in flight (host calls made outside
     /// a WASM invocation) or nothing new was consumed.
     pub(super) fn take_unsynced_in_flight_points<S: AsStoreMut>(&mut self, store: &mut S) -> Option<u64> {
-        use wasmer_middlewares::metering::{MeteringPoints, get_remaining_points};
+        use tari_wasmer_middlewares::metering::{MeteringPoints, get_remaining_points};
 
         let meter = self.invocation_meter.as_mut()?;
         let consumed = match get_remaining_points(store, &meter.instance) {

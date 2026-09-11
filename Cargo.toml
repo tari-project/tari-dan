@@ -292,7 +292,9 @@ url = "2.4.1"
 # Capped to 7.4.x. The accepted-module set and memory tunables are consensus-critical and wasmer
 # reshapes both across minor releases, so a bump must be a deliberate, reviewed change.
 wasmer = "~7.4.0"
-wasmer-middlewares = "~7.4.0"
+# Fork of `wasmer-middlewares` that makes `Metering`'s injected global indexes public, which the
+# bulk-memory metering middleware needs to decrement the remaining-points global inline.
+tari-wasmer-middlewares = "~7.4.0"
 zeroize = "1"
 webauthn-rs = { version = "0.5.1", features = ["default"] }
 webauthn-rs-proto = { version = "0.5.1", features = ["default"] }
