@@ -7,7 +7,7 @@ pub use error::*;
 mod environment;
 
 mod module;
-pub use module::{LoadedWasmTemplate, WasmModule};
+pub use module::{LoadedWasmTemplate, ModuleShape, WasmModule};
 
 mod static_template_def;
 pub use static_template_def::{ExtractTemplateDefError, extract_template_def};

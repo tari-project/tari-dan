@@ -126,6 +126,32 @@ pub const FREE_COMPUTE_GRACE_POINTS: u64 = 32_000_000;
 /// real metered WASM on the same hardware. Both sides are CPU-bound, so the ratio holds across
 /// validator classes. Values from `cargo run -p tari_engine --example native_points_calibrate
 /// --release` (~8.4M points/ms), rounded up.
+/// Points charged for building the `Store` and `Instance` a template call runs in, before its first
+/// metered operator.
+///
+/// Every instruction that calls a template instantiates it afresh: linear memory is mapped, the
+/// module's data segments are copied into it, and the tables and imports are wired up. Compiled
+/// code is laid down once at publish and costs nothing to instantiate, so the only part that scales
+/// with the binary is the data copy — measured across the built-in templates, a 150 KiB and a 520
+/// KiB module instantiate in the same ~0.015 ms because both carry a few KiB of data. Pricing this
+/// off the binary size would therefore overcharge a code-heavy template by an order of magnitude.
+///
+/// Both figures from `cargo run -p tari_engine --release --example instantiation_points_calibrate`,
+/// rounded up.
+pub const fn instantiation_points(data_segment_bytes: u64) -> u64 {
+    PER_TEMPLATE_INSTANTIATION.saturating_add(PER_TEMPLATE_DATA_SEGMENT_BYTE.saturating_mul(data_segment_bytes))
+}
+
+/// Fixed cost of one instantiation: mapping the memory, wiring the imports and building the tables.
+/// Measured at 0.008 to 0.010 ms across runs, taken at the top of that spread.
+pub const PER_TEMPLATE_INSTANTIATION: u64 = 100_000;
+
+/// Each byte of data segment copied into the fresh linear memory. The per-byte figure measures at 3
+/// to 8 points depending on how warm the allocator is, so it is set above the middle of that
+/// spread: the built-in templates end up charged ~1.8x what they measure, and a module carrying the
+/// largest data segment a publish admits ~2.1x.
+pub const PER_TEMPLATE_DATA_SEGMENT_BYTE: u64 = 5;
+
 pub struct NativeExecutionPoints;
 
 impl NativeExecutionPoints {

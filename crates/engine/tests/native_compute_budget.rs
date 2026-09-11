@@ -266,6 +266,29 @@ fn in_flight_wasm_counts_toward_the_native_allowance() {
     assert_reject_reason(reason, "points of compute credit");
 }
 
+/// The `NativeExecution` charge a bare fee payment carries: `pay_fee_from_component` calls into the
+/// Account template, and every call instantiates its template. Subtracting it leaves the charge for
+/// the verification the test is actually about.
+fn fee_payment_native_charge(test: &mut TemplateTest, account: ComponentAddress, owner: NonFungibleAddress) -> u64 {
+    let result = test.execute_expect_success(
+        Transaction::builder_localnet(Epoch(1))
+            .pay_fee_from_component(account, 900_000_000u64)
+            .build_and_seal(test.secret_key()),
+        vec![owner],
+    );
+    native_charge(&result)
+}
+
+fn native_charge(result: &tari_engine_types::commit_result::ExecuteResult) -> u64 {
+    result
+        .finalize
+        .fee_receipt
+        .fee_breakdown()
+        .iter()
+        .find_map(|(s, a)| (*s == FeeSource::NativeExecution).then_some(*a))
+        .expect("NativeExecution charge present")
+}
+
 /// A paying transaction's native verification is charged under `FeeSource::NativeExecution` at the
 /// per-point rate.
 #[test]
@@ -286,6 +309,7 @@ fn paid_native_verification_is_charged() {
         0,
     );
     let expected_points = tari_engine_types::stealth::transfer_native_points(&transfer.statement, false);
+    let baseline = fee_payment_native_charge(&mut test, account, owner.clone());
 
     let seal_signer = RistrettoPublicKey::from_secret_key(&key).to_byte_type();
     // Explicit proofs suppress the tooling's auto-added signer badges, so the UTXO spend key's
@@ -302,14 +326,7 @@ fn paid_native_verification_is_charged() {
         vec![owner, mask_badge],
     );
 
-    let native_charge = result
-        .finalize
-        .fee_receipt
-        .fee_breakdown()
-        .iter()
-        .find_map(|(s, a)| (*s == FeeSource::NativeExecution).then_some(*a))
-        .expect("NativeExecution charge present");
-    assert_eq!(native_charge, expected_points);
+    assert_eq!(native_charge(&result) - baseline, expected_points);
 }
 
 /// A resource with a view key verifies an ElGamal viewable-balance proof per output, so its
@@ -337,6 +354,7 @@ fn view_key_surcharge_is_charged_per_output() {
         0u64,
         &view_key,
     );
+    let baseline = fee_payment_native_charge(&mut test, account, owner.clone());
     let expected_points = tari_engine_types::stealth::transfer_native_points(&transfer.statement, true);
     assert_eq!(
         expected_points,
@@ -358,12 +376,5 @@ fn view_key_surcharge_is_charged_per_output() {
         vec![owner, mask_badge],
     );
 
-    let native_charge = result
-        .finalize
-        .fee_receipt
-        .fee_breakdown()
-        .iter()
-        .find_map(|(s, a)| (*s == FeeSource::NativeExecution).then_some(*a))
-        .expect("NativeExecution charge present");
-    assert_eq!(native_charge, expected_points);
+    assert_eq!(native_charge(&result) - baseline, expected_points);
 }

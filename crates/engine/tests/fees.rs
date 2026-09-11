@@ -8,7 +8,7 @@ use tari_engine_types::{
     fees::{FeeReceipt, FeeSource},
     limits::ENGINE_LIMITS,
 };
-use tari_ootle_transaction::{Epoch, Transaction, args};
+use tari_ootle_transaction::{Epoch, INVOCATION_FLOOR, Transaction, args};
 use tari_template_lib::types::{
     Amount,
     ComponentAddress,
@@ -36,7 +36,7 @@ fn deducts_fees_from_payments_and_refunds_the_rest() {
 
     let result = test.execute_expect_success(
         Transaction::builder_localnet(Epoch(1))
-            .pay_fee_from_component(account, 1000u64)
+            .pay_fee_from_component(account, 2000u64)
             .call_function(test.get_template_address("State"), "new", args![])
             .build_and_seal(&private_key),
         vec![owner_token],
@@ -54,7 +54,7 @@ fn deducts_fees_from_payments_and_refunds_the_rest() {
         .unwrap()
         .balance();
     assert_eq!(new_balance, orig_balance - payment.total_fees_charged());
-    assert_eq!(payment.total_refunded(), 1000 - payment.total_fees_charged());
+    assert_eq!(payment.total_refunded(), 2000 - payment.total_fees_charged());
     assert!(payment.is_paid_in_full());
 }
 
@@ -185,7 +185,7 @@ fn another_account_pays_partially_for_fees() {
             // Faucet pays a little
             .pay_fee_from_component(account_fee, Amount::from(FAUCET_CAP))
             // Account pays the rest
-            .pay_fee_from_component(account_fee2, Amount::from(3000u64))
+            .pay_fee_from_component(account_fee2, Amount::from(6000u64))
             .call_method(xtr_faucet_component(), "take", args![account])
             // NOTE: the test harness provides the virtual proofs as provided, so the transaction signer does not matter
             .build_and_seal(test.secret_key()),
@@ -436,7 +436,7 @@ fn fail_partial_paid_fees() {
     // Must cover what committing the fee intent costs — otherwise nothing commits at all — yet stay
     // smaller than the full transaction's fee, so the main instructions exhaust the compute the
     // payment funds and trap.
-    const FEE_PAID: u64 = 1000;
+    const FEE_PAID: u64 = 2000;
 
     let result = test.execute_expect_commit(
         Transaction::builder_localnet(Epoch(1))
@@ -772,15 +772,17 @@ fn state_transaction<'a>(
     }
 }
 
-/// `max_fee` is the only literal arg of the `pay_fee` instruction, and `calc_args_weight` prices an
-/// instruction's literals at `total_bytes / LITERAL_BYTE_DIVISOR`. The whole weight of this
-/// transaction is that one term, so it steps whenever the encoded width crosses the divisor.
+/// `max_fee` is the only literal arg of the `pay_fee` instruction, so `calc_args_weight` reads its
+/// encoded width. Every invocation carries at least [`INVOCATION_FLOOR`], and an `Amount` is far too
+/// narrow for its literal term to reach that floor, so the weight of a transaction this shape is the
+/// floor for each of its two calls and `max_fee` cannot move it.
 #[test]
-fn transaction_weight_follows_the_max_fee_literal_width() {
-    const LITERAL_BYTE_DIVISOR: u64 = 3;
+fn transaction_weight_does_not_follow_the_max_fee_literal_width() {
     // Straddles an encoding-width boundary while keeping the digit count and the residual balance's
-    // width fixed, so the weight charge is the only thing that can move.
+    // width fixed, so the weight charge is the only thing that could move.
     const MAX_FEES: [u64; 2] = [65_535, 65_536];
+    // `pay_fee_from_component` and the `State::new` call.
+    const INVOCATIONS: u64 = 2;
 
     let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
     let (account, owner_token, key) = test.create_funded_account();
@@ -795,7 +797,7 @@ fn transaction_weight_follows_the_max_fee_literal_width() {
     for (max_fee, receipt) in MAX_FEES.iter().zip(&receipts) {
         assert_eq!(
             receipt.fee_breakdown().get(FeeSource::TransactionWeight),
-            (amount_len(*max_fee) / LITERAL_BYTE_DIVISOR) * per_weight,
+            INVOCATIONS * INVOCATION_FLOOR * per_weight,
             "TransactionWeight at max_fee {max_fee}"
         );
         assert_eq!(
@@ -883,7 +885,7 @@ fn storage_follows_the_residual_vault_balance_width() {
 /// the three mechanisms above do not account for the whole drift.
 #[test]
 fn no_charge_other_than_weight_and_storage_moves_with_max_fee() {
-    const MAX_FEES: [u64; 6] = [1_000, 65_535, 65_536, 100_000_000, FUNDED - 60_000, FUNDED - 10];
+    const MAX_FEES: [u64; 6] = [2_000, 65_535, 65_536, 100_000_000, FUNDED - 60_000, FUNDED - 10];
 
     let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
     let (account, owner_token, key) = test.create_funded_account();
@@ -1077,7 +1079,7 @@ fn template_load_fee_charged_once_per_template_per_transaction() {
     // Single State call — establishes the baseline TemplateLoad fee for {Account, State}.
     let single = test.execute_expect_success(
         Transaction::builder_localnet(Epoch(1))
-            .pay_fee_from_component(account, 1000u64)
+            .pay_fee_from_component(account, 4000u64)
             .call_method(state, "set", args![1u32])
             .build_and_seal(&private_key),
         vec![owner_token.clone()],
@@ -1087,7 +1089,7 @@ fn template_load_fee_charged_once_per_template_per_transaction() {
     // would scale with call count; with dedup it must match the single-call baseline.
     let many = test.execute_expect_success(
         test.transaction()
-            .pay_fee_from_component(account, 1000u64)
+            .pay_fee_from_component(account, 4000u64)
             .call_method(state, "set", args![1u32])
             .call_method(state, "set", args![2u32])
             .call_method(state, "set", args![3u32])

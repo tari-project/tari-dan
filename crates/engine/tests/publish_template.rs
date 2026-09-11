@@ -157,3 +157,26 @@ fn publish_template_without_a_template_def_section() {
 
     assert_reject_reason(result, TEMPLATE_DEF_CUSTOM_SECTION);
 }
+
+/// The compile a publish pays for costs two orders of magnitude more than the compute credit a fee
+/// intent runs on, and the fee intent is only checked for payment once its instructions have run.
+/// Nothing legitimate sources a fee by publishing, so the shape is refused outright.
+#[test]
+fn publishing_a_template_in_the_fee_instructions_is_rejected() {
+    let mut test = TemplateTest::new(CRATE_PATH, &[] as &[&str]);
+    let (account_address, owner_proof, account_key, _) = test.create_funded_account_with_keypair();
+    let template = compile_template("tests/templates/hello_world", &[]).unwrap();
+
+    let reason = test.execute_expect_failure(
+        Transaction::builder_localnet(Epoch(1))
+            .with_fee_instructions_builder(|builder| {
+                builder
+                    .pay_fee_from_component(account_address, 200_000u64)
+                    .publish_template(template.into_code())
+            })
+            .build_and_seal(&account_key),
+        vec![owner_proof],
+    );
+
+    assert_reject_reason(reason, "publishes a template in its fee instructions");
+}
