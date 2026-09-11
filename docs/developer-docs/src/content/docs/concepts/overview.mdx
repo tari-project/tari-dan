@@ -61,8 +61,8 @@ weak script — so that there is little on the security anchor to attack. It pro
 - **The minting source.** The only way to create the Ootle native token is to burn its base-layer
   counterpart. There is no reverse bridge (see
   <a href={basePath("/concepts/tokenomics/")}>Tokenomics</a>).
-- **A liveness backstop.** A BFT chain can stall if more than a third of a committee misbehaves.
-  The base layer's proof-of-work provides a reference point that keeps epochs advancing.
+- **The epoch clock.** Epochs are a fixed number of base-layer blocks, so membership rotation and
+  Ootle's notion of time advance against the base layer's block height.
 
 **Ootle does the programmable, high-throughput thing.** It owns execution, the sharded state, and
 its own finality, and it isolates the complex, higher-risk logic — arbitrary contracts — away from
@@ -167,7 +167,9 @@ top of it. Read the mechanism in detail in
 
 The base layer's role in finality is narrower: it decides *membership* (who is allowed to vote this
 epoch) and it is the reference clock that epochs advance against. Safety of a state transition is a
-statement about the Ootle committee; liveness borrows from the base layer.
+statement about the Ootle committee — and liveness is not borrowed from the base layer either. A
+stalled committee is un-stuck by its own pacemaker, and the next epoch re-forms its membership from
+the base layer's registrations.
 
 ---
 

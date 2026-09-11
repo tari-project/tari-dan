@@ -265,7 +265,7 @@ vote**. Once a quorum of timeout votes is collected, they form a `TimeoutCertifi
 A new-view phase then follows:
 
 1. Validators broadcast a `NewViewMessage` carrying their `high_pc` (the highest proposal certificate
-   seen) and their `high_tc` (the highest timeout certificate) — see
+   seen), their `timeout` vote for the view, and their `last_vote` if they cast one — see
    `crates/consensus/src/messages/new_view.rs`.
 2. The next leader aggregates these into a fresh view: it proposes a block justified by the highest
    certificate it observed, so no locked block is skipped.
@@ -342,7 +342,13 @@ A transaction moves through stages, each carried as a consensus `Command` on the
 |---|---|
 | `LocalOnly` | The transaction touches only this shard group; sequence and commit it here. |
 | `LocalPrepare` | This group sequences its part and pledges its inputs, awaiting the foreign parts. |
-| `LocalAccept` | All foreign pledges are in; execute and commit. |
+| `LocalAccept` | All foreign pledges are in; execute the transaction with the same COMMIT/ABORT decision the other groups reached. |
+| `AllAccept` | Every involved shard group reported ACCEPT; the group records that shared decision. |
+| `SomeAccept` | At least one involved shard group did not report ACCEPT, so the transaction is finalised as aborted. |
+
+`LocalAccept` is where a group executes; `AllAccept` / `SomeAccept` are the finalisation stages where
+it learns whether *every* group accepted and records the outcome. It is the pair of those last two,
+not `LocalAccept`, that makes the shared decision final in every group.
 
 If a foreign shard group has already consumed an input this transaction expected, the local execution
 is rejected with `RejectReason::ForeignPledgeInputConflict` (`crates/engine_types/src/commit_result.rs`)
@@ -377,8 +383,8 @@ view whose leader fails. The base layer contributes the membership clock — the
 - The **pacemaker** times out stalled views; a quorum of timeout votes forms a `TimeoutCertificate`,
   and a `NewViewMessage` starts the next view.
 - Quorum tolerance is `f = (power - 1) / 3`; progress needs `2f + 1` live power.
-- **Cross-shard** transactions are pledged input-by-input and committed atomically via the
-  `LocalOnly` / `LocalPrepare` / `LocalAccept` stages.
+- **Cross-shard** transactions are pledged input-by-input and driven to a shared decision through the
+  `LocalOnly` / `LocalPrepare` / `LocalAccept` stages, finalised by `AllAccept` / `SomeAccept`.
 
 **Next:** how the committed blocks change state —
 <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a>.

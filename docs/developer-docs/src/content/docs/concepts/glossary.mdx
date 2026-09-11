@@ -17,9 +17,9 @@ explained in full. Use your browser's find to jump to a term.
 |---|---|---|
 | **Account** | The standard built-in component that holds vaults and gates withdrawals by owner rule. It is the seam between public and private funds. | <a href={basePath("/concepts/templates-and-assets/")}>Templates and Assets</a> |
 | **Atomic swap** | A cross-party exchange that completes entirely or not at all, typically built from a stealth output with a hashlock/ timelock condition tree. | <a href={basePath("/concepts/privacy-in-applications/")}>Privacy in Applications</a> |
+| **Balance proof** | The statement-level proof that $\sum \text{inputs} = \sum \text{outputs}$ across a stealth transfer, checked over commitments. | <a href={basePath("/concepts/privacy/")}>Privacy</a> |
 | **Base layer** | The upstream Minotari chain (proof of work). It supplies validator registration, the epoch clock, and the burned coins that back L2 value. | <a href={basePath("/concepts/overview/")}>Overview</a> |
 | **Base node** | A node of the base layer. Ootle nodes read registrations and epoch data from it; it does not vote on Ootle state. | <a href={basePath("/concepts/architecture/")}>Architecture</a> |
-| **Balance proof** | The statement-level proof that $\sum \text{inputs} = \sum \text{outputs}$ across a stealth transfer, checked over commitments. | <a href={basePath("/concepts/privacy/")}>Privacy</a> |
 | **Bucket** | A transient pile of funds on a transaction's instruction workspace. Unlike a vault, a bucket is **not** a substate and does not persist. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |
 | **Bulletproofs+** | The range-proof system used to show a committed value is in range without revealing it. Aggregated over multiple outputs. | <a href={basePath("/concepts/privacy/")}>Privacy</a> |
 | **Burn claim** | The operation that mints L2 TARI against a burned base-layer output, writing a tombstone and a stealth UTXO atomically. | <a href={basePath("/concepts/tokenomics/")}>Tokenomics</a> |
@@ -41,7 +41,7 @@ explained in full. Use your browser's find to jump to a term.
 | **Jellyfish Merkle Tree** | The per-shard authenticated data structure over substate addresses; its root is the shard's state commitment. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |
 | **Justified** | A block a quorum has voted for, certified by a `ProposalCertificate`. Weaker than locked, and much weaker than committed. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
 | **Leader** | The validator chosen to propose a block for a view. Selected **round-robin** by `height % committee.len()`. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
-| **Liveness** | The property that the chain keeps advancing. Borrowed in part from the base layer; maintained by the pacemaker. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
+| **Liveness** | The property that the chain keeps advancing. Maintained by the pacemaker; a stalled committee is re-formed at the next epoch from the base layer's registrations. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
 | **Lock (locked block)** | The block a validator must not contradict. Advanced when a justified child appears; it is what keeps honest votes consistent across views. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
 | **Microtari** | The base unit of TARI: `1 TARI = 1_000_000` microtari (divisibility 6). Amounts in code and manifests are microtari. | <a href={basePath("/concepts/tokenomics/")}>Tokenomics</a> |
 | **Pacemaker** | The per-view timer that times out a stalled view and triggers a new-view phase. Interval is a per-network constant (10s). | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
@@ -54,7 +54,7 @@ explained in full. Use your browser's find to jump to a term.
 | **Safety** | The property that no two honest validators commit conflicting histories. Enforced by the lock and the three-chain rule. | <a href={basePath("/concepts/consensus/")}>Consensus</a> |
 | **Shard** | One slice of the sharded state space, numbered 1–256. A substate's shard is derived from the top bits of its address. | <a href={basePath("/concepts/state-and-execution/")}>State and Execution</a> |
 | **Shard group** | A contiguous run of shards administered by one committee. | <a href={basePath("/concepts/architecture/")}>Architecture</a> |
-| **Shard key** | The deterministic address a validator derives from its registration; it decides which shard group the validator serves. | <a href={basePath("/concepts/architecture/")}>Architecture</a> |
+| **Shard key** | The address that decides which shard group a validator serves. On a live network the base layer computes it — from the node key and a base-layer block hash — and delivers it with the registration; a config-file oracle stands in for local swarms. | <a href={basePath("/concepts/architecture/")}>Architecture</a> |
 | **Stablecoin** | An issuance-backed asset built from ordinary primitives: the resource type sets the privacy, and the mint/redeem boundary is where supply is revealed. | <a href={basePath("/concepts/stablecoin/")}>Stablecoins</a> |
 | **Stealth** | The strongest privacy layer, and a resource type: hides both **amounts and owners**, with funds held as UTXOs. | <a href={basePath("/concepts/privacy/")}>Privacy</a> |
 | **Stealth address** | A one-time public key $P = cG + K$ derived by Diffie-Hellman, unlinkable to the recipient's real key. | <a href={basePath("/concepts/privacy/")}>Privacy</a> |

@@ -5,7 +5,8 @@ const headers = { 'User-Agent': 'Tari-Docs-Builder' };
 // The list endpoint returns drafts only to callers with push access, so an
 // unauthenticated request never sees them. Fetch just the newest release for a
 // small payload; if it happens to be a draft (authenticated runs), fall back to
-// paging the list and skipping drafts, so we never misreport an empty table.
+// fetching the default page of the list and skipping drafts, so we never
+// misreport an empty table.
 const pickNewest = (releases: any) =>
   Array.isArray(releases) ? releases.filter((r: any) => !r.draft)[0] : null;
 

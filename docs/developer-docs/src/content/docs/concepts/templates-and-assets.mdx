@@ -39,7 +39,7 @@ pub enum ResourceType {
 
 | Type | Balances visible? | Owners visible? | Funds live in | Builder |
 |---|---|---|---|---|
-| **Public Fungible** | Yes | Yes | Vaults | `ResourceBuilder::fungible()` |
+| **Public Fungible** | Yes | Yes | Vaults | `ResourceBuilder::public_fungible()` |
 | **Public Non-Fungible** | Yes (per NFT) | Yes | Vaults | `ResourceBuilder::non_fungible()` |
 | **Confidential** | No | Yes (the vault's component) | Vaults | `ResourceBuilder::confidential()` |
 | **Stealth** | No | No | UTXOs | `ResourceBuilder::stealth()` |

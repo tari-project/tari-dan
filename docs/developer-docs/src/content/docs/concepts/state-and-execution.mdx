@@ -332,10 +332,11 @@ not estimated.
 
 ### From metering to fees
 
-Metered work is converted to a fee through a `WasmMeteringRate` (`crates/engine/src/transaction/`).
-The transaction pays for the work it actually performs — there is no priority bidding layer in the
-fee model; a transaction either covers its metered cost or is rejected. Fee *distribution* is covered
-in <a href={basePath("/concepts/tokenomics/")}>Tokenomics</a>.
+Metered work is converted to a fee through a `WasmMeteringRate`
+(`crates/engine/src/fees/fee_table.rs`). The transaction pays for the work it actually performs —
+there is no priority bidding layer in the fee model; a transaction either covers its metered cost or
+is rejected. Fee *distribution* is covered in
+<a href={basePath("/concepts/tokenomics/")}>Tokenomics</a>.
 
 ---
 

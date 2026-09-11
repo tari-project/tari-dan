@@ -194,8 +194,10 @@ shards_per_group = 256 / 4  = 64        (no remainder)
 ```
 
 Four committees, each owning a contiguous block of 64 shards: 1–64, 65–128, 129–192, 193–256. When the
-count does not divide evenly, the remainder goes to the **first** group: the code's own test for three
-committees produces `1–86`, `87–171`, `172–256`.
+count does not divide evenly, the remainder is spread across the **leading** groups — one extra shard
+to each of the first `remainder` groups, in order. The code's own tests pin this both ways: three
+committees split 256 into 86 + 85 + 85 (remainder 1), and six committees into
+43 + 43 + 43 + 43 + 42 + 42 (remainder 4).
 
 Two consequences are easy to miss:
 
@@ -231,33 +233,39 @@ constant, and the number of groups is derived from the validator count — so th
 
 ### How a validator lands in a shard group
 
-Membership is **deterministic**, not random. Each registered validator derives a shard key that
-falls inside its shard group's address range:
+Membership is **deterministic**, not random, but on a real network the shard key is computed on the
+base layer and delivered with the registration — Ootle does not derive it:
 
 ```rust
-// crates/epoch_oracles/src/configured/config.rs
-pub(crate) fn calculate_shard_key(&self) -> SubstateAddress {
-    let range = self.shard_group.to_substate_address_range(NumPreshards::current());
-    let mut hasher = DefaultHasher::new();
-    hasher.write(&self.shard_group.encode_as_u32().to_be_bytes());
-    hasher.write(self.public_key.as_bytes());
-    hasher.write(self.claim_key.as_bytes());
-    hasher.write(&self.registration_epoch.to_be_bytes());
-    let hash = hasher.finish();
-    // ... drops the hash into the low bytes of the shard group's address range
+// crates/epoch_manager/src/epoch_event_oracle/event.rs
+ValidatorNodeChange::Add {
+    // ...
+    shard_key: {
+        let hash = Hash32::try_from(add.shard_key.as_slice())?;
+        SubstateAddress::from_hash_and_version(hash, 0)
+    },
 }
 ```
 
-<Aside type="note">
-There is **no verifiable random function (VRF)** and **no sortition** in the Ootle validator set.
-A validator's shard group is a function of its own registration — shard group, public key, claim
-key, and registration epoch — not of a network-wide randomness beacon. You will not find `VRF` or
-`sortition` anywhere in the validator-selection path; the randomness folklore inherited from the
-ERA design documents does not describe what the code does.
-</Aside>
+Minotari derives that value from the validator node's public key **and a base-layer block hash**, and
+re-rolls it periodically, so a validator's shard key — and the shard group it falls into — carries
+base-layer entropy and can change between registrations. A validator's **claim key** (also called a
+registration key) is the credential it proves on the base layer when it registers; rotating it is
+what re-clusters that validator.
 
-A validator's **claim key** (also called a registration key) is the credential it proves on the base
-layer when it registers. Rotating it is what re-clusters that validator.
+Local swarms and tests have no base layer to draw from, so the **configured epoch oracle** stands in
+for it: it derives a shard key from the config file, hashing the validator's own registration fields
+into the low bytes of its shard group's address range
+(`crates/epoch_oracles/src/configured/config.rs`). That is the code you will hit when you run a swarm
+locally, and it is *not* how a live network assigns committees.
+
+<Aside type="note">
+There is **no verifiable random function (VRF)** and **no sortition** in the Ootle validator set —
+neither word appears in the validator-selection path. But the shard key is not purely
+registration-derived: on a live network it is a base-layer function of the node's key and a
+base-layer block hash, re-rolled periodically. Treating it as fixed for the life of a registration
+would misread how committee membership can move.
+</Aside>
 
 ---
 
@@ -269,10 +277,11 @@ oracle (`crates/epoch_oracles/src/base_layer/oracle.rs`) rather than defining it
 
 At each epoch boundary the committee composition is recomputed from the current set of registered
 validators. Members whose registration has lapsed or who have been evicted drop out; newly
-registered validators join. Because a shard key depends on the registration epoch, a validator that
-re-registers can move to a different shard group.
+registered validators join. Because a validator's shard key can change — the base layer re-rolls it
+periodically, and in the dev config oracle it is a function of the registration epoch — a validator
+can move to a different shard group over time.
 
-The number of transactions a transaction may remain valid for is bounded separately by
+The number of **epochs** a transaction may remain valid for is bounded separately by
 `max_transaction_validity_epochs` in `crates/consensus/src/consensus_constants.rs` — a transaction
 carries the last epoch it may be sequenced in, and past that it can never land.
 
@@ -287,22 +296,30 @@ Ootle nodes talk over **libp2p** (`networking/swarm/src/behaviour.rs`). The tran
 - **QUIC** as an alternative transport.
 - A **relay client** so nodes behind NAT can still be reached.
 
-Messages ride on **gossip topics**, which let a node subscribe only to the traffic it needs:
+Messages ride on **gossip topics**. Both topics are deliberately **single and network-wide**:
 
 | Topic | Carries |
 |---|---|
-| `transactions` (`crates/p2p/src/gossip.rs`) | Submitted transactions, propagated to the committees that must sequence them. |
-| `consensus` (`applications/tari_validator_node/src/p2p/services/consensus_gossip/service.rs`) | Consensus messages — proposals, votes, certificates — among committee members. |
+| `transactions` | Submitted transactions, propagated to the committees that must sequence them. |
+| `consensus` | Consensus messages — proposals, votes, certificates — among committee members. |
 
-Topics can also be **prefixed** per shard group (for example a transaction topic scoped to a range
-of shards). A node routes a prefixed topic on the prefix before the first delimiter, so a validator
-can subscribe to the exact slice of the network it is responsible for
-(`networking/core/src/message_mode.rs`).
+They are defined in `crates/p2p/src/gossip.rs` and
+`applications/tari_validator_node/src/p2p/services/consensus_gossip/service.rs` respectively.
 
-This split matters: consensus traffic is confined to a committee, while transaction gossip is
-fanned out to whichever committees hold the inputs. That is the network-level expression of the
-sharding described above — and it is what a <a href={basePath("/concepts/consensus/")}>cross-shard
-transaction</a> has to work against.
+Using one topic rather than a topic per shard group keeps the gossipsub mesh stable across epoch
+boundaries: a validator shuffled into a different shard group never has to unsubscribe and
+resubscribe. Both definitions carry that reasoning in a comment, which is worth reading before you
+consider scoping these topics by shard.
+
+The topics being network-wide does **not** mean the traffic reaches everyone: consensus gossip is
+handled only by committee members, and a transaction is propagated only to the committees that hold
+its inputs. The router *can* carry prefixed topics (for example `transactions-0-15`) and dispatches
+on the segment before the first delimiter, falling back to the whole topic when there is none
+(`networking/core/src/message_mode.rs`) — but that is a routing fallback, not a per-shard-group
+subscription strategy.
+
+That scoping is what a <a href={basePath("/concepts/consensus/")}>cross-shard transaction</a> has to
+work against: a transaction whose inputs span shard groups has to reach each of its committees.
 
 ---
 
@@ -314,7 +331,8 @@ transaction</a> has to work against.
 - Shards are grouped into contiguous **shard groups**, one per committee. A validator serves exactly
   one group, so consensus runs once per committee over disjoint state.
 - Committee size is a constant (**40** on live networks, **7** on devnet); the number of committees
-  scales with the validator count, and a non-dividing remainder goes to the first group.
-- Membership is **deterministic** — no VRF, no sortition.
+  scales with the validator count, and a non-dividing remainder is spread across the leading groups.
+- Membership is **deterministic** — no VRF, no sortition — and the shard key itself is computed on the
+  base layer (a dev-only config oracle stands in for local swarms).
 - **Epochs** rotate membership, driven by the base layer's block height.
 - Nodes communicate over **libp2p** with topic-scoped gossip.

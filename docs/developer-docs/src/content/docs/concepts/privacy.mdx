@@ -148,7 +148,7 @@ implementation facts matter:
   many-output stealth transfer cheap to verify.
 - **Six-decimal precision.** Values are amounts in TARI's smallest unit; the native token has
   divisibility 6, so `1 TARI = 1_000_000` base units. The bit length bounds the largest single
-  value at $2^{64}$ base units.
+  value at $2^{64} - 1$ base units.
 
 Range proofs are the reason a confirmed transfer can be checked for validity — "no value was
 invented" — without any party learning an amount.
@@ -165,12 +165,15 @@ and derives a one-time address:
 
 | Step | Expression | Code |
 |---|---|---|
-| Shared secret | $c = H(r \cdot K)$ | `stealth_owner_dh` |
+| Shared secret | $c = H(r \cdot K)$ | `stealth_owner_dh` (private helper) |
 | Stealth public key | $P = c \cdot G + K$ | `owner_stealth_dh_stealth_address` |
 | Spending key (recipient) | $p = c + k$ | `owner_stealth_dh_secret` |
 | Ephemeral nonce | $R = r \cdot G$ | stored as `sender_public_nonce` |
 
-All of these live in `crates/wallet/crypto/src/kdfs.rs`. Only the recipient, who knows $k$, can
+All of these live in `crates/wallet/crypto/src/kdfs.rs`. The public entry points take a `Network`,
+and the domain hasher mixes it into the derivation, so a key derived for one network does not carry
+over to another. `stealth_owner_dh` itself is a private helper — callers go through the
+address/secret functions above rather than the shared-secret step directly. Only the recipient, who knows $k$, can
 recompute $c$ from $R$ and derive the spending key $p$; a third party sees $P$ and $R$ and cannot
 connect either to the recipient's public key. The output carries $R$ so the recipient can scan.
 
@@ -354,9 +357,11 @@ must reach the recipient privately.
 
 Ootle uses **BLAKE2b** with domain separation for its internal hashes
 (`crates/engine_types/src/hashing.rs`): each use-case mixes in a distinct domain tag, so a hash
-produced for one purpose can never be reinterpreted as valid for another. **SHA-256** appears only
-as an interoperability option for hashlocks — so a hashlock secret can be shared with a chain that
-speaks SHA-256, such as Bitcoin.
+produced for one purpose can never be reinterpreted as valid for another. Templates can also call
+other hash functions directly through `EngineArgs` — `HASH_SHA256`, `HASH_SHA512`, and
+`HASH_KECCAK256` alongside `HASH_BLAKE2B` (`crates/template_lib_types/src/engine_args.rs`) — so a
+hashlock secret can be shared with a chain that speaks SHA-256, such as Bitcoin. BLAKE2b remains the
+engine's internal default; the others are there for interoperability.
 
 Spend conditions themselves are committed in a **Merklized condition tree (MAST)**: the output stores
 only a root, and a spend reveals one leaf plus a logarithmic inclusion proof. The alternative spend

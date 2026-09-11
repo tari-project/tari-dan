@@ -172,7 +172,7 @@ let initial_bucket = ResourceBuilder::stealth()
     .with_token_symbol("USDX")
     .with_divisibility(6)
     // Only whoever satisfies this rule may ever create supply.
-    .mintable(rule!(require(mint_badge)), LOCKED)
+    .mintable(rule!(resource(mint_badge)), LOCKED)
     // Give the auditor the ability to decrypt amounts, and nothing else.
     .with_view_key(auditor_public_key)
     // Mint is revealed: total_supply is updated in the clear.
@@ -208,7 +208,8 @@ This is where the privacy lives, and it is the ordinary stealth transfer:
 - The engine verifies the statement-level **balance proof** $\sum \text{in} = \sum \text{out}$ over the
   commitments, so value is conserved.
 - **Range proofs** on the outputs ensure no single commitment hides a value outside
-  `[minimum_value_proof, 2^64)`, which is what stops a spender from committing to a negative amount.
+  `[minimum_value_promise, 2^64 − 1]`, which is what stops a spender from committing to a negative
+  amount.
 
 Neither the amounts nor the parties are readable on-chain. The mechanics — condition trees, covenants,
 and the runnable example — are in
