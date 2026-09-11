@@ -407,10 +407,10 @@ impl Display for CallScope {
 pub enum FrameWriteMode {
     /// Any substate the frame can lock may be written.
     Full,
-    /// Only the component the frame is executing on, through the lock taken at push. Every other write funnelling
-    /// through `WorkingState::write_lock_substate` / `new_substate` is rejected, so the frame cannot touch a vault,
-    /// resource or any other component. Resource auth hooks run in this mode: the acting component did not choose
-    /// the hook code, so the hook must not be able to act on the acting component's behalf beyond its own state.
+    /// Only the component the frame is executing on, through the lock taken at push. Every write lock the frame
+    /// asks for and every new substate it creates is rejected, so it cannot touch a vault, resource or any other
+    /// component. Resource auth hooks run in this mode: the acting component did not choose the hook code, so the
+    /// hook must not be able to act on the acting component's behalf beyond its own state.
     OwnComponent,
     /// No state mutation at all. Spend-script predicate frames run in this mode so they are provably
     /// side-effect-free.

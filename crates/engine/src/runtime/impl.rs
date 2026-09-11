@@ -252,8 +252,8 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
     }
 
     /// Layer (b) of the frame sandbox: deny the effectful or non-deterministic host ops that are NOT mediated by the
-    /// write-lock chokepoint (layer (a) in `WorkingState::write_lock_substate` / `new_substate`, which neutralises
-    /// every state write). Together they make a spend-script predicate provably side-effect-free and deterministic,
+    /// write-lock chokepoint (layer (a) in `WorkingState::try_lock` / `new_substate`, which neutralises every state
+    /// write). Together they make a spend-script predicate provably side-effect-free and deterministic,
     /// and confine a resource auth hook to its own component state.
     ///
     /// Events are permitted in both modes: an event is an output of execution that no later code can observe, and it
