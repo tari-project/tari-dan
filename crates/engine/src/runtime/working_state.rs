@@ -1516,15 +1516,17 @@ impl<TStore: StateReader> WorkingState<TStore> {
         Ok(frame.current_template_name())
     }
 
-    pub fn id_provider(&self) -> Result<IdProvider<'_>, RuntimeError> {
-        self.call_frames
+    pub fn id_provider(&mut self) -> Result<IdProvider<'_>, RuntimeError> {
+        let entity_id = self
+            .call_frames
             .last()
-            .map(|frame| IdProvider::new(frame.entity_id(), self.transaction_hash, &self.object_ids))
-            .ok_or(RuntimeError::NoActiveCallFrame)
+            .map(|frame| frame.entity_id())
+            .ok_or(RuntimeError::NoActiveCallFrame)?;
+        Ok(IdProvider::new(entity_id, self.transaction_hash, &mut self.object_ids))
     }
 
-    pub fn id_provider_for_entity(&self, entity_id: EntityId) -> IdProvider<'_> {
-        IdProvider::new(entity_id, self.transaction_hash, &self.object_ids)
+    pub fn id_provider_for_entity(&mut self, entity_id: EntityId) -> IdProvider<'_> {
+        IdProvider::new(entity_id, self.transaction_hash, &mut self.object_ids)
     }
 
     pub fn new_bucket_id(&mut self) -> BucketId {

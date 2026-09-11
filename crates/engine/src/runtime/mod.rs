@@ -117,7 +117,7 @@ pub use working_state::ChargeableState;
 use crate::runtime::{locking::LockedSubstate, scope::PushCallFrame};
 
 pub trait RuntimeInterface {
-    fn next_entity_id(&self) -> Result<EntityId, RuntimeError>;
+    fn next_entity_id(&mut self) -> Result<EntityId, RuntimeError>;
     fn emit_event(&mut self, topic: String, payload: Metadata) -> Result<(), RuntimeError>;
 
     fn emit_log(&mut self, level: LogLevel, message: String) -> Result<(), RuntimeError>;

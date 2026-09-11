@@ -637,7 +637,7 @@ where
         substate_type: AllocatableAddressType,
         workspace_id: WorkspaceId,
     ) -> Result<InstructionResult, TransactionErrorKind> {
-        let entity_id = runtime.interface().next_entity_id()?;
+        let entity_id = runtime.interface_mut().next_entity_id()?;
         let result = runtime
             .interface_mut()
             .allocate_address(substate_type, entity_id, workspace_id)?;
@@ -862,7 +862,7 @@ where
             template_address: *template_address,
             module_name: template.template_name().to_string(),
             arg_scope,
-            entity_id: runtime.interface().next_entity_id()?,
+            entity_id: runtime.interface_mut().next_entity_id()?,
         };
 
         runtime.interface_mut().push_call_frame(frame)?;

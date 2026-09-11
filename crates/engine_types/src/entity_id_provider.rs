@@ -1,17 +1,15 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::sync::{Arc, atomic::AtomicU32};
-
 use tari_template_lib::types::{EntityId, Hash32};
 
 use crate::hashing::{EngineHashDomainLabel, hasher32};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct EntityIdProvider {
     transaction_hash: Hash32,
     max_ids: u32,
-    current_id: Arc<AtomicU32>,
+    current_id: u32,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -27,15 +25,16 @@ impl EntityIdProvider {
         Self {
             transaction_hash,
             max_ids,
-            current_id: Arc::new(AtomicU32::new(0)),
+            current_id: 0,
         }
     }
 
-    fn next(&self) -> Result<u32, EntityIdProviderError> {
-        let id = self.current_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    fn next(&mut self) -> Result<u32, EntityIdProviderError> {
+        let id = self.current_id;
         if id >= self.max_ids {
             return Err(EntityIdProviderError::MaxIdsExceeded { max: self.max_ids });
         }
+        self.current_id += 1;
         Ok(id)
     }
 
@@ -44,8 +43,9 @@ impl EntityIdProvider {
     }
 
     /// Generates a new entity id trailing_24_bytes(H(tx_hash || n))
-    pub fn next_entity_id(&self) -> Result<EntityId, EntityIdProviderError> {
-        let id = generate_entity_id(&self.transaction_hash, self.next()?);
+    pub fn next_entity_id(&mut self) -> Result<EntityId, EntityIdProviderError> {
+        let n = self.next()?;
+        let id = generate_entity_id(&self.transaction_hash, n);
         Ok(id)
     }
 }

@@ -1105,7 +1105,7 @@ where
     TStore: StateReader + Clone + 'static,
     TTemplateProvider: TemplateProvider<Template = LoadedTemplate>,
 {
-    fn next_entity_id(&self) -> Result<EntityId, RuntimeError> {
+    fn next_entity_id(&mut self) -> Result<EntityId, RuntimeError> {
         let id = self.entity_id_provider.next_entity_id()?;
         Ok(id)
     }
@@ -3584,10 +3584,9 @@ where
 
     fn generate_uuid(&mut self) -> Result<[u8; 32], RuntimeError> {
         self.invoke_modules_on_runtime_call("generate_uuid")?;
-        self.tracker.read_with(|state| {
+        self.tracker.write_with(|state| {
             let epoch_hash = state.get_current_epoch_hash()?;
-            let id_provider = state.id_provider()?;
-            Ok(id_provider.new_uuid(&epoch_hash)?)
+            Ok(state.id_provider()?.new_uuid(&epoch_hash)?)
         })
     }
 
@@ -3775,11 +3774,11 @@ where
                         })
                         .transpose()?;
 
-                    let template = state.current_template()?;
-                    let id_provider = state.id_provider()?;
+                    let template = *state.current_template()?;
+                    let mut id_provider = state.id_provider()?;
                     let address = public_key
                         .as_ref()
-                        .map(|public_key| id_provider.derive_new_component_address(template, public_key))
+                        .map(|public_key| id_provider.derive_new_component_address(&template, public_key))
                         .unwrap_or_else(|| id_provider.new_component_address())?;
 
                     let id = state.new_address_allocation(address)?;
@@ -4037,29 +4036,25 @@ where
         entity_id: EntityId,
         workspace_id: WorkspaceId,
     ) -> Result<AllocateAddressResult, RuntimeError> {
-        self.tracker.write_with(|state| {
-            let id_provider = state.id_provider_for_entity(entity_id);
-
-            match substate_type {
-                AllocatableAddressType::Component => {
-                    let address = id_provider.new_component_address()?;
-                    let id = state.new_address_allocation(address)?;
-                    let value = IndexedValue::from_type(&ComponentAddressAllocation::new(id))?;
-                    state.workspace_mut().insert(workspace_id, value)?;
-                    Ok(AllocateAddressResult::ComponentAddress(
-                        ComponentAddressAllocation::new(id),
-                    ))
-                },
-                AllocatableAddressType::Resource => {
-                    let address = id_provider.new_resource_address()?;
-                    let id = state.new_address_allocation(address)?;
-                    let value = IndexedValue::from_type(&ResourceAddressAllocation::new(id))?;
-                    state.workspace_mut().insert(workspace_id, value)?;
-                    Ok(AllocateAddressResult::ResourceAddress(ResourceAddressAllocation::new(
-                        id,
-                    )))
-                },
-            }
+        self.tracker.write_with(|state| match substate_type {
+            AllocatableAddressType::Component => {
+                let address = state.id_provider_for_entity(entity_id).new_component_address()?;
+                let id = state.new_address_allocation(address)?;
+                let value = IndexedValue::from_type(&ComponentAddressAllocation::new(id))?;
+                state.workspace_mut().insert(workspace_id, value)?;
+                Ok(AllocateAddressResult::ComponentAddress(
+                    ComponentAddressAllocation::new(id),
+                ))
+            },
+            AllocatableAddressType::Resource => {
+                let address = state.id_provider_for_entity(entity_id).new_resource_address()?;
+                let id = state.new_address_allocation(address)?;
+                let value = IndexedValue::from_type(&ResourceAddressAllocation::new(id))?;
+                state.workspace_mut().insert(workspace_id, value)?;
+                Ok(AllocateAddressResult::ResourceAddress(ResourceAddressAllocation::new(
+                    id,
+                )))
+            },
         })
     }
 
