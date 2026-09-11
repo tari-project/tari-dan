@@ -376,7 +376,9 @@ fn transfer_revealed_between_accounts() {
 }
 
 /// A stealth transfer consumes its revealed-funds bucket whole, so funds a proof has locked in that bucket would
-/// be destroyed while the proof still names it.
+/// be destroyed while the proof still names it. A bucket proof locks the whole bucket, so the shape that reaches
+/// the drop is a statement with no revealed input: the unlocked amount matches its zero and the locked funds go
+/// unexamined.
 #[test]
 fn transfer_rejects_a_revealed_funds_bucket_with_locked_funds() {
     let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
@@ -402,7 +404,15 @@ fn transfer_rejects_a_revealed_funds_bucket_with_locked_funds() {
         [999, 9901],
         100,
     );
-    let onward_transfer = stealth::generate_transfer_data(NO_INPUTS, 100u64, [25, 25, 25], 25);
+    let onward_transfer = stealth::generate_transfer_data(
+        [MaskAndValue {
+            mask: mint.output_masks[0].clone(),
+            value: 100,
+        }],
+        0u64,
+        [40, 60],
+        0u64,
+    );
 
     let reason = test.execute_expect_failure(
         Transaction::builder_localnet(Epoch(1))
@@ -414,8 +424,12 @@ fn transfer_rejects_a_revealed_funds_bucket_with_locked_funds() {
             .call_function(template_addr, "lock_bucket", args![Workspace("funds")])
             .put_last_instruction_output_on_workspace("locked")
             .stealth_transfer_with_input_bucket(faucet_resx, onward_transfer.statement, "locked.0")
+            // Dropping the proof clears the dangling-proof check, leaving the guard as the only thing between
+            // this transfer and a bucket whose locked funds are gone.
+            .drop_all_proofs_in_workspace()
             .finish()
             // In tests, we set the spend condition to require the mask as a signer
+            .add_signer(&test.to_public_key_bytes(), &mint.output_masks[0])
             .add_signer(&test.to_public_key_bytes(), &mint.output_masks[1])
             .add_signer(&test.to_public_key_bytes(), &mint.output_masks[2])
             .seal(&alice_sk),
