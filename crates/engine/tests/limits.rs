@@ -187,19 +187,21 @@ fn deposit_nfts(account: ComponentAddress, key: &RistrettoSecretKey, batches: u6
     builder.build_and_seal(key)
 }
 
-/// Overwrites the account's NFT faucet vault with one holding `count` ids, keeping its substate version.
-fn seed_nft_vault(test: &mut TemplateTest, count: u64) {
-    let (vault_id, version) = test
-        .get_state_store_mut()
+/// Overwrites `account`'s NFT faucet vault with one holding `count` ids, keeping its substate version.
+fn seed_nft_vault(test: &mut TemplateTest, account: ComponentAddress, count: u64) {
+    let vault_id = *test
+        .read_only_state_store()
+        .get_vaults_for_component(account)
+        .unwrap()
         .iter()
-        .find_map(|(id, substate)| {
-            let SubstateId::Vault(vault_id) = id else {
-                return None;
-            };
-            let vault = substate.substate_value().vault()?;
-            (*vault.resource_address() == NFT_FAUCET_RESOURCE_ADDRESS).then_some((*vault_id, substate.version()))
-        })
-        .expect("the account holds a vault for the NFT faucet resource");
+        .find(|(_, vault)| *vault.resource_address() == NFT_FAUCET_RESOURCE_ADDRESS)
+        .expect("the account holds a vault for the NFT faucet resource")
+        .0;
+    let version = test
+        .read_only_state_store()
+        .get_substate(&SubstateId::Vault(vault_id))
+        .unwrap()
+        .version();
 
     let value = nft_vault_of(count);
     assert!(
@@ -228,13 +230,13 @@ fn max_substate_size_limit_applies_to_mutations() {
     let max_count = largest_fitting_nft_count();
 
     // A deposit into a vault with room to spare is accepted.
-    seed_nft_vault(&mut test, max_count - 100);
+    seed_nft_vault(&mut test, account, max_count - 100);
     test.execute_expect_success(deposit_nfts(account, &account_key, DEPOSIT_BATCHES), vec![
         owner_proof.clone(),
     ]);
 
     // One that takes the vault over the limit is not.
-    seed_nft_vault(&mut test, max_count);
+    seed_nft_vault(&mut test, account, max_count);
     let reason = test.execute_expect_failure(deposit_nfts(account, &account_key, DEPOSIT_BATCHES), vec![owner_proof]);
     assert_reject_reason(reason, "exceeds the maximum allowed size");
 }

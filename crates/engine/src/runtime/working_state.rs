@@ -550,7 +550,8 @@ impl<TStore: StateReader> WorkingState<TStore> {
 
     pub(super) fn validate_finalized(&self) -> Result<(), RuntimeError> {
         // A substate can be grown through any of the `&mut SubstateValue` handles this state hands out, so the
-        // size limit binds on what is actually persisted rather than on what was created.
+        // size limit binds on every substate the transaction's instructions persist rather than on what was
+        // created.
         for (id, value) in self.store.mutated_substates() {
             Self::enforce_substate_size_limit(id, value)?;
         }
