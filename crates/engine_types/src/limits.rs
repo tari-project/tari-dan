@@ -10,6 +10,12 @@ pub struct WasmLimits {
     pub max_functions: usize,
     /// Maximum memory size in pages (64KiB each)
     pub max_memory_pages: usize,
+    /// Maximum number of elements in a table. Every table a module declares is capped at this many
+    /// entries, whether or not the module declares a maximum of its own: a table's storage is a
+    /// host-side `Vec` of function references, so an uncapped `table.grow` is a host allocation
+    /// sized by a guest operand. The cap is well above `max_functions`, which bounds what a
+    /// template's own `__indirect_function_table` needs.
+    pub max_table_elements: u32,
 }
 
 pub const WASM_LIMITS: WasmLimits = WasmLimits {
@@ -17,6 +23,7 @@ pub const WASM_LIMITS: WasmLimits = WasmLimits {
     max_function_name_length: 256,
     max_functions: 8192,
     max_memory_pages: 32, // ~2MiB = 32 * 64KiB
+    max_table_elements: 16_384,
 };
 
 /// Maximum Wasmer metering points a single template invocation may consume. Enforced by the

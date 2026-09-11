@@ -46,7 +46,6 @@ use tari_template_test_tooling::{
     support::assert_error::assert_reject_reason,
 };
 use tari_transaction_manifest::ManifestValue;
-use wasmer::ExportError;
 
 const CRATE_PATH: &str = env!("CARGO_MANIFEST_DIR");
 #[test]
@@ -202,7 +201,8 @@ fn test_composed() {
 
 #[test]
 fn test_buggy_template() {
-    // Uncomment the following lines to print the ABI bytes
+    // Uncomment the following lines to print the template definition bytes embedded in the
+    // `tari_tdef` custom section
     // let bytes = tari_template_abi::TemplateDef::V1(tari_template_abi::TemplateDefV1 {
     //     template_name: "Buggy".to_string(),
     //     abi_version: tari_template_abi::version::MINIMUM_SUPPORTED_WASM_ABI_VERSION,
@@ -210,7 +210,7 @@ fn test_buggy_template() {
     // })
     // .encode_for_wasm_embedding()
     // .unwrap();
-    // println!("pub static _ABI_TEMPLATE_DEF: [u8; {}] = [", bytes.len());
+    // println!("static _TARI_TEMPLATE_DEF: [u8; {}] = [", bytes.len());
     // for chunk in bytes.chunks(16) {
     //     print!("    ");
     //     for byte in chunk {
@@ -219,18 +219,6 @@ fn test_buggy_template() {
     //     println!();
     // }
     // println!("];");
-
-    let err = compile_template("tests/templates/buggy", &["return_null_abi"])
-        .unwrap()
-        .load_template()
-        .unwrap_err();
-    match err {
-        // The ptr location is non-zero, and the pointer reads a large length that is out of range
-        TemplateLoaderError::WasmModuleError(WasmExecutionError::MemoryPointerOutOfRange { .. }) => {},
-        // The ptr location is zero, so the decode fails
-        TemplateLoaderError::WasmModuleError(WasmExecutionError::AbiTemplateDefDecodeError { .. }) => {},
-        _ => panic!("Unexpected error: {:?}", err),
-    }
 
     let err = compile_template("tests/templates/buggy", &["unexpected_export_function"])
         .unwrap()
@@ -241,15 +229,6 @@ fn test_buggy_template() {
         TemplateLoaderError::WasmModuleError(WasmExecutionError::UnexpectedAbiFunction { .. })
     ));
 
-    let err = compile_template("tests/templates/buggy", &["return_empty_abi"])
-        .unwrap()
-        .load_template()
-        .unwrap_err();
-    assert!(matches!(
-        err,
-        TemplateLoaderError::WasmModuleError(WasmExecutionError::AbiTemplateDefDecodeError(_))
-    ));
-
     let err = compile_template("tests/templates/buggy", &["no_template_def"])
         .unwrap()
         .load_template()
@@ -257,7 +236,7 @@ fn test_buggy_template() {
 
     assert!(matches!(
         err,
-        TemplateLoaderError::WasmModuleError(WasmExecutionError::ExportError(ExportError::Missing(_)))
+        TemplateLoaderError::WasmModuleError(WasmExecutionError::AbiTemplateDefSectionMissing)
     ));
 }
 

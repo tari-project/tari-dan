@@ -14,6 +14,7 @@ use tari_engine_types::{
     substate::{SubstateId, SubstateValue},
 };
 use tari_ootle_transaction::{Epoch, Transaction};
+use tari_template_abi::TEMPLATE_DEF_CUSTOM_SECTION;
 use tari_template_test_tooling::{
     TemplateTest,
     compile::compile_template,
@@ -129,10 +130,11 @@ fn generate_random_binary(size_in_bytes: usize) -> Vec<u8> {
     iter::repeat_with(random).take(size_in_bytes).collect()
 }
 
-/// `_ABI_TEMPLATE_DEF` is a guest-controlled global that the loader reads before it validates the instance, and
-/// the pointer arithmetic on it must survive any value the guest puts there.
+/// A template's ABI comes from its `tari_tdef` custom section, so a binary without one carries no
+/// template definition the engine can admit — including one embedding its ABI the legacy way, in
+/// linear memory behind an `_ABI_TEMPLATE_DEF` global.
 #[test]
-fn publish_template_with_an_out_of_range_abi_pointer() {
+fn publish_template_without_a_template_def_section() {
     let mut test = TemplateTest::new(CRATE_PATH, &[] as &[&str]);
     let (account_address, owner_proof, account_key, _) = test.create_funded_account_with_keypair();
 
@@ -153,5 +155,5 @@ fn publish_template_with_an_out_of_range_abi_pointer() {
         vec![owner_proof],
     );
 
-    assert_reject_reason(result, "Load template error");
+    assert_reject_reason(result, TEMPLATE_DEF_CUSTOM_SECTION);
 }
