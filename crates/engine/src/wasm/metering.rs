@@ -20,11 +20,16 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use wasmer::{sys::ModuleMiddleware, wasmparser::Operator};
-use wasmer_middlewares::Metering;
+use tari_wasmer_middlewares::Metering;
+use wasmer::wasmparser::Operator;
 
-pub fn middleware(limit: u64) -> impl ModuleMiddleware {
-    Metering::new(limit, cost_function)
+/// The static per-operator cost table, as a function pointer so that the concrete `Metering` type
+/// can be named. [`super::bulk_metering::BulkMetering`] holds the same instance to read its global
+/// indexes.
+pub type CostFunction = fn(&Operator) -> u64;
+
+pub fn middleware(limit: u64) -> Metering<CostFunction> {
+    Metering::new(limit, cost_function as CostFunction)
 }
 
 #[allow(clippy::too_many_lines)]

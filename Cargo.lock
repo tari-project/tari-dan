@@ -11622,6 +11622,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari-wasmer-middlewares"
+version = "7.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93b2f760872268158f76f16d8f36e8c2bccf78dcd9e2f4486091c18351f0c115"
+dependencies = [
+ "wasmer",
+ "wasmer-types",
+ "wasmer-vm",
+]
+
+[[package]]
 name = "tari_base_node_client"
 version = "0.41.0"
 dependencies = [
@@ -12005,6 +12016,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sha3",
+ "tari-wasmer-middlewares",
  "tari_bor",
  "tari_crypto",
  "tari_engine_types",
@@ -12020,7 +12032,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "wasmer",
- "wasmer-middlewares",
  "wat",
 ]
 
@@ -15028,17 +15039,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.4",
-]
-
-[[package]]
-name = "wasmer-middlewares"
-version = "7.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d02a64ce70385c9f6b9b51892844ecb4a843a97f8b4995ba3032bfcc8f4b195"
-dependencies = [
- "wasmer",
- "wasmer-types",
- "wasmer-vm",
 ]
 
 [[package]]

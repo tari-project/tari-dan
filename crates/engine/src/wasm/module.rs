@@ -41,7 +41,14 @@ use wasmer::{
 
 use crate::{
     template::{LoadedTemplate, TemplateLoaderError, TemplateModuleLoader},
-    wasm::{WasmExecutionError, WasmProcess, WasmValidationError, limiting_tunable::LimitingTunables, metering},
+    wasm::{
+        WasmExecutionError,
+        WasmProcess,
+        WasmValidationError,
+        bulk_metering::BulkMetering,
+        limiting_tunable::LimitingTunables,
+        metering,
+    },
 };
 
 pub type MainFunction = TypedFunction<(WasmPtr<u8>, u32), WasmPtr<u8>>;
@@ -160,7 +167,11 @@ impl WasmModule {
             .canonicalize_nans(true);
         // Per-call metering ceiling. `WasmProcess::invoke` lowers each call's allowance further to
         // whatever remains of the per-transaction budget (`MAX_WASM_POINTS_PER_TRANSACTION`).
-        compiler.push_middleware(Arc::new(metering::middleware(limits::MAX_WASM_POINTS_PER_CALL)));
+        let metering = Arc::new(metering::middleware(limits::MAX_WASM_POINTS_PER_CALL));
+        compiler.push_middleware(metering.clone());
+        // Must follow the static meter: `BulkMetering` reads the global indexes that meter installs
+        // and relies on its own emitted operators escaping static costing.
+        compiler.push_middleware(Arc::new(BulkMetering::new(metering)));
 
         // Every feature is set explicitly rather than relying on `Features::default()`: the
         // accepted-module set is consensus-critical, and wasmer flips defaults between releases
