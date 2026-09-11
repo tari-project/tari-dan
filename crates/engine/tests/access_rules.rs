@@ -675,6 +675,115 @@ mod resource_access_rules {
         );
     }
 
+    /// A resource's withdraw and deposit rules are evaluated in the account's own frame, and a `Proof` argument
+    /// is how a badge reaches a frame. The account holds the transaction's signer badge and nothing else of its
+    /// own, so a rule naming some other badge is satisfied only by handing that badge in.
+    #[test]
+    fn the_account_takes_a_badge_restricted_resource_when_handed_the_badge() {
+        let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/access_rules"]);
+
+        let (owner_proof, _, owner_key) = test.create_owner_proof();
+        let (user_account, user_proof, user_key) = test.create_empty_account();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        let result = test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(access_rules_template, "using_resource_rules", args![])
+                .build_and_seal(&owner_key),
+            vec![owner_proof.clone()],
+        );
+
+        let access_rules_component = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+        let resources = result
+            .finalize
+            .result
+            .any_accept()
+            .unwrap()
+            .up_iter()
+            .filter_map(|(addr, s)| s.substate_value().as_resource().map(|r| (addr, r)))
+            .map(|(addr, r)| (r.resource_type().is_non_fungible(), addr.as_resource_address().unwrap()))
+            .collect::<Vec<_>>();
+        let badge_resource = resources.iter().find(|(is_nft, _)| *is_nft).unwrap().1;
+        let token_resource = resources.iter().find(|(is_nft, _)| !*is_nft).unwrap().1;
+
+        // Give the user a badge and, with it, some of the restricted tokens. Both the resource's withdraw and
+        // deposit rules name the badge.
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(access_rules_component, "mint_new_badge", args![])
+                .put_last_instruction_output_on_workspace("permission")
+                .call_method(user_account, "deposit", args![Workspace("permission")])
+                .build_and_seal(&owner_key),
+            vec![owner_proof],
+        );
+
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(user_account, "create_proof_by_amount", args![badge_resource, 1])
+                .put_last_instruction_output_on_workspace("proof")
+                .call_method(access_rules_component, "take_tokens_using_proof", args![
+                    Workspace("proof"),
+                    100
+                ])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(user_account, "deposit", args![Workspace("tokens")])
+                .drop_all_proofs_in_workspace()
+                .build_and_seal(&user_key),
+            vec![user_proof.clone()],
+        );
+
+        // The account frame carries the signer badge, which the resource's withdraw rule does not name.
+        let reason = test.execute_expect_failure(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(user_account, "withdraw", args![token_resource, 10])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(user_account, "deposit", args![Workspace("tokens")])
+                .build_and_seal(&user_key),
+            vec![user_proof.clone()],
+        );
+
+        assert_access_denied_for_action(reason, ResourceAuthAction::Withdraw);
+
+        // Handing the badge to the account's frame satisfies it.
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(user_account, "create_proof_by_amount", args![badge_resource, 1])
+                .put_last_instruction_output_on_workspace("badge")
+                .call_method(user_account, "withdraw_with_auth", args![
+                    token_resource,
+                    10,
+                    Workspace("badge")
+                ])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(user_account, "deposit_with_auth", args![
+                    Workspace("tokens"),
+                    Workspace("badge")
+                ])
+                .drop_all_proofs_in_workspace()
+                .build_and_seal(&user_key),
+            vec![user_proof.clone()],
+        );
+
+        // A proof over the restricted vault is checked against the same rule.
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(user_account, "create_proof_by_amount", args![badge_resource, 1])
+                .put_last_instruction_output_on_workspace("badge")
+                .call_method(user_account, "create_proof_by_amount_with_auth", args![
+                    token_resource,
+                    10,
+                    Workspace("badge")
+                ])
+                .put_last_instruction_output_on_workspace("token_proof")
+                .drop_all_proofs_in_workspace()
+                .build_and_seal(&user_key),
+            vec![user_proof],
+        );
+    }
+
     #[test]
     fn it_locks_resources_used_in_proofs() {
         let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/access_rules"]);
