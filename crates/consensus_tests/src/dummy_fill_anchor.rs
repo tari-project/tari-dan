@@ -9,6 +9,7 @@ use std::{
 
 use tari_consensus::messages::HotstuffMessage;
 use tari_consensus_types::{BlockId, Decision};
+use tari_epoch_manager::EpochManagerReader;
 use tari_ootle_common_types::{Epoch, NodeHeight, optional::Optional};
 use tari_ootle_storage::{StateStore, StorageError, consensus_models::Block};
 use tari_ootle_transaction::TransactionId;
@@ -27,6 +28,9 @@ struct OrphanPlan {
     transaction_id: Option<TransactionId>,
     orphan_block_id: Option<BlockId>,
     orphan_height: Option<NodeHeight>,
+    /// The committee member denied the orphan. Its own highest seen block is the justify block, so a
+    /// proposal it makes on the dummy chain reads the same either way and cannot discriminate.
+    starved: Option<TestAddress>,
     /// The orphan's command for the transaction, captured off the wire: a block that never gathers a QC is
     /// pruned from every store before the assertions run.
     orphan_command: Option<String>,
@@ -62,6 +66,7 @@ fn withhold_first_command_for(plan: Arc<Mutex<OrphanPlan>>) -> MessageFilter {
             return true;
         };
         log::info!("🔇 Withholding {} from {to}", proposal.block);
+        plan.starved = Some(to.clone());
         plan.orphan_command = Some(command.to_string());
         plan.orphan_height = Some(proposal.block.height());
         plan.orphan_block_id = Some(*proposal.block.id());
@@ -154,17 +159,19 @@ async fn dummy_fill_proposes_from_the_justify_block_not_the_orphan() {
 
     test.stop();
 
-    let (orphan_id, orphan_height, orphan_command) = {
+    let (orphan_id, orphan_height, orphan_command, starved) = {
         let plan = plan.lock().unwrap();
         (
             plan.orphan_block_id
                 .expect("no proposal carrying the transaction was ever withheld"),
             plan.orphan_height.unwrap(),
             plan.orphan_command.clone().unwrap(),
+            plan.starved.clone().unwrap(),
         )
     };
 
-    let chain = canonical_chain(test.get_validator(&TestAddress::new(OBSERVER)));
+    let observer = test.get_validator(&TestAddress::new(OBSERVER));
+    let chain = canonical_chain(observer);
     let shape = describe(&chain);
     log::info!(
         "canonical chain:\n  {shape}\norphan: {} at {orphan_height}",
@@ -177,12 +184,37 @@ async fn dummy_fill_proposes_from_the_justify_block_not_the_orphan() {
     );
 
     let by_id = chain.iter().map(|b| (*b.id(), b)).collect::<HashMap<_, _>>();
-    let post_dummy = chain
+    let dummy_extensions = chain
         .iter()
-        .find(|b| {
+        .filter(|b| {
             !b.is_dummy() && b.height() > orphan_height && by_id.get(b.parent()).is_some_and(|parent| parent.is_dummy())
         })
-        .unwrap_or_else(|| panic!("no proposal was built on a dummy chain above the orphan; chain shape:\n  {shape}"));
+        .collect::<Vec<_>>();
+    assert!(
+        !dummy_extensions.is_empty(),
+        "no proposal was built on a dummy chain above the orphan; chain shape:\n  {shape}"
+    );
+
+    // Only a proposer that saw the orphan has a highest seen block above the justify block, so only its
+    // proposal distinguishes the two anchors.
+    let mut post_dummy = None;
+    for block in dummy_extensions {
+        let proposer = observer
+            .epoch_manager
+            .get_validator_node_by_public_key(Epoch(1), *block.proposed_by())
+            .await
+            .unwrap();
+        if proposer.address != starved {
+            post_dummy = Some(block);
+            break;
+        }
+    }
+    let post_dummy = post_dummy.unwrap_or_else(|| {
+        panic!(
+            "every proposal on the dummy chain came from {starved}, which never saw the orphan; chain shape:\n  \
+             {shape}"
+        )
+    });
 
     let post_dummy_command = post_dummy
         .commands()
