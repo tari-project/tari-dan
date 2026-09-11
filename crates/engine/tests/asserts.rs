@@ -174,6 +174,34 @@ mod assert_bucket_contains {
             existing_ids: vec![0],
         });
     }
+
+    /// The ids a reject reason lists are part of the reason validators compare, so they must come out in the order
+    /// they went on rather than in a hash order that differs between runs.
+    #[test]
+    fn it_lists_existing_workspace_ids_in_insertion_order() {
+        let mut test: AssertTest = setup();
+
+        let reason = test.template_test.execute_expect_failure(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(test.account, "withdraw", args![test.faucet_resource, 1u64])
+                .put_last_instruction_output_on_workspace("first")
+                .call_method(test.account, "withdraw", args![test.faucet_resource, 1u64])
+                .put_last_instruction_output_on_workspace("second")
+                .call_method(test.account, "withdraw", args![test.faucet_resource, 1u64])
+                .put_last_instruction_output_on_workspace("third")
+                .add_instruction(Instruction::Assert {
+                    key: WorkspaceOffsetId::new(999),
+                    assertion: Assertion::IsNotNull,
+                })
+                .build_and_seal(&test.account_key),
+            vec![test.account_proof.clone()],
+        );
+
+        assert_reject_reason(reason, RuntimeError::ItemNotOnWorkspace {
+            id: WorkspaceOffsetId::new(999),
+            existing_ids: vec![0, 1, 2],
+        });
+    }
 }
 
 mod assert_is_not_null {

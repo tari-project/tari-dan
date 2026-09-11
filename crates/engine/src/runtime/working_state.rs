@@ -145,8 +145,10 @@ pub(super) struct WorkingState<TStore> {
     events: Vec<Event>,
     logs: Vec<LogEntry>,
     buckets: HashMap<BucketId, Bucket>,
-    address_allocations: HashMap<AddressAllocationId, AllocatedAddress>,
-    used_address_allocations: HashMap<AddressAllocationId, SubstateId>,
+    /// Insertion-ordered: `get_allocated_address_by_address` scans these, so a hashed map would let the iteration
+    /// order decide which allocation a lookup finds.
+    address_allocations: IndexMap<AddressAllocationId, AllocatedAddress>,
+    used_address_allocations: IndexMap<AddressAllocationId, SubstateId>,
     address_allocation_id: u32,
     proofs: HashMap<ProofId, Proof>,
     object_ids: ObjectIds,
@@ -197,8 +199,8 @@ impl<TStore: StateReader> WorkingState<TStore> {
             buckets: HashMap::new(),
             proofs: HashMap::new(),
             address_allocation_id: 0,
-            address_allocations: HashMap::new(),
-            used_address_allocations: HashMap::new(),
+            address_allocations: IndexMap::new(),
+            used_address_allocations: IndexMap::new(),
 
             store: WorkingStateStore::new(state_store),
 
@@ -262,6 +264,12 @@ impl<TStore: StateReader> WorkingState<TStore> {
 
     fn lock_substate(&mut self, addr: SubstateId, lock_flag: LockFlag) -> Result<LockedSubstate, RuntimeError> {
         let lock_id = self.try_lock(addr.clone(), lock_flag)?;
+        // Every lock a frame takes must be released before that frame is popped, which `pop_frame` enforces. A lock
+        // taken before the first frame is pushed — fee settlement, transaction setup — belongs to no frame and is
+        // left untracked.
+        if let Some(frame) = self.call_frames.last_mut() {
+            frame.scope_mut().add_lock_to_scope(lock_id);
+        }
         Ok(LockedSubstate::new(addr, lock_id, lock_flag))
     }
 
@@ -295,6 +303,13 @@ impl<TStore: StateReader> WorkingState<TStore> {
 
     pub fn unlock_substate(&mut self, lock: LockedSubstate) -> Result<(), RuntimeError> {
         self.store.try_unlock(lock.lock_id())?;
+        // The frame releasing a lock need not be the one that took it: a component lock is taken by the caller and
+        // released when the frame it was pushed into is popped, by which point that frame is off the stack.
+        for frame in self.call_frames.iter_mut().rev() {
+            if frame.scope_mut().remove_lock_from_scope(lock.lock_id()) {
+                break;
+            }
+        }
         Ok(())
     }
 
@@ -1245,7 +1260,7 @@ impl<TStore: StateReader> WorkingState<TStore> {
         }
         let alloc_addr = self
             .address_allocations
-            .remove(&id)
+            .shift_remove(&id)
             .ok_or(RuntimeError::AddressAllocationNotFound { id })?;
         self.current_call_scope_mut()?.remove_address_allocation_from_scope(id);
         self.used_address_allocations

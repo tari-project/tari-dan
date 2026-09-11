@@ -1,11 +1,9 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::{HashMap, HashSet},
-    mem,
-};
+use std::mem;
 
+use indexmap::{IndexMap, IndexSet};
 use tari_bor::Value;
 use tari_engine_types::indexed_value::{IndexedValue, IndexedValueError};
 use tari_ootle_transaction::args::{WorkspaceId, WorkspaceOffsetId};
@@ -21,10 +19,14 @@ pub enum WorkspaceError {
     WorkspaceIdAlreadyExists(WorkspaceId),
 }
 
+/// NOTE: the collections here must be insertion-ordered rather than hashed. `drain_all_proofs` drives the order in
+/// which proofs are dropped, and dropping a vault-backed proof can append that vault to the substates the
+/// transaction persists — whose order is hashed into the `TransactionReceipt` diff. `all_ids_iter` likewise lands
+/// in reject strings, which validators compare.
 #[derive(Debug, Clone, Default)]
 pub struct Workspace {
-    items: HashMap<WorkspaceId, IndexedValue>,
-    proofs: HashSet<ProofId>,
+    items: IndexMap<WorkspaceId, IndexedValue>,
+    proofs: IndexSet<ProofId>,
 }
 
 impl Workspace {
@@ -57,7 +59,7 @@ impl Workspace {
         Ok(())
     }
 
-    pub fn drain_all_proofs(&mut self) -> HashSet<ProofId> {
+    pub fn drain_all_proofs(&mut self) -> IndexSet<ProofId> {
         mem::take(&mut self.proofs)
     }
 
