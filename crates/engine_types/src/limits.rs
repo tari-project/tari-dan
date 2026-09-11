@@ -169,6 +169,14 @@ pub struct EngineLimits {
     pub max_logs: usize,
     pub max_log_size_bytes: usize,
     pub max_events: usize,
+    /// Maximum CBOR-encoded size of a single event.
+    ///
+    /// Every event a transaction emits is carried in its transaction receipt, which is persisted as a
+    /// substate like any other but is built after fees settle, so it cannot be rejected for being
+    /// oversized. Its event payload is bounded here instead: `max_events * max_event_size_bytes` must
+    /// stay under [`EngineLimits::max_substate_size`] with room for the receipt's diff summary
+    /// (up to [`EngineLimits::max_substate_outputs`] entries) and fee breakdown.
+    pub max_event_size_bytes: usize,
     pub max_panic_message_size: usize,
     pub max_template_binary_size_bytes: usize,
     pub max_template_name_length: usize,
@@ -184,7 +192,8 @@ pub const ENGINE_LIMITS: EngineLimits = EngineLimits {
     max_logs: 256,
     max_log_size_bytes: 32 * 1024, // 32 KiB
     max_events: 256,
-    max_panic_message_size: 32 * 1024,              // 32 KiB
+    max_event_size_bytes: 2 * 1024, // 2 KiB; 256 * 2 KiB = 512 KiB of the 1 MiB substate budget
+    max_panic_message_size: 32 * 1024, // 32 KiB
     max_template_binary_size_bytes: 3 * 512 * 1024, // 1.5 MiB
     max_template_name_length: 64,
     max_call_depth: 10,

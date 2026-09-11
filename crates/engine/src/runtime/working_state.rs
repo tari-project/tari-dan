@@ -25,7 +25,7 @@ use tari_engine_types::{
     id_provider::{IdProvider, ObjectIds},
     indexed_value::{IndexedValue, IndexedWellKnownTypes},
     limits,
-    lock::LockFlag,
+    lock::{LockFlag, LockId},
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
     proof::{ContainerRef, LockedResource, Proof},
@@ -234,14 +234,14 @@ impl<TStore: StateReader> WorkingState<TStore> {
         self.store.exists(address)
     }
 
-    fn enforce_substate_size_limit(&self, value: &SubstateValue) -> Result<(), RuntimeError> {
+    fn enforce_substate_size_limit(id: &SubstateId, value: &SubstateValue) -> Result<(), RuntimeError> {
         // Published template has its own size restriction
         if value.published_template().is_some() {
             return Ok(());
         }
         let size = encoded_len(value);
         if size > limits::ENGINE_LIMITS.max_substate_size {
-            return Err(LimitError::SubstateSizeExceeded { size }.into());
+            return Err(LimitError::SubstateSizeExceeded { id: id.clone(), size }.into());
         }
         Ok(())
     }
@@ -254,15 +254,24 @@ impl<TStore: StateReader> WorkingState<TStore> {
         let address = address.into();
         self.check_write_allowed(&address)?;
         let value = value.into();
-        self.enforce_substate_size_limit(&value)?;
+        Self::enforce_substate_size_limit(&address, &value)?;
         self.current_call_scope_mut()?.add_substate_to_scope(address.clone())?;
         self.store.insert(address, value)?;
         Ok(())
     }
 
     fn lock_substate(&mut self, addr: SubstateId, lock_flag: LockFlag) -> Result<LockedSubstate, RuntimeError> {
-        let lock_id = self.store.try_lock(addr.clone(), lock_flag)?;
+        let lock_id = self.try_lock(addr.clone(), lock_flag)?;
         Ok(LockedSubstate::new(addr, lock_id, lock_flag))
+    }
+
+    /// Every lock this state takes goes through here, so a write lock cannot be acquired without the frame write
+    /// mode permitting it. Callers that need the raw [`LockId`] use this directly rather than the store.
+    fn try_lock(&mut self, addr: SubstateId, lock_flag: LockFlag) -> Result<LockId, RuntimeError> {
+        if lock_flag.is_write() {
+            self.check_write_allowed(&addr)?;
+        }
+        self.store.try_lock(addr, lock_flag)
     }
 
     pub fn read_lock_substate(&mut self, addr: SubstateId) -> Result<LockedSubstate, RuntimeError> {
@@ -270,7 +279,6 @@ impl<TStore: StateReader> WorkingState<TStore> {
     }
 
     pub fn write_lock_substate(&mut self, addr: SubstateId) -> Result<LockedSubstate, RuntimeError> {
-        self.check_write_allowed(&addr)?;
         self.lock_substate(addr, LockFlag::Write)
     }
 
@@ -387,7 +395,7 @@ impl<TStore: StateReader> WorkingState<TStore> {
 
         for input in &stmt.inputs_statement.inputs {
             let address = UtxoAddress::new(resource_address, input.commitment.into());
-            let lock_id = self.store.try_lock(address.clone().into(), LockFlag::Write)?;
+            let lock_id = self.try_lock(address.clone().into(), LockFlag::Write)?;
             let utxo = self.store.down_utxo(lock_id)?;
             self.store.try_unlock(lock_id)?;
             if utxo.is_frozen() {
@@ -541,6 +549,12 @@ impl<TStore: StateReader> WorkingState<TStore> {
     }
 
     pub(super) fn validate_finalized(&self) -> Result<(), RuntimeError> {
+        // A substate can be grown through any of the `&mut SubstateValue` handles this state hands out, so the
+        // size limit binds on what is actually persisted rather than on what was created.
+        for (id, value) in self.store.mutated_substates() {
+            Self::enforce_substate_size_limit(id, value)?;
+        }
+
         if self.buckets.iter().any(|(_, b)| !b.is_empty()) {
             return Err(TransactionCommitError::DanglingBuckets {
                 count: self.buckets.len(),
@@ -656,7 +670,7 @@ impl<TStore: StateReader> WorkingState<TStore> {
             .into_iter()
             .map(|commitment| {
                 let address = ConfidentialOutputAddress::new(resource_address, commitment);
-                let lock_id = self.store.try_lock(address.clone().into(), LockFlag::Write)?;
+                let lock_id = self.try_lock(address.clone().into(), LockFlag::Write)?;
                 let output = self.store.down_confidential_output(lock_id)?;
                 self.store.try_unlock(lock_id)?;
                 if output.is_frozen() {
@@ -1899,6 +1913,11 @@ impl<TStore: StateReader> WorkingState<TStore> {
     }
 
     pub fn push_event(&mut self, event: Event) -> Result<(), RuntimeError> {
+        let size = encoded_len(&event);
+        if size > limits::ENGINE_LIMITS.max_event_size_bytes {
+            return Err(LimitError::EventSizeExceeded { size }.into());
+        }
+
         if self.events.len() >= limits::ENGINE_LIMITS.max_events {
             return Err(LimitError::MaxEventsExceeded.into());
         }

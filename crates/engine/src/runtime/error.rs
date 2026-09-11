@@ -499,14 +499,16 @@ pub enum ArgumentValidationError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum LimitError {
-    #[error("Substate size of {size} bytes exceeds the maximum allowed size of {} bytes", limits::ENGINE_LIMITS.max_substate_size)]
-    SubstateSizeExceeded { size: usize },
+    #[error("Substate {id} of {size} bytes exceeds the maximum allowed size of {} bytes", limits::ENGINE_LIMITS.max_substate_size)]
+    SubstateSizeExceeded { id: SubstateId, size: usize },
     #[error("Log entry of {size} bytes exceeds maximum size of {} bytes", limits::ENGINE_LIMITS.max_log_size_bytes)]
     LogSizeExceeded { size: usize },
     #[error("Exceeded maximum number of logs per transaction: {}", limits::ENGINE_LIMITS.max_logs)]
     MaxLogsExceeded,
     #[error("Exceeded maximum number of events per transaction: {}", limits::ENGINE_LIMITS.max_events)]
     MaxEventsExceeded,
+    #[error("Event of {size} bytes exceeds maximum size of {} bytes", limits::ENGINE_LIMITS.max_event_size_bytes)]
+    EventSizeExceeded { size: usize },
     #[error("Requested random bytes length {len} exceeds maximum of {} bytes", limits::ENGINE_LIMITS.max_random_bytes_len)]
     MaxRandomBytesLenExceeded { len: usize },
 }
