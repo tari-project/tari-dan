@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from "astro/config";
 import cloudflare from "@astrojs/cloudflare";
+import { unified } from "@astrojs/markdown-remark";
 import starlight from "@astrojs/starlight";
 import skills from 'astro-skills';
 import remarkMath from 'remark-math';
@@ -15,8 +16,10 @@ export default defineConfig({
   }),
   base: '/',
   markdown: {
-    remarkPlugins: [remarkMath],
-    rehypePlugins: [rehypeKatex],
+    processor: unified({
+      remarkPlugins: [remarkMath],
+      rehypePlugins: [rehypeKatex],
+    }),
   },
   integrations: [
     skills(),
