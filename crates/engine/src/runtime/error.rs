@@ -111,8 +111,6 @@ pub enum RuntimeError {
     AddressAllocationNotInScope { id: AddressAllocationId },
     #[error("Encountered unknown or out of scope signer badge with public key {public_key}")]
     SignerBadgeNotInScope { public_key: RistrettoPublicKeyBytes },
-    #[error("Component not found with address '{address}'")]
-    ComponentNotFound { address: ComponentAddress },
     #[error("Layer one commitment not found with address '{address}'")]
     LayerOneCommitmentNotFound { address: ClaimedOutputTombstoneAddress },
     #[error("Invalid argument {argument}: {reason}")]
@@ -404,19 +402,16 @@ impl RuntimeError {
     }
 }
 
+/// Only the absence of a substate counts as "not found". The runtime objects a transaction holds — buckets,
+/// proofs, vaults — go missing because a call is wrong about what is in scope, not because the ledger lacks
+/// something, and an `.optional()` that swallowed those would turn a scope error into a silent `None`.
 impl IsNotFoundError for RuntimeError {
     fn is_not_found_error(&self) -> bool {
-        matches!(
-            self,
-            RuntimeError::SubstateNotFound { .. } |
-                RuntimeError::ComponentNotFound { .. } |
-                RuntimeError::VaultNotFound { .. } |
-                RuntimeError::BucketNotFound { .. } |
-                RuntimeError::ResourceNotFound { .. } |
-                RuntimeError::NonFungibleNotFound { .. } |
-                RuntimeError::ProofNotFound { .. } |
-                RuntimeError::VirtualSubstateNotFound { .. }
-        )
+        match self {
+            RuntimeError::SubstateNotFound { .. } => true,
+            RuntimeError::StateStoreError(err) => err.is_not_found_error(),
+            _ => false,
+        }
     }
 }
 
