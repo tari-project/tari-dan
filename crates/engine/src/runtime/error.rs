@@ -446,7 +446,7 @@ pub enum AssertError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum TransactionCommitError {
-    #[error("{count} dangling bucket(s) remain after transaction execution")]
+    #[error("{count} dangling buckets remain after transaction execution")]
     DanglingBuckets { count: usize },
     #[error(
         "{count} dangling proofs remain after transaction execution. You may need to add a `DropAllProofsOnWorkspace` \
