@@ -128,3 +128,30 @@ fn rejects_more_than_one_publish_template() {
 fn generate_random_binary(size_in_bytes: usize) -> Vec<u8> {
     iter::repeat_with(random).take(size_in_bytes).collect()
 }
+
+/// `_ABI_TEMPLATE_DEF` is a guest-controlled global that the loader reads before it validates the instance, and
+/// the pointer arithmetic on it must survive any value the guest puts there.
+#[test]
+fn publish_template_with_an_out_of_range_abi_pointer() {
+    let mut test = TemplateTest::new(CRATE_PATH, &[] as &[&str]);
+    let (account_address, owner_proof, account_key, _) = test.create_funded_account_with_keypair();
+
+    let code = wat::parse_str(
+        r#"
+        (module
+          (memory (export "memory") 1)
+          (global (export "_ABI_TEMPLATE_DEF") i32 (i32.const -1)))
+        "#,
+    )
+    .unwrap();
+
+    let result = test.execute_expect_failure(
+        test.transaction()
+            .pay_fee_from_component(account_address, 200_000u64)
+            .publish_template(code)
+            .build_and_seal(&account_key),
+        vec![owner_proof],
+    );
+
+    assert_reject_reason(result, "Load template error");
+}

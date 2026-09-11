@@ -69,6 +69,7 @@ criterion = { version = "0.8.1", features = ["html_reports"] }
 minicbor = { workspace = true, default-features = false, features = ["alloc", "derive"] }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
+wat = "1.258"
 
 
 [[bench]]

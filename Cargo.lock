@@ -12021,6 +12021,7 @@ dependencies = [
  "thiserror 2.0.18",
  "wasmer",
  "wasmer-middlewares",
+ "wat",
 ]
 
 [[package]]

@@ -275,12 +275,14 @@ impl ResourceContainer {
 
         match (self, other) {
             (
-                Self::Fungible { amount, .. },
+                Self::Fungible {
+                    amount, locked_amount, ..
+                },
                 Self::Fungible {
                     amount: other_amount, ..
                 },
             ) => {
-                *amount += other_amount;
+                *amount = checked_deposit(*amount, *locked_amount, other_amount)?;
             },
             (
                 Self::NonFungible { token_ids, .. },
@@ -302,6 +304,7 @@ impl ResourceContainer {
                 Self::Confidential {
                     commitments,
                     revealed_amount,
+                    locked_revealed_amount,
                     ..
                 },
                 Self::Confidential {
@@ -317,16 +320,20 @@ impl ResourceContainer {
                         ));
                     }
                 }
-                *revealed_amount += other_amount;
+                *revealed_amount = checked_deposit(*revealed_amount, *locked_revealed_amount, other_amount)?;
             },
             (
-                Self::Stealth { revealed_amount, .. },
+                Self::Stealth {
+                    revealed_amount,
+                    locked_amount,
+                    ..
+                },
                 Self::Stealth {
                     revealed_amount: other_amount,
                     ..
                 },
             ) => {
-                *revealed_amount += other_amount;
+                *revealed_amount = checked_deposit(*revealed_amount, *locked_amount, other_amount)?;
             },
             (this, other) => {
                 return Err(ResourceError::ResourceTypeMismatch {
@@ -659,13 +666,16 @@ impl ResourceContainer {
                 locked_revealed_amount,
                 ..
             } => {
-                if commitments.is_empty() {
+                // A confidential container carries value in two places, so it is empty only when both are.
+                // `mint_revealed` alone produces a vault with a revealed balance and no commitments.
+                if commitments.is_empty() && revealed_amount.is_zero() {
                     return Err(ResourceError::InsufficientBalance {
-                        details: "lock_all: resource container contained no commitments".to_string(),
+                        details: "lock_all: resource container contained no commitments or revealed funds".to_string(),
                     });
                 }
                 let newly_locked_commitments = mem::take(commitments);
-                let newly_locked_revealed_amount = *revealed_amount;
+                // Sets to zero and returns the amount
+                let newly_locked_revealed_amount = mem::take(revealed_amount);
                 locked_commitments.extend(newly_locked_commitments.iter().copied());
                 *locked_revealed_amount += newly_locked_revealed_amount;
 
@@ -689,7 +699,7 @@ impl ResourceContainer {
                 // Sets to zero and returns the amount
                 let newly_locked_amount = mem::take(revealed_amount);
                 *locked_amount += newly_locked_amount;
-                Ok(Self::public_fungible(resource_address, newly_locked_amount))
+                Ok(Self::stealth(resource_address, newly_locked_amount))
             },
         }
     }
@@ -724,7 +734,7 @@ impl ResourceContainer {
                         ),
                     });
                 }
-                *amount += container.unlocked_amount();
+                *amount = checked_add(*amount, container.unlocked_amount(), "unlock")?;
                 *locked_amount -= container.unlocked_amount();
             },
             Self::NonFungible {
@@ -790,7 +800,7 @@ impl ResourceContainer {
                         ));
                     }
                 }
-                *revealed_amount += container.unlocked_amount();
+                *revealed_amount = checked_add(*revealed_amount, container.unlocked_amount(), "unlock")?;
                 *locked_revealed_amount -= container.unlocked_amount();
             },
             Self::Stealth {
@@ -808,7 +818,7 @@ impl ResourceContainer {
                         ),
                     });
                 }
-                *revealed_amount += container.unlocked_amount();
+                *revealed_amount = checked_add(*revealed_amount, container.unlocked_amount(), "unlock")?;
                 *locked_amount -= container.unlocked_amount();
             },
         }
@@ -940,6 +950,25 @@ impl ResourceContainer {
     }
 }
 
+/// Every balance a container holds is bounded by [`Amount::MAX`]: an addition that would cross it is a rejected
+/// operation, not a wrapped balance.
+fn checked_add(amount: Amount, other: Amount, operate: &'static str) -> Result<Amount, ResourceError> {
+    amount
+        .checked_add(other)
+        .ok_or(ResourceError::BalanceOverflow { operate, amount: other })
+}
+
+/// Returns the new unlocked balance for a deposit of `deposit` into a container holding `unlocked` and `locked`.
+///
+/// A container's balance is the two fields together, so [`Amount::MAX`] bounds their sum rather than either one.
+/// Deposit is the only operation that raises that sum — locking and unlocking move value between the fields and
+/// leave it alone — so bounding it here is what keeps every one of those moves in range.
+fn checked_deposit(unlocked: Amount, locked: Amount, deposit: Amount) -> Result<Amount, ResourceError> {
+    let new_unlocked = checked_add(unlocked, deposit, "deposit")?;
+    checked_add(new_unlocked, locked, "deposit")?;
+    Ok(new_unlocked)
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ResourceError {
     #[error("Attempted to {operate} a {given} resource, but the container resource type is {expected}")]
@@ -955,6 +984,8 @@ pub enum ResourceError {
     },
     #[error("Resource did not contain sufficient balance: {details}")]
     InsufficientBalance { details: String },
+    #[error("{operate} of {amount} would take the resource balance past the maximum")]
+    BalanceOverflow { operate: &'static str, amount: Amount },
     #[error("Invariant error: {0}")]
     InvariantError(String),
     #[error("Operation not allowed: {0}")]
