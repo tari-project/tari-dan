@@ -246,16 +246,6 @@ impl<TStore: StateReader> WorkingState<TStore> {
         Ok(())
     }
 
-    /// Enforces [`limits::ENGINE_LIMITS::max_substate_size`] on a substate the current instruction has just
-    /// written, so an instruction that takes a substate over the limit is the one that fails. Only worth calling
-    /// where a single write can cross the limit — where the new value came from an engine argument, which
-    /// `max_internal_call_size` allows to be as large as the substate limit itself. Growth that accumulates a few
-    /// bytes at a time, such as a vault's non-fungible ids, is caught by the sweep in [`Self::validate_finalized`]
-    /// instead, which measures each substate once rather than once per write.
-    pub fn enforce_size_limit_of(&self, locked: &LockedSubstate) -> Result<(), RuntimeError> {
-        Self::enforce_substate_size_limit(locked.substate_id(), self.get_locked_substate(locked)?)
-    }
-
     pub fn new_substate<K: Into<SubstateId>, V: Into<SubstateValue>>(
         &mut self,
         address: K,
@@ -360,7 +350,6 @@ impl<TStore: StateReader> WorkingState<TStore> {
             return Ok(());
         };
 
-        self.enforce_size_limit_of(locked)?;
         self.validate_component_state(Some(&before), &after)?;
 
         // add event to indicate that there is a change in component
@@ -560,9 +549,10 @@ impl<TStore: StateReader> WorkingState<TStore> {
     }
 
     pub(super) fn validate_finalized(&self) -> Result<(), RuntimeError> {
-        // The backstop for the size limit. A write that can cross it in one step is caught where it happens, but a
-        // substate also grows a few bytes at a time — a vault's non-fungible ids most of all — and no single write
-        // can see that. Measured here once per substate rather than once per write.
+        // A substate can be grown through any of the `&mut SubstateValue` handles this state hands out, so the
+        // size limit binds on every substate the transaction's instructions persist rather than on what was
+        // created. Measured here, where the set to persist is known, rather than at each write: a substate a
+        // transaction writes many times would otherwise be measured many times.
         for (id, value) in self.store.mutated_substates() {
             Self::enforce_substate_size_limit(id, value)?;
         }
