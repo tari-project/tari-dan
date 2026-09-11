@@ -166,10 +166,9 @@ top of it. Read the mechanism in detail in
 <a href={basePath("/concepts/consensus/")}>Consensus</a>.
 
 The base layer's role in finality is narrower: it decides *membership* (who is allowed to vote this
-epoch) and it is the reference clock that epochs advance against. Safety of a state transition is a
-statement about the Ootle committee — and liveness is not borrowed from the base layer either. A
-stalled committee is un-stuck by its own pacemaker, and the next epoch re-forms its membership from
-the base layer's registrations.
+epoch) and it is the reference clock that epochs advance against. Both safety and liveness of a
+state transition are statements about the Ootle committee. A stalled committee is un-stuck by its own
+pacemaker, and the next epoch re-forms its membership from the base layer's registrations.
 
 ---
 

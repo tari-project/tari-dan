@@ -347,8 +347,8 @@ A transaction moves through stages, each carried as a consensus `Command` on the
 | `SomeAccept` | At least one involved shard group did not report ACCEPT, so the transaction is finalised as aborted. |
 
 `LocalAccept` is where a group executes; `AllAccept` / `SomeAccept` are the finalisation stages where
-it learns whether *every* group accepted and records the outcome. It is the pair of those last two,
-not `LocalAccept`, that makes the shared decision final in every group.
+it learns whether *every* group accepted and records the shared decision that makes the outcome
+final in every group.
 
 If a foreign shard group has already consumed an input this transaction expected, the local execution
 is rejected with `RejectReason::ForeignPledgeInputConflict` (`crates/engine_types/src/commit_result.rs`)

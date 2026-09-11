@@ -195,7 +195,7 @@ shards_per_group = 256 / 4  = 64        (no remainder)
 
 Four committees, each owning a contiguous block of 64 shards: 1–64, 65–128, 129–192, 193–256. When the
 count does not divide evenly, the remainder is spread across the **leading** groups — one extra shard
-to each of the first `remainder` groups, in order. The code's own tests pin this both ways: three
+to each of the first `remainder` groups, in order. The code's own test pins this both ways: three
 committees split 256 into 86 + 85 + 85 (remainder 1), and six committees into
 43 + 43 + 43 + 43 + 42 + 42 (remainder 4).
 
@@ -256,8 +256,7 @@ what re-clusters that validator.
 Local swarms and tests have no base layer to draw from, so the **configured epoch oracle** stands in
 for it: it derives a shard key from the config file, hashing the validator's own registration fields
 into the low bytes of its shard group's address range
-(`crates/epoch_oracles/src/configured/config.rs`). That is the code you will hit when you run a swarm
-locally, and it is *not* how a live network assigns committees.
+(`crates/epoch_oracles/src/configured/config.rs`).
 
 <Aside type="note">
 There is **no verifiable random function (VRF)** and **no sortition** in the Ootle validator set —
@@ -300,26 +299,31 @@ Messages ride on **gossip topics**. Both topics are deliberately **single and ne
 
 | Topic | Carries |
 |---|---|
-| `transactions` | Submitted transactions, propagated to the committees that must sequence them. |
-| `consensus` | Consensus messages — proposals, votes, certificates — among committee members. |
+| `transactions` | Submitted transactions, delivered to every validator. |
+| `consensus` | Consensus messages — proposals, votes, certificates — delivered to every validator. |
 
 They are defined in `crates/p2p/src/gossip.rs` and
 `applications/tari_validator_node/src/p2p/services/consensus_gossip/service.rs` respectively.
 
-Using one topic rather than a topic per shard group keeps the gossipsub mesh stable across epoch
-boundaries: a validator shuffled into a different shard group never has to unsubscribe and
-resubscribe. Both definitions carry that reasoning in a comment, which is worth reading before you
-consider scoping these topics by shard.
+Scoping the topics per shard group would tear the gossipsub mesh down every time the network
+reshards: validators unsubscribe and resubscribe at the epoch boundary, and each new topic's mesh
+has to be rebuilt from scratch, leaving the network poorly connected until it re-forms — exactly
+when a fresh epoch's traffic starts flowing. One network-wide topic survives resharding untouched,
+and it keeps the whole validator set in a single well-connected mesh, which matters because shard
+groups have to communicate across shard boundaries anyway. It also means indexers
+(`applications/tari_indexer/src/transaction_gossip/service.rs`), which subscribe to the same
+transaction topic, see every transaction without tracking shard assignments.
 
-The topics being network-wide does **not** mean the traffic reaches everyone: consensus gossip is
-handled only by committee members, and a transaction is propagated only to the committees that hold
-its inputs. The router *can* carry prefixed topics (for example `transactions-0-15`) and dispatches
-on the segment before the first delimiter, falling back to the whole topic when there is none
-(`networking/core/src/message_mode.rs`) — but that is a routing fallback, not a per-shard-group
-subscription strategy.
+Network-wide propagation is not the same as network-wide *work*: every validator receives a
+gossiped transaction, and each one checks whether it holds any of the inputs (`is_involved`,
+`mempool/service.rs:298`) before passing it to consensus. Nodes outside the involved committees drop
+it. The router can carry prefixed topics (for example `transactions-0-15`), dispatching on the
+segment before the first delimiter and falling back to the whole topic when there is none
+(`networking/core/src/message_mode.rs`); Ootle's own topics carry no such prefix.
 
-That scoping is what a <a href={basePath("/concepts/consensus/")}>cross-shard transaction</a> has to
-work against: a transaction whose inputs span shard groups has to reach each of its committees.
+A transaction whose inputs span shard groups therefore already reaches every committee by the time
+it is gossiped — see <a href={basePath("/concepts/consensus/")}>cross-shard transaction</a> for how
+those committees then coordinate.
 
 ---
 
@@ -335,4 +339,4 @@ work against: a transaction whose inputs span shard groups has to reach each of 
 - Membership is **deterministic** — no VRF, no sortition — and the shard key itself is computed on the
   base layer (a dev-only config oracle stands in for local swarms).
 - **Epochs** rotate membership, driven by the base layer's block height.
-- Nodes communicate over **libp2p** with topic-scoped gossip.
+- Nodes communicate over **libp2p** with network-wide gossip topics.

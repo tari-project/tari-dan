@@ -165,15 +165,14 @@ and derives a one-time address:
 
 | Step | Expression | Code |
 |---|---|---|
-| Shared secret | $c = H(r \cdot K)$ | `stealth_owner_dh` (private helper) |
+| Shared secret | $c = H(r \cdot K)$ | `stealth_owner_dh` |
 | Stealth public key | $P = c \cdot G + K$ | `owner_stealth_dh_stealth_address` |
 | Spending key (recipient) | $p = c + k$ | `owner_stealth_dh_secret` |
 | Ephemeral nonce | $R = r \cdot G$ | stored as `sender_public_nonce` |
 
 All of these live in `crates/wallet/crypto/src/kdfs.rs`. The public entry points take a `Network`,
 and the domain hasher mixes it into the derivation, so a key derived for one network does not carry
-over to another. `stealth_owner_dh` itself is a private helper — callers go through the
-address/secret functions above rather than the shared-secret step directly. Only the recipient, who knows $k$, can
+over to another. Only the recipient, who knows $k$, can
 recompute $c$ from $R$ and derive the spending key $p$; a third party sees $P$ and $R$ and cannot
 connect either to the recipient's public key. The output carries $R$ so the recipient can scan.
 
