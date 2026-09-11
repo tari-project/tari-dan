@@ -43,7 +43,7 @@ same.
 ## Basic setup and creating accounts
 
 `create_funded_account` generates a fresh key pair, publishes an account component for it and funds
-it from the built-in TARI faucet, all in one call. It returns the account address, an ownership proof
+it from the built-in `XtrFaucet`, all in one call. It returns the account address, an ownership proof
 and the secret key you seal that account's transactions with:
 
 ```rust title="crates/engine/tests/testing_tutorial.rs"
@@ -51,7 +51,7 @@ let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/guessing_game"]);
 let template = test.get_template_address("GuessingGame");
 
 // Creates a fresh key pair, publishes an account component for it and funds it from the
-// built-in TARI faucet.
+// built-in XtrFaucet, which dispenses TARI.
 let (player, _player_proof, player_key) = test.create_funded_account();
 
 let vaults = test.read_only_state_store().get_vaults_for_account(player).unwrap();

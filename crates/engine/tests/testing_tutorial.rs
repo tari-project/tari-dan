@@ -26,7 +26,7 @@ fn create_accounts_and_call_a_component() {
     let template = test.get_template_address("GuessingGame");
 
     // Creates a fresh key pair, publishes an account component for it and funds it from the
-    // built-in XTR faucet.
+    // built-in XtrFaucet, which dispenses TARI.
     let (player, _player_proof, player_key) = test.create_funded_account();
 
     let vaults = test.read_only_state_store().get_vaults_for_account(player).unwrap();
