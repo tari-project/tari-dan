@@ -3847,6 +3847,16 @@ where
             .read_with(|state| state.authorization().check_current_component_access_rules(method))
     }
 
+    fn check_signer_badge_in_scope(&self, public_key: RistrettoPublicKeyBytes) -> Result<(), RuntimeError> {
+        self.tracker.read_with(|state| {
+            let badge = NonFungibleAddress::from_public_key(public_key);
+            if !state.base_call_scope().auth_scope().contains_badge(&badge) {
+                return Err(RuntimeError::SignerBadgeNotInScope { public_key });
+            }
+            Ok(())
+        })
+    }
+
     fn check_component_ownership(&self, action: ActionIdent) -> Result<(), RuntimeError> {
         self.tracker.read_with(|state| {
             let locked = state

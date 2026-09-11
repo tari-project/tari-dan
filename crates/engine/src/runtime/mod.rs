@@ -106,6 +106,7 @@ use tari_template_lib::{
         NonFungibleAddress,
         TemplateAddress,
         ValidatorFeePoolAddress,
+        crypto::RistrettoPublicKeyBytes,
         engine_args::IntrinsicId,
         stealth::StealthTransferStatement,
     },
@@ -213,6 +214,10 @@ pub trait RuntimeInterface {
     fn check_component_access_rules(&self, method: &str) -> Result<(), RuntimeError>;
     /// Checks whether the current execution context has owner permission of the given component.
     fn check_component_ownership(&self, action: ActionIdent) -> Result<(), RuntimeError>;
+
+    /// Asserts that the signer badge for `public_key` is in the transaction's base auth scope, i.e. that the
+    /// transaction is signed by that key.
+    fn check_signer_badge_in_scope(&self, public_key: RistrettoPublicKeyBytes) -> Result<(), RuntimeError>;
 
     fn update_component_template(&mut self, new_template: TemplateAddress) -> Result<(), RuntimeError>;
 
