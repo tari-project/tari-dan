@@ -1914,8 +1914,6 @@ impl<TStore: StateReader> WorkingState<TStore> {
     }
 
     pub fn push_event(&mut self, event: Event) -> Result<(), RuntimeError> {
-        // The count cap is tested first because measuring the event walks its payload, unlike `push_log`, whose
-        // size check is a `String::len`.
         if self.events.len() >= limits::ENGINE_LIMITS.max_events {
             return Err(LimitError::MaxEventsExceeded.into());
         }
