@@ -1260,7 +1260,7 @@ mod resource_access_rules {
 
         assert_reject_reason(result, RuntimeError::AccessDeniedAuthHook {
             action_ident: ResourceAuthAction::Deposit.into(),
-            details: "Panic! Access denied for action Deposit".to_string(),
+            details: "Template error: Access denied for action Deposit".to_string(),
         });
     }
 
@@ -1565,7 +1565,7 @@ mod resource_access_rules {
         let reason = test.execute_expect_failure(take_and_deposit(), vec![owner_proof.clone()]);
         assert_reject_reason(reason, RuntimeError::AccessDeniedAuthHook {
             action_ident: ResourceAuthAction::Deposit.into(),
-            details: "Panic! Access denied for action Deposit".to_string(),
+            details: "Template error: Access denied for action Deposit".to_string(),
         });
 
         test.execute_expect_success(
@@ -1624,7 +1624,7 @@ mod resource_access_rules {
         let reason = test.execute_expect_failure(take_and_deposit(), vec![owner_proof]);
         assert_reject_reason(reason, RuntimeError::AccessDeniedAuthHook {
             action_ident: ResourceAuthAction::Deposit.into(),
-            details: "Panic! Access denied for action Deposit".to_string(),
+            details: "Template error: Access denied for action Deposit".to_string(),
         });
     }
 

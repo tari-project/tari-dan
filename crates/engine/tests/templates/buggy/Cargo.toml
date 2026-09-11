@@ -15,8 +15,6 @@ crate-type = ["cdylib"]
 
 [features]
 no_template_def = []
-return_null_abi = []
-return_empty_abi = []
 unexpected_export_function = []
 engine_call_in_alloc = []
 engine_call_in_free = []

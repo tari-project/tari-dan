@@ -35,28 +35,22 @@ pub use tari_template_abi::tari_alloc;
 static ALLOC: lol_alloc::AssumeSingleThreaded<lol_alloc::FreeListAllocator> =
     unsafe { lol_alloc::AssumeSingleThreaded::new(lol_alloc::FreeListAllocator::new()) };
 
-#[cfg(feature = "return_null_abi")]
-#[unsafe(no_mangle)]
-pub static _ABI_TEMPLATE_DEF: [u8; 0] = [];
-
-#[cfg(feature = "return_empty_abi")]
-#[unsafe(no_mangle)]
-pub static _ABI_TEMPLATE_DEF: [u8; 4] = [4, 0, 0, 0];
-
 // Hard-coded minicbor encoding of `TemplateDef::V1(TemplateDefV1 { template_name: "Buggy",
 // abi_version: 0, functions: [] })`. The leading 4 bytes are the little-endian length prefix used
 // by `encode_for_wasm_embedding`. Regenerate by running the snippet preserved in
 // `tests/test.rs::test_buggy_template` (currently commented out at the top of that function).
+//
+// The `#[template]` macro emits this section for a real template; it is written out by hand here so
+// these variants can be malformed in ways the macro cannot express.
 #[cfg(not(any(
-    feature = "return_empty_abi",
-    feature = "return_null_abi",
     feature = "no_template_def",
     feature = "engine_call_in_alloc",
     feature = "engine_call_in_free",
     feature = "engine_call_in_response_alloc"
 )))]
-#[unsafe(no_mangle)]
-pub static _ABI_TEMPLATE_DEF: [u8; 16] = [
+#[used]
+#[unsafe(link_section = "tari_tdef")]
+static _TARI_TEMPLATE_DEF: [u8; 16] = [
     16, 0, 0, 0, 130, 0, 129, 131, 101, 66, 117, 103, 103, 121, 0, 128,
 ];
 
@@ -117,8 +111,9 @@ mod engine_call_in_alloc_or_free {
     /// `encode_for_wasm_embedding` adds. The one declared function makes the template callable, so
     /// the engine drives the `tari_alloc` of the `CallInfo` and the `tari_free` of the returned
     /// pointer.
-    #[unsafe(no_mangle)]
-    pub static _ABI_TEMPLATE_DEF: [u8; 28] = [
+    #[used]
+    #[unsafe(link_section = "tari_tdef")]
+    static _TARI_TEMPLATE_DEF: [u8; 28] = [
         28, 0, 0, 0, 130, 0, 129, 131, 101, 66, 117, 103, 103, 121, 0, 129, 133, 100, 109, 97, 105,
         110, 128, 130, 0, 128, 244, 244,
     ];

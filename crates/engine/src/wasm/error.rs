@@ -65,13 +65,18 @@ pub enum WasmExecutionError {
     EngineArgDecodeFailed(BorError),
     #[error("Failed to decode template definition: {0:?}")]
     AbiTemplateDefDecodeError(BorError),
-    #[error("Malformed `tari_tdef` custom section: {reason}")]
+    #[error("Malformed `{TEMPLATE_DEF_CUSTOM_SECTION}` custom section: {reason}")]
     AbiTemplateDefSectionMalformed { reason: String },
+    #[error(
+        "Module does not contain a `{TEMPLATE_DEF_CUSTOM_SECTION}` custom section. Rebuild the template with a \
+         current `tari_template_lib`."
+    )]
+    AbiTemplateDefSectionMissing,
     #[error("Unexpected ABI function {name}")]
     UnexpectedAbiFunction { name: String },
     #[error("Encoding error: {0}")]
     EncodingError(#[from] BorError),
-    #[error("Panic! {message}")]
+    #[error("Template error: {message}")]
     Panic {
         message: String,
         runtime_error: wasmer::RuntimeError,
@@ -125,6 +130,20 @@ pub enum WasmValidationError {
          `wasm-strip`)."
     )]
     DisallowedCustomSection { name: String },
+    #[error("Module declares a start function, which templates may not do")]
+    StartSectionNotAllowed,
+    #[error("Module declares {count} tables, the maximum is {max_tables}")]
+    TooManyTables { count: usize, max_tables: usize },
+    #[error("Module declares {count} globals, the maximum is {max_globals}")]
+    TooManyGlobals { count: usize, max_globals: usize },
+    #[error("Module does not export `{name}`")]
+    MissingExport { name: String },
+    #[error("Export `{name}` has signature `{signature}`, expected `{expected}`")]
+    InvalidExportSignature {
+        name: String,
+        signature: String,
+        expected: String,
+    },
 }
 
 impl From<wasmer::InstantiationError> for WasmExecutionError {
