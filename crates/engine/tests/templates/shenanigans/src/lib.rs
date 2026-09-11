@@ -302,5 +302,16 @@ mod template {
         pub fn deposit(&mut self, bucket: Bucket) {
             self.vault.as_mut().unwrap().deposit(bucket);
         }
+
+        /// Joins a bucket whose funds a proof has locked into another. `join` moves only the unlocked funds, so
+        /// the engine must refuse it rather than let the locked portion vanish while the proof still names it.
+        pub fn join_locked_bucket(&mut self) {
+            let locked = self.vault.as_mut().unwrap().withdraw(Amount::from(10u64));
+            let target = self.vault.as_mut().unwrap().withdraw(Amount::from(10u64));
+            let proof = locked.create_proof();
+            let joined = target.join(locked);
+            proof.drop();
+            self.vault.as_mut().unwrap().deposit(joined);
+        }
     }
 }

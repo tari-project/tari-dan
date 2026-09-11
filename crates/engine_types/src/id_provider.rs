@@ -131,6 +131,7 @@ pub struct ObjectIds {
     max_ids: usize,
     current_id: AtomicU32,
     bucket_id: AtomicU32,
+    proof_id: AtomicU32,
     uuid: AtomicU32,
 }
 
@@ -140,6 +141,7 @@ impl ObjectIds {
             max_ids,
             current_id: AtomicU32::new(0),
             bucket_id: AtomicU32::new(0),
+            proof_id: AtomicU32::new(0),
             uuid: AtomicU32::new(0),
         }
     }
@@ -157,7 +159,7 @@ impl ObjectIds {
     }
 
     pub fn next_proof_id(&self) -> ProofId {
-        self.bucket_id.fetch_add(1, atomic::Ordering::SeqCst).into()
+        self.proof_id.fetch_add(1, atomic::Ordering::SeqCst).into()
     }
 
     pub fn next_uuid_id(&self) -> u32 {
@@ -171,6 +173,7 @@ impl Clone for ObjectIds {
             max_ids: self.max_ids,
             current_id: AtomicU32::new(self.current_id.load(atomic::Ordering::SeqCst)),
             bucket_id: AtomicU32::new(self.bucket_id.load(atomic::Ordering::SeqCst)),
+            proof_id: AtomicU32::new(self.proof_id.load(atomic::Ordering::SeqCst)),
             uuid: AtomicU32::new(self.uuid.load(atomic::Ordering::SeqCst)),
         }
     }

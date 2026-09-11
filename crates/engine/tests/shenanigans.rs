@@ -492,6 +492,33 @@ fn it_rejects_a_bucket_that_is_neither_consumed_nor_returned_by_a_call() {
     assert_reject_reason(reason, "were neither consumed nor returned by the call");
 }
 
+/// `Bucket::join` moves only the unlocked funds, so joining a bucket a proof has locked would destroy the locked
+/// portion while the proof still names it.
+#[test]
+fn it_rejects_joining_a_bucket_with_locked_funds() {
+    let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);
+    let template_addr = test.get_template_address(TEMPLATE_NAME);
+
+    let result = test.execute_expect_success(
+        test.transaction()
+            .call_function(template_addr, "with_fungible_vault", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    let component = result.finalize.execution_results[0]
+        .decode::<ComponentAddress>()
+        .unwrap();
+
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_method(component, "join_locked_bucket", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "Cannot join bucket");
+}
+
 #[test]
 fn it_rejects_a_proof_that_is_neither_dropped_nor_returned_by_a_call() {
     let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/shenanigans"]);

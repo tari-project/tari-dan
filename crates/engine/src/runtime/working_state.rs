@@ -557,9 +557,11 @@ impl<TStore: StateReader> WorkingState<TStore> {
             Self::enforce_substate_size_limit(id, value)?;
         }
 
-        if self.buckets.iter().any(|(_, b)| !b.is_empty()) {
+        // An emptied bucket carries nothing and is tolerated, so the count is of those that are not empty.
+        let dangling_buckets = self.buckets.iter().filter(|(_, bucket)| !bucket.is_empty()).count();
+        if dangling_buckets > 0 {
             return Err(TransactionCommitError::DanglingBuckets {
-                count: self.buckets.len(),
+                count: dangling_buckets,
             }
             .into());
         }
@@ -579,7 +581,9 @@ impl<TStore: StateReader> WorkingState<TStore> {
         }
 
         for (vault_id, vault) in self.store.new_vaults() {
-            if !vault.locked_balance().is_zero() {
+            // A confidential vault's locked value is a set of commitments whose amounts are hidden, so the locked
+            // balance alone reports zero for it.
+            if vault.has_locked_funds() {
                 return Err(TransactionCommitError::DanglingLockedValueInVault {
                     vault_id,
                     locked_amount: vault.locked_balance(),
@@ -792,7 +796,8 @@ impl<TStore: StateReader> WorkingState<TStore> {
         // it. Callers reject this earlier to avoid charging for a burn that cannot succeed; the check lives here so
         // that it holds for every caller.
         if bucket.has_locked_funds() {
-            return Err(RuntimeError::InvalidOpDepositLockedBucket {
+            return Err(RuntimeError::InvalidOpLockedBucket {
+                op: "burn",
                 bucket_id,
                 locked_amount: bucket.locked_amount(),
             });

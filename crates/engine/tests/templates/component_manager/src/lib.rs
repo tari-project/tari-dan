@@ -32,5 +32,18 @@ mod template {
         pub fn get_template_address_for_component(component_address: ComponentAddress) -> TemplateAddress {
             ComponentManager::get(component_address).get_template_address()
         }
+
+        /// Creates a component and immediately asks for its owner proof. The component is not in the state store
+        /// yet, so the proof must come from what this transaction has written.
+        pub fn owner_proof_for_a_component_created_here() -> ComponentAddress {
+            let component = Component::new(Self)
+                .with_owner_rule(OwnerRule::OwnedBySigner)
+                .with_access_rules(AccessRules::allow_all())
+                .create();
+            let address = *component.address();
+            let proof = ComponentManager::get(address).get_owner_proof();
+            proof.drop();
+            address
+        }
     }
 }
