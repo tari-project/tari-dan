@@ -65,3 +65,42 @@ fn test_claim_validator_fees_up_to() {
         .get_substate(&SubstateId::ValidatorFeePool(addr));
     assert!(result.is_err(), "ValidatorFeePool should be destroyed when empty");
 }
+
+/// A claim must release the fee pool's lock, so a second claim against the same pool in the same transaction can
+/// take it.
+#[test]
+fn test_two_claims_against_one_pool_in_a_transaction() {
+    use ootle_byte_type::ToByteType;
+    use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey};
+
+    let mut test = TemplateTest::new(CRATE_PATH, std::iter::empty::<&str>());
+    let (account, _token, private_key) = test.create_funded_account();
+
+    let public_key = RistrettoPublicKey::from_secret_key(&private_key);
+    let pk: tari_template_lib::types::crypto::RistrettoPublicKeyBytes = public_key.to_byte_type();
+    let addr = ValidatorFeePoolAddress::from_array(pk.into_array());
+
+    test.get_state_store_mut()
+        .set_state(
+            SubstateId::ValidatorFeePool(addr),
+            Substate::new(0, ValidatorFeePool::new(pk, 100)),
+        )
+        .unwrap();
+
+    test.execute_expect_success(
+        Transaction::builder_localnet(Epoch(1))
+            .claim_validator_fees_up_to(addr, 60u64)
+            .put_last_instruction_output_on_workspace("first")
+            .call_method(account, "deposit", args![Workspace("first")])
+            .claim_validator_fees_up_to(addr, 40u64)
+            .put_last_instruction_output_on_workspace("second")
+            .call_method(account, "deposit", args![Workspace("second")])
+            .build_and_seal(&private_key),
+        vec![],
+    );
+
+    let result = test
+        .read_only_state_store()
+        .get_substate(&SubstateId::ValidatorFeePool(addr));
+    assert!(result.is_err(), "both claims emptied the pool, so it is destroyed");
+}

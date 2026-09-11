@@ -148,6 +148,7 @@ pub(super) struct WorkingState<TStore> {
     /// Insertion-ordered: `get_allocated_address_by_address` scans these, so a hashed map would let the iteration
     /// order decide which allocation a lookup finds.
     address_allocations: IndexMap<AddressAllocationId, AllocatedAddress>,
+    /// Only ever inserted into and looked up by id. Ordered for symmetry with `address_allocations`.
     used_address_allocations: IndexMap<AddressAllocationId, SubstateId>,
     address_allocation_id: u32,
     proofs: HashMap<ProofId, Proof>,
@@ -1328,6 +1329,7 @@ impl<TStore: StateReader> WorkingState<TStore> {
         let (amount, resource_container) = pool_mut.withdraw_up_to(max_amount)?;
         self.validator_fee_withdrawals
             .push(ValidatorFeeWithdrawal { address, amount });
+        self.unlock_substate(locked_substate)?;
         Ok(resource_container)
     }
 

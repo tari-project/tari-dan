@@ -21,8 +21,7 @@ pub enum WorkspaceError {
 
 /// NOTE: the collections here must be insertion-ordered rather than hashed. `drain_all_proofs` drives the order in
 /// which proofs are dropped, and dropping a vault-backed proof can append that vault to the substates the
-/// transaction persists — whose order is hashed into the `TransactionReceipt` diff. `all_ids_iter` likewise lands
-/// in reject strings, which validators compare.
+/// transaction persists — whose order becomes `DiffSummary::upped` in the `TransactionReceipt`, and is hashed.
 #[derive(Debug, Clone, Default)]
 pub struct Workspace {
     items: IndexMap<WorkspaceId, IndexedValue>,
