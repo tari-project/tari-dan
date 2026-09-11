@@ -66,7 +66,10 @@ impl LockedSubstates {
         match entry {
             Entry::Occupied(mut val) => match val.get_mut() {
                 LockState::Read(count_mut) => {
-                    *count_mut -= 1;
+                    *count_mut = count_mut.checked_sub(1).ok_or(LockError::InvariantError {
+                        function: "LockedSubstates::try_unlock",
+                        details: "read lock count underflowed".to_string(),
+                    })?;
                     if *count_mut == 0 {
                         val.remove_entry();
                     }

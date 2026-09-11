@@ -203,7 +203,7 @@ For a `no_std` template, build `core` instead: `-Z build-std=core,alloc,panic_ab
 
 <Aside type="caution">
   **You lose every panic message.** Normally a failed template produces
-  `Panic! <your message>` in the reject reason, with the source line and column logged by the
+  `Template error: <your message>` in the reject reason, with the source line and column logged by the
   validator — `tari_template_lib` forwards them through the engine's `on_panic` host call. Under
   `immediate-abort` that call never happens, and the failure surfaces as a bare WASM trap with no
   message, no line and no column. Every `expect`, `assert!` and arithmetic-overflow message becomes

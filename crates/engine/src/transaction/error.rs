@@ -124,6 +124,8 @@ pub enum TransactionErrorKind {
     NotAMigrationFunction { name: String },
     #[error("Migration functions cannot be called directly: {name}")]
     CannotCallMigrationFunctionDirectly { name: String },
+    #[error("The account constructor cannot be called directly. Use the CreateAccount instruction.")]
+    CannotCallAccountConstructor,
     #[error("Invalid CreateAccount operation for component {component_address}: {details}")]
     InvalidCreateAccount {
         component_address: ComponentAddress,

@@ -420,7 +420,10 @@ impl FeeBreakdown {
     pub fn add(&mut self, source: FeeSource, amount: u64) {
         match self.breakdown.entry(source) {
             Entry::Occupied(entry) => {
-                *entry.into_mut() += amount;
+                let total = entry.into_mut();
+                // A breakdown row is a display total, so a charge that would take it past `u64::MAX` pins it there
+                // rather than wrapping. Whether the fee itself is affordable is decided elsewhere.
+                *total = total.saturating_add(amount);
             },
             Entry::Vacant(entry) => {
                 entry.insert(amount);

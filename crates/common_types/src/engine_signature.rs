@@ -50,10 +50,14 @@ impl RistrettoSchnorrBlake2bVerifier {
 
 impl Verifier for RistrettoSchnorrBlake2bVerifier {
     fn verify(&self, domain: &[u8], message: &[u8], public_key: &PublicKey, signature: &SignaturePayload) -> bool {
-        let sig = signature
-            .ristretto_schnorr_blake2b()
-            .expect("Expected Ristretto Schnorr signature");
-        let ristretto_public_key = public_key.ristretto25519().expect("Expected Ristretto PublicKey");
+        // A caller chooses both the key and the payload, and `PublicKey`/`SignaturePayload` are open enums whose
+        // other variants are valid encodings, so a variant this verifier cannot use is a failed verification.
+        let Some(sig) = signature.ristretto_schnorr_blake2b() else {
+            return false;
+        };
+        let Some(ristretto_public_key) = public_key.ristretto25519() else {
+            return false;
+        };
 
         let Ok(pk) = ristretto_public_key.try_from_byte_type() else {
             return false;

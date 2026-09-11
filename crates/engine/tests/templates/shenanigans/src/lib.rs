@@ -75,6 +75,19 @@ mod template {
             ComponentManager::get(dest_component).call("deposit", args![stolen])
         }
 
+        /// Reaches the account template's constructor through a cross-template call rather than a `CallFunction`
+        /// instruction, claiming the address derived from `victim_badge`'s key under an owner rule of its own.
+        pub fn create_account_for(victim_badge: NonFungibleAddress) -> ComponentAddress {
+            let no_access_rules: Option<AccessRules> = None;
+            let no_bucket: Option<Bucket> = None;
+            TemplateManager::get(BuiltinTemplate::Account.address()).call("create", args![
+                victim_badge,
+                Some(OwnerRule::ByAccessRule(rule!(allow_all))),
+                no_access_rules,
+                no_bucket
+            ])
+        }
+
         pub fn with_vault_copy() -> Self {
             let vault = Vault::new_empty(STEALTH_TARI_RESOURCE_ADDRESS);
             let vault_copy = Vault::for_test(vault.vault_id());

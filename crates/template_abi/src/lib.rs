@@ -48,24 +48,12 @@ pub mod version;
 #[cfg(feature = "func-hasher")]
 pub mod func_hasher;
 
-/// The name of the global export that defines the template definition.
-///
-/// NOTE: this is deprecated in favour  of the `tari_tdef' custom section and will be removed.
-///
-/// This is the legacy embedding path: the template's bor-encoded `TemplateDef`
-/// (with a 4-byte LE length prefix) is laid out in the WASM module's linear
-/// memory and an exported i32 global of this name holds the pointer to the
-/// length prefix. Engines read it via instance-time memory access.
-pub const ABI_TEMPLATE_DEF_GLOBAL_NAME: &str = "_ABI_TEMPLATE_DEF";
-
 /// The name of the WASM custom section that holds the template definition.
 ///
-/// New templates additionally embed the same `[u32 LE length] || [bor bytes]`
-/// blob as a WASM custom section. This avoids any dependency on linear-memory
-/// layout, which makes static extraction trivial (no global / data-segment
-/// walk) and gives the JIT path a way to recover the ABI without instantiating
-/// the module. The legacy global+rodata embedding is kept alongside this for
-/// backward compatibility with engines that don't yet read custom sections.
+/// A template embeds its bor-encoded `TemplateDef` as `[u32 LE length] || [bor
+/// bytes]` in this section. The section is part of the module rather than its
+/// linear memory, so an engine recovers a template's ABI without instantiating
+/// it and without reading guest memory.
 pub const TEMPLATE_DEF_CUSTOM_SECTION: &str = "tari_tdef";
 
 pub const WASM_PTR_SIZE: usize = 4; // 32-bit pointers in wasm

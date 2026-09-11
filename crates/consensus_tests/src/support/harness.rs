@@ -45,7 +45,11 @@ use tari_state_store_rocksdb::column_families::{
     finalized_transaction::FinalizedTransactionLinkCf,
     transaction::TransactionCf,
 };
-use tokio::{sync::broadcast, task, time::sleep};
+use tokio::{
+    sync::broadcast,
+    task,
+    time::{Instant, sleep},
+};
 
 use super::{
     MessageFilter,
@@ -261,9 +265,12 @@ impl Test {
     }
 
     pub async fn on_block_committed(&mut self) -> (TestAddress, BlockId, Epoch, NodeHeight) {
+        // The deadline is a wall-clock bound on the wait for a committed block. Events that are ignored below
+        // must not extend it, otherwise a consensus livelock that keeps emitting events never trips the timeout.
+        let deadline = self.timeout.map(|timeout| Instant::now() + timeout);
         loop {
-            let (address, event) = if let Some(timeout) = self.timeout {
-                match tokio::time::timeout(timeout, self.on_hotstuff_event()).await {
+            let (address, event) = if let Some(deadline) = deadline {
+                match tokio::time::timeout_at(deadline, self.on_hotstuff_event()).await {
                     Ok(v) => v,
                     Err(_) => {
                         self.dump_pool_info();

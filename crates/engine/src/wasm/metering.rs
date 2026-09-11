@@ -508,6 +508,10 @@ fn cost_function(op: &Operator) -> u64 {
         Operator::Drop |
         Operator::Select |
         Operator::TypedSelect { .. } => 1,
-        _ => 1,
+        // An operator this table does not name. The engine's `Features` set admits only the
+        // proposals the cases above cover, so this arm is reached when a wasmer upgrade introduces
+        // an operator before it is priced here. The fallback sits far above every named cost, so
+        // such an operator is costly to execute until someone prices it.
+        _ => 1_000,
     }
 }

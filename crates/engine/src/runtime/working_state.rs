@@ -25,7 +25,7 @@ use tari_engine_types::{
     id_provider::{IdProvider, ObjectIds},
     indexed_value::{IndexedValue, IndexedWellKnownTypes},
     limits,
-    lock::LockFlag,
+    lock::{LockFlag, LockId},
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
     proof::{ContainerRef, LockedResource, Proof},
@@ -234,14 +234,14 @@ impl<TStore: StateReader> WorkingState<TStore> {
         self.store.exists(address)
     }
 
-    fn enforce_substate_size_limit(&self, value: &SubstateValue) -> Result<(), RuntimeError> {
+    fn enforce_substate_size_limit(id: &SubstateId, value: &SubstateValue) -> Result<(), RuntimeError> {
         // Published template has its own size restriction
         if value.published_template().is_some() {
             return Ok(());
         }
         let size = encoded_len(value);
         if size > limits::ENGINE_LIMITS.max_substate_size {
-            return Err(LimitError::SubstateSizeExceeded { size }.into());
+            return Err(LimitError::SubstateSizeExceeded { id: id.clone(), size }.into());
         }
         Ok(())
     }
@@ -254,15 +254,24 @@ impl<TStore: StateReader> WorkingState<TStore> {
         let address = address.into();
         self.check_write_allowed(&address)?;
         let value = value.into();
-        self.enforce_substate_size_limit(&value)?;
+        Self::enforce_substate_size_limit(&address, &value)?;
         self.current_call_scope_mut()?.add_substate_to_scope(address.clone())?;
         self.store.insert(address, value)?;
         Ok(())
     }
 
     fn lock_substate(&mut self, addr: SubstateId, lock_flag: LockFlag) -> Result<LockedSubstate, RuntimeError> {
-        let lock_id = self.store.try_lock(addr.clone(), lock_flag)?;
+        let lock_id = self.try_lock(addr.clone(), lock_flag)?;
         Ok(LockedSubstate::new(addr, lock_id, lock_flag))
+    }
+
+    /// Every lock this state takes goes through here, so a write lock cannot be acquired without the frame write
+    /// mode permitting it. Callers that need the raw [`LockId`] use this directly rather than the store.
+    fn try_lock(&mut self, addr: SubstateId, lock_flag: LockFlag) -> Result<LockId, RuntimeError> {
+        if lock_flag.is_write() {
+            self.check_write_allowed(&addr)?;
+        }
+        self.store.try_lock(addr, lock_flag)
     }
 
     pub fn read_lock_substate(&mut self, addr: SubstateId) -> Result<LockedSubstate, RuntimeError> {
@@ -270,7 +279,6 @@ impl<TStore: StateReader> WorkingState<TStore> {
     }
 
     pub fn write_lock_substate(&mut self, addr: SubstateId) -> Result<LockedSubstate, RuntimeError> {
-        self.check_write_allowed(&addr)?;
         self.lock_substate(addr, LockFlag::Write)
     }
 
@@ -387,7 +395,7 @@ impl<TStore: StateReader> WorkingState<TStore> {
 
         for input in &stmt.inputs_statement.inputs {
             let address = UtxoAddress::new(resource_address, input.commitment.into());
-            let lock_id = self.store.try_lock(address.clone().into(), LockFlag::Write)?;
+            let lock_id = self.try_lock(address.clone().into(), LockFlag::Write)?;
             let utxo = self.store.down_utxo(lock_id)?;
             self.store.try_unlock(lock_id)?;
             if utxo.is_frozen() {
@@ -541,6 +549,14 @@ impl<TStore: StateReader> WorkingState<TStore> {
     }
 
     pub(super) fn validate_finalized(&self) -> Result<(), RuntimeError> {
+        // A substate can be grown through any of the `&mut SubstateValue` handles this state hands out, so the
+        // size limit binds on every substate the transaction's instructions persist rather than on what was
+        // created. Measured here, where the set to persist is known, rather than at each write: a substate a
+        // transaction writes many times would otherwise be measured many times.
+        for (id, value) in self.store.mutated_substates() {
+            Self::enforce_substate_size_limit(id, value)?;
+        }
+
         if self.buckets.iter().any(|(_, b)| !b.is_empty()) {
             return Err(TransactionCommitError::DanglingBuckets {
                 count: self.buckets.len(),
@@ -656,7 +672,7 @@ impl<TStore: StateReader> WorkingState<TStore> {
             .into_iter()
             .map(|commitment| {
                 let address = ConfidentialOutputAddress::new(resource_address, commitment);
-                let lock_id = self.store.try_lock(address.clone().into(), LockFlag::Write)?;
+                let lock_id = self.try_lock(address.clone().into(), LockFlag::Write)?;
                 let output = self.store.down_confidential_output(lock_id)?;
                 self.store.try_unlock(lock_id)?;
                 if output.is_frozen() {
@@ -1193,7 +1209,13 @@ impl<TStore: StateReader> WorkingState<TStore> {
         address: T,
     ) -> Result<AddressAllocationId, RuntimeError> {
         let id = self.address_allocation_id;
-        self.address_allocation_id += 1;
+        self.address_allocation_id = self
+            .address_allocation_id
+            .checked_add(1)
+            .ok_or(RuntimeError::InvariantError {
+                function: "new_address_allocation",
+                details: "address allocation id counter overflowed".to_string(),
+            })?;
         let current_template = self.current_template().ok().copied();
         self.address_allocations
             .insert(id, AllocatedAddress::new(address.into(), current_template));
@@ -1902,6 +1924,11 @@ impl<TStore: StateReader> WorkingState<TStore> {
         if self.events.len() >= limits::ENGINE_LIMITS.max_events {
             return Err(LimitError::MaxEventsExceeded.into());
         }
+
+        let size = encoded_len(&event);
+        if size > limits::ENGINE_LIMITS.max_event_size_bytes {
+            return Err(LimitError::EventSizeExceeded { size }.into());
+        }
         self.events.push(event);
         Ok(())
     }
@@ -1925,11 +1952,16 @@ impl<TStore: StateReader> WorkingState<TStore> {
         let mut total_fee_overcharge = 0;
         // First collect fees that cannot be refunded (we have to take all fees even if they exceed the required amount)
         for resx in self.fee_state.non_refundable_fee_payments_mut_iter() {
-            // PANIC: this is checked by FeeState
             let paid_amount = resx
                 .unlocked_amount()
                 .to_u64_checked()
-                .expect("invalid fee entry in fee state");
+                .ok_or_else(|| RuntimeError::InvariantError {
+                    function: "finalize_fees_and_refunds",
+                    details: format!(
+                        "Non-refundable fee payment {} does not fit in a u64",
+                        resx.unlocked_amount()
+                    ),
+                })?;
 
             debug!(
                 target: LOG_TARGET,
@@ -1956,11 +1988,16 @@ impl<TStore: StateReader> WorkingState<TStore> {
                     "Collecting {} of refundable fees", resx.unlocked_amount()
                 );
 
-                // PANIC: this is checked by FeeState
-                let paid_amount = resx
-                    .unlocked_amount()
-                    .to_u64_checked()
-                    .expect("invalid fee entry in fee state");
+                let paid_amount =
+                    resx.unlocked_amount()
+                        .to_u64_checked()
+                        .ok_or_else(|| RuntimeError::InvariantError {
+                            function: "finalize_fees_and_refunds",
+                            details: format!(
+                                "Refundable fee payment {} does not fit in a u64",
+                                resx.unlocked_amount()
+                            ),
+                        })?;
 
                 // Withdraw only what is needed
                 let amount_to_withdraw = cmp::min(paid_amount, remaining_fees);
@@ -1981,16 +2018,22 @@ impl<TStore: StateReader> WorkingState<TStore> {
             );
             let vault_mut = substates_to_persist
                 .get_mut(&SubstateId::Vault(*refund_vault))
-                .expect("invariant: vault that made fee payment not in changeset")
-                .as_vault_mut()
-                .expect("invariant: substate substate_id for fee refund is not a vault");
+                .and_then(|substate| substate.as_vault_mut())
+                .ok_or_else(|| RuntimeError::InvariantError {
+                    function: "finalize_fees_and_refunds",
+                    details: format!("Refund target {} is not a vault in the changeset", refund_vault),
+                })?;
             vault_mut.resource_container_mut().deposit(resx.withdraw_all()?)?;
         }
 
-        let total_fees_paid = fee_resource
-            .unlocked_amount()
-            .to_u64_checked()
-            .expect("FeeState guarantees that the total fee payments fit in an u64");
+        let total_fees_paid =
+            fee_resource
+                .unlocked_amount()
+                .to_u64_checked()
+                .ok_or_else(|| RuntimeError::InvariantError {
+                    function: "finalize_fees_and_refunds",
+                    details: format!("Collected fees {} do not fit in a u64", fee_resource.unlocked_amount()),
+                })?;
 
         // The burn is a share of what was collected, overcharge included, and leaders receive the rest.
         let exhaust_burn = exhaust_burn_share(total_fees_paid, self.fee_state.burn_rate());
@@ -2023,7 +2066,15 @@ impl<TStore: StateReader> WorkingState<TStore> {
                         // If there are no fees left, do not up the fee pool
                         continue;
                     }
-                    Substate::new(existing_state.version() + 1, substate)
+                    let version =
+                        existing_state
+                            .version()
+                            .checked_add(1)
+                            .ok_or_else(|| RuntimeError::InvariantError {
+                                function: "generate_substate_diff",
+                                details: format!("version of substate {id} overflowed"),
+                            })?;
+                    Substate::new(version, substate)
                 },
                 None => Substate::new(0, substate),
             };

@@ -111,8 +111,6 @@ pub enum RuntimeError {
     AddressAllocationNotInScope { id: AddressAllocationId },
     #[error("Encountered unknown or out of scope signer badge with public key {public_key}")]
     SignerBadgeNotInScope { public_key: RistrettoPublicKeyBytes },
-    #[error("Component not found with address '{address}'")]
-    ComponentNotFound { address: ComponentAddress },
     #[error("Layer one commitment not found with address '{address}'")]
     LayerOneCommitmentNotFound { address: ClaimedOutputTombstoneAddress },
     #[error("Invalid argument {argument}: {reason}")]
@@ -404,19 +402,16 @@ impl RuntimeError {
     }
 }
 
+/// Only the absence of a substate counts as "not found". The runtime objects a transaction holds — buckets,
+/// proofs, vaults — go missing because a call is wrong about what is in scope, not because the ledger lacks
+/// something, and an `.optional()` that swallowed those would turn a scope error into a silent `None`.
 impl IsNotFoundError for RuntimeError {
     fn is_not_found_error(&self) -> bool {
-        matches!(
-            self,
-            RuntimeError::SubstateNotFound { .. } |
-                RuntimeError::ComponentNotFound { .. } |
-                RuntimeError::VaultNotFound { .. } |
-                RuntimeError::BucketNotFound { .. } |
-                RuntimeError::ResourceNotFound { .. } |
-                RuntimeError::NonFungibleNotFound { .. } |
-                RuntimeError::ProofNotFound { .. } |
-                RuntimeError::VirtualSubstateNotFound { .. }
-        )
+        match self {
+            RuntimeError::SubstateNotFound { .. } => true,
+            RuntimeError::StateStoreError(err) => err.is_not_found_error(),
+            _ => false,
+        }
     }
 }
 
@@ -499,14 +494,16 @@ pub enum ArgumentValidationError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum LimitError {
-    #[error("Substate size of {size} bytes exceeds the maximum allowed size of {} bytes", limits::ENGINE_LIMITS.max_substate_size)]
-    SubstateSizeExceeded { size: usize },
+    #[error("Substate {id} of {size} bytes exceeds the maximum allowed size of {} bytes", limits::ENGINE_LIMITS.max_substate_size)]
+    SubstateSizeExceeded { id: SubstateId, size: usize },
     #[error("Log entry of {size} bytes exceeds maximum size of {} bytes", limits::ENGINE_LIMITS.max_log_size_bytes)]
     LogSizeExceeded { size: usize },
     #[error("Exceeded maximum number of logs per transaction: {}", limits::ENGINE_LIMITS.max_logs)]
     MaxLogsExceeded,
     #[error("Exceeded maximum number of events per transaction: {}", limits::ENGINE_LIMITS.max_events)]
     MaxEventsExceeded,
+    #[error("Event of {size} bytes exceeds maximum size of {} bytes", limits::ENGINE_LIMITS.max_event_size_bytes)]
+    EventSizeExceeded { size: usize },
     #[error("Requested random bytes length {len} exceeds maximum of {} bytes", limits::ENGINE_LIMITS.max_random_bytes_len)]
     MaxRandomBytesLenExceeded { len: usize },
 }

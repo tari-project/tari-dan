@@ -23,19 +23,12 @@
 use std::{fmt, fmt::Formatter, sync::Arc};
 
 use tari_engine_types::limits;
-use tari_template_abi::{
-    ABI_TEMPLATE_DEF_GLOBAL_NAME,
-    FunctionDef,
-    TEMPLATE_DEF_CUSTOM_SECTION,
-    TemplateDef,
-    Type,
-    WASM_PTR_SIZE,
-};
+use tari_template_abi::{FunctionDef, TEMPLATE_DEF_CUSTOM_SECTION, TemplateDef, Type, WASM_PTR_SIZE};
 use wasmer::{
-    AsStoreMut,
     Engine,
-    ExportError,
+    ExternType,
     Function,
+    FunctionType,
     Instance,
     Pages,
     Store,
@@ -48,14 +41,7 @@ use wasmer::{
 
 use crate::{
     template::{LoadedTemplate, TemplateLoaderError, TemplateModuleLoader},
-    wasm::{
-        WasmExecutionError,
-        WasmProcess,
-        WasmValidationError,
-        environment::WasmEnv,
-        limiting_tunable::LimitingTunables,
-        metering,
-    },
+    wasm::{WasmExecutionError, WasmProcess, WasmValidationError, limiting_tunable::LimitingTunables, metering},
 };
 
 pub type MainFunction = TypedFunction<(WasmPtr<u8>, u32), WasmPtr<u8>>;
@@ -82,6 +68,7 @@ impl WasmModule {
     }
 
     pub fn load_template_from_code(code: &[u8]) -> Result<LoadedTemplate, TemplateLoaderError> {
+        validate_module_structure(code).map_err(WasmExecutionError::from)?;
         let engine = Self::create_engine();
         let module = wasmer::Module::new(&engine, code)?;
         Self::finalize_loaded_module(engine, module, code.len())
@@ -119,13 +106,24 @@ impl WasmModule {
         Self::finalize_loaded_module(engine, module, code_size)
     }
 
+    /// Validates a compiled module and turns it into a [`LoadedTemplate`].
+    ///
+    /// Every check the module itself can answer runs before the module is instantiated.
+    /// Instantiating creates the guest's linear memory and tables, sized by values the module
+    /// declares, so a module reaches it only once the engine has accepted its ABI and its exports.
     fn finalize_loaded_module(
         engine: Engine,
         module: wasmer::Module,
         code_size: usize,
     ) -> Result<LoadedTemplate, TemplateLoaderError> {
-        let mut store = Store::new(engine);
+        let template = load_template_def_from_custom_section(&module)?;
+        let main_fn = format!("{}_main", template.template_name());
 
+        WasmProcess::validate_template_abi_version(&template)?;
+        validate_functions(&template)?;
+        validate_module_exports(&module, &main_fn)?;
+
+        let mut store = Store::new(engine);
         let imports = imports! {
             "env" => {
                 "tari_engine" => Function::new_typed(&mut store, |_op: i32, _arg_ptr: i32, _arg_len: i32| 0i32),
@@ -133,25 +131,11 @@ impl WasmModule {
                 "on_panic" => Function::new_typed(&mut store, |_msg_ptr: i32, _msg_len: i32, _line: i32, _col: i32| {  }),
             }
         };
-        let instance = Instance::new(&mut store, &module, &imports)?;
-        let mut env = WasmEnv::new(());
-        let memory = instance.exports.get_memory("memory")?.clone();
-        env.set_memory(memory);
-
-        // Prefer the `tari_tdef` custom section. New templates produced by the
-        // current `#[template]` macro embed the bor-encoded `TemplateDef`
-        // there. If the section is absent we treat the binary as legacy and
-        // fall back to reading the blob out of linear memory via the
-        // `_ABI_TEMPLATE_DEF` exported global.
-        let template = match load_template_def_from_custom_section(&module)? {
-            Some(def) => def,
-            None => env.load_template_def(&mut store, &instance)?,
-        };
-        let main_fn = format!("{}_main", template.template_name());
-
-        WasmProcess::validate_template_abi_version(&template)?;
-        validate_instance(&mut store, &instance, &main_fn)?;
-        validate_functions(&template)?;
+        // The memory and table limits live in [`LimitingTunables`], which only sees a module's
+        // declared types when the instance's storage is created. Instantiating here is what applies
+        // them, so a template that declares more than a limit allows is refused at load rather than
+        // at its first call.
+        Instance::new(&mut store, &module, &imports)?;
 
         let engine = store.engine().clone();
 
@@ -169,7 +153,7 @@ impl WasmModule {
     fn create_engine() -> Engine {
         const MEMORY_PAGE_LIMIT: Pages = Pages(limits::WASM_LIMITS.max_memory_pages as u32);
         let base = BaseTunables::new();
-        let tunables = LimitingTunables::new(base, MEMORY_PAGE_LIMIT);
+        let tunables = LimitingTunables::new(base, MEMORY_PAGE_LIMIT, limits::WASM_LIMITS.max_table_elements);
         let mut compiler = Cranelift::new();
         compiler
             .opt_level(CraneliftOptLevel::SpeedAndSize)
@@ -272,19 +256,17 @@ impl fmt::Debug for LoadedWasmTemplate {
     }
 }
 
-/// Try to recover the `TemplateDef` directly from the `tari_tdef` custom
-/// section. Returns `Ok(None)` when the section is absent (legacy templates
-/// that only embed the ABI via the `_ABI_TEMPLATE_DEF` global+rodata
-/// pattern); the caller falls back to reading the blob out of linear memory
-/// in that case.
+/// Recovers the `TemplateDef` from the `tari_tdef` custom section, which every template must
+/// carry. The section is part of the module, so reading it needs no instance and no access to guest
+/// memory.
 ///
 /// Wasmer preserves custom sections through compile and `serialize` /
 /// `deserialize`, so this works on both freshly compiled modules and modules
 /// loaded from the disk cache.
-fn load_template_def_from_custom_section(module: &wasmer::Module) -> Result<Option<TemplateDef>, WasmExecutionError> {
+fn load_template_def_from_custom_section(module: &wasmer::Module) -> Result<TemplateDef, WasmExecutionError> {
     let mut sections = module.custom_sections(TEMPLATE_DEF_CUSTOM_SECTION);
     let Some(section) = sections.next() else {
-        return Ok(None);
+        return Err(WasmExecutionError::AbiTemplateDefSectionMissing);
     };
     // The macro emits exactly one `tari_tdef` section per template. Multiple
     // sections with this name would be ambiguous — refuse to guess which one
@@ -321,7 +303,7 @@ fn load_template_def_from_custom_section(module: &wasmer::Module) -> Result<Opti
     }
     let template = tari_bor::decode::<TemplateDef>(&section[WASM_PTR_SIZE..full_len])
         .map_err(WasmExecutionError::AbiTemplateDefDecodeError)?;
-    Ok(Some(template))
+    Ok(template)
 }
 
 /// Custom sections the engine consumes and therefore admits into a published
@@ -355,43 +337,109 @@ fn reject_disallowed_custom_sections(code: &[u8]) -> Result<(), WasmValidationEr
     Ok(())
 }
 
-fn validate_instance<S: AsStoreMut>(
-    store: &mut S,
-    instance: &Instance,
-    main_fn: &str,
-) -> Result<(), WasmExecutionError> {
-    fn is_func_permitted(name: &str, main_fn: &str) -> bool {
-        name == main_fn || name == "tari_alloc" || name == "tari_free"
+/// Checks a module's exports against the template ABI, reading them off the module rather than an
+/// instance: the memory the engine reads and writes, the three functions it calls and their
+/// signatures, and that the module exports no other function.
+fn validate_module_exports(module: &wasmer::Module, main_fn: &str) -> Result<(), WasmExecutionError> {
+    // `(call_info_ptr: i32, call_info_len: i32) -> i32`, matching [`MainFunction`].
+    let expected_main = FunctionType::new([wasmer::Type::I32, wasmer::Type::I32], [wasmer::Type::I32]);
+    // `(len: i32) -> i32` and `(ptr: i32)`, matching `WasmAllocFn` and `WasmFreeFn`.
+    let expected_alloc = FunctionType::new([wasmer::Type::I32], [wasmer::Type::I32]);
+    let expected_free = FunctionType::new([wasmer::Type::I32], []);
+
+    let mut memory_export = false;
+    let mut main_signature = None;
+    let mut alloc_signature = None;
+    let mut free_signature = None;
+
+    for export in module.exports() {
+        match export.ty() {
+            ExternType::Function(signature) => match export.name() {
+                name if name == main_fn => main_signature = Some(signature.clone()),
+                "tari_alloc" => alloc_signature = Some(signature.clone()),
+                "tari_free" => free_signature = Some(signature.clone()),
+                name => {
+                    return Err(WasmExecutionError::UnexpectedAbiFunction { name: name.to_string() });
+                },
+            },
+            ExternType::Memory(_) => {
+                memory_export |= export.name() == "memory";
+            },
+            ExternType::Global(_) | ExternType::Table(_) | ExternType::Tag(_) => {},
+        }
     }
 
-    instance.exports.get_memory("memory")?;
-
-    // Enforce that only permitted functions are allowed
-    let unexpected_abi_func = instance
-        .exports
-        .iter()
-        .functions()
-        .find(|(name, _)| !is_func_permitted(name, main_fn));
-
-    if let Some((name, _)) = unexpected_abi_func {
-        return Err(WasmExecutionError::UnexpectedAbiFunction { name: name.to_string() });
+    if !memory_export {
+        return Err(WasmValidationError::MissingExport {
+            name: "memory".to_string(),
+        }
+        .into());
     }
 
-    // The `_ABI_TEMPLATE_DEF` global is present in legacy templates (where
-    // the ABI lives in linear memory) and absent in templates produced by
-    // the current macro (which puts the ABI in the `tari_tdef` custom
-    // section). When present, sanity-check that it's an i32; when missing,
-    // we've already validated the ABI via the custom section.
-    if let Ok(global) = instance.exports.get_global(ABI_TEMPLATE_DEF_GLOBAL_NAME) {
-        global
-            .get(store)
-            .i32()
-            .ok_or(WasmExecutionError::ExportError(ExportError::IncompatibleType))?;
+    validate_export_signature(main_fn, main_signature.as_ref(), &expected_main)?;
+    validate_export_signature("tari_alloc", alloc_signature.as_ref(), &expected_alloc)?;
+    validate_export_signature("tari_free", free_signature.as_ref(), &expected_free)?;
+
+    Ok(())
+}
+
+/// The engine calls each ABI function by name and by type, so a module that exports one under
+/// another signature — or not at all — is refused at admission rather than on its first call.
+fn validate_export_signature(
+    name: &str,
+    signature: Option<&FunctionType>,
+    expected: &FunctionType,
+) -> Result<(), WasmValidationError> {
+    match signature {
+        Some(signature) if signature == expected => Ok(()),
+        Some(signature) => Err(WasmValidationError::InvalidExportSignature {
+            name: name.to_string(),
+            signature: signature.to_string(),
+            expected: expected.to_string(),
+        }),
+        None => Err(WasmValidationError::MissingExport { name: name.to_string() }),
     }
+}
 
-    // Check that the main function exists and it's signature is correct
-    let _main: MainFunction = instance.exports.get_typed_function(store, main_fn)?;
-
+/// Checks what only the module bytes show: that the module declares no start function, and no more
+/// tables or globals than the limits.
+///
+/// A start function runs on every instantiation, before the engine has installed this call's
+/// metering allowance and outside any invocation it could attribute effects to. Templates have no
+/// use for one: the engine only ever enters a template through its `<name>_main` export.
+///
+/// Tables and globals are both host storage built at every instantiation and claimed by a
+/// declaration far smaller than what it claims. Each table's element count is bounded by the
+/// tunables, which see one table at a time, so the number of tables is what bounds the storage all
+/// of them together claim; a global's slot is fixed, so its count is the whole bound.
+fn validate_module_structure(code: &[u8]) -> Result<(), WasmValidationError> {
+    for payload in Parser::new(0).parse_all(code) {
+        // Malformed wasm: stop and let the cranelift compile in
+        // `load_template_from_code` report the canonical CompileError.
+        let Ok(payload) = payload else { break };
+        match payload {
+            Payload::StartSection { .. } => return Err(WasmValidationError::StartSectionNotAllowed),
+            Payload::TableSection(reader) => {
+                let count = reader.count() as usize;
+                if count > limits::WASM_LIMITS.max_tables {
+                    return Err(WasmValidationError::TooManyTables {
+                        count,
+                        max_tables: limits::WASM_LIMITS.max_tables,
+                    });
+                }
+            },
+            Payload::GlobalSection(reader) => {
+                let count = reader.count() as usize;
+                if count > limits::WASM_LIMITS.max_globals {
+                    return Err(WasmValidationError::TooManyGlobals {
+                        count,
+                        max_globals: limits::WASM_LIMITS.max_globals,
+                    });
+                }
+            },
+            _ => {},
+        }
+    }
     Ok(())
 }
 

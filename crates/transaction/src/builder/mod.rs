@@ -558,6 +558,11 @@ impl<D> TransactionBuilder<D> {
         self.add_instruction(Instruction::PutLastInstructionOutputOnWorkspace { key })
     }
 
+    /// Alias for [`Self::put_last_instruction_output_on_workspace`].
+    pub fn put_workspace<T: Into<BuilderWorkspaceKey>>(self, label: T) -> Self {
+        self.put_last_instruction_output_on_workspace(label)
+    }
+
     pub fn take_from_bucket<I: Into<BuilderWorkspaceKey>, A: Into<Amount>, O: Into<BuilderWorkspaceKey>>(
         mut self,
         label: I,

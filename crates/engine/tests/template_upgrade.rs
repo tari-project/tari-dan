@@ -205,7 +205,9 @@ fn it_fails_when_a_migration_panics() {
 
     assert_reject_reason(
         reason,
-        RejectReason::ExecutionFailure("At instruction #1: Panic! Intentional panic during migration".to_string()),
+        RejectReason::ExecutionFailure(
+            "At instruction #1: Template error: Intentional panic during migration".to_string(),
+        ),
     );
 }
 

@@ -14,6 +14,7 @@ use tari_engine_types::{
     substate::{SubstateId, SubstateValue},
 };
 use tari_ootle_transaction::{Epoch, Transaction};
+use tari_template_abi::TEMPLATE_DEF_CUSTOM_SECTION;
 use tari_template_test_tooling::{
     TemplateTest,
     compile::compile_template,
@@ -127,4 +128,32 @@ fn rejects_more_than_one_publish_template() {
 
 fn generate_random_binary(size_in_bytes: usize) -> Vec<u8> {
     iter::repeat_with(random).take(size_in_bytes).collect()
+}
+
+/// A template's ABI comes from its `tari_tdef` custom section, so a binary without one carries no
+/// template definition the engine can admit — including one embedding its ABI the legacy way, in
+/// linear memory behind an `_ABI_TEMPLATE_DEF` global.
+#[test]
+fn publish_template_without_a_template_def_section() {
+    let mut test = TemplateTest::new(CRATE_PATH, &[] as &[&str]);
+    let (account_address, owner_proof, account_key, _) = test.create_funded_account_with_keypair();
+
+    let code = wat::parse_str(
+        r#"
+        (module
+          (memory (export "memory") 1)
+          (global (export "_ABI_TEMPLATE_DEF") i32 (i32.const -1)))
+        "#,
+    )
+    .unwrap();
+
+    let result = test.execute_expect_failure(
+        test.transaction()
+            .pay_fee_from_component(account_address, 200_000u64)
+            .publish_template(code)
+            .build_and_seal(&account_key),
+        vec![owner_proof],
+    );
+
+    assert_reject_reason(result, TEMPLATE_DEF_CUSTOM_SECTION);
 }

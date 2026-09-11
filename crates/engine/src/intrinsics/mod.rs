@@ -43,6 +43,10 @@ use tari_template_lib::{
 
 use crate::runtime::{EngineArgs, RuntimeError};
 
+/// The fewest bytes a [`RistrettoPublicKeyBytes`] can occupy inside an encoded list: 32 bytes of key and the
+/// CBOR byte-string header in front of them. `encoded_point_len_is_at_least_the_minimum` pins it.
+const MIN_ENCODED_POINT_LEN: u64 = 33;
+
 /// The metering points an intrinsic call costs, derived from its declared arguments alone.
 ///
 /// Charged before [`dispatch`] runs, so the price may not depend on anything the work itself
@@ -59,12 +63,14 @@ pub fn price(intrinsic: IntrinsicId, args: &EngineArgs) -> Result<u64, RuntimeEr
         I::RISTRETTO_MUL => NativeExecutionPoints::PER_RISTRETTO_MUL,
         I::RISTRETTO_MUL_BASE => NativeExecutionPoints::PER_RISTRETTO_MUL_BASE,
         I::RISTRETTO_MSM => {
-            // Priced off the declared point count, which is read before any point is decompressed.
-            // A mismatch against the scalar count is rejected in `dispatch`, after this charge —
-            // a caller cannot get free work out of an argument this never looks at.
-            let points_len = args.get::<Vec<RistrettoPublicKeyBytes>>(0)?.len() as u64;
+            // Priced off the encoded length of the point list rather than a decoded one: pricing must not do
+            // work proportional to the input it is pricing, and that decode is unmetered. Dividing by the
+            // smallest a point can encode to bounds the term count from above, so the charge is never short. A
+            // mismatch against the scalar count is rejected in `dispatch`, after this charge — a caller cannot
+            // get free work out of an argument this never looks at.
+            let terms = args.arg_encoded_len(0) / MIN_ENCODED_POINT_LEN;
             NativeExecutionPoints::PER_RISTRETTO_MSM
-                .saturating_add(NativeExecutionPoints::PER_RISTRETTO_MSM_TERM.saturating_mul(points_len))
+                .saturating_add(NativeExecutionPoints::PER_RISTRETTO_MSM_TERM.saturating_mul(terms))
         },
         I::SCALAR_ADD |
         I::SCALAR_SUB |
@@ -313,6 +319,21 @@ fn encode_scalar(s: RistrettoSecretKey) -> Result<InvokeResult, RuntimeError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `price` bounds an MSM's term count by dividing the encoded argument by [`MIN_ENCODED_POINT_LEN`], which
+    /// only bounds from above while a point never encodes to less than that.
+    #[test]
+    fn encoded_point_len_is_at_least_the_minimum() {
+        for len in [1usize, 2, 32, 1000] {
+            let points = vec![RistrettoPublicKeyBytes::zero(); len];
+            let encoded = tari_bor::encode(&points).unwrap().len() as u64;
+            assert!(
+                encoded >= MIN_ENCODED_POINT_LEN * len as u64,
+                "{len} points encode to {encoded} bytes, under the {MIN_ENCODED_POINT_LEN} per point assumed when \
+                 pricing"
+            );
+        }
+    }
 
     /// An id priced but not dispatched charges for work never done; one dispatched but not priced
     /// runs unmetered native code, which is the hole the pricing discipline exists to close. Empty

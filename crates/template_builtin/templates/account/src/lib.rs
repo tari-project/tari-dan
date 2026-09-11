@@ -99,9 +99,23 @@ mod account_template {
             v.withdraw(amount)
         }
 
+        /// Withdraws with `auth` authorizing the resource's withdraw rule.
+        ///
+        /// A resource whose withdraw rule names a badge is reachable only by a frame that holds that badge, and a
+        /// `Proof` is how a badge reaches a frame. `auth` remains the caller's: it authorizes for the duration of
+        /// this call and is neither consumed nor dropped here.
+        pub fn withdraw_with_auth(&mut self, resource: ResourceAddress, amount: Amount, auth: Proof) -> Bucket {
+            auth.authorize_with(|| self.withdraw(resource, amount))
+        }
+
         pub fn withdraw_all(&mut self, resource: ResourceAddress) -> Bucket {
             let v = self.get_vault_mut(resource);
             v.withdraw_all()
+        }
+
+        /// [`Self::withdraw_all`] with `auth` authorizing the resource's withdraw rule.
+        pub fn withdraw_all_with_auth(&mut self, resource: ResourceAddress, auth: Proof) -> Bucket {
+            auth.authorize_with(|| self.withdraw_all(resource))
         }
 
         pub fn withdraw_non_fungible(&mut self, resource: ResourceAddress, nf_id: NonFungibleId) -> Bucket {
@@ -110,10 +124,30 @@ mod account_template {
             v.withdraw_non_fungibles([nf_id])
         }
 
+        /// [`Self::withdraw_non_fungible`] with `auth` authorizing the resource's withdraw rule.
+        pub fn withdraw_non_fungible_with_auth(
+            &mut self,
+            resource: ResourceAddress,
+            nf_id: NonFungibleId,
+            auth: Proof,
+        ) -> Bucket {
+            auth.authorize_with(|| self.withdraw_non_fungible(resource, nf_id))
+        }
+
         pub fn withdraw_many_non_fungibles(&mut self, resource: ResourceAddress, nf_ids: Vec<NonFungibleId>) -> Bucket {
             // An event is emitted by the vault.withdraw_non_fungibles method
             let v = self.get_vault_mut(resource);
             v.withdraw_non_fungibles(nf_ids)
+        }
+
+        /// [`Self::withdraw_many_non_fungibles`] with `auth` authorizing the resource's withdraw rule.
+        pub fn withdraw_many_non_fungibles_with_auth(
+            &mut self,
+            resource: ResourceAddress,
+            nf_ids: Vec<NonFungibleId>,
+            auth: Proof,
+        ) -> Bucket {
+            auth.authorize_with(|| self.withdraw_many_non_fungibles(resource, nf_ids))
         }
 
         pub fn withdraw_confidential(
@@ -124,6 +158,16 @@ mod account_template {
             // An event is emitted by the vault.withdraw_confidential method
             let v = self.get_vault_mut(resource);
             v.withdraw_confidential(withdraw_proof)
+        }
+
+        /// [`Self::withdraw_confidential`] with `auth` authorizing the resource's withdraw rule.
+        pub fn withdraw_confidential_with_auth(
+            &mut self,
+            resource: ResourceAddress,
+            withdraw_proof: ConfidentialWithdrawProof,
+            auth: Proof,
+        ) -> Bucket {
+            auth.authorize_with(|| self.withdraw_confidential(resource, withdraw_proof))
         }
 
         pub fn deposit(&mut self, bucket: Bucket) {
@@ -139,6 +183,11 @@ mod account_template {
                 .entry(resource_address)
                 .or_insert_with(|| Vault::new_empty(resource_address));
             vault_mut.deposit(bucket);
+        }
+
+        /// [`Self::deposit`] with `auth` authorizing the resource's deposit rule.
+        pub fn deposit_with_auth(&mut self, bucket: Bucket, auth: Proof) {
+            auth.authorize_with(|| self.deposit(bucket));
         }
 
         fn get_vault(&self, resource: ResourceAddress) -> &Vault {
@@ -185,6 +234,12 @@ mod account_template {
             v.create_proof()
         }
 
+        /// [`Self::create_proof_for_resource`] with `auth` authorizing the resource's withdraw rule, which is what
+        /// taking a proof over a vault is checked against.
+        pub fn create_proof_for_resource_with_auth(&mut self, resource: ResourceAddress, auth: Proof) -> Proof {
+            auth.authorize_with(|| self.create_proof_for_resource(resource))
+        }
+
         pub fn create_proof_by_non_fungible(&mut self, nft: NonFungibleAddress) -> Proof {
             self.create_proof_by_non_fungible_ids(*nft.resource_address(), vec![nft.id().clone()])
         }
@@ -198,9 +253,29 @@ mod account_template {
             v.create_proof_by_non_fungible_ids(ids.into_iter().collect())
         }
 
+        /// [`Self::create_proof_by_non_fungible_ids`] with `auth` authorizing the resource's withdraw rule.
+        pub fn create_proof_by_non_fungible_ids_with_auth(
+            &mut self,
+            resource: ResourceAddress,
+            ids: Vec<NonFungibleId>,
+            auth: Proof,
+        ) -> Proof {
+            auth.authorize_with(|| self.create_proof_by_non_fungible_ids(resource, ids))
+        }
+
         pub fn create_proof_by_amount(&mut self, resource: ResourceAddress, amount: Amount) -> Proof {
             let v = self.get_vault_mut(resource);
             v.create_proof_by_amount(amount)
+        }
+
+        /// [`Self::create_proof_by_amount`] with `auth` authorizing the resource's withdraw rule.
+        pub fn create_proof_by_amount_with_auth(
+            &mut self,
+            resource: ResourceAddress,
+            amount: Amount,
+            auth: Proof,
+        ) -> Proof {
+            auth.authorize_with(|| self.create_proof_by_amount(resource, amount))
         }
 
         pub fn create_ownership_proof(&mut self) -> Proof {

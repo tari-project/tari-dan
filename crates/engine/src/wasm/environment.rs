@@ -22,18 +22,9 @@
 
 use std::fmt::{Debug, Formatter};
 
-use tari_template_abi::{ABI_TEMPLATE_DEF_GLOBAL_NAME, EngineOp, TemplateDef, WASM_PTR_SIZE};
-use wasmer::{
-    AsStoreMut,
-    AsStoreRef,
-    ExportError,
-    Instance,
-    Memory,
-    MemoryAccessError,
-    MemoryView,
-    TypedFunction,
-    WasmPtr,
-};
+use tari_engine_types::limits;
+use tari_template_abi::{EngineOp, WASM_PTR_SIZE};
+use wasmer::{AsStoreMut, AsStoreRef, Instance, Memory, MemoryAccessError, MemoryView, TypedFunction, WasmPtr};
 
 use crate::wasm::{WasmExecutionError, mem_writer::MemWriter};
 
@@ -53,6 +44,7 @@ pub struct WasmEnv<T> {
     invocation_meter: Option<InvocationMeter>,
     in_template_invocation: bool,
     refused_engine_call: Option<EngineOp>,
+    debug_messages_written: usize,
 }
 
 /// Per-invocation view of the Wasmer meter, letting host calls read the in-flight consumption of
@@ -77,7 +69,21 @@ impl<T> WasmEnv<T> {
             invocation_meter: None,
             in_template_invocation: false,
             refused_engine_call: None,
+            debug_messages_written: 0,
         }
+    }
+
+    /// Counts one `tari_debug` message against this instance's debug budget, reporting whether it
+    /// may be written.
+    ///
+    /// Debug output is validator I/O a template pays almost nothing for — one host call, whatever
+    /// it writes — and it never reaches the transaction result, so it carries its own budget.
+    pub(super) fn allow_debug_message(&mut self) -> bool {
+        if self.debug_messages_written >= limits::ENGINE_LIMITS.max_debug_messages {
+            return false;
+        }
+        self.debug_messages_written += 1;
+        true
     }
 
     /// Marks template code as running inside a function invocation, which is the only context
@@ -203,29 +209,6 @@ impl<T> WasmEnv<T> {
 
     pub(super) fn take_last_engine_error(&mut self) -> Option<WasmExecutionError> {
         self.last_engine_error.take()
-    }
-
-    pub(super) fn load_template_def<S: AsStoreMut>(
-        &self,
-        store: &mut S,
-        instance: &Instance,
-    ) -> Result<TemplateDef, WasmExecutionError> {
-        let ptr = instance
-            .exports
-            .get_global(ABI_TEMPLATE_DEF_GLOBAL_NAME)?
-            .get(store)
-            .i32()
-            .ok_or(WasmExecutionError::ExportError(ExportError::IncompatibleType))?;
-
-        // with_memory_embedded_len expects a pointer to the payload (i.e. after the length prefix), so we need to add
-        // the size of the length prefix to the pointer
-        let offset_ptr = ptr as u32 + WASM_PTR_SIZE as u32;
-        // Load ABI from memory
-        // SAFETY: WasmEnv is not used concurrently
-        unsafe {
-            self.with_memory_embedded_len(store, offset_ptr, tari_bor::decode)?
-                .map_err(WasmExecutionError::AbiTemplateDefDecodeError)
-        }
     }
 
     pub(super) fn memory_writer<'a, S: AsStoreMut>(

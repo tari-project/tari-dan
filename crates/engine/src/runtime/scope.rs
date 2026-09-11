@@ -312,6 +312,10 @@ impl CallScope {
         }
     }
 
+    /// Brings what a caller passed in as arguments into this frame. Buckets and proofs stay the caller's — they are
+    /// recorded as inherited, so this frame need not account for them — but a proof among them also *authorizes*
+    /// here from the moment it arrives, without the frame calling `authorize()` on it. Passing a proof is therefore
+    /// the act of lending the authority it carries.
     pub fn include_refs_in_scope(&mut self, values: &IndexedWellKnownTypes) {
         for addr in values.referenced_substates() {
             // Never able to bring these into scope
@@ -407,10 +411,10 @@ impl Display for CallScope {
 pub enum FrameWriteMode {
     /// Any substate the frame can lock may be written.
     Full,
-    /// Only the component the frame is executing on, through the lock taken at push. Every other write funnelling
-    /// through `WorkingState::write_lock_substate` / `new_substate` is rejected, so the frame cannot touch a vault,
-    /// resource or any other component. Resource auth hooks run in this mode: the acting component did not choose
-    /// the hook code, so the hook must not be able to act on the acting component's behalf beyond its own state.
+    /// Only the component the frame is executing on, through the lock taken at push. Every write lock the frame
+    /// asks for and every new substate it creates is rejected, so it cannot touch a vault, resource or any other
+    /// component. Resource auth hooks run in this mode: the acting component did not choose the hook code, so the
+    /// hook must not be able to act on the acting component's behalf beyond its own state.
     OwnComponent,
     /// No state mutation at all. Spend-script predicate frames run in this mode so they are provably
     /// side-effect-free.

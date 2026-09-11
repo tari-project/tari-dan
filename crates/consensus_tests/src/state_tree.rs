@@ -47,6 +47,10 @@ async fn check_state_transitions() {
             panic!("Not all transactions committed after {} blocks", leaf.height);
         }
     }
+    // The budget below is relative to where the loop above left off: a commit trails the leaf by a
+    // three-chain, so the first block committed in Epoch(2) always arrives several blocks after the
+    // epoch starts.
+    let epoch_2_deadline = test.get_validator(&TestAddress::new("1")).get_leaf_block().height + NodeHeight(10);
     test.start_epoch(Epoch(2)).await;
     loop {
         let (_, _, epoch, height) = test.on_block_committed().await;
@@ -54,8 +58,8 @@ async fn check_state_transitions() {
         if epoch == Epoch(2) {
             break;
         }
-        if height >= NodeHeight(10) {
-            panic!("Not all transaction committed after {} blocks", height);
+        if height >= epoch_2_deadline {
+            panic!("Epoch(2) not reached by block {height}");
         }
     }
 
