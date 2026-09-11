@@ -302,7 +302,7 @@ where TConsensusSpec: ConsensusSpec
     /// Returns Ok(None) if the command cannot be sequenced yet due to lock conflicts.
     fn transaction_pool_record_to_command<TTx: StateStoreReadTransaction>(
         &self,
-        start_of_chain_id: &LeafBlock,
+        state_anchor: &LeafBlock,
         locked_epoch: &LockedEpoch,
         pool_tx: TransactionPoolRecord,
         local_committee_info: &CommitteeInfo,
@@ -313,7 +313,7 @@ where TConsensusSpec: ConsensusSpec
     ) -> Result<Option<Command>, HotStuffError> {
         match pool_tx.current_stage() {
             TransactionPoolStage::New => self.prepare_transaction(
-                start_of_chain_id,
+                state_anchor,
                 locked_epoch,
                 pool_tx,
                 local_committee_info,
@@ -325,7 +325,7 @@ where TConsensusSpec: ConsensusSpec
             // Leader thinks all foreign PREPARE pledges have been received (condition for LocalPrepared stage to be
             // ready)
             TransactionPoolStage::LocalPrepared => self.local_accept_transaction(
-                start_of_chain_id,
+                state_anchor,
                 local_committee_info,
                 change_set,
                 pool_tx,
@@ -336,7 +336,7 @@ where TConsensusSpec: ConsensusSpec
             // Leader thinks that all foreign ACCEPT pledges have been received and, we are ready to accept the result
             // (COMMIT/ABORT)
             TransactionPoolStage::LocalAccepted => {
-                self.accept_transaction(start_of_chain_id, &pool_tx, local_committee_info, substate_store)
+                self.accept_transaction(state_anchor, &pool_tx, local_committee_info, substate_store)
             },
             // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes
             // agreed with the Accept, more (possibly empty) blocks with QCs will be
@@ -369,7 +369,6 @@ where TConsensusSpec: ConsensusSpec
     ) -> Result<NextBlock, HotStuffError> {
         let high_qc_id = high_qc_certificate.calculate_id();
         let justify_block = Block::get_justified_block(tx, &high_qc_certificate, epoch)?;
-        let start_of_chain_block = highest_seen_block;
         let parent_block = dummy_block.unwrap_or_else(|| highest_seen_block.as_leaf());
         let highest_seen_block = Block::get(tx, highest_seen_block.block_id())?;
         let is_end_of_epoch_in_chain = highest_seen_block.is_epoch_end_proposed_in_chain(tx)?;
@@ -383,24 +382,25 @@ where TConsensusSpec: ConsensusSpec
         };
 
         let mut total_leader_fee = 0u64;
-        // When filling a timeout gap with a dummy chain, the candidate effectively extends from justify_block (the
-        // dummies are empty blocks that carry justify_block's accumulated_data and state forward — see
-        // `calculate_last_dummy_block`). Anchor accumulated_data, the substate store, the pending state tree
-        // diff lookup and propose-time foreign proposal processing at justify_block to match what validators
-        // recompute from the reconstructed dummy chain.
-        // Otherwise speculative state and leader-fee burn that accumulated on a locally-stored fork above the high QC
-        // would be incorrectly carried into the new candidate and validators would reject with either an
-        // exhaust-burn mismatch or a state Merkle-root mismatch.
-        let state_anchor_leaf = if dummy_block.is_some() {
-            justify_block.as_leaf()
+        // The block the candidate extends from, and the point at which every speculative state and pool read
+        // for this proposal is taken. When filling a timeout gap with a dummy chain that is justify_block:
+        // the dummies are empty blocks carrying justify_block's accumulated_data and state forward (see
+        // `calculate_last_dummy_block`), so the candidate's parent chain runs back through them to
+        // justify_block and never through a locally-stored fork above the high QC. A validator recomputes
+        // that same chain, so anything read at a fork block is state it does not have: speculative substate
+        // changes and leader-fee burn surface as an exhaust-burn or state Merkle-root mismatch, and pool
+        // records read there carry stages and decisions from blocks the candidate abandons.
+        //
+        // The epoch-boundary checks above and the locked epoch below are read at `highest_seen_block`
+        // instead. They gate whether commands are proposed at all, so reading them a block early only ever
+        // suppresses commands, and the candidate's own header takes its epoch hash from the same block.
+        let state_anchor = if dummy_block.is_some() {
+            &justify_block
         } else {
-            start_of_chain_block.as_leaf()
+            &highest_seen_block
         };
-        let mut accumulated_data = if dummy_block.is_some() {
-            *justify_block.header().accumulated_data()
-        } else {
-            *highest_seen_block.header().accumulated_data()
-        };
+        let state_anchor_leaf = state_anchor.as_leaf();
+        let mut accumulated_data = *state_anchor.header().accumulated_data();
 
         let mut substate_store =
             PendingSubstateStore::new(tx, state_anchor_leaf, self.config.consensus_constants.num_preshards);
@@ -410,7 +410,7 @@ where TConsensusSpec: ConsensusSpec
         let batch = if should_not_propose_commands {
             ProposalBatch::default()
         } else {
-            self.fetch_next_proposal_batch(tx, start_of_chain_block)?
+            self.fetch_next_proposal_batch(tx, state_anchor_leaf)?
         };
         debug!(target: LOG_TARGET, "🌿 PROPOSE: {} (justify: {}) {batch}", highest_seen_block.height(), justify_block.height());
 
@@ -428,7 +428,7 @@ where TConsensusSpec: ConsensusSpec
         };
 
         // NOTE: the block for the change set is not used.
-        let mut change_set = ProposedBlockChangeSet::new(start_of_chain_block.as_leaf());
+        let mut change_set = ProposedBlockChangeSet::new(state_anchor_leaf);
         let mut invalid_foreign_proposals = Vec::new();
         let mut dropped_foreign_proposals = false;
 
@@ -560,7 +560,7 @@ where TConsensusSpec: ConsensusSpec
             // for this block, so only count executions newly produced by the command conversion below.
             let had_execution = executed_transactions.contains_key(&tx_id);
             let maybe_command = self.transaction_pool_record_to_command(
-                &start_of_chain_block.as_leaf(),
+                &state_anchor_leaf,
                 // This locked epoch is used to set the transaction LockedEpoch if necessary
                 &locked_epoch,
                 transaction,
@@ -707,7 +707,7 @@ where TConsensusSpec: ConsensusSpec
     fn fetch_next_proposal_batch<TTx: StateStoreReadTransaction>(
         &self,
         tx: &TTx,
-        start_of_chain_block: HighestSeenBlock,
+        state_anchor_leaf: LeafBlock,
     ) -> Result<ProposalBatch, HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "fetch_next_proposal_batch");
         // A block is budgeted by total command weight (`max_block_weight`), not a flat command count.
@@ -722,7 +722,7 @@ where TConsensusSpec: ConsensusSpec
         let max_commands = self.config.consensus_constants.max_commands_in_block;
 
         let foreign_proposals =
-            ForeignProposalRecord::get_all_new(tx, start_of_chain_block.block_id(), MAX_FOREIGN_PROPOSALS_PER_BLOCK)?;
+            ForeignProposalRecord::get_all_new(tx, state_anchor_leaf.block_id(), MAX_FOREIGN_PROPOSALS_PER_BLOCK)?;
 
         if !foreign_proposals.is_empty() {
             debug!(
@@ -750,7 +750,7 @@ where TConsensusSpec: ConsensusSpec
                     tx,
                     weight_budget,
                     max_tx_count,
-                    start_of_chain_block.block_id(),
+                    state_anchor_leaf.block_id(),
                 )
             })
             .transpose()?
@@ -766,7 +766,7 @@ where TConsensusSpec: ConsensusSpec
     #[allow(clippy::too_many_lines)]
     fn prepare_transaction<TTx: StateStoreReadTransaction>(
         &self,
-        parent_block: &LeafBlock,
+        state_anchor: &LeafBlock,
         locked_epoch: &LockedEpoch,
         mut pool_tx: TransactionPoolRecord,
         local_committee_info: &CommitteeInfo,
@@ -790,7 +790,7 @@ where TConsensusSpec: ConsensusSpec
                 substate_store,
                 local_committee_info,
                 &pool_tx,
-                *parent_block,
+                *state_anchor,
                 change_set,
             )
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
@@ -965,7 +965,7 @@ where TConsensusSpec: ConsensusSpec
 
     fn local_accept_transaction<TTx: StateStoreReadTransaction>(
         &self,
-        parent_block: &LeafBlock,
+        state_anchor: &LeafBlock,
         local_committee_info: &CommitteeInfo,
         change_set: &ProposedBlockChangeSet,
         mut tx_rec: TransactionPoolRecord,
@@ -986,7 +986,7 @@ where TConsensusSpec: ConsensusSpec
 
         let tx = substate_store.read_transaction();
         let transaction = tx_rec.get_transaction(tx)?;
-        let execution = self.execute_transaction(tx, parent_block, transaction, change_set, locked_epoch.clone())?;
+        let execution = self.execute_transaction(tx, state_anchor, transaction, change_set, locked_epoch.clone())?;
 
         // Try to lock all local outputs
         let local_outputs = execution
@@ -1028,7 +1028,7 @@ where TConsensusSpec: ConsensusSpec
 
     fn accept_transaction<TTx: StateStoreReadTransaction>(
         &self,
-        parent_block: &LeafBlock,
+        state_anchor: &LeafBlock,
         tx_rec: &TransactionPoolRecord,
         local_committee_info: &CommitteeInfo,
         substate_store: &mut PendingSubstateStore<TTx>,
@@ -1039,7 +1039,7 @@ where TConsensusSpec: ConsensusSpec
 
         let tx = substate_store.read_transaction();
         let execution = tx_rec
-            .get_pending_execution_for_block(tx, parent_block)
+            .get_pending_execution_for_block(tx, state_anchor)
             .optional()?
             .ok_or_else(|| {
                 HotStuffError::InvariantError(format!(
@@ -1092,14 +1092,14 @@ where TConsensusSpec: ConsensusSpec
     fn execute_transaction<TTx: StateStoreReadTransaction>(
         &self,
         tx: &TTx,
-        parent_block: &LeafBlock,
+        state_anchor: &LeafBlock,
         transaction: TransactionRecord,
         change_set: &ProposedBlockChangeSet,
         locked_epoch: LockedEpoch,
     ) -> Result<TransactionExecution, HotStuffError> {
         // Should have been executed already if all inputs are local
         if let Some(execution) =
-            BlockTransactionExecution::get_pending_for_block(tx, transaction.id(), parent_block).optional()?
+            BlockTransactionExecution::get_pending_for_block(tx, transaction.id(), state_anchor).optional()?
         {
             info!(
                 target: LOG_TARGET,
