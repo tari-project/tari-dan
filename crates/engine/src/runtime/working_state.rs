@@ -145,8 +145,9 @@ pub(super) struct WorkingState<TStore> {
     events: Vec<Event>,
     logs: Vec<LogEntry>,
     buckets: HashMap<BucketId, Bucket>,
-    /// Insertion-ordered: `get_allocated_address_by_address` scans these, so a hashed map would let the iteration
-    /// order decide which allocation a lookup finds.
+    /// `get_allocated_address_by_address` scans these, and two allocations can name the same address, so the
+    /// iteration order decides which one a lookup finds. It must therefore follow from the transaction's own
+    /// operations rather than from a hash seed.
     address_allocations: IndexMap<AddressAllocationId, AllocatedAddress>,
     /// Only ever inserted into and looked up by id. Ordered for symmetry with `address_allocations`.
     used_address_allocations: IndexMap<AddressAllocationId, SubstateId>,
@@ -1261,7 +1262,7 @@ impl<TStore: StateReader> WorkingState<TStore> {
         }
         let alloc_addr = self
             .address_allocations
-            .shift_remove(&id)
+            .swap_remove(&id)
             .ok_or(RuntimeError::AddressAllocationNotFound { id })?;
         self.current_call_scope_mut()?.remove_address_allocation_from_scope(id);
         self.used_address_allocations

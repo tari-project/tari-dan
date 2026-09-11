@@ -19,7 +19,7 @@ pub enum WorkspaceError {
     WorkspaceIdAlreadyExists(WorkspaceId),
 }
 
-/// NOTE: the collections here must be insertion-ordered rather than hashed. `drain_all_proofs` drives the order in
+/// NOTE: the collections here must be insertion-ordered rather than hashed. `take_all_proofs` drives the order in
 /// which proofs are dropped, and dropping a vault-backed proof can append that vault to the substates the
 /// transaction persists — whose order becomes `DiffSummary::upped` in the `TransactionReceipt`, and is hashed.
 #[derive(Debug, Clone, Default)]
@@ -58,7 +58,7 @@ impl Workspace {
         Ok(())
     }
 
-    pub fn drain_all_proofs(&mut self) -> IndexSet<ProofId> {
+    pub fn take_all_proofs(&mut self) -> IndexSet<ProofId> {
         mem::take(&mut self.proofs)
     }
 

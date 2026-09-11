@@ -671,7 +671,7 @@ impl<TStore: StateReader + Clone> StateTracker<TStore> {
 
             // After checkpointing, the main intent has a cleared workspace
             state.workspace_mut().clear_items();
-            let proofs = state.workspace_mut().drain_all_proofs();
+            let proofs = state.workspace_mut().take_all_proofs();
             for proof_id in proofs {
                 state.drop_proof(proof_id)?;
             }
