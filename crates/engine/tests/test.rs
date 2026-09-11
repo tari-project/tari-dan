@@ -332,8 +332,8 @@ fn test_engine_errors() {
         vec![],
     );
 
-    // Check that the engine error is captured in the execution result rather than the WASM panic message (Panic! Engine
-    // call returned null for op VaultInvoke)
+    // Check that the engine error is captured in the execution result rather than the WASM panic
+    // message (Template error: Engine call returned null for op VaultInvoke)
     assert_reject_reason(
         reason,
         RejectReason::SubstateNotFound(
@@ -442,7 +442,9 @@ mod errors {
             .unwrap();
         match result.finalize.result.any_reject().unwrap() {
             RejectReason::ExecutionFailure(message) => {
-                assert!(message.contains("Panic! This error message should be included in the execution result"));
+                assert!(
+                    message.contains("Template error: This error message should be included in the execution result")
+                );
             },
             reason => panic!("Unexpected transaction reject reason: {}", reason),
         }
@@ -497,7 +499,7 @@ mod errors {
         );
         assert_reject_reason(
             reason,
-            "Panic! failed to decode tuple argument at position 1 (Tuple<String,U32>) for function 'set'",
+            "Template error: failed to decode tuple argument at position 1 (Tuple<String,U32>) for function 'set'",
         )
     }
 
@@ -516,7 +518,7 @@ mod errors {
         );
         assert_reject_reason(
             reason,
-            "Panic! failed to decode argument at position 0 (Amount) for function 'please_pass_invalid_args'",
+            "Template error: failed to decode argument at position 0 (Amount) for function 'please_pass_invalid_args'",
         )
     }
 }

@@ -76,7 +76,7 @@ pub enum WasmExecutionError {
     UnexpectedAbiFunction { name: String },
     #[error("Encoding error: {0}")]
     EncodingError(#[from] BorError),
-    #[error("Panic! {message}")]
+    #[error("Template error: {message}")]
     Panic {
         message: String,
         runtime_error: wasmer::RuntimeError,
