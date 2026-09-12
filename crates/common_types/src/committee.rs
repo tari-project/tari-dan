@@ -61,7 +61,8 @@ impl<TAddr: PartialEq> Committee<TAddr> {
         (power - VotePower::of(1)) / VotePower::of(3)
     }
 
-    /// Returns $n - f$ (i.e. $2f + 1$) where n is the number of committee members and f is the tolerated failure nodes.
+    /// Returns the quorum threshold $n - f$, where $n$ is the committee's total vote power and $f$ is the
+    /// tolerated faulty power. This equals $2f + 1$ exactly when $n = 3f + 1$.
     pub fn quorum_threshold(&self) -> VotePower {
         self.total_power() - self.max_failures()
     }
@@ -246,13 +247,13 @@ impl CommitteeInfo {
         self.epoch
     }
 
-    /// Returns $n - f$ (i.e $2f + 1$) where n is the total power of committee members and f is the tolerated failure
-    /// nodes.
+    /// Returns the quorum threshold $n - f$, where $n$ is the committee's total vote power and $f$ is the
+    /// tolerated faulty power. This equals $2f + 1$ exactly when $n = 3f + 1$.
     pub fn quorum_threshold(&self) -> VotePower {
         self.total_power() - self.max_failures()
     }
 
-    /// Returns the maximum number of failures $f$ that can be tolerated by this committee.
+    /// Returns the maximum faulty vote power $f$ that this committee tolerates.
     pub fn max_failures(&self) -> VotePower {
         if self.total_power().is_zero() {
             return VotePower::zero();
