@@ -269,6 +269,17 @@ pub trait RuntimeInterface {
     /// nested cross-template calls.
     fn record_wasm_execution(&mut self, points_consumed: u64) -> Result<(), RuntimeError>;
 
+    /// Charges the cost of building the `Store` and `Instance` a template call runs in, before the
+    /// instance exists and before the first metered operator. Priced by
+    /// [`tari_engine_types::limits::instantiation_points`] and charged against the same compute
+    /// allowance as native verification, so a call that cannot cover it fails having done none of
+    /// the work.
+    fn charge_template_instantiation(&mut self, data_segment_bytes: u64) -> Result<(), RuntimeError>;
+
+    /// Charges the Cranelift compile a `PublishTemplate` instruction makes every validator run,
+    /// before the compile starts. Priced by [`tari_engine_types::limits::template_compile_points`].
+    fn charge_template_compile(&mut self, binary_bytes: u64) -> Result<(), RuntimeError>;
+
     /// Total Wasmer metering points consumed by the transaction so far, across every template
     /// invocation. Used by `WasmProcess::invoke` to enforce `MAX_WASM_POINTS_PER_TRANSACTION`.
     fn wasm_points_consumed(&self) -> u64;

@@ -68,10 +68,10 @@ impl WasmModule {
     }
 
     pub fn load_template_from_code(code: &[u8]) -> Result<LoadedTemplate, TemplateLoaderError> {
-        validate_module_structure(code).map_err(WasmExecutionError::from)?;
+        let shape = validate_module_structure(code).map_err(WasmExecutionError::from)?;
         let engine = Self::create_engine();
         let module = wasmer::Module::new(&engine, code)?;
-        Self::finalize_loaded_module(engine, module, code.len())
+        Self::finalize_loaded_module(engine, module, code.len(), shape)
     }
 
     /// Load a template from a previously serialized wasmer module (see
@@ -99,11 +99,12 @@ impl WasmModule {
     pub unsafe fn load_template_from_serialized(
         serialized: bytes::Bytes,
         code_size: usize,
+        shape: ModuleShape,
     ) -> Result<LoadedTemplate, TemplateLoaderError> {
         let engine = Self::create_engine();
         // SAFETY: forwarded to caller — see function-level docs.
         let module = unsafe { wasmer::Module::deserialize_unchecked(&engine, serialized) }?;
-        Self::finalize_loaded_module(engine, module, code_size)
+        Self::finalize_loaded_module(engine, module, code_size, shape)
     }
 
     /// Validates a compiled module and turns it into a [`LoadedTemplate`].
@@ -115,6 +116,7 @@ impl WasmModule {
         engine: Engine,
         module: wasmer::Module,
         code_size: usize,
+        shape: ModuleShape,
     ) -> Result<LoadedTemplate, TemplateLoaderError> {
         let template = load_template_def_from_custom_section(&module)?;
         let main_fn = format!("{}_main", template.template_name());
@@ -139,7 +141,7 @@ impl WasmModule {
 
         let engine = store.engine().clone();
 
-        Ok(LoadedWasmTemplate::new(template, module, engine, code_size).into())
+        Ok(LoadedWasmTemplate::new(template, module, engine, code_size, shape).into())
     }
 
     pub fn code(&self) -> &[u8] {
@@ -200,15 +202,23 @@ pub struct LoadedWasmTemplate {
     module: wasmer::Module,
     engine: Engine,
     code_size: usize,
+    shape: ModuleShape,
 }
 
 impl LoadedWasmTemplate {
-    pub fn new(template_def: TemplateDef, module: wasmer::Module, engine: Engine, code_size: usize) -> Self {
+    pub fn new(
+        template_def: TemplateDef,
+        module: wasmer::Module,
+        engine: Engine,
+        code_size: usize,
+        shape: ModuleShape,
+    ) -> Self {
         Self {
             template_def: Arc::new(template_def),
             module,
             engine,
             code_size,
+            shape,
         }
     }
 
@@ -242,6 +252,10 @@ impl LoadedWasmTemplate {
 
     pub fn code_size(&self) -> usize {
         self.code_size
+    }
+
+    pub fn shape(&self) -> ModuleShape {
+        self.shape
     }
 }
 
@@ -412,7 +426,18 @@ fn validate_export_signature(
 /// declaration far smaller than what it claims. Each table's element count is bounded by the
 /// tunables, which see one table at a time, so the number of tables is what bounds the storage all
 /// of them together claim; a global's slot is fixed, so its count is the whole bound.
-fn validate_module_structure(code: &[u8]) -> Result<(), WasmValidationError> {
+/// What a module's binary says about the work instantiating it will cost.
+///
+/// Compiled code is laid down once at publish; what every instantiation repeats is copying the
+/// data segments into a fresh linear memory, so that byte count — not the binary size — is what
+/// [`tari_engine_types::limits::instantiation_points`] prices.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ModuleShape {
+    pub data_segment_bytes: u64,
+}
+
+fn validate_module_structure(code: &[u8]) -> Result<ModuleShape, WasmValidationError> {
+    let mut shape = ModuleShape::default();
     for payload in Parser::new(0).parse_all(code) {
         // Malformed wasm: stop and let the cranelift compile in
         // `load_template_from_code` report the canonical CompileError.
@@ -437,10 +462,15 @@ fn validate_module_structure(code: &[u8]) -> Result<(), WasmValidationError> {
                     });
                 }
             },
+            Payload::DataSection(reader) => {
+                for segment in reader.into_iter().flatten() {
+                    shape.data_segment_bytes = shape.data_segment_bytes.saturating_add(segment.data.len() as u64);
+                }
+            },
             _ => {},
         }
     }
-    Ok(())
+    Ok(shape)
 }
 
 fn validate_functions(template_def: &TemplateDef) -> Result<(), WasmExecutionError> {

@@ -204,6 +204,28 @@ where
         // A transaction may publish at most one template. Enforced here during execution — a consensus rule every
         // validator applies deterministically — so it holds even for transactions that reach execution without
         // passing the mempool ingress validator that mirrors it.
+        // A fee intent may not publish. The compile a publish pays for costs two orders of magnitude
+        // more than the fee intent's compute credit, and `checkpoint_fee_intent` enforces payment
+        // only after the instruction has run. No way of sourcing a fee involves publishing.
+        if instructions
+            .fee
+            .iter()
+            .any(|instruction| matches!(instruction, Instruction::PublishTemplate { .. }))
+        {
+            return Ok(ExecuteResult {
+                finalize: FinalizeResult::new_rejected(
+                    id.as_hash(),
+                    RejectReason::ExecutionFailure(
+                        "Transaction publishes a template in its fee instructions".to_string(),
+                    ),
+                ),
+                execution_time: timer.elapsed(),
+                execute_epoch: execute_epoch.map(Into::into),
+                wasm_execution_points: 0,
+                native_execution_points: 0,
+            });
+        }
+
         let publish_template_count = instructions
             .fee
             .iter()
@@ -672,7 +694,10 @@ where
             });
         }
 
-        // validate binary
+        // The compile is the most expensive thing a single instruction can ask of a validator, so it
+        // is paid for before it runs. The size cap above is what keeps this charge affordable.
+        runtime.interface_mut().charge_template_compile(binary.len() as u64)?;
+
         let template_def = WasmModule::validate_code(binary)?;
         // The size cap above is enforced; constructing TemplateBlob is therefore infallible.
         let blob = TemplateBlob::new_checked(binary).expect("template binary size verified above");
@@ -966,12 +991,17 @@ where
 
     fn invoke_template(
         module: LoadedTemplate,
-        runtime: Runtime,
+        mut runtime: Runtime,
         function_def: &FunctionDef,
         args: &[tari_bor::Value],
     ) -> Result<InstructionResult, TransactionErrorKind> {
         let result = match module {
             LoadedTemplate::Wasm(loaded) => {
+                // Instantiation runs before the first metered operator, so it is charged against
+                // the same allowance and per-block budget the call's execution draws on.
+                runtime
+                    .interface_mut()
+                    .charge_template_instantiation(loaded.shape().data_segment_bytes)?;
                 let mut store = loaded.create_store();
                 let mut process = WasmProcess::init(&mut store, loaded, runtime)?;
                 process.invoke(&mut store, function_def, args)?

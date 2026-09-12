@@ -192,7 +192,7 @@ fn gasless() {
 
     test.execute_expect_success(
         test.transaction()
-            .pay_fee_from_component(fee_account, 2000u64)
+            .pay_fee_from_component(fee_account, 4000u64)
             .call_method(user_account, "withdraw", args![TARI_TOKEN, 100])
             .put_last_instruction_output_on_workspace("b")
             .call_method(user2_account, "deposit", args![Workspace("b")])

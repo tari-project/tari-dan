@@ -95,6 +95,8 @@ pub enum TransactionValidationError {
         max: usize,
         actual: usize,
     },
+    #[error("Transaction {transaction_id} publishes a template in its fee instructions")]
+    PublishTemplateInFeeInstructions { transaction_id: TransactionId },
     #[error("Transaction {transaction_id} contains {actual} signatures, but the maximum allowed is {max}")]
     TooManySignatures {
         transaction_id: TransactionId,
@@ -171,6 +173,7 @@ impl TransactionValidationError {
             Self::TransactionExceedsMaxSize { .. } |
             Self::ExceedsStealthTransactionLimit { .. } |
             Self::TooManyPublishTemplateInstructions { .. } |
+            Self::PublishTemplateInFeeInstructions { .. } |
             Self::TooManySignatures { .. } |
             Self::InvalidBlobReferences { .. } => true,
         }

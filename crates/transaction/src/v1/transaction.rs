@@ -341,8 +341,8 @@ fn calc_instruction_weight(instruction: &Instruction) -> u64 {
             access_rules.as_ref().map(|a| a.num_access_rules() as u64).unwrap_or(0) +
                 workspace_id.as_ref().map(|_| 1).unwrap_or(0)
         },
-        Instruction::CallFunction { args, .. } => calc_args_weight(args),
-        Instruction::CallMethod { args, .. } => calc_args_weight(args),
+        Instruction::CallFunction { args, .. } => calc_args_weight(args).max(INVOCATION_FLOOR),
+        Instruction::CallMethod { args, .. } => calc_args_weight(args).max(INVOCATION_FLOOR),
         Instruction::PutLastInstructionOutputOnWorkspace { .. } => 0, // Call already costs
         Instruction::ClaimBurn { .. } => CLAIM_FIXED_COST,
         Instruction::ClaimValidatorFees { .. } => 1,
@@ -399,6 +399,16 @@ fn calc_stealth_statement_weight(statement: &StealthTransferStatement) -> u64 {
 /// Public because the dry-run fee allowance is derived from it: the encoded width of the `max_fee`
 /// literal is the one term that can make a real run weigh more than the dry run that estimated it.
 pub const LITERAL_BYTE_DIVISOR: u64 = 3;
+
+/// Least weight a template invocation may carry, whatever its arguments come to.
+///
+/// A call with no arguments weighs nothing by argument alone, so without a floor
+/// `max_transaction_weight` bounds a transaction's bytes but not the number of invocations it
+/// packs — and every invocation instantiates the template afresh
+/// ([`tari_engine_types::limits::instantiation_points`]), which is real work before any of the
+/// template's own code runs. The execution-point budget is what prices that work; this floor is
+/// what keeps the weight cap a bound on instruction count at all.
+pub const INVOCATION_FLOOR: u64 = 30;
 
 fn calc_args_weight(args: &[InstructionArg]) -> u64 {
     // Workspace and blob refs are cheap — just an index. Blob payloads are charged at the
@@ -723,5 +733,43 @@ mod transaction_id_tests {
         );
 
         assert_ne!(a.calculate_id(), b.calculate_id());
+    }
+}
+
+#[cfg(test)]
+mod weight_tests {
+    use tari_template_lib_types::{FunctionName, ObjectKey};
+
+    use super::*;
+
+    fn no_arg_call() -> Instruction {
+        Instruction::CallMethod {
+            call: ComponentAddress::new(ObjectKey::default()).into(),
+            method: FunctionName::try_from("m").expect("a one-character method name fits"),
+            args: vec![],
+        }
+    }
+
+    /// A call carrying no arguments weighs nothing by argument alone, so the floor is what stops an
+    /// instruction list from being free.
+    #[test]
+    fn a_no_argument_call_weighs_the_floor() {
+        assert_eq!(calc_instruction_weight(&no_arg_call()), INVOCATION_FLOOR);
+    }
+
+    /// The weight a transaction's size cap admits must be bounded by the weight cap, so that
+    /// packing the size cap full of minimal calls is not free.
+    #[test]
+    fn a_size_cap_of_minimal_calls_exceeds_the_transaction_weight_cap() {
+        // A `CallMethod` with an empty method name and no args encodes in well under 45 bytes, so
+        // this many is what the size cap admits at worst.
+        const CALLS_IN_THE_SIZE_CAP: u64 = 1_750_000 / 45;
+        const MAX_TRANSACTION_WEIGHT: u64 = 1_000_000;
+
+        let weight = CALLS_IN_THE_SIZE_CAP * calc_instruction_weight(&no_arg_call());
+        assert!(
+            weight > MAX_TRANSACTION_WEIGHT,
+            "{CALLS_IN_THE_SIZE_CAP} minimal calls weigh {weight}"
+        );
     }
 }

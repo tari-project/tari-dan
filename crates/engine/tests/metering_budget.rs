@@ -51,3 +51,39 @@ fn per_transaction_budget_caps_total_across_calls() {
         "expected an out-of-gas execution failure, got {reason:?}",
     );
 }
+
+/// Every instruction that calls a template builds a fresh `Store` and `Instance` before the first
+/// metered operator runs, so the cost of doing so is charged per call rather than absorbed.
+#[test]
+fn instantiation_is_charged_once_per_call() {
+    use tari_engine_types::limits::PER_TEMPLATE_INSTANTIATION;
+
+    let mut test = TemplateTest::new(CRATE_PATH, [METERING_BENCH]);
+    let addr = test.get_template_address("MeteringBench");
+    let (account, owner, key) = test.create_funded_account();
+
+    test.enable_fees();
+
+    let native_points = |test: &mut TemplateTest, calls: usize| -> u64 {
+        let mut builder = Transaction::builder_localnet(Epoch(1)).pay_fee_from_component(account, 900_000_000u64);
+        for _ in 0..calls {
+            builder = builder.call_function(addr, "bench_div_u64", args![1u64]);
+        }
+        test.execute_expect_success(builder.build_and_seal(&key), vec![owner.clone()])
+            .native_execution_points
+    };
+
+    let one = native_points(&mut test, 1);
+    let two = native_points(&mut test, 2);
+    let three = native_points(&mut test, 3);
+
+    // `bench_div_u64` does no native verification of its own, so each added call contributes
+    // exactly one instantiation. The single-call figure also carries the fee payment's own call
+    // into the Account template, so the marginal cost is what identifies the charge.
+    let marginal = two - one;
+    assert!(
+        marginal >= PER_TEMPLATE_INSTANTIATION,
+        "an added call charged only {marginal} points"
+    );
+    assert_eq!(three - two, marginal, "the charge must be the same for every call");
+}
