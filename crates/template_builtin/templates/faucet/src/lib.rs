@@ -43,5 +43,12 @@ mod template {
                 component.invoke("deposit", args!(bucket));
             })
         }
+
+        /// Tops up the faucet vault. Permissionless: any caller may return or add funds. A bucket of any
+        /// resource other than the faucet's own is rejected by the vault.
+        pub fn deposit(&self, bucket: Bucket) {
+            emit_event("deposit", metadata!["amount" => bucket.amount().to_string()]);
+            self.vault.deposit(bucket);
+        }
     }
 }
