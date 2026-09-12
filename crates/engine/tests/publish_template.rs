@@ -180,3 +180,32 @@ fn publishing_a_template_in_the_fee_instructions_is_rejected() {
 
     assert_reject_reason(reason, "publishes a template in its fee instructions");
 }
+
+/// A publish makes every validator Cranelift-compile the binary it carries, which is the most
+/// expensive thing one instruction can ask for. It is charged before the compile runs, so a
+/// transaction that cannot cover it does none of the work.
+#[test]
+fn the_compile_a_publish_pays_for_is_charged_before_it_runs() {
+    use tari_engine_types::limits::template_compile_points;
+
+    let mut test = TemplateTest::new(CRATE_PATH, &[] as &[&str]);
+    let (account, owner_proof, key, _) = test.create_funded_account_with_keypair();
+    let template = compile_template("tests/templates/hello_world", &[]).unwrap();
+    let binary_len = template.code().len() as u64;
+    test.enable_fees();
+
+    let result = test.execute_expect_success(
+        Transaction::builder_localnet(Epoch(1))
+            .pay_fee_from_component(account, 2_000_000u64)
+            .publish_template(template.into_code())
+            .build_and_seal(&key),
+        vec![owner_proof],
+    );
+
+    let native_points = result.native_execution_points;
+    let compile = template_compile_points(binary_len);
+    assert!(
+        native_points >= compile,
+        "a {binary_len}-byte publish charged {native_points} native points, under the {compile} its compile costs"
+    );
+}

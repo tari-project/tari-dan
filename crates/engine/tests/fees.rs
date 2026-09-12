@@ -901,7 +901,7 @@ fn no_charge_other_than_weight_and_storage_moves_with_max_fee() {
 #[test]
 fn a_template_publish_introduces_no_further_max_fee_sensitivity() {
     // Every entry clears the publish cost; between them they move all three quantities.
-    const MAX_FEES: [u64; 4] = [400_000, 100_000_000, FUNDED - 60_000, FUNDED - 10];
+    const MAX_FEES: [u64; 4] = [1_000_000, 100_000_000, FUNDED - 60_000, FUNDED - 10];
 
     let mut test = TemplateTest::new(CRATE_PATH, &[] as &[&str]);
     let (account, owner_proof, key, _) = test.create_funded_account_with_keypair();

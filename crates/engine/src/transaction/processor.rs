@@ -694,7 +694,10 @@ where
             });
         }
 
-        // validate binary
+        // The compile is the most expensive thing a single instruction can ask of a validator, so it
+        // is paid for before it runs. The size cap above is what keeps this charge affordable.
+        runtime.interface_mut().charge_template_compile(binary.len() as u64)?;
+
         let template_def = WasmModule::validate_code(binary)?;
         // The size cap above is enforced; constructing TemplateBlob is therefore infallible.
         let blob = TemplateBlob::new_checked(binary).expect("template binary size verified above");
