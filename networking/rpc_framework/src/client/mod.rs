@@ -907,6 +907,13 @@ where TSubstream: AsyncRead + AsyncWrite + Unpin + Send
                         target: LOG_TARGET,
                         "Request {} (method={}) was closed (read_reply)", request_id, method,
                     );
+                    if !response_tx.is_closed() {
+                        let _result = response_tx
+                            .send(Err(RpcStatus::general(
+                                "The RPC client closed before the response completed",
+                            )))
+                            .await;
+                    }
                     self.request_rx.close();
                     break;
                 },
@@ -920,7 +927,12 @@ where TSubstream: AsyncRead + AsyncWrite + Unpin + Send
                         .await;
                     break;
                 },
+                // The consumer must see the failure: a stream that just ends is indistinguishable from one the
+                // peer chose to end.
                 Err(err) => {
+                    if !response_tx.is_closed() {
+                        let _result = response_tx.send(Err(RpcStatus::general(err.to_string()))).await;
+                    }
                     return Err(err);
                 },
             };
@@ -1304,6 +1316,45 @@ mod keepalive_tests {
         send_message(&mut framed, request.request_id, message).await;
 
         request
+    }
+
+    #[tokio::test]
+    async fn a_stream_cut_off_mid_way_ends_with_an_error() {
+        let (server, client) = tokio::io::duplex(RPC_MAX_FRAME_SIZE);
+        let reply = proto::RpcSession {
+            supported_versions: vec![7],
+        };
+        let server = tokio::spawn(async move {
+            let mut framed = framing::canonical(server.compat(), RPC_MAX_FRAME_SIZE);
+            let request = read_request(&mut framed).await;
+            send_response(&mut framed, RpcResponse {
+                request_id: request.request_id,
+                status: RpcStatusCode::Ok,
+                flags: RpcMessageFlags::empty(),
+                payload: reply.encode_to_vec().into(),
+            })
+            .await;
+        });
+
+        let mut rpc_client = RpcClient::connect(
+            RpcClientConfig::default(),
+            PeerId::random(),
+            framing::canonical(client.compat(), RPC_MAX_FRAME_SIZE),
+            StreamProtocol::new(PROTOCOL),
+        )
+        .await
+        .unwrap();
+
+        let stream = rpc_client
+            .server_streaming::<_, _, proto::RpcSession>(proto::RpcSession::default(), 1u32)
+            .await
+            .unwrap();
+        server.await.unwrap();
+        let received = stream.collect::<Vec<_>>().await;
+
+        assert_eq!(received.len(), 2, "{received:?}");
+        assert_eq!(received[0].as_ref().unwrap().supported_versions, vec![7]);
+        assert!(received[1].is_err(), "{received:?}");
     }
 
     #[tokio::test]

@@ -331,7 +331,9 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         let mut last_hard_error = None;
         let mut saw_unavailable_peer = false;
 
-        for member in &source.serving_peers {
+        // A peer that served invalid state earlier in this run is left out of the rest of it too.
+        let peers = leave_out_skipped(&source.serving_peers, |addr| self.skipped_peers.is_skipped(addr));
+        for member in &peers {
             let mut client = match self.establish_rpc_session(&member.address).await {
                 Ok(c) => c,
                 Err(err) => {
@@ -580,7 +582,7 @@ impl<TAddr: Clone + Eq + Hash> SyncSource<TAddr> {
 
         // Shuffling within each tier spreads load across equally preferred peers.
         let mut rng = rand::rng();
-        let mut serving_peers = [continuing, joined, departed]
+        let serving_peers = [continuing, joined, departed]
             .into_iter()
             .flat_map(|mut tier| {
                 tier.shuffle(&mut rng);
@@ -588,27 +590,33 @@ impl<TAddr: Clone + Eq + Hash> SyncSource<TAddr> {
             })
             .collect::<Vec<_>>();
 
-        let unskipped_peers = serving_peers
-            .iter()
-            .filter(|m| !skipped_peers.contains(&m.address))
-            .cloned()
-            .collect::<Vec<_>>();
-        if unskipped_peers.is_empty() && !serving_peers.is_empty() {
-            warn!(
-                target: LOG_TARGET,
-                "🛜 Every one of the {} peer(s) able to serve state is skipped for serving invalid state. Trying them \
-                 anyway.",
-                serving_peers.len()
-            );
-        } else {
-            serving_peers = unskipped_peers;
-        }
-
         Self {
             signing_committee,
-            serving_peers,
+            serving_peers: leave_out_skipped(&serving_peers, |addr| skipped_peers.contains(addr)),
         }
     }
+}
+
+/// The peers in `peers` that are not skipped, in order, or all of them if every one is skipped.
+fn leave_out_skipped<TAddr: Clone>(
+    peers: &[CommitteeMember<TAddr>],
+    is_skipped: impl Fn(&TAddr) -> bool,
+) -> Vec<CommitteeMember<TAddr>> {
+    let unskipped = peers
+        .iter()
+        .filter(|m| !is_skipped(&m.address))
+        .cloned()
+        .collect::<Vec<_>>();
+    if unskipped.is_empty() && !peers.is_empty() {
+        warn!(
+            target: LOG_TARGET,
+            "🛜 Every one of the {} peer(s) able to serve state is skipped for serving invalid state. Trying them \
+             anyway.",
+            peers.len()
+        );
+        return peers.to_vec();
+    }
+    unskipped
 }
 
 /// Peers that served invalid state, with the number of sync runs each is still left out of.
@@ -634,6 +642,10 @@ impl<TAddr: Clone + Eq + Hash> SkippedPeers<TAddr> {
         if runs > 0 {
             self.runs_left.insert(peer, runs);
         }
+    }
+
+    fn is_skipped(&self, peer: &TAddr) -> bool {
+        self.runs_left.contains_key(peer)
     }
 
     /// Starts a sync run at `epoch` and returns the peers it leaves out, counting the run against each of them.
@@ -1138,6 +1150,26 @@ mod tests {
         let source = SyncSource::new(signing, &local, &0, &skipped.start_run(epoch));
 
         assert_eq!(serving_peers(&source), HashSet::from([1, 2]));
+    }
+
+    #[test]
+    fn a_peer_skipped_during_a_run_is_left_out_of_the_rest_of_it() {
+        let signing = committee(&[1, 2, 3]);
+        let local = committee(&[0, 1, 2, 3]);
+        let mut skipped = SkippedPeers::default();
+        let source = SyncSource::new(signing, &local, &0, &skipped.start_run(Epoch(5)));
+
+        skipped.skip(2, DEFAULT_SYNC_PEER_SKIP_RUNS);
+        let peers = leave_out_skipped(&source.serving_peers, |addr| skipped.is_skipped(addr));
+        assert_eq!(
+            peers.iter().map(|m| m.address).collect::<HashSet<_>>(),
+            HashSet::from([1, 3])
+        );
+
+        skipped.skip(1, DEFAULT_SYNC_PEER_SKIP_RUNS);
+        skipped.skip(3, DEFAULT_SYNC_PEER_SKIP_RUNS);
+        let peers = leave_out_skipped(&source.serving_peers, |addr| skipped.is_skipped(addr));
+        assert_eq!(peers.len(), 3);
     }
 
     #[test]

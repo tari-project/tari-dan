@@ -59,8 +59,11 @@ const MAX_BUFFERED_VERSION_BYTES: usize = 256 * 1024 * 1024;
 const _: () =
     assert!(MAX_BUFFERED_VERSION_BYTES >= 2 * tari_ootle_common_types::MAX_BLOCK_VALIDATION_SHARD_OUTPUT_BYTES);
 /// The most state versions a peer may commit in one attempt without a verified state version proof in between.
-/// It applies only while the stream is held to the proof schedule (or carries no proofs at all): a network
-/// launched before V1 has history that no node can prove, and an honest stream of it has no such bound.
+///
+/// It applies when the stream is held to an enforced proof schedule, where the schedule already rejects a stream
+/// that goes a full proof interval without a proof, and when no proof validator is configured. A stream of a
+/// network launched before V1 is not held to the schedule until its first proof, because that history cannot be
+/// proven; there the bound on a peer's work is the checkpoint's state version, which no batch may exceed.
 const MAX_UNVERIFIED_VERSIONS_PER_ATTEMPT: u64 = 64;
 // An honest stream held to the schedule commits up to a full proof interval before it must prove one.
 const _: () = assert!(MAX_UNVERIFIED_VERSIONS_PER_ATTEMPT > STATE_VERSION_PROOF_INTERVAL);
@@ -448,6 +451,13 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                     "Received state version {} that is less than the persisted state version {}.",
                     batch.state_version,
                     start_state_version
+                )));
+            }
+            if batch.state_version > self.checkpoint_state_version {
+                return Err(RpcStateSyncError::InvalidResponse(anyhow!(
+                    "Received state version {} that is above the checkpoint state version {}.",
+                    batch.state_version,
+                    self.checkpoint_state_version
                 )));
             }
 
@@ -1115,7 +1125,7 @@ mod tests {
         shard: Shard,
         updates: Vec<SubstateUpdateProof>,
     ) -> Option<Result<Option<Version>, RpcStateSyncError>> {
-        let sync = ShardSync::new(NETWORK, NUM_PRESHARDS, store, shard, SPARSE_MERKLE_PLACEHOLDER_HASH, 0);
+        let sync = ShardSync::new(NETWORK, NUM_PRESHARDS, store, shard, SPARSE_MERKLE_PLACEHOLDER_HASH, 1);
         let stalled = stream::iter(vec![batch_in(shard, 1, updates)]).chain(stream::pending());
         sync.sync_from_stream(&mut StateSyncStats::default(), None, stalled)
             .now_or_never()
@@ -1479,5 +1489,46 @@ mod tests {
         );
         assert_eq!(local_version(&store), None);
         assert_eq!(rewind_point(&store), None);
+    }
+
+    #[tokio::test]
+    async fn a_batch_above_the_checkpoint_is_rejected_before_it_is_buffered() {
+        // A network launched before V1 holds a stream to the proof schedule only from its first proof.
+        const PRE_V1_NETWORK: Network = Network::Esmeralda;
+        assert!(ProtocolVersion::genesis(PRE_V1_NETWORK) < ProtocolVersion::V1);
+        let (store, _tmp) = create_store();
+        let checkpoint = vec![(1, vec![create(HONEST)])];
+        let validator = AcceptAll;
+        let sync = ShardSync::new(
+            PRE_V1_NETWORK,
+            NUM_PRESHARDS,
+            &store,
+            shard(),
+            root_after(&checkpoint),
+            version_after(&checkpoint),
+        )
+        .with_version_proofs(&validator);
+        let mut stats = StateSyncStats::default();
+
+        let err = sync
+            .sync_from_stream(
+                &mut stats,
+                None,
+                stream::iter(vec![
+                    batch(1, vec![create(HONEST)]),
+                    batch(2, vec![create(POISON)]),
+                    complete(2),
+                ]),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(&err, RpcStateSyncError::InvalidResponse(e) if e.to_string().contains("above the checkpoint state version 1")),
+            "{err}"
+        );
+        assert_eq!(stats.total_transitions, 1);
+        assert!(substate(&store, POISON).is_none());
+        assert_eq!(local_version(&store), None);
     }
 }
