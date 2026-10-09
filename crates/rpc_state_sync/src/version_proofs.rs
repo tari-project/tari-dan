@@ -112,10 +112,11 @@ impl ProofSchedule {
         }
     }
 
-    /// Rejects a completed stream that still owes a proof.
+    /// Rejects a completed stream that still owes a proof. Whether it owes one depends on the checkpoint's state
+    /// version, so the failure is relative to the checkpoint.
     pub fn check_complete(&self) -> Result<(), RpcStateSyncError> {
         if self.enforced && self.next_point <= self.last {
-            return Err(RpcStateSyncError::InvalidResponse(anyhow!(
+            return Err(RpcStateSyncError::ConflictsWithCheckpoint(anyhow!(
                 "Peer completed the stream without proving v{}",
                 self.next_point
             )));

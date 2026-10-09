@@ -25,6 +25,7 @@ tari_validator_node_rpc = { workspace = true }
 
 anyhow = { workspace = true }
 futures = { workspace = true }
+tokio = { workspace = true, default-features = false, features = ["time"] }
 log = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
@@ -35,4 +36,4 @@ tari_common_types = { workspace = true }
 tari_sidechain = { workspace = true }
 tari_state_store_rocksdb = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, default-features = false, features = ["macros", "rt"] }
+tokio = { workspace = true, default-features = false, features = ["macros", "rt", "time"] }

@@ -3,8 +3,9 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    fmt::Display,
     hash::Hash,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use anyhow::anyhow;
@@ -54,6 +55,9 @@ use crate::{
 const LOG_TARGET: &str = "tari::ootle::rpc_state_sync";
 /// The number of sync runs a peer that served invalid state is left out of, unless configured otherwise.
 pub const DEFAULT_SYNC_PEER_SKIP_RUNS: u32 = 3;
+/// The longest a peer's state stream may go without committing or proving a version, unless configured otherwise.
+/// It comfortably exceeds the RPC deadline for a single message.
+pub const DEFAULT_SYNC_PROGRESS_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 pub struct RpcStateSyncClientProtocol<TConsensusSpec: ConsensusSpec> {
     network: Network,
@@ -66,10 +70,20 @@ pub struct RpcStateSyncClientProtocol<TConsensusSpec: ConsensusSpec> {
     /// Checkpoints fetched and validated during the current sync, by shard group. A checkpoint is stored only
     /// once every shard synced from it matches it, since a stored checkpoint tells peers this node holds that
     /// state.
-    unsaved_checkpoints: HashMap<ShardGroup, EpochCheckpoint>,
+    unsaved_checkpoints: HashMap<ShardGroup, FetchedCheckpoint>,
+    /// Checkpoints fetched during the current sync that do not bind each shard's state to the shard (before
+    /// [`ProtocolVersion::V2`]) and that no second peer has yet served identically, by shard group.
+    unconfirmed_checkpoints: HashMap<ShardGroup, Vec<(PeerAddress, EpochCheckpoint)>>,
     /// Peers that served invalid state, left out of the next `peer_skip_runs` sync runs.
     skipped_peers: SkippedPeers<PeerAddress>,
     peer_skip_runs: u32,
+    progress_timeout: Duration,
+}
+
+/// A checkpoint fetched during the current sync and the peers that served it.
+struct FetchedCheckpoint<TAddr = PeerAddress> {
+    checkpoint: EpochCheckpoint,
+    suppliers: Vec<TAddr>,
 }
 
 impl<TConsensusSpec> RpcStateSyncClientProtocol<TConsensusSpec>
@@ -91,15 +105,39 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             stats: StateSyncStats::default(),
             skip_sync: false,
             unsaved_checkpoints: HashMap::new(),
+            unconfirmed_checkpoints: HashMap::new(),
             skipped_peers: SkippedPeers::default(),
             peer_skip_runs: DEFAULT_SYNC_PEER_SKIP_RUNS,
+            progress_timeout: DEFAULT_SYNC_PROGRESS_TIMEOUT,
         }
+    }
+
+    /// Sets the longest a peer's state stream may go without committing or proving a version.
+    pub fn with_progress_timeout(mut self, progress_timeout: Duration) -> Self {
+        self.progress_timeout = progress_timeout;
+        self
     }
 
     /// Sets the number of sync runs a peer that served invalid state is left out of.
     pub fn with_peer_skip_runs(mut self, peer_skip_runs: u32) -> Self {
         self.peer_skip_runs = peer_skip_runs;
         self
+    }
+
+    /// Leaves the peer `streamer` out of the next sync runs if its failed shard sync shows it served invalid state.
+    /// When the checkpoint, rather than the stream, may be at fault, the checkpoint is discarded to be fetched again
+    /// and no peer is skipped: the suppliers and the streamer disagree, and either may be honest.
+    fn blame_sync_failure(&mut self, shard_group: ShardGroup, streamer: &PeerAddress, err: &RpcStateSyncError) {
+        if checkpoint_may_be_at_fault(self.unsaved_checkpoints.get(&shard_group), streamer, err) {
+            warn!(
+                target: LOG_TARGET,
+                "⚠️ The checkpoint for {shard_group} that {streamer} was synced against came from other peers and \
+                 does not bind shard states to their shards. Fetching it again."
+            );
+            self.unsaved_checkpoints.remove(&shard_group);
+        } else {
+            self.skip_peer_if_misbehaved(streamer, err);
+        }
     }
 
     /// Leaves `peer` out of the next sync runs if `err` shows it served invalid state. A transport failure says
@@ -125,9 +163,14 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         Ok(client)
     }
 
+    /// The checkpoint for `for_shard_group` at `prev_epoch`, fetched from `peer` unless already held. When
+    /// `require_confirmation` is set, a checkpoint that does not bind each shard's state to the shard is used only
+    /// once two distinct peers have served the same shard states; until then it is reported as not yet available.
     async fn get_or_fetch_valid_epoch_checkpoint(
         &mut self,
         client: &mut ValidatorNodeRpcClient,
+        peer: &PeerAddress,
+        require_confirmation: bool,
         for_shard_group: ShardGroup,
         prev_committee: &Committee<PeerAddress>,
         prev_epoch: Epoch,
@@ -141,8 +184,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             info!(target: LOG_TARGET, "🛜 Checkpoint already stored: {cp}");
             return Ok(Some(cp));
         }
-        if let Some(cp) = self.unsaved_checkpoints.get(&for_shard_group) {
-            return Ok(Some(cp.clone()));
+        if let Some(fetched) = self.unsaved_checkpoints.get(&for_shard_group) {
+            return Ok(Some(fetched.checkpoint.clone()));
         }
 
         self.stats.total_requests += 1;
@@ -179,7 +222,34 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         }
         info!(target: LOG_TARGET, "🛜 Checkpoint: {checkpoint}");
         self.validate_checkpoint(&checkpoint, prev_committee, prev_epoch)?;
-        self.unsaved_checkpoints.insert(for_shard_group, checkpoint.clone());
+
+        let is_shard_bound = checkpoint
+            .protocol_version()
+            .map_err(|e| RpcStateSyncError::InvalidResponse(e.into()))? >=
+            ProtocolVersion::V2;
+        let suppliers = if is_shard_bound || !require_confirmation {
+            vec![*peer]
+        } else {
+            let candidates = self.unconfirmed_checkpoints.entry(for_shard_group).or_default();
+            match confirm_checkpoint(candidates, *peer, &checkpoint) {
+                Some(other) => {
+                    self.unconfirmed_checkpoints.remove(&for_shard_group);
+                    vec![other, *peer]
+                },
+                None => {
+                    info!(
+                        target: LOG_TARGET,
+                        "🛜 Checkpoint for {for_shard_group} at epoch {prev_epoch} from {peer} awaits confirmation \
+                         from a second peer"
+                    );
+                    return Err(RpcStateSyncError::CheckpointNotAvailable { epoch: prev_epoch });
+                },
+            }
+        };
+        self.unsaved_checkpoints.insert(for_shard_group, FetchedCheckpoint {
+            checkpoint: checkpoint.clone(),
+            suppliers,
+        });
         Ok(Some(checkpoint))
     }
 
@@ -205,7 +275,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         let validator = CommitteeProofValidator::new(&self.epoch_manager, checkpoint.epoch());
         let shard_sync = shard_sync
             .with_version_proofs(&validator)
-            .with_authenticated_checkpoint_version(checkpoint_protocol_version >= ProtocolVersion::V1);
+            .with_authenticated_checkpoint_version(checkpoint_protocol_version >= ProtocolVersion::V2)
+            .with_progress_timeout(self.progress_timeout);
         let maybe_persisted_state_version = shard_sync.discard_unverified_state()?;
 
         if shard_sync.local_state_root(maybe_persisted_state_version)? == checkpoint_shard_root {
@@ -354,7 +425,14 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
             // fetch checkpoint
             let checkpoint = match self
-                .get_or_fetch_valid_epoch_checkpoint(&mut client, shard_group, &source.signing_committee, prev_epoch)
+                .get_or_fetch_valid_epoch_checkpoint(
+                    &mut client,
+                    &member.address,
+                    source.serving_peers.len() > 1,
+                    shard_group,
+                    &source.signing_committee,
+                    prev_epoch,
+                )
                 .await
             {
                 Ok(Some(cp)) => cp,
@@ -409,7 +487,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                         target: LOG_TARGET,
                         "⚠️Failed to sync state from {member}: {err}. Attempting another peer if available"
                     );
-                    self.skip_peer_if_misbehaved(&member.address, &err);
+                    self.blame_sync_failure(shard_group, &member.address, &err);
                     last_hard_error = Some(err);
                     continue;
                 },
@@ -474,6 +552,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
     async fn sync_inner(&mut self, target_epoch: Option<Epoch>) -> Result<(), RpcStateSyncError> {
         let timer = Instant::now();
         self.unsaved_checkpoints.clear();
+        self.unconfirmed_checkpoints.clear();
         discard_all_unverified_state(&self.state_store)?;
         // Use the caller-provided target if any (typically the highest epoch resolved by a
         // stall-recovery probe), otherwise fall back to the oracle's current epoch.
@@ -537,8 +616,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                     .await?;
             }
             // The global shard synced first, so every shard this node takes from the checkpoint now matches it.
-            if let Some(checkpoint) = self.unsaved_checkpoints.remove(&shard_group) {
-                self.state_store.with_write_tx(|tx| checkpoint.save(tx))?;
+            if let Some(fetched) = self.unsaved_checkpoints.remove(&shard_group) {
+                self.state_store.with_write_tx(|tx| fetched.checkpoint.save(tx))?;
             }
         }
 
@@ -603,6 +682,63 @@ impl<TAddr: Clone + Eq + Hash> SyncSource<TAddr> {
     }
 }
 
+/// Records `checkpoint` from `peer` among `candidates`, and returns a different peer that served the same shard states
+/// if there is one.
+fn confirm_checkpoint<TAddr: Copy + Eq + Display>(
+    candidates: &mut Vec<(TAddr, EpochCheckpoint)>,
+    peer: TAddr,
+    checkpoint: &EpochCheckpoint,
+) -> Option<TAddr> {
+    let confirmed_by = candidates
+        .iter()
+        .find(|(other, candidate)| *other != peer && same_shard_states(candidate, checkpoint))
+        .map(|(other, _)| *other);
+    if confirmed_by.is_none() {
+        if candidates.iter().any(|(other, _)| *other != peer) {
+            warn!(
+                target: LOG_TARGET,
+                "⚠️ {peer} served a checkpoint whose shard states differ from those another peer served for epoch {}",
+                checkpoint.epoch()
+            );
+        }
+        candidates.retain(|(other, _)| *other != peer);
+        candidates.push((peer, checkpoint.clone()));
+    }
+    confirmed_by
+}
+
+/// True if the stream `streamer` served may have failed because of the `fetched` checkpoint rather than its own
+/// state: the failure is relative to the checkpoint, the checkpoint does not bind each shard's state to the shard,
+/// and other peers supplied it.
+fn checkpoint_may_be_at_fault<TAddr: Eq>(
+    fetched: Option<&FetchedCheckpoint<TAddr>>,
+    streamer: &TAddr,
+    err: &RpcStateSyncError,
+) -> bool {
+    let is_checkpoint_relative = matches!(
+        err,
+        RpcStateSyncError::StateRootMismatch { .. } | RpcStateSyncError::ConflictsWithCheckpoint(_)
+    );
+    is_checkpoint_relative &&
+        fetched.is_some_and(|fetched| {
+            !fetched.suppliers.contains(streamer) &&
+                fetched
+                    .checkpoint
+                    .protocol_version()
+                    .is_ok_and(|version| version < ProtocolVersion::V2)
+        })
+}
+
+/// True if `a` and `b` record the same root and state version for the same shards.
+fn same_shard_states(a: &EpochCheckpoint, b: &EpochCheckpoint) -> bool {
+    a.shard_tree_summary().len() == b.shard_tree_summary().len() &&
+        a.shard_tree_summary().iter().all(|(shard, summary)| {
+            b.shard_tree_summary().get(shard).is_some_and(|other| {
+                other.root_hash == summary.root_hash && other.state_version == summary.state_version
+            })
+        })
+}
+
 /// The peers in `peers` that are not skipped, in order, or all of them if every one is skipped.
 fn leave_out_skipped<TAddr: Clone>(
     peers: &[CommitteeMember<TAddr>],
@@ -628,7 +764,8 @@ fn leave_out_skipped<TAddr: Clone>(
 /// Peers that served invalid state, with the number of sync runs each is still left out of.
 #[derive(Debug)]
 struct SkippedPeers<TAddr> {
-    /// The epoch of the current run. Committees change with the epoch, so the list starts empty at each one.
+    /// The highest epoch a run has been at. Committees change with the epoch, so the list starts empty when a run
+    /// moves past it. A run may target an epoch below it, as a probed target can lag the current epoch.
     epoch: Option<Epoch>,
     runs_left: HashMap<TAddr, u32>,
 }
@@ -656,7 +793,7 @@ impl<TAddr: Clone + Eq + Hash> SkippedPeers<TAddr> {
 
     /// Starts a sync run at `epoch` and returns the peers it leaves out, counting the run against each of them.
     fn start_run(&mut self, epoch: Epoch) -> HashSet<TAddr> {
-        if self.epoch != Some(epoch) {
+        if self.epoch.is_none_or(|current| epoch > current) {
             self.runs_left.clear();
             self.epoch = Some(epoch);
         }
@@ -1089,6 +1226,7 @@ fn is_peer_misbehaviour(err: &RpcStateSyncError) -> bool {
         err,
         RpcStateSyncError::InvalidResponse(_) |
             RpcStateSyncError::StateRootMismatch { .. } |
+            RpcStateSyncError::ConflictsWithCheckpoint(_) |
             RpcStateSyncError::StateTreeError(_)
     )
 }
@@ -1186,6 +1324,113 @@ mod tests {
 
         assert!(skipped.start_run(Epoch(6)).is_empty());
         assert!(skipped.runs_left.is_empty());
+    }
+
+    #[test]
+    fn a_run_at_an_earlier_epoch_keeps_the_skipped_peers() {
+        let mut skipped = SkippedPeers::default();
+        skipped.start_run(Epoch(5));
+        skipped.skip(1, DEFAULT_SYNC_PEER_SKIP_RUNS);
+
+        assert_eq!(skipped.start_run(Epoch(4)), HashSet::from([1]));
+        assert_eq!(skipped.start_run(Epoch(5)), HashSet::from([1]));
+        assert!(skipped.start_run(Epoch(6)).is_empty());
+    }
+
+    /// A checkpoint for shards 1 and 2 under `protocol_version`, with `roots` as their roots and versions. Its
+    /// commit proof is not signed.
+    fn checkpoint(protocol_version: ProtocolVersion, roots: [(u8, Version); 2]) -> EpochCheckpoint {
+        use tari_ootle_storage::consensus_models::{EndOfEpochCommand, TreeRootSummary};
+        use tari_sidechain::{CommandCommitProof, SidechainBlockCommitProof, SidechainBlockHeader};
+        use tari_state_tree::{TreeHash, compute_proof_for_hashes};
+
+        let header = SidechainBlockHeader {
+            network: 0,
+            protocol_version: protocol_version.as_u32(),
+            parent_id: Default::default(),
+            justify_id: Default::default(),
+            height: 0,
+            epoch: 3,
+            epoch_hash: Default::default(),
+            shard_group: tari_sidechain::ShardGroup {
+                start: 1,
+                end_inclusive: 2,
+            },
+            proposed_by: Default::default(),
+            state_merkle_root: Default::default(),
+            command_merkle_root: Default::default(),
+            transaction_merkle_root: None,
+            signature: Default::default(),
+            accumulated_data: Default::default(),
+            metadata_hash: Default::default(),
+        };
+        let command_hash = TreeHash::new([1; 32]);
+        let (_, inclusion_proof) = compute_proof_for_hashes([command_hash].into_iter(), command_hash).unwrap();
+        let summary = [1u32, 2]
+            .into_iter()
+            .zip(roots)
+            .map(|(shard, (root, state_version))| {
+                (Shard::from(shard), TreeRootSummary {
+                    root_hash: TreeHash::new([root; 32]),
+                    state_version,
+                })
+            })
+            .collect();
+        EpochCheckpoint::new(
+            CommandCommitProof::new(
+                EndOfEpochCommand::new(Default::default()),
+                SidechainBlockCommitProof {
+                    header,
+                    proof_elements: vec![],
+                },
+                inclusion_proof,
+            ),
+            summary,
+        )
+    }
+
+    #[test]
+    fn a_checkpoint_is_confirmed_only_by_a_second_peer_serving_the_same_shard_states() {
+        let honest = checkpoint(ProtocolVersion::V1, [(1, 10), (2, 20)]);
+        let swapped = checkpoint(ProtocolVersion::V1, [(2, 20), (1, 10)]);
+        let mut candidates = Vec::new();
+
+        assert_eq!(confirm_checkpoint(&mut candidates, 1u8, &honest), None);
+        assert_eq!(confirm_checkpoint(&mut candidates, 1, &honest), None);
+        assert_eq!(confirm_checkpoint(&mut candidates, 2, &swapped), None);
+        assert_eq!(confirm_checkpoint(&mut candidates, 3, &swapped), Some(2));
+        assert_eq!(confirm_checkpoint(&mut candidates, 4, &honest), Some(1));
+    }
+
+    #[test]
+    fn a_checkpoint_relative_failure_is_not_the_streamer_s_fault_when_others_supplied_an_unbound_checkpoint() {
+        let mismatch = RpcStateSyncError::StateRootMismatch {
+            expected: tari_state_tree::SPARSE_MERKLE_PLACEHOLDER_HASH,
+            actual: tari_state_tree::SPARSE_MERKLE_PLACEHOLDER_HASH,
+        };
+        let unbound = FetchedCheckpoint {
+            checkpoint: checkpoint(ProtocolVersion::V1, [(1, 10), (2, 20)]),
+            suppliers: vec![1u8, 2],
+        };
+        let bound = FetchedCheckpoint {
+            checkpoint: checkpoint(ProtocolVersion::V2, [(1, 10), (2, 20)]),
+            suppliers: vec![1u8, 2],
+        };
+
+        assert!(checkpoint_may_be_at_fault(Some(&unbound), &3, &mismatch));
+        assert!(checkpoint_may_be_at_fault(
+            Some(&unbound),
+            &3,
+            &RpcStateSyncError::ConflictsWithCheckpoint(anyhow!("owes a proof"))
+        ));
+        assert!(!checkpoint_may_be_at_fault(Some(&unbound), &1, &mismatch));
+        assert!(!checkpoint_may_be_at_fault(
+            Some(&unbound),
+            &3,
+            &RpcStateSyncError::InvalidResponse(anyhow!("bad"))
+        ));
+        assert!(!checkpoint_may_be_at_fault(Some(&bound), &3, &mismatch));
+        assert!(!checkpoint_may_be_at_fault(None, &3, &mismatch));
     }
 
     #[test]

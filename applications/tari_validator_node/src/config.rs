@@ -385,6 +385,10 @@ pub struct ConsensusConfig {
     /// The number of state sync runs a peer that served invalid state is left out of.
     #[serde(default = "default_state_sync_peer_skip_runs")]
     pub state_sync_peer_skip_runs: u32,
+    /// The longest, in seconds, a peer's state sync stream may go without committing or proving a state version
+    /// before the attempt is abandoned and the peer is skipped.
+    #[serde(default = "default_state_sync_progress_timeout_secs")]
+    pub state_sync_progress_timeout_secs: u64,
 }
 
 impl Default for ConsensusConfig {
@@ -392,10 +396,15 @@ impl Default for ConsensusConfig {
         Self {
             skip_sync: false,
             state_sync_peer_skip_runs: default_state_sync_peer_skip_runs(),
+            state_sync_progress_timeout_secs: default_state_sync_progress_timeout_secs(),
         }
     }
 }
 
 fn default_state_sync_peer_skip_runs() -> u32 {
     tari_rpc_state_sync::DEFAULT_SYNC_PEER_SKIP_RUNS
+}
+
+fn default_state_sync_progress_timeout_secs() -> u64 {
+    tari_rpc_state_sync::DEFAULT_SYNC_PROGRESS_TIMEOUT.as_secs()
 }
