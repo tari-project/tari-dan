@@ -1439,7 +1439,7 @@ mod tests {
 
         let err = sync_with_proofs(&store, &checkpoint, responses).await.unwrap_err();
 
-        assert!(matches!(err, RpcStateSyncError::ConflictsWithCheckpoint(_)), "{err}");
+        assert!(matches!(err, RpcStateSyncError::InvalidResponse(_)), "{err}");
         assert_eq!(local_version(&store), None);
         assert!(held_proofs(&store).is_empty());
     }

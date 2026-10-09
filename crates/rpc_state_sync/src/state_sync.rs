@@ -600,11 +600,13 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
     }
 }
 
-/// Where to sync one shard group's state from. Checkpoint validity depends only on the quorum signatures of
-/// the committee that produced it, so who serves the bytes is chosen for availability rather than trust.
+/// Where to sync one shard group's state from. From [`ProtocolVersion::V2`] a checkpoint carrying the quorum
+/// signatures of the committee that produced it suffices, so who serves it is chosen for availability. Before V2 the
+/// signatures do not bind each shard's state to its shard, so a checkpoint is used only once two distinct peers serve
+/// it identically, or when it comes from the sole other signer of the previous epoch.
 struct SyncSource<TAddr> {
-    /// The previous epoch's committee for the shard group. Its quorum threshold and voting powers are the
-    /// only thing a fetched checkpoint is validated against.
+    /// The previous epoch's committee for the shard group. A fetched checkpoint is validated against its quorum
+    /// threshold and voting powers, and its members decide who may supply a pre-V2 checkpoint alone.
     signing_committee: Committee<TAddr>,
     /// Peers to request the checkpoint and state from, in order of preference, excluding this node.
     /// Members of our current committee are running consensus and hold the previous epoch's state for our
@@ -1428,7 +1430,7 @@ mod tests {
             actual: tari_state_tree::SPARSE_MERKLE_PLACEHOLDER_HASH,
         }));
         assert!(is_peer_misbehaviour(&RpcStateSyncError::ConflictsWithCheckpoint(
-            anyhow!("owes a proof")
+            anyhow!("above the checkpoint")
         )));
     }
 
