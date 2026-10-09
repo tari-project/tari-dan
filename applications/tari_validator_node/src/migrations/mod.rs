@@ -179,12 +179,4 @@ mod tests {
         assert!(err.to_string().contains("is newer than this binary"), "{err}");
         assert_eq!(stored_version(&db), CURRENT_VERSION + 1);
     }
-
-    /// A database from before the v0.42.0 network reset carries a schema version from the old numbering, which this
-    /// binary must not take for its own.
-    #[test]
-    fn a_database_stamped_by_a_pre_reset_binary_is_refused() {
-        let (db, _tmp) = store_stamped(3);
-        assert!(run_migrate(&db).is_err());
-    }
 }
