@@ -69,7 +69,8 @@ pub struct RpcStateSyncClientProtocol<TConsensusSpec: ConsensusSpec> {
     skip_sync: bool,
     /// Checkpoints fetched and validated during the current sync, by shard group. A checkpoint is stored only
     /// once every shard synced from it matches it, since a stored checkpoint tells peers this node holds that
-    /// state.
+    /// state. Each binds each shard's state to the shard (from [`ProtocolVersion::V2`]), was served identically by
+    /// two peers, or was served by the only other signer of the previous epoch, so its shard states are trusted.
     unsaved_checkpoints: HashMap<ShardGroup, FetchedCheckpoint>,
     /// Checkpoints fetched during the current sync that do not bind each shard's state to the shard (before
     /// [`ProtocolVersion::V2`]) and that no second peer has yet served identically, by shard group.
@@ -275,7 +276,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         let validator = CommitteeProofValidator::new(&self.epoch_manager, checkpoint.epoch());
         let shard_sync = shard_sync
             .with_version_proofs(&validator)
-            .with_authenticated_checkpoint_version(checkpoint_protocol_version >= ProtocolVersion::V2)
+            .with_trusted_checkpoint_version(checkpoint_commits_state_versions(checkpoint_protocol_version))
             .with_progress_timeout(self.progress_timeout);
         let maybe_persisted_state_version = shard_sync.discard_unverified_state()?;
 
@@ -428,7 +429,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                 .get_or_fetch_valid_epoch_checkpoint(
                     &mut client,
                     &member.address,
-                    source.num_checkpoint_holders > 1,
+                    source.requires_checkpoint_confirmation(&member.address),
                     shard_group,
                     &source.signing_committee,
                     prev_epoch,
@@ -644,6 +645,12 @@ struct SyncSource<TAddr> {
 }
 
 impl<TAddr: Clone + Eq + Hash> SyncSource<TAddr> {
+    /// Whether a checkpoint from `peer` that does not bind each shard's state to the shard must be confirmed by a
+    /// second peer before it is used. Only the sole other signer of the previous epoch is trusted alone.
+    fn requires_checkpoint_confirmation(&self, peer: &TAddr) -> bool {
+        self.num_checkpoint_holders > 1 || !self.signing_committee.contains(peer)
+    }
+
     fn new(
         signing_committee: Committee<TAddr>,
         local_committee: &Committee<TAddr>,
@@ -736,6 +743,13 @@ fn checkpoint_may_be_at_fault<TAddr: Eq>(
                     .protocol_version()
                     .is_ok_and(|version| version < ProtocolVersion::V2)
         })
+}
+
+/// Whether a checkpoint under `protocol_version` commits each shard's state version to its quorum-signed root. Every
+/// checkpoint a sync uses has its shard states trusted (see `unsaved_checkpoints`), so from V1 its version for a
+/// shard bounds the shard's stream.
+fn checkpoint_commits_state_versions(protocol_version: ProtocolVersion) -> bool {
+    protocol_version >= ProtocolVersion::V1
 }
 
 /// True if `a` and `b` record the same root and state version for the same shards.
@@ -1301,6 +1315,31 @@ mod tests {
         let source = SyncSource::new(committee(&[1, 3]), &committee(&[0, 1, 2]), &0, &HashSet::from([3]));
         assert_eq!(serving_peers(&source), HashSet::from([1, 2]));
         assert_eq!(source.num_checkpoint_holders, 2);
+    }
+
+    #[test]
+    fn only_the_sole_previous_signer_is_trusted_for_a_checkpoint_alone() {
+        let holder = 1u8;
+        let joiner = 2u8;
+        let source = SyncSource::new(committee(&[holder]), &committee(&[0, joiner]), &0, &HashSet::new());
+
+        assert!(source.requires_checkpoint_confirmation(&joiner));
+        assert!(!source.requires_checkpoint_confirmation(&holder));
+
+        let honest = checkpoint(ProtocolVersion::V1, [(1, 10), (2, 20)]);
+        let mut candidates = Vec::new();
+        assert_eq!(confirm_checkpoint(&mut candidates, joiner, &honest), None);
+        assert_eq!(confirm_checkpoint(&mut candidates, holder, &honest), Some(joiner));
+
+        let two_signers = SyncSource::new(committee(&[1, 3]), &committee(&[0, 1, 3]), &0, &HashSet::new());
+        assert!(two_signers.requires_checkpoint_confirmation(&1));
+    }
+
+    #[test]
+    fn a_stream_is_bounded_by_any_checkpoint_that_commits_state_versions() {
+        assert!(!checkpoint_commits_state_versions(ProtocolVersion::V0));
+        assert!(checkpoint_commits_state_versions(ProtocolVersion::V1));
+        assert!(checkpoint_commits_state_versions(ProtocolVersion::V2));
     }
 
     #[test]

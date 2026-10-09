@@ -63,9 +63,9 @@ const _: () =
 /// It applies when the stream is held to an enforced proof schedule, where the schedule already rejects a stream
 /// that goes a full proof interval without a proof, and when no proof validator is configured. A stream of a
 /// network launched before V1 is not held to the schedule until its first proof, because that history cannot be
-/// proven. There a batch is bounded by the checkpoint's state version only when the checkpoint binds it to its shard
-/// (from V2); a stream synced against an older checkpoint has no authenticated upper bound on its versions, and only
-/// the checkpoint root check at completion rejects it.
+/// proven. There a batch is bounded by the checkpoint's state version when that version is trusted (see
+/// [`ShardSync::with_trusted_checkpoint_version`]); a stream synced against a V0 checkpoint, which commits no state
+/// versions, has no upper bound on its versions, and only the checkpoint root check at completion rejects it.
 const MAX_UNVERIFIED_VERSIONS_PER_ATTEMPT: u64 = 64;
 // An honest stream held to the schedule commits up to a full proof interval before it must prove one.
 const _: () = assert!(MAX_UNVERIFIED_VERSIONS_PER_ATTEMPT > STATE_VERSION_PROOF_INTERVAL);
@@ -117,10 +117,9 @@ pub(crate) struct ShardSync<'a, TStore, TValidator = NoVersionProofs> {
     shard: Shard,
     checkpoint_shard_root: TreeHash,
     checkpoint_state_version: Version,
-    /// Whether the checkpoint's quorum signatures bind `checkpoint_state_version` to this shard, which holds from
-    /// [`ProtocolVersion::V2`]. Only then is a batch above it rejected: an unbound version may be lower than the
-    /// versions an honest peer streams.
-    checkpoint_state_version_is_authenticated: bool,
+    /// Whether `checkpoint_state_version` is trusted as this shard's version. Only then is a batch above it rejected:
+    /// an untrusted version may be lower than the versions an honest peer streams.
+    checkpoint_state_version_is_trusted: bool,
     /// The longest the stream may go without committing a version or proving one. A zero timeout sets no limit.
     progress_timeout: Option<Duration>,
     /// Validates the commit proofs of the state version proofs the stream carries, if it was asked to carry them.
@@ -143,7 +142,7 @@ impl<'a, TStore: StateStore> ShardSync<'a, TStore> {
             shard,
             checkpoint_shard_root,
             checkpoint_state_version,
-            checkpoint_state_version_is_authenticated: false,
+            checkpoint_state_version_is_trusted: false,
             progress_timeout: None,
             version_proofs: None,
         }
@@ -160,7 +159,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
             shard: self.shard,
             checkpoint_shard_root: self.checkpoint_shard_root,
             checkpoint_state_version: self.checkpoint_state_version,
-            checkpoint_state_version_is_authenticated: self.checkpoint_state_version_is_authenticated,
+            checkpoint_state_version_is_trusted: self.checkpoint_state_version_is_trusted,
             progress_timeout: self.progress_timeout,
             version_proofs: Some(validator),
         }
@@ -173,9 +172,10 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         self
     }
 
-    /// Rejects any batch above the checkpoint's state version, which the checkpoint must authenticate.
-    pub fn with_authenticated_checkpoint_version(mut self, is_authenticated: bool) -> Self {
-        self.checkpoint_state_version_is_authenticated = is_authenticated;
+    /// Rejects any batch above the checkpoint's state version if `is_trusted`. The checkpoint's quorum signatures
+    /// must cover that version, and it must be the version of this shard rather than another shard of the group.
+    pub fn with_trusted_checkpoint_version(mut self, is_trusted: bool) -> Self {
+        self.checkpoint_state_version_is_trusted = is_trusted;
         self
     }
 
@@ -522,7 +522,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                     start_state_version
                 )));
             }
-            if self.checkpoint_state_version_is_authenticated && batch.state_version > self.checkpoint_state_version {
+            if self.checkpoint_state_version_is_trusted && batch.state_version > self.checkpoint_state_version {
                 return Err(RpcStateSyncError::ConflictsWithCheckpoint(anyhow!(
                     "Received state version {} that is above the checkpoint state version {}.",
                     batch.state_version,
@@ -1586,7 +1586,7 @@ mod tests {
             version_after(&checkpoint),
         )
         .with_version_proofs(&validator)
-        .with_authenticated_checkpoint_version(true);
+        .with_trusted_checkpoint_version(true);
         let mut stats = StateSyncStats::default();
 
         let err = sync
@@ -1612,7 +1612,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_unauthenticated_checkpoint_version_does_not_bound_the_stream() {
+    async fn an_untrusted_checkpoint_version_does_not_bound_the_stream() {
         const PRE_V1_NETWORK: Network = Network::Esmeralda;
         let (store, _tmp) = create_store();
         let checkpoint = vec![(1, vec![create(HONEST)])];
@@ -1626,7 +1626,7 @@ mod tests {
             version_after(&checkpoint),
         )
         .with_version_proofs(&validator)
-        .with_authenticated_checkpoint_version(false);
+        .with_trusted_checkpoint_version(false);
         let mut stats = StateSyncStats::default();
 
         let err = sync
