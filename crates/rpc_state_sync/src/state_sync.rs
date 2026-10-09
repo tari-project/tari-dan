@@ -125,8 +125,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
     }
 
     /// Leaves the peer `streamer` out of the next sync runs if its failed shard sync shows it served invalid state.
-    /// When the checkpoint, rather than the stream, may be at fault, the checkpoint is discarded to be fetched again
-    /// and no peer is skipped: the suppliers and the streamer disagree, and either may be honest.
+    /// When an unconfirmed checkpoint, rather than the stream, may be at fault, the checkpoint is discarded to be
+    /// fetched again and no peer is skipped: its supplier and the streamer disagree, and either may be honest.
     fn blame_sync_failure(&mut self, shard_group: ShardGroup, streamer: &PeerAddress, err: &RpcStateSyncError) {
         if checkpoint_may_be_at_fault(self.unsaved_checkpoints.get(&shard_group), streamer, err) {
             warn!(
@@ -428,7 +428,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                 .get_or_fetch_valid_epoch_checkpoint(
                     &mut client,
                     &member.address,
-                    source.serving_peers.len() > 1,
+                    source.num_candidate_peers > 1,
                     shard_group,
                     &source.signing_committee,
                     prev_epoch,
@@ -638,6 +638,8 @@ struct SyncSource<TAddr> {
     /// so they come first; signing-committee members that left at the epoch boundary are the fallback.
     /// Peers in `skipped_peers` are left out, unless that would leave none.
     serving_peers: Vec<CommitteeMember<TAddr>>,
+    /// The number of peers able to serve the shard group's state, skipped or not.
+    num_candidate_peers: usize,
 }
 
 impl<TAddr: Clone + Eq + Hash> SyncSource<TAddr> {
@@ -678,6 +680,7 @@ impl<TAddr: Clone + Eq + Hash> SyncSource<TAddr> {
         Self {
             signing_committee,
             serving_peers: leave_out_skipped(&serving_peers, |addr| skipped_peers.contains(addr)),
+            num_candidate_peers: serving_peers.len(),
         }
     }
 }
@@ -709,7 +712,7 @@ fn confirm_checkpoint<TAddr: Copy + Eq + Display>(
 
 /// True if the stream `streamer` served may have failed because of the `fetched` checkpoint rather than its own
 /// state: the failure is relative to the checkpoint, the checkpoint does not bind each shard's state to the shard,
-/// and other peers supplied it.
+/// and a single other peer supplied it. A checkpoint two peers served identically is taken as correct.
 fn checkpoint_may_be_at_fault<TAddr: Eq>(
     fetched: Option<&FetchedCheckpoint<TAddr>>,
     streamer: &TAddr,
@@ -721,7 +724,8 @@ fn checkpoint_may_be_at_fault<TAddr: Eq>(
     );
     is_checkpoint_relative &&
         fetched.is_some_and(|fetched| {
-            !fetched.suppliers.contains(streamer) &&
+            fetched.suppliers.len() < 2 &&
+                !fetched.suppliers.contains(streamer) &&
                 fetched
                     .checkpoint
                     .protocol_version()
@@ -1282,6 +1286,16 @@ mod tests {
     }
 
     #[test]
+    fn skipped_peers_still_count_as_candidates() {
+        let signing = committee(&[1, 2, 3]);
+        let local = committee(&[0, 1, 2, 3]);
+        let source = SyncSource::new(signing, &local, &0, &HashSet::from([1, 2]));
+
+        assert_eq!(serving_peers(&source), HashSet::from([3]));
+        assert_eq!(source.num_candidate_peers, 3);
+    }
+
+    #[test]
     fn every_peer_is_tried_when_all_are_skipped() {
         let signing = committee(&[1, 2]);
         let local = committee(&[0, 1, 2]);
@@ -1403,12 +1417,17 @@ mod tests {
     }
 
     #[test]
-    fn a_checkpoint_relative_failure_is_not_the_streamer_s_fault_when_others_supplied_an_unbound_checkpoint() {
+    fn a_checkpoint_relative_failure_is_not_the_streamer_s_fault_when_another_peer_alone_supplied_an_unbound_checkpoint()
+     {
         let mismatch = RpcStateSyncError::StateRootMismatch {
             expected: tari_state_tree::SPARSE_MERKLE_PLACEHOLDER_HASH,
             actual: tari_state_tree::SPARSE_MERKLE_PLACEHOLDER_HASH,
         };
         let unbound = FetchedCheckpoint {
+            checkpoint: checkpoint(ProtocolVersion::V1, [(1, 10), (2, 20)]),
+            suppliers: vec![1u8],
+        };
+        let confirmed = FetchedCheckpoint {
             checkpoint: checkpoint(ProtocolVersion::V1, [(1, 10), (2, 20)]),
             suppliers: vec![1u8, 2],
         };
@@ -1429,6 +1448,7 @@ mod tests {
             &3,
             &RpcStateSyncError::InvalidResponse(anyhow!("bad"))
         ));
+        assert!(!checkpoint_may_be_at_fault(Some(&confirmed), &3, &mismatch));
         assert!(!checkpoint_may_be_at_fault(Some(&bound), &3, &mismatch));
         assert!(!checkpoint_may_be_at_fault(None, &3, &mismatch));
     }

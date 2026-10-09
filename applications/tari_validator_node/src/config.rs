@@ -386,7 +386,7 @@ pub struct ConsensusConfig {
     #[serde(default = "default_state_sync_peer_skip_runs")]
     pub state_sync_peer_skip_runs: u32,
     /// The longest, in seconds, a peer's state sync stream may go without committing or proving a state version
-    /// before the attempt is abandoned and the peer is skipped.
+    /// before the attempt is abandoned and the peer is skipped. 0 sets no limit.
     #[serde(default = "default_state_sync_progress_timeout_secs")]
     pub state_sync_progress_timeout_secs: u64,
 }

@@ -121,7 +121,7 @@ pub(crate) struct ShardSync<'a, TStore, TValidator = NoVersionProofs> {
     /// [`ProtocolVersion::V2`]. Only then is a batch above it rejected: an unbound version may be lower than the
     /// versions an honest peer streams.
     checkpoint_state_version_is_authenticated: bool,
-    /// The longest the stream may go without committing a version or proving one.
+    /// The longest the stream may go without committing a version or proving one. A zero timeout sets no limit.
     progress_timeout: Option<Duration>,
     /// Validates the commit proofs of the state version proofs the stream carries, if it was asked to carry them.
     version_proofs: Option<&'a TValidator>,
@@ -166,7 +166,8 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         }
     }
 
-    /// Rejects a stream that goes `timeout` without committing a version or proving one.
+    /// Rejects a stream that goes `timeout` without committing a version or proving one. A zero timeout sets no
+    /// limit.
     pub fn with_progress_timeout(mut self, timeout: Duration) -> Self {
         self.progress_timeout = Some(timeout);
         self
@@ -389,9 +390,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         let mut last_committed_version = None;
         let mut last_proven_version = None;
         let mut unverified_versions = 0u64;
-        let mut progress_deadline = self
-            .progress_timeout
-            .map(|timeout| tokio::time::Instant::now() + timeout);
+        let mut progress_deadline = next_progress_deadline(self.progress_timeout);
 
         // syncing states
         loop {
@@ -437,9 +436,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                     schedule.proven(proven);
                     last_proven_version = Some(proven);
                     last_committed_version = Some(proven);
-                    progress_deadline = self
-                        .progress_timeout
-                        .map(|timeout| tokio::time::Instant::now() + timeout);
+                    progress_deadline = next_progress_deadline(self.progress_timeout);
                     unverified_versions = 0;
                     has_unverified_state = false;
                     rewind_point = maybe_persisted_state_version.unwrap_or(0);
@@ -661,9 +658,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
             has_unverified_state = true;
             last_committed_version = Some(state_version);
             unverified_versions += 1;
-            progress_deadline = self
-                .progress_timeout
-                .map(|timeout| tokio::time::Instant::now() + timeout);
+            progress_deadline = next_progress_deadline(self.progress_timeout);
         }
 
         // The stream ended without a SyncComplete - the peer closed early, so the sync is unverified.
@@ -671,6 +666,14 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
             "State sync stream for {shard} ended without a completion marker"
         )))
     }
+}
+
+/// The instant by which a stream must next make progress, if `timeout` sets a limit. A zero timeout, or one too long
+/// to represent, sets none.
+fn next_progress_deadline(timeout: Option<Duration>) -> Option<tokio::time::Instant> {
+    timeout
+        .filter(|timeout| !timeout.is_zero())
+        .and_then(|timeout| tokio::time::Instant::now().checked_add(timeout))
 }
 
 /// Rejects a state version with a transition that does not apply cleanly to local state: creating a substate that
@@ -1681,7 +1684,7 @@ mod tests {
         matches!(err, RpcStateSyncError::InvalidResponse(e) if e.to_string().contains("made no progress"))
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn a_stalled_stream_is_abandoned() {
         let (store, _tmp) = create_store();
         let checkpoint = vec![(1, vec![create(HONEST), create(2)])];
@@ -1695,7 +1698,7 @@ mod tests {
         assert!(is_no_progress(&err), "{err}");
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn a_stream_that_trickles_out_one_version_is_abandoned() {
         let (store, _tmp) = create_store();
         let checkpoint = vec![(1, vec![create(HONEST)])];
@@ -1712,7 +1715,7 @@ mod tests {
         assert!(is_no_progress(&err), "{err}");
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn a_stream_that_keeps_committing_versions_outlasts_the_progress_timeout() {
         let (store, _tmp) = create_store();
         let checkpoint = unproven_versions(5);
@@ -1763,5 +1766,13 @@ mod tests {
         .unwrap_err();
 
         assert!(matches!(err, RpcStateSyncError::RpcError(_)), "{err}");
+    }
+
+    #[test]
+    fn a_zero_or_unrepresentable_progress_timeout_sets_no_deadline() {
+        assert_eq!(next_progress_deadline(None), None);
+        assert_eq!(next_progress_deadline(Some(Duration::ZERO)), None);
+        assert_eq!(next_progress_deadline(Some(Duration::MAX)), None);
+        assert!(next_progress_deadline(Some(Duration::from_secs(1))).is_some());
     }
 }
