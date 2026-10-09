@@ -63,7 +63,9 @@ const _: () =
 /// It applies when the stream is held to an enforced proof schedule, where the schedule already rejects a stream
 /// that goes a full proof interval without a proof, and when no proof validator is configured. A stream of a
 /// network launched before V1 is not held to the schedule until its first proof, because that history cannot be
-/// proven; there the bound on a peer's work is the checkpoint's state version, which no batch may exceed.
+/// proven. There a batch is bounded by the checkpoint's state version only when the checkpoint authenticates it (from
+/// V1); a stream synced against a V0 checkpoint has no authenticated upper bound on its versions, and only the
+/// checkpoint root check at completion rejects it.
 const MAX_UNVERIFIED_VERSIONS_PER_ATTEMPT: u64 = 64;
 // An honest stream held to the schedule commits up to a full proof interval before it must prove one.
 const _: () = assert!(MAX_UNVERIFIED_VERSIONS_PER_ATTEMPT > STATE_VERSION_PROOF_INTERVAL);
@@ -115,6 +117,10 @@ pub(crate) struct ShardSync<'a, TStore, TValidator = NoVersionProofs> {
     shard: Shard,
     checkpoint_shard_root: TreeHash,
     checkpoint_state_version: Version,
+    /// Whether the checkpoint's quorum signatures cover `checkpoint_state_version`, which holds from
+    /// [`ProtocolVersion::V1`]. Only then is a batch above it rejected: an unauthenticated version may be lower than
+    /// the versions an honest peer streams.
+    checkpoint_state_version_is_authenticated: bool,
     /// Validates the commit proofs of the state version proofs the stream carries, if it was asked to carry them.
     version_proofs: Option<&'a TValidator>,
 }
@@ -135,6 +141,7 @@ impl<'a, TStore: StateStore> ShardSync<'a, TStore> {
             shard,
             checkpoint_shard_root,
             checkpoint_state_version,
+            checkpoint_state_version_is_authenticated: false,
             version_proofs: None,
         }
     }
@@ -150,8 +157,15 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
             shard: self.shard,
             checkpoint_shard_root: self.checkpoint_shard_root,
             checkpoint_state_version: self.checkpoint_state_version,
+            checkpoint_state_version_is_authenticated: self.checkpoint_state_version_is_authenticated,
             version_proofs: Some(validator),
         }
+    }
+
+    /// Rejects any batch above the checkpoint's state version, which the checkpoint must authenticate.
+    pub fn with_authenticated_checkpoint_version(mut self, is_authenticated: bool) -> Self {
+        self.checkpoint_state_version_is_authenticated = is_authenticated;
+        self
     }
 
     /// The proof schedule for a stream starting at `start_state_version`, if the stream carries proofs. A network
@@ -453,7 +467,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                     start_state_version
                 )));
             }
-            if batch.state_version > self.checkpoint_state_version {
+            if self.checkpoint_state_version_is_authenticated && batch.state_version > self.checkpoint_state_version {
                 return Err(RpcStateSyncError::InvalidResponse(anyhow!(
                     "Received state version {} that is above the checkpoint state version {}.",
                     batch.state_version,
@@ -1507,7 +1521,8 @@ mod tests {
             root_after(&checkpoint),
             version_after(&checkpoint),
         )
-        .with_version_proofs(&validator);
+        .with_version_proofs(&validator)
+        .with_authenticated_checkpoint_version(true);
         let mut stats = StateSyncStats::default();
 
         let err = sync
@@ -1529,6 +1544,42 @@ mod tests {
         );
         assert_eq!(stats.total_transitions, 1);
         assert!(substate(&store, POISON).is_none());
+        assert_eq!(local_version(&store), None);
+    }
+
+    #[tokio::test]
+    async fn an_unauthenticated_checkpoint_version_does_not_bound_the_stream() {
+        const PRE_V1_NETWORK: Network = Network::Esmeralda;
+        let (store, _tmp) = create_store();
+        let checkpoint = vec![(1, vec![create(HONEST)])];
+        let validator = AcceptAll;
+        let sync = ShardSync::new(
+            PRE_V1_NETWORK,
+            NUM_PRESHARDS,
+            &store,
+            shard(),
+            root_after(&checkpoint),
+            version_after(&checkpoint),
+        )
+        .with_version_proofs(&validator)
+        .with_authenticated_checkpoint_version(false);
+        let mut stats = StateSyncStats::default();
+
+        let err = sync
+            .sync_from_stream(
+                &mut stats,
+                None,
+                stream::iter(vec![
+                    batch(1, vec![create(HONEST)]),
+                    batch(2, vec![create(POISON)]),
+                    complete(2),
+                ]),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, RpcStateSyncError::StateRootMismatch { .. }), "{err}");
+        assert_eq!(stats.total_transitions, 2);
         assert_eq!(local_version(&store), None);
     }
 }

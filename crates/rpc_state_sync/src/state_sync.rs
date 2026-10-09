@@ -16,6 +16,7 @@ use tari_consensus::{
     traits::{ConsensusSpec, SyncManager, SyncStatus},
 };
 use tari_consensus_types::{LeafBlock, ProposalCertificate};
+use tari_engine_types::ProtocolVersion;
 use tari_epoch_manager::EpochManagerReader;
 use tari_ootle_common_types::{
     Epoch,
@@ -198,8 +199,13 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             checkpoint_shard_root,
             checkpoint.get_shard_state_version(shard),
         );
+        let checkpoint_protocol_version = checkpoint
+            .protocol_version()
+            .map_err(|e| RpcStateSyncError::InvalidResponse(e.into()))?;
         let validator = CommitteeProofValidator::new(&self.epoch_manager, checkpoint.epoch());
-        let shard_sync = shard_sync.with_version_proofs(&validator);
+        let shard_sync = shard_sync
+            .with_version_proofs(&validator)
+            .with_authenticated_checkpoint_version(checkpoint_protocol_version >= ProtocolVersion::V1);
         let maybe_persisted_state_version = shard_sync.discard_unverified_state()?;
 
         if shard_sync.local_state_root(maybe_persisted_state_version)? == checkpoint_shard_root {
