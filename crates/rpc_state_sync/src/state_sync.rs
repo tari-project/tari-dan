@@ -428,7 +428,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                 .get_or_fetch_valid_epoch_checkpoint(
                     &mut client,
                     &member.address,
-                    source.num_candidate_peers > 1,
+                    source.num_checkpoint_holders > 1,
                     shard_group,
                     &source.signing_committee,
                     prev_epoch,
@@ -638,8 +638,9 @@ struct SyncSource<TAddr> {
     /// so they come first; signing-committee members that left at the epoch boundary are the fallback.
     /// Peers in `skipped_peers` are left out, unless that would leave none.
     serving_peers: Vec<CommitteeMember<TAddr>>,
-    /// The number of peers able to serve the shard group's state, skipped or not.
-    num_candidate_peers: usize,
+    /// The number of peers other than this node that signed the previous epoch and so hold its checkpoint without
+    /// syncing first, skipped or not. Peers that joined at this epoch may still be syncing it themselves.
+    num_checkpoint_holders: usize,
 }
 
 impl<TAddr: Clone + Eq + Hash> SyncSource<TAddr> {
@@ -649,6 +650,10 @@ impl<TAddr: Clone + Eq + Hash> SyncSource<TAddr> {
         our_vn_addr: &TAddr,
         skipped_peers: &HashSet<TAddr>,
     ) -> Self {
+        let num_checkpoint_holders = signing_committee
+            .address_iter()
+            .filter(|addr| *addr != our_vn_addr)
+            .count();
         let signing_addrs = signing_committee.address_iter().collect::<HashSet<_>>();
         let local_addrs = local_committee.address_iter().collect::<HashSet<_>>();
 
@@ -680,7 +685,7 @@ impl<TAddr: Clone + Eq + Hash> SyncSource<TAddr> {
         Self {
             signing_committee,
             serving_peers: leave_out_skipped(&serving_peers, |addr| skipped_peers.contains(addr)),
-            num_candidate_peers: serving_peers.len(),
+            num_checkpoint_holders,
         }
     }
 }
@@ -1286,13 +1291,24 @@ mod tests {
     }
 
     #[test]
-    fn skipped_peers_still_count_as_candidates() {
+    fn skipped_peers_still_count_as_checkpoint_holders() {
         let signing = committee(&[1, 2, 3]);
         let local = committee(&[0, 1, 2, 3]);
         let source = SyncSource::new(signing, &local, &0, &HashSet::from([1, 2]));
-
         assert_eq!(serving_peers(&source), HashSet::from([3]));
-        assert_eq!(source.num_candidate_peers, 3);
+        assert_eq!(source.num_checkpoint_holders, 3);
+
+        let source = SyncSource::new(committee(&[1, 3]), &committee(&[0, 1, 2]), &0, &HashSet::from([3]));
+        assert_eq!(serving_peers(&source), HashSet::from([1, 2]));
+        assert_eq!(source.num_checkpoint_holders, 2);
+    }
+
+    #[test]
+    fn peers_that_joined_this_epoch_do_not_count_as_checkpoint_holders() {
+        let source = SyncSource::new(committee(&[1]), &committee(&[0, 1, 2]), &0, &HashSet::new());
+
+        assert_eq!(serving_peers(&source), HashSet::from([1, 2]));
+        assert_eq!(source.num_checkpoint_holders, 1);
     }
 
     #[test]
