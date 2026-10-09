@@ -55,9 +55,12 @@ use crate::{
 const LOG_TARGET: &str = "tari::ootle::rpc_state_sync";
 /// The number of sync runs a peer that served invalid state is left out of, unless configured otherwise.
 pub const DEFAULT_SYNC_PEER_SKIP_RUNS: u32 = 3;
-/// The longest a peer's state stream may go without committing or proving a version, unless configured otherwise.
-/// It comfortably exceeds the RPC deadline for a single message.
-pub const DEFAULT_SYNC_PROGRESS_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+/// The base time a peer's state stream has to complete each version, unless configured otherwise. A version's
+/// allowance grows with its bytes at the minimum throughput.
+pub const DEFAULT_SYNC_PROGRESS_TIMEOUT: Duration = Duration::from_secs(60);
+/// The streaming rate, in bytes per second, at which a version's bytes extend its time allowance, unless configured
+/// otherwise.
+pub const DEFAULT_SYNC_MIN_THROUGHPUT_BYTES_PER_SEC: u64 = 256 * 1024;
 
 pub struct RpcStateSyncClientProtocol<TConsensusSpec: ConsensusSpec> {
     network: Network,
@@ -80,6 +83,7 @@ pub struct RpcStateSyncClientProtocol<TConsensusSpec: ConsensusSpec> {
     skipped_peers: SkippedPeers<PeerAddress>,
     peer_skip_runs: u32,
     progress_timeout: Duration,
+    min_throughput_bytes_per_sec: u64,
 }
 
 impl<TConsensusSpec> RpcStateSyncClientProtocol<TConsensusSpec>
@@ -105,12 +109,20 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             skipped_peers: SkippedPeers::default(),
             peer_skip_runs: DEFAULT_SYNC_PEER_SKIP_RUNS,
             progress_timeout: DEFAULT_SYNC_PROGRESS_TIMEOUT,
+            min_throughput_bytes_per_sec: DEFAULT_SYNC_MIN_THROUGHPUT_BYTES_PER_SEC,
         }
     }
 
-    /// Sets the longest a peer's state stream may go without committing or proving a version.
+    /// Sets the base time a peer's state stream has to complete each version. Zero sets no limit.
     pub fn with_progress_timeout(mut self, progress_timeout: Duration) -> Self {
         self.progress_timeout = progress_timeout;
+        self
+    }
+
+    /// Sets the streaming rate, in bytes per second, at which a version's bytes extend its time allowance. Zero
+    /// grants no extension beyond the base time.
+    pub fn with_min_throughput(mut self, bytes_per_sec: u64) -> Self {
+        self.min_throughput_bytes_per_sec = bytes_per_sec;
         self
     }
 
@@ -250,7 +262,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         let shard_sync = shard_sync
             .with_version_proofs(&validator)
             .with_trusted_checkpoint_version(checkpoint_commits_state_versions(checkpoint_protocol_version))
-            .with_progress_timeout(self.progress_timeout);
+            .with_progress_timeout(self.progress_timeout)
+            .with_min_throughput(self.min_throughput_bytes_per_sec);
         let maybe_persisted_state_version = shard_sync.discard_unverified_state()?;
 
         if shard_sync.local_state_root(maybe_persisted_state_version)? == checkpoint_shard_root {

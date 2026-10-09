@@ -385,10 +385,15 @@ pub struct ConsensusConfig {
     /// The number of state sync runs a peer that served invalid state is left out of.
     #[serde(default = "default_state_sync_peer_skip_runs")]
     pub state_sync_peer_skip_runs: u32,
-    /// The longest, in seconds, a peer's state sync stream may go without committing or proving a state version
-    /// before the attempt is abandoned and the peer is skipped. 0 sets no limit.
+    /// The base time, in seconds, a peer's state sync stream has to complete each state version, counted from the
+    /// last version it committed or proved. A version's allowance grows by the time its bytes take at
+    /// `state_sync_min_throughput_bytes_per_sec`. A peer that overruns it is abandoned and skipped. 0 sets no limit.
     #[serde(default = "default_state_sync_progress_timeout_secs")]
     pub state_sync_progress_timeout_secs: u64,
+    /// The streaming rate, in bytes per second, at which a state version's bytes extend its time allowance. 0 grants
+    /// no extension beyond `state_sync_progress_timeout_secs`.
+    #[serde(default = "default_state_sync_min_throughput_bytes_per_sec")]
+    pub state_sync_min_throughput_bytes_per_sec: u64,
 }
 
 impl Default for ConsensusConfig {
@@ -397,6 +402,7 @@ impl Default for ConsensusConfig {
             skip_sync: false,
             state_sync_peer_skip_runs: default_state_sync_peer_skip_runs(),
             state_sync_progress_timeout_secs: default_state_sync_progress_timeout_secs(),
+            state_sync_min_throughput_bytes_per_sec: default_state_sync_min_throughput_bytes_per_sec(),
         }
     }
 }
@@ -407,4 +413,8 @@ fn default_state_sync_peer_skip_runs() -> u32 {
 
 fn default_state_sync_progress_timeout_secs() -> u64 {
     tari_rpc_state_sync::DEFAULT_SYNC_PROGRESS_TIMEOUT.as_secs()
+}
+
+fn default_state_sync_min_throughput_bytes_per_sec() -> u64 {
+    tari_rpc_state_sync::DEFAULT_SYNC_MIN_THROUGHPUT_BYTES_PER_SEC
 }

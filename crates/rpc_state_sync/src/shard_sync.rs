@@ -120,8 +120,12 @@ pub(crate) struct ShardSync<'a, TStore, TValidator = NoVersionProofs> {
     /// Whether `checkpoint_state_version` is trusted as this shard's version. Only then is a batch above it rejected:
     /// an untrusted version may be lower than the versions an honest peer streams.
     checkpoint_state_version_is_trusted: bool,
-    /// The longest the stream may go without committing a version or proving one. A zero timeout sets no limit.
+    /// The base time the stream has to complete each version, counted from the last version it committed or proved.
+    /// A zero timeout sets no limit.
     progress_timeout: Option<Duration>,
+    /// The streaming rate, in bytes per second, at which the bytes of a version extend its time allowance. Zero
+    /// grants no extension.
+    min_throughput_bytes_per_sec: u64,
     /// Validates the commit proofs of the state version proofs the stream carries, if it was asked to carry them.
     version_proofs: Option<&'a TValidator>,
 }
@@ -144,6 +148,7 @@ impl<'a, TStore: StateStore> ShardSync<'a, TStore> {
             checkpoint_state_version,
             checkpoint_state_version_is_trusted: false,
             progress_timeout: None,
+            min_throughput_bytes_per_sec: 0,
             version_proofs: None,
         }
     }
@@ -161,14 +166,22 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
             checkpoint_state_version: self.checkpoint_state_version,
             checkpoint_state_version_is_trusted: self.checkpoint_state_version_is_trusted,
             progress_timeout: self.progress_timeout,
+            min_throughput_bytes_per_sec: self.min_throughput_bytes_per_sec,
             version_proofs: Some(validator),
         }
     }
 
-    /// Rejects a stream that goes `timeout` without committing a version or proving one. A zero timeout sets no
-    /// limit.
+    /// Rejects a stream that takes longer than `timeout` to complete a version, plus the time its bytes would take
+    /// at the minimum throughput. A zero timeout sets no limit.
     pub fn with_progress_timeout(mut self, timeout: Duration) -> Self {
         self.progress_timeout = Some(timeout);
+        self
+    }
+
+    /// Extends each version's time allowance by the time its bytes take at `bytes_per_sec`. Zero grants no
+    /// extension.
+    pub fn with_min_throughput(mut self, bytes_per_sec: u64) -> Self {
+        self.min_throughput_bytes_per_sec = bytes_per_sec;
         self
     }
 
@@ -355,8 +368,8 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
             );
         }
         // A peer whose stream fails once it has made this node commit unverified state has cost the work of
-        // committing and discarding it, whatever the cause.
-        if has_unverified_state && matches!(err, RpcStateSyncError::RpcError(_)) {
+        // committing and discarding it, unless the failure is this node's own.
+        if has_unverified_state && !is_local_failure(&err) && !is_peer_fault(&err) {
             return Err(RpcStateSyncError::InvalidResponse(anyhow!(
                 "Stream failed after committing unverified state: {err}"
             )));
@@ -390,17 +403,24 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         let mut last_committed_version = None;
         let mut last_proven_version = None;
         let mut unverified_versions = 0u64;
-        let mut progress_deadline = next_progress_deadline(self.progress_timeout);
+        let mut version_started = tokio::time::Instant::now();
+        let mut version_bytes = 0u64;
 
         // syncing states
         loop {
-            let next = match progress_deadline {
+            let deadline = version_deadline(
+                version_started,
+                self.progress_timeout,
+                version_bytes,
+                self.min_throughput_bytes_per_sec,
+            );
+            let next = match deadline {
                 Some(deadline) => tokio::time::timeout_at(deadline, state_stream.next())
                     .await
                     .map_err(|_| {
                         RpcStateSyncError::InvalidResponse(anyhow!(
-                            "Peer made no progress syncing {shard} within {:?}",
-                            self.progress_timeout.unwrap_or_default()
+                            "Peer made no progress syncing {shard}: a version of {version_bytes} byte(s) was not \
+                             completed within its time allowance"
                         ))
                     })?,
                 None => state_stream.next().await,
@@ -436,7 +456,8 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                     schedule.proven(proven);
                     last_proven_version = Some(proven);
                     last_committed_version = Some(proven);
-                    progress_deadline = next_progress_deadline(self.progress_timeout);
+                    version_started = tokio::time::Instant::now();
+                    version_bytes = 0;
                     unverified_versions = 0;
                     has_unverified_state = false;
                     rewind_point = maybe_persisted_state_version.unwrap_or(0);
@@ -569,7 +590,9 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                 schedule.check_batch(state_version)?;
             }
             last_state_version = state_version;
-            buffered.charge(state_version, batch.encoded_len())?;
+            let batch_bytes = batch.encoded_len();
+            buffered.charge(state_version, batch_bytes)?;
+            version_bytes = version_bytes.saturating_add(u64::try_from(batch_bytes).unwrap_or(u64::MAX));
 
             stats.total_transitions += batch.updates.len() as u64;
 
@@ -658,7 +681,8 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
             has_unverified_state = true;
             last_committed_version = Some(state_version);
             unverified_versions += 1;
-            progress_deadline = next_progress_deadline(self.progress_timeout);
+            version_started = tokio::time::Instant::now();
+            version_bytes = 0;
         }
 
         // The stream ended without a SyncComplete - the peer closed early, so the sync is unverified.
@@ -668,12 +692,42 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
     }
 }
 
-/// The instant by which a stream must next make progress, if `timeout` sets a limit. A zero timeout, or one too long
-/// to represent, sets none.
-fn next_progress_deadline(timeout: Option<Duration>) -> Option<tokio::time::Instant> {
-    timeout
-        .filter(|timeout| !timeout.is_zero())
-        .and_then(|timeout| tokio::time::Instant::now().checked_add(timeout))
+/// True if `err` is a failure of this node's own storage or services rather than anything a peer sent.
+fn is_local_failure(err: &RpcStateSyncError) -> bool {
+    matches!(
+        err,
+        RpcStateSyncError::StorageError(_) |
+            RpcStateSyncError::EpochManagerError(_) |
+            RpcStateSyncError::TransactionPoolError(_) |
+            RpcStateSyncError::InvariantError { .. }
+    )
+}
+
+/// True if `err` already attributes the failure to the streaming peer.
+fn is_peer_fault(err: &RpcStateSyncError) -> bool {
+    matches!(
+        err,
+        RpcStateSyncError::InvalidResponse(_) |
+            RpcStateSyncError::StateRootMismatch { .. } |
+            RpcStateSyncError::ConflictsWithCheckpoint(_) |
+            RpcStateSyncError::StateTreeError(_)
+    )
+}
+
+/// The instant by which a version started at `started` must be completed: `base` plus the time `bytes` take at
+/// `bytes_per_sec`. A missing or zero `base`, or a deadline too far off to represent, sets none.
+fn version_deadline(
+    started: tokio::time::Instant,
+    base: Option<Duration>,
+    bytes: u64,
+    bytes_per_sec: u64,
+) -> Option<tokio::time::Instant> {
+    let base = base.filter(|base| !base.is_zero())?;
+    let extension = match bytes_per_sec {
+        0 => Duration::ZERO,
+        rate => Duration::from_millis(bytes.saturating_mul(1000) / rate),
+    };
+    started.checked_add(base)?.checked_add(extension)
 }
 
 /// Rejects a state version with a transition that does not apply cleanly to local state: creating a substate that
@@ -1769,10 +1823,182 @@ mod tests {
     }
 
     #[test]
-    fn a_zero_or_unrepresentable_progress_timeout_sets_no_deadline() {
-        assert_eq!(next_progress_deadline(None), None);
-        assert_eq!(next_progress_deadline(Some(Duration::ZERO)), None);
-        assert_eq!(next_progress_deadline(Some(Duration::MAX)), None);
-        assert!(next_progress_deadline(Some(Duration::from_secs(1))).is_some());
+    fn a_version_s_deadline_is_its_base_allowance_plus_its_bytes_at_the_minimum_throughput() {
+        let now = tokio::time::Instant::now();
+        let second = Duration::from_secs(1);
+        assert_eq!(version_deadline(now, None, 0, 0), None);
+        assert_eq!(version_deadline(now, Some(Duration::ZERO), 1000, 100), None);
+        assert_eq!(version_deadline(now, Some(Duration::MAX), 0, 0), None);
+        assert_eq!(version_deadline(now, Some(second), 1000, 0), Some(now + second));
+        assert_eq!(version_deadline(now, Some(second), 1000, 500), Some(now + 3 * second));
+    }
+
+    /// Rejects every commit proof with `error`.
+    struct FailWith(fn() -> RpcStateSyncError);
+
+    impl CommitProofValidator for FailWith {
+        async fn validate(&self, _commit_proof: &CommittedBlockProof) -> Result<(), RpcStateSyncError> {
+            Err((self.0)())
+        }
+    }
+
+    async fn sync_with_failing_proof(
+        store: &RocksDbStateStore<String>,
+        error: fn() -> RpcStateSyncError,
+    ) -> RpcStateSyncError {
+        let checkpoint = versions_to_proof_point();
+        let validator = FailWith(error);
+        let mut responses = stream_of(&checkpoint);
+        responses.push(version_proof(N, root_after(&checkpoint)));
+        responses.push(complete(N));
+        ShardSync::new(
+            NETWORK,
+            NUM_PRESHARDS,
+            store,
+            shard(),
+            root_after(&checkpoint),
+            version_after(&checkpoint),
+        )
+        .with_version_proofs(&validator)
+        .sync_from_stream(&mut StateSyncStats::default(), None, stream::iter(responses))
+        .await
+        .unwrap_err()
+    }
+
+    #[tokio::test]
+    async fn a_peer_failure_after_committing_a_version_is_the_peer_s_fault() {
+        let (store, _tmp) = create_store();
+
+        let err = sync_with_failing_proof(&store, || RpcStateSyncError::NoCommittees(EPOCH)).await;
+
+        assert!(
+            matches!(&err, RpcStateSyncError::InvalidResponse(e) if e.to_string().contains("after committing unverified state")),
+            "{err}"
+        );
+        assert_eq!(local_version(&store), None);
+    }
+
+    #[tokio::test]
+    async fn a_local_failure_after_committing_a_version_is_not_the_peer_s_fault() {
+        let (store, _tmp) = create_store();
+
+        let err = sync_with_failing_proof(&store, || {
+            RpcStateSyncError::EpochManagerError(tari_epoch_manager::EpochManagerError::ReceiveError)
+        })
+        .await;
+
+        assert!(matches!(err, RpcStateSyncError::EpochManagerError(_)), "{err}");
+        assert_eq!(local_version(&store), None);
+    }
+
+    fn encoded_batch_len(response: &Result<SyncStateResponse, RpcStatus>) -> u64 {
+        match &response.as_ref().unwrap().response {
+            Some(sync_state_response::Response::Batch(batch)) => batch.encoded_len() as u64,
+            _ => panic!("not a batch"),
+        }
+    }
+
+    fn paced(
+        responses: Vec<Result<SyncStateResponse, RpcStatus>>,
+        interval: Duration,
+    ) -> impl Stream<Item = Result<SyncStateResponse, RpcStatus>> + Unpin {
+        Box::pin(stream::iter(responses).then(move |response| async move {
+            tokio::time::sleep(interval).await;
+            response
+        }))
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_version_dripped_in_small_chunks_is_abandoned() {
+        let (store, _tmp) = create_store();
+        let seeds = 1..=20u8;
+        let checkpoint = vec![(1, seeds.clone().map(create).collect::<Vec<_>>())];
+        let mut responses = seeds
+            .map(|seed| batch_with_more(1, vec![create(seed)]))
+            .collect::<Vec<_>>();
+        responses.push(batch(1, vec![create(21)]));
+        // Each chunk earns a tenth of the time the peer takes to send it.
+        let rate = encoded_batch_len(&responses[0]) * 10;
+
+        let err = sync_with_timeout(&store, &checkpoint, Duration::from_secs(1))
+            .with_min_throughput(rate)
+            .sync_from_stream(
+                &mut StateSyncStats::default(),
+                None,
+                paced(responses, Duration::from_millis(500)),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(is_no_progress(&err), "{err}");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_large_version_streamed_at_the_minimum_throughput_outlasts_the_base_allowance() {
+        let (store, _tmp) = create_store();
+        let seeds = 1..=10u8;
+        let checkpoint = vec![(1, seeds.clone().map(create).collect::<Vec<_>>())];
+        let mut responses = seeds
+            .clone()
+            .map(|seed| batch_with_more(1, vec![create(seed)]))
+            .collect::<Vec<_>>();
+        responses.pop();
+        responses.push(batch(1, vec![create(10)]));
+        responses.push(complete(1));
+        // Each chunk earns a second and arrives after half a second, so the version takes 5.5s against a 1s base.
+        let rate = encoded_batch_len(&responses[0]);
+
+        sync_with_timeout(&store, &checkpoint, Duration::from_secs(1))
+            .with_min_throughput(rate)
+            .sync_from_stream(
+                &mut StateSyncStats::default(),
+                None,
+                paced(responses, Duration::from_millis(500)),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(local_version(&store), Some(1));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_peer_committing_small_versions_slowly_is_abandoned() {
+        let (store, _tmp) = create_store();
+        let checkpoint = unproven_versions(5);
+        let mut responses = stream_of(&checkpoint);
+        responses.push(complete(5));
+
+        let err = sync_with_timeout(&store, &checkpoint, Duration::from_secs(1))
+            .with_min_throughput(1024 * 1024)
+            .sync_from_stream(
+                &mut StateSyncStats::default(),
+                None,
+                paced(responses, Duration::from_millis(1500)),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(is_no_progress(&err), "{err}");
+        assert_eq!(local_version(&store), None);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_zero_progress_timeout_sets_no_limit() {
+        let (store, _tmp) = create_store();
+        let checkpoint = unproven_versions(3);
+        let mut responses = stream_of(&checkpoint);
+        responses.push(complete(3));
+
+        sync_with_timeout(&store, &checkpoint, Duration::ZERO)
+            .with_min_throughput(1024 * 1024)
+            .sync_from_stream(
+                &mut StateSyncStats::default(),
+                None,
+                paced(responses, Duration::from_secs(3600)),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(local_version(&store), Some(3));
     }
 }

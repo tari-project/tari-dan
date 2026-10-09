@@ -107,7 +107,8 @@ pub async fn spawn(
         state_sync: RpcStateSyncClientProtocol::new(network, epoch_manager, store, client_factory, signing_service)
             .with_skip_sync(consensus_config.skip_sync)
             .with_peer_skip_runs(consensus_config.state_sync_peer_skip_runs)
-            .with_progress_timeout(Duration::from_secs(consensus_config.state_sync_progress_timeout_secs)),
+            .with_progress_timeout(Duration::from_secs(consensus_config.state_sync_progress_timeout_secs))
+            .with_min_throughput(consensus_config.state_sync_min_throughput_bytes_per_sec),
         tx_current_state,
     };
 
