@@ -28,6 +28,7 @@ use tari_ootle_storage::{
     StorageError,
     consensus_models::{
         CommittedBlockProof,
+        STATE_VERSION_PROOF_INTERVAL,
         StateVersionProof,
         StateVersionProofSource,
         SubstateRecord,
@@ -57,6 +58,12 @@ const MAX_BUFFERED_VERSION_BYTES: usize = 256 * 1024 * 1024;
 // buffer leaves twice that.
 const _: () =
     assert!(MAX_BUFFERED_VERSION_BYTES >= 2 * tari_ootle_common_types::MAX_BLOCK_VALIDATION_SHARD_OUTPUT_BYTES);
+/// The most state versions a peer may commit in one attempt without a verified state version proof in between.
+/// It applies only while the stream is held to the proof schedule (or carries no proofs at all): a network
+/// launched before V1 has history that no node can prove, and an honest stream of it has no such bound.
+const MAX_UNVERIFIED_VERSIONS_PER_ATTEMPT: u64 = 64;
+// An honest stream held to the schedule commits up to a full proof interval before it must prove one.
+const _: () = assert!(MAX_UNVERIFIED_VERSIONS_PER_ATTEMPT > STATE_VERSION_PROOF_INTERVAL);
 
 /// Rewinds every shard that a sync committed unverified versions of, so that everything the node reads or builds
 /// on afterwards is verified state.
@@ -332,6 +339,10 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         let mut expected_state_version = None;
         let mut buffered = VersionBuffer::default();
         let mut proof_schedule = self.proof_schedule(start_state_version);
+        // The last version this stream committed or proved. A new version must lie above it: re-committing a version
+        // fails only inside the write transaction, after the whole version is buffered.
+        let mut last_committed_version = None;
+        let mut unverified_versions = 0u64;
 
         // syncing states
         while let Some(result) = state_stream.next().await {
@@ -353,6 +364,8 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                         .apply_version_proof(validator, proof, maybe_persisted_state_version)
                         .await?;
                     schedule.proven(proven);
+                    last_committed_version = Some(proven);
+                    unverified_versions = 0;
                     has_unverified_state = false;
                     rewind_point = maybe_persisted_state_version.unwrap_or(0);
                     // Every version up to the proven one is settled, so the stream must continue above it.
@@ -455,6 +468,24 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                 )));
             }
 
+            if expected_state_version.is_none() {
+                if let Some(committed) = last_committed_version &&
+                    state_version <= committed
+                {
+                    return Err(RpcStateSyncError::InvalidResponse(anyhow!(
+                        "Received a new state version v{state_version} that is not above the last committed state \
+                         version v{committed}."
+                    )));
+                }
+                let budget_applies = proof_schedule.as_ref().is_none_or(|s| s.is_enforced());
+                if budget_applies && unverified_versions >= MAX_UNVERIFIED_VERSIONS_PER_ATTEMPT {
+                    return Err(RpcStateSyncError::InvalidResponse(anyhow!(
+                        "Peer exceeded unverified version budget: {MAX_UNVERIFIED_VERSIONS_PER_ATTEMPT} state \
+                         versions without a state version proof"
+                    )));
+                }
+            }
+
             if let Some(schedule) = &proof_schedule {
                 schedule.check_batch(state_version)?;
             }
@@ -546,6 +577,8 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                 Ok::<_, RpcStateSyncError>(())
             })?;
             has_unverified_state = true;
+            last_committed_version = Some(state_version);
+            unverified_versions += 1;
         }
 
         // The stream ended without a SyncComplete - the peer closed early, so the sync is unverified.
@@ -788,6 +821,17 @@ mod tests {
                 shard: shard.as_u32(),
             })),
         })
+    }
+
+    fn batch_with_more(
+        state_version: Version,
+        updates: Vec<SubstateUpdateProof>,
+    ) -> Result<SyncStateResponse, RpcStatus> {
+        let mut response = batch(state_version, updates)?;
+        if let Some(sync_state_response::Response::Batch(batch)) = response.response.as_mut() {
+            batch.has_more = true;
+        }
+        Ok(response)
     }
 
     fn stream_of(versions: &Versions) -> Vec<Result<SyncStateResponse, RpcStatus>> {
@@ -1342,5 +1386,98 @@ mod tests {
         assert!(matches!(err, RpcStateSyncError::StateRootMismatch { .. }), "{err}");
         assert_eq!(local_version(&store), Some(N));
         assert!(substate(&store, POISON).is_none());
+    }
+
+    #[tokio::test]
+    async fn a_second_terminal_batch_at_a_committed_version_is_rejected_before_it_is_buffered() {
+        let (store, _tmp) = create_store();
+        let checkpoint = vec![(1, vec![create(HONEST)])];
+        let sync = ShardSync::new(
+            NETWORK,
+            NUM_PRESHARDS,
+            &store,
+            shard(),
+            root_after(&checkpoint),
+            version_after(&checkpoint),
+        );
+        let mut stats = StateSyncStats::default();
+
+        let err = sync
+            .apply_stream(
+                &mut stats,
+                None,
+                stream::iter(vec![
+                    batch(1, vec![create(HONEST)]),
+                    batch(1, vec![create(POISON)]),
+                    complete(1),
+                ]),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(&err, RpcStateSyncError::InvalidResponse(e) if e.to_string().contains("not above the last committed state version v1")),
+            "{err}"
+        );
+        assert_eq!(stats.total_transitions, 1);
+        assert_eq!(local_version(&store), Some(1));
+        assert!(substate(&store, HONEST).is_some_and(|s| s.is_up()));
+        assert!(substate(&store, POISON).is_none());
+        assert_eq!(rewind_point(&store), Some(0));
+    }
+
+    #[tokio::test]
+    async fn a_version_streamed_over_several_batches_is_committed_whole() {
+        let (store, _tmp) = create_store();
+        let checkpoint = vec![(1, vec![create(HONEST), create(2)])];
+
+        let synced = sync(&store, &checkpoint, vec![
+            batch_with_more(1, vec![create(HONEST)]),
+            batch(1, vec![create(2)]),
+            complete(1),
+        ])
+        .await
+        .unwrap();
+
+        assert_eq!(synced, Some(1));
+        assert!(substate(&store, HONEST).is_some_and(|s| s.is_up()));
+        assert!(substate(&store, 2).is_some_and(|s| s.is_up()));
+        assert_eq!(rewind_point(&store), None);
+    }
+
+    /// `count` versions, each creating one substate.
+    fn unproven_versions(count: u64) -> Versions {
+        (1..=count)
+            .map(|version| (version, vec![create(u8::try_from(version).unwrap())]))
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn a_stream_within_the_unverified_version_budget_is_kept() {
+        let (store, _tmp) = create_store();
+        let checkpoint = unproven_versions(MAX_UNVERIFIED_VERSIONS_PER_ATTEMPT);
+        let mut responses = stream_of(&checkpoint);
+        responses.push(complete(MAX_UNVERIFIED_VERSIONS_PER_ATTEMPT));
+
+        sync(&store, &checkpoint, responses).await.unwrap();
+
+        assert_eq!(local_version(&store), Some(MAX_UNVERIFIED_VERSIONS_PER_ATTEMPT));
+    }
+
+    #[tokio::test]
+    async fn a_stream_beyond_the_unverified_version_budget_is_rejected() {
+        let (store, _tmp) = create_store();
+        let checkpoint = unproven_versions(MAX_UNVERIFIED_VERSIONS_PER_ATTEMPT + 1);
+        let mut responses = stream_of(&checkpoint);
+        responses.push(complete(MAX_UNVERIFIED_VERSIONS_PER_ATTEMPT + 1));
+
+        let err = sync(&store, &checkpoint, responses).await.unwrap_err();
+
+        assert!(
+            matches!(&err, RpcStateSyncError::InvalidResponse(e) if e.to_string().contains("unverified version budget")),
+            "{err}"
+        );
+        assert_eq!(local_version(&store), None);
+        assert_eq!(rewind_point(&store), None);
     }
 }

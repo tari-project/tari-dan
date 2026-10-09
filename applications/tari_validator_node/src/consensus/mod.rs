@@ -105,7 +105,8 @@ pub async fn spawn(
         epoch_manager: epoch_manager.clone(),
         hotstuff: hotstuff_worker,
         state_sync: RpcStateSyncClientProtocol::new(network, epoch_manager, store, client_factory, signing_service)
-            .with_skip_sync(consensus_config.skip_sync),
+            .with_skip_sync(consensus_config.skip_sync)
+            .with_peer_skip_runs(consensus_config.state_sync_peer_skip_runs),
         tx_current_state,
     };
 

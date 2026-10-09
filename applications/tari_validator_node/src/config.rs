@@ -373,7 +373,7 @@ impl SubConfigPath for ValidatorNodeConfig {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct ConsensusConfig {
     /// Skip the state sync check on startup and go directly into consensus. This makes `check_sync` always report
@@ -382,4 +382,20 @@ pub struct ConsensusConfig {
     /// consensus to misbehave.
     #[serde(default)]
     pub skip_sync: bool,
+    /// The number of state sync runs a peer that served invalid state is left out of.
+    #[serde(default = "default_state_sync_peer_skip_runs")]
+    pub state_sync_peer_skip_runs: u32,
+}
+
+impl Default for ConsensusConfig {
+    fn default() -> Self {
+        Self {
+            skip_sync: false,
+            state_sync_peer_skip_runs: default_state_sync_peer_skip_runs(),
+        }
+    }
+}
+
+fn default_state_sync_peer_skip_runs() -> u32 {
+    tari_rpc_state_sync::DEFAULT_SYNC_PEER_SKIP_RUNS
 }

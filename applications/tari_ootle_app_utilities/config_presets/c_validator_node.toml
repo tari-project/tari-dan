@@ -35,6 +35,8 @@
 #[validator_node.consensus]
 ## Skip the startup state-sync check and go straight into consensus (default = false)
 #skip_sync = false
+## The number of state sync runs a peer that served invalid state is left out of (default = 3)
+#state_sync_peer_skip_runs = 3
 
 #[validator_node.database]
 ## The type of database ("rocksdb" or "sqlite") to use (default = "sqlite")

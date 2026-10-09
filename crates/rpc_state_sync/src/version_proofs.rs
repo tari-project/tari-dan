@@ -88,6 +88,11 @@ impl ProofSchedule {
         }
     }
 
+    /// Whether the stream is held to the schedule.
+    pub fn is_enforced(&self) -> bool {
+        self.enforced
+    }
+
     /// Rejects a batch at `state_version` if the stream owes a proof for an earlier version.
     pub fn check_batch(&self, state_version: Version) -> Result<(), RpcStateSyncError> {
         if self.enforced && self.next_point < state_version && self.next_point <= self.last {
