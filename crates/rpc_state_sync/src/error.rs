@@ -32,6 +32,9 @@ pub enum RpcStateSyncError {
     ProposalValidationError(#[from] ProposalValidationError),
     #[error("State tree error: {0}")]
     StateTreeError(#[from] tari_state_tree::StateTreeError),
+    /// The peer's stream disagrees with the checkpoint it is synced against.
+    #[error("Stream conflicts with the checkpoint: {0}")]
+    ConflictsWithCheckpoint(anyhow::Error),
     #[error("State root mismatch. Expected: {expected}, actual: {actual}")]
     StateRootMismatch { expected: TreeHash, actual: TreeHash },
     #[error("Checkpoint for epoch {epoch} is not yet available from the previous committee")]
@@ -43,6 +46,17 @@ pub enum RpcStateSyncError {
 }
 
 impl RpcStateSyncError {
+    /// True if the error shows that the streaming peer served invalid state.
+    pub fn is_peer_fault(&self) -> bool {
+        matches!(
+            self,
+            RpcStateSyncError::InvalidResponse(_) |
+                RpcStateSyncError::StateRootMismatch { .. } |
+                RpcStateSyncError::ConflictsWithCheckpoint(_) |
+                RpcStateSyncError::StateTreeError(_)
+        )
+    }
+
     pub fn error_at_remote(self) -> Result<RpcStateSyncError, RpcStateSyncError> {
         match &self {
             RpcStateSyncError::InvalidResponse(_) | RpcStateSyncError::RpcError(_) => Err(self),

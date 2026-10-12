@@ -35,6 +35,14 @@
 #[validator_node.consensus]
 ## Skip the startup state-sync check and go straight into consensus (default = false)
 #skip_sync = false
+## The number of state sync runs a peer that served invalid state is left out of (default = 3)
+#state_sync_peer_skip_runs = 3
+## The base time, in seconds, a state sync stream has to complete each state version before the peer is skipped,
+## 0 for no limit (default = 60)
+#state_sync_progress_timeout_secs = 60
+## The streaming rate, in bytes per second, at which a state version's bytes extend that time, 0 for no extension
+## (default = 262144)
+#state_sync_min_throughput_bytes_per_sec = 262144
 
 #[validator_node.database]
 ## The type of database ("rocksdb" or "sqlite") to use (default = "sqlite")

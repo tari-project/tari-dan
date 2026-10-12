@@ -2,8 +2,8 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use anyhow::anyhow;
-use tari_epoch_manager::EpochManagerReader;
-use tari_ootle_common_types::{Epoch, VotePower};
+use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
+use tari_ootle_common_types::{Epoch, ShardGroup, VotePower, optional::Optional};
 use tari_ootle_p2p::PeerAddress;
 use tari_ootle_storage::consensus_models::{CommittedBlockProof, STATE_VERSION_PROOF_INTERVAL};
 use tari_state_tree::Version;
@@ -48,10 +48,13 @@ where TEpochManager: EpochManagerReader<Addr = PeerAddress> + Sync
         let shard_group = commit_proof
             .shard_group()
             .map_err(|e| RpcStateSyncError::InvalidResponse(e.into()))?;
-        let committee = self
-            .epoch_manager
-            .get_committee_by_shard_group(epoch, shard_group)
-            .await?;
+        let committee = committee_named_by_proof(
+            epoch,
+            shard_group,
+            self.epoch_manager
+                .get_committee_by_shard_group(epoch, shard_group)
+                .await,
+        )?;
         commit_proof
             .validate(committee.quorum_threshold(), |pk| {
                 Ok(committee.get_power_by_public_key(pk).unwrap_or_else(VotePower::zero))
@@ -59,6 +62,20 @@ where TEpochManager: EpochManagerReader<Addr = PeerAddress> + Sync
             .map_err(|e| RpcStateSyncError::InvalidResponse(anyhow!("Invalid commit proof: {e}")))?;
         Ok(())
     }
+}
+
+/// The committee a commit proof names by `epoch` and `shard_group`, as `lookup` found it. The peer chose both, so a
+/// committee that does not exist is the peer's fault; any other lookup failure is this node's.
+fn committee_named_by_proof<T>(
+    epoch: Epoch,
+    shard_group: ShardGroup,
+    lookup: Result<T, EpochManagerError>,
+) -> Result<T, RpcStateSyncError> {
+    lookup.optional()?.ok_or_else(|| {
+        RpcStateSyncError::InvalidResponse(anyhow!(
+            "State version proof names {shard_group} at epoch {epoch}, which has no committee"
+        ))
+    })
 }
 
 /// The first state version at or after `version` that a stream must prove.
@@ -124,6 +141,29 @@ mod tests {
     use super::*;
 
     const N: Version = STATE_VERSION_PROOF_INTERVAL;
+
+    #[test]
+    fn a_proof_naming_a_committee_that_does_not_exist_is_the_peer_s_fault() {
+        let missing = committee_named_by_proof::<()>(
+            Epoch(3),
+            ShardGroup::all_shards(tari_ootle_common_types::NumPreshards::P256),
+            Err(EpochManagerError::NoEpochFound(Epoch(3))),
+        );
+        assert!(
+            matches!(missing, Err(RpcStateSyncError::InvalidResponse(_))),
+            "{missing:?}"
+        );
+
+        let local = committee_named_by_proof::<()>(
+            Epoch(3),
+            ShardGroup::all_shards(tari_ootle_common_types::NumPreshards::P256),
+            Err(EpochManagerError::ReceiveError),
+        );
+        assert!(
+            matches!(local, Err(RpcStateSyncError::EpochManagerError(_))),
+            "{local:?}"
+        );
+    }
 
     #[test]
     fn proof_points_are_multiples_of_the_interval() {

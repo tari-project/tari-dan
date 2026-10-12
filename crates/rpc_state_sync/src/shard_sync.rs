@@ -1,7 +1,7 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashSet, ops::Deref};
+use std::{collections::HashSet, ops::Deref, time::Duration};
 
 use anyhow::anyhow;
 use futures::{Stream, StreamExt};
@@ -105,6 +105,15 @@ pub(crate) struct ShardSync<'a, TStore, TValidator = NoVersionProofs> {
     shard: Shard,
     checkpoint_shard_root: TreeHash,
     checkpoint_state_version: Version,
+    /// Whether `checkpoint_state_version` is trusted as this shard's version. Only then is a batch above it rejected:
+    /// an untrusted version may be lower than the versions an honest peer streams.
+    checkpoint_state_version_is_trusted: bool,
+    /// The base time the stream has to complete each version, counted from the last version it committed or proved.
+    /// A zero timeout sets no limit.
+    progress_timeout: Option<Duration>,
+    /// The streaming rate, in bytes per second, at which the bytes of a version extend its time allowance. Zero
+    /// grants no extension.
+    min_throughput_bytes_per_sec: u64,
     /// Validates the commit proofs of the state version proofs the stream carries, if it was asked to carry them.
     version_proofs: Option<&'a TValidator>,
 }
@@ -125,6 +134,9 @@ impl<'a, TStore: StateStore> ShardSync<'a, TStore> {
             shard,
             checkpoint_shard_root,
             checkpoint_state_version,
+            checkpoint_state_version_is_trusted: false,
+            progress_timeout: None,
+            min_throughput_bytes_per_sec: 0,
             version_proofs: None,
         }
     }
@@ -140,8 +152,32 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
             shard: self.shard,
             checkpoint_shard_root: self.checkpoint_shard_root,
             checkpoint_state_version: self.checkpoint_state_version,
+            checkpoint_state_version_is_trusted: self.checkpoint_state_version_is_trusted,
+            progress_timeout: self.progress_timeout,
+            min_throughput_bytes_per_sec: self.min_throughput_bytes_per_sec,
             version_proofs: Some(validator),
         }
+    }
+
+    /// Rejects a stream that takes longer than `timeout` to complete a version, plus the time its bytes would take
+    /// at the minimum throughput. A zero timeout sets no limit.
+    pub fn with_progress_timeout(mut self, timeout: Duration) -> Self {
+        self.progress_timeout = Some(timeout);
+        self
+    }
+
+    /// Extends each version's time allowance by the time its bytes take at `bytes_per_sec`. Zero grants no
+    /// extension.
+    pub fn with_min_throughput(mut self, bytes_per_sec: u64) -> Self {
+        self.min_throughput_bytes_per_sec = bytes_per_sec;
+        self
+    }
+
+    /// Rejects any batch above the checkpoint's state version if `is_trusted`. The checkpoint's quorum signatures
+    /// must cover that version.
+    pub fn with_trusted_checkpoint_version(mut self, is_trusted: bool) -> Self {
+        self.checkpoint_state_version_is_trusted = is_trusted;
+        self
     }
 
     /// The proof schedule for a stream starting at `start_state_version`, if the stream carries proofs. A network
@@ -173,7 +209,13 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
             )));
         }
         let state_version = proof.state_version;
-        if state_version < written_version.unwrap_or(0) || state_version > self.checkpoint_state_version {
+        if state_version > self.checkpoint_state_version {
+            return Err(RpcStateSyncError::ConflictsWithCheckpoint(anyhow!(
+                "Received a proof of v{state_version} for {shard}, above the checkpoint's v{}",
+                self.checkpoint_state_version
+            )));
+        }
+        if state_version < written_version.unwrap_or(0) {
             return Err(RpcStateSyncError::InvalidResponse(anyhow!(
                 "Received a proof of v{state_version} for {shard}, outside v{}..=v{}",
                 written_version.unwrap_or(0),
@@ -298,17 +340,29 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         RpcStateSyncError: From<E>,
     {
         let result = self.apply_stream(stats, verified_version, state_stream).await;
-        if result.is_err() &&
-            let Err(err) = self.discard_unverified_state()
-        {
+        let Err(err) = result else {
+            return result;
+        };
+        let has_unverified_state = matches!(
+            self.store.with_read_tx(|tx| tx.state_sync_rewind_point_get(self.shard)),
+            Ok(Some(_))
+        );
+        if let Err(discard_err) = self.discard_unverified_state() {
             // The rewind point is still stored, so the next sync attempt discards the state first.
             error!(
                 target: LOG_TARGET,
-                "❌ Failed to discard unverified synced state for {}: {err}",
+                "❌ Failed to discard unverified synced state for {}: {discard_err}",
                 self.shard,
             );
         }
-        result
+        // A peer whose stream fails once it has made this node commit unverified state has cost the work of
+        // committing and discarding it, unless the failure is this node's own.
+        if has_unverified_state && !is_local_failure(&err) && !err.is_peer_fault() {
+            return Err(RpcStateSyncError::InvalidResponse(anyhow!(
+                "Stream failed after committing unverified state: {err}"
+            )));
+        }
+        Err(err)
     }
 
     #[expect(clippy::too_many_lines)]
@@ -332,9 +386,35 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         let mut expected_state_version = None;
         let mut buffered = VersionBuffer::default();
         let mut proof_schedule = self.proof_schedule(start_state_version);
+        // The last version this stream committed or proved. A new version must lie above it: re-committing a version
+        // fails only inside the write transaction, after the whole version is buffered.
+        let mut last_committed_version = None;
+        let mut last_proven_version = None;
+        let mut version_started = tokio::time::Instant::now();
+        let mut version_bytes = 0u64;
 
         // syncing states
-        while let Some(result) = state_stream.next().await {
+        loop {
+            let deadline = version_deadline(
+                version_started,
+                self.progress_timeout,
+                version_bytes,
+                self.min_throughput_bytes_per_sec,
+            );
+            let next = match deadline {
+                Some(deadline) => tokio::time::timeout_at(deadline, state_stream.next())
+                    .await
+                    .map_err(|_| {
+                        RpcStateSyncError::InvalidResponse(anyhow!(
+                            "Peer made no progress syncing {shard}: a version of {version_bytes} byte(s) was not \
+                             completed within its time allowance"
+                        ))
+                    })?,
+                None => state_stream.next().await,
+            };
+            let Some(result) = next else {
+                break;
+            };
             let msg = result?;
             let batch = match msg.response {
                 Some(sync_state_response::Response::Batch(batch)) => batch,
@@ -349,10 +429,22 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                             "Peer sent a state version proof in the middle of v{version}"
                         )));
                     }
+                    if let Some(proven) = last_proven_version &&
+                        proof.state_version <= proven
+                    {
+                        return Err(RpcStateSyncError::InvalidResponse(anyhow!(
+                            "Received a proof of v{} after this stream already proved v{proven}",
+                            proof.state_version
+                        )));
+                    }
                     let proven = self
                         .apply_version_proof(validator, proof, maybe_persisted_state_version)
                         .await?;
                     schedule.proven(proven);
+                    last_proven_version = Some(proven);
+                    last_committed_version = Some(proven);
+                    version_started = tokio::time::Instant::now();
+                    version_bytes = 0;
                     has_unverified_state = false;
                     rewind_point = maybe_persisted_state_version.unwrap_or(0);
                     // Every version up to the proven one is settled, so the stream must continue above it.
@@ -437,6 +529,13 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                     start_state_version
                 )));
             }
+            if self.checkpoint_state_version_is_trusted && batch.state_version > self.checkpoint_state_version {
+                return Err(RpcStateSyncError::ConflictsWithCheckpoint(anyhow!(
+                    "Received state version {} that is above the checkpoint state version {}.",
+                    batch.state_version,
+                    self.checkpoint_state_version
+                )));
+            }
 
             if expected_state_version.is_some_and(|v| v != batch.state_version) {
                 return Err(RpcStateSyncError::InvalidResponse(anyhow!(
@@ -455,11 +554,23 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                 )));
             }
 
+            if expected_state_version.is_none() &&
+                let Some(committed) = last_committed_version &&
+                state_version <= committed
+            {
+                return Err(RpcStateSyncError::InvalidResponse(anyhow!(
+                    "Received a new state version v{state_version} that is not above the last committed state version \
+                     v{committed}."
+                )));
+            }
+
             if let Some(schedule) = &proof_schedule {
                 schedule.check_batch(state_version)?;
             }
             last_state_version = state_version;
-            buffered.charge(state_version, batch.encoded_len())?;
+            let batch_bytes = batch.encoded_len();
+            buffered.charge(state_version, batch_bytes)?;
+            version_bytes = version_bytes.saturating_add(u64::try_from(batch_bytes).unwrap_or(u64::MAX));
 
             stats.total_transitions += batch.updates.len() as u64;
 
@@ -546,6 +657,9 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                 Ok::<_, RpcStateSyncError>(())
             })?;
             has_unverified_state = true;
+            last_committed_version = Some(state_version);
+            version_started = tokio::time::Instant::now();
+            version_bytes = 0;
         }
 
         // The stream ended without a SyncComplete - the peer closed early, so the sync is unverified.
@@ -553,6 +667,33 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
             "State sync stream for {shard} ended without a completion marker"
         )))
     }
+}
+
+/// True if `err` is a failure of this node's own storage or services rather than anything a peer sent.
+fn is_local_failure(err: &RpcStateSyncError) -> bool {
+    matches!(
+        err,
+        RpcStateSyncError::StorageError(_) |
+            RpcStateSyncError::EpochManagerError(_) |
+            RpcStateSyncError::TransactionPoolError(_) |
+            RpcStateSyncError::InvariantError { .. }
+    )
+}
+
+/// The instant by which a version started at `started` must be completed: `base` plus the time `bytes` take at
+/// `bytes_per_sec`. A missing or zero `base`, or a deadline too far off to represent, sets none.
+fn version_deadline(
+    started: tokio::time::Instant,
+    base: Option<Duration>,
+    bytes: u64,
+    bytes_per_sec: u64,
+) -> Option<tokio::time::Instant> {
+    let base = base.filter(|base| !base.is_zero())?;
+    let extension = match bytes_per_sec {
+        0 => Duration::ZERO,
+        rate => Duration::from_millis(bytes.saturating_mul(1000) / rate),
+    };
+    started.checked_add(base)?.checked_add(extension)
 }
 
 /// Rejects a state version with a transition that does not apply cleanly to local state: creating a substate that
@@ -788,6 +929,17 @@ mod tests {
                 shard: shard.as_u32(),
             })),
         })
+    }
+
+    fn batch_with_more(
+        state_version: Version,
+        updates: Vec<SubstateUpdateProof>,
+    ) -> Result<SyncStateResponse, RpcStatus> {
+        let mut response = batch(state_version, updates)?;
+        if let Some(sync_state_response::Response::Batch(batch)) = response.response.as_mut() {
+            batch.has_more = true;
+        }
+        Ok(response)
     }
 
     fn stream_of(versions: &Versions) -> Vec<Result<SyncStateResponse, RpcStatus>> {
@@ -1071,7 +1223,7 @@ mod tests {
         shard: Shard,
         updates: Vec<SubstateUpdateProof>,
     ) -> Option<Result<Option<Version>, RpcStateSyncError>> {
-        let sync = ShardSync::new(NETWORK, NUM_PRESHARDS, store, shard, SPARSE_MERKLE_PLACEHOLDER_HASH, 0);
+        let sync = ShardSync::new(NETWORK, NUM_PRESHARDS, store, shard, SPARSE_MERKLE_PLACEHOLDER_HASH, 1);
         let stalled = stream::iter(vec![batch_in(shard, 1, updates)]).chain(stream::pending());
         sync.sync_from_stream(&mut StateSyncStats::default(), None, stalled)
             .now_or_never()
@@ -1342,5 +1494,439 @@ mod tests {
         assert!(matches!(err, RpcStateSyncError::StateRootMismatch { .. }), "{err}");
         assert_eq!(local_version(&store), Some(N));
         assert!(substate(&store, POISON).is_none());
+    }
+
+    #[tokio::test]
+    async fn a_second_terminal_batch_at_a_committed_version_is_rejected_before_it_is_buffered() {
+        let (store, _tmp) = create_store();
+        let checkpoint = vec![(1, vec![create(HONEST)])];
+        let sync = ShardSync::new(
+            NETWORK,
+            NUM_PRESHARDS,
+            &store,
+            shard(),
+            root_after(&checkpoint),
+            version_after(&checkpoint),
+        );
+        let mut stats = StateSyncStats::default();
+
+        let err = sync
+            .apply_stream(
+                &mut stats,
+                None,
+                stream::iter(vec![
+                    batch(1, vec![create(HONEST)]),
+                    batch(1, vec![create(POISON)]),
+                    complete(1),
+                ]),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(&err, RpcStateSyncError::InvalidResponse(e) if e.to_string().contains("not above the last committed state version v1")),
+            "{err}"
+        );
+        assert_eq!(stats.total_transitions, 1);
+        assert_eq!(local_version(&store), Some(1));
+        assert!(substate(&store, HONEST).is_some_and(|s| s.is_up()));
+        assert!(substate(&store, POISON).is_none());
+        assert_eq!(rewind_point(&store), Some(0));
+    }
+
+    #[tokio::test]
+    async fn a_version_streamed_over_several_batches_is_committed_whole() {
+        let (store, _tmp) = create_store();
+        let checkpoint = vec![(1, vec![create(HONEST), create(2)])];
+
+        let synced = sync(&store, &checkpoint, vec![
+            batch_with_more(1, vec![create(HONEST)]),
+            batch(1, vec![create(2)]),
+            complete(1),
+        ])
+        .await
+        .unwrap();
+
+        assert_eq!(synced, Some(1));
+        assert!(substate(&store, HONEST).is_some_and(|s| s.is_up()));
+        assert!(substate(&store, 2).is_some_and(|s| s.is_up()));
+        assert_eq!(rewind_point(&store), None);
+    }
+
+    /// `count` versions, each creating one substate.
+    fn unproven_versions(count: u64) -> Versions {
+        (1..=count)
+            .map(|version| (version, vec![create(u8::try_from(version).unwrap())]))
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn a_batch_above_the_checkpoint_is_rejected_before_it_is_buffered() {
+        let (store, _tmp) = create_store();
+        let checkpoint = vec![(1, vec![create(HONEST)])];
+        let sync = ShardSync::new(
+            NETWORK,
+            NUM_PRESHARDS,
+            &store,
+            shard(),
+            root_after(&checkpoint),
+            version_after(&checkpoint),
+        )
+        .with_trusted_checkpoint_version(true);
+        let mut stats = StateSyncStats::default();
+
+        let err = sync
+            .sync_from_stream(
+                &mut stats,
+                None,
+                stream::iter(vec![
+                    batch(1, vec![create(HONEST)]),
+                    batch(2, vec![create(POISON)]),
+                    complete(2),
+                ]),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(&err, RpcStateSyncError::ConflictsWithCheckpoint(e) if e.to_string().contains("above the checkpoint state version 1")),
+            "{err}"
+        );
+        assert_eq!(stats.total_transitions, 1);
+        assert!(substate(&store, POISON).is_none());
+        assert_eq!(local_version(&store), None);
+    }
+
+    #[tokio::test]
+    async fn an_untrusted_checkpoint_version_does_not_bound_the_stream() {
+        let (store, _tmp) = create_store();
+        let checkpoint = vec![(1, vec![create(HONEST)])];
+        let sync = ShardSync::new(
+            NETWORK,
+            NUM_PRESHARDS,
+            &store,
+            shard(),
+            root_after(&checkpoint),
+            version_after(&checkpoint),
+        );
+        let mut stats = StateSyncStats::default();
+
+        let err = sync
+            .sync_from_stream(
+                &mut stats,
+                None,
+                stream::iter(vec![
+                    batch(1, vec![create(HONEST)]),
+                    batch(2, vec![create(POISON)]),
+                    complete(2),
+                ]),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, RpcStateSyncError::StateRootMismatch { .. }), "{err}");
+        assert_eq!(stats.total_transitions, 2);
+        assert_eq!(local_version(&store), None);
+    }
+
+    #[tokio::test]
+    async fn a_replayed_proof_is_rejected() {
+        let (store, _tmp) = create_store();
+        let checkpoint = versions_to_proof_point();
+        let mut responses = stream_of(&checkpoint);
+        responses.push(version_proof(N, root_after(&checkpoint)));
+        responses.push(version_proof(N, root_after(&checkpoint)));
+        responses.push(complete(N));
+
+        let err = sync_with_proofs(&store, &checkpoint, responses).await.unwrap_err();
+
+        assert!(
+            matches!(&err, RpcStateSyncError::InvalidResponse(e) if e.to_string().contains("already proved")),
+            "{err}"
+        );
+    }
+
+    fn sync_with_timeout<'a, TStore: StateStore>(
+        store: &'a TStore,
+        checkpoint: &Versions,
+        timeout: Duration,
+    ) -> ShardSync<'a, TStore> {
+        ShardSync::new(
+            NETWORK,
+            NUM_PRESHARDS,
+            store,
+            shard(),
+            root_after(checkpoint),
+            version_after(checkpoint),
+        )
+        .with_progress_timeout(timeout)
+    }
+
+    fn is_no_progress(err: &RpcStateSyncError) -> bool {
+        matches!(err, RpcStateSyncError::InvalidResponse(e) if e.to_string().contains("made no progress"))
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_stalled_stream_is_abandoned() {
+        let (store, _tmp) = create_store();
+        let checkpoint = vec![(1, vec![create(HONEST), create(2)])];
+        let stalled = stream::iter(vec![batch_with_more(1, vec![create(HONEST)])]).chain(stream::pending());
+
+        let err = sync_with_timeout(&store, &checkpoint, Duration::from_millis(50))
+            .sync_from_stream(&mut StateSyncStats::default(), None, stalled)
+            .await
+            .unwrap_err();
+
+        assert!(is_no_progress(&err), "{err}");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_stream_that_trickles_out_one_version_is_abandoned() {
+        let (store, _tmp) = create_store();
+        let checkpoint = vec![(1, vec![create(HONEST)])];
+        let trickle = stream::repeat_with(|| batch_with_more(1, vec![create(HONEST)])).then(|response| async {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            response
+        });
+
+        let err = sync_with_timeout(&store, &checkpoint, Duration::from_millis(100))
+            .sync_from_stream(&mut StateSyncStats::default(), None, Box::pin(trickle))
+            .await
+            .unwrap_err();
+
+        assert!(is_no_progress(&err), "{err}");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_stream_that_keeps_committing_versions_outlasts_the_progress_timeout() {
+        let (store, _tmp) = create_store();
+        let checkpoint = unproven_versions(5);
+        let mut responses = stream_of(&checkpoint);
+        responses.push(complete(5));
+        let paced = stream::iter(responses).then(|response| async {
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            response
+        });
+
+        sync_with_timeout(&store, &checkpoint, Duration::from_millis(80))
+            .sync_from_stream(&mut StateSyncStats::default(), None, Box::pin(paced))
+            .await
+            .unwrap();
+
+        assert_eq!(local_version(&store), Some(5));
+    }
+
+    #[tokio::test]
+    async fn a_transport_failure_after_committing_a_version_is_the_peer_s_fault() {
+        let (store, _tmp) = create_store();
+        let checkpoint = vec![(1, vec![create(HONEST)]), (2, vec![create(2)])];
+
+        let err = sync(&store, &checkpoint, vec![
+            batch(1, vec![create(HONEST)]),
+            Err(RpcStatus::general("connection lost")),
+        ])
+        .await
+        .unwrap_err();
+
+        assert!(
+            matches!(&err, RpcStateSyncError::InvalidResponse(e) if e.to_string().contains("after committing unverified state")),
+            "{err}"
+        );
+        assert_eq!(local_version(&store), None);
+    }
+
+    #[tokio::test]
+    async fn a_transport_failure_before_committing_a_version_stays_a_transport_failure() {
+        let (store, _tmp) = create_store();
+        let checkpoint = vec![(1, vec![create(HONEST), create(2)])];
+
+        let err = sync(&store, &checkpoint, vec![
+            batch_with_more(1, vec![create(HONEST)]),
+            Err(RpcStatus::general("connection lost")),
+        ])
+        .await
+        .unwrap_err();
+
+        assert!(matches!(err, RpcStateSyncError::RpcError(_)), "{err}");
+    }
+
+    #[test]
+    fn a_version_s_deadline_is_its_base_allowance_plus_its_bytes_at_the_minimum_throughput() {
+        let now = tokio::time::Instant::now();
+        let second = Duration::from_secs(1);
+        assert_eq!(version_deadline(now, None, 0, 0), None);
+        assert_eq!(version_deadline(now, Some(Duration::ZERO), 1000, 100), None);
+        assert_eq!(version_deadline(now, Some(Duration::MAX), 0, 0), None);
+        assert_eq!(version_deadline(now, Some(second), 1000, 0), Some(now + second));
+        assert_eq!(version_deadline(now, Some(second), 1000, 500), Some(now + 3 * second));
+    }
+
+    /// Rejects every commit proof with `error`.
+    struct FailWith(fn() -> RpcStateSyncError);
+
+    impl CommitProofValidator for FailWith {
+        async fn validate(&self, _commit_proof: &CommittedBlockProof) -> Result<(), RpcStateSyncError> {
+            Err((self.0)())
+        }
+    }
+
+    async fn sync_with_failing_proof(
+        store: &RocksDbStateStore<String>,
+        error: fn() -> RpcStateSyncError,
+    ) -> RpcStateSyncError {
+        let checkpoint = versions_to_proof_point();
+        let validator = FailWith(error);
+        let mut responses = stream_of(&checkpoint);
+        responses.push(version_proof(N, root_after(&checkpoint)));
+        responses.push(complete(N));
+        ShardSync::new(
+            NETWORK,
+            NUM_PRESHARDS,
+            store,
+            shard(),
+            root_after(&checkpoint),
+            version_after(&checkpoint),
+        )
+        .with_version_proofs(&validator)
+        .sync_from_stream(&mut StateSyncStats::default(), None, stream::iter(responses))
+        .await
+        .unwrap_err()
+    }
+
+    #[tokio::test]
+    async fn a_peer_failure_after_committing_a_version_is_the_peer_s_fault() {
+        let (store, _tmp) = create_store();
+
+        let err = sync_with_failing_proof(&store, || RpcStateSyncError::NoCommittees(EPOCH)).await;
+
+        assert!(
+            matches!(&err, RpcStateSyncError::InvalidResponse(e) if e.to_string().contains("after committing unverified state")),
+            "{err}"
+        );
+        assert_eq!(local_version(&store), None);
+    }
+
+    #[tokio::test]
+    async fn a_local_failure_after_committing_a_version_is_not_the_peer_s_fault() {
+        let (store, _tmp) = create_store();
+
+        let err = sync_with_failing_proof(&store, || {
+            RpcStateSyncError::EpochManagerError(tari_epoch_manager::EpochManagerError::ReceiveError)
+        })
+        .await;
+
+        assert!(matches!(err, RpcStateSyncError::EpochManagerError(_)), "{err}");
+        assert_eq!(local_version(&store), None);
+    }
+
+    fn encoded_batch_len(response: &Result<SyncStateResponse, RpcStatus>) -> u64 {
+        match &response.as_ref().unwrap().response {
+            Some(sync_state_response::Response::Batch(batch)) => batch.encoded_len() as u64,
+            _ => panic!("not a batch"),
+        }
+    }
+
+    fn paced(
+        responses: Vec<Result<SyncStateResponse, RpcStatus>>,
+        interval: Duration,
+    ) -> impl Stream<Item = Result<SyncStateResponse, RpcStatus>> + Unpin {
+        Box::pin(stream::iter(responses).then(move |response| async move {
+            tokio::time::sleep(interval).await;
+            response
+        }))
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_version_dripped_in_small_chunks_is_abandoned() {
+        let (store, _tmp) = create_store();
+        let seeds = 1..=20u8;
+        let checkpoint = vec![(1, seeds.clone().map(create).collect::<Vec<_>>())];
+        let mut responses = seeds
+            .map(|seed| batch_with_more(1, vec![create(seed)]))
+            .collect::<Vec<_>>();
+        responses.push(batch(1, vec![create(21)]));
+        // Each chunk earns a tenth of the time the peer takes to send it.
+        let rate = encoded_batch_len(&responses[0]) * 10;
+
+        let err = sync_with_timeout(&store, &checkpoint, Duration::from_secs(1))
+            .with_min_throughput(rate)
+            .sync_from_stream(
+                &mut StateSyncStats::default(),
+                None,
+                paced(responses, Duration::from_millis(500)),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(is_no_progress(&err), "{err}");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_large_version_streamed_at_the_minimum_throughput_outlasts_the_base_allowance() {
+        let (store, _tmp) = create_store();
+        let seeds = 1..=10u8;
+        let checkpoint = vec![(1, seeds.clone().map(create).collect::<Vec<_>>())];
+        let mut responses = seeds
+            .clone()
+            .map(|seed| batch_with_more(1, vec![create(seed)]))
+            .collect::<Vec<_>>();
+        responses.pop();
+        responses.push(batch(1, vec![create(10)]));
+        responses.push(complete(1));
+        // Each chunk earns a second and arrives after half a second, so the version takes 5.5s against a 1s base.
+        let rate = encoded_batch_len(&responses[0]);
+
+        sync_with_timeout(&store, &checkpoint, Duration::from_secs(1))
+            .with_min_throughput(rate)
+            .sync_from_stream(
+                &mut StateSyncStats::default(),
+                None,
+                paced(responses, Duration::from_millis(500)),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(local_version(&store), Some(1));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_peer_committing_small_versions_slowly_is_abandoned() {
+        let (store, _tmp) = create_store();
+        let checkpoint = unproven_versions(5);
+        let mut responses = stream_of(&checkpoint);
+        responses.push(complete(5));
+
+        let err = sync_with_timeout(&store, &checkpoint, Duration::from_secs(1))
+            .with_min_throughput(1024 * 1024)
+            .sync_from_stream(
+                &mut StateSyncStats::default(),
+                None,
+                paced(responses, Duration::from_millis(1500)),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(is_no_progress(&err), "{err}");
+        assert_eq!(local_version(&store), None);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_zero_progress_timeout_sets_no_limit() {
+        let (store, _tmp) = create_store();
+        let checkpoint = unproven_versions(3);
+        let mut responses = stream_of(&checkpoint);
+        responses.push(complete(3));
+
+        sync_with_timeout(&store, &checkpoint, Duration::ZERO)
+            .with_min_throughput(1024 * 1024)
+            .sync_from_stream(
+                &mut StateSyncStats::default(),
+                None,
+                paced(responses, Duration::from_secs(3600)),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(local_version(&store), Some(3));
     }
 }
