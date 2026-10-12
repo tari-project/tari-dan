@@ -36,6 +36,7 @@ impl SubstateUpdateBatch {
                 for transition in transitions {
                     if let SubstateTransition::Down { id } = transition {
                         downed.push(DownedSubstate {
+                            epoch: self.epoch,
                             shard: *shard,
                             id: id.clone(),
                             state_version: *state_version,
@@ -48,9 +49,10 @@ impl SubstateUpdateBatch {
     }
 }
 
-/// A substate taken down at `state_version` of `shard`.
+/// A substate taken down at `state_version` of `shard`, in `epoch`.
 #[derive(Debug, Clone)]
 pub struct DownedSubstate {
+    pub epoch: Epoch,
     pub shard: Shard,
     pub id: VersionedSubstateId,
     pub state_version: Version,
