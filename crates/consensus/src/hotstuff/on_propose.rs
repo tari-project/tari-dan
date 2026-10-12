@@ -432,7 +432,7 @@ where TConsensusSpec: ConsensusSpec
         // No need to include evidence from justified block if no transactions are included in the next block
         if !batch.transactions.is_empty() {
             // A replica evaluates this block as: the newly justified block, then the commands in block order
-            // (foreign proposals sort before the transaction commands, see `Command`'s ordering), all against
+            // (foreign proposals sort before the transaction commands, see `BlockCommands`), all against
             // a single change set. The commands generated below must be derived from that same sequence, or
             // the proposer commits to an atom no replica can reproduce and the block is unvotable.
             // TODO: we dont need to process transactions here that are not in the batch

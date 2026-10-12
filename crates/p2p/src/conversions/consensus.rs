@@ -624,7 +624,7 @@ impl TryFrom<proto::consensus::Block> for consensus_models::Block {
                 .as_ref()
                 .map(|h| to_hex(&h.proposed_by))
                 .unwrap_or_else(|| "<no header>".to_string());
-            anyhow!("Block from {proposer} lists its commands out of canonical order: {e}")
+            anyhow!("Block from {proposer} has invalid commands: {e}")
         })?;
 
         let justify = value
@@ -1327,7 +1327,7 @@ mod tests {
             let mut block = proto_block();
             block.commands.reverse();
             let err = consensus_models::Block::try_from(block).unwrap_err();
-            assert!(err.to_string().contains("out of canonical order"), "{err}");
+            assert!(err.to_string().contains("canonical order places it first"), "{err}");
         }
 
         #[test]
