@@ -46,6 +46,17 @@ pub enum RpcStateSyncError {
 }
 
 impl RpcStateSyncError {
+    /// True if the error shows that the streaming peer served invalid state.
+    pub fn is_peer_fault(&self) -> bool {
+        matches!(
+            self,
+            RpcStateSyncError::InvalidResponse(_) |
+                RpcStateSyncError::StateRootMismatch { .. } |
+                RpcStateSyncError::ConflictsWithCheckpoint(_) |
+                RpcStateSyncError::StateTreeError(_)
+        )
+    }
+
     pub fn error_at_remote(self) -> Result<RpcStateSyncError, RpcStateSyncError> {
         match &self {
             RpcStateSyncError::InvalidResponse(_) | RpcStateSyncError::RpcError(_) => Err(self),
