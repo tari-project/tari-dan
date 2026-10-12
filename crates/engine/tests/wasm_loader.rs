@@ -6,6 +6,8 @@
 //! module that declares a start function, an oversized table, or a malformed ABI section, and those
 //! are exactly the shapes a published binary may arrive in.
 
+use std::cell::Cell;
+
 use tari_engine::wasm::{WasmExecutionError, WasmModule, WasmValidationError};
 use tari_engine_types::{
     commit_result::{ExecutionFailureCode, RejectReason, TransactionResult},
@@ -38,9 +40,16 @@ fn wat_bytes(bytes: &[u8]) -> String {
 /// `[u32 alloc_len][payload]` pair at offset 16 — clear of that region — whose payload is the
 /// encoded unit the declared return type expects.
 fn template_module(parts: &str) -> Vec<u8> {
+    template_module_importing("", parts)
+}
+
+/// [`template_module`] for a module that also imports host functions, which the text format
+/// requires to come before any definition.
+fn template_module_importing(imports: &str, parts: &str) -> Vec<u8> {
     let wat = format!(
         r#"
         (module
+          {imports}
           (memory (export "memory") 3)
           (data (i32.const 16) "\05\00\00\00\80")
           {parts}
@@ -325,6 +334,11 @@ fn rejects_an_unexpected_exported_function() {
 /// published: these tests are about what the engine does with a template while it runs, not about
 /// the publishing path.
 fn load_and_call(code: Vec<u8>) -> Result<u64, RejectReason> {
+    let (mut test, address) = load(code);
+    call_main(&mut test, address)
+}
+
+fn load(code: Vec<u8>) -> (TemplateTest, TemplateAddress) {
     let address: TemplateAddress = hash_template_code(&code);
     let mut builder = Package::builder();
     builder.add_all_builtin_templates();
@@ -333,7 +347,10 @@ fn load_and_call(code: Vec<u8>) -> Result<u64, RejectReason> {
         .expect("template was rejected by the loader");
     let mut test = TemplateTest::from_package(builder.build());
     test.bootstrap_state();
+    (test, address)
+}
 
+fn call_main(test: &mut TemplateTest, address: TemplateAddress) -> Result<u64, RejectReason> {
     let result = test
         .try_execute(
             Transaction::builder_localnet(Epoch(1))
@@ -708,5 +725,215 @@ fn declared_table_capacity_is_charged_without_any_element_segment() {
     assert!(
         instantiation_points(&shape) >= SLOTS * PER_TEMPLATE_TABLE_SLOT,
         "a {SLOTS}-slot table was not charged for"
+    );
+}
+
+/// What the engine wrote to the validator's log while one call ran.
+#[derive(Debug, Clone, Copy, Default)]
+struct Logged {
+    records: usize,
+    bytes: usize,
+}
+
+thread_local! {
+    static LOGGED: Cell<Logged> = const { Cell::new(Logged { records: 0, bytes: 0 }) };
+}
+
+/// Counts records at the levels a validator logs by default. The engine runs a call on the thread
+/// that submits it, so a thread-local tally sees only the test's own call.
+struct CountingLogger;
+
+impl log::Log for CountingLogger {
+    fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
+        metadata.level() <= log::Level::Info
+    }
+
+    fn log(&self, record: &log::Record<'_>) {
+        if !self.enabled(record.metadata()) {
+            return;
+        }
+        let bytes = record.args().to_string().len();
+        LOGGED.with(|logged| {
+            let Logged { records, bytes: total } = logged.get();
+            logged.set(Logged {
+                records: records + 1,
+                bytes: total + bytes,
+            });
+        });
+    }
+
+    fn flush(&self) {}
+}
+
+/// Loads `code` and calls its `main`, tallying what the call alone logs.
+fn call_logged(code: Vec<u8>) -> (Result<u64, RejectReason>, Logged) {
+    static LOGGER: CountingLogger = CountingLogger;
+    // Each test installs the same logger; only the first install in a process takes.
+    let _ignore = log::set_logger(&LOGGER);
+    log::set_max_level(log::LevelFilter::Info);
+
+    let (mut test, address) = load(code);
+    LOGGED.with(|logged| logged.set(Logged::default()));
+    let result = call_main(&mut test, address);
+    (result, LOGGED.with(Cell::get))
+}
+
+/// Offset and length of an all-zero, valid UTF-8 run in [`template_module`]'s memory, larger than
+/// any panic message the engine keeps.
+const OVERSIZED_PANIC: (u32, u32) = (65536, 131072);
+
+const ON_PANIC_IMPORT: &str = r#"(import "env" "on_panic" (func $on_panic (param i32 i32 i32 i32)))"#;
+
+/// `on_panic` is a host call rather than a trap, so a template is free to make it any number of
+/// times. Only the first report of an invocation is kept, and none of them is written to the log
+/// at the levels a validator runs with.
+#[test]
+fn repeated_panic_reports_keep_the_first_and_are_not_logged() {
+    let (offset, len) = OVERSIZED_PANIC;
+    let code = template_module_importing(
+        ON_PANIC_IMPORT,
+        &format!(
+            r#"
+        (data (i32.const 64) "first")
+        (func (export "tari_alloc") (param i32) (result i32) (i32.const 1024))
+        (func (export "tari_free") (param i32))
+        (func (export "Buggy_main") (param i32 i32) (result i32)
+          (local $i i32)
+          (call $on_panic (i32.const 64) (i32.const 5) (i32.const 1) (i32.const 1))
+          (local.set $i (i32.const 200))
+          (loop $again
+            (call $on_panic (i32.const {offset}) (i32.const {len}) (i32.const 2) (i32.const 1))
+            (local.set $i (i32.sub (local.get $i) (i32.const 1)))
+            (br_if $again (local.get $i)))
+          unreachable)
+        "#
+        ),
+    );
+
+    let (result, logged) = call_logged(code);
+    let reason = result.expect_err("a trapping call was accepted");
+    let RejectReason::ExecutionFailure { message, .. } = reason else {
+        panic!("expected an execution failure, got {reason:?}");
+    };
+    assert!(
+        message.contains("first"),
+        "the first panic was not kept: {message:.200}"
+    );
+    assert!(
+        message.len() < 1024,
+        "a later panic replaced the first: {} bytes",
+        message.len()
+    );
+    assert!(
+        logged.bytes < 4096,
+        "{} bytes logged across {} records",
+        logged.bytes,
+        logged.records
+    );
+}
+
+/// A panic message is truncated before the engine reads it, so an oversized one never reaches the
+/// transaction result or the log at full size.
+#[test]
+fn an_oversized_panic_message_is_truncated() {
+    let (offset, len) = OVERSIZED_PANIC;
+    let code = template_module_importing(
+        ON_PANIC_IMPORT,
+        &format!(
+            r#"
+        (func (export "tari_alloc") (param i32) (result i32) (i32.const 1024))
+        (func (export "tari_free") (param i32))
+        (func (export "Buggy_main") (param i32 i32) (result i32)
+          (call $on_panic (i32.const {offset}) (i32.const {len}) (i32.const 1) (i32.const 1))
+          unreachable)
+        "#
+        ),
+    );
+
+    let (result, logged) = call_logged(code);
+    let reason = result.expect_err("a trapping call was accepted");
+    let RejectReason::ExecutionFailure { message, .. } = reason else {
+        panic!("expected an execution failure, got {reason:?}");
+    };
+    let limit = limits::ENGINE_LIMITS.max_panic_message_size;
+    assert!(
+        message.len() <= limit + 1024,
+        "a {} byte panic message was kept",
+        message.len()
+    );
+    assert!(
+        logged.bytes <= 2 * limit,
+        "{} bytes logged across {} records",
+        logged.bytes,
+        logged.records
+    );
+}
+
+const TARI_ENGINE_IMPORT: &str = r#"(import "env" "tari_engine" (func $tari_engine (param i32 i32 i32) (result i32)))"#;
+
+/// A template that ignores the null a failed engine call returns can go on making calls that fail.
+/// Any one of them fails the transaction, and only the first is logged.
+#[test]
+fn repeated_failed_engine_calls_are_logged_once() {
+    let code = template_module_importing(
+        TARI_ENGINE_IMPORT,
+        r#"
+        (func (export "tari_alloc") (param i32) (result i32) (i32.const 1024))
+        (func (export "tari_free") (param i32))
+        (func (export "Buggy_main") (param i32 i32) (result i32)
+          (local $i i32)
+          (local.set $i (i32.const 200))
+          (loop $again
+            (drop (call $tari_engine (i32.const 0x7fff) (i32.const 0) (i32.const 0)))
+            (local.set $i (i32.sub (local.get $i) (i32.const 1)))
+            (br_if $again (local.get $i)))
+          (i32.const 20))
+        "#,
+    );
+
+    let (result, logged) = call_logged(code);
+    result.expect_err("a call whose engine calls failed was accepted");
+    assert!(logged.records < 10, "{} records logged", logged.records);
+}
+
+/// A template log entry is echoed to the validator's log only once the engine has retained it, so
+/// entries refused for their size or number are not written out either.
+#[test]
+fn refused_template_log_entries_are_not_logged() {
+    use tari_template_lib::{args::EmitLogArg, types::LogLevel};
+
+    let arg = tari_bor::encode(&EmitLogArg {
+        message: "x".repeat(2 * limits::ENGINE_LIMITS.max_log_size_bytes),
+        level: LogLevel::Error,
+    })
+    .unwrap();
+    let arg_len = arg.len();
+    let code = template_module_importing(
+        TARI_ENGINE_IMPORT,
+        &format!(
+            r#"
+        (data (i32.const 65536) "{}")
+        (func (export "tari_alloc") (param i32) (result i32) (i32.const 1024))
+        (func (export "tari_free") (param i32))
+        (func (export "Buggy_main") (param i32 i32) (result i32)
+          (local $i i32)
+          (local.set $i (i32.const 200))
+          (loop $again
+            (drop (call $tari_engine (i32.const 0) (i32.const 65536) (i32.const {arg_len})))
+            (local.set $i (i32.sub (local.get $i) (i32.const 1)))
+            (br_if $again (local.get $i)))
+          (i32.const 20))
+        "#,
+            wat_bytes(&arg)
+        ),
+    );
+
+    let (result, logged) = call_logged(code);
+    result.expect_err("a call whose log entries were refused was accepted");
+    assert!(
+        logged.bytes < 4096,
+        "{} bytes logged across {} records",
+        logged.bytes,
+        logged.records
     );
 }

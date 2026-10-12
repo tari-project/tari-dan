@@ -244,8 +244,9 @@ impl<TStore: StateReader> StateTracker<TStore> {
         self.write_with(|state| state.push_event(event))
     }
 
-    pub fn add_log(&self, log: LogEntry) -> Result<(), RuntimeError> {
-        self.write_with(|state| state.push_log(log))
+    /// Adds `log` to the transaction's logs, handing it to `on_added` only if it was accepted.
+    pub fn add_log<F: FnOnce(&LogEntry)>(&self, log: LogEntry, on_added: F) -> Result<(), RuntimeError> {
+        self.write_with(|state| state.push_log(log).map(on_added))
     }
 
     /// Returns `true` the first time a given template address is seen within this transaction's

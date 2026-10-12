@@ -1959,7 +1959,7 @@ impl<TStore: StateReader> WorkingState<TStore> {
         &self.proofs
     }
 
-    pub fn push_log(&mut self, log: LogEntry) -> Result<(), RuntimeError> {
+    pub fn push_log(&mut self, log: LogEntry) -> Result<&LogEntry, RuntimeError> {
         // TIL: that String::len returns the number of bytes, not UTF8 characters
         if log.message.len() > limits::ENGINE_LIMITS.max_log_size_bytes {
             return Err(LimitError::LogSizeExceeded {
@@ -1972,7 +1972,7 @@ impl<TStore: StateReader> WorkingState<TStore> {
             return Err(LimitError::MaxLogsExceeded.into());
         }
         self.logs.push(log);
-        Ok(())
+        Ok(self.logs.last().expect("a log was just pushed"))
     }
 
     pub fn take_logs(&mut self) -> Vec<LogEntry> {
