@@ -2,63 +2,17 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 //! Heap held by the inbound consensus message queue, against the bytes it charges to its budget.
-//!
-//! Kept in a test binary of its own because it installs a counting global allocator, and any other
-//! test running alongside it would be counted too. The tests here take [`SERIAL`] for the same reason.
 
-use std::{
-    alloc::{GlobalAlloc, Layout, System},
-    collections::HashMap,
-    sync::{
-        Mutex,
-        atomic::{AtomicUsize, Ordering},
-    },
-};
+mod support;
+
+use std::{collections::HashMap, sync::atomic::Ordering};
 
 use libp2p::futures::executor::block_on;
 use prost::Message;
+use support::{OUTSTANDING, PEAK, SERIAL};
 use tari_networking::{MessagingMode, PeerId, message_queue};
 use tari_ootle_p2p::proto;
-use tari_swarm::messaging::{BytesCodec, Codec};
-
-static SERIAL: Mutex<()> = Mutex::new(());
-
-/// The most bytes the direct messaging protocol accepts in one message.
-const MAX_MESSAGE_SIZE: usize = 4 * 1024 * 1024;
-
-struct Counting;
-
-static OUTSTANDING: AtomicUsize = AtomicUsize::new(0);
-
-unsafe impl GlobalAlloc for Counting {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let ptr = unsafe { System.alloc(layout) };
-        if !ptr.is_null() {
-            OUTSTANDING.fetch_add(layout.size(), Ordering::Relaxed);
-        }
-        ptr
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        OUTSTANDING.fetch_sub(layout.size(), Ordering::Relaxed);
-        unsafe { System.dealloc(ptr, layout) };
-    }
-
-    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        let new_ptr = unsafe { System.realloc(ptr, layout, new_size) };
-        if !new_ptr.is_null() {
-            if new_size >= layout.size() {
-                OUTSTANDING.fetch_add(new_size - layout.size(), Ordering::Relaxed);
-            } else {
-                OUTSTANDING.fetch_sub(layout.size() - new_size, Ordering::Relaxed);
-            }
-        }
-        new_ptr
-    }
-}
-
-#[global_allocator]
-static ALLOC: Counting = Counting;
+use tari_swarm::messaging::{BytesCodec, Codec, MAX_MESSAGE_SIZE};
 
 /// A length-prefixed frame carrying `message`, as the direct messaging protocol puts it on the wire.
 fn frame(message: &proto::consensus::HotStuffMessage) -> Vec<u8> {
@@ -92,10 +46,19 @@ fn proposal_of_empty_commands() -> proto::consensus::HotStuffMessage {
     message(commands)
 }
 
+/// Heap measured while a frame is received into the inbound queue.
+struct Received {
+    /// Bytes the queue charged for the message.
+    charged: usize,
+    /// Heap the queued message holds.
+    held: usize,
+    /// The most heap taken at once while receiving it, beyond the frame itself.
+    peak: usize,
+}
+
 /// Receives `frame` from a peer as the networking worker does, reading it with the direct messaging protocol's codec
-/// and admitting it to the inbound queue, and returns the bytes the inbound queue
-/// charged for it and the heap held while it sits in the queue.
-fn receive_into_queue(frame: Vec<u8>) -> (usize, usize) {
+/// and admitting it to the inbound queue.
+fn receive_into_queue(frame: Vec<u8>) -> Received {
     let (tx, rx) = message_queue(16, 128 * 1024 * 1024);
     let mode = MessagingMode::Enabled {
         tx_messages: tx.clone(),
@@ -103,25 +66,28 @@ fn receive_into_queue(frame: Vec<u8>) -> (usize, usize) {
     };
 
     let baseline = OUTSTANDING.load(Ordering::Relaxed);
+    PEAK.store(baseline, Ordering::Relaxed);
     let (_, message) = block_on(BytesCodec.decode_from(&mut frame.as_slice())).unwrap();
     drop(frame);
     mode.send_message(PeerId::random(), message).unwrap();
     let held = OUTSTANDING.load(Ordering::Relaxed).saturating_sub(baseline);
+    let peak = PEAK.load(Ordering::Relaxed).saturating_sub(baseline);
     let charged = tx.queued_bytes();
 
     drop(rx);
-    (charged, held)
+    Received { charged, held, peak }
 }
 
-/// The inbound queue's byte budget is what bounds the memory its queued messages hold, so a queued message must
-/// hold no more heap than the queue charges for it, however its payload is laid out.
+/// The inbound queue's byte budget is what bounds the memory its queued messages hold, so receiving a message must
+/// cost about the bytes it arrived as, and the queued message must hold no more heap than the queue charges for it,
+/// however its payload is laid out.
 #[test]
 fn a_queued_message_holds_no_more_heap_than_the_queue_charges_for_it() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let frame = frame(&proposal_of_empty_commands());
     let wire_len = frame.len();
 
-    let (charged, held) = receive_into_queue(frame);
+    let Received { charged, held, peak } = receive_into_queue(frame);
 
     assert!(
         charged > 0 && charged <= wire_len,
@@ -132,5 +98,9 @@ fn a_queued_message_holds_no_more_heap_than_the_queue_charges_for_it() {
     assert!(
         held <= charged + slack,
         "a message charged {charged} bytes holds {held} bytes of heap in the queue"
+    );
+    assert!(
+        peak <= wire_len + slack,
+        "receiving a {wire_len} byte frame peaked at {peak} bytes of heap"
     );
 }
