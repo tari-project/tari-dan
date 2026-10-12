@@ -322,10 +322,11 @@ fn a_nested_return_value_is_charged_per_item() {
     let large_points = native_points_for(&mut test, "return_items_nested", args![template, large]);
 
     // The outer call passes `len` to the engine and returns the count, and both encodings widen
-    // with it.
+    // with it. The engine reads `len` three times: in the engine call's argument, in the call's
+    // arguments nested in it, and as the callee's argument nested in those.
     let width = |len: u32| tari_bor::encode(&len).unwrap().len() as u64;
     let count_charge = |len: u32| limits::return_value_points(width(len), 1);
-    let call_arg_charge = |len: u32| limits::engine_arg_scan_points(width(len));
+    let call_arg_charge = |len: u32| 3 * limits::engine_arg_points(width(len), 0);
     assert_eq!(
         large_points - small_points,
         return_value_charge(large) + count_charge(large) + call_arg_charge(large) -
@@ -400,9 +401,9 @@ fn engine_arg_shape(items: u32) -> (u64, u64) {
     (5 + u64::from(items), 1 + u64::from(items))
 }
 
-/// Scanning and decoding an engine call's argument runs on the host, outside the Wasmer meter, so
-/// the engine charges native points for each byte it scans and each item it decodes, whether or not
-/// the argument turns out to be one the op accepts.
+/// Walking and decoding an engine call's argument runs on the host, outside the Wasmer meter, so
+/// the engine charges native points for each byte and item it reads, whether or not the argument
+/// turns out to be one the op accepts.
 #[test]
 fn an_engine_call_argument_is_charged_per_byte_and_item() {
     let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
@@ -413,7 +414,7 @@ fn an_engine_call_argument_is_charged_per_byte_and_item() {
 
     let charge = |items| {
         let (bytes, items) = engine_arg_shape(items);
-        limits::engine_arg_scan_points(bytes) + limits::engine_arg_decode_points(items)
+        limits::engine_arg_points(bytes, items)
     };
     assert_eq!(
         large_points - small_points,
@@ -447,43 +448,107 @@ fn engine_call_in_fee_intent(items: u32) -> RejectReason {
     )
 }
 
-/// An argument whose scan alone is priced above what the transaction can cover fails it out of
-/// compute before the engine reads it.
+/// An argument holding more items than the transaction can pay for fails it out of compute. The
+/// engine reads no more of it than the transaction can pay for, and is paid for what it read: the
+/// credit is spent to within an item's price.
 #[test]
-fn an_unaffordable_engine_call_argument_scan_fails_out_of_compute() {
-    let items =
-        u32::try_from(limits::FREE_COMPUTE_GRACE_POINTS / limits::NativeExecutionPoints::PER_ENGINE_ARG_BYTE).unwrap();
-    let (bytes, _) = engine_arg_shape(items);
+fn an_unaffordable_engine_call_argument_fails_out_of_compute_once_paid_for_what_was_read() {
+    let per_item = limits::NativeExecutionPoints::PER_ENGINE_ARG_ITEM;
+    let items = u32::try_from(limits::FREE_COMPUTE_GRACE_POINTS / per_item + 1_000).unwrap();
 
+    let reason = engine_call_in_fee_intent(items);
     assert_reject_reason(
-        engine_call_in_fee_intent(items),
+        reason.clone(),
         format!(
             "requiring {} points exceeds the fee intent's",
-            limits::engine_arg_scan_points(bytes)
+            limits::engine_arg_points(0, 1)
         ),
+    );
+    let message = reason.to_string();
+    let consumed: u64 = message
+        .split("compute credit: ")
+        .nth(1)
+        .and_then(|rest| rest.split(' ').next())
+        .and_then(|consumed| consumed.parse().ok())
+        .unwrap_or_else(|| panic!("no consumed points in {message}"));
+    assert!(
+        consumed > limits::FREE_COMPUTE_GRACE_POINTS - per_item,
+        "the items read must be paid for: {consumed} of {} consumed",
+        limits::FREE_COMPUTE_GRACE_POINTS
     );
 }
 
-/// An argument whose scan is affordable but whose decode is not fails the transaction out of
-/// compute before the engine decodes it.
+/// `max_internal_call_size` sits at what a template can build in its linear memory, so building an
+/// argument that large runs a template out of memory, trapping before the engine sees it, where one
+/// a quarter that size reaches the engine.
 #[test]
-fn an_unaffordable_engine_call_argument_decode_fails_out_of_compute() {
-    // The scan takes a third of the credit, the decode the rest and more.
-    let items =
-        u32::try_from(limits::FREE_COMPUTE_GRACE_POINTS / 3 / limits::NativeExecutionPoints::PER_ENGINE_ARG_BYTE)
-            .unwrap();
-    let (bytes, decoded) = engine_arg_shape(items);
-    assert!(
-        limits::engine_arg_scan_points(bytes) + limits::engine_arg_decode_points(decoded) >
-            limits::FREE_COMPUTE_GRACE_POINTS,
-        "the decode must be priced above what the scan leaves of the credit for this test to reach it"
-    );
+fn a_template_cannot_build_an_engine_call_argument_at_the_size_limit() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let template = test.get_template_address(TEMPLATE_NAME);
+    let mut log_of_size = |len: usize| {
+        test.execute_expect_failure(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(template, "engine_log_of_size", args![u32::try_from(len).unwrap()])
+                .build_and_seal(test.secret_key()),
+            vec![],
+        )
+    };
 
-    assert_reject_reason(
-        engine_call_in_fee_intent(items),
-        format!(
-            "requiring {} points exceeds the fee intent's",
-            limits::engine_arg_decode_points(decoded)
-        ),
+    let limit = limits::ENGINE_LIMITS.max_internal_call_size;
+    assert_reject_reason(log_of_size(limit / 4), "Log entry of");
+    assert_reject_reason(log_of_size(limit), "Wasm RuntimeError: unreachable");
+}
+
+/// Native points a transaction calling `method` on a new `PushItToTheLimit` component is charged.
+fn native_points_for_method(test: &mut TemplateTest, method: &str, args: Vec<NamedArg>) -> u64 {
+    let component: ComponentAddress =
+        test.call_function(TEMPLATE_NAME, "new", args![Bytes::from(vec![0u8; 4])], vec![]);
+    test.execute_expect_success(
+        Transaction::builder_localnet(Epoch(1))
+            .call_method(component, method, args)
+            .build_and_seal(test.secret_key()),
+        vec![],
+    )
+    .native_execution_points
+}
+
+/// A component's state reaches the engine as a byte string inside an engine call's argument, one
+/// item there, and is decoded again as a value. That decode is charged for the items the state
+/// holds.
+#[test]
+fn a_component_state_is_charged_per_item_it_holds() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let (small, large) = (1u32, 30_000u32);
+
+    let small_points = native_points_for_method(&mut test, "set_items", args![small]);
+    let large_points = native_points_for_method(&mut test, "set_items", args![large]);
+
+    let items = u64::from(large - small);
+    assert!(
+        large_points - small_points >= limits::engine_arg_points(0, items),
+        "a state holding {items} more items must be charged for each: {} < {}",
+        large_points - small_points,
+        limits::engine_arg_points(0, items)
+    );
+}
+
+/// A cross-template call's arguments reach the engine as byte strings nested two deep in an engine
+/// call's argument, and are decoded again into the callee's call. That decode is charged for the
+/// items they hold.
+#[test]
+fn a_cross_template_call_argument_is_charged_per_item_it_holds() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let template = test.get_template_address(TEMPLATE_NAME);
+    let (small, large) = (1u32, 30_000u32);
+
+    let small_points = native_points_for(&mut test, "pass_items_nested", args![template, small]);
+    let large_points = native_points_for(&mut test, "pass_items_nested", args![template, large]);
+
+    let items = u64::from(large - small);
+    assert!(
+        large_points - small_points >= limits::engine_arg_points(0, items),
+        "an argument holding {items} more items must be charged for each: {} < {}",
+        large_points - small_points,
+        limits::engine_arg_points(0, items)
     );
 }

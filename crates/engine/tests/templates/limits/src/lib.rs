@@ -9,15 +9,30 @@ mod template {
 
     pub struct PushItToTheLimit {
         data: Bytes,
+        items: Vec<u32>,
     }
 
     impl PushItToTheLimit {
         pub fn new(data: Bytes) -> Self {
-            Self { data }
+            Self { data, items: Vec::new() }
         }
 
         pub fn set_data(&mut self, data: Bytes) {
             self.data = data;
+        }
+
+        /// Sets this component's items to `len` zeros, each a one-byte CBOR item in its state.
+        pub fn set_items(&mut self, len: u32) {
+            self.items = vec![0; len as usize];
+        }
+
+        /// Passes `len` zeros to `count_items` on `template` and returns the count that comes back.
+        pub fn pass_items_nested(template: TemplateAddress, len: u32) -> u32 {
+            TemplateManager::get(template).call("count_items", args![vec![0u32; len as usize]])
+        }
+
+        pub fn count_items(items: Vec<u32>) -> u32 {
+            items.len() as u32
         }
 
 
@@ -50,6 +65,12 @@ mod template {
 
         pub fn request_random_bytes(len: u32) -> Vec<u8> {
             rand::random_bytes(len)
+        }
+
+        /// Hands the engine a log message of `len` bytes. This costs a template the least memory an
+        /// engine call's argument can: the message and its encoding.
+        pub fn engine_log_of_size(len: u32) {
+            tari_template_lib::engine().emit_log(tari_template_lib::macros::LogLevel::Info, "a".repeat(len as usize));
         }
 
         pub fn emit_log_of_size(len: u32) {

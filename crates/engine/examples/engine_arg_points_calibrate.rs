@@ -1,20 +1,24 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-//! Prices the host-side handling of an engine call's argument in metering points.
+//! Prices the host-side decode of CBOR a template wrote in metering points.
 //!
-//! A template hands the engine up to `max_internal_call_size` bytes of CBOR with every engine call.
-//! The engine scans it for its item count and nesting depth, then decodes it into the op's argument
-//! type. Neither runs under the Wasmer meter. The scan reads every item head before the item count
-//! is known, so it is priced per byte at its densest, one item a byte. The decode is priced per item
-//! once the scan has counted them.
+//! A template hands the engine up to `max_internal_call_size` bytes of CBOR with every engine call,
+//! and the engine decodes it several times over, all outside the Wasmer meter:
 //!
-//! The scan is timed over arguments filling `max_internal_call_size` with the cheapest-to-encode
-//! item of each kind. The decode is timed over the op arguments that hold the most items for their
-//! size and decode in full: an invoke argument's `args` list of empty byte strings, and an event
-//! payload of small entries. An argument that fails its decode stops early and costs less. Both are
-//! converted to points at the same WASM points-per-millisecond rate `native_points_calibrate`
-//! derives, and by the same method, so the figures are comparable.
+//! - the engine call's argument, into the op's argument type;
+//! - each byte string nested in that argument, into the handler's argument types. The costliest is a component's state,
+//!   decoded as a `Value` that is indexed for well-known types before and after it replaces the old state, and compared
+//!   with it;
+//! - each argument of a cross-template call, nested a level further, decoded as a `Value` and encoded again into the
+//!   callee's `CallInfo`.
+//!
+//! Each decode is charged by `engine_arg_points` after a walk that counts the items and checks
+//! their nesting depth, so every figure below includes that walk. Each shape fills
+//! `max_internal_call_size` with the cheapest-to-encode item of its kind, so the worst of them
+//! bounds the per-item price. The per-byte price is the single byte string, which is nothing but
+//! copies. Both are converted to points at the same WASM points-per-millisecond rate
+//! `native_points_calibrate` derives, and by the same method, so the figures are comparable.
 //!
 //! Run with `--release`; a debug build measures nothing useful.
 
@@ -23,9 +27,11 @@ use std::{hint::black_box, time::Instant};
 use tari_engine::fees::FeeTable;
 use tari_engine_types::{
     fees::FeeSource,
+    indexed_value::IndexedWellKnownTypes,
     limits::{self, NativeExecutionPoints},
 };
 use tari_ootle_transaction::{Epoch, Transaction, args};
+use tari_template_abi::CallInfo;
 use tari_template_lib::{
     args::{ComponentAction, ComponentInvokeArg, ComponentRef, EmitEventArg},
     types::{Metadata, bytes::Bytes},
@@ -46,21 +52,29 @@ const MAX_FEE: u64 = 60_000_000;
 
 const MAX: usize = limits::ENGINE_LIMITS.max_internal_call_size;
 
+/// The CBOR head of a definite-length item of `major` type and `len`.
+fn head(major: u8, len: usize) -> Vec<u8> {
+    let mut out = vec![major << 5 | 26];
+    out.extend_from_slice(&u32::try_from(len).unwrap().to_be_bytes());
+    out
+}
+
 /// An array filling `max_internal_call_size` with copies of `item`.
 fn array_of(item: &[u8]) -> Vec<u8> {
     let len = (MAX - 5) / item.len();
-    let mut out = vec![0x9a];
-    out.extend_from_slice(&u32::try_from(len).unwrap().to_be_bytes());
+    let mut out = head(4, len);
     out.extend(item.iter().copied().cycle().take(len * item.len()));
     out
 }
 
-fn scan_shapes() -> Vec<(&'static str, Vec<u8>)> {
+/// Values filling `max_internal_call_size`, one per item shape.
+fn value_shapes() -> Vec<(&'static str, Vec<u8>)> {
+    let mut map = head(5, (MAX - 5) / 2);
+    map.extend(std::iter::repeat_n(0x00, (MAX - 5) / 2 * 2));
     let mut chunked = vec![0x5f];
     chunked.extend(std::iter::repeat_n(0x40, MAX - 2));
     chunked.push(0xff);
-    let mut bytes = vec![0x5a];
-    bytes.extend_from_slice(&u32::try_from(MAX - 5).unwrap().to_be_bytes());
+    let mut bytes = head(2, MAX - 5);
     bytes.extend(std::iter::repeat_n(0xab, MAX - 5));
 
     vec![
@@ -69,7 +83,12 @@ fn scan_shapes() -> Vec<(&'static str, Vec<u8>)> {
         ("[[], [], ..]", array_of(&[0x80])),
         ("[{}, {}, ..]", array_of(&[0xa0])),
         ("[[[0]], [[0]], ..]", array_of(&[0x81, 0x81, 0x00])),
+        ("[\"\", \"\", ..]", array_of(&[0x60])),
+        ("[\"a\", \"a\", ..]", array_of(&[0x61, 0x61])),
+        ("[h'00', h'00', ..]", array_of(&[0x41, 0x00])),
+        ("{0: 0, ..}", map),
         ("[0(0), 0(0), ..]", array_of(&[0xc0, 0x00])),
+        ("[bucket(0), ..]", array_of(&[0xd8, 0x85, 0x00])),
         ("(_ h'', h'', ..)", chunked),
         ("h'abab..'", bytes),
     ]
@@ -118,8 +137,31 @@ fn best_ms<T>(mut f: impl FnMut() -> T) -> f64 {
     best
 }
 
-fn scan(raw: &[u8]) -> u64 {
-    tari_bor::count_data_items_with_max_depth(raw, limits::MAX_CBOR_NESTING_DEPTH).expect("well-formed")
+/// The walk every charged decode runs first.
+fn walk(raw: &[u8]) -> u64 {
+    tari_bor::count_data_items_bounded(raw, limits::MAX_CBOR_NESTING_DEPTH, u64::MAX)
+        .expect("well-formed")
+        .expect("within the item bound")
+}
+
+/// A component's state replacing the old state: decoded, compared with the old, and indexed for
+/// well-known types before and after.
+fn set_state(raw: &[u8], old: &tari_bor::Value) -> bool {
+    walk(raw);
+    let state: tari_bor::Value = tari_bor::decode_exact(raw).expect("decodes");
+    let before = IndexedWellKnownTypes::from_value(old);
+    let after = IndexedWellKnownTypes::from_value(&state);
+    black_box((before.is_ok(), after.is_ok()));
+    state == *old
+}
+
+/// A cross-template call's argument: decoded and encoded into the callee's `CallInfo`.
+fn call_arg(raw: &[u8]) -> Vec<u8> {
+    walk(raw);
+    let args = [tari_bor::decode_exact::<tari_bor::Value>(raw).expect("decodes")];
+    let mut call_info = Vec::with_capacity(CallInfo::encode_v1_packed_size(&args).unwrap());
+    CallInfo::encode_v1_packed(&mut call_info, 0, &args).unwrap();
+    call_info
 }
 
 /// The points-per-millisecond rate, derived exactly as `native_points_calibrate` derives it: two
@@ -173,58 +215,61 @@ fn wasm_rate_points_per_ms() -> f64 {
 fn main() {
     let rate = wasm_rate_points_per_ms();
     println!("WASM rate: {rate:.0} points/ms\n");
-
-    println!("Scan, charged per byte before it runs");
-    println!(
-        "{:<22} {:>8} {:>8} {:>10} {:>12} {:>10}",
-        "shape", "bytes", "items", "ms", "points/byte", "charged/ms"
-    );
-    for (label, raw) in scan_shapes() {
-        let items = scan(&raw);
-        let ms = best_ms(|| scan(&raw));
-        let points = ms * rate;
-        let charged = limits::engine_arg_scan_points(raw.len() as u64);
-        println!(
-            "{label:<22} {:>8} {items:>8} {ms:>10.3} {:>12.1} {:>9.2}x",
-            raw.len(),
-            points / raw.len() as f64,
-            charged as f64 / points,
-        );
-    }
-
-    println!("\nDecode, charged per item once the scan has counted them");
-    println!(
-        "{:<22} {:>8} {:>8} {:>10} {:>12} {:>10}",
-        "shape", "bytes", "items", "ms", "points/item", "charged/ms"
-    );
     let report = |label: &str, raw: &[u8], ms: f64| {
-        let items = scan(raw);
+        let items = walk(raw);
         let points = ms * rate;
-        let charged = limits::engine_arg_decode_points(items);
+        let charged = limits::engine_arg_points(raw.len() as u64, items);
         println!(
-            "{label:<22} {:>8} {items:>8} {ms:>10.3} {:>12.1} {:>9.2}x",
+            "{label:<24} {:>8} {items:>8} {ms:>10.3} {:>12.1} {:>9.2}x",
             raw.len(),
             points / items as f64,
             charged as f64 / points,
         );
     };
+    let header = |title: &str| {
+        println!("\n{title}");
+        println!(
+            "{:<24} {:>8} {:>8} {:>10} {:>12} {:>10}",
+            "shape", "bytes", "items", "ms", "points/item", "charged/ms"
+        );
+    };
+
+    header("Engine call argument: walk and decode into the op's argument type");
     let invoke = invoke_args();
     report(
         "invoke [h'', ..]",
         &invoke,
-        best_ms(|| tari_bor::decode_exact::<ComponentInvokeArg>(&invoke).expect("decodes")),
+        best_ms(|| {
+            walk(&invoke);
+            tari_bor::decode_exact::<ComponentInvokeArg>(&invoke).expect("decodes")
+        }),
     );
     let event = event_payload();
     report(
         "event {\"0\": 0, ..}",
         &event,
-        best_ms(|| tari_bor::decode_exact::<EmitEventArg>(&event).expect("decodes")),
+        best_ms(|| {
+            walk(&event);
+            tari_bor::decode_exact::<EmitEventArg>(&event).expect("decodes")
+        }),
     );
 
+    let shapes = value_shapes();
+    header("Component state: walk, decode, compare, index before and after");
+    for (label, raw) in &shapes {
+        let old = tari_bor::decode_exact::<tari_bor::Value>(raw).expect("decodes");
+        report(label, raw, best_ms(|| set_state(raw, &old)));
+    }
+
+    header("Cross-template call argument: walk, decode, encode into the callee's CallInfo");
+    for (label, raw) in &shapes {
+        report(label, raw, best_ms(|| call_arg(raw)));
+    }
+
     println!(
-        "\nPER_ENGINE_ARG_BYTE = {}, PER_ENGINE_ARG_ITEM = {}. The last column is what those charge over what was \
+        "\nPER_ENGINE_ARG_ITEM = {}, PER_ENGINE_ARG_BYTE = {}. The last column is what those charge over what was \
          measured.",
-        NativeExecutionPoints::PER_ENGINE_ARG_BYTE,
         NativeExecutionPoints::PER_ENGINE_ARG_ITEM,
+        NativeExecutionPoints::PER_ENGINE_ARG_BYTE,
     );
 }

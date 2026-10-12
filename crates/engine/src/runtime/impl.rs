@@ -167,7 +167,7 @@ use crate::{
     runtime::{
         RuntimeError,
         RuntimeInterface,
-        engine_args::EngineArgs,
+        engine_args::{EngineArgChargeError, EngineArgs},
         error::{ArgumentValidationError, LimitError},
         locking::{LockError, LockedSubstate},
         pay_fee::PayFee,
@@ -611,6 +611,21 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
             method: method.to_string(),
             details: Box::new(e),
         })
+    }
+
+    /// Charges for the arguments a template passes to a cross-template call, which the engine
+    /// decodes into the callee's `CallInfo`.
+    fn charge_call_args(&self, args: &[Bytes]) -> Result<(), RuntimeError> {
+        for arg in args {
+            self.charge_engine_arg(arg).map_err(|e| match e {
+                EngineArgChargeError::Unreadable(e) => RuntimeError::InvalidArgument {
+                    argument: "args",
+                    reason: format!("Argument failed to decode. Err: {:?}", e),
+                },
+                EngineArgChargeError::Runtime(e) => e,
+            })?;
+        }
+        Ok(())
     }
 
     fn invoke_template_function(
@@ -3901,6 +3916,7 @@ where
                     args,
                 } = args.assert_one_arg()?;
 
+                self.charge_call_args(&args)?;
                 self.invoke_template_function(
                     &template_address,
                     &function,
@@ -3915,6 +3931,7 @@ where
                     args,
                 } = args.assert_one_arg()?;
 
+                self.charge_call_args(&args)?;
                 self.invoke_component_method(component_address, &method, args, None)?
             },
         };
@@ -4276,14 +4293,29 @@ where
             .charge_native_execution(tari_engine_types::limits::return_value_points(bytes, items))
     }
 
-    fn charge_engine_arg_scan(&self, bytes: u64) -> Result<(), RuntimeError> {
-        self.tracker
-            .charge_native_execution(tari_engine_types::limits::engine_arg_scan_points(bytes))
-    }
+    fn charge_engine_arg(&self, input: &[u8]) -> Result<(), EngineArgChargeError> {
+        use tari_engine_types::limits::{self, NativeExecutionPoints, engine_arg_points};
 
-    fn charge_engine_arg_decode(&self, items: u64) -> Result<(), RuntimeError> {
         self.tracker
-            .charge_native_execution(tari_engine_types::limits::engine_arg_decode_points(items))
+            .charge_native_execution(engine_arg_points(input.len() as u64, 0))?;
+        let affordable = self.tracker.native_execution_headroom() / NativeExecutionPoints::PER_ENGINE_ARG_ITEM;
+        let counted = tari_bor::count_data_items_bounded(input, limits::MAX_CBOR_NESTING_DEPTH, affordable)
+            .map_err(|e| EngineArgChargeError::Unreadable(e.into()))?;
+        match counted {
+            Some(items) => self.tracker.charge_native_execution(engine_arg_points(0, items))?,
+            None => {
+                // The items read are paid for before failing, which leaves nothing for a repeat of
+                // the call to read.
+                self.tracker.charge_native_execution(engine_arg_points(0, affordable))?;
+                self.tracker.charge_native_execution(engine_arg_points(0, 1))?;
+                return Err(RuntimeError::InvariantError {
+                    function: "charge_engine_arg",
+                    details: "an item beyond the native execution headroom was affordable".to_string(),
+                }
+                .into());
+            },
+        }
+        Ok(())
     }
 
     fn wasm_instances(&self) -> &RefCell<WasmInstanceCache> {

@@ -136,10 +136,9 @@ pub const MIN_MAX_COMPUTE_TRANSACTIONS_PER_BLOCK: u64 = 18;
 /// and that limit is chosen so the remainder still covers a fee intent (see
 /// `the_largest_publishable_binary_leaves_room_to_source_a_fee`). So a max-size publish *can* reach this cap, by
 /// construction — it is what makes the publish limit binding. Template return values and engine call arguments are
-/// the other flows this cap bounds: [`return_value_points`], [`engine_arg_scan_points`] and
-/// [`engine_arg_decode_points`] are bounded per call, not per transaction, and about 18 maximal item-heavy returns,
-/// or 3 maximal item-heavy engine call arguments, reach the cap, failing the transaction out of compute. Every
-/// remaining flow stays under it on the structural caps alone.
+/// the other flows this cap bounds: [`return_value_points`] and [`engine_arg_points`] are bounded per call, not
+/// per transaction, and about 18 maximal item-heavy returns, or 3 maximal item-heavy engine call arguments, reach the
+/// cap, failing the transaction out of compute. Every remaining flow stays under it on the structural caps alone.
 pub const MAX_NATIVE_POINTS_PER_TRANSACTION: u64 = 2_400_000_000;
 
 /// Execution metering points the fee intent may consume, whatever it has paid. A transaction sources
@@ -415,25 +414,24 @@ pub const fn return_value_points(bytes: u64, items: u64) -> u64 {
         .saturating_add(NativeExecutionPoints::PER_RETURN_VALUE_BYTE.saturating_mul(bytes))
 }
 
-/// Points charged for scanning an engine call's argument, `bytes` long, before the scan runs.
+/// Points charged for the host-side decode of CBOR a template wrote, `bytes` long and holding
+/// `items` CBOR data items, before it is decoded.
 ///
-/// With every engine call a template hands the engine up to `max_internal_call_size` bytes of CBOR,
-/// which the engine walks once for its item count and nesting depth before decoding it. The walk
-/// runs outside the Wasmer meter and costs a roughly fixed amount per item, but the item count is
-/// what it produces, so it is priced per byte at its densest, one item a byte. The decode it guards
-/// is charged separately, by [`engine_arg_decode_points`].
+/// With every engine call a template hands the engine up to `max_internal_call_size` bytes of CBOR.
+/// The engine walks it for its item count and nesting depth and decodes it into the op's argument
+/// type, and most ops then decode the byte strings nested in it again: into the handler's argument
+/// types, a component's state as a `Value` it indexes and compares, or a cross-template call's
+/// arguments as the `Value`s it encodes into the callee's `CallInfo`. Each of those decodes is
+/// charged here for the bytes and items it reads. That work runs outside the Wasmer meter and
+/// follows the number of CBOR items far more than the number of bytes, so `items` is priced per
+/// item, with the copies priced per byte.
 ///
-/// Measured with `cargo run -p tari_engine --release --example engine_arg_points_calibrate`.
-pub const fn engine_arg_scan_points(bytes: u64) -> u64 {
-    NativeExecutionPoints::PER_ENGINE_ARG_BYTE.saturating_mul(bytes)
-}
-
-/// Points charged for decoding an engine call's argument of `items` CBOR data items, counted by
-/// the scan [`engine_arg_scan_points`] prices, before the decode runs.
-///
-/// Measured with `cargo run -p tari_engine --release --example engine_arg_points_calibrate`.
-pub const fn engine_arg_decode_points(items: u64) -> u64 {
-    NativeExecutionPoints::PER_ENGINE_ARG_ITEM.saturating_mul(items)
+/// Measured with `cargo run -p tari_engine --release --example engine_arg_points_calibrate`, which
+/// times the walk and decode of each of those shapes at `max_internal_call_size`.
+pub const fn engine_arg_points(bytes: u64, items: u64) -> u64 {
+    NativeExecutionPoints::PER_ENGINE_ARG_ITEM
+        .saturating_mul(items)
+        .saturating_add(NativeExecutionPoints::PER_ENGINE_ARG_BYTE.saturating_mul(bytes))
 }
 
 /// Metering-point prices for native (non-WASM) verification work, charged against the same
@@ -453,16 +451,18 @@ impl NativeExecutionPoints {
     /// One ElGamal (DLEQ) value proof. It verifies two Schnorr-style equations over four decompressed
     /// points rather than one, so it is priced at double the mask-knowledge variant.
     pub const PER_ELGAMAL_VALUE_PROOF: u64 = 1_200_000;
-    /// Each byte of an engine call's argument, which the engine walks for its item count and depth
-    /// before decoding it. Arguments of one-byte items, the densest the walk sees, measure at
-    /// ~85-100 points a byte. Set above those. Charged by [`engine_arg_scan_points`].
-    pub const PER_ENGINE_ARG_BYTE: u64 = 120;
-    /// Each CBOR data item in an engine call's argument, decoded into the op's argument type. An
-    /// invoke argument's list of empty byte strings measures at ~70 points an item; the costliest
-    /// shape, an event payload of short distinct keys, where every entry allocates a key and a value
-    /// and is inserted into a map, at ~1,300. Set above that. Charged by
-    /// [`engine_arg_decode_points`].
-    pub const PER_ENGINE_ARG_ITEM: u64 = 1_500;
+    /// Each byte of CBOR a template wrote that the engine decodes, which it copies into the decoded
+    /// value and, for a cross-template call's argument, encodes again into the callee's `CallInfo`.
+    /// A single byte string, which is nothing but those copies, measures at ~2.8 points a byte as a
+    /// call argument and ~0.4 as component state. Set above those. Charged by [`engine_arg_points`].
+    pub const PER_ENGINE_ARG_BYTE: u64 = 4;
+    /// Each CBOR data item a template wrote that the engine decodes: walking it for the count and
+    /// depth check, decoding it, and the work its decode site does with it. An invoke argument's list
+    /// of empty byte strings measures at ~200 points an item; component state and cross-template call
+    /// arguments, decoded as `Value`s, at ~300-800 depending on the item shape; the costliest, an
+    /// event payload of short distinct keys, where every entry allocates a key and a value and is
+    /// inserted into a map, at ~1,400. Set above that. Charged by [`engine_arg_points`].
+    pub const PER_ENGINE_ARG_ITEM: u64 = 1_600;
     /// Fixed cost of a hash invocation, charged on top of [`Self::PER_HASH_BYTE`].
     pub const PER_HASH: u64 = 10_000;
     /// Each byte fed to a hash.

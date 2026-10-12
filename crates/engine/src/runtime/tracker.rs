@@ -436,6 +436,20 @@ impl<TStore: StateReader> StateTracker<TStore> {
         Ok(())
     }
 
+    /// The most points [`Self::charge_native_execution`] would accept in one charge now, so that work
+    /// priced as it runs can be bounded to what the transaction can pay for before it starts.
+    pub fn native_execution_headroom(&self) -> u64 {
+        let native = self.accumulated_native_points();
+        let cap_remaining = limits::MAX_NATIVE_POINTS_PER_TRANSACTION.saturating_sub(native);
+        match self.compute_allowance() {
+            Some(allowance) => {
+                let consumed = self.accumulated_wasm_points().saturating_add(native);
+                cap_remaining.min(allowance.points.saturating_sub(consumed))
+            },
+            None => cap_remaining,
+        }
+    }
+
     /// Chooses the state that finalization will persist.
     ///
     /// A transaction that failed — either explicitly, or by not covering the fees charged against

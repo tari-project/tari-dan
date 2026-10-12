@@ -1532,8 +1532,7 @@ fn covenant_balanced_call_native_points() -> u64 {
         action: SpendContextAction::AssertCovenantBalanced { max_revealed: 0 },
     })
     .unwrap();
-    limits::engine_arg_scan_points(arg.len() as u64) +
-        limits::engine_arg_decode_points(tari_bor::count_data_items(&arg).unwrap())
+    limits::engine_arg_points(arg.len() as u64, tari_bor::count_data_items(&arg).unwrap())
 }
 
 #[test]
