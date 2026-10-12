@@ -62,6 +62,13 @@ fn commit_proof_of(
         .unwrap();
 }
 
+/// Stores the proof of `shard`'s next version, committed in `epoch` by a block of its own, superseding the proof of
+/// `state_version` as the shard's latest.
+fn supersede(store: &RocksDbStateStore<String>, epoch: Epoch, shard: Shard, state_version: Version) {
+    let next = state_version + 1;
+    commit_proof_of(store, epoch, shard, next, block(u8::try_from(next).unwrap()));
+}
+
 /// Stores a down proof record, for a substate destroyed in `epoch`, that cites the proof of `shard` at
 /// `state_version`.
 fn cite(store: &RocksDbStateStore<String>, epoch: Epoch, shard: Shard, state_version: Version, seed: u32) {
@@ -105,6 +112,8 @@ fn a_proof_is_pruned_once_its_epoch_leaves_the_window_unless_it_is_a_proof_point
     let proof_point = STATE_VERSION_PROOF_INTERVAL;
     commit_proof_of(&store, EPOCH, SHARD, 5, block(1));
     commit_proof_of(&store, EPOCH, OTHER_SHARD, proof_point, block(1));
+    supersede(&store, EPOCH, SHARD, 5);
+    supersede(&store, EPOCH, OTHER_SHARD, proof_point);
 
     prune_at(&store, EPOCH + Epoch(HISTORY - 1));
     assert!(holds_proof(&store, SHARD, 5), "pruned inside the window");
@@ -126,6 +135,7 @@ fn a_down_proof_record_keeps_the_proof_it_cites_until_the_record_is_pruned() {
     let (store, _dir) = create_store();
     let destroyed_in = EPOCH + Epoch(10);
     commit_proof_of(&store, EPOCH, SHARD, 5, block(1));
+    supersede(&store, EPOCH, SHARD, 5);
     cite(&store, destroyed_in, SHARD, 5, 1);
 
     prune_at(&store, EPOCH + Epoch(HISTORY));
@@ -149,6 +159,8 @@ fn a_commit_proof_is_pruned_with_the_last_proof_that_cites_it() {
     let (store, _dir) = create_store();
     commit_proof_of(&store, EPOCH, SHARD, 5, block(1));
     commit_proof_of(&store, EPOCH, OTHER_SHARD, 7, block(1));
+    supersede(&store, EPOCH, SHARD, 5);
+    supersede(&store, EPOCH, OTHER_SHARD, 7);
     cite(&store, EPOCH + Epoch(1), SHARD, 5, 1);
 
     prune_at(&store, EPOCH + Epoch(HISTORY));
@@ -177,10 +189,37 @@ fn a_rewound_proof_releases_its_retention_and_commit_proof() {
 
     // The version is committed again, by another block. The rewound proof's retention does not carry over to it.
     commit_proof_of(&store, EPOCH, SHARD, 5, block(2));
+    supersede(&store, EPOCH, SHARD, 5);
     prune_at(&store, EPOCH + Epoch(HISTORY));
     assert!(
         !holds_proof(&store, SHARD, 5),
         "kept through the rewound proof's retention"
     );
     assert!(!holds_commit_proof(&store, block(2)));
+}
+
+#[test]
+fn a_shards_latest_proof_is_kept_until_a_later_proof_supersedes_it() {
+    let (store, _dir) = create_store();
+    let superseded_in = EPOCH + Epoch(10);
+    commit_proof_of(&store, EPOCH, SHARD, 5, block(1));
+
+    prune_at(&store, EPOCH + Epoch(HISTORY));
+    assert!(holds_proof(&store, SHARD, 5), "pruned while it is the shard's latest");
+    assert!(holds_commit_proof(&store, block(1)));
+
+    supersede(&store, superseded_in, SHARD, 5);
+    prune_at(&store, superseded_in + Epoch(HISTORY - 1));
+    assert!(
+        holds_proof(&store, SHARD, 5),
+        "pruned inside the window of its supersession"
+    );
+
+    prune_at(&store, superseded_in + Epoch(HISTORY));
+    assert!(
+        !holds_proof(&store, SHARD, 5),
+        "kept past the window of its supersession"
+    );
+    assert!(!holds_commit_proof(&store, block(1)));
+    assert!(holds_proof(&store, SHARD, 6), "the shard's latest proof was pruned");
 }

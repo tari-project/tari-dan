@@ -20,7 +20,7 @@ prefixed!(StateVersionProofPrefix, KeyPrefix::StateVersionProofs);
 ///
 /// A proof point is kept for good, since state sync proves every one from the start of the shard's history. Any other
 /// version has a [`StateVersionProofRetentionCf`] entry, and epoch GC prunes it once that entry's epoch ages past
-/// `down_proof_history_length`.
+/// `down_proof_history_length` and a later version of the shard is proven.
 pub struct StateVersionProofCf;
 
 impl Cf for StateVersionProofCf {
@@ -56,10 +56,10 @@ impl Cf for BlockCommitProofCf {
 
 prefixed!(StateVersionProofRetentionPrefix, KeyPrefix::StateVersionProofRetention);
 
-/// Per [`StateVersionProofCf`] entry that is not a proof point, the epoch it is kept through: the later of the epoch
-/// of the block that produced the version and the epoch of the latest destruction whose down proof record cites it.
-/// Since a record is pruned once the epoch of its destruction ages past the same window, no record outlives the proof
-/// it cites.
+/// Per [`StateVersionProofCf`] entry that is not a proof point, the epoch it is kept through: the latest of the epoch
+/// of the block that produced the version, the epoch of the proof of the shard's next proven version, and the epoch of
+/// the latest destruction whose down proof record cites it. Since a record is pruned once the epoch of its destruction
+/// ages past the same window, no record outlives the proof it cites.
 pub struct StateVersionProofRetentionCf;
 
 impl Cf for StateVersionProofRetentionCf {
@@ -81,7 +81,8 @@ prefixed!(
 
 /// Each [`StateVersionProofRetentionCf`] key under the epoch it is kept through, so that epoch GC reaches them in
 /// epoch order. An entry whose epoch is no longer the key's retention epoch is stale: GC drops it and keeps the
-/// proof.
+/// proof. GC also drops the entry of a shard's latest proof and keeps the proof, until the proof that supersedes it
+/// indexes it again.
 pub struct StateVersionProofEpochIndex;
 
 impl Cf for StateVersionProofEpochIndex {

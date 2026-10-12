@@ -1826,6 +1826,9 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         let key = (proof.shard, proof.state_version);
         let proofs_cf = db.cf(StateVersionProofCf)?;
         let cited_block = proof.source.block_id();
+        if let Some(superseded) = state_version_proofs::latest_below(&db, key)? {
+            state_version_proofs::retain_through(&db, superseded, epoch)?;
+        }
         if let Some(existing) = proofs_cf.get(&key, OPERATION).optional()? &&
             existing.source.block_id() != cited_block
         {
@@ -2154,6 +2157,35 @@ mod state_version_proofs {
         Ok(())
     }
 
+    /// The key of `key.0`'s greatest proven version below `key.1`.
+    pub fn latest_below(
+        db: &DbWriteContext<'_>,
+        key: (Shard, Version),
+    ) -> Result<Option<(Shard, Version)>, StorageError> {
+        let (shard, version) = key;
+        let proofs = db.cf(StateVersionProofCf)?;
+        let latest = proofs
+            .range_iterator(
+                Ordering::Descending,
+                proofs.encode_key(&(shard, 0))..proofs.encode_key(&key),
+            )
+            .next()
+            .transpose()?
+            .map(|(key, _)| key);
+        debug_assert!(latest.is_none_or(|(s, v)| s == shard && v < version));
+        Ok(latest)
+    }
+
+    /// Whether `key.0` has a proven version above `key.1`.
+    pub fn is_superseded(db: &DbWriteContext<'_>, key: (Shard, Version)) -> Result<bool, StorageError> {
+        let (shard, version) = key;
+        let proofs = db.cf(StateVersionProofCf)?;
+        let superseded = proofs.any_exists_within_range(
+            proofs.encode_key(&(shard, version.saturating_add(1)))..proofs.encode_key(&(shard, Version::MAX)),
+        )?;
+        Ok(superseded)
+    }
+
     /// Deletes the proof of `key` with its retention, and the commit proof it cites if no other proof cites it.
     pub fn remove(db: &DbWriteContext<'_>, key: (Shard, Version)) -> Result<(), StorageError> {
         const OPERATION: &str = "state_version_proofs::remove";
@@ -2358,9 +2390,13 @@ mod cleanup {
 
         let index = db.cf(StateVersionProofEpochIndex)?;
         let retention = db.cf(StateVersionProofRetentionCf)?;
+        // A shard's latest proof outlives its window: it proves the state that the shard's next destructions are proved
+        // up in. The proof that supersedes it raises its retention, which indexes it again.
         for (epoch, shard, version) in &keys {
             index.delete(&(*epoch, *shard, *version), OPERATION)?;
-            if retention.get(&(*shard, *version), OPERATION).optional()? == Some(*epoch) {
+            if retention.get(&(*shard, *version), OPERATION).optional()? == Some(*epoch) &&
+                state_version_proofs::is_superseded(db, (*shard, *version))?
+            {
                 state_version_proofs::remove(db, (*shard, *version))?;
             }
         }
