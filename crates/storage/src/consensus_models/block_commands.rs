@@ -17,11 +17,11 @@ use super::Command;
 /// keeps the encoding of a block canonical.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
-pub struct BlockCommands(Vec<Command>);
+pub struct BlockCommands(Box<[Command]>);
 
 impl BlockCommands {
-    pub const fn empty() -> Self {
-        Self(Vec::new())
+    pub fn empty() -> Self {
+        Self(Vec::new().into_boxed_slice())
     }
 
     /// Sorts `commands` into canonical order. Two commands with the same ordering key (e.g. a `LocalPrepare` and a
@@ -38,7 +38,7 @@ impl BlockCommands {
                 second: pair[1].to_string(),
             });
         }
-        Ok(Self(commands))
+        Ok(Self(commands.into_boxed_slice()))
     }
 
     /// Accepts `commands` only if they are already in canonical order, i.e. their ordering keys strictly increase.
@@ -60,7 +60,7 @@ impl BlockCommands {
                 },
             }
         }
-        Ok(Self(commands))
+        Ok(Self(commands.into_boxed_slice()))
     }
 
     pub fn as_slice(&self) -> &[Command] {
@@ -68,7 +68,7 @@ impl BlockCommands {
     }
 
     pub fn into_vec(self) -> Vec<Command> {
-        self.0
+        self.0.into_vec()
     }
 }
 
