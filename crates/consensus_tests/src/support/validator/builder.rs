@@ -142,6 +142,18 @@ impl ValidatorBuilder {
         self
     }
 
+    /// The store keeps the state history that consensus's down proof lookback reaches into.
+    fn database_options(&self) -> DatabaseOptions {
+        let state_history_length = self
+            .config
+            .as_ref()
+            .expect("No config given (use ValidatorBuilder::with_config)")
+            .state_history_length;
+        DatabaseOptions::default()
+            .with_debugging_data(true)
+            .with_state_history_length(state_history_length)
+    }
+
     pub fn spawn(&self, shutdown_signal: ShutdownSignal) -> (ValidatorChannels, Validator) {
         log::info!(
             "Spawning validator with address {} and public key {}",
@@ -168,7 +180,7 @@ impl ValidatorBuilder {
                 .as_deref()
                 .unwrap_or_else(|| self.rocks_tmp_path.path());
             log::info!("Rocksdb path {}", rocks_path.display());
-            TestStore::open(rocks_path, DatabaseOptions::default().with_debugging_data(true)).unwrap()
+            TestStore::open(rocks_path, self.database_options()).unwrap()
         };
 
         let observer: Option<SendObserver> = self.send_observer.clone().map(|observe| {

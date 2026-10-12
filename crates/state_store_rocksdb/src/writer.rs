@@ -1652,6 +1652,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
     ) -> Result<usize, StorageError> {
         const OPERATION: &str = "state_tree_nodes_clear_stale";
 
+        let db = self.db();
         let cf = self.db().cf(StateTreeCf)?;
         let versions_cf = self.db().cf(StateTreeShardVersionCf)?;
         let stale_cf = self.db().cf(state_tree::ByStateTreeStaleShardVersionQuery)?;
@@ -1723,6 +1724,13 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
                 // The record goes in the same transaction as its nodes, so a version is never left half-cleared.
                 stale_nodes_cf.delete(&(shard, version), OPERATION)?;
                 num_deleted += delete_buffer.len() + 1;
+                // Every committed version records its stale nodes, and the nodes made stale at `version` are the last
+                // of the tree at the version below it, so that version can no longer be proved up in.
+                if let Some(below) = version.checked_sub(1) &&
+                    state_version_proofs::prune_out_of_window(&db, (shard, below))?
+                {
+                    num_deleted += 1;
+                }
             }
         }
 
@@ -1820,15 +1828,12 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         Ok(())
     }
 
-    fn state_version_proofs_insert(&mut self, epoch: Epoch, proof: &StateVersionProof) -> Result<(), StorageError> {
+    fn state_version_proofs_insert(&mut self, proof: &StateVersionProof) -> Result<(), StorageError> {
         const OPERATION: &str = "state_version_proofs_insert";
         let db = self.db();
         let key = (proof.shard, proof.state_version);
         let proofs_cf = db.cf(StateVersionProofCf)?;
         let cited_block = proof.source.block_id();
-        if let Some(superseded) = state_version_proofs::latest_below(&db, key)? {
-            state_version_proofs::retain_through(&db, superseded, epoch)?;
-        }
         if let Some(existing) = proofs_cf.get(&key, OPERATION).optional()? &&
             existing.source.block_id() != cited_block
         {
@@ -1839,7 +1844,6 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
             db.cf(BlockCommitProofCitationCf)?
                 .put(&(*block_id, proof.shard), &(), OPERATION)?;
         }
-        state_version_proofs::retain_through(&db, key, epoch)?;
         Ok(())
     }
 
@@ -2002,7 +2006,9 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         match step {
             EpochCleanupStep::DownedSubstateValues => self.substates_prune_downed_values(prune_epoch, limit),
             EpochCleanupStep::SubstateDownProofs => cleanup::substate_down_proofs_for_epoch(&db, prune_epoch, limit),
-            EpochCleanupStep::StateVersionProofs => cleanup::state_version_proofs_for_epoch(&db, prune_epoch, limit),
+            EpochCleanupStep::StateVersionProofs => {
+                cleanup::state_version_proofs_for_epoch(&db, prune_epoch, self.options.state_history_length, limit)
+            },
             EpochCleanupStep::Blocks => cleanup::blocks_for_epoch(&db, prune_epoch, limit),
             EpochCleanupStep::ProposalCertificates => cleanup::proposal_certificates_for_epoch(&db, prune_epoch, limit),
             EpochCleanupStep::TimeoutCertificates => cleanup::timeout_certificates_for_epoch(&db, prune_epoch, limit),
@@ -2157,33 +2163,45 @@ mod state_version_proofs {
         Ok(())
     }
 
-    /// The key of `key.0`'s greatest proven version below `key.1`.
-    pub fn latest_below(
-        db: &DbWriteContext<'_>,
-        key: (Shard, Version),
-    ) -> Result<Option<(Shard, Version)>, StorageError> {
+    /// Deletes the proof of `key`, which has left its shard's version window, unless it is a proof point or a live
+    /// down proof record cites it. Only a proof that holds a citation of its block is deleted: a proof stored without
+    /// one may be cited by a record that holds no retention for it. Returns whether the proof was deleted.
+    pub fn prune_out_of_window(db: &DbWriteContext<'_>, key: (Shard, Version)) -> Result<bool, StorageError> {
+        const OPERATION: &str = "state_version_proofs::prune_out_of_window";
         let (shard, version) = key;
-        let proofs = db.cf(StateVersionProofCf)?;
-        let latest = proofs
-            .range_iterator(
-                Ordering::Descending,
-                proofs.encode_key(&(shard, 0))..proofs.encode_key(&key),
-            )
-            .next()
-            .transpose()?
-            .map(|(key, _)| key);
-        debug_assert!(latest.is_none_or(|(s, v)| s == shard && v < version));
-        Ok(latest)
+        if is_state_version_proof_point(version) || db.cf(StateVersionProofRetentionCf)?.exists(&key, OPERATION)? {
+            return Ok(false);
+        }
+        let Some(proof) = db.cf(StateVersionProofCf)?.get(&key, OPERATION).optional()? else {
+            return Ok(false);
+        };
+        let Some(block_id) = proof.source.block_id() else {
+            return Ok(false);
+        };
+        if !db
+            .cf(BlockCommitProofCitationCf)?
+            .exists(&(*block_id, shard), OPERATION)?
+        {
+            return Ok(false);
+        }
+        remove(db, key)?;
+        Ok(true)
     }
 
-    /// Whether `key.0` has a proven version above `key.1`.
-    pub fn is_superseded(db: &DbWriteContext<'_>, key: (Shard, Version)) -> Result<bool, StorageError> {
-        let (shard, version) = key;
-        let proofs = db.cf(StateVersionProofCf)?;
-        let superseded = proofs.any_exists_within_range(
-            proofs.encode_key(&(shard, version.saturating_add(1)))..proofs.encode_key(&(shard, Version::MAX)),
-        )?;
-        Ok(superseded)
+    /// The lowest version of `shard` inside its version window. The stale-node pass deletes the trees of the versions
+    /// below it, so no new down proof record is proved up at them.
+    pub fn window_floor(
+        db: &DbWriteContext<'_>,
+        shard: Shard,
+        state_history_length: u64,
+    ) -> Result<Version, StorageError> {
+        const OPERATION: &str = "state_version_proofs::window_floor";
+        let max_version = db
+            .cf(StateTreeShardVersionCf)?
+            .get(&shard, OPERATION)
+            .optional()?
+            .unwrap_or(0);
+        Ok(max_version.saturating_sub(state_history_length))
     }
 
     /// Deletes the proof of `key` with its retention, and the commit proof it cites if no other proof cites it.
@@ -2378,6 +2396,7 @@ mod cleanup {
     pub fn state_version_proofs_for_epoch(
         db: &DbWriteContext<'_>,
         up_to_epoch: Epoch,
+        state_history_length: u64,
         limit: usize,
     ) -> Result<usize, StorageError> {
         const OPERATION: &str = "cleanup::state_version_proofs_for_epoch";
@@ -2390,14 +2409,18 @@ mod cleanup {
 
         let index = db.cf(StateVersionProofEpochIndex)?;
         let retention = db.cf(StateVersionProofRetentionCf)?;
-        // A shard's latest proof outlives its window: it proves the state that the shard's next destructions are proved
-        // up in. The proof that supersedes it raises its retention, which indexes it again.
+        // A proof whose citation expires inside its shard's version window stays for the stale-node pass, which
+        // reaches its version once the window passes it.
         for (epoch, shard, version) in &keys {
+            let key = (*shard, *version);
             index.delete(&(*epoch, *shard, *version), OPERATION)?;
-            if retention.get(&(*shard, *version), OPERATION).optional()? == Some(*epoch) &&
-                state_version_proofs::is_superseded(db, (*shard, *version))?
-            {
-                state_version_proofs::remove(db, (*shard, *version))?;
+            if retention.get(&key, OPERATION).optional()? != Some(*epoch) {
+                continue;
+            }
+            if *version < state_version_proofs::window_floor(db, *shard, state_history_length)? {
+                state_version_proofs::remove(db, key)?;
+            } else {
+                retention.delete(&key, OPERATION)?;
             }
         }
         Ok(keys.len())

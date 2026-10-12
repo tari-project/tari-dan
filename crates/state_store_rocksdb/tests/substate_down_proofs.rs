@@ -216,7 +216,7 @@ fn commit_with_received_proof<S: StateStore>(
     commit_version(&mut tx, shard, 1, changes, records, no_committed_blocks);
     let tree = group_tree(&*tx, shard_group);
     let commit_proof = commit_proof(shard_group, 2, tree.root());
-    tx.state_version_proofs_insert(EPOCH, &StateVersionProof {
+    tx.state_version_proofs_insert(&StateVersionProof {
         shard,
         state_version: 1,
         source: StateVersionProofSource::Received {
@@ -266,7 +266,7 @@ fn a_destroyed_substate_stays_provably_down_after_its_state_is_pruned() {
     // no usable proof of: its only candidate is a block this node can no longer build a commit proof for.
     {
         let mut tx = db.create_write_tx().unwrap();
-        tx.state_version_proofs_insert(EPOCH, &StateVersionProof {
+        tx.state_version_proofs_insert(&StateVersionProof {
             shard,
             state_version: 2,
             source: StateVersionProofSource::Committed {
@@ -340,7 +340,7 @@ fn a_substate_destroyed_with_a_committed_block_proof_is_recorded() {
     );
     let tree = group_tree(&*tx, shard_group);
     let r1_commit_proof = commit_proof(shard_group, 2, tree.root());
-    tx.state_version_proofs_insert(EPOCH, &StateVersionProof {
+    tx.state_version_proofs_insert(&StateVersionProof {
         shard,
         state_version: 1,
         source: StateVersionProofSource::Committed { block_id },
@@ -428,7 +428,7 @@ fn substates_destroyed_together_share_one_commit_proof() {
         );
         let tree = group_tree(&*tx, shard_group);
         let commit_proof_bytes = commit_proof(shard_group, 2, tree.root()).to_bytes();
-        tx.state_version_proofs_insert(EPOCH, &StateVersionProof {
+        tx.state_version_proofs_insert(&StateVersionProof {
             shard,
             state_version: 1,
             source: StateVersionProofSource::Committed { block_id },
@@ -620,7 +620,7 @@ fn a_substate_destroyed_after_its_shard_idles_past_the_retention_window_is_recor
         no_committed_blocks,
     );
     let tree = group_tree(&*tx, shard_group);
-    tx.state_version_proofs_insert(EPOCH, &StateVersionProof {
+    tx.state_version_proofs_insert(&StateVersionProof {
         shard,
         state_version: 1,
         source: StateVersionProofSource::Committed { block_id },
@@ -631,11 +631,10 @@ fn a_substate_destroyed_after_its_shard_idles_past_the_retention_window_is_recor
         .unwrap();
     tx.commit().unwrap();
 
-    // The shard does not move while the epoch of its latest proof leaves the window, and its block is pruned.
-    db.with_write_tx(|tx| {
-        tx.epoch_cleanup_step(EPOCH + Epoch(HISTORY), EpochCleanupStep::StateVersionProofs, usize::MAX)
-    })
-    .unwrap();
+    // The shard does not move while epoch GC passes far beyond the epoch of its latest proof, and its block is pruned.
+    db.with_write_tx(|tx| tx.epoch_cleanup(EPOCH + Epoch(100))).unwrap();
+    db.with_write_tx(|tx| tx.state_tree_nodes_clear_stale(num_preshards(), usize::MAX))
+        .unwrap();
 
     let mut tx = db.create_write_tx().unwrap();
     commit_version(

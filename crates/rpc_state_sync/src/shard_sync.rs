@@ -246,7 +246,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         validator.validate(&commit_proof).await?;
 
         self.store.with_write_tx(|tx| {
-            tx.state_version_proofs_insert(commit_proof.epoch(), &StateVersionProof {
+            tx.state_version_proofs_insert(&StateVersionProof {
                 shard,
                 state_version,
                 source: StateVersionProofSource::Received {

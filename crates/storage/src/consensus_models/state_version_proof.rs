@@ -217,7 +217,7 @@ where
             });
         }
         let (_, shard_root_proof) = root_tree.get_proof(*shard).map_err(to_storage_error)?;
-        tx.state_version_proofs_insert(block.epoch(), &StateVersionProof {
+        tx.state_version_proofs_insert(&StateVersionProof {
             shard: *shard,
             state_version: *state_version,
             source: StateVersionProofSource::Committed { block_id: *block.id() },

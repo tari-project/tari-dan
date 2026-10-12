@@ -14,9 +14,10 @@ pub enum EpochCleanupStep {
     /// Deletes the down proofs of substates downed in pruned epochs. Its window is the down proof retention window,
     /// not the one the other steps share.
     SubstateDownProofs,
-    /// Deletes the state version proofs, other than proof points, that no live down proof record can cite, and the
-    /// commit proofs that only they cited. Shares the down proof retention window, and runs after
-    /// [`Self::SubstateDownProofs`] so that a record and the proof it cites leave together.
+    /// Expires the citations of state version proofs by the down proof records of the window's epochs, and deletes
+    /// each such proof that is below its shard's version window, with the commit proof only it cited. Shares the down
+    /// proof retention window, and runs after [`Self::SubstateDownProofs`] so that a record and the proof it cites
+    /// leave together.
     StateVersionProofs,
     Blocks,
     ProposalCertificates,
