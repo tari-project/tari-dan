@@ -35,7 +35,6 @@ mod template {
             items.len() as u32
         }
 
-
         /// Returns `len` zeros, each encoded as a one-byte CBOR item.
         pub fn return_items(len: u32) -> Vec<u32> {
             vec![0; len as usize]
