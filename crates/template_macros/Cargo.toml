@@ -1,7 +1,7 @@
 [package]
 name = "tari_template_macros"
 description = "Tari template macro"
-version = "0.23.0"
+version = "0.23.1"
 edition.workspace = true
 authors.workspace = true
 repository.workspace = true
