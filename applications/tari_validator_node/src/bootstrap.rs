@@ -139,7 +139,7 @@ use crate::{
         services::{
             consensus_gossip::{self},
             mempool::{self, MempoolHandle},
-            messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging},
+            messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging, spawn_direct_message_decoder},
         },
     },
     template_prewarm::{self, TemplatePrewarmHooks},
@@ -384,13 +384,15 @@ pub async fn spawn_services(
     let message_logger = NopLogger; // SqliteMessageLogger::new(config.validator_node.data_dir.join("message_log.sqlite"));
     let local_address = PeerAddress::from(keypair.public_key().clone());
     let (loopback_sender, loopback_receiver) = mpsc::unbounded_channel();
+    let (rx_direct_consensus_messages, join_handle) =
+        spawn_direct_message_decoder(rx_consensus_messages, epoch_manager.clone());
+    handles.push(join_handle);
     let inbound_messaging = ConsensusInboundMessaging::new(
         local_address,
-        rx_consensus_messages,
+        rx_direct_consensus_messages,
         rx_consensus_gossip_messages,
         loopback_receiver,
         message_logger.clone(),
-        epoch_manager.clone(),
     );
     let outbound_messaging = ConsensusOutboundMessaging::new(
         loopback_sender,
