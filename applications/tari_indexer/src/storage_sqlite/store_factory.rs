@@ -643,24 +643,62 @@ mod tests {
         // The newest 16 (heights 4..=19) remain trusted; the oldest 3 (1..=3) were pruned.
         for h in 4..=19u64 {
             let root = FixedHash::new([h as u8; 32]);
-            assert!(
+            assert_eq!(
                 store
-                    .with_read_tx(move |tx| tx.is_state_root_trusted(Epoch(1), shard_group(), &root))
+                    .with_read_tx(move |tx| tx.get_verified_state_root_height(Epoch(1), shard_group(), &root))
                     .await
                     .unwrap(),
+                Some(NodeHeight(h)),
                 "height {h} should still be trusted"
             );
         }
         for h in 1..=3u64 {
             let root = FixedHash::new([h as u8; 32]);
             assert!(
-                !store
-                    .with_read_tx(move |tx| tx.is_state_root_trusted(Epoch(1), shard_group(), &root))
+                store
+                    .with_read_tx(move |tx| tx.get_verified_state_root_height(Epoch(1), shard_group(), &root))
                     .await
-                    .unwrap(),
+                    .unwrap()
+                    .is_none(),
                 "height {h} should have been pruned"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn the_latest_verified_height_spans_overlapping_shard_groups_of_an_epoch() {
+        let (_dir, store) = temp_store().await;
+        for (epoch, group, height) in [
+            (Epoch(1), ShardGroup::new(0, 127), 30u64),
+            (Epoch(1), ShardGroup::new(128, 255), 50),
+            (Epoch(2), ShardGroup::new(0, 255), 70),
+        ] {
+            let root = VerifiedStateRoot {
+                epoch,
+                shard_group: group,
+                height: NodeHeight(height),
+                block_hash: FixedHash::zero(),
+                state_merkle_root: FixedHash::new([height as u8; 32]),
+            };
+            store
+                .with_write_tx(move |tx| tx.upsert_verified_state_root(&root))
+                .await
+                .unwrap();
+        }
+
+        let latest = |epoch, group| {
+            let store = store.clone();
+            async move {
+                store
+                    .with_read_tx(move |tx| tx.get_latest_verified_height_overlapping(epoch, group))
+                    .await
+                    .unwrap()
+            }
+        };
+        assert_eq!(latest(Epoch(1), ShardGroup::new(0, 127)).await, Some(NodeHeight(30)));
+        assert_eq!(latest(Epoch(1), ShardGroup::new(100, 200)).await, Some(NodeHeight(50)));
+        assert_eq!(latest(Epoch(2), ShardGroup::new(0, 63)).await, Some(NodeHeight(70)));
+        assert_eq!(latest(Epoch(3), ShardGroup::new(0, 255)).await, None);
     }
 
     #[tokio::test]
@@ -674,19 +712,21 @@ mod tests {
                 .unwrap();
         }
         let hash = FixedHash::new([5u8; 32]);
-        assert!(
+        assert_eq!(
             store
-                .with_read_tx(move |tx| tx.is_state_root_trusted(Epoch(1), shard_group(), &hash))
+                .with_read_tx(move |tx| tx.get_verified_state_root_height(Epoch(1), shard_group(), &hash))
                 .await
-                .unwrap()
+                .unwrap(),
+            Some(NodeHeight(5))
         );
         // An unrecorded root is not trusted.
         let other = FixedHash::new([99u8; 32]);
         assert!(
-            !store
-                .with_read_tx(move |tx| tx.is_state_root_trusted(Epoch(1), shard_group(), &other))
+            store
+                .with_read_tx(move |tx| tx.get_verified_state_root_height(Epoch(1), shard_group(), &other))
                 .await
                 .unwrap()
+                .is_none()
         );
     }
 

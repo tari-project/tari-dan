@@ -48,6 +48,7 @@ use tari_indexer_lib::{
 };
 use tari_ootle_common_types::{
     Epoch,
+    NodeHeight,
     NumPreshards,
     ShardGroup,
     StateVersion,
@@ -106,9 +107,21 @@ impl std::fmt::Debug for SqliteTrustedRootStore {
 
 #[async_trait]
 impl TrustedRootStore for SqliteTrustedRootStore {
-    async fn is_trusted(&self, epoch: Epoch, shard_group: ShardGroup, root: FixedHash) -> Result<bool, IndexerError> {
+    async fn trusted_root_height(
+        &self,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+        root: FixedHash,
+    ) -> Result<Option<NodeHeight>, IndexerError> {
         self.store
-            .with_read_tx(move |tx| tx.is_state_root_trusted(epoch, shard_group, &root))
+            .with_read_tx(move |tx| tx.get_verified_state_root_height(epoch, shard_group, &root))
+            .await
+            .map_err(|e: StorageError| IndexerError::TrustedRootStoreError(e.to_string()))
+    }
+
+    async fn latest_height(&self, epoch: Epoch, shard_group: ShardGroup) -> Result<Option<NodeHeight>, IndexerError> {
+        self.store
+            .with_read_tx(move |tx| tx.get_latest_verified_height_overlapping(epoch, shard_group))
             .await
             .map_err(|e: StorageError| IndexerError::TrustedRootStoreError(e.to_string()))
     }

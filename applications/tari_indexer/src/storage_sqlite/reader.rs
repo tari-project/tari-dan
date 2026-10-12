@@ -1149,25 +1149,56 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
             .collect()
     }
 
-    fn is_state_root_trusted(
+    fn get_verified_state_root_height(
         &mut self,
         epoch: Epoch,
         shard_group: ShardGroup,
         root: &FixedHash,
-    ) -> Result<bool, StorageError> {
-        const OPERATION: &str = "is_state_root_trusted";
+    ) -> Result<Option<NodeHeight>, StorageError> {
+        const OPERATION: &str = "get_verified_state_root_height";
         use crate::storage_sqlite::schema::verified_state_roots;
-        let count: i64 = verified_state_roots::table
+        let height: Option<i64> = verified_state_roots::table
+            .select(verified_state_roots::block_height)
             .filter(verified_state_roots::epoch.eq(epoch.as_u64() as i64))
             .filter(verified_state_roots::shard_group.eq(shard_group.to_parsable_string()))
             .filter(verified_state_roots::state_merkle_root.eq(serialize_hex(root)))
-            .limit(1)
-            .count()
-            .get_result(self.connection())
+            .first(self.connection())
+            .optional()
             .map_err(|e| StorageError::QueryError {
                 reason: format!("{OPERATION}: {e}"),
             })?;
-        Ok(count > 0)
+        Ok(height.map(|h| NodeHeight(h as u64)))
+    }
+
+    fn get_latest_verified_height_overlapping(
+        &mut self,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+    ) -> Result<Option<NodeHeight>, StorageError> {
+        const OPERATION: &str = "get_latest_verified_height_overlapping";
+        use crate::storage_sqlite::schema::verified_state_roots;
+        let latest_by_group: Vec<(String, Option<i64>)> = verified_state_roots::table
+            .filter(verified_state_roots::epoch.eq(epoch.as_u64() as i64))
+            .group_by(verified_state_roots::shard_group)
+            .select((
+                verified_state_roots::shard_group,
+                diesel::dsl::max(verified_state_roots::block_height),
+            ))
+            .load(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("{OPERATION}: {e}"),
+            })?;
+
+        let mut latest = None;
+        for (group, height) in latest_by_group {
+            let group = ShardGroup::from_str(&group).map_err(|e| StorageError::DataInconsistency {
+                details: format!("{OPERATION}: {e}"),
+            })?;
+            if group.overlaps_shard_group(&shard_group) {
+                latest = latest.max(height.map(|h| NodeHeight(h as u64)));
+            }
+        }
+        Ok(latest)
     }
 
     fn get_latest_verified_state_root(
