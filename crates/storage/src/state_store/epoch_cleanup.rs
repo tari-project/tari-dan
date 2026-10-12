@@ -14,6 +14,10 @@ pub enum EpochCleanupStep {
     /// Deletes the down proofs of substates downed in pruned epochs. Its window is the down proof retention window,
     /// not the one the other steps share.
     SubstateDownProofs,
+    /// Deletes the state version proofs, other than proof points, that no live down proof record can cite, and the
+    /// commit proofs that only they cited. Shares the down proof retention window, and runs after
+    /// [`Self::SubstateDownProofs`] so that a record and the proof it cites leave together.
+    StateVersionProofs,
     Blocks,
     ProposalCertificates,
     TimeoutCertificates,
@@ -25,9 +29,10 @@ pub enum EpochCleanupStep {
 }
 
 impl EpochCleanupStep {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::DownedSubstateValues,
         Self::SubstateDownProofs,
+        Self::StateVersionProofs,
         Self::Blocks,
         Self::ProposalCertificates,
         Self::TimeoutCertificates,
@@ -41,6 +46,7 @@ impl EpochCleanupStep {
         match self {
             Self::DownedSubstateValues => "downed substate values",
             Self::SubstateDownProofs => "substate down proofs",
+            Self::StateVersionProofs => "state version proofs",
             Self::Blocks => "blocks",
             Self::ProposalCertificates => "proposal certificates",
             Self::TimeoutCertificates => "timeout certificates",

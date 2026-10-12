@@ -786,13 +786,16 @@ pub trait StateStoreWriteTransaction {
     /// that they can be rewound if the sync never verifies them, even across a restart.
     fn state_sync_rewind_point_set(&mut self, shard: Shard, version: Version) -> Result<(), StorageError>;
     fn state_sync_rewind_point_remove(&mut self, shard: Shard) -> Result<(), StorageError>;
-    fn state_version_proofs_insert(&mut self, proof: &StateVersionProof) -> Result<(), StorageError>;
-    /// Stores the CBOR-encoded commit proof of `block_id`. It is never pruned: the state version proofs that name the
-    /// block outlive it.
+    /// Stores `proof`, produced by a block of `epoch`. A proof point is kept for good. Any other proof is kept through
+    /// `epoch`, or through the epoch of the latest destruction whose down proof record cites it if that is later, and
+    /// epoch GC prunes it once that epoch leaves the down proof retention window.
+    fn state_version_proofs_insert(&mut self, epoch: Epoch, proof: &StateVersionProof) -> Result<(), StorageError>;
+    /// Stores the CBOR-encoded commit proof of `block_id`, which the block's state version proofs are served with once
+    /// the block is pruned. It is deleted with the last of those proofs.
     fn block_commit_proofs_insert(&mut self, block_id: &BlockId, commit_proof: &[u8]) -> Result<(), StorageError>;
 
     /// Stores the down proof record of `id`, destroyed in `epoch`, which epoch GC prunes once `epoch` leaves the
-    /// down proof retention window.
+    /// down proof retention window. The state version proof the record cites is kept through `epoch` at least.
     fn substate_down_proofs_insert(
         &mut self,
         epoch: Epoch,

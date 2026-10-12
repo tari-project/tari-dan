@@ -1043,14 +1043,17 @@ mod tests {
         shard: tari_ootle_common_types::shard::Shard,
         state_version: u64,
     ) -> Result<(), StorageError> {
-        tx.state_version_proofs_insert(&tari_ootle_storage::consensus_models::StateVersionProof {
-            shard,
-            state_version,
-            source: tari_ootle_storage::consensus_models::StateVersionProofSource::Committed {
-                block_id: COMMITTING_BLOCK,
+        tx.state_version_proofs_insert(
+            tari_ootle_common_types::Epoch(1),
+            &tari_ootle_storage::consensus_models::StateVersionProof {
+                shard,
+                state_version,
+                source: tari_ootle_storage::consensus_models::StateVersionProofSource::Committed {
+                    block_id: COMMITTING_BLOCK,
+                },
+                shard_root_proof: proof_ext(3),
             },
-            shard_root_proof: proof_ext(3),
-        })
+        )
     }
 
     fn exclusion() -> SubstateValueProof {

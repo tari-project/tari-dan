@@ -210,7 +210,7 @@ fn commit_with_received_proof<S: StateStore>(
     commit_version(&mut tx, shard, 1, changes, records, no_committed_blocks);
     let tree = group_tree(&*tx, shard_group);
     let commit_proof = commit_proof(shard_group, 2, tree.root());
-    tx.state_version_proofs_insert(&StateVersionProof {
+    tx.state_version_proofs_insert(EPOCH, &StateVersionProof {
         shard,
         state_version: 1,
         source: StateVersionProofSource::Received {
@@ -260,7 +260,7 @@ fn a_destroyed_substate_stays_provably_down_after_its_state_is_pruned() {
     // no usable proof of: its only candidate is a block this node can no longer build a commit proof for.
     {
         let mut tx = db.create_write_tx().unwrap();
-        tx.state_version_proofs_insert(&StateVersionProof {
+        tx.state_version_proofs_insert(EPOCH, &StateVersionProof {
             shard,
             state_version: 2,
             source: StateVersionProofSource::Committed {
@@ -334,7 +334,7 @@ fn a_substate_destroyed_with_a_committed_block_proof_is_recorded() {
     );
     let tree = group_tree(&*tx, shard_group);
     let r1_commit_proof = commit_proof(shard_group, 2, tree.root());
-    tx.state_version_proofs_insert(&StateVersionProof {
+    tx.state_version_proofs_insert(EPOCH, &StateVersionProof {
         shard,
         state_version: 1,
         source: StateVersionProofSource::Committed { block_id },
@@ -422,7 +422,7 @@ fn substates_destroyed_together_share_one_commit_proof() {
         );
         let tree = group_tree(&*tx, shard_group);
         let commit_proof_bytes = commit_proof(shard_group, 2, tree.root()).to_bytes();
-        tx.state_version_proofs_insert(&StateVersionProof {
+        tx.state_version_proofs_insert(EPOCH, &StateVersionProof {
             shard,
             state_version: 1,
             source: StateVersionProofSource::Committed { block_id },

@@ -73,6 +73,9 @@ pub enum KeyPrefix {
     BlockCommitProofs = 56,
     SubstateDownProofs = 57,
     SubstateDownProofEpochIndex = 58,
+    StateVersionProofRetention = 59,
+    StateVersionProofEpochIndex = 60,
+    BlockCommitProofCitations = 61,
 }
 
 impl KeyPrefix {
