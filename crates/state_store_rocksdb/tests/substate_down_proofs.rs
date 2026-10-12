@@ -27,6 +27,7 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_storage::{
     DownProofAnchor,
+    EpochCleanupStep,
     ShardScopedTreeStoreReader,
     ShardScopedTreeStoreWriter,
     StateStore,
@@ -136,9 +137,9 @@ fn commit_version<TTx>(
     }
     tx.state_tree_shard_versions_set(shard, version).unwrap();
     let batch = create_substate_update_batch(EPOCH, records.iter().copied());
-    let downed = batch.downed();
+    let downed = batch.downed_iter().collect::<Vec<_>>();
     tx.substates_commit_batch(batch).unwrap();
-    index_substate_down_proofs(tx, &downed, commit_proof_for_block).unwrap();
+    index_substate_down_proofs(tx, downed, commit_proof_for_block).unwrap();
 }
 
 fn up(record: &SubstateRecord) -> SubstateTreeChange {
@@ -517,4 +518,75 @@ fn a_received_commit_proof_is_served_from_its_state_version_proof() {
             .unwrap()
             .is_none()
     );
+}
+
+/// Commits `target` and a neighbour at state version 1 and destroys `target` at state version 2, in [`EPOCH`].
+fn commit_and_destroy<S: StateStore>(db: &S, seed: u32) -> (Shard, VersionedSubstateId) {
+    let target = build_substate_record(&substate_id_seed(seed << 24), SubstateVersion::ZERO, 1);
+    let shard = target.created().in_shard;
+    let shard_group = ShardGroup::new(shard, shard);
+    let neighbour = build_substate_record(&substate_id_seed((seed << 24) | 1), SubstateVersion::ZERO, 1);
+    commit_with_received_proof(db, shard_group, shard, &[&target, &neighbour]);
+
+    let target_id = target.to_versioned_substate_id();
+    let mut tx = db.create_write_tx().unwrap();
+    commit_version(
+        &mut tx,
+        shard,
+        2,
+        vec![SubstateTreeChange::Down { id: target_id.clone() }],
+        &[&destroyed(&target, 2)],
+        no_committed_blocks,
+    );
+    assert!(tx.substate_down_proofs_get(shard, &target_id).unwrap().is_some());
+    tx.commit().unwrap();
+    (shard, target_id)
+}
+
+#[test]
+fn down_proofs_are_pruned_once_their_epoch_leaves_the_retention_window() {
+    const HISTORY: u64 = 3;
+    let (db, _dir) = create_rocksdb_with_opts(
+        DatabaseOptions::default()
+            .with_epoch_history_length(1)
+            .with_down_proof_history_length(HISTORY),
+    );
+    let (shard, target_id) = commit_and_destroy(&db, 5);
+    let has_record = || {
+        db.with_read_tx(|tx| tx.substate_down_proofs_get(shard, &target_id))
+            .unwrap()
+            .is_some()
+    };
+
+    // Every other step's window has passed the destruction's epoch, the down proofs' has not.
+    let last_retained = EPOCH + Epoch(HISTORY - 1);
+    db.with_write_tx(|tx| tx.epoch_cleanup(last_retained)).unwrap();
+    assert!(has_record(), "pruned inside the retention window");
+
+    let prune = || {
+        db.with_write_tx(|tx| tx.epoch_cleanup_step(EPOCH + Epoch(HISTORY), EpochCleanupStep::SubstateDownProofs, 1))
+            .unwrap()
+    };
+    assert_eq!(prune(), 1);
+    assert!(!has_record(), "kept past the retention window");
+    assert_eq!(prune(), 0, "the epoch index entry outlived its record");
+}
+
+#[test]
+fn rewinding_a_destruction_removes_its_down_proof_from_epoch_gc() {
+    let (db, _dir) = create_rocksdb_with_opts(DatabaseOptions::default().with_down_proof_history_length(0));
+    let (shard, target_id) = commit_and_destroy(&db, 6);
+
+    db.with_write_tx(|tx| tx.substates_rewind_to_state_version(shard, 1))
+        .unwrap();
+
+    db.with_read_tx(|tx| {
+        assert!(tx.substate_down_proofs_get(shard, &target_id)?.is_none());
+        Ok::<_, tari_ootle_storage::StorageError>(())
+    })
+    .unwrap();
+    let pruned = db
+        .with_write_tx(|tx| tx.epoch_cleanup_step(EPOCH, EpochCleanupStep::SubstateDownProofs, usize::MAX))
+        .unwrap();
+    assert_eq!(pruned, 0, "the rewound destruction's epoch index entry survived");
 }

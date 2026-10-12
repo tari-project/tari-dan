@@ -791,8 +791,11 @@ pub trait StateStoreWriteTransaction {
     /// block outlive it.
     fn block_commit_proofs_insert(&mut self, block_id: &BlockId, commit_proof: &[u8]) -> Result<(), StorageError>;
 
+    /// Stores the down proof record of `id`, destroyed in `epoch`, which epoch GC prunes once `epoch` leaves the
+    /// down proof retention window.
     fn substate_down_proofs_insert(
         &mut self,
+        epoch: Epoch,
         shard: Shard,
         id: &VersionedSubstateId,
         record: &SubstateDownProofRecord,

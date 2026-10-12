@@ -158,7 +158,7 @@ use crate::{
         state_version_proof::{BlockCommitProofCf, StateVersionProofCf},
         substate,
         substate::{SubstateCf, SubstateHeadData},
-        substate_down_proof::SubstateDownProofCf,
+        substate_down_proof::{SubstateDownProofByEpochQuery, SubstateDownProofCf, SubstateDownProofEpochIndex},
         substate_locks::BlockLockSetCf,
         transaction::TransactionCf,
         transaction_pool::TransactionPoolCf,
@@ -1411,6 +1411,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         let head_cf = db.cf(substate::HeadIndex)?;
         let unpruned_cf = db.cf(substate::UnprunedDownedValuesIndex)?;
         let down_proofs_cf = db.cf(SubstateDownProofCf)?;
+        let down_proofs_epoch_index = db.cf(SubstateDownProofEpochIndex)?;
 
         let start_version = target_state_version.saturating_add(1);
         let mut touched: HashSet<SubstateId> = HashSet::new();
@@ -1442,7 +1443,8 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
                         touched.insert(substate.substate_id.clone());
                         substate.destroyed = None;
                         substates_cf.put(address, &substate, OPERATION)?;
-                        down_proofs_cf.delete(&(shard, *address), OPERATION).optional()?;
+                        down_proofs_cf.delete(&(shard, *address), OPERATION)?;
+                        down_proofs_epoch_index.delete(&(record.epoch, shard, *address), OPERATION)?;
                         stats.substates_destroyed_restored += 1;
                     },
                 }
@@ -1826,14 +1828,17 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
 
     fn substate_down_proofs_insert(
         &mut self,
+        epoch: Epoch,
         shard: Shard,
         id: &VersionedSubstateId,
         record: &SubstateDownProofRecord,
     ) -> Result<(), StorageError> {
         const OPERATION: &str = "substate_down_proofs_insert";
-        self.db()
-            .cf(SubstateDownProofCf)?
-            .put(&(shard, id.to_substate_address()), record, OPERATION)?;
+        let db = self.db();
+        let address = id.to_substate_address();
+        db.cf(SubstateDownProofCf)?.put(&(shard, address), record, OPERATION)?;
+        db.cf(SubstateDownProofEpochIndex)?
+            .put(&(epoch, shard, address), &(), OPERATION)?;
         Ok(())
     }
 
@@ -1957,13 +1962,18 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         step: EpochCleanupStep,
         limit: usize,
     ) -> Result<usize, StorageError> {
-        let Some(prune_epoch) = epoch.checked_sub(self.options.epoch_history_length) else {
+        let history_length = match step {
+            EpochCleanupStep::SubstateDownProofs => self.options.down_proof_history_length,
+            _ => self.options.epoch_history_length,
+        };
+        let Some(prune_epoch) = epoch.checked_sub(history_length) else {
             return Ok(0);
         };
 
         let db = self.db();
         match step {
             EpochCleanupStep::DownedSubstateValues => self.substates_prune_downed_values(prune_epoch, limit),
+            EpochCleanupStep::SubstateDownProofs => cleanup::substate_down_proofs_for_epoch(&db, prune_epoch, limit),
             EpochCleanupStep::Blocks => cleanup::blocks_for_epoch(&db, prune_epoch, limit),
             EpochCleanupStep::ProposalCertificates => cleanup::proposal_certificates_for_epoch(&db, prune_epoch, limit),
             EpochCleanupStep::TimeoutCertificates => cleanup::timeout_certificates_for_epoch(&db, prune_epoch, limit),
@@ -2211,6 +2221,29 @@ mod cleanup {
         let cf = db.cf(validator_liveness_log::ValidatorLivenessLogCf)?;
         for key in &keys {
             cf.delete(key, OPERATION)?;
+        }
+        Ok(keys.len())
+    }
+
+    pub fn substate_down_proofs_for_epoch(
+        db: &DbWriteContext<'_>,
+        up_to_epoch: Epoch,
+        limit: usize,
+    ) -> Result<usize, StorageError> {
+        const OPERATION: &str = "cleanup::substate_down_proofs_for_epoch";
+        let up_to_epoch = up_to_epoch + Epoch(1); // Make it inclusive
+        let keys = db.cf(SubstateDownProofByEpochQuery)?.query_range_keys_limited(
+            Ordering::Ascending,
+            Epoch::zero()..up_to_epoch,
+            limit,
+        )?;
+
+        let records = db.cf(SubstateDownProofCf)?;
+        let index = db.cf(SubstateDownProofEpochIndex)?;
+        for key in &keys {
+            let (_, shard, address) = key;
+            records.delete(&(*shard, *address), OPERATION)?;
+            index.delete(key, OPERATION)?;
         }
         Ok(keys.len())
     }

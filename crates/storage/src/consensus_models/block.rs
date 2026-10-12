@@ -775,7 +775,7 @@ impl Block {
                 Ok(batch)
             })?;
 
-        let downed = batch.downed();
+        let downed = batch.downed_iter().collect();
         SubstateRecord::commit_batch(tx, batch)?;
 
         Ok(downed)

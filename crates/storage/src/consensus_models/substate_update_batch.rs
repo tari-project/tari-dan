@@ -29,28 +29,27 @@ impl SubstateUpdateBatch {
     }
 
     /// Every substate the batch takes down.
-    pub fn downed(&self) -> Vec<DownedSubstate> {
-        let mut downed = Vec::new();
-        for (shard, versions) in &self.updates {
-            for (state_version, transitions) in versions {
-                for transition in transitions {
-                    if let SubstateTransition::Down { id } = transition {
-                        downed.push(DownedSubstate {
-                            shard: *shard,
-                            id: id.clone(),
-                            state_version: *state_version,
-                        });
-                    }
-                }
-            }
-        }
-        downed
+    pub fn downed_iter(&self) -> impl Iterator<Item = DownedSubstate> + '_ {
+        self.updates.iter().flat_map(move |(shard, versions)| {
+            versions.iter().flat_map(move |(state_version, transitions)| {
+                transitions
+                    .iter()
+                    .filter_map(SubstateTransition::down)
+                    .map(move |id| DownedSubstate {
+                        epoch: self.epoch,
+                        shard: *shard,
+                        id: id.clone(),
+                        state_version: *state_version,
+                    })
+            })
+        })
     }
 }
 
-/// A substate taken down at `state_version` of `shard`.
+/// A substate taken down at `state_version` of `shard`, in `epoch`.
 #[derive(Debug, Clone)]
 pub struct DownedSubstate {
+    pub epoch: Epoch,
     pub shard: Shard,
     pub id: VersionedSubstateId,
     pub state_version: Version,
@@ -65,4 +64,13 @@ pub enum SubstateTransition {
     Down {
         id: VersionedSubstateId,
     },
+}
+
+impl SubstateTransition {
+    pub fn down(&self) -> Option<&VersionedSubstateId> {
+        match self {
+            Self::Down { id } => Some(id),
+            Self::Up { .. } => None,
+        }
+    }
 }

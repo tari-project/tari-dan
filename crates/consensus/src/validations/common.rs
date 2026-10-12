@@ -506,10 +506,9 @@ pub(super) fn check_sidechain_id(header: &BlockHeader, config: &HotstuffConfig) 
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
     use tari_consensus_types::{BlockId, ProposalCertificate, ShardGroupAccumulatedData};
     use tari_ootle_common_types::ExtraData;
+    use tari_ootle_storage::consensus_models::BlockCommands;
 
     use super::*;
 
@@ -526,7 +525,7 @@ mod tests {
             shard_group,
             RistrettoPublicKeyBytes::default(),
             FixedHash::zero(),
-            &BTreeSet::new(),
+            &BlockCommands::empty(),
             1,
             1234,
             FixedHash::zero(),

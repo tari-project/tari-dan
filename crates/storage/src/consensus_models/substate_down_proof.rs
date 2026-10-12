@@ -104,30 +104,32 @@ pub fn resolve_substate_down_proof<TTx: StateStoreReadTransaction>(
 /// Records, for each substate in `downed`, the proof that it was committed before it went down (see
 /// [`SubstateDownProofRecord`]).
 ///
-/// Must run in the write transaction that commits the destructions, after the state tree diffs are committed.
-/// `commit_proof_for_block` returns the encoded commit proof of a block this node committed, or `None` when it can no
-/// longer build one (e.g. the block was pruned). It is asked only for a block with no stored commit proof, and what it
-/// returns is stored, so that the record stays servable once the block is pruned. A substate for which no proof can be
-/// assembled - such as on a node that state-synced past every version it was up at - gets no record, and is served as
-/// an unproven Down.
-pub fn index_substate_down_proofs<TTx, F>(
+/// Must run in the write transaction that commits the destructions, after the state tree diffs of every earlier state
+/// version are committed. It reads nothing that committing the destructions themselves writes, so it may run before
+/// or after [`SubstateRecord::commit_batch`]. `commit_proof_for_block` returns the encoded commit proof of a block this
+/// node committed, or `None` when it can no longer build one (e.g. the block was pruned). It is asked only for a block
+/// with no stored commit proof, and what it returns is stored, so that the record stays servable once the block is
+/// pruned. A substate for which no proof can be assembled - such as on a node that state-synced past every version it
+/// was up at - gets no record, and is served as an unproven Down.
+pub fn index_substate_down_proofs<TTx, I, F>(
     tx: &mut TTx,
-    downed: &[DownedSubstate],
+    downed: I,
     commit_proof_for_block: F,
 ) -> Result<(), StorageError>
 where
     TTx: StateStoreWriteTransaction + Deref,
     TTx::Target: StateStoreReadTransaction,
+    I: IntoIterator<Item = DownedSubstate>,
     F: FnMut(&TTx::Target, &BlockId) -> Option<Vec<u8>>,
 {
     let mut sources = UpVersionSources::new(commit_proof_for_block);
     for downed in downed {
-        match sources.build_record(&**tx, downed)? {
+        match sources.build_record(&**tx, &downed)? {
             Some(record) => {
                 for (block_id, commit_proof) in sources.unstored.drain() {
                     tx.block_commit_proofs_insert(&block_id, &commit_proof)?;
                 }
-                tx.substate_down_proofs_insert(downed.shard, &downed.id, &record)?;
+                tx.substate_down_proofs_insert(downed.epoch, downed.shard, &downed.id, &record)?;
             },
             None => {
                 debug!(

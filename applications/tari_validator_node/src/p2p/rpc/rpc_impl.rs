@@ -1134,7 +1134,7 @@ mod tests {
             .with_write_tx(|tx| {
                 committed_version_proof(tx, shard, 1)?;
                 tx.block_commit_proofs_insert(&COMMITTING_BLOCK, &[9, 9, 9])?;
-                tx.substate_down_proofs_insert(shard, &id, &record)
+                tx.substate_down_proofs_insert(Epoch(1), shard, &id, &record)
             })
             .unwrap();
         let tx = store.create_read_tx().unwrap();
@@ -1177,7 +1177,7 @@ mod tests {
             );
         }
         store
-            .with_write_tx(|tx| tx.substate_down_proofs_insert(id.to_shard(NUM_PRESHARDS), &id, &record))
+            .with_write_tx(|tx| tx.substate_down_proofs_insert(Epoch(1), id.to_shard(NUM_PRESHARDS), &id, &record))
             .unwrap();
         // A record whose version's commit proof is not held cannot be served: first no state version proof, then one
         // citing a committed block whose commit proof is not stored.

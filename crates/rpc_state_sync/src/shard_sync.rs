@@ -634,9 +634,8 @@ where
             },
         }));
 
-    let downed = batch.downed();
+    index_substate_down_proofs(tx, batch.downed_iter(), committed_block_commit_proof)?;
     SubstateRecord::commit_batch(tx, batch)?;
-    index_substate_down_proofs(tx, &downed, committed_block_commit_proof)?;
 
     Ok(())
 }
