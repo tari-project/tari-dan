@@ -3,7 +3,7 @@
 //! Access control rules for template-related data like component methods and resources
 
 use minicbor::{CborLen, Decode, Decoder, Encode, data::Type, decode};
-use tari_bor::adapters::boxed_slice;
+use tari_bor::adapters::{bounded_vec, boxed_slice};
 use tari_template_abi::rust::{
     collections::BTreeMap,
     fmt::{self, Display},
@@ -80,6 +80,15 @@ impl AccessRule {
             Self::Restricted(rule) => rule.find_invalid_m_of_n(),
         }
     }
+
+    /// The number of nodes this rule holds: each [`RestrictedAccessRule`] and each [`RuleRequirement`] in it.
+    /// Decoding refuses a rule holding more than [`MAX_ACCESS_RULE_NODES`].
+    pub fn num_nodes(&self) -> usize {
+        match self {
+            Self::AllowAll | Self::DenyAll => 0,
+            Self::Restricted(rule) => rule.num_nodes(),
+        }
+    }
 }
 
 /// Why an `m_of_n` rule is rejected.
@@ -139,9 +148,23 @@ impl RestrictedAccessRule {
             Self::AnyOf(rules) | Self::AllOf(rules) => rules.iter().find_map(Self::find_invalid_m_of_n),
         }
     }
+
+    fn num_nodes(&self) -> usize {
+        1 + match self {
+            Self::Require(rule) => rule.num_requirements(),
+            Self::AnyOf(rules) | Self::AllOf(rules) => rules.iter().map(Self::num_nodes).sum(),
+        }
+    }
 }
 
 impl RequireRule {
+    fn num_requirements(&self) -> usize {
+        match self {
+            Self::Require(_) => 1,
+            Self::AnyOf(requirements) | Self::AllOf(requirements) | Self::MOfN(_, requirements) => requirements.len(),
+        }
+    }
+
     fn contains_requirement(&self, predicate: &impl Fn(&RuleRequirement) -> bool) -> bool {
         match self {
             Self::Require(requirement) => predicate(requirement),
@@ -197,22 +220,44 @@ impl RuleRequirement {
 // a clean error, mirroring the guard `tari_bor` applies to the dynamic `Value` tree. `Encode` and
 // `CborLen` stay derived, so this decode must match their wire framing; the round-trip tests enforce
 // that.
+//
+// A rule node encodes in as little as four bytes and occupies a `RestrictedAccessRule` slot once decoded, so
+// the decode also counts nodes and refuses a tree over `MAX_ACCESS_RULE_NODES`.
 impl<'b, C> Decode<'b, C> for RestrictedAccessRule {
     fn decode(d: &mut Decoder<'b>, ctx: &mut C) -> Result<Self, decode::Error> {
-        decode_restricted_access_rule(d, ctx, 0)
+        decode_restricted_access_rule(d, ctx, 0, &mut 0)
     }
+}
+
+/// The most nodes one decoded access rule tree, or one [`ComponentAccessRules`], may hold, as counted by
+/// [`AccessRule::num_nodes`] and [`ComponentAccessRules::num_nodes`].
+///
+/// Each node encodes in a few bytes but decodes to a fixed-size slot many times larger, so the byte size of an
+/// encoding does not bound the memory its decode takes. Decoding refuses anything over this bound.
+pub const MAX_ACCESS_RULE_NODES: usize = 1024;
+
+fn count_nodes(num_nodes: &mut usize, added: usize) -> Result<(), decode::Error> {
+    *num_nodes += added;
+    if *num_nodes > MAX_ACCESS_RULE_NODES {
+        return Err(decode::Error::message(
+            "access rules hold more than MAX_ACCESS_RULE_NODES nodes",
+        ));
+    }
+    Ok(())
 }
 
 fn decode_restricted_access_rule<'b, C>(
     d: &mut Decoder<'b>,
     ctx: &mut C,
     depth: usize,
+    num_nodes: &mut usize,
 ) -> Result<RestrictedAccessRule, decode::Error> {
     if depth >= tari_bor::MAX_DECODE_DEPTH {
         return Err(decode::Error::message(
             "RestrictedAccessRule nesting exceeds the maximum decode depth",
         ));
     }
+    count_nodes(num_nodes, 1)?;
 
     // minicbor's derived enum framing is a definite 2-element array of `[variant index, body]`.
     let pos = d.position();
@@ -221,10 +266,14 @@ fn decode_restricted_access_rule<'b, C>(
     }
     let variant_pos = d.position();
     match d.i64()? {
-        0 => decode_variant_field(d, ctx, |d, ctx| RequireRule::decode(d, ctx)).map(RestrictedAccessRule::Require),
-        1 => decode_variant_field(d, ctx, |d, ctx| decode_restricted_slice(d, ctx, depth + 1))
+        0 => {
+            let rule = decode_variant_field(d, ctx, |d, ctx| RequireRule::decode(d, ctx))?;
+            count_nodes(num_nodes, rule.num_requirements())?;
+            Ok(RestrictedAccessRule::Require(rule))
+        },
+        1 => decode_variant_field(d, ctx, |d, ctx| decode_restricted_slice(d, ctx, depth + 1, num_nodes))
             .map(RestrictedAccessRule::AnyOf),
-        2 => decode_variant_field(d, ctx, |d, ctx| decode_restricted_slice(d, ctx, depth + 1))
+        2 => decode_variant_field(d, ctx, |d, ctx| decode_restricted_slice(d, ctx, depth + 1, num_nodes))
             .map(RestrictedAccessRule::AllOf),
         n => Err(decode::Error::unknown_variant(n).at(variant_pos)),
     }
@@ -236,8 +285,13 @@ fn decode_restricted_slice<'b, C>(
     d: &mut Decoder<'b>,
     ctx: &mut C,
     depth: usize,
+    num_nodes: &mut usize,
 ) -> Result<Box<[RestrictedAccessRule]>, decode::Error> {
-    boxed_slice::decode_with_fn(d, ctx, |d, ctx| decode_restricted_access_rule(d, ctx, depth))
+    boxed_slice::decode_with_fn(d, ctx, |d, ctx| decode_restricted_access_rule(d, ctx, depth, num_nodes))
+}
+
+fn decode_requirements<'b, C>(d: &mut Decoder<'b>, ctx: &mut C) -> Result<Box<[RuleRequirement]>, decode::Error> {
+    bounded_vec::decode(d, ctx, MAX_ACCESS_RULE_NODES).map(Vec::into_boxed_slice)
 }
 
 // Every `RestrictedAccessRule` variant carries a single field at index 0. minicbor's derive encodes a
@@ -360,14 +414,22 @@ pub enum RequireRule {
     #[n(1)]
     AnyOf(
         #[n(0)]
-        #[cbor(with = "boxed_slice")]
+        #[cbor(
+            encode_with = "boxed_slice::encode",
+            decode_with = "decode_requirements",
+            cbor_len = "boxed_slice::cbor_len"
+        )]
         Box<[RuleRequirement]>,
     ),
     /// Requires all of the specified conditions to be met (logical AND)
     #[n(2)]
     AllOf(
         #[n(0)]
-        #[cbor(with = "boxed_slice")]
+        #[cbor(
+            encode_with = "boxed_slice::encode",
+            decode_with = "decode_requirements",
+            cbor_len = "boxed_slice::cbor_len"
+        )]
         Box<[RuleRequirement]>,
     ),
     /// Requires N of the specified conditions to be met
@@ -375,13 +437,17 @@ pub enum RequireRule {
     MOfN(
         #[n(0)] u16,
         #[n(1)]
-        #[cbor(with = "boxed_slice")]
+        #[cbor(
+            encode_with = "boxed_slice::encode",
+            decode_with = "decode_requirements",
+            cbor_len = "boxed_slice::cbor_len"
+        )]
         Box<[RuleRequirement]>,
     ),
 }
 
 /// Information needed to specify access rules to methods of a component
-#[derive(Debug, Clone, Encode, Decode, CborLen, PartialEq, Eq)]
+#[derive(Debug, Clone, Encode, CborLen, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize))]
@@ -471,6 +537,85 @@ impl ComponentAccessRules {
             .find_invalid_m_of_n()
             .or_else(|| self.method_access.values().find_map(AccessRule::find_invalid_m_of_n))
     }
+
+    /// The number of nodes these rules hold: one for each method rule, plus the nodes of every method rule and of
+    /// the default rule (see [`AccessRule::num_nodes`]). Decoding refuses rules holding more than
+    /// [`MAX_ACCESS_RULE_NODES`].
+    pub fn num_nodes(&self) -> usize {
+        self.default.num_nodes() +
+            self.method_access
+                .values()
+                .map(|rule| 1 + rule.num_nodes())
+                .sum::<usize>()
+    }
+}
+
+// `Decode` is hand-written so that one node count spans every method rule and the default rule: a method rule
+// encodes in a few bytes, so neither the number of methods nor the byte size of the map bounds its decode.
+// `Encode` and `CborLen` stay derived, so this decode follows their framing, an array of the fields by index.
+impl<'b, C> Decode<'b, C> for ComponentAccessRules {
+    fn decode(d: &mut Decoder<'b>, ctx: &mut C) -> Result<Self, decode::Error> {
+        let pos = d.position();
+        let len = d.array()?;
+        let mut num_nodes = 0;
+        let mut method_access = None;
+        let mut default = None;
+        let mut index = 0u64;
+        loop {
+            match len {
+                Some(len) if index == len => break,
+                None if matches!(d.datatype()?, Type::Break) => {
+                    d.skip()?;
+                    break;
+                },
+                _ => {},
+            }
+            match index {
+                0 => method_access = Some(decode_method_access(d, ctx, &mut num_nodes)?),
+                1 => {
+                    let rule = AccessRule::decode(d, ctx)?;
+                    count_nodes(&mut num_nodes, rule.num_nodes())?;
+                    default = Some(rule);
+                },
+                _ => d.skip()?,
+            }
+            index += 1;
+        }
+        Ok(Self {
+            method_access: method_access.ok_or_else(|| decode::Error::missing_value(0).at(pos))?,
+            default: default.ok_or_else(|| decode::Error::missing_value(1).at(pos))?,
+        })
+    }
+}
+
+fn decode_method_access<'b, C>(
+    d: &mut Decoder<'b>,
+    ctx: &mut C,
+    num_nodes: &mut usize,
+) -> Result<BTreeMap<String, AccessRule>, decode::Error> {
+    let pos = d.position();
+    let len = d.map()?;
+    if len.is_some_and(|len| len > MAX_ACCESS_RULE_NODES as u64) {
+        return Err(decode::Error::message("access rules hold more than MAX_ACCESS_RULE_NODES nodes").at(pos));
+    }
+    let mut method_access = BTreeMap::new();
+    let mut index = 0u64;
+    loop {
+        match len {
+            Some(len) if index == len => break,
+            None if matches!(d.datatype()?, Type::Break) => {
+                d.skip()?;
+                break;
+            },
+            _ => {},
+        }
+        let method = String::decode(d, ctx)?;
+        let rule = AccessRule::decode(d, ctx)?;
+        count_nodes(num_nodes, 1 + rule.num_nodes())?;
+        method_access.insert(method, rule);
+        index += 1;
+    }
+    Ok(method_access)
 }
 
 impl Default for ComponentAccessRules {
@@ -1183,6 +1328,77 @@ mod tests {
         // depth guard must reject it as a clean error long before the recursion can overflow.
         let bytes: Vec<u8> = (0..100_000).flat_map(|_| [0x82u8, 0x01, 0x81, 0x81]).collect();
         assert!(tari_bor::decode::<RestrictedAccessRule>(&bytes).is_err());
+    }
+
+    fn any_of_empty(num_nodes: usize) -> RestrictedAccessRule {
+        RestrictedAccessRule::AnyOf(
+            (1..num_nodes)
+                .map(|_| RestrictedAccessRule::AnyOf(Box::new([])))
+                .collect(),
+        )
+    }
+
+    fn requirements(num_requirements: usize) -> RestrictedAccessRule {
+        RestrictedAccessRule::Require(RequireRule::AnyOf(
+            (0..num_requirements)
+                .map(|_| RuleRequirement::Resource(ResourceAddress::new(ObjectKey::default())))
+                .collect(),
+        ))
+    }
+
+    fn method_rules(num_methods: usize, default: AccessRule) -> ComponentAccessRules {
+        (0..num_methods).fold(ComponentAccessRules::new().default(default), |rules, i| {
+            rules.method(format!("{i}"), AccessRule::AllowAll)
+        })
+    }
+
+    fn roundtrips<T>(value: &T) -> bool
+    where T: Encode<()> + for<'b> Decode<'b, ()> + PartialEq {
+        let bytes = tari_bor::encode(value).unwrap();
+        tari_bor::decode::<T>(&bytes).is_ok_and(|decoded| decoded == *value)
+    }
+
+    #[test]
+    fn restricted_access_rule_decodes_up_to_max_nodes() {
+        for rule in [
+            any_of_empty(MAX_ACCESS_RULE_NODES),
+            requirements(MAX_ACCESS_RULE_NODES - 1),
+        ] {
+            assert_eq!(AccessRule::Restricted(rule.clone()).num_nodes(), MAX_ACCESS_RULE_NODES);
+            assert!(roundtrips(&rule));
+        }
+        for rule in [
+            any_of_empty(MAX_ACCESS_RULE_NODES + 1),
+            requirements(MAX_ACCESS_RULE_NODES),
+        ] {
+            assert!(!roundtrips(&rule));
+        }
+    }
+
+    #[test]
+    fn component_access_rules_decode_up_to_max_nodes() {
+        let at_limit = [
+            method_rules(MAX_ACCESS_RULE_NODES, AccessRule::DenyAll),
+            method_rules(MAX_ACCESS_RULE_NODES - 2, AccessRule::Restricted(any_of_empty(2))),
+        ];
+        for rules in at_limit {
+            assert_eq!(rules.num_nodes(), MAX_ACCESS_RULE_NODES);
+            assert!(roundtrips(&rules));
+        }
+        let over_limit = [
+            method_rules(MAX_ACCESS_RULE_NODES + 1, AccessRule::DenyAll),
+            method_rules(MAX_ACCESS_RULE_NODES - 1, AccessRule::Restricted(any_of_empty(2))),
+        ];
+        for rules in over_limit {
+            assert!(!roundtrips(&rules));
+        }
+    }
+
+    #[test]
+    fn component_access_rules_decode_requires_both_fields() {
+        let mut e = minicbor::Encoder::new(Vec::new());
+        e.array(1).unwrap().map(0).unwrap();
+        assert!(tari_bor::decode::<ComponentAccessRules>(e.writer()).is_err());
     }
 
     #[test]

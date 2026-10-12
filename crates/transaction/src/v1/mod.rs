@@ -4,6 +4,7 @@
 mod assertion;
 mod component_reference;
 mod instruction;
+mod instruction_limits;
 mod intent;
 pub(crate) mod pruned;
 mod resource_address_ref;
@@ -16,6 +17,7 @@ mod unsigned;
 pub use assertion::*;
 pub use component_reference::*;
 pub use instruction::*;
+pub use instruction_limits::*;
 pub use intent::*;
 pub use pruned::*;
 pub use resource_address_ref::*;

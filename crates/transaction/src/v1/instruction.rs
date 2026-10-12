@@ -22,6 +22,7 @@ use crate::{
     Assertion,
     BlobIndex,
     ComponentReference,
+    MAX_INSTRUCTION_ARGS,
     ResourceAddressRef,
     args::{InstructionArg, WorkspaceId, WorkspaceOffsetId},
 };
@@ -49,6 +50,7 @@ pub enum Instruction {
         #[cfg_attr(feature = "ts", ts(type = "string"))]
         function: FunctionName,
         #[n(2)]
+        #[cbor(decode_with = "decode_args")]
         args: Vec<InstructionArg>,
     },
     #[n(2)]
@@ -59,6 +61,7 @@ pub enum Instruction {
         #[cfg_attr(feature = "ts", ts(type = "string"))]
         method: FunctionName,
         #[n(2)]
+        #[cbor(decode_with = "decode_args")]
         args: Vec<InstructionArg>,
     },
     #[n(3)]
@@ -497,7 +500,15 @@ pub struct MigrateFunction {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub name: FunctionName,
     #[n(1)]
+    #[cbor(decode_with = "decode_args")]
     pub args: Vec<InstructionArg>,
+}
+
+fn decode_args<'b, C>(
+    d: &mut minicbor::Decoder<'b>,
+    ctx: &mut C,
+) -> Result<Vec<InstructionArg>, minicbor::decode::Error> {
+    tari_bor::adapters::bounded_vec::decode(d, ctx, MAX_INSTRUCTION_ARGS)
 }
 
 impl Display for MigrateFunction {
