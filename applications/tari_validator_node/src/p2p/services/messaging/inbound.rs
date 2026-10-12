@@ -4,6 +4,7 @@
 use std::future::Future;
 
 use libp2p::PeerId;
+use prost::Message;
 use tari_consensus::{messages::HotstuffMessage, traits::InboundMessagingError};
 use tari_epoch_manager::{EpochManagerReader, service::EpochManagerHandle};
 use tari_networking::InboundMessage;
@@ -28,7 +29,9 @@ impl ValidatorRegistry for EpochManagerHandle<PeerAddress> {
 
 pub struct ConsensusInboundMessaging<TMsgLogger, TRegistry = EpochManagerHandle<PeerAddress>> {
     local_address: PeerAddress,
-    rx_inbound_msg: mpsc::Receiver<InboundMessage<proto::consensus::HotStuffMessage>>,
+    /// Direct messages, still encoded. Each is decoded only once taken off the queue, so the queue's byte budget
+    /// bounds what it holds and decoding runs one message at a time.
+    rx_inbound_msg: mpsc::Receiver<InboundMessage>,
     rx_gossip: mpsc::Receiver<(PeerId, HotstuffMessage)>,
     rx_loopback: mpsc::UnboundedReceiver<HotstuffMessage>,
     msg_logger: TMsgLogger,
@@ -41,7 +44,7 @@ pub struct ConsensusInboundMessaging<TMsgLogger, TRegistry = EpochManagerHandle<
 impl<TMsgLogger: MessageLogger, TRegistry: ValidatorRegistry> ConsensusInboundMessaging<TMsgLogger, TRegistry> {
     pub fn new(
         local_address: PeerAddress,
-        rx_inbound_msg: mpsc::Receiver<InboundMessage<proto::consensus::HotStuffMessage>>,
+        rx_inbound_msg: mpsc::Receiver<InboundMessage>,
         rx_gossip: mpsc::Receiver<(PeerId, HotstuffMessage)>,
         rx_loopback: mpsc::UnboundedReceiver<HotstuffMessage>,
         msg_logger: TMsgLogger,
@@ -99,11 +102,19 @@ where
                     Ok((self.local_address, msg))
                 }),
                 maybe_msg = self.rx_inbound_msg.recv() => {
-                    let inbound = maybe_msg?;
-                    if validator_only_epoch(&inbound.message).is_none() {
-                        return self.handle_message(inbound.peer_id, inbound.message);
+                    let InboundMessage { peer_id, message, .. } = maybe_msg?;
+                    let message = match proto::consensus::HotStuffMessage::decode(message) {
+                        Ok(message) => message,
+                        Err(err) => {
+                            return Some(Err(InboundMessagingError::InvalidMessage {
+                                reason: format!("from peer {peer_id}: undecodable message: {err}"),
+                            }));
+                        },
+                    };
+                    if validator_only_epoch(&message).is_none() {
+                        return self.handle_message(peer_id, message);
                     }
-                    self.awaiting_sender_check = Some((inbound.peer_id, inbound.message));
+                    self.awaiting_sender_check = Some((peer_id, message));
                 },
                 maybe_msg = self.rx_gossip.recv() => {
                     let (from, msg) = maybe_msg?;
@@ -156,17 +167,21 @@ async fn resolve_sender_check<TRegistry: ValidatorRegistry>(
 #[cfg(test)]
 mod tests {
     use std::{
-        collections::HashSet,
+        collections::{HashMap, HashSet},
         sync::atomic::{AtomicBool, Ordering},
         time::Duration,
     };
 
+    use prost::bytes::Bytes;
+    use tari_consensus::traits::InboundMessaging;
+    use tari_networking::{MessageQueueSender, MessagingMode, message_queue};
     use tari_ootle_p2p::proto::{
-        consensus::{HotStuffMessage, MissingTransactionsResponse, hot_stuff_message::Message},
+        consensus::{HotStuffMessage, MissingTransactionsResponse, SyncRequest, hot_stuff_message::Message},
         transaction::Transaction,
     };
 
     use super::*;
+    use crate::p2p::logging::NopLogger;
 
     struct Registered(HashSet<PeerAddress>);
 
@@ -259,5 +274,75 @@ mod tests {
             .unwrap();
         assert_eq!(resolved_from, from);
         assert!(pending.is_none());
+    }
+
+    /// The gossip and loopback senders, held so those channels stay open.
+    type OpenChannels = (
+        mpsc::Sender<(PeerId, HotstuffMessage)>,
+        mpsc::UnboundedSender<HotstuffMessage>,
+    );
+
+    /// Direct messaging fed from a queue of the given byte budget.
+    fn direct_messaging(
+        max_queued_bytes: usize,
+    ) -> (
+        ConsensusInboundMessaging<NopLogger, Registered>,
+        MessagingMode,
+        MessageQueueSender,
+        OpenChannels,
+    ) {
+        let (tx_messages, rx_messages) = message_queue(8, max_queued_bytes);
+        let (tx_gossip, rx_gossip) = mpsc::channel(1);
+        let (tx_loopback, rx_loopback) = mpsc::unbounded_channel();
+        let messaging = ConsensusInboundMessaging::new(
+            PeerId::random().into(),
+            rx_messages,
+            rx_gossip,
+            rx_loopback,
+            NopLogger,
+            Registered(HashSet::new()),
+        );
+        let mode = MessagingMode::Enabled {
+            tx_messages: tx_messages.clone(),
+            tx_gossip_messages_by_topic: HashMap::new(),
+        };
+        (messaging, mode, tx_messages, (tx_gossip, tx_loopback))
+    }
+
+    #[tokio::test]
+    async fn a_direct_message_is_decoded_once_taken_off_the_queue() {
+        let (mut messaging, mode, queue, _open) = direct_messaging(1024);
+        let from = PeerId::random();
+        let request = HotStuffMessage {
+            message: Some(Message::SyncRequest(SyncRequest {
+                epoch: 3,
+                block_height: 7,
+            })),
+        };
+        let encoded = Bytes::from(prost::Message::encode_to_vec(&request));
+        let len = encoded.len();
+
+        mode.send_message(from, encoded).unwrap();
+        assert_eq!(queue.queued_bytes(), len, "the queue charges the encoded message");
+
+        let (sender, msg) = messaging.next_message().await.unwrap().unwrap();
+        assert_eq!(sender, from);
+        assert!(
+            matches!(msg, HotstuffMessage::CatchUpSyncRequest(ref req) if req.epoch == Epoch(3)),
+            "{msg:?}"
+        );
+        assert_eq!(queue.queued_bytes(), 0);
+    }
+
+    #[tokio::test]
+    async fn an_undecodable_direct_message_is_refused_by_the_consumer() {
+        let (mut messaging, mode, queue, _open) = direct_messaging(1024);
+
+        mode.send_message(PeerId::random(), Bytes::from_static(&[0xff; 8]))
+            .unwrap();
+
+        let err = messaging.next_message().await.unwrap().unwrap_err();
+        assert!(err.to_string().contains("undecodable"), "{err}");
+        assert_eq!(queue.queued_bytes(), 0, "the refused message released its budget");
     }
 }

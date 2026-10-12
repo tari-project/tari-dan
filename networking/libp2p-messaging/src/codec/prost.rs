@@ -6,12 +6,9 @@ use std::{fmt, marker::PhantomData};
 // Re-export prost public types
 pub use ::prost::Message;
 use async_trait::async_trait;
-use libp2p::futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use libp2p::futures::{AsyncRead, AsyncWrite};
 
-use crate::codec::Codec;
-
-const MAX_MESSAGE_SIZE: usize = 4 * 1024 * 1024;
-const INITIAL_READ_CAPACITY: usize = 64 * 1024;
+use crate::codec::{Codec, read_frame, write_frame};
 
 pub struct ProstCodec<TMsg>(PhantomData<TMsg>);
 
@@ -29,49 +26,21 @@ where TMsg: prost::Message + fmt::Debug + Default
 
     async fn decode_from<R>(&self, reader: &mut R) -> std::io::Result<(usize, Self::Message)>
     where R: AsyncRead + Unpin + Send {
-        let mut len_buf = [0u8; 4];
-        reader.read_exact(&mut len_buf).await?;
-        let len = u32::from_be_bytes(len_buf) as usize;
-        if len > MAX_MESSAGE_SIZE {
-            return Err(std::io::Error::other("message too large"));
-        }
-        let buf = read_exact_growing(reader, len).await?;
+        let buf = read_frame(reader).await?;
         let mut slice = &buf[..];
         let message = prost::Message::decode(&mut slice).map_err(std::io::Error::other)?;
 
         if !slice.is_empty() {
             return Err(std::io::Error::other("bytes remaining on buffer"));
         }
-        Ok((len, message))
+        Ok((buf.len(), message))
     }
 
     async fn encode_to<W>(&self, writer: &mut W, message: Self::Message) -> std::io::Result<()>
     where W: AsyncWrite + Unpin + Send {
-        let mut buf = Vec::new();
-        message.encode(&mut buf).map_err(std::io::Error::other)?;
-        let len = buf.len();
-        if len > MAX_MESSAGE_SIZE {
-            return Err(std::io::Error::other("message too large"));
-        }
-        writer.write_all(&(len as u32).to_be_bytes()).await?;
-        writer.write_all(&buf).await?;
-        Ok(())
+        let buf = message.encode_to_vec();
+        write_frame(writer, &buf).await
     }
-}
-
-/// Reads exactly `len` bytes. The buffer grows as bytes arrive: each step at most doubles what has been received and
-/// never exceeds `len`.
-async fn read_exact_growing<R>(reader: &mut R, len: usize) -> std::io::Result<Vec<u8>>
-where R: AsyncRead + Unpin {
-    let mut buf = Vec::new();
-    while buf.len() < len {
-        let start = buf.len();
-        let end = len.min(start.saturating_mul(2).max(INITIAL_READ_CAPACITY));
-        buf.reserve_exact(end - start);
-        buf.resize(end, 0);
-        reader.read_exact(&mut buf[start..]).await?;
-    }
-    Ok(buf)
 }
 
 impl<TMsg> Clone for ProstCodec<TMsg> {

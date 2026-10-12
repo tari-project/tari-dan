@@ -8,6 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use bytes::Bytes;
 use libp2p::{
     Multiaddr,
     PeerId,
@@ -40,7 +41,7 @@ use tari_swarm::{
     TariSwarm,
     is_supported_multiaddr,
     messaging,
-    messaging::{prost, prost::ProstCodec},
+    messaging::{BytesCodec, prost},
     protocol_ids,
     rendezvous,
     rendezvous::Namespace,
@@ -83,13 +84,13 @@ where
     _keypair: identity::Keypair,
     rx_request: mpsc::Receiver<NetworkingRequest<TMsg>>,
     tx_events: broadcast::Sender<NetworkingEvent>,
-    messaging_mode: MessagingMode<TMsg>,
+    messaging_mode: MessagingMode,
     active_connections: HashMap<PeerId, Vec<Connection>>,
     pending_substream_requests: HashMap<StreamId, ReplyTx<NegotiatedSubstream<Substream>>>,
     pending_dial_requests: HashMap<PeerId, Vec<ReplyTx<()>>>,
     substream_notifiers: Notifiers<Substream>,
     topic_peers: HashMap<TopicHash, Vec<PeerId>>,
-    swarm: TariSwarm<ProstCodec<TMsg::Message>>,
+    swarm: TariSwarm<BytesCodec>,
     config: crate::Config,
     rendezvous_state: RendezvousState,
     relays: RelayState,
@@ -111,8 +112,8 @@ where
         keypair: identity::Keypair,
         rx_request: mpsc::Receiver<NetworkingRequest<TMsg>>,
         tx_events: broadcast::Sender<NetworkingEvent>,
-        messaging_mode: MessagingMode<TMsg>,
-        swarm: TariSwarm<ProstCodec<TMsg::Message>>,
+        messaging_mode: MessagingMode,
+        swarm: TariSwarm<BytesCodec>,
         config: crate::Config,
         known_relay_nodes: Vec<(PeerId, Multiaddr)>,
         seed_peers: Vec<(Option<PeerId>, Multiaddr)>,
@@ -248,7 +249,7 @@ where
                     .behaviour_mut()
                     .messaging
                     .as_mut()
-                    .map(|m| m.send_message(peer, message))
+                    .map(|m| m.send_message(peer, prost::Message::encode_to_vec(&message).into()))
                 {
                     Some(Ok(_)) => {
                         debug!(target: LOG_TARGET, "📢 Queued message to peer {}", peer);
@@ -276,6 +277,7 @@ where
                     return Ok(());
                 };
 
+                let message = Bytes::from(prost::Message::encode_to_vec(&message));
                 let mut num_sent = 0;
                 for peer in destination {
                     match messaging_mut.send_message(peer, message.clone()) {
@@ -478,7 +480,7 @@ where
 
     async fn on_swarm_event(
         &mut self,
-        event: SwarmEvent<TariNodeBehaviourEvent<ProstCodec<TMsg::Message>>>,
+        event: SwarmEvent<TariNodeBehaviourEvent<BytesCodec>>,
     ) -> Result<(), NetworkingError> {
         match event {
             SwarmEvent::Behaviour(event) => self.on_behaviour_event(event).await?,
@@ -563,10 +565,7 @@ where
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn on_behaviour_event(
-        &mut self,
-        event: TariNodeBehaviourEvent<ProstCodec<TMsg::Message>>,
-    ) -> Result<(), NetworkingError> {
+    async fn on_behaviour_event(&mut self, event: TariNodeBehaviourEvent<BytesCodec>) -> Result<(), NetworkingError> {
         use TariNodeBehaviourEvent::*;
         #[cfg(feature = "metrics")]
         self.record_metrics(&event);
@@ -693,7 +692,7 @@ where
                 length,
             }) => {
                 info!(target: LOG_TARGET, "📧 Rx Messaging: peer {peer_id} ({length} bytes)");
-                if let Err(e) = self.messaging_mode.send_message(peer_id, message, length) {
+                if let Err(e) = self.messaging_mode.send_message(peer_id, message) {
                     warn!(target: LOG_TARGET, "📧 Inbound message dropped: {e}");
                 }
             },
@@ -824,7 +823,7 @@ where
     }
 
     #[cfg(feature = "metrics")]
-    fn record_metrics(&mut self, event: &TariNodeBehaviourEvent<ProstCodec<TMsg::Message>>) {
+    fn record_metrics(&mut self, event: &TariNodeBehaviourEvent<BytesCodec>) {
         use tari_swarm::metrics::Recorder;
         if let Some(metrics) = self.metrics.as_ref() {
             metrics.record(event);

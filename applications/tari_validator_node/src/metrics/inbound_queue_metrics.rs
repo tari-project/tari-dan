@@ -22,7 +22,6 @@ use prometheus_client::{
     registry::Registry,
 };
 use tari_networking::{GossipQueueSender, MessageQueueSender};
-use tari_ootle_p2p::proto;
 
 /// One queue's readings, taken at scrape time.
 struct QueueReading {
@@ -41,14 +40,14 @@ type MetricFamily = (&'static str, &'static str, fn(&QueueReading) -> Reading);
 pub struct InboundQueueCollector {
     transaction_gossip: GossipQueueSender,
     consensus_gossip: GossipQueueSender,
-    consensus_messaging: MessageQueueSender<proto::consensus::HotStuffMessage>,
+    consensus_messaging: MessageQueueSender,
 }
 
 impl InboundQueueCollector {
     pub fn new(
         transaction_gossip: GossipQueueSender,
         consensus_gossip: GossipQueueSender,
-        consensus_messaging: MessageQueueSender<proto::consensus::HotStuffMessage>,
+        consensus_messaging: MessageQueueSender,
     ) -> Self {
         Self {
             transaction_gossip,
@@ -169,7 +168,7 @@ mod tests {
     fn exports_each_queue_under_its_own_label() {
         let (transaction_gossip, _rx_a) = gossip_queue(8, 1024);
         let (consensus_gossip, _rx_b) = gossip_queue(8, 2048);
-        let (consensus_messaging, _rx_c) = message_queue::<proto::consensus::HotStuffMessage>(8, 4096);
+        let (consensus_messaging, _rx_c) = message_queue(8, 4096);
 
         let mut registry = Registry::default();
         InboundQueueCollector::new(transaction_gossip, consensus_gossip, consensus_messaging).register(&mut registry);
