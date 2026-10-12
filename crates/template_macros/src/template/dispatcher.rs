@@ -294,8 +294,8 @@ fn replace_self_in_tuple(type_tuple: &TypeTuple) -> Stmt {
                     parse_quote! {
                         engine().create_component(
                             #field_expr,
-                            ::tari_template_lib::auth::OwnerRule::default(),
-                            :tari_template_lib::auth::ComponentAccessRules::new(),
+                            ::tari_template_lib::template_macro_deps::OwnerRule::default(),
+                            ::tari_template_lib::template_macro_deps::ComponentAccessRules::new(),
                             None,
                         )
                     }

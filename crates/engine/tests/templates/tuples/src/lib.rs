@@ -41,6 +41,16 @@ mod tuple_template {
             )
         }
 
+        pub fn new_with_self() -> (Self, String) {
+            (
+                Self {
+                    value_a: "Hello Self!".to_string(),
+                    value_b: 1,
+                },
+                "Hello Self!".to_string(),
+            )
+        }
+
         pub fn get(&self) -> (String, u32) {
             (self.value_a.clone(), self.value_b)
         }

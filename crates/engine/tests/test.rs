@@ -352,6 +352,9 @@ fn test_tuples() {
     // the "set" method accepts a tuple (String, u32) as argument
     let fn_set = module.find_func_by_name("set").unwrap();
     assert_eq!(fn_set.arguments[1].arg_type.to_string(), "Tuple<String,U32>");
+    // the "new_with_self" constructor returns a tuple (Self, String)
+    let fn_new_with_self = module.find_func_by_name("new_with_self").unwrap();
+    assert_eq!(fn_new_with_self.output.to_string(), "Tuple<Tuple,String>");
 
     // tuples returned in a constructor
     let (component_id, message): (ComponentAddress, String) =
@@ -369,6 +372,13 @@ fn test_tuples() {
     // check that the component state was actually updated
     let value: (String, u32) = template_test.call_method(component_id, "get", args![], vec![]);
     assert_eq!(value, new_value);
+
+    // a constructor returning Self inside a tuple creates the component
+    let (component_id, message): (ComponentAddress, String) =
+        template_test.call_function("Tuple", "new_with_self", args![], vec![]);
+    assert_eq!(message, "Hello Self!");
+    let value: (String, u32) = template_test.call_method(component_id, "get", args![], vec![]);
+    assert_eq!(value, ("Hello Self!".to_string(), 1));
 }
 
 #[test]
