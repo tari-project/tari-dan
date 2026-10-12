@@ -97,7 +97,7 @@ impl<'b, C, P: minicbor::Decode<'b, C>> minicbor::Decode<'b, C> for IndexedTreeD
     }
 }
 
-impl<C, P: minicbor::CborLen<C>> minicbor::CborLen<C> for IndexedTreeDiff<P> {
+impl<C, P: minicbor::Encode<C> + minicbor::CborLen<C>> minicbor::CborLen<C> for IndexedTreeDiff<P> {
     fn cbor_len(&self, ctx: &mut C) -> usize {
         self.inner.diff.cbor_len(ctx)
     }

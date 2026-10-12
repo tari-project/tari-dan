@@ -3,8 +3,6 @@
 
 pub use tari_jellyfish::*;
 
-pub mod cbor;
-
 mod error;
 pub use error::*;
 

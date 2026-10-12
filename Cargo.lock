@@ -12205,6 +12205,7 @@ checksum = "8de229a54661fe6191352462e4a3e209698aaba72811811e588382f8b63a372b"
 dependencies = [
  "borsh",
  "digest 0.10.7",
+ "minicbor",
  "serde",
  "tari_crypto",
  "tari_hashing",

@@ -4,7 +4,7 @@
 use std::io;
 
 use anyhow::anyhow;
-use tari_state_tree::{NibblePath, Node, NodeKey, StaleTreeNode, StateTreePayload, Version, cbor};
+use tari_state_tree::{NibblePath, Node, NodeKey, StaleTreeNode, StateTreePayload, Version};
 
 use crate::{
     codecs::{DbDecoder, DbEncoder},
@@ -111,13 +111,13 @@ impl<'a> DbEncoder<&'a NodeKey> for NodeKeyCodec {
     }
 }
 
-/// [`Node`]s in `tari_state_tree::cbor`'s native encoding.
+/// [`Node`]s in `tari_jellyfish`'s native minicbor encoding.
 #[derive(Default)]
 pub struct TreeNodeCodec;
 
 impl DbEncoder<Node<StateTreePayload>> for TreeNodeCodec {
     fn encode_len(&self, value: &Node<StateTreePayload>) -> Result<usize, RocksDbStorageError> {
-        Ok(cbor::node::cbor_len(value, &mut ()))
+        Ok(minicbor::len(value))
     }
 
     fn encode_into<W: io::Write>(
@@ -125,9 +125,10 @@ impl DbEncoder<Node<StateTreePayload>> for TreeNodeCodec {
         value: &Node<StateTreePayload>,
         writer: &mut W,
     ) -> Result<(), RocksDbStorageError> {
-        let mut encoder = minicbor::Encoder::new(minicbor::encode::write::Writer::new(writer));
-        cbor::node::encode(value, &mut encoder, &mut ()).map_err(|e| RocksDbStorageError::EncodeError {
-            source: anyhow!("TreeNodeCodec: {e}"),
+        minicbor::encode(value, minicbor::encode::write::Writer::new(writer)).map_err(|e| {
+            RocksDbStorageError::EncodeError {
+                source: anyhow!("TreeNodeCodec: {e}"),
+            }
         })
     }
 }
@@ -135,34 +136,28 @@ impl DbEncoder<Node<StateTreePayload>> for TreeNodeCodec {
 impl DbDecoder<Node<StateTreePayload>> for TreeNodeCodec {
     fn decode(&self, bytes: &[u8]) -> Result<(Node<StateTreePayload>, usize), RocksDbStorageError> {
         let mut decoder = minicbor::Decoder::new(bytes);
-        let node = cbor::node::decode(&mut decoder, &mut ()).map_err(|e| RocksDbStorageError::DecodeError {
+        let node = decoder.decode().map_err(|e| RocksDbStorageError::DecodeError {
             source: anyhow!("TreeNodeCodec: {e}"),
         })?;
         Ok((node, decoder.position()))
     }
 }
 
-/// Lists of [`StaleTreeNode`]s in `tari_state_tree::cbor`'s native encoding.
+/// Lists of [`StaleTreeNode`]s in `tari_jellyfish`'s native minicbor encoding.
 #[derive(Default)]
 pub struct StaleTreeNodesCodec;
 
 impl StaleTreeNodesCodec {
     fn encoded_len(nodes: &[StaleTreeNode]) -> usize {
-        nodes.iter().fold(minicbor::len(nodes.len() as u64), |acc, stale| {
-            acc + cbor::stale_tree_node::cbor_len(stale, &mut ())
-        })
+        minicbor::len(nodes)
     }
 
     fn encode_slice_into<W: io::Write>(nodes: &[StaleTreeNode], writer: &mut W) -> Result<(), RocksDbStorageError> {
-        let encode_error = |e| RocksDbStorageError::EncodeError {
-            source: anyhow!("StaleTreeNodesCodec: {e}"),
-        };
-        let mut encoder = minicbor::Encoder::new(minicbor::encode::write::Writer::new(writer));
-        encoder.array(nodes.len() as u64).map_err(encode_error)?;
-        for stale in nodes {
-            cbor::stale_tree_node::encode(stale, &mut encoder, &mut ()).map_err(encode_error)?;
-        }
-        Ok(())
+        minicbor::encode(nodes, minicbor::encode::write::Writer::new(writer)).map_err(|e| {
+            RocksDbStorageError::EncodeError {
+                source: anyhow!("StaleTreeNodesCodec: {e}"),
+            }
+        })
     }
 
     /// Encodes `nodes` as a stored list, without first collecting them into a `Vec`.
@@ -195,7 +190,7 @@ impl DbDecoder<Vec<StaleTreeNode>> for StaleTreeNodesCodec {
             .ok_or_else(|| decode_error(minicbor::decode::Error::message("expected a definite-length array")))?;
         let mut nodes = Vec::with_capacity(len.min(4096) as usize);
         for _ in 0..len {
-            nodes.push(cbor::stale_tree_node::decode(&mut decoder, &mut ()).map_err(decode_error)?);
+            nodes.push(decoder.decode().map_err(decode_error)?);
         }
         Ok((nodes, decoder.position()))
     }
