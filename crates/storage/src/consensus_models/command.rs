@@ -1,10 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    cmp::Ordering,
-    fmt::{Display, Formatter},
-};
+use std::fmt::{Display, Formatter};
 
 use borsh::BorshSerialize;
 use serde::{Deserialize, Serialize};
@@ -226,7 +223,7 @@ pub enum Command {
 
 /// Defines the order in which commands should be processed in a block. "Smallest" comes first and "largest" comes last.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum CommandOrdering<'a> {
+pub(super) enum CommandOrdering<'a> {
     /// Foreign proposals should come first in the block so that they are processed before commands
     ForeignProposal(ShardGroup, &'a BlockId),
     TransactionId(&'a TransactionId),
@@ -258,7 +255,9 @@ impl Command {
         }
     }
 
-    fn as_ordering(&self) -> CommandOrdering<'_> {
+    /// The key [`BlockCommands`](super::BlockCommands) orders a block's commands by. Commands that share a key
+    /// cannot appear in the same block.
+    pub(super) fn as_ordering(&self) -> CommandOrdering<'_> {
         match self {
             Command::LocalPrepare(tx) | Command::LocalAccept(tx) | Command::AllAccept(tx) | Command::SomeAccept(tx) => {
                 CommandOrdering::TransactionId(&tx.id)
@@ -404,18 +403,6 @@ impl Command {
     }
 }
 
-impl PartialOrd for Command {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Command {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.as_ordering().cmp(&other.as_ordering())
-    }
-}
-
 impl Display for Command {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -481,9 +468,8 @@ impl Display for EndEpochAtom {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
     use super::*;
+    use crate::consensus_models::BlockCommands;
 
     #[test]
     fn ordering() {
@@ -499,7 +485,6 @@ mod tests {
 
         assert!(CommandOrdering::TransactionId(&TransactionId::default()) < CommandOrdering::TransactionId(&tx_id));
         assert!(CommandOrdering::TransactionId(&tx_id) < CommandOrdering::EndEpoch);
-        let mut set = BTreeSet::new();
         let cmds = [
             Command::EndEpoch(EndEpochAtom::new(FixedHash::zero())),
             Command::AllAccept(MultiShardAtom {
@@ -522,10 +507,9 @@ mod tests {
             }),
         ];
         let expected = [cmds[2].clone(), cmds[3].clone(), cmds[1].clone(), cmds[0].clone()];
-        set.extend(cmds);
+        let commands = BlockCommands::init(cmds).unwrap();
 
-        // Check the ordering in the set
-        let mut iter = set.iter();
+        let mut iter = commands.iter();
         for exp in &expected {
             let next = iter.next().unwrap();
             assert_eq!(next, exp);

@@ -1,10 +1,7 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::BTreeSet,
-    fmt::{Debug, Display, Formatter},
-};
+use std::fmt::{Debug, Display, Formatter};
 
 use borsh::BorshSerialize;
 use minicbor::{CborLen, Decode, Encode};
@@ -40,7 +37,7 @@ use tari_sidechain::{BlockHeaderHashFields, BlockHeaderHashFieldsV1, BlockHeader
 use tari_state_tree::{TreeHash, compute_merkle_root_for_hashes};
 use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
 
-use super::{BlockError, Command, build_finalized_transaction_tree};
+use super::{BlockCommands, BlockError, build_finalized_transaction_tree};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, CborLen)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -144,7 +141,7 @@ impl BlockHeader {
         shard_group: ShardGroup,
         proposed_by: RistrettoPublicKeyBytes,
         state_merkle_root: FixedHash,
-        commands: &BTreeSet<Command>,
+        commands: &BlockCommands,
         total_leader_fee: u64,
         signature: SchnorrSignatureBytes,
         timestamp: u64,
@@ -190,7 +187,7 @@ impl BlockHeader {
         shard_group: ShardGroup,
         proposed_by: RistrettoPublicKeyBytes,
         state_merkle_root: FixedHash,
-        commands: &BTreeSet<Command>,
+        commands: &BlockCommands,
         total_leader_fee: u64,
         timestamp: u64,
         epoch_hash: FixedHash,
@@ -249,7 +246,7 @@ impl BlockHeader {
             shard_group,
             RistrettoPublicKeyBytes::default(),
             state_merkle_root,
-            &BTreeSet::new(),
+            &BlockCommands::empty(),
             0,
             SchnorrSignatureBytes::zero(),
             0,
@@ -318,7 +315,7 @@ impl BlockHeader {
             shard_group,
             proposed_by,
             state_merkle_root: parent_state_merkle_root,
-            command_merkle_root: BlockHeader::compute_command_merkle_root(protocol_version, &BTreeSet::new())
+            command_merkle_root: BlockHeader::compute_command_merkle_root(protocol_version, &BlockCommands::empty())
                 .expect("compute_command_merkle_root is infallible for empty commands"),
             total_leader_fee: 0,
             signature: None,
@@ -327,8 +324,11 @@ impl BlockHeader {
             accumulated_data: parent_accumulated_data,
             extra_data,
             timeout_certificate_id: None,
-            transaction_merkle_root: BlockHeader::compute_transaction_merkle_root(protocol_version, &BTreeSet::new())
-                .expect("compute_transaction_merkle_root is infallible for empty commands"),
+            transaction_merkle_root: BlockHeader::compute_transaction_merkle_root(
+                protocol_version,
+                &BlockCommands::empty(),
+            )
+            .expect("compute_transaction_merkle_root is infallible for empty commands"),
         };
         block.id = block.calculate_id();
         block
@@ -612,7 +612,7 @@ impl BlockHeader {
 
     pub fn compute_command_merkle_root(
         protocol_version: ProtocolVersion,
-        commands: &BTreeSet<Command>,
+        commands: &BlockCommands,
     ) -> Result<FixedHash, BlockError> {
         let hashes = commands
             .iter()
@@ -624,7 +624,7 @@ impl BlockHeader {
     /// The root over the transactions `commands` finalize, which a header carries from protocol version 2.
     pub fn compute_transaction_merkle_root(
         protocol_version: ProtocolVersion,
-        commands: &BTreeSet<Command>,
+        commands: &BlockCommands,
     ) -> Result<Option<FixedHash>, BlockError> {
         match protocol_version {
             ProtocolVersion::V0 | ProtocolVersion::V1 => Ok(None),
@@ -714,7 +714,7 @@ mod tests {
             shard_group,
             RistrettoPublicKeyBytes::default(),
             FixedHash::zero(),
-            &BTreeSet::new(),
+            &BlockCommands::empty(),
             1,
             SchnorrSignatureBytes::zero(),
             1234,
@@ -809,7 +809,7 @@ mod tests {
             shard_group,
             proposed_by,
             FixedHash::zero(),
-            &BTreeSet::new(),
+            &BlockCommands::empty(),
             0,
             SchnorrSignatureBytes::zero(),
             parent_timestamp,

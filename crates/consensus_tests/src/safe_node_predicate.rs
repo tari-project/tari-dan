@@ -15,8 +15,6 @@
 //! Either rule independently makes the candidate safe. The tests below construct minimal real
 //! chains in a tempdir-backed state store and exercise both rules and the unsafe corner.
 
-use std::collections::BTreeSet;
-
 use tari_common_types::types::FixedHash;
 use tari_consensus::traits::CertificateStore;
 use tari_consensus_types::{BlockId, LeafBlock, ProposalCertificate, ShardGroupAccumulatedData, TimeoutCertificate};
@@ -26,7 +24,7 @@ use tari_ootle_p2p::PeerAddress;
 use tari_ootle_storage::{
     StateStore,
     StorageError,
-    consensus_models::{Block, BlockHeader, BookkeepingModel},
+    consensus_models::{Block, BlockCommands, BlockHeader, BookkeepingModel},
 };
 use tari_ootle_transaction::Network;
 use tari_sidechain::QuorumDecision;
@@ -92,7 +90,7 @@ fn build_block_with_tc(
         ShardGroup::all_shards(NUM_PRESHARDS),
         RistrettoPublicKeyBytes::default(),
         FixedHash::new(state_root),
-        &BTreeSet::new(),
+        &BlockCommands::empty(),
         0,
         EpochTime::now().as_u64(),
         FixedHash::zero(),
@@ -100,7 +98,7 @@ fn build_block_with_tc(
         ExtraData::new(),
     )
     .unwrap();
-    Block::new(header, justify, BTreeSet::new(), timeout_certificate)
+    Block::new(header, justify, BlockCommands::empty(), timeout_certificate)
 }
 
 /// Safety rule: a candidate that extends the locked block is safe even when its justify is at

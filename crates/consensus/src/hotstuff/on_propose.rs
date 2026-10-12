@@ -1,12 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::{BTreeSet, HashMap},
-    fmt::Display,
-    num::NonZeroU64,
-    time::Instant,
-};
+use std::{collections::HashMap, fmt::Display, num::NonZeroU64, time::Instant};
 
 use log::*;
 use ootle_byte_type::ToByteType;
@@ -38,6 +33,7 @@ use tari_ootle_storage::{
     StateStoreReadTransaction,
     consensus_models::{
         Block,
+        BlockCommands,
         BlockHeader,
         BlockTransactionExecution,
         BookkeepingModel,
@@ -417,16 +413,15 @@ where TConsensusSpec: ConsensusSpec
         debug!(target: LOG_TARGET, "🌿 PROPOSE: {} (justify: {}) {batch}", highest_seen_block.height(), justify_block.height());
 
         let mut commands = if is_end_of_epoch_in_chain {
-            BTreeSet::from_iter([])
+            vec![]
         } else if let Some(next_epoch_hash) = end_epoch_hash {
-            BTreeSet::from_iter([Command::EndEpoch(EndEpochAtom::new(next_epoch_hash))])
+            vec![Command::EndEpoch(EndEpochAtom::new(next_epoch_hash))]
         } else {
-            BTreeSet::from_iter(
-                batch
-                    .foreign_proposals
-                    .iter()
-                    .map(|fp| Command::ForeignProposal(fp.to_atom())),
-            )
+            batch
+                .foreign_proposals
+                .iter()
+                .map(|fp| Command::ForeignProposal(fp.to_atom()))
+                .collect()
         };
 
         // NOTE: the block for the change set is not used.
@@ -437,7 +432,7 @@ where TConsensusSpec: ConsensusSpec
         // No need to include evidence from justified block if no transactions are included in the next block
         if !batch.transactions.is_empty() {
             // A replica evaluates this block as: the newly justified block, then the commands in block order
-            // (foreign proposals sort before the transaction commands, see `Command`'s ordering), all against
+            // (foreign proposals sort before the transaction commands, see `BlockCommands`), all against
             // a single change set. The commands generated below must be derived from that same sequence, or
             // the proposer commits to an atom no replica can reproduce and the block is unvotable.
             // TODO: we dont need to process transactions here that are not in the batch
@@ -613,14 +608,16 @@ where TConsensusSpec: ConsensusSpec
                         ))
                     })?;
                 accumulated_data.total_exhaust_burn += u128::from(exhaust_burn_portion);
-                // TODO: a BTreeSet changes the order from the original batch. Uncertain if this is a problem since the
-                // proposer also processes transactions in the completed block order, however on_propose does perform
-                // some operations (e.g. prepare, execute) in batch order. To ensure correctness, we should process
-                // on_propose in canonical order.
-                commands.insert(command);
+                commands.push(command);
             }
         }
         timer.done();
+
+        let commands = BlockCommands::init(commands).map_err(|e| {
+            HotStuffError::InvariantError(format!(
+                "Proposal at height {next_height} generated two commands for one block position: {e}"
+            ))
+        })?;
 
         // Calibration signal: observed propose-time execution throughput and the time a full
         // `max_block_weight` block would take at that rate. Use this (from real traffic, at debug level)

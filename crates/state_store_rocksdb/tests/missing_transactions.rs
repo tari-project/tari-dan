@@ -10,7 +10,7 @@ use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight, ProtocolVersion};
 use tari_ootle_storage::{
     StateStore,
     StateStoreWriteTransaction,
-    consensus_models::{Block, Command},
+    consensus_models::{Block, BlockCommands, Command},
 };
 use tari_ootle_transaction::Network;
 use tari_template_lib_types::crypto::SchnorrSignatureBytes;
@@ -45,7 +45,7 @@ fn missing_transactions_operations(db: impl StateStore) {
         Default::default(),
         // Need to have a command in, otherwise this block will not be included internally in the query because it
         // cannot cause a state change without any commands
-        [Command::LocalPrepare(atom1.clone())].into_iter().collect(),
+        BlockCommands::init([Command::LocalPrepare(atom1.clone())]).unwrap(),
         Default::default(),
         Default::default(),
         SchnorrSignatureBytes::zero(),

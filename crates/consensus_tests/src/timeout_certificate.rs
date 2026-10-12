@@ -13,8 +13,6 @@
 //! that timeout certificate must justify from a certificate at least that high, so a leader cannot use a leader
 //! failure to rewind the committee onto an older branch.
 
-use std::collections::BTreeSet;
-
 use tari_common_types::types::FixedHash;
 use tari_consensus::{
     check_block_commits_to_timeout_certificate,
@@ -34,7 +32,7 @@ use tari_consensus_types::{
 };
 use tari_crypto::tari_utilities::epoch_time::EpochTime;
 use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight, NumPreshards, ProtocolVersion, ShardGroup};
-use tari_ootle_storage::consensus_models::{Block, BlockHeader};
+use tari_ootle_storage::consensus_models::{Block, BlockCommands, BlockHeader};
 use tari_ootle_transaction::Network;
 use tari_sidechain::QuorumDecision;
 use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
@@ -109,7 +107,7 @@ fn block_at(
         ShardGroup::all_shards(NUM_PRESHARDS),
         RistrettoPublicKeyBytes::default(),
         FixedHash::zero(),
-        &BTreeSet::new(),
+        &BlockCommands::empty(),
         0,
         EpochTime::now().as_u64(),
         FixedHash::zero(),
@@ -117,7 +115,7 @@ fn block_at(
         ExtraData::new(),
     )
     .unwrap();
-    Block::new(header, justify, BTreeSet::new(), Some(timeout_certificate))
+    Block::new(header, justify, BlockCommands::empty(), Some(timeout_certificate))
 }
 
 #[test]
@@ -202,7 +200,12 @@ fn justify_below_the_attested_height_is_rejected() {
 fn a_block_without_a_timeout_certificate_is_accepted() {
     let tc = timeout_certificate(NodeHeight(9), &[3, 5, 4]);
     let mut block = block_justifying(NodeHeight(1), tc);
-    block = Block::new(block.header().clone(), block.justify().clone(), BTreeSet::new(), None);
+    block = Block::new(
+        block.header().clone(),
+        block.justify().clone(),
+        BlockCommands::empty(),
+        None,
+    );
 
     check_justify_reaches_timeout_certificate(&block).unwrap();
     check_timeout_certificate_precedes_block(&block).unwrap();
@@ -224,7 +227,7 @@ fn a_timeout_certificate_spliced_after_signing_no_longer_matches_the_header() {
     let spliced_block = Block::new(
         block.header().clone(),
         block.justify().clone(),
-        BTreeSet::new(),
+        BlockCommands::empty(),
         Some(spliced),
     );
     assert_eq!(
@@ -252,7 +255,12 @@ fn a_timeout_certificate_spliced_after_signing_no_longer_matches_the_header() {
 fn a_header_and_block_must_agree_on_whether_there_is_a_timeout_certificate() {
     let tc = timeout_certificate(NodeHeight(9), &[3]);
     let block = block_justifying(NodeHeight(3), tc);
-    let dropped = Block::new(block.header().clone(), block.justify().clone(), BTreeSet::new(), None);
+    let dropped = Block::new(
+        block.header().clone(),
+        block.justify().clone(),
+        BlockCommands::empty(),
+        None,
+    );
     assert!(matches!(
         check_block_commits_to_timeout_certificate(&dropped).unwrap_err(),
         ProposalValidationError::TimeoutCertificateIdMismatch { .. }

@@ -21,7 +21,7 @@ use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
-    consensus_models::{Block, BookkeepingModel, Command},
+    consensus_models::{Block, BlockCommands, BookkeepingModel, Command},
 };
 use tari_ootle_transaction::Network;
 use tari_template_lib_types::crypto::SchnorrSignatureBytes;
@@ -118,7 +118,7 @@ mod block_parent_operations {
             Default::default(),
             // Need to have a command in, otherwise this block will not be included internally in the query because it
             // cannot cause a state change without any commands
-            [Command::LocalPrepare(atom1.clone())].into_iter().collect(),
+            BlockCommands::init([Command::LocalPrepare(atom1.clone())]).unwrap(),
             Default::default(),
             Default::default(),
             SchnorrSignatureBytes::zero(),
@@ -142,7 +142,7 @@ mod block_parent_operations {
             Default::default(),
             // Need to have a command in, otherwise this block will not be included internally in the query because it
             // cannot cause a state change without any commands
-            [Command::LocalPrepare(atom2.clone())].into_iter().collect(),
+            BlockCommands::init([Command::LocalPrepare(atom2.clone())]).unwrap(),
             Default::default(),
             Default::default(),
             SchnorrSignatureBytes::zero(),
@@ -253,7 +253,7 @@ mod block_query_operations {
             Default::default(),
             // Need to have a command in, otherwise this block will not be included internally in the query because it
             // cannot cause a state change without any commands
-            [Command::LocalPrepare(atom1.clone())].into_iter().collect(),
+            BlockCommands::init([Command::LocalPrepare(atom1.clone())]).unwrap(),
             Default::default(),
             Default::default(),
             SchnorrSignatureBytes::zero(),
@@ -280,7 +280,7 @@ mod block_query_operations {
             Default::default(),
             // Need to have a command in, otherwise this block will not be included internally in the query because it
             // cannot cause a state change without any commands
-            [Command::LocalPrepare(atom2.clone())].into_iter().collect(),
+            BlockCommands::init([Command::LocalPrepare(atom2.clone())]).unwrap(),
             Default::default(),
             // adding some fee to test blocks_get_total_leader_fee_for_epoch
             4,
@@ -314,7 +314,7 @@ mod block_query_operations {
             Default::default(),
             // Need to have a command in, otherwise this block will not be included internally in the query because it
             // cannot cause a state change without any commands
-            [Command::LocalPrepare(atom2.clone())].into_iter().collect(),
+            BlockCommands::init([Command::LocalPrepare(atom2.clone())]).unwrap(),
             Default::default(),
             // adding some fee to test blocks_get_total_leader_fee_for_epoch
             5,

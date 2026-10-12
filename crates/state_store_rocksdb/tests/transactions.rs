@@ -28,6 +28,7 @@ use tari_ootle_storage::{
     StateStoreWriteTransaction,
     consensus_models::{
         Block,
+        BlockCommands,
         BlockTransactionExecution,
         BookkeepingModel,
         Command,
@@ -83,7 +84,7 @@ mod confirm_all_transitions {
             Default::default(),
             // Need to have a command in, otherwise this block will not be included internally in the query because it
             // cannot cause a state change without any commands
-            [Command::LocalPrepare(atom1.clone())].into_iter().collect(),
+            BlockCommands::init([Command::LocalPrepare(atom1.clone())]).unwrap(),
             Default::default(),
             Default::default(),
             SchnorrSignatureBytes::zero(),
@@ -191,7 +192,7 @@ mod confirm_all_transitions {
             Epoch(0),
             shard_group,
             Default::default(),
-            [Command::LocalPrepare(atom1.clone())].into_iter().collect(),
+            BlockCommands::init([Command::LocalPrepare(atom1.clone())]).unwrap(),
             Default::default(),
             Default::default(),
             SchnorrSignatureBytes::zero(),
@@ -855,7 +856,7 @@ mod get_batch_for_next_block {
             shard_group,
             Default::default(),
             // Need at least one command so the block causes a state change and is queryable.
-            [Command::LocalPrepare(create_tx_atom())].into_iter().collect(),
+            BlockCommands::init([Command::LocalPrepare(create_tx_atom())]).unwrap(),
             Default::default(),
             Default::default(),
             SchnorrSignatureBytes::zero(),

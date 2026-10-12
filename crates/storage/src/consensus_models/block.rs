@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::HashMap,
     fmt::{Debug, Display, Formatter},
     iter,
     ops::Deref,
@@ -51,6 +51,7 @@ use tari_template_lib_types::{
 use time::PrimitiveDateTime;
 
 use super::{
+    BlockCommands,
     BlockDiff,
     BlockPledge,
     BookkeepingModel,
@@ -110,7 +111,8 @@ pub struct Block {
     justify: ProposalCertificate,
     /// Commands in the block. These are in canonical order to ensure a deterministic block hash.
     #[n(2)]
-    commands: BTreeSet<Command>,
+    #[cfg_attr(feature = "ts", ts(as = "Vec<Command>"))]
+    commands: BlockCommands,
     /// The block's justification for a view timeout. This is only relevant if it is for a higher view height than the
     /// ProposalCertificate.
     #[n(3)]
@@ -149,7 +151,7 @@ impl Block {
         epoch: Epoch,
         shard_group: ShardGroup,
         proposed_by: RistrettoPublicKeyBytes,
-        commands: BTreeSet<Command>,
+        commands: BlockCommands,
         state_merkle_root: FixedHash,
         total_leader_fee: u64,
         signature: SchnorrSignatureBytes,
@@ -183,7 +185,7 @@ impl Block {
     pub fn new(
         header: BlockHeader,
         justify: ProposalCertificate,
-        commands: BTreeSet<Command>,
+        commands: BlockCommands,
         timeout_certificate: Option<TimeoutCertificate>,
     ) -> Self {
         Self {
@@ -233,7 +235,7 @@ impl Block {
             ShardGroupAccumulatedData::default(),
             extra_data,
         );
-        Self::new(header, justify, BTreeSet::new(), None)
+        Self::new(header, justify, BlockCommands::empty(), None)
     }
 
     /// This is the parent block for all genesis blocks. Its block ID is always zero.
@@ -427,11 +429,11 @@ impl Block {
         self.header.command_merkle_root()
     }
 
-    pub fn commands(&self) -> &BTreeSet<Command> {
+    pub fn commands(&self) -> &BlockCommands {
         &self.commands
     }
 
-    pub fn into_commands(self) -> BTreeSet<Command> {
+    pub fn into_commands(self) -> BlockCommands {
         self.commands
     }
 

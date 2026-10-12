@@ -12444,6 +12444,7 @@ dependencies = [
  "ootle_serde",
  "rand 0.10.1",
  "serde",
+ "serde_json",
  "tari_bor",
  "tari_common_types",
  "tari_consensus_types",

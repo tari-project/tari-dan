@@ -1,8 +1,6 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::BTreeSet;
-
 use ootle_byte_type::ToByteType;
 use tari_common_types::types::FixedHash;
 use tari_consensus::hotstuff::{
@@ -27,7 +25,7 @@ use tari_ootle_common_types::{
     crypto::create_key_pair_from_seed,
 };
 use tari_ootle_p2p::PeerAddress;
-use tari_ootle_storage::consensus_models::{Block, BlockHeader};
+use tari_ootle_storage::consensus_models::{Block, BlockCommands, BlockHeader};
 use tari_ootle_transaction::Network;
 
 use crate::support::{RoundRobinLeaderStrategy, load_json_fixture};
@@ -309,7 +307,7 @@ fn proposer_accumulated_data_must_come_from_justify_on_timeout_recovery() {
         shard_group,
         committee.shuffled().next().unwrap().public_key,
         FixedHash::zero(),
-        &BTreeSet::new(),
+        &BlockCommands::empty(),
         0,
         0,
         FixedHash::zero(),
@@ -331,7 +329,7 @@ fn proposer_accumulated_data_must_come_from_justify_on_timeout_recovery() {
         )
         .justify()
         .clone(),
-        BTreeSet::new(),
+        BlockCommands::empty(),
         None,
     );
 
@@ -442,7 +440,7 @@ fn proposer_must_anchor_recovery_on_justify_not_uncertified_leaf() {
             shard_group,
             committee.shuffled().next().unwrap().public_key,
             FixedHash::zero(),
-            &BTreeSet::new(),
+            &BlockCommands::empty(),
             0,
             timestamp,
             FixedHash::zero(),
@@ -450,7 +448,7 @@ fn proposer_must_anchor_recovery_on_justify_not_uncertified_leaf() {
             ExtraData::new(),
         )
         .unwrap();
-        Block::new(header, genesis.justify().clone(), BTreeSet::new(), None)
+        Block::new(header, genesis.justify().clone(), BlockCommands::empty(), None)
     };
 
     // The HighQC's justified block (HighPC), at height H.

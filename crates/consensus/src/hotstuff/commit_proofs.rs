@@ -280,8 +280,6 @@ fn convert_validator_block_signature(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
     use tari_common_types::types::FixedHash;
     use tari_consensus_types::{
         Decision,
@@ -305,7 +303,7 @@ mod tests {
     use tari_ootle_storage::{
         StateStore,
         StateStoreWriteTransaction,
-        consensus_models::{Command, LocalOnlyAtom, MultiShardAtom},
+        consensus_models::{BlockCommands, Command, LocalOnlyAtom, MultiShardAtom},
     };
     use tari_ootle_transaction::{Network, TransactionId};
     use tari_sidechain::{ProposalVoteMessage, QuorumDecision, ValidatorQcSignature, check_proof_elements};
@@ -496,7 +494,7 @@ mod tests {
 
     #[test]
     fn it_hashes_the_header_identically_to_sidechain_header() {
-        let finalizing = BTreeSet::from([
+        let finalizing = BlockCommands::init([
             Command::LocalOnly(LocalOnlyAtom {
                 id: TransactionId::new([7; 32]),
                 decision: Decision::Abort(AbortReason::ExecutionFailure),
@@ -510,10 +508,11 @@ mod tests {
                 transaction_fee: 0,
                 leader_fee: None,
             }),
-        ]);
+        ])
+        .unwrap();
         for protocol_version in [ProtocolVersion::V0, ProtocolVersion::V1, ProtocolVersion::V2] {
             for timeout_certificate_id in [None, Some(TcId::from([4u8; 32]))] {
-                for commands in [BTreeSet::new(), finalizing.clone()] {
+                for commands in [BlockCommands::empty(), finalizing.clone()] {
                     assert_hashes_identically_to_sidechain_header(protocol_version, timeout_certificate_id, &commands);
                 }
             }
@@ -523,7 +522,7 @@ mod tests {
     fn build_header(
         protocol_version: ProtocolVersion,
         timeout_certificate_id: Option<TcId>,
-        commands: &BTreeSet<Command>,
+        commands: &BlockCommands,
     ) -> BlockHeader {
         let parent_id = seed_hash(1).into_array().into();
         let shard_group = ShardGroup::all_shards(NumPreshards::P256);
@@ -595,7 +594,7 @@ mod tests {
     fn assert_hashes_identically_to_sidechain_header(
         protocol_version: ProtocolVersion,
         timeout_certificate_id: Option<TcId>,
-        commands: &BTreeSet<Command>,
+        commands: &BlockCommands,
     ) {
         let block = build_header(protocol_version, timeout_certificate_id, commands);
         let sidechain_header = SidechainBlockHeader {

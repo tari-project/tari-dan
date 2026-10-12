@@ -39,6 +39,7 @@ ts-rs = { workspace = true, optional = true }
 
 [dev-dependencies]
 tari_template_lib = { workspace = true, features = ["borsh"] }
+serde_json = { workspace = true }
 
 [features]
 ts = ["ts-rs", "tari_template_lib/ts", "tari_ootle_transaction/ts", "tari_consensus_types/ts"]

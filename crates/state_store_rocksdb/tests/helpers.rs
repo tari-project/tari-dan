@@ -31,6 +31,7 @@ use tari_ootle_storage::{
     StateStoreWriteTransaction,
     consensus_models::{
         Block,
+        BlockCommands,
         BlockPledge,
         BookkeepingModel,
         Command,
@@ -322,7 +323,7 @@ pub fn create_block(parent: Option<&Block>) -> Block {
         Default::default(),
         // Need to have a command in, otherwise this block will not be included internally in the query because it
         // cannot cause a state change without any commands
-        [Command::LocalPrepare(atom1.clone())].into_iter().collect(),
+        BlockCommands::init([Command::LocalPrepare(atom1.clone())]).unwrap(),
         random_merkle_root,
         Default::default(),
         SchnorrSignatureBytes::zero(),
@@ -366,7 +367,7 @@ fn create_block_at(parent: &LeafBlock, height: NodeHeight, epoch: Epoch) -> Bloc
         Default::default(),
         // Need to have a command in, otherwise this block will not be included internally in the query because it
         // cannot cause a state change without any commands
-        [Command::LocalPrepare(atom1.clone())].into_iter().collect(),
+        BlockCommands::init([Command::LocalPrepare(atom1.clone())]).unwrap(),
         random_merkle_root,
         Default::default(),
         SchnorrSignatureBytes::zero(),

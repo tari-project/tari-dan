@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 mod block;
+mod block_commands;
 mod block_diff;
 mod block_header;
 mod block_pledges;
@@ -36,6 +37,7 @@ mod validator_stats;
 mod vote_equivocation;
 
 pub use block::*;
+pub use block_commands::*;
 pub use block_diff::*;
 pub use block_header::*;
 pub use block_pledges::*;

@@ -20,10 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    collections::BTreeSet,
-    convert::{TryFrom, TryInto},
-};
+use std::convert::{TryFrom, TryInto};
 
 use anyhow::{Context, anyhow};
 use tari_consensus::messages::{
@@ -52,7 +49,7 @@ use tari_consensus_types::{
     TimeoutCertificate,
     TimeoutVote,
 };
-use tari_crypto::tari_utilities::ByteArray;
+use tari_crypto::tari_utilities::{ByteArray, hex::to_hex};
 use tari_engine_types::{
     commit_result::AbortReason,
     fees::ExhaustBurnRate,
@@ -74,6 +71,7 @@ use tari_ootle_common_types::{
 use tari_ootle_storage::{
     consensus_models,
     consensus_models::{
+        BlockCommands,
         Command,
         EndEpochAtom,
         Evidence,
@@ -516,7 +514,7 @@ fn try_convert_proto_block_header(
     value: proto::consensus::BlockHeader,
     justify_id: PcId,
     timeout_certificate_id: Option<TcId>,
-    commands: &BTreeSet<Command>,
+    commands: &BlockCommands,
 ) -> Result<consensus_models::BlockHeader, anyhow::Error> {
     let network = u8::try_from(value.network)
         .map_err(|_| anyhow!("Block conversion: Invalid network byte {}", value.network))?
@@ -619,7 +617,15 @@ impl TryFrom<proto::consensus::Block> for consensus_models::Block {
             .commands
             .into_iter()
             .map(TryInto::try_into)
-            .collect::<Result<_, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
+        let commands = BlockCommands::try_from_canonical(commands).map_err(|e| {
+            let proposer = value
+                .header
+                .as_ref()
+                .map(|h| to_hex(&h.proposed_by))
+                .unwrap_or_else(|| "<no header>".to_string());
+            anyhow!("Block from {proposer} has invalid commands: {e}")
+        })?;
 
         let justify = value
             .justify
@@ -1259,5 +1265,77 @@ mod tests {
         };
         let err = MissingTransactionsResponse::try_from(response).unwrap_err();
         assert!(err.to_string().contains("at most"), "{err}");
+    }
+
+    mod block_commands {
+        use tari_ootle_common_types::NumPreshards;
+        use tari_ootle_transaction::Network;
+        use tari_template_lib::types::crypto::SchnorrSignatureBytes;
+
+        use super::*;
+
+        fn local_prepare(seed: u8) -> Command {
+            Command::LocalPrepare(MultiShardAtom {
+                id: TransactionId::new([seed; 32]),
+                decision: Decision::Commit,
+                evidence: Evidence::default(),
+                transaction_fee: 0,
+                leader_fee: None,
+            })
+        }
+
+        fn local_accept(seed: u8) -> Command {
+            let Command::LocalPrepare(atom) = local_prepare(seed) else {
+                unreachable!()
+            };
+            Command::LocalAccept(atom)
+        }
+
+        fn proto_block() -> proto::consensus::Block {
+            let shard_group = ShardGroup::all_shards(NumPreshards::P64);
+            let block = consensus_models::Block::create(
+                Network::LocalNet,
+                ProtocolVersion::V2,
+                BlockId::zero(),
+                ProposalCertificate::genesis(Epoch(1), shard_group),
+                None,
+                NodeHeight(2),
+                Epoch(1),
+                shard_group,
+                Default::default(),
+                BlockCommands::init([local_prepare(1), local_prepare(2)]).unwrap(),
+                Default::default(),
+                0,
+                SchnorrSignatureBytes::zero(),
+                1234,
+                Default::default(),
+                ShardGroupAccumulatedData::default(),
+                ExtraData::new(),
+            )
+            .unwrap();
+            proto::consensus::Block::from(&block)
+        }
+
+        #[test]
+        fn a_block_in_canonical_order_decodes() {
+            let block = consensus_models::Block::try_from(proto_block()).unwrap();
+            assert_eq!(block.commands().len(), 2);
+        }
+
+        #[test]
+        fn a_block_listing_its_commands_out_of_order_does_not_decode() {
+            let mut block = proto_block();
+            block.commands.reverse();
+            let err = consensus_models::Block::try_from(block).unwrap_err();
+            assert!(err.to_string().contains("canonical order places it first"), "{err}");
+        }
+
+        #[test]
+        fn a_block_listing_two_commands_for_one_transaction_does_not_decode() {
+            let mut block = proto_block();
+            block.commands[1] = (&local_accept(1)).into();
+            let err = consensus_models::Block::try_from(block).unwrap_err();
+            assert!(err.to_string().contains("share an ordering key"), "{err}");
+        }
     }
 }

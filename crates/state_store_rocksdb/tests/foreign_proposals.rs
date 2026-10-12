@@ -11,7 +11,7 @@ use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
-    consensus_models::{Block, BookkeepingModel, Command, ForeignProposalStatus},
+    consensus_models::{Block, BlockCommands, BookkeepingModel, Command, ForeignProposalStatus},
 };
 use tari_ootle_transaction::Network;
 use tari_template_lib_types::crypto::SchnorrSignatureBytes;
@@ -44,10 +44,7 @@ fn foreign_proposals_rocksdb() {
         EPOCH,
         shard_group,
         Default::default(),
-        [Command::ForeignProposal(proposal1.to_atom())]
-            .iter()
-            .cloned()
-            .collect(),
+        BlockCommands::init([Command::ForeignProposal(proposal1.to_atom())]).unwrap(),
         Default::default(),
         2,
         SchnorrSignatureBytes::zero(),

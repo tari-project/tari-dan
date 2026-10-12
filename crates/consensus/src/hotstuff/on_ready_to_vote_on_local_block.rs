@@ -2043,12 +2043,10 @@ mod tests {
     }
 
     mod check_no_commands_after_epoch_end {
-        use std::collections::BTreeSet;
-
         use tari_consensus_types::{BlockId, ProposalCertificate, ShardGroupAccumulatedData};
         use tari_crypto::tari_utilities::epoch_time::EpochTime;
         use tari_ootle_common_types::{ExtraData, NodeHeight, NumPreshards, ProtocolVersion};
-        use tari_ootle_storage::consensus_models::{BlockHeader, EndEpochAtom};
+        use tari_ootle_storage::consensus_models::{BlockCommands, BlockHeader, EndEpochAtom};
         use tari_ootle_transaction::Network;
         use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
         use tempfile::TempDir;
@@ -2090,7 +2088,7 @@ mod tests {
                 self
             }
 
-            fn child(&self, commands: BTreeSet<Command>) -> Block {
+            fn child(&self, commands: BlockCommands) -> Block {
                 let parent = &self.tip;
                 let justify = ProposalCertificate::new(
                     *parent.id().hash(),
@@ -2124,7 +2122,7 @@ mod tests {
             }
 
             /// Appends a block carrying `commands` to the tip, committing it if `commit` is set.
-            fn push(&mut self, commands: BTreeSet<Command>, commit: bool) -> &mut Self {
+            fn push(&mut self, commands: BlockCommands, commit: bool) -> &mut Self {
                 let block = self.child(commands);
                 self.store
                     .with_write_tx(|tx| {
@@ -2141,7 +2139,7 @@ mod tests {
             }
 
             /// The rule's decision on a candidate that extends the tip and carries `commands`.
-            fn decide(&self, commands: BTreeSet<Command>) -> Option<NoVoteReason> {
+            fn decide(&self, commands: BlockCommands) -> Option<NoVoteReason> {
                 let candidate = self.child(commands);
                 self.store
                     .with_read_tx(|tx| check_no_commands_after_epoch_end(tx, &self.tip, &candidate))
@@ -2149,19 +2147,20 @@ mod tests {
             }
         }
 
-        fn none() -> BTreeSet<Command> {
-            BTreeSet::new()
+        fn none() -> BlockCommands {
+            BlockCommands::empty()
         }
 
-        fn foreign_proposal() -> BTreeSet<Command> {
-            BTreeSet::from([Command::ForeignProposal(ForeignProposalAtom {
+        fn foreign_proposal() -> BlockCommands {
+            BlockCommands::init([Command::ForeignProposal(ForeignProposalAtom {
                 block_id: BlockId::new(FixedHash::new([7; 32])),
                 shard_group: ShardGroup::new(0, 127),
             })])
+            .unwrap()
         }
 
-        fn end_epoch() -> BTreeSet<Command> {
-            BTreeSet::from([Command::EndEpoch(EndEpochAtom::new(FixedHash::new([9; 32])))])
+        fn end_epoch() -> BlockCommands {
+            BlockCommands::init([Command::EndEpoch(EndEpochAtom::new(FixedHash::new([9; 32])))]).unwrap()
         }
 
         fn assert_rejected(reason: Option<NoVoteReason>) {

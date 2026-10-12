@@ -11,8 +11,6 @@
 //! certificate proves the views in between failed and the parent is the last of the dummy blocks that every
 //! replica recomputes for them.
 
-use std::collections::BTreeSet;
-
 use tari_common_types::types::FixedHash;
 use tari_consensus::hotstuff::{
     LeaderSkipSet,
@@ -32,7 +30,7 @@ use tari_ootle_common_types::{
     VotePower,
     committee::{Committee, CommitteeMember},
 };
-use tari_ootle_storage::consensus_models::{Block, BlockHeader};
+use tari_ootle_storage::consensus_models::{Block, BlockCommands, BlockHeader};
 use tari_ootle_transaction::Network;
 use tari_sidechain::QuorumDecision;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
@@ -91,7 +89,7 @@ fn build_block(
         ShardGroup::all_shards(NUM_PRESHARDS),
         RistrettoPublicKeyBytes::default(),
         FixedHash::new(state_root),
-        &BTreeSet::new(),
+        &BlockCommands::empty(),
         0,
         EpochTime::now().as_u64(),
         FixedHash::zero(),
@@ -99,7 +97,7 @@ fn build_block(
         ExtraData::new(),
     )
     .unwrap();
-    Block::new(header, justify, BTreeSet::new(), timeout_certificate)
+    Block::new(header, justify, BlockCommands::empty(), timeout_certificate)
 }
 
 fn timeout_certificate_at(height: NodeHeight) -> TimeoutCertificate {

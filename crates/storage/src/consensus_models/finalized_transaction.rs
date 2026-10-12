@@ -1,15 +1,13 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::BTreeSet;
-
 use tari_common_types::types::FixedHash;
 use tari_consensus_types::Decision;
 use tari_ootle_common_types::hashing::finalized_transaction_hasher;
 use tari_ootle_transaction::TransactionId;
 use tari_state_tree::{KeyedProofTree, LeafKey, TreeHash};
 
-use super::{BlockError, Command};
+use super::{BlockCommands, BlockError, Command};
 
 /// A transaction's outcome as a leaf of the transaction merkle root of the block that finalizes it. The tree holds
 /// one leaf per finalized transaction, at the transaction id, so a proof shows either the decision a block reached
@@ -41,7 +39,7 @@ pub fn transaction_leaf_key(transaction_id: &TransactionId) -> LeafKey {
 }
 
 /// The tree over the transactions `commands` finalize: `LocalOnly`, `AllAccept` and `SomeAccept`.
-pub fn build_finalized_transaction_tree(commands: &BTreeSet<Command>) -> Result<KeyedProofTree, BlockError> {
+pub fn build_finalized_transaction_tree(commands: &BlockCommands) -> Result<KeyedProofTree, BlockError> {
     let leaves = commands.iter().filter_map(Command::finalising).map(|atom| {
         let leaf = FinalizedTransactionLeaf {
             transaction_id: atom.id(),
@@ -93,17 +91,18 @@ mod tests {
 
     /// Finalizes transactions 1 (LocalOnly abort), 2 (AllAccept commit) and 3 (SomeAccept abort). Transactions 4 and 5
     /// are only prepared or accepted locally.
-    fn commands() -> BTreeSet<Command> {
-        BTreeSet::from([
+    fn commands() -> BlockCommands {
+        BlockCommands::init([
             local_only(1, abort()),
             Command::AllAccept(multi_shard(2, Decision::Commit)),
             Command::SomeAccept(multi_shard(3, abort())),
             Command::LocalPrepare(multi_shard(4, Decision::Commit)),
             Command::LocalAccept(multi_shard(5, Decision::Commit)),
         ])
+        .unwrap()
     }
 
-    fn block(protocol_version: ProtocolVersion, commands: BTreeSet<Command>) -> Result<Block, BlockError> {
+    fn block(protocol_version: ProtocolVersion, commands: BlockCommands) -> Result<Block, BlockError> {
         let shard_group = ShardGroup::all_shards(NumPreshards::P64);
         Block::create(
             Network::LocalNet,
@@ -185,9 +184,14 @@ mod tests {
     fn the_block_id_commits_to_each_decision() {
         let original = block(ProtocolVersion::V2, commands()).unwrap();
 
-        let mut commands = commands();
-        commands.remove(&local_only(1, abort()));
-        commands.insert(local_only(1, Decision::Abort(AbortReason::InsufficientFeesPaid)));
+        let commands = BlockCommands::init(commands().into_iter().map(|cmd| {
+            if cmd == local_only(1, abort()) {
+                local_only(1, Decision::Abort(AbortReason::InsufficientFeesPaid))
+            } else {
+                cmd
+            }
+        }))
+        .unwrap();
         let changed = block(ProtocolVersion::V2, commands).unwrap();
 
         assert_ne!(root_of(&original), root_of(&changed));
@@ -196,7 +200,7 @@ mod tests {
 
     #[test]
     fn an_empty_block_commits_to_the_empty_tree() {
-        let block = block(ProtocolVersion::V2, BTreeSet::new()).unwrap();
+        let block = block(ProtocolVersion::V2, BlockCommands::empty()).unwrap();
         assert_eq!(root_of(&block), tari_state_tree::SPARSE_MERKLE_PLACEHOLDER_HASH);
     }
 }
