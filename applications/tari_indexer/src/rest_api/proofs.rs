@@ -84,6 +84,8 @@ mod tests {
             substate_value_proof: vec![1, 2, 3],
             commit_proof: commit_proof.to_bytes(),
             proof_epoch: 2,
+            substate_down_proof: None,
+            destroyed_at_state_version: None,
         })
         .unwrap();
 

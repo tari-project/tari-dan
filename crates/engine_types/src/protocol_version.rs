@@ -24,7 +24,8 @@ pub enum ProtocolVersion {
     /// a quorum-signed header fixes the version every shard of the group is at. Block IDs commit to the version.
     V1 = 1,
     /// Each block header commits to a transaction merkle root over the decision it reached for every transaction it
-    /// finalizes.
+    /// finalizes, and each leaf of a block's state merkle root commits to its shard as well as its shard root and
+    /// state version, so a substate proof can only cite the state of the shard the substate lives in.
     V2 = 2,
 }
 
@@ -277,6 +278,18 @@ mod tests {
         (u8::MIN..=u8::MAX)
             .filter_map(|byte| Network::try_from(byte).ok())
             .collect()
+    }
+
+    #[test]
+    fn every_network_but_esmeralda_starts_at_v2() {
+        for network in all_networks() {
+            let expected = if network == Network::Esmeralda {
+                ProtocolVersion::V0
+            } else {
+                ProtocolVersion::V2
+            };
+            assert_eq!(ProtocolVersion::genesis(network), expected, "{network}");
+        }
     }
 
     #[test]

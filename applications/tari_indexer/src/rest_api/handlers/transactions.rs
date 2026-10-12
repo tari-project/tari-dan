@@ -173,6 +173,7 @@ pub async fn submit_transaction_dry_run(
         .await
         .map_err(|e| match e {
             DryRunTransactionProcessorError::Busy => ErrorResponse::too_many_requests(e.to_string()),
+            e if e.is_unavailable() => ErrorResponse::service_unavailable(e.to_string()),
             e if e.is_invalid_transaction() => ErrorResponse::bad_request(e.to_string()),
             e => ErrorResponse::anyhow(e),
         })?;

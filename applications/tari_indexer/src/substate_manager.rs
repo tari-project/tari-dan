@@ -48,6 +48,7 @@ use tari_indexer_lib::{
 };
 use tari_ootle_common_types::{
     Epoch,
+    NumPreshards,
     ShardGroup,
     StateVersion,
     SubstateRequirementRef,
@@ -131,6 +132,7 @@ pub struct SubstateManager {
 impl SubstateManager {
     pub fn new(
         network: Network,
+        num_preshards: NumPreshards,
         substate_store: SqliteIndexerStore,
         epoch_manager: EpochManagerHandle<PeerAddress>,
         validator_node_client_factory: TariValidatorNodeRpcClientFactory,
@@ -144,6 +146,7 @@ impl SubstateManager {
         });
         let cached_substates = CachedSubstateManager::new(
             network,
+            num_preshards,
             epoch_manager.clone(),
             validator_node_client_factory.clone(),
             substate_cache,
@@ -168,6 +171,12 @@ impl SubstateManager {
 
     pub fn with_substate_proof_verification(mut self, enabled: bool) -> Self {
         self.cache_manager = self.cache_manager.with_substate_proof_verification(enabled);
+        self
+    }
+
+    /// See [`CachedSubstateManager::with_cache_writes`].
+    pub fn with_cache_writes(mut self, enabled: bool) -> Self {
+        self.cache_manager = self.cache_manager.with_cache_writes(enabled);
         self
     }
 

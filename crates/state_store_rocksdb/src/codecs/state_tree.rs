@@ -88,12 +88,15 @@ impl DbDecoder<NodeKey> for NodeKeyCodec {
                 source: anyhow!("Invalid nibble path bytes. Could not read {} bytes", num_path_bytes),
             });
         }
-        let nibble_path_bytes = bytes[path_start..path_end].to_vec();
+        let nibble_path_bytes = &bytes[path_start..path_end];
         let nibble_path = if is_even {
             NibblePath::new_even(nibble_path_bytes)
         } else {
             NibblePath::new_odd(nibble_path_bytes)
-        };
+        }
+        .map_err(|e| RocksDbStorageError::DecodeError {
+            source: anyhow!("Invalid nibble path: {e}"),
+        })?;
         Ok((NodeKey::new(version, nibble_path), path_end))
     }
 }
@@ -205,6 +208,7 @@ mod tests {
     use rand::RngExt;
     use tari_state_tree::{
         JellyfishMerkleTree,
+        JmtHashScheme,
         LeafKey,
         StaleTreeNode,
         TreeHash,
@@ -217,7 +221,7 @@ mod tests {
     #[test]
     fn encode_decode() {
         let version = 1;
-        let nibble_path = NibblePath::new_odd(vec![0x01, 0x02, 0x03, 0x04 << 4]);
+        let nibble_path = NibblePath::new_odd(&[0x01, 0x02, 0x03, 0x04 << 4]).unwrap();
         let key = NodeKey::new(version, nibble_path);
         let codec = NodeKeyCodec;
         let encoded1 = codec.encode(&key).unwrap();
@@ -225,7 +229,7 @@ mod tests {
         assert_eq!(key, decoded);
 
         let version = 2;
-        let nibble_path = NibblePath::new_even(vec![0x01, 0x02, 0x03, 0x04]);
+        let nibble_path = NibblePath::new_even(&[0x01, 0x02, 0x03, 0x04]).unwrap();
         let key = NodeKey::new(version, nibble_path);
 
         let encoded = codec.encode(&key).unwrap();
@@ -237,12 +241,12 @@ mod tests {
     #[test]
     fn smoke() {
         let mut store = MemoryTreeStore::new();
-        let jmt = JellyfishMerkleTree::new(&store);
+        let jmt = JellyfishMerkleTree::new(&store, JmtHashScheme::V1);
         let changes = iter::repeat_with(|| TreeHash::new(random_bytes()))
             .take(100)
             .map(|hash| (LeafKey::new(hash), Some((hash, ()))));
 
-        let (_, update) = jmt.batch_put_value_set(changes, None, None, 1).unwrap();
+        let (_, update) = jmt.batch_put_value_set(changes, None, 1).unwrap();
 
         let codec = NodeKeyCodec;
         for (key, node) in update.node_batch {
@@ -257,14 +261,12 @@ mod tests {
                 .unwrap();
         }
 
-        let jmt = JellyfishMerkleTree::new(&store);
+        let jmt = JellyfishMerkleTree::new(&store, JmtHashScheme::V1);
         let changes = iter::repeat_with(|| TreeHash::new(random_bytes()))
             .take(100)
             .map(|hash| (LeafKey::new(hash), Some((hash, ()))))
             .collect::<Vec<_>>();
-        let (_, update) = jmt
-            .batch_put_value_set(changes.iter().copied(), None, Some(1), 2)
-            .unwrap();
+        let (_, update) = jmt.batch_put_value_set(changes.iter().copied(), Some(1), 2).unwrap();
 
         for (key, node) in update.node_batch {
             let encoded = codec.encode(&key).unwrap();
@@ -277,9 +279,9 @@ mod tests {
                 .record_stale_tree_node(StaleTreeNode::Node(stale_tree_node.node_key))
                 .unwrap();
         }
-        let jmt = JellyfishMerkleTree::new(&store);
+        let jmt = JellyfishMerkleTree::new(&store, JmtHashScheme::V1);
         let _unused = jmt
-            .batch_put_value_set(changes.into_iter().map(|(key, _)| (key, None)), None, Some(2), 3)
+            .batch_put_value_set(changes.into_iter().map(|(key, _)| (key, None)), Some(2), 3)
             .unwrap();
     }
 

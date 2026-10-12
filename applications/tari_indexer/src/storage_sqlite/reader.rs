@@ -1247,6 +1247,8 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
             substate_value_proof: value_proof,
             commit_proof,
             proof_epoch: proof_epoch as u64,
+            substate_down_proof: None,
+            destroyed_at_state_version: None,
         }))
     }
 }

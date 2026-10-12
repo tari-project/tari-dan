@@ -503,3 +503,73 @@ pub(super) fn check_sidechain_id(header: &BlockHeader, config: &HotstuffConfig) 
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use tari_consensus_types::{BlockId, ProposalCertificate, ShardGroupAccumulatedData};
+    use tari_ootle_common_types::ExtraData;
+
+    use super::*;
+
+    fn header(network: Network, protocol_version: ProtocolVersion, epoch: Epoch) -> BlockHeader {
+        let shard_group = ShardGroup::all_shards(NumPreshards::P64);
+        BlockHeader::create_unsigned(
+            network,
+            protocol_version,
+            BlockId::zero(),
+            ProposalCertificate::genesis(epoch, shard_group).calculate_id(),
+            None,
+            NodeHeight(2),
+            epoch,
+            shard_group,
+            RistrettoPublicKeyBytes::default(),
+            FixedHash::zero(),
+            &BTreeSet::new(),
+            1,
+            1234,
+            FixedHash::zero(),
+            ShardGroupAccumulatedData::default(),
+            ExtraData::new(),
+        )
+        .unwrap()
+    }
+
+    fn is_rejected(network: Network, protocol_version: ProtocolVersion, epoch: Epoch) -> bool {
+        matches!(
+            check_protocol_version(&header(network, protocol_version, epoch), network),
+            Err(ProposalValidationError::InvalidProtocolVersion { .. })
+        )
+    }
+
+    #[test]
+    fn esmeralda_requires_the_version_its_schedule_names() {
+        let v1_activation = Epoch(11925);
+        let before = Epoch(v1_activation.as_u64() - 1);
+        assert!(!is_rejected(Network::Esmeralda, ProtocolVersion::V0, before));
+        assert!(is_rejected(Network::Esmeralda, ProtocolVersion::V1, before));
+        assert!(!is_rejected(Network::Esmeralda, ProtocolVersion::V1, v1_activation));
+        assert!(is_rejected(Network::Esmeralda, ProtocolVersion::V0, v1_activation));
+        assert!(is_rejected(Network::Esmeralda, ProtocolVersion::V2, v1_activation));
+    }
+
+    #[test]
+    fn other_networks_require_v2_from_genesis() {
+        for network in [
+            Network::MainNet,
+            Network::StageNet,
+            Network::NextNet,
+            Network::Igor,
+            Network::LocalNet,
+        ] {
+            for protocol_version in [ProtocolVersion::V0, ProtocolVersion::V1] {
+                assert!(
+                    is_rejected(network, protocol_version, Epoch(0)),
+                    "{network} {protocol_version}"
+                );
+            }
+            assert!(!is_rejected(network, ProtocolVersion::V2, Epoch(0)), "{network}");
+        }
+    }
+}

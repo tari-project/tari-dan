@@ -27,6 +27,33 @@ impl SubstateUpdateBatch {
     pub fn with_transition(&mut self, shard: Shard, state_version: Version) -> &mut Vec<SubstateTransition> {
         self.updates.entry(shard).or_default().entry(state_version).or_default()
     }
+
+    /// Every substate the batch takes down.
+    pub fn downed(&self) -> Vec<DownedSubstate> {
+        let mut downed = Vec::new();
+        for (shard, versions) in &self.updates {
+            for (state_version, transitions) in versions {
+                for transition in transitions {
+                    if let SubstateTransition::Down { id } = transition {
+                        downed.push(DownedSubstate {
+                            shard: *shard,
+                            id: id.clone(),
+                            state_version: *state_version,
+                        });
+                    }
+                }
+            }
+        }
+        downed
+    }
+}
+
+/// A substate taken down at `state_version` of `shard`.
+#[derive(Debug, Clone)]
+pub struct DownedSubstate {
+    pub shard: Shard,
+    pub id: VersionedSubstateId,
+    pub state_version: Version,
 }
 
 pub enum SubstateTransition {

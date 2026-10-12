@@ -37,7 +37,7 @@ use tari_ootle_storage::{
     },
 };
 use tari_ootle_transaction::Network;
-use tari_state_tree::{JellyfishMerkleTree, SPARSE_MERKLE_PLACEHOLDER_HASH, StateTreeError};
+use tari_state_tree::{JellyfishMerkleTree, JmtHashScheme, SPARSE_MERKLE_PLACEHOLDER_HASH, StateTreeError};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{
@@ -384,7 +384,7 @@ where
     // adding global shard first
     if let Some(version) = tx.state_tree_versions_get_latest(Shard::global())? {
         let scoped_store = ShardScopedTreeStoreReader::new(tx, Shard::global());
-        let jmt = JellyfishMerkleTree::new(&scoped_store);
+        let jmt = JellyfishMerkleTree::new(&scoped_store, JmtHashScheme::V1);
         let root_hash = jmt
             .get_root_hash(version)
             .map_err(|e| HotStuffError::StateTreeError(e.into()))?;
@@ -411,7 +411,7 @@ where
         };
 
         let scoped_store = ShardScopedTreeStoreReader::new(tx, shard);
-        let jmt = JellyfishMerkleTree::new(&scoped_store);
+        let jmt = JellyfishMerkleTree::new(&scoped_store, JmtHashScheme::V1);
         let root_hash = jmt
             .get_root_hash(version)
             .map_err(|e| HotStuffError::StateTreeError(e.into()))?;

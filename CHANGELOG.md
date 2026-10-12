@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## Unreleased
+
+### ⚠️ Upgrade notes
+
+- **Protocol V2 now also binds every substate proof to its shard**: each leaf of a block's state merkle root
+  commits to its shard. No persistent network depends on V2 state roots yet: esmeralda has not scheduled V2.
+- **V2 state merkle roots change, so every network started on V2 must be reset.** Any non-esmeralda network or
+  local database started on 0.46.0 (igor, nextnet, stagenet, mainnet, localnet) runs V2 from genesis; wipe its
+  data directory before upgrading. `check_activation_schedule` does not detect this, because the genesis
+  version is unchanged.
+
 ## [0.46.0](https://github.com/tari-project/tari-ootle/compare/v0.45.0...v0.46.0) (2026-10-07)
 
 Introduces protocol version V2, whose block headers commit to a transaction merkle root. Also fixes

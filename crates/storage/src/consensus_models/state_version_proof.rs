@@ -18,6 +18,7 @@ use tari_state_tree::{
     StateTreeError,
     TreeHash,
     Version,
+    jmt_hash_scheme,
 };
 
 use crate::{
@@ -106,9 +107,12 @@ pub fn verify_state_version_leaf(
 
     let leaf = ShardGroupLeaf::new(protocol_version, shard, shard_root, state_version);
     let state_merkle_root = TreeHash::new(commit_proof.state_merkle_root().into_array());
+    let scheme = jmt_hash_scheme(protocol_version);
     let result = match leaf.value {
-        Some(value) => shard_root_proof.verify_inclusion(&state_merkle_root, &leaf.key, &value),
-        None => shard_root_proof.verify_exclusion(&state_merkle_root, &leaf.key),
+        Some(value) => shard_root_proof.verify_inclusion(scheme, &state_merkle_root, &leaf.key, &value),
+        // The commit proof authenticates `state_merkle_root` for this shard group, so the empty-tree root means no
+        // shard of the group holds state.
+        None => shard_root_proof.verify_exclusion_or_empty_tree(scheme, &state_merkle_root, &leaf.key),
     };
     result.map_err(|e| StateVersionProofError::LeafNotIncluded {
         shard,

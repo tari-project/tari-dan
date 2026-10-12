@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use tari_engine_types::ProtocolVersion;
 use tari_jellyfish::{
     JellyfishMerkleTree,
+    JmtHashScheme,
     LeafKey,
     Node,
     NodeKey,
@@ -62,14 +63,14 @@ impl<S: TreeStoreReader<StateTreePayload>, M: DbKeyMapper<VersionedSubstateId>> 
         version: Version,
         key: &VersionedSubstateId,
     ) -> Result<(LeafKey, Option<ProofValue<StateTreePayload>>, SparseMerkleProofExt), StateTreeError> {
-        let jmt = JellyfishMerkleTree::new(self.store);
+        let jmt = JellyfishMerkleTree::new(self.store, JmtHashScheme::V1);
         let key = M::map_to_leaf_key(key);
         let (maybe_value, proof) = jmt.get_with_proof_ext(key.as_ref(), version)?;
         Ok((key, maybe_value, proof))
     }
 
     pub fn get_root_hash(&self, version: Version) -> Result<TreeHash, StateTreeError> {
-        let jmt = JellyfishMerkleTree::new(self.store);
+        let jmt = JellyfishMerkleTree::new(self.store, JmtHashScheme::V1);
         let root_hash = jmt.get_root_hash(version)?;
         Ok(root_hash)
     }
@@ -166,13 +167,13 @@ impl<S: TreeStore<()>, M: DbKeyMapper<TreeHash>> StateTree<'_, S, M> {
         next_version: Version,
         changes: I,
     ) -> Result<(TreeHash, TreeUpdateBatch<()>), StateTreeError> {
-        let jmt = JellyfishMerkleTree::<_, ()>::new(self.store);
+        let jmt = JellyfishMerkleTree::<_, ()>::new(self.store, JmtHashScheme::V1);
 
         let changes = changes
             .into_iter()
             .map(|hash| (M::map_to_leaf_key(&hash), Some((hash, ()))));
 
-        let (root, update) = jmt.batch_put_value_set(changes, None, current_version, next_version)?;
+        let (root, update) = jmt.batch_put_value_set(changes, current_version, next_version)?;
         Ok((root, update))
     }
 }
@@ -202,7 +203,7 @@ fn calculate_substate_changes<
         });
     }
 
-    let jmt = JellyfishMerkleTree::new(store);
+    let jmt = JellyfishMerkleTree::new(store, JmtHashScheme::V1);
 
     let changes = changes.into_iter().map(|ch| match ch {
         SubstateTreeChange::Up { id, value_hash } => (
@@ -212,7 +213,7 @@ fn calculate_substate_changes<
         SubstateTreeChange::Down { id } => (M::map_to_leaf_key(&id), None),
     });
 
-    let (root_hash, update_result) = jmt.batch_put_value_set(changes, None, current_version, next_version)?;
+    let (root_hash, update_result) = jmt.batch_put_value_set(changes, current_version, next_version)?;
 
     Ok((root_hash, update_result))
 }
@@ -360,7 +361,7 @@ impl RootProofTree {
         &self,
         hash_to_prove: TreeHash,
     ) -> Result<(Option<ProofValue<()>>, SparseMerkleProofExt), StateTreeError> {
-        let jmt = JellyfishMerkleTree::new(&self.store);
+        let jmt = JellyfishMerkleTree::new(&self.store, JmtHashScheme::V1);
         let key = HashIdentityKeyMapper::map_to_leaf_key(&hash_to_prove);
         let proof_tuple = jmt.get_with_proof_ext(key.as_ref(), 1)?;
         Ok(proof_tuple)
@@ -372,9 +373,10 @@ impl RootProofTree {
 ///
 /// - [`ProtocolVersion::V0`] and [`ProtocolVersion::V1`]: the leaf is [`shard_state_leaf`], keyed by its own hash. The
 ///   tree is a set of leaves, so a proof against such a root shows only that a leaf is one of the group's.
-/// - [`ProtocolVersion::V2`]: the leaf is keyed by the shard, so a proof names the shard a leaf belongs to. A shard
-///   with no state - the empty-tree root at state version 0 - has no leaf, and the absence of its key proves its state.
-///   This keeps the tree, and the cost of building it for every block, proportional to the shards that hold state.
+/// - [`ProtocolVersion::V2`]: the leaf is keyed by the shard, so a proof names the shard a leaf belongs to, and the
+///   leaf value commits to the shard as well (see [`shard_state_leaf`]). A shard with no state - the empty-tree root at
+///   state version 0 - has no leaf, and the absence of its key proves its state. This keeps the tree, and the cost of
+///   building it for every block, proportional to the shards that hold state.
 #[derive(Debug, Clone)]
 pub struct ShardGroupLeaf {
     pub key: LeafKey,
@@ -383,7 +385,7 @@ pub struct ShardGroupLeaf {
 
 impl ShardGroupLeaf {
     pub fn new(protocol_version: ProtocolVersion, shard: Shard, shard_root: &TreeHash, state_version: Version) -> Self {
-        let value = shard_state_leaf(protocol_version, shard_root, state_version);
+        let value = shard_state_leaf(protocol_version, shard, shard_root, state_version);
         match protocol_version {
             ProtocolVersion::V0 | ProtocolVersion::V1 => Self {
                 key: HashIdentityKeyMapper::map_to_leaf_key(&value),
@@ -436,9 +438,8 @@ impl ShardGroupRootTree {
                 leaves,
             });
         }
-        let (root, update) = JellyfishMerkleTree::<_, ()>::new(&store).batch_put_value_set(
+        let (root, update) = JellyfishMerkleTree::<_, ()>::new(&store, JmtHashScheme::V1).batch_put_value_set(
             changes,
-            None,
             None,
             SHARD_GROUP_ROOT_VERSION,
         )?;
@@ -459,7 +460,7 @@ impl ShardGroupRootTree {
             .leaves
             .get(&shard)
             .ok_or(StateTreeError::ShardNotInShardGroupTree { shard })?;
-        let jmt = JellyfishMerkleTree::new(&self.store);
+        let jmt = JellyfishMerkleTree::new(&self.store, JmtHashScheme::V1);
         let proof_tuple = jmt.get_with_proof_ext(leaf.key.as_ref(), SHARD_GROUP_ROOT_VERSION)?;
         Ok(proof_tuple)
     }
@@ -504,9 +505,8 @@ impl KeyedProofTree {
         }
 
         let mut store = MemoryTreeStore::new();
-        let (root, batch) = JellyfishMerkleTree::<_, ()>::new(&store).batch_put_value_set(
+        let (root, batch) = JellyfishMerkleTree::<_, ()>::new(&store, JmtHashScheme::V1).batch_put_value_set(
             leaves_by_key.into_iter().map(|(key, value)| (key, Some((value, ())))),
-            None,
             None,
             1,
         )?;
@@ -522,7 +522,7 @@ impl KeyedProofTree {
 
     /// Proves the value at `key`, or that no leaf has that key. Returns the value (if it exists) and the Merkle proof.
     pub fn get_proof(&self, key: &LeafKey) -> Result<(Option<ProofValue<()>>, SparseMerkleProofExt), StateTreeError> {
-        let jmt = JellyfishMerkleTree::new(&self.store);
+        let jmt = JellyfishMerkleTree::new(&self.store, JmtHashScheme::V1);
         Ok(jmt.get_with_proof_ext(key.as_ref(), 1)?)
     }
 }

@@ -55,6 +55,15 @@ pub enum DryRunTransactionProcessorError {
 }
 
 impl DryRunTransactionProcessorError {
+    /// True when an input's committee disagrees on it and none can prove it, which passes as the network settles.
+    pub fn is_unavailable(&self) -> bool {
+        matches!(
+            self,
+            Self::IndexerError(IndexerError::InvalidSubstateState) |
+                Self::SubstateManagerError(SubstateManagerError::IndexerError(IndexerError::InvalidSubstateState))
+        )
+    }
+
     /// True when the fault lies with the submitted transaction.
     pub fn is_invalid_transaction(&self) -> bool {
         matches!(
@@ -66,5 +75,24 @@ impl DryRunTransactionProcessorError {
                         SubstateManagerError::InputSubstateDoesNotExist { .. }
                 )
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_committee_that_cannot_agree_on_an_input_is_unavailable() {
+        for e in [
+            DryRunTransactionProcessorError::IndexerError(IndexerError::InvalidSubstateState),
+            DryRunTransactionProcessorError::SubstateManagerError(SubstateManagerError::IndexerError(
+                IndexerError::InvalidSubstateState,
+            )),
+        ] {
+            assert!(e.is_unavailable(), "{e}");
+            assert!(!e.is_invalid_transaction(), "{e}");
+        }
+        assert!(!DryRunTransactionProcessorError::Busy.is_unavailable());
     }
 }

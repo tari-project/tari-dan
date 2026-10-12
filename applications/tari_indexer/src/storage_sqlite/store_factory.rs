@@ -2340,6 +2340,8 @@ mod tests {
             substate_value_proof: vec![marker],
             commit_proof: vec![marker; 2],
             proof_epoch: u64::from(marker),
+            substate_down_proof: None,
+            destroyed_at_state_version: None,
         };
         let id = id.clone();
         store

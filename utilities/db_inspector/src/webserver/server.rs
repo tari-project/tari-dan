@@ -199,6 +199,7 @@ pub fn register_all_cfs(context: &mut HandlerContext) -> &mut HandlerContext {
         .register_cf(column_families::substate::HeadIndex)
         .register_cf(column_families::substate::SubstateCf)
         .register_cf(column_families::substate::UnprunedDownedValuesIndex)
+        .register_cf(column_families::substate_down_proof::SubstateDownProofCf)
         .register_cf(column_families::substate_locks::BlockLockSetCf)
         .register_cf(column_families::transaction::TransactionCf)
         .register_cf(column_families::transaction_pool::TransactionPoolCf)

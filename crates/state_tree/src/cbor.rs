@@ -20,7 +20,6 @@
 //! These types are read only from the node's own database, so decoding checks no more than it needs to avoid a panic.
 //! Never decode them from untrusted input.
 
-use indexmap::IndexMap;
 use minicbor::{
     CborLen,
     Decode,
@@ -80,13 +79,14 @@ fn decode_nibble_path<C>(d: &mut Decoder<'_>, ctx: &mut C) -> Result<NibblePath,
     let num_nibbles = usize::decode(d, ctx)?;
     let bytes = d.bytes()?;
     let num_bytes_nibbles = bytes.len().saturating_mul(2);
-    if num_nibbles == num_bytes_nibbles {
-        Ok(NibblePath::new_even(bytes.to_vec()))
+    let path = if num_nibbles == num_bytes_nibbles {
+        NibblePath::new_even(bytes)
     } else if num_nibbles.checked_add(1) == Some(num_bytes_nibbles) && bytes.last().is_some_and(|b| b & 0x0F == 0) {
-        Ok(NibblePath::new_odd(bytes.to_vec()))
+        NibblePath::new_odd(bytes)
     } else {
-        Err(decode::Error::message("NibblePath: nibble count does not match its bytes").at(pos))
-    }
+        return Err(decode::Error::message("NibblePath: nibble count does not match its bytes").at(pos));
+    };
+    path.map_err(|e| decode::Error::message(e.to_string()).at(pos))
 }
 
 fn nibble_path_len<C>(path: &NibblePath, ctx: &mut C) -> usize {
@@ -173,10 +173,11 @@ fn encode_child<C, W: Write>(child: &Child, e: &mut Encoder<W>, ctx: &mut C) -> 
 
 fn decode_child<C>(d: &mut Decoder<'_>, ctx: &mut C) -> Result<Child, decode::Error> {
     d.array()?;
+    let pos = d.position();
     let hash = decode_tree_hash(d)?;
     let version = d.u64()?;
     let node_type = decode_node_type(d, ctx)?;
-    Ok(Child::new(hash, version, node_type))
+    Child::try_new(hash, version, node_type).map_err(|e| decode::Error::message(e.to_string()).at(pos))
 }
 
 fn child_len<C>(child: &Child, ctx: &mut C) -> usize {
@@ -193,10 +194,10 @@ fn encode_internal_node<C, W: Write>(
     e: &mut Encoder<W>,
     ctx: &mut C,
 ) -> Result<(), encode::Error<W::Error>> {
-    // `InternalNode::new` sorts its children, so this map is in ascending nibble order.
+    // `children_sorted` yields children in ascending nibble order, so this map is too.
     e.map(node.children_sorted().count() as u64)?;
     for (nibble, child) in node.children_sorted() {
-        e.u8(u8::from(*nibble))?;
+        e.u8(u8::from(nibble))?;
         encode_child(child, e, ctx)?;
     }
     Ok(())
@@ -207,18 +208,20 @@ fn decode_internal_node<C>(d: &mut Decoder<'_>, ctx: &mut C) -> Result<InternalN
     let len = d
         .map()?
         .ok_or_else(|| decode::Error::message("InternalNode: expected a definite-length map").at(pos))?;
-    let mut children = IndexMap::with_capacity(16);
+    let mut children = Vec::with_capacity(16);
     for _ in 0..len {
-        let nibble = Nibble::from(d.u8()? & 0x0F);
-        children.insert(nibble, decode_child(d, ctx)?);
+        let nibble_pos = d.position();
+        let nibble =
+            Nibble::try_from(d.u8()? & 0x0F).map_err(|e| decode::Error::message(e.to_string()).at(nibble_pos))?;
+        children.push((nibble, decode_child(d, ctx)?));
     }
-    Ok(InternalNode::new(children))
+    InternalNode::try_new(children.into_iter().collect()).map_err(|e| decode::Error::message(e.to_string()).at(pos))
 }
 
 fn internal_node_len<C>(node: &InternalNode, ctx: &mut C) -> usize {
     node.children_sorted().fold(
         header_len(node.children_sorted().count() as u64),
-        |acc, (nibble, child)| sum([acc, u8::from(*nibble).cbor_len(ctx), child_len(child, ctx)]),
+        |acc, (nibble, child)| sum([acc, u8::from(nibble).cbor_len(ctx), child_len(child, ctx)]),
     )
 }
 
@@ -331,23 +334,23 @@ pub mod stale_tree_node {
 
 #[cfg(test)]
 mod tests {
-    use tari_jellyfish::{JellyfishMerkleTree, StaleTreeNode};
+    use tari_jellyfish::{JellyfishMerkleTree, JmtHashScheme, StaleTreeNode};
 
     use super::*;
     use crate::{StateHashTreeDiff, memory_store::MemoryTreeStore};
 
     fn tree_diff() -> StateHashTreeDiff<u64> {
         let store = MemoryTreeStore::<u64>::new();
-        let jmt = JellyfishMerkleTree::new(&store);
+        let jmt = JellyfishMerkleTree::new(&store, JmtHashScheme::V1);
         let changes = (0..500u64).map(|i| {
             let mut key = [0u8; 32];
             key[..8].copy_from_slice(&i.wrapping_mul(0x9E37_79B9_7F4A_7C15).to_be_bytes());
             (LeafKey::new(TreeHash::new(key)), Some((TreeHash::new([7; 32]), i)))
         });
-        let (_, batch) = jmt.batch_put_value_set(changes, None, None, 1).unwrap();
+        let (_, batch) = jmt.batch_put_value_set(changes, None, 1).unwrap();
         let mut diff = StateHashTreeDiff::from(batch);
         diff.new_nodes.push((NodeKey::new_empty_path(2), Node::Null));
-        let odd_path = NibblePath::new_odd(vec![0xa0]);
+        let odd_path = NibblePath::new_odd(&[0xa0]).unwrap();
         diff.stale_tree_nodes
             .push(StaleTreeNode::Node(NodeKey::new(3, odd_path.clone())));
         diff.stale_tree_nodes
@@ -413,25 +416,29 @@ mod tests {
     /// Bytes `tari_jellyfish`'s `minicbor` feature (tari-project/tari#8101) encodes the same values to.
     #[test]
     fn encodes_as_tari_jellyfish_does() {
-        let mut children = IndexMap::new();
-        children.insert(
-            Nibble::from(0xf),
-            Child::new(TreeHash::new([3; 32]), 70_000, NodeType::Leaf),
-        );
-        children.insert(Nibble::from(0x0), Child::new(TreeHash::new([1; 32]), 5, NodeType::Leaf));
-        children.insert(
-            Nibble::from(0x3),
-            Child::new(TreeHash::new([2; 32]), 300, NodeType::Internal { leaf_count: 7 }),
-        );
-        let internal = Node::<u64>::Internal(InternalNode::new(children));
+        let children = [
+            (
+                0xf,
+                Child::try_new(TreeHash::new([3; 32]), 70_000, NodeType::Leaf).unwrap(),
+            ),
+            (0x0, Child::try_new(TreeHash::new([1; 32]), 5, NodeType::Leaf).unwrap()),
+            (
+                0x3,
+                Child::try_new(TreeHash::new([2; 32]), 300, NodeType::Internal { leaf_count: 7 }).unwrap(),
+            ),
+        ]
+        .into_iter()
+        .map(|(nibble, child)| (Nibble::try_from(nibble).unwrap(), child))
+        .collect();
+        let internal = Node::<u64>::Internal(InternalNode::try_new(children).unwrap());
         let leaf = Node::Leaf(LeafNode::new(
             LeafKey::new(TreeHash::new([4; 32])),
             TreeHash::new([5; 32]),
             1234u64,
             42,
         ));
-        let even = NodeKey::new(9, NibblePath::new_even(vec![0x12, 0x34]));
-        let odd = NodeKey::new(9, NibblePath::new_odd(vec![0x50]));
+        let even = NodeKey::new(9, NibblePath::new_even(&[0x12, 0x34]).unwrap());
+        let odd = NodeKey::new(9, NibblePath::new_odd(&[0x50]).unwrap());
         let encode_key = |key: &NodeKey| {
             let mut e = Encoder::new(Vec::new());
             node_key::encode(key, &mut e, &mut ()).unwrap();

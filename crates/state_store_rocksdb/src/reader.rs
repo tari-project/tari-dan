@@ -56,6 +56,7 @@ use tari_ootle_common_types::{
     SubstateAddress,
     SubstateVersion,
     ToSubstateAddress,
+    VersionedSubstateId,
     VersionedSubstateIdRef,
     displayable::Displayable,
     optional::Optional,
@@ -81,6 +82,7 @@ use tari_ootle_storage::{
         SubstateCreate,
         SubstateData,
         SubstateDestroy,
+        SubstateDownProofRecord,
         SubstateLock,
         SubstatePledges,
         SubstateRecord,
@@ -146,6 +148,7 @@ use crate::{
         state_version_proof::{BlockCommitProofCf, StateVersionProofCf},
         substate,
         substate::SubstateCf,
+        substate_down_proof::SubstateDownProofCf,
         transaction::TransactionCf,
         transaction_pool::TransactionPoolCf,
         transaction_pool_state_update,
@@ -1966,6 +1969,20 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         const OPERATION: &str = "block_commit_proofs_get";
         let commit_proof = self.db().cf(BlockCommitProofCf)?.get(block_id, OPERATION)?;
         Ok(commit_proof)
+    }
+
+    fn substate_down_proofs_get(
+        &self,
+        shard: Shard,
+        id: &VersionedSubstateId,
+    ) -> Result<Option<SubstateDownProofRecord>, StorageError> {
+        const OPERATION: &str = "substate_down_proofs_get";
+        let record = self
+            .db()
+            .cf(SubstateDownProofCf)?
+            .get(&(shard, id.to_substate_address()), OPERATION)
+            .optional()?;
+        Ok(record)
     }
 
     fn state_sync_rewind_points_get_all(&self) -> Result<Vec<(Shard, Version)>, StorageError> {

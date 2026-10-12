@@ -112,7 +112,7 @@ mod tests {
     fn diff() -> StateHashTreeDiff<u32> {
         let mut diff = StateHashTreeDiff::new();
         for i in 0..3u8 {
-            let key = NodeKey::new(u64::from(i), NibblePath::new_even(vec![i; 2]));
+            let key = NodeKey::new(u64::from(i), NibblePath::new_even(&[i; 2]).unwrap());
             let node = Node::new_leaf(LeafKey::new([i; 32].into()), [i; 32].into(), u32::from(i), u64::from(i));
             diff.new_nodes.push((key, node));
         }

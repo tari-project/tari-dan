@@ -26,6 +26,7 @@ use tari_ootle_p2p::{
     ToPeerId,
     proto,
     proto::rpc::{
+        GetSubstateResponse,
         GetTransactionResultRequest,
         PayloadResultStatus,
         SubmitTransactionRequest,
@@ -102,6 +103,9 @@ pub struct BatchedSubstate {
     /// Epoch the substate value hash was computed at; needed to re-derive the leaf value hash when
     /// verifying an inclusion proof.
     pub proof_epoch: u64,
+    /// CBOR-encoded SubstateDownProof, decoded for wire compatibility. Validators leave it empty: a batch answers
+    /// with heads, which a down proof cannot settle.
+    pub substate_down_proof: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -170,6 +174,11 @@ pub struct SubstateProofData {
     /// Epoch the substate value hash was computed at; needed to re-derive the leaf value hash when
     /// verifying an inclusion proof.
     pub proof_epoch: u64,
+    /// CBOR-encoded SubstateDownProof proving a down result was committed before it went down. A down result is
+    /// only proven by this: an exclusion proof alone is also satisfied by a version that never existed.
+    pub substate_down_proof: Option<Vec<u8>>,
+    /// The shard state version at which the responder recorded the substate's destruction, for a down result.
+    pub destroyed_at_state_version: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -320,7 +329,7 @@ impl<TAddr: NodeAddressable + ToPeerId, TMsg: MessageSpec> ValidatorNodeRpcClien
             include_proof: true,
         };
 
-        let resp = client.get_substate(request).await?;
+        let mut resp = client.get_substate(request).await?;
         let status = SubstateStatus::try_from(resp.status).map_err(|e| {
             ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
                 "Node returned invalid substate status {}: {e}",
@@ -328,16 +337,7 @@ impl<TAddr: NodeAddressable + ToPeerId, TMsg: MessageSpec> ValidatorNodeRpcClien
             ))
         })?;
 
-        // The responder omits the commit proof when it has nothing committed to anchor against.
-        let proof = if resp.commit_proof.is_empty() {
-            None
-        } else {
-            Some(SubstateProofData {
-                substate_value_proof: resp.substate_value_proof,
-                commit_proof: resp.commit_proof,
-                proof_epoch: resp.proof_epoch,
-            })
-        };
+        let proof = decode_substate_proof(status, &mut resp);
 
         let result = match status {
             SubstateStatus::Up => {
@@ -429,6 +429,21 @@ impl<TAddr: NodeAddressable + ToPeerId, TMsg: MessageSpec> ValidatorNodeRpcClien
     }
 }
 
+/// The proof a single-substate response carries, taken out of `resp`. The responder omits the commit proof when it has
+/// nothing committed to anchor against.
+fn decode_substate_proof(status: SubstateStatus, resp: &mut GetSubstateResponse) -> Option<SubstateProofData> {
+    if resp.commit_proof.is_empty() {
+        return None;
+    }
+    Some(SubstateProofData {
+        substate_value_proof: std::mem::take(&mut resp.substate_value_proof),
+        commit_proof: std::mem::take(&mut resp.commit_proof),
+        proof_epoch: resp.proof_epoch,
+        substate_down_proof: Some(std::mem::take(&mut resp.substate_down_proof)).filter(|proof| !proof.is_empty()),
+        destroyed_at_state_version: (status == SubstateStatus::Down).then_some(resp.destroyed_at_state_version),
+    })
+}
+
 fn decode_batched_substate(proven: proto::rpc::ProvenSubstate) -> Result<BatchedSubstate, ValidatorNodeRpcClientError> {
     let substate = proven
         .substate
@@ -455,6 +470,7 @@ fn decode_batched_substate(proven: proto::rpc::ProvenSubstate) -> Result<Batched
         result,
         value_proof: Some(proven.substate_value_proof).filter(|proof| !proof.is_empty()),
         proof_epoch: proven.proof_epoch,
+        substate_down_proof: Some(proven.substate_down_proof).filter(|proof| !proof.is_empty()),
     })
 }
 
@@ -538,5 +554,98 @@ impl<TMsg: MessageSpec> RpcMultiPool<TMsg> {
     async fn connected_session(&self, addr: &PeerId) -> Option<rpc_service::ValidatorNodeRpcClient> {
         let sessions = self.sessions.read().await;
         sessions.get(addr).filter(|client| client.is_connected()).cloned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use prost::Message;
+    use tari_engine_types::substate::SubstateId;
+    use tari_template_lib_types::{ComponentAddress, ObjectKey};
+
+    use super::*;
+
+    fn substate_id() -> SubstateId {
+        SubstateId::Component(ComponentAddress::new(ObjectKey::from_array([1; ObjectKey::LENGTH])))
+    }
+
+    /// The response as the client receives it, having crossed the wire.
+    fn over_the_wire<M: Message + Default>(message: &M) -> M {
+        M::decode(message.encode_to_vec().as_slice()).unwrap()
+    }
+
+    #[test]
+    fn a_single_down_response_carries_its_down_proof() {
+        let mut resp = over_the_wire(&GetSubstateResponse {
+            status: SubstateStatus::Down as i32,
+            version: 3,
+            destroyed_at_state_version: 9,
+            substate_value_proof: vec![1],
+            commit_proof: vec![2],
+            substate_down_proof: vec![3, 4],
+            ..Default::default()
+        });
+        let proof = decode_substate_proof(SubstateStatus::Down, &mut resp).unwrap();
+        assert_eq!(proof.substate_down_proof, Some(vec![3, 4]));
+        assert_eq!(proof.destroyed_at_state_version, Some(9));
+        assert_eq!(proof.commit_proof, vec![2]);
+    }
+
+    #[test]
+    fn a_single_response_without_a_down_proof_has_none() {
+        let mut resp = over_the_wire(&GetSubstateResponse {
+            status: SubstateStatus::Up as i32,
+            substate_value_proof: vec![1],
+            commit_proof: vec![2],
+            ..Default::default()
+        });
+        let proof = decode_substate_proof(SubstateStatus::Up, &mut resp).unwrap();
+        assert_eq!(proof.substate_down_proof, None);
+        assert_eq!(proof.destroyed_at_state_version, None);
+
+        let mut unanchored = over_the_wire(&GetSubstateResponse {
+            status: SubstateStatus::Down as i32,
+            ..Default::default()
+        });
+        assert!(decode_substate_proof(SubstateStatus::Down, &mut unanchored).is_none());
+    }
+
+    #[test]
+    fn a_batched_down_substate_carries_its_down_proof() {
+        let destroyed = over_the_wire(&proto::rpc::ProvenSubstate {
+            substate: Some(proto::consensus::Substate {
+                substate_id: substate_id().to_bytes(),
+                version: 2,
+                substate: vec![],
+                created: None,
+                destroyed: Some(proto::consensus::SubstateDestroyedMetadata {
+                    at_epoch: None,
+                    at_state_version: 5,
+                }),
+            }),
+            substate_value_proof: vec![1],
+            proof_epoch: 0,
+            substate_down_proof: vec![7, 8],
+        });
+        let batched = decode_batched_substate(destroyed).unwrap();
+        assert!(matches!(batched.result, SubstateResult::Down { .. }));
+        assert_eq!(batched.substate_down_proof, Some(vec![7, 8]));
+
+        let without = over_the_wire(&proto::rpc::ProvenSubstate {
+            substate: Some(proto::consensus::Substate {
+                substate_id: substate_id().to_bytes(),
+                version: 2,
+                substate: vec![],
+                created: None,
+                destroyed: Some(proto::consensus::SubstateDestroyedMetadata {
+                    at_epoch: None,
+                    at_state_version: 5,
+                }),
+            }),
+            substate_value_proof: vec![1],
+            proof_epoch: 0,
+            substate_down_proof: vec![],
+        });
+        assert_eq!(decode_batched_substate(without).unwrap().substate_down_proof, None);
     }
 }

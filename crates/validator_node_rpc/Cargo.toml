@@ -28,6 +28,9 @@ futures = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, default-features = false, features = ["sync"] }
 
+[dev-dependencies]
+tari_template_lib_types = { workspace = true }
+
 [build-dependencies]
 proto_builder = { workspace = true }
 

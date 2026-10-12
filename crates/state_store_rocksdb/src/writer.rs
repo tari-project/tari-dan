@@ -54,6 +54,7 @@ use tari_ootle_common_types::{
     NumPreshards,
     ShardGroup,
     ToSubstateAddress,
+    VersionedSubstateId,
     optional::Optional,
     shard::Shard,
 };
@@ -81,6 +82,7 @@ use tari_ootle_storage::{
         SubstateChange,
         SubstateCreated,
         SubstateDestroyed,
+        SubstateDownProofRecord,
         SubstateLock,
         SubstatePledges,
         SubstateRecord,
@@ -96,7 +98,7 @@ use tari_ootle_storage::{
     time,
 };
 use tari_ootle_transaction::TransactionId;
-use tari_state_tree::{Child, Nibble, Node, NodeKey, NodeType, StaleTreeNode, StateTreePayload, Version};
+use tari_state_tree::{Children, Node, NodeKey, NodeType, StaleTreeNode, StateTreePayload, Version};
 
 use crate::{
     block_diff_table::BlockDiffEntry,
@@ -156,6 +158,7 @@ use crate::{
         state_version_proof::{BlockCommitProofCf, StateVersionProofCf},
         substate,
         substate::{SubstateCf, SubstateHeadData},
+        substate_down_proof::SubstateDownProofCf,
         substate_locks::BlockLockSetCf,
         transaction::TransactionCf,
         transaction_pool::TransactionPoolCf,
@@ -1407,6 +1410,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         let substates_cf = db.cf(SubstateCf)?;
         let head_cf = db.cf(substate::HeadIndex)?;
         let unpruned_cf = db.cf(substate::UnprunedDownedValuesIndex)?;
+        let down_proofs_cf = db.cf(SubstateDownProofCf)?;
 
         let start_version = target_state_version.saturating_add(1);
         let mut touched: HashSet<SubstateId> = HashSet::new();
@@ -1438,6 +1442,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
                         touched.insert(substate.substate_id.clone());
                         substate.destroyed = None;
                         substates_cf.put(address, &substate, OPERATION)?;
+                        down_proofs_cf.delete(&(shard, *address), OPERATION).optional()?;
                         stats.substates_destroyed_restored += 1;
                     },
                 }
@@ -1819,6 +1824,19 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         Ok(())
     }
 
+    fn substate_down_proofs_insert(
+        &mut self,
+        shard: Shard,
+        id: &VersionedSubstateId,
+        record: &SubstateDownProofRecord,
+    ) -> Result<(), StorageError> {
+        const OPERATION: &str = "substate_down_proofs_insert";
+        self.db()
+            .cf(SubstateDownProofCf)?
+            .put(&(shard, id.to_substate_address()), record, OPERATION)?;
+        Ok(())
+    }
+
     fn state_sync_rewind_point_remove(&mut self, shard: Shard) -> Result<(), StorageError> {
         const OPERATION: &str = "state_sync_rewind_point_remove";
         self.db().cf(StateSyncRewindPointCf)?.delete(&shard, OPERATION)?;
@@ -2032,7 +2050,7 @@ fn recurse_subtree_depth_first_post_order<'a>(
     cf: &'a CfContext<Transaction<TransactionDB>, StateTreeCf>,
     shard: Shard,
     parent_key: NodeKey,
-    children: IndexMap<Nibble, Child>,
+    children: Children,
 ) -> impl Iterator<Item = (Shard, NodeKey)> + 'a {
     const OPERATION: &str = "recurse_subtree";
     let parent_after_child = Some((shard, parent_key.clone()));
@@ -2040,7 +2058,13 @@ fn recurse_subtree_depth_first_post_order<'a>(
     children
         .into_iter()
         .flat_map(move |(nibble, child)| -> Box<dyn Iterator<Item = (Shard, NodeKey)>> {
-            let child_key = parent_key.gen_child_node_key(child.version, nibble);
+            let child_key = match parent_key.gen_child_node_key(child.version, nibble) {
+                Ok(child_key) => child_key,
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Cannot derive the child of stale node ({shard}, {parent_key}) at {nibble:?}: {e}");
+                    return Box::new(iter::empty());
+                },
+            };
             match child.node_type{
                 NodeType::Leaf => {
                     Box::new(iter::once((shard, child_key)))

@@ -96,7 +96,7 @@ fn gen_nodes(version: u64, num: usize) -> impl Iterator<Item = (NodeKey, Node<St
     (0..num as u64).map(move |i| {
         let node = Node::Null;
         // No possibility of key collisions
-        let path = NibblePath::new_even(i.to_be_bytes().to_vec());
+        let path = NibblePath::new_even(&i.to_be_bytes()).unwrap();
         let node_key = NodeKey::new(version, path);
         (node_key, node)
     })

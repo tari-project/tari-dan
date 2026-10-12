@@ -18,6 +18,7 @@ use tari_ootle_storage::{
 };
 use tari_sidechain::{CommandCommitProof, SidechainBlockCommitProof, SidechainBlockHeader};
 use tari_state_tree::{
+    JmtHashScheme,
     SPARSE_MERKLE_PLACEHOLDER_HASH,
     SpreadPrefixStateTree,
     TreeHash,
@@ -156,6 +157,7 @@ fn proofs_for_a_batch_verify_against_one_shard_group_root() {
         let proof = generator.generate(&versioned_id).unwrap().expect("shard has state");
         proof
             .verify_inclusion(
+                JmtHashScheme::V1,
                 PROTOCOL_VERSION,
                 &group_root,
                 num_preshards(),
@@ -189,6 +191,7 @@ fn a_reused_shard_root_proof_belongs_to_its_own_shard() {
         let proof = generator.generate(&versioned_id).unwrap().expect("shard has state");
         proof
             .verify_inclusion(
+                JmtHashScheme::V1,
                 PROTOCOL_VERSION,
                 &group_root,
                 num_preshards(),
@@ -216,10 +219,17 @@ fn a_version_that_is_not_up_gets_an_exclusion_proof() {
         let next_version = VersionedSubstateId::new(substate.substate_id().clone(), substate.version().next());
         let proof = generator.generate(&next_version).unwrap().expect("shard has state");
         proof
-            .verify_exclusion(PROTOCOL_VERSION, &group_root, num_preshards(), &next_version)
+            .verify_exclusion(
+                JmtHashScheme::V1,
+                PROTOCOL_VERSION,
+                &group_root,
+                num_preshards(),
+                &next_version,
+            )
             .unwrap();
         proof
             .verify_inclusion(
+                JmtHashScheme::V1,
                 PROTOCOL_VERSION,
                 &group_root,
                 num_preshards(),
@@ -251,10 +261,17 @@ fn an_exclusion_proof_from_another_shard_does_not_prove_absence() {
     let absent_elsewhere = VersionedSubstateId::new(elsewhere.substate_id().clone(), elsewhere.version().next());
     let proof = generator.generate(&absent_elsewhere).unwrap().expect("shard has state");
     proof
-        .verify_exclusion(PROTOCOL_VERSION, &group_root, num_preshards(), &absent_elsewhere)
+        .verify_exclusion(
+            JmtHashScheme::V1,
+            PROTOCOL_VERSION,
+            &group_root,
+            num_preshards(),
+            &absent_elsewhere,
+        )
         .unwrap();
     proof
         .verify_exclusion(
+            JmtHashScheme::V1,
             PROTOCOL_VERSION,
             &group_root,
             num_preshards(),
@@ -348,6 +365,7 @@ fn a_proof_verifies_only_at_the_version_of_its_anchor() {
 
         v1_proof
             .verify_inclusion(
+                JmtHashScheme::V1,
                 ProtocolVersion::V1,
                 &v1_root,
                 num_preshards(),
@@ -357,6 +375,7 @@ fn a_proof_verifies_only_at_the_version_of_its_anchor() {
             .unwrap();
         v2_proof
             .verify_inclusion(
+                JmtHashScheme::V1,
                 ProtocolVersion::V2,
                 &v2_root,
                 num_preshards(),
@@ -366,6 +385,7 @@ fn a_proof_verifies_only_at_the_version_of_its_anchor() {
             .unwrap();
         v1_proof
             .verify_inclusion(
+                JmtHashScheme::V1,
                 ProtocolVersion::V2,
                 &v2_root,
                 num_preshards(),
@@ -375,6 +395,7 @@ fn a_proof_verifies_only_at_the_version_of_its_anchor() {
             .unwrap_err();
         v2_proof
             .verify_inclusion(
+                JmtHashScheme::V1,
                 ProtocolVersion::V1,
                 &v1_root,
                 num_preshards(),
@@ -412,6 +433,7 @@ fn a_v1_checkpoint_re_rooted_at_v2_anchors_v2_proofs() {
             .unwrap()
             .expect("shard has state")
             .verify_inclusion(
+                JmtHashScheme::V1,
                 ProtocolVersion::V2,
                 &genesis_root,
                 num_preshards(),

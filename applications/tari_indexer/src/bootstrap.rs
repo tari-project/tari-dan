@@ -301,6 +301,7 @@ pub async fn spawn_services(
     substate_cache.spawn_pruner(SUBSTATE_CACHE_PRUNE_INTERVAL, shutdown.clone());
     let substate_manager = SubstateManager::new(
         config.network,
+        consensus_constants.num_preshards,
         store.clone(),
         epoch_manager.clone(),
         validator_node_client_factory.clone(),
@@ -353,9 +354,11 @@ pub async fn spawn_services(
     // fact have succeeded, which is the same staleness `dry_run_cache_ttl` is set to bound.
     // Proof verification is left off here: dry run only produces a fee estimate, and gating it on
     // proof availability would make transaction submission fragile when proofs are momentarily
-    // unavailable.
+    // unavailable. It shares the main manager's cache, so it only reads it: its unverified results
+    // must not be served from the cache as the main manager's.
     let dry_run_substate_manager = substate_manager
         .clone()
+        .with_cache_writes(false)
         .with_cache_ttl(config.indexer.dry_run_cache_ttl)
         .with_negative_cache_ttl(
             config

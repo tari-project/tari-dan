@@ -46,6 +46,7 @@ use tari_ootle_common_types::{
     ShardStateVersions,
     SubstateAddress,
     ToSubstateAddress,
+    VersionedSubstateId,
     VersionedSubstateIdRef,
     shard::Shard,
 };
@@ -74,6 +75,7 @@ use crate::{
         StateVersionProof,
         StateVersionTransitions,
         SubstateChange,
+        SubstateDownProofRecord,
         SubstateLock,
         SubstatePledges,
         SubstateRecord,
@@ -457,6 +459,13 @@ pub trait StateStoreReadTransaction: Sized {
     /// The CBOR-encoded commit proof of `block_id`, a block this node committed that produced state versions.
     fn block_commit_proofs_get(&self, block_id: &BlockId) -> Result<Vec<u8>, StorageError>;
 
+    /// The proof that `id` was committed before it went down in `shard`, if this node recorded one.
+    fn substate_down_proofs_get(
+        &self,
+        shard: Shard,
+        id: &VersionedSubstateId,
+    ) -> Result<Option<SubstateDownProofRecord>, StorageError>;
+
     // -------------------------------- Epoch checkpoint -------------------------------- //
     fn epoch_checkpoint_get_all_from_epoch(
         &self,
@@ -781,6 +790,13 @@ pub trait StateStoreWriteTransaction {
     /// Stores the CBOR-encoded commit proof of `block_id`. It is never pruned: the state version proofs that name the
     /// block outlive it.
     fn block_commit_proofs_insert(&mut self, block_id: &BlockId, commit_proof: &[u8]) -> Result<(), StorageError>;
+
+    fn substate_down_proofs_insert(
+        &mut self,
+        shard: Shard,
+        id: &VersionedSubstateId,
+        record: &SubstateDownProofRecord,
+    ) -> Result<(), StorageError>;
 
     // -------------------------------- Epoch checkpoint -------------------------------- //
     fn epoch_checkpoint_save(&mut self, checkpoint: &EpochCheckpoint) -> Result<(), StorageError>;
