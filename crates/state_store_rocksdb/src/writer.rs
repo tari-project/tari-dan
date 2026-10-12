@@ -1443,10 +1443,8 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
                         touched.insert(substate.substate_id.clone());
                         substate.destroyed = None;
                         substates_cf.put(address, &substate, OPERATION)?;
-                        down_proofs_cf.delete(&(shard, *address), OPERATION).optional()?;
-                        down_proofs_epoch_index
-                            .delete(&(record.epoch, shard, *address), OPERATION)
-                            .optional()?;
+                        down_proofs_cf.delete(&(shard, *address), OPERATION)?;
+                        down_proofs_epoch_index.delete(&(record.epoch, shard, *address), OPERATION)?;
                         stats.substates_destroyed_restored += 1;
                     },
                 }
@@ -2227,8 +2225,6 @@ mod cleanup {
         Ok(keys.len())
     }
 
-    /// Equivocation evidence is retained for as long as the blocks of the view it indicts, so an
-    /// operator reading the record can still fetch the blocks it refers to.
     pub fn substate_down_proofs_for_epoch(
         db: &DbWriteContext<'_>,
         up_to_epoch: Epoch,
@@ -2252,6 +2248,8 @@ mod cleanup {
         Ok(keys.len())
     }
 
+    /// Equivocation evidence is retained for as long as the blocks of the view it indicts, so an
+    /// operator reading the record can still fetch the blocks it refers to.
     pub fn vote_equivocations_for_epoch(
         db: &DbWriteContext<'_>,
         up_to_epoch: Epoch,
