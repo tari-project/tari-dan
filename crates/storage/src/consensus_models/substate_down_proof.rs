@@ -127,7 +127,7 @@ where
                 for (block_id, commit_proof) in sources.unstored.drain() {
                     tx.block_commit_proofs_insert(&block_id, &commit_proof)?;
                 }
-                tx.substate_down_proofs_insert(downed.shard, &downed.id, &record)?;
+                tx.substate_down_proofs_insert(downed.epoch, downed.shard, &downed.id, &record)?;
             },
             None => {
                 debug!(

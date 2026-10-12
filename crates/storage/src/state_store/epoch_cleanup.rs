@@ -11,6 +11,9 @@ use std::fmt::Display;
 pub enum EpochCleanupStep {
     /// Clears the values of substates downed in pruned epochs, keeping their records.
     DownedSubstateValues,
+    /// Deletes the down proofs of substates downed in pruned epochs. Its window is the down proof retention window,
+    /// not the one the other steps share.
+    SubstateDownProofs,
     Blocks,
     ProposalCertificates,
     TimeoutCertificates,
@@ -22,8 +25,9 @@ pub enum EpochCleanupStep {
 }
 
 impl EpochCleanupStep {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::DownedSubstateValues,
+        Self::SubstateDownProofs,
         Self::Blocks,
         Self::ProposalCertificates,
         Self::TimeoutCertificates,
@@ -36,6 +40,7 @@ impl EpochCleanupStep {
     pub const fn as_str(&self) -> &'static str {
         match self {
             Self::DownedSubstateValues => "downed substate values",
+            Self::SubstateDownProofs => "substate down proofs",
             Self::Blocks => "blocks",
             Self::ProposalCertificates => "proposal certificates",
             Self::TimeoutCertificates => "timeout certificates",
