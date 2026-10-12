@@ -101,15 +101,20 @@ const ENGINE_FINGERPRINT_BITS: u64 = {
     // Which count a hit reads out of each header slot. Swapping two of these is a fee change.
     let h = const_hash::values(h, &header_layout());
     // Every limit, not just the ones the artifact bakes in: `validate_module_structure` enforces
-    // `max_tables`, `max_globals`, `max_module_functions` and `max_module_variables` at compile
-    // time only, and a hit goes straight to `finalize_loaded_module` without it. Destructured rather than read field by
-    // field, so that a limit added later does not compile until it is named here.
+    // `max_tables`, `max_globals` and the module and function limits on what the compile emits at
+    // compile time only, and a hit goes straight to `finalize_loaded_module` without it.
+    // Destructured rather than read field by field, so that a limit added later does not compile
+    // until it is named here.
     let limits::WasmLimits {
         max_function_arguments,
         max_function_name_length,
         max_functions,
         max_module_functions,
         max_module_variables,
+        max_function_metering_checks,
+        max_function_loops,
+        max_module_loops,
+        max_function_nesting_depth,
         max_memory_pages,
         max_globals,
         max_tables,
@@ -122,10 +127,21 @@ const ENGINE_FINGERPRINT_BITS: u64 = {
         max_functions as u128,
         max_module_functions as u128,
         max_module_variables as u128,
+        max_function_metering_checks as u128,
+        max_function_loops as u128,
+        max_module_loops as u128,
+        max_function_nesting_depth as u128,
         max_memory_pages as u128,
         max_globals as u128,
         max_tables as u128,
         max_table_elements as u128,
+        // The compile work `validate_module_structure` refuses a module for is these counts at these
+        // prices, against the size cap.
+        limits::ENGINE_LIMITS.max_template_binary_size_bytes as u128,
+        limits::TEMPLATE_COMPILE_BYTES_PER_FUNCTION as u128,
+        limits::TEMPLATE_COMPILE_BYTES_PER_VARIABLE as u128,
+        limits::TEMPLATE_COMPILE_BYTES_PER_METERING_CHECK as u128,
+        limits::TEMPLATE_COMPILE_FUNCTION_CHECKS_SQUARED_PER_BYTE as u128,
     ]))
 };
 

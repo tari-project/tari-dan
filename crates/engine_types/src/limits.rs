@@ -17,6 +17,28 @@ pub struct WasmLimits {
     /// function. Cranelift declares each as a variable of its own, while a run of locals is a
     /// single `(count, type)` pair of a few bytes. The built-in templates declare 1,000 to 3,300.
     pub max_module_variables: usize,
+    /// Maximum number of metering checks the compile may emit into one function (see
+    /// [`TEMPLATE_COMPILE_BYTES_PER_METERING_CHECK`]). Wasmer compiles each function on a single
+    /// thread, at a cost that grows with the square of these, so a module's largest function is
+    /// billed by [`TEMPLATE_COMPILE_FUNCTION_CHECKS_SQUARED_PER_BYTE`], and this cap is the count at
+    /// which that bill reaches the size cap. `rustc`'s wasm32 output for the built-in templates needs at most ~4,900
+    /// in one function, the account template's generated `Account_main` dispatcher, which grows by
+    /// ~160 for each of the 30 functions in the template's ABI.
+    pub max_function_metering_checks: usize,
+    /// Maximum number of `loop`s one function may contain. Each one costs Cranelift far more than
+    /// the other operators a metering check follows, and that cost grows with how many share the
+    /// function. The built-in templates hold at most 66 in one function.
+    pub max_function_loops: usize,
+    /// Maximum number of `loop`s a module may contain, summed over its functions. A `loop` and its
+    /// metering checks compile in ~55 µs, the byte price of ~220 bytes against the three bytes it
+    /// takes, and wasmer parallelises a compile only across ~33 KB runs of function bytes, so a
+    /// module of loops compiles nearly serially. One at this cap measures at ~115 ms, up to ~4x its
+    /// charge. The built-in templates hold at most 522.
+    pub max_module_loops: usize,
+    /// Maximum depth to which one function may nest `block`, `loop` and `if`. Cranelift's time on
+    /// a function grows with the nesting as well as the count. The built-in templates nest at most
+    /// 121 deep.
+    pub max_function_nesting_depth: usize,
     /// Maximum memory size in pages (64KiB each)
     pub max_memory_pages: usize,
     /// Maximum number of globals a module may declare. Each one occupies a slot in the instance's
@@ -43,6 +65,10 @@ pub const WASM_LIMITS: WasmLimits = WasmLimits {
     max_functions: 8192,
     max_module_functions: 2048,
     max_module_variables: 512 * 1024,
+    max_function_metering_checks: 8192,
+    max_function_loops: 512,
+    max_module_loops: 2048,
+    max_function_nesting_depth: 1024,
     max_memory_pages: 32, // ~2MiB = 32 * 64KiB
     max_globals: 1024,
     max_tables: 4,
@@ -151,25 +177,57 @@ pub const FREE_COMPUTE_GRACE_POINTS: u64 = 32_000_000;
 /// unaffordable publish is refused for its size rather than part-way through paying for it.
 ///
 /// The binary is billed at [`PER_TEMPLATE_COMPILE_BYTE`] for whichever is larger: its size, or
-/// [`TEMPLATE_COMPILE_BYTES_PER_FUNCTION`] for each function it contains plus
-/// [`TEMPLATE_COMPILE_BYTES_PER_VARIABLE`] for each parameter and local those functions declare.
-/// The byte price is fitted over templates whose functions average 800 to 1500 bytes and declare
-/// under one variable per hundred bytes, so it carries those costs within it; a module denser in
-/// either is billed by its counts.
+/// its [`template_compile_count_bytes`]. The byte price is fitted over templates whose functions
+/// average 800 to 1500 bytes, declare under one variable per hundred bytes and need one metering
+/// check per ~19 bytes, so it carries those costs within it; a module denser in any of them is
+/// billed by its counts.
 ///
 /// From `cargo run -p tari_engine --release --example instantiation_points_calibrate`, fitted over
 /// the built-in templates and converted at the calibrated ~8.4M points/ms, rounded up.
 pub const fn template_compile_points(binary_bytes: u64, counts: &CompileCounts) -> u64 {
-    let count_bytes = counts
-        .functions
-        .saturating_mul(TEMPLATE_COMPILE_BYTES_PER_FUNCTION)
-        .saturating_add(counts.variables.saturating_mul(TEMPLATE_COMPILE_BYTES_PER_VARIABLE));
+    let count_bytes = template_compile_count_bytes(counts);
     let billed_bytes = if count_bytes > binary_bytes {
         count_bytes
     } else {
         binary_bytes
     };
     PER_TEMPLATE_COMPILE.saturating_add(PER_TEMPLATE_COMPILE_BYTE.saturating_mul(billed_bytes))
+}
+
+/// The binary size whose compile [`PER_TEMPLATE_COMPILE_BYTE`] prices the same as what `counts`
+/// asks the compile to emit.
+///
+/// Wasmer compiles a module's functions in parallel, each on a single thread, so this is whichever
+/// is larger of two bounds. The work all the functions add up to is
+/// [`TEMPLATE_COMPILE_BYTES_PER_FUNCTION`] for each function,
+/// [`TEMPLATE_COMPILE_BYTES_PER_VARIABLE`] for each parameter and local and
+/// [`TEMPLATE_COMPILE_BYTES_PER_METERING_CHECK`] for each metering check. The compile also takes
+/// at least as long as its largest function, which grows with the square of that function's
+/// metering checks: see [`TEMPLATE_COMPILE_FUNCTION_CHECKS_SQUARED_PER_BYTE`].
+///
+/// A module may ask for no more than [`EngineLimits::max_template_binary_size_bytes`] of it, so no
+/// publish is charged more than one at the size cap. The function, variable and per-function
+/// metering-check caps keep their own shares of it under the size cap; the metering checks summed
+/// over a module are bounded by this alone.
+pub const fn template_compile_count_bytes(counts: &CompileCounts) -> u64 {
+    let all_functions = counts
+        .functions
+        .saturating_mul(TEMPLATE_COMPILE_BYTES_PER_FUNCTION)
+        .saturating_add(counts.variables.saturating_mul(TEMPLATE_COMPILE_BYTES_PER_VARIABLE))
+        .saturating_add(
+            counts
+                .metering_checks
+                .saturating_mul(TEMPLATE_COMPILE_BYTES_PER_METERING_CHECK),
+        );
+    let largest_function = counts
+        .largest_function_metering_checks
+        .saturating_mul(counts.largest_function_metering_checks) /
+        TEMPLATE_COMPILE_FUNCTION_CHECKS_SQUARED_PER_BYTE;
+    if largest_function > all_functions {
+        largest_function
+    } else {
+        all_functions
+    }
 }
 
 /// Fixed cost of a compile, independent of the binary: ~16 ms of Cranelift setup.
@@ -199,11 +257,44 @@ pub const TEMPLATE_COMPILE_BYTES_PER_FUNCTION: u64 = 256;
 /// [`PER_TEMPLATE_COMPILE_BYTE`] charges for.
 pub const TEMPLATE_COMPILE_BYTES_PER_VARIABLE: u64 = 1;
 
+/// The fewest bytes a metering check is billed as by [`template_compile_points`].
+///
+/// The compile emits a check against the metering allowance after every operator the metering
+/// middleware ends a basic block at — a `loop`, `if`, `else`, `end`, branch, call or `return` — and
+/// after every operator the bulk meter charges by length. Each check is a conditional trap, and the
+/// checks are where Cranelift's time on these operators goes, while the operator they follow can be
+/// as small as one byte. Modules of blocks and branches asking for the most compile work a module
+/// may, spread over 32 to 2,047 functions, measure at 0.8 to 1.5x their charge.
+///
+/// The built-in templates need a check per ~19 bytes and are billed by their counts, at 1.03 to
+/// 1.28x their size; each still measures at or above its charge.
+pub const TEMPLATE_COMPILE_BYTES_PER_METERING_CHECK: u64 = 16;
+
+/// A module's largest function is billed as the square of its metering checks over this many
+/// bytes.
+///
+/// Within one function, Cranelift's time grows by 2.8e-6 to 3.6e-6 ms per check squared on top of
+/// a linear cost, measured over runs of blocks and branches: the byte price of one byte for every
+/// ~58 to ~76 checks squared. Set to the value at which a function at
+/// [`WasmLimits::max_function_metering_checks`] is billed as the size cap, where the costliest such
+/// function, its linear cost compiling on the same thread, measures at 2 to 3x its charge. A lower
+/// value buys a wider margin only with a lower function cap. The account template's largest
+/// function, its generated `Account_main` dispatcher of ~4,900 checks, is billed as ~370 KiB,
+/// under the account template's own size.
+pub const TEMPLATE_COMPILE_FUNCTION_CHECKS_SQUARED_PER_BYTE: u64 = 64;
+
 const _: () = assert!(
     WASM_LIMITS.max_module_functions as u64 * TEMPLATE_COMPILE_BYTES_PER_FUNCTION +
         WASM_LIMITS.max_module_variables as u64 * TEMPLATE_COMPILE_BYTES_PER_VARIABLE <=
         ENGINE_LIMITS.max_template_binary_size_bytes as u64,
     "a module at the function and variable caps must not cost more to publish than one at the size cap"
+);
+
+const _: () = assert!(
+    (WASM_LIMITS.max_function_metering_checks as u64 * WASM_LIMITS.max_function_metering_checks as u64) /
+        TEMPLATE_COMPILE_FUNCTION_CHECKS_SQUARED_PER_BYTE <=
+        ENGINE_LIMITS.max_template_binary_size_bytes as u64,
+    "a function at the metering-check cap must not cost more to publish than a module at the size cap"
 );
 
 /// What a module asks the compile to emit beyond its bytes. Priced by [`template_compile_points`].
@@ -213,6 +304,12 @@ pub struct CompileCounts {
     pub functions: u64,
     /// Parameters and locals, summed over every function.
     pub variables: u64,
+    /// Metering checks, summed over every function. See
+    /// [`TEMPLATE_COMPILE_BYTES_PER_METERING_CHECK`].
+    pub metering_checks: u64,
+    /// Metering checks in the function that has the most of them. See
+    /// [`TEMPLATE_COMPILE_FUNCTION_CHECKS_SQUARED_PER_BYTE`].
+    pub largest_function_metering_checks: u64,
 }
 
 /// Fixed cost of one instantiation: mapping the memory, wiring the imports and building the tables.
@@ -591,6 +688,8 @@ mod publish_budget_tests {
         let compile = template_compile_points(largest, &CompileCounts {
             functions: WASM_LIMITS.max_module_functions as u64,
             variables: WASM_LIMITS.max_module_variables as u64,
+            metering_checks: 0,
+            largest_function_metering_checks: 0,
         });
 
         assert!(
