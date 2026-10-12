@@ -335,30 +335,17 @@ impl WasmProcess {
     ) -> WasmPtr<u8> {
         let op = match EngineOp::from_i32(op) {
             Some(op) => op,
-            None => {
-                log::error!(target: LOG_TARGET, "Invalid opcode: {}", op);
-                env.data_mut()
-                    .set_last_engine_error(WasmExecutionError::InvalidEngineOp { op });
-                return WasmPtr::null();
-            },
+            None => return fail_engine_call(env.data_mut(), WasmExecutionError::InvalidEngineOp { op }),
         };
 
         // Defence in depth: `max_internal_call_size` sits above what a template can build inside
         // `WASM_LIMITS.max_memory_pages`, since the argument and its encoded copy must both fit, so
         // a template reaching this limit runs out of linear memory first.
         if arg_len as usize > limits::ENGINE_LIMITS.max_internal_call_size {
-            log::error!(
-                target: LOG_TARGET,
-                "Engine call size limit of {} bytes exceeded: {} bytes",
-                limits::ENGINE_LIMITS.max_internal_call_size,
-                arg_len
-            );
-            env.data_mut()
-                .set_last_engine_error(WasmExecutionError::EngineCallArgSizeExceeded {
-                    limit: limits::ENGINE_LIMITS.max_internal_call_size,
-                    size: arg_len as usize,
-                });
-            return WasmPtr::null();
+            return fail_engine_call(env.data_mut(), WasmExecutionError::EngineCallArgSizeExceeded {
+                limit: limits::ENGINE_LIMITS.max_internal_call_size,
+                size: arg_len as usize,
+            });
         }
 
         {
@@ -483,13 +470,7 @@ impl WasmProcess {
         let clamped = Self::clamp_in_flight_meter(&mut env);
         let result = result.and_then(|ptr| clamped.map(|()| ptr));
 
-        result.unwrap_or_else(|err| {
-            // The recorded error is what reaches the transaction, as its reject reason. This line is
-            // the validator's own record of it.
-            log::error!(target: LOG_TARGET, "{}", err);
-            env.data_mut().set_last_engine_error(err);
-            WasmPtr::null()
-        })
+        result.unwrap_or_else(|err| fail_engine_call(env.data_mut(), err))
     }
 
     fn handle<T, U, E>(
@@ -517,10 +498,8 @@ impl WasmProcess {
                 env_mut.with_memory_slice(&mut store, arg_ptr, arg_len, |arg| {
                     // An engine op's payload is whatever the guest wrote into its memory, decoded
                     // here on the validator's own stack.
-                    decode_exact_with_max_depth(arg, limits::MAX_CBOR_NESTING_DEPTH).map_err(|e| {
-                        log::error!(target: LOG_TARGET, "Failed to decode args for engine call: {}", e);
-                        WasmExecutionError::EngineArgDecodeFailed(e)
-                    })
+                    decode_exact_with_max_depth(arg, limits::MAX_CBOR_NESTING_DEPTH)
+                        .map_err(WasmExecutionError::EngineArgDecodeFailed)
                 })
             }??
         };
@@ -778,6 +757,20 @@ fn transaction_headroom(runtime: &Runtime) -> TransactionHeadroom {
     }
 }
 
+/// Fails an engine call with `err`, answering the template with a null pointer.
+///
+/// The recorded error is what reaches the transaction, as its reject reason; the log line is the
+/// validator's own record of it. A template is free to ignore the null and call again, so only the
+/// first failure of an invocation is logged: each one after it is validator I/O the template would
+/// get for the price of a host call.
+fn fail_engine_call<T>(env: &mut WasmEnv<T>, err: WasmExecutionError) -> WasmPtr<u8> {
+    if !env.has_last_engine_error() {
+        log::error!(target: LOG_TARGET, "{}", err);
+    }
+    env.set_last_engine_error(err);
+    WasmPtr::null()
+}
+
 /// Reports an engine call `tari_engine_entrypoint` refused. It can only signal a refusal by
 /// returning a null pointer, which a template is free to ignore, so the recorded refusal is what
 /// actually fails the call. It takes precedence over any error the alloc or free itself returned,
@@ -823,6 +816,12 @@ fn debug_handler<T: Send + 'static>(mut env: FunctionEnvMut<WasmEnv<T>>, arg_ptr
 /// `Self::alloc_response` suspends that window while it writes an engine call's response through
 /// the template's `tari_alloc`, so a panic raised inside that allocation reaches the transaction as
 /// a plain runtime error with no message attached.
+///
+/// `on_panic` is a host call, not a trap, so a template may make it any number of times in one
+/// invocation. Only the first report is kept, it is read no further than
+/// `max_panic_message_size`, and it is logged at debug level only: the message reaches the
+/// transaction as its reject reason, and anything more would be validator work the template gets
+/// for the price of a host call.
 fn on_panic_handler<T: Send + 'static>(
     mut env: FunctionEnvMut<WasmEnv<T>>,
     msg_ptr: WasmPtr<u8>,
@@ -831,56 +830,32 @@ fn on_panic_handler<T: Send + 'static>(
     col: i32,
 ) {
     let (state, mut store) = env.data_and_store_mut();
-    if !state.is_in_template_invocation() {
+    if !state.is_in_template_invocation() || state.has_last_panic() {
         return;
     }
 
     let Ok(msg_len) = u32::try_from(msg_len) else {
-        log::error!(
-            target: WASM_DEBUG_LOG_TARGET,
-            "📣 PANIC: ({}:{}) WASM template reported a negative panic message length ({})",
-            line, col, msg_len
-        );
         return;
     };
+    let limit = limits::ENGINE_LIMITS.max_panic_message_size;
+    let len = msg_len.min(u32::try_from(limit).unwrap_or(u32::MAX));
 
     // SAFETY: There is no way to call this function concurrently
-    let panic_message = unsafe {
-        state.with_memory_slice(&mut store, msg_ptr, msg_len, |msg_bytes| {
-            if msg_bytes.len() > limits::ENGINE_LIMITS.max_panic_message_size {
-                let Ok(msg) = str::from_utf8(msg_bytes) else {
-                    error!(target: WASM_DEBUG_LOG_TARGET, "📣 PANIC: ({}:{}) <invalid utf8 message>", line, col);
-                    return None;
-                };
-                log::error!(target: WASM_DEBUG_LOG_TARGET, "📣 PANIC: ({}:{}) {}", line, col, msg);
-                let limit = limits::ENGINE_LIMITS.max_panic_message_size;
-                let mut end = limit;
-                // Ensure we truncate at a char boundary (to avoid a panic when calling truncate)
-                while end > 0 && !msg.is_char_boundary(end) {
-                    end -= 1;
-                }
-                error!(target: LOG_TARGET, "Panic message size limit exceeded: for panic {}", msg);
-                Some(msg[..end].to_string())
-            } else {
-                let msg = String::from_utf8_lossy(msg_bytes);
-                log::error!(target: WASM_DEBUG_LOG_TARGET, "📣 PANIC: ({}:{}) {}", line, col, msg);
-                Some(msg.into_owned())
-            }
+    let message = unsafe {
+        state.with_memory_slice(&mut store, msg_ptr, len, |msg_bytes| {
+            // Lossy decoding can lengthen invalid input, so the decoded message is bounded again.
+            let mut msg = String::from_utf8_lossy(msg_bytes).into_owned();
+            msg.truncate(msg.floor_char_boundary(limit));
+            msg
         })
     }
     .unwrap_or_else(|err| {
-        log::error!(
-            target: WASM_DEBUG_LOG_TARGET,
-            "📣 PANIC: WASM template panicked but did not provide a valid memory pointer to on_panic callback: {}",
-            err
-        );
-        Some(format!(
+        format!(
             "WASM panicked but did not provide a valid message pointer to on_panic callback: {}",
             err
-        ))
+        )
     });
 
-    if let Some(message) = panic_message {
-        state.set_last_panic(message);
-    }
+    log::debug!(target: WASM_DEBUG_LOG_TARGET, "📣 PANIC: ({}:{}) {}", line, col, message);
+    state.set_last_panic(message);
 }
