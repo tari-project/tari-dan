@@ -11,7 +11,7 @@ use tari_crypto::{
 };
 use tari_engine_types::{
     crypto::covenant_balance_proof_native_points,
-    limits::STEALTH_LIMITS,
+    limits::{self, STEALTH_LIMITS},
     stealth::{MerkleTree, hashlock_digest},
 };
 use tari_ootle_common_types::{
@@ -20,18 +20,21 @@ use tari_ootle_common_types::{
     substate_type::SubstateType,
 };
 use tari_ootle_transaction::{Epoch, Transaction, args};
-use tari_template_lib::types::{
-    AccessRule,
-    Amount,
-    FunctionName,
-    Hash32,
-    ResourceAddress,
-    TemplateAddress,
-    bytes::Bytes,
-    constants::STEALTH_TARI_RESOURCE_ADDRESS,
-    crypto::{NoSignatureDomain, PublicKey, RistrettoPublicKeyBytes, Signature},
-    rule,
-    stealth::{BuiltinPredicate, Covenant, HashAlg, MerkleProof, SpendCondition, SpendWitness, TemplateFunction},
+use tari_template_lib::{
+    args::{SpendContextAction, SpendContextInvokeArg},
+    types::{
+        AccessRule,
+        Amount,
+        FunctionName,
+        Hash32,
+        ResourceAddress,
+        TemplateAddress,
+        bytes::Bytes,
+        constants::STEALTH_TARI_RESOURCE_ADDRESS,
+        crypto::{NoSignatureDomain, PublicKey, RistrettoPublicKeyBytes, Signature},
+        rule,
+        stealth::{BuiltinPredicate, Covenant, HashAlg, MerkleProof, SpendCondition, SpendWitness, TemplateFunction},
+    },
 };
 use tari_template_test_tooling::{
     TemplateTest,
@@ -1522,11 +1525,25 @@ fn repeated_covenant_balance_atoms_are_charged_once() {
     assert_eq!(repeated, once);
 }
 
+/// The engine argument charge for the `AssertCovenantBalanced` call the `preserve_balance` script
+/// makes and `always_ok` does not.
+fn covenant_balanced_call_native_points() -> u64 {
+    let arg = tari_bor::encode(&SpendContextInvokeArg {
+        action: SpendContextAction::AssertCovenantBalanced { max_revealed: 0 },
+    })
+    .unwrap();
+    limits::engine_arg_scan_points(arg.len() as u64) +
+        limits::engine_arg_decode_points(tari_bor::count_data_items(&arg).unwrap())
+}
+
 #[test]
 fn spend_script_covenant_balance_proof_is_charged() {
     let unproven = covenant_spend_native_points(|t| script_condition(t, "always_ok", vec![]), 1);
     let proven = covenant_spend_native_points(|t| script_condition(t, "preserve_balance", vec![]), 1);
-    assert_eq!(proven - unproven, covenant_balance_proof_native_points(1, 1));
+    assert_eq!(
+        proven - unproven,
+        covenant_balance_proof_native_points(1, 1) + covenant_balanced_call_native_points()
+    );
 }
 
 #[test]
@@ -1549,7 +1566,7 @@ fn native_and_spend_script_covenants_share_one_proof() {
         },
         1,
     );
-    assert_eq!(both, native_only);
+    assert_eq!(both, native_only + covenant_balanced_call_native_points());
 }
 
 #[test]

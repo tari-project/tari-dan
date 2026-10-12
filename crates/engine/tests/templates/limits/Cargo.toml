@@ -8,6 +8,9 @@ edition = "2024"
 
 [dependencies]
 tari_template_lib = { path = "../../../../template_lib" }
+# Used to reach the raw `tari_engine` import, so a test can hand the engine an argument of a chosen
+# shape.
+tari_template_abi = { path = "../../../../template_abi", default-features = false }
 
 [profile.release]
 opt-level = 's'     # Optimize for size.

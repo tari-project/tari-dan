@@ -7,6 +7,7 @@ use tari_bor::encoded_len;
 use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_engine::{fees::FeeTable, runtime::LimitError, state_store::StateWriter, wasm::WasmExecutionError};
 use tari_engine_types::{
+    commit_result::RejectReason,
     events::Event,
     limits,
     resource_container::ResourceContainer,
@@ -320,11 +321,17 @@ fn a_nested_return_value_is_charged_per_item() {
     let small_points = native_points_for(&mut test, "return_items_nested", args![template, small]);
     let large_points = native_points_for(&mut test, "return_items_nested", args![template, large]);
 
-    // The outer call returns the count, whose encoding widens with it.
-    let count_charge = |len: u32| limits::return_value_points(tari_bor::encode(&len).unwrap().len() as u64, 1);
+    // The outer call passes `len` to the engine and returns the count, and both encodings widen
+    // with it.
+    let width = |len: u32| tari_bor::encode(&len).unwrap().len() as u64;
+    let count_charge = |len: u32| limits::return_value_points(width(len), 1);
+    let call_arg_charge = |len: u32| limits::engine_arg_scan_points(width(len));
     assert_eq!(
         large_points - small_points,
-        return_value_charge(large) + count_charge(large) - return_value_charge(small) - count_charge(small),
+        return_value_charge(large) + count_charge(large) + call_arg_charge(large) -
+            return_value_charge(small) -
+            count_charge(small) -
+            call_arg_charge(small),
         "a nested call returning {large} items rather than {small} must cost exactly the difference in return-value \
          charges"
     );
@@ -365,5 +372,118 @@ fn an_unaffordable_return_value_fails_out_of_compute() {
     assert_reject_reason(
         reason,
         format!("requiring {} points exceeds the fee intent's", return_value_charge(len)),
+    );
+}
+
+/// Native points a main-instruction call to `engine_call_with_items` is charged. The engine refuses
+/// the argument, so the transaction fails, and the charge stands all the same.
+fn engine_call_native_points(test: &mut TemplateTest, items: u32) -> u64 {
+    let template = test.get_template_address(TEMPLATE_NAME);
+    let result = test
+        .try_execute(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(template, "engine_call_with_items", args![items])
+                .build_and_seal(test.secret_key()),
+            vec![],
+        )
+        .unwrap();
+    assert_reject_reason(
+        result.expect_failure().clone(),
+        "Failed to decode argument for engine call",
+    );
+    result.native_execution_points
+}
+
+/// The bytes of the argument `engine_call_with_items` sends for `items`, and the CBOR items they
+/// hold: a five-byte array head and one byte per element.
+fn engine_arg_shape(items: u32) -> (u64, u64) {
+    (5 + u64::from(items), 1 + u64::from(items))
+}
+
+/// Scanning and decoding an engine call's argument runs on the host, outside the Wasmer meter, so
+/// the engine charges native points for each byte it scans and each item it decodes, whether or not
+/// the argument turns out to be one the op accepts.
+#[test]
+fn an_engine_call_argument_is_charged_per_byte_and_item() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let (small, large) = (1, 30_000);
+
+    let small_points = engine_call_native_points(&mut test, small);
+    let large_points = engine_call_native_points(&mut test, large);
+
+    let charge = |items| {
+        let (bytes, items) = engine_arg_shape(items);
+        limits::engine_arg_scan_points(bytes) + limits::engine_arg_decode_points(items)
+    };
+    assert_eq!(
+        large_points - small_points,
+        charge(large) - charge(small),
+        "an argument of {large} items rather than {small} must cost exactly the difference in engine argument charges"
+    );
+}
+
+/// Runs `engine_call_with_items` for `items` in the fee intent, whose flat credit is the allowance,
+/// and returns why it failed.
+fn engine_call_in_fee_intent(items: u32) -> RejectReason {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let template = test.get_template_address(TEMPLATE_NAME);
+    let mut fee_table = FeeTable::zero_rated();
+    fee_table.per_wasm_point_cost = 1;
+    fee_table.wasm_points_cost_divisor = 1;
+    test.set_fee_table(fee_table);
+    test.enable_fees();
+
+    assert!(
+        engine_arg_shape(items).0 <= limits::ENGINE_LIMITS.max_internal_call_size as u64,
+        "the argument must fit within max_internal_call_size for this test to reach the charge"
+    );
+    test.execute_expect_failure(
+        Transaction::builder_localnet(Epoch(1))
+            .with_fee_instructions_builder(|builder| {
+                builder.call_function(template, "engine_call_with_items", args![items])
+            })
+            .build_and_seal(test.secret_key()),
+        vec![],
+    )
+}
+
+/// An argument whose scan alone is priced above what the transaction can cover fails it out of
+/// compute before the engine reads it.
+#[test]
+fn an_unaffordable_engine_call_argument_scan_fails_out_of_compute() {
+    let items =
+        u32::try_from(limits::FREE_COMPUTE_GRACE_POINTS / limits::NativeExecutionPoints::PER_ENGINE_ARG_BYTE).unwrap();
+    let (bytes, _) = engine_arg_shape(items);
+
+    assert_reject_reason(
+        engine_call_in_fee_intent(items),
+        format!(
+            "requiring {} points exceeds the fee intent's",
+            limits::engine_arg_scan_points(bytes)
+        ),
+    );
+}
+
+/// An argument whose scan is affordable but whose decode is not fails the transaction out of
+/// compute before the engine decodes it.
+#[test]
+fn an_unaffordable_engine_call_argument_decode_fails_out_of_compute() {
+    // The scan takes a third of the credit, the decode the rest and more.
+    let items =
+        u32::try_from(limits::FREE_COMPUTE_GRACE_POINTS / 3 / limits::NativeExecutionPoints::PER_ENGINE_ARG_BYTE)
+            .unwrap();
+    let (bytes, decoded) = engine_arg_shape(items);
+    assert!(
+        limits::engine_arg_scan_points(bytes) + limits::engine_arg_decode_points(decoded) >
+            limits::FREE_COMPUTE_GRACE_POINTS,
+        "the decode must be priced above what the scan leaves of the credit for this test to reach it"
+    );
+
+    assert_reject_reason(
+        engine_call_in_fee_intent(items),
+        format!(
+            "requiring {} points exceeds the fee intent's",
+            limits::engine_arg_decode_points(decoded)
+        ),
     );
 }

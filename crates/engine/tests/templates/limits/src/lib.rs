@@ -32,6 +32,22 @@ mod template {
             items.len() as u32
         }
 
+        /// Calls the engine once with an argument of `items` one-byte CBOR items, which no engine op
+        /// accepts, and ignores the refusal.
+        pub fn engine_call_with_items(items: u32) {
+            let mut arg = vec![0u8; 5 + items as usize];
+            // The head of a definite-length array with a four-byte length.
+            arg[0] = 0x9a;
+            arg[1..5].copy_from_slice(&items.to_be_bytes());
+            unsafe {
+                tari_template_abi::tari_engine(
+                    tari_template_abi::EngineOp::EmitLog.as_i32(),
+                    arg.as_ptr(),
+                    arg.len(),
+                );
+            }
+        }
+
         pub fn request_random_bytes(len: u32) -> Vec<u8> {
             rand::random_bytes(len)
         }

@@ -26,7 +26,7 @@ mod walker;
 mod byte_counter;
 
 pub use byte_counter::ByteCounter;
-pub use depth::{check_nesting_depth, count_data_items};
+pub use depth::{check_nesting_depth, count_data_items, count_data_items_with_max_depth};
 pub use error::BorError;
 pub use macros::__cbor_macro;
 pub use minicbor::{self, CborLen, Decode, Encode};

@@ -287,6 +287,16 @@ pub trait RuntimeInterface {
     /// allowance as native verification.
     fn charge_return_value(&self, bytes: u64, items: u64) -> Result<(), RuntimeError>;
 
+    /// Charges the scan of an engine call's argument, `bytes` long, for its item count and nesting
+    /// depth, before the scan runs. Priced by [`tari_engine_types::limits::engine_arg_scan_points`]
+    /// and charged against the same compute allowance as native verification.
+    fn charge_engine_arg_scan(&self, bytes: u64) -> Result<(), RuntimeError>;
+
+    /// Charges the decode of an engine call's argument holding `items` CBOR data items, before the
+    /// decode runs. Priced by [`tari_engine_types::limits::engine_arg_decode_points`] and charged
+    /// against the same compute allowance as native verification.
+    fn charge_engine_arg_decode(&self, items: u64) -> Result<(), RuntimeError>;
+
     /// The template instances this transaction has created. A borrow of it must not be held across a
     /// template call, which may reach it again through a nested call.
     fn wasm_instances(&self) -> &RefCell<WasmInstanceCache>;

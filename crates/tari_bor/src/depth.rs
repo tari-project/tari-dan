@@ -33,6 +33,16 @@ pub fn count_data_items(input: &[u8]) -> Result<u64, decode::Error> {
     Ok(walk(&mut Decoder::new(input), usize::MAX)?.unwrap_or(u64::MAX))
 }
 
+/// Counts the data items making up the first item in `input`, as [`count_data_items`] does, and
+/// rejects it as [`check_nesting_depth`] does: one walk that both prices a decode and guards it.
+///
+/// Unlike [`check_nesting_depth`], input the walk cannot read fails here, since there is no count to
+/// give for it.
+pub fn count_data_items_with_max_depth(input: &[u8], max_depth: usize) -> Result<u64, decode::Error> {
+    walk(&mut Decoder::new(input), max_depth)?
+        .ok_or_else(|| decode::Error::message("maximum CBOR nesting depth exceeded"))
+}
+
 /// Walks the heads of the first item in `d`, returning how many items it holds, or `None` once an
 /// item nests deeper than `max_depth`.
 fn walk(d: &mut Decoder<'_>, max_depth: usize) -> Result<Option<u64>, decode::Error> {
@@ -215,6 +225,24 @@ mod tests {
         let mut deep = vec![0x81u8; 10_000];
         deep.push(0x00);
         assert_eq!(count_data_items(&deep).unwrap(), 10_001);
+    }
+
+    #[test]
+    fn a_bounded_count_counts_within_the_bound_and_rejects_beyond_it() {
+        let mut at_bound = vec![0x81u8; MAX];
+        at_bound.push(0x00);
+        assert_eq!(count_data_items_with_max_depth(&at_bound, MAX).unwrap(), MAX as u64 + 1);
+
+        let mut over_bound = vec![0x81u8; MAX + 1];
+        over_bound.push(0x00);
+        assert!(count_data_items_with_max_depth(&over_bound, MAX).is_err());
+
+        for input in [&[][..], &[0x81][..], &[0x1c][..]] {
+            assert!(
+                count_data_items_with_max_depth(input, MAX).is_err(),
+                "counted {input:x?}"
+            );
+        }
     }
 
     #[test]

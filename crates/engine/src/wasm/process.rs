@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::*;
-use tari_bor::{BorError, ByteCounter, decode_exact_with_max_depth, encode_into_writer, encoded_len};
+use tari_bor::{BorError, ByteCounter, count_data_items_with_max_depth, decode_exact, encode_into_writer, encoded_len};
 use tari_engine_types::{indexed_value::IndexedValue, limits};
 use tari_template_abi::{
     CallInfo,
@@ -338,9 +338,9 @@ impl WasmProcess {
             None => return fail_engine_call(env.data_mut(), WasmExecutionError::InvalidEngineOp { op }),
         };
 
-        // Defence in depth: `max_internal_call_size` sits above what a template can build inside
-        // `WASM_LIMITS.max_memory_pages`, since the argument and its encoded copy must both fit, so
-        // a template reaching this limit runs out of linear memory first.
+        // Bounds the host work a single engine call can be charged for. `max_internal_call_size`
+        // sits at about what a template can build inside `WASM_LIMITS.max_memory_pages`, where the
+        // argument and its encoded copy must both fit beside the stack.
         if arg_len as usize > limits::ENGINE_LIMITS.max_internal_call_size {
             return fail_engine_call(env.data_mut(), WasmExecutionError::EngineCallArgSizeExceeded {
                 limit: limits::ENGINE_LIMITS.max_internal_call_size,
@@ -493,13 +493,19 @@ impl WasmProcess {
         let span = abi_metrics::Span::start();
         let decoded = {
             let (env_mut, mut store) = env.data_and_store_mut();
+            // An engine op's payload is whatever the guest wrote into its memory, scanned and
+            // decoded here on the validator's own stack and outside the Wasmer meter. Each step is
+            // charged before it runs, so a transaction that cannot cover one fails having done none
+            // of it.
+            let interface = env_mut.state()?.interface();
+            interface.charge_engine_arg_scan(u64::from(arg_len))?;
             // SAFETY: WasmProcess is not used concurrently and templates are not able to spawn threads
             unsafe {
                 env_mut.with_memory_slice(&mut store, arg_ptr, arg_len, |arg| {
-                    // An engine op's payload is whatever the guest wrote into its memory, decoded
-                    // here on the validator's own stack.
-                    decode_exact_with_max_depth(arg, limits::MAX_CBOR_NESTING_DEPTH)
-                        .map_err(WasmExecutionError::EngineArgDecodeFailed)
+                    let items = count_data_items_with_max_depth(arg, limits::MAX_CBOR_NESTING_DEPTH)
+                        .map_err(|e| WasmExecutionError::EngineArgDecodeFailed(e.into()))?;
+                    interface.charge_engine_arg_decode(items)?;
+                    decode_exact(arg).map_err(WasmExecutionError::EngineArgDecodeFailed)
                 })
             }??
         };

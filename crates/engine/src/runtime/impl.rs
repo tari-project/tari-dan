@@ -4276,6 +4276,16 @@ where
             .charge_native_execution(tari_engine_types::limits::return_value_points(bytes, items))
     }
 
+    fn charge_engine_arg_scan(&self, bytes: u64) -> Result<(), RuntimeError> {
+        self.tracker
+            .charge_native_execution(tari_engine_types::limits::engine_arg_scan_points(bytes))
+    }
+
+    fn charge_engine_arg_decode(&self, items: u64) -> Result<(), RuntimeError> {
+        self.tracker
+            .charge_native_execution(tari_engine_types::limits::engine_arg_decode_points(items))
+    }
+
     fn wasm_instances(&self) -> &RefCell<WasmInstanceCache> {
         &self.wasm_instances
     }
