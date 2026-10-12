@@ -333,6 +333,14 @@ impl WasmProcess {
         arg_ptr: WasmPtr<u8>,
         arg_len: u32,
     ) -> WasmPtr<u8> {
+        // A recorded engine error already fails the invocation, but the template may ignore the
+        // null it was answered with and keep calling. Nothing it calls from here on can change the
+        // outcome, so nothing is dispatched: the first failure stays the reject reason, and no host
+        // work is done on behalf of an invocation that is already lost.
+        if env.data().has_last_engine_error() {
+            return WasmPtr::null();
+        }
+
         let op = match EngineOp::from_i32(op) {
             Some(op) => op,
             None => return fail_engine_call(env.data_mut(), WasmExecutionError::InvalidEngineOp { op }),
