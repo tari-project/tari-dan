@@ -971,10 +971,16 @@ fn main() {{
             if s["state"] != "Running":
                 problems.append(f"{name} is {s['state']}")
             prev = (self.health_before or {}).get(name)
-            moved = f"{prev['height']} → {s['height']}" if prev else str(s["height"])
-            detail(f"{name:<20} {s['state']:<9} epoch {s['epoch']}  height {moved}")
-            if prev and s["height"] <= prev["height"]:
-                problems.append(f"{name} did not advance (height {s['height']})")
+            if prev and prev["epoch"] != s["epoch"]:
+                moved = f"epoch {prev['epoch']} height {prev['height']} → epoch {s['epoch']} height {s['height']}"
+            elif prev:
+                moved = f"epoch {s['epoch']}  height {prev['height']} → {s['height']}"
+            else:
+                moved = f"epoch {s['epoch']}  height {s['height']}"
+            detail(f"{name:<20} {s['state']:<9} {moved}")
+            # Heights restart at each epoch change.
+            if prev and (s["epoch"], s["height"]) <= (prev["epoch"], prev["height"]):
+                problems.append(f"{name} did not advance (epoch {s['epoch']} height {s['height']})")
         epochs = {s["epoch"] for s in now.values()}
         if len(epochs) > 1:
             problems.append(f"validators disagree on the epoch: {sorted(epochs)}")
