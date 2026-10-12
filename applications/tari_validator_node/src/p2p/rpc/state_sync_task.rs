@@ -4,7 +4,6 @@
 use std::num::NonZeroUsize;
 
 use log::*;
-use prost::Message;
 use tari_consensus::hotstuff::{HotstuffEvent, commit_proofs::state_version_commit_proof};
 use tari_engine_types::published_template::MAX_TEMPLATE_BLOB_WIRE_BYTES;
 use tari_epoch_manager::{EpochManagerReader, service::EpochManagerHandle};
@@ -37,9 +36,6 @@ use tokio::sync::{broadcast, mpsc};
 use crate::{consensus::ConsensusHandle, p2p::rpc::CONSENSUS_NOT_RUNNING};
 
 const LOG_TARGET: &str = "tari::ootle::rpc::sync_task";
-/// Once this many bytes of a shard's updates have streamed since its last proof, the next version this node can
-/// prove is proven even if it is not a proof point, which bounds what the caller downloads before it can verify.
-const MAX_BYTES_BETWEEN_VERSION_PROOFS: usize = 16 * 1024 * 1024;
 /// The most encoded update bytes a single `SubstateBatch` carries. The rest of the response payload limit is left for
 /// the batch's other fields and the response envelope.
 const MAX_BATCH_UPDATE_BYTES: usize = 4 * 1024 * 1024;
@@ -62,7 +58,6 @@ struct ProofProgress {
     next: Version,
     /// The last version the stream covers: the shard's version in the checkpoint it syncs to.
     last: Version,
-    bytes_since_proof: usize,
 }
 
 /// A validated resume point for a single shard.
@@ -429,10 +424,9 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
                     if let Some(proofs) = proofs.as_mut() {
                         self.send_proof_points_before(shard, proofs, state_version).await?;
                     }
-                    let bytes = self.send_batches(transitions).await?;
+                    self.send_batches(transitions).await?;
                     if let Some(proofs) = proofs.as_mut() {
-                        self.send_proof_after_version(shard, proofs, state_version, bytes)
-                            .await?;
+                        self.send_proof_after_version(shard, proofs, state_version).await?;
                     }
                     // A version whose updates are all filtered out streams no batch, so only versions we
                     // actually sent count towards the client's recorded progress.
@@ -598,7 +592,6 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
         Ok(Some(ProofProgress {
             next: cursor.start_state_version,
             last,
-            bytes_since_proof: 0,
         }))
     }
 
@@ -617,7 +610,6 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
             for proof in held {
                 if is_state_version_proof_point(proof.state_version) {
                     self.send_proof(proof).await?;
-                    proofs.bytes_since_proof = 0;
                 }
             }
         }
@@ -625,26 +617,19 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
         Ok(())
     }
 
-    /// Proves `state_version`, whose updates were just sent, if it is a proof point or enough has streamed since
-    /// the last proof.
+    /// Proves `state_version`, whose updates were just sent, if it is a proof point.
     async fn send_proof_after_version(
         &mut self,
         shard: Shard,
         proofs: &mut ProofProgress,
         state_version: Version,
-        bytes: usize,
     ) -> Result<(), ()> {
         proofs.next = state_version.saturating_add(1);
-        proofs.bytes_since_proof = proofs.bytes_since_proof.saturating_add(bytes);
-        if state_version > proofs.last ||
-            !(is_state_version_proof_point(state_version) ||
-                proofs.bytes_since_proof >= MAX_BYTES_BETWEEN_VERSION_PROOFS)
-        {
+        if state_version > proofs.last || !is_state_version_proof_point(state_version) {
             return Ok(());
         }
         if let Some(proof) = self.read_proofs(shard, state_version, state_version).await?.pop() {
             self.send_proof(proof).await?;
-            proofs.bytes_since_proof = 0;
         }
         Ok(())
     }
@@ -678,8 +663,8 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
         .await
     }
 
-    /// Sends `transitions` in batches and returns the number of encoded bytes sent.
-    async fn send_batches(&mut self, transitions: StateVersionTransitions) -> Result<usize, ()> {
+    /// Sends `transitions` in batches.
+    async fn send_batches(&mut self, transitions: StateVersionTransitions) -> Result<(), ()> {
         let batches = match into_batches(transitions, self.batch_size) {
             Ok(batches) => batches,
             Err(status) => {
@@ -689,16 +674,14 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
             },
         };
 
-        let mut bytes = 0usize;
         for batch in batches {
-            let response = rpc::SyncStateResponse {
+            self.send(Ok(rpc::SyncStateResponse {
                 response: Some(rpc::sync_state_response::Response::Batch(batch)),
-            };
-            bytes = bytes.saturating_add(response.encoded_len());
-            self.send(Ok(response)).await?;
+            }))
+            .await?;
         }
 
-        Ok(bytes)
+        Ok(())
     }
 }
 
@@ -774,6 +757,7 @@ fn version_proof_message<TTx: StateStoreReadTransaction>(
 
 #[cfg(test)]
 mod tests {
+    use prost::Message;
     use tari_engine_types::{
         limits::ENGINE_LIMITS,
         published_template::{PublishedTemplate, PublishedTemplateAddress},
