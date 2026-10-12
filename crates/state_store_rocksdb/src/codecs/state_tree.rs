@@ -149,21 +149,15 @@ pub struct StaleTreeNodesCodec;
 
 impl StaleTreeNodesCodec {
     fn encoded_len(nodes: &[StaleTreeNode]) -> usize {
-        nodes.iter().fold(minicbor::len(nodes.len() as u64), |acc, stale| {
-            acc + minicbor::len(stale)
-        })
+        minicbor::len(nodes)
     }
 
     fn encode_slice_into<W: io::Write>(nodes: &[StaleTreeNode], writer: &mut W) -> Result<(), RocksDbStorageError> {
-        let encode_error = |e| RocksDbStorageError::EncodeError {
-            source: anyhow!("StaleTreeNodesCodec: {e}"),
-        };
-        let mut encoder = minicbor::Encoder::new(minicbor::encode::write::Writer::new(writer));
-        encoder.array(nodes.len() as u64).map_err(encode_error)?;
-        for stale in nodes {
-            encoder.encode(stale).map_err(encode_error)?;
-        }
-        Ok(())
+        minicbor::encode(nodes, minicbor::encode::write::Writer::new(writer)).map_err(|e| {
+            RocksDbStorageError::EncodeError {
+                source: anyhow!("StaleTreeNodesCodec: {e}"),
+            }
+        })
     }
 
     /// Encodes `nodes` as a stored list, without first collecting them into a `Vec`.
