@@ -35,9 +35,9 @@ pub type DirectMessageResult = Result<(PeerId, HotstuffMessage), InboundMessagin
 
 /// Spawns the task that decodes direct messages taken off the inbound queue, one at a time, ahead of consensus.
 ///
-/// A decoded message can occupy many times the bytes it arrived as, and decoding a large one takes time, so the work
-/// runs on this task rather than on the consensus worker. The task decodes a message only once consensus has taken
-/// the previous one, so at most one decoded message waits for it.
+/// A decoded message can occupy many times the bytes it arrived as, and decoding a large one takes time, so it runs
+/// on this task and the consensus worker only ever receives decoded messages. The task decodes a message only once
+/// consensus has taken the previous one, so at most one decoded message waits for it.
 pub fn spawn_direct_message_decoder<TRegistry>(
     rx_inbound: mpsc::Receiver<InboundMessage>,
     validators: TRegistry,
