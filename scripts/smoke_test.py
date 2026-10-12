@@ -797,6 +797,23 @@ fn main() {{
             return
         raise StageFailed(f"{label}: transaction was accepted")
 
+    def ensure_on_chain(self, name, account):
+        """The account's component address, after claiming faucet coins into the account if the network does not
+        hold its component yet. Receiving stealth transfers leaves an account without one."""
+        address = account["account"]["component_address"]
+        code, _ = http_get(f"{self.indexer_url}/substates/{address}")
+        if code == 404:
+            info(f"🚰 {bold(name)} has no component on the network yet, claiming from the faucet…")
+            res = self.wallet.call(
+                "accounts.create_free_test_coins",
+                {"account": {"Name": name}, "max_fee": 100_000},
+                timeout=180,
+            )
+            self.indexer_check(res["transaction_id"], "faucet_claim")
+        elif code != 200:
+            raise StageFailed(f"indexer cannot serve {short(address)} (HTTP {code})")
+        return address
+
     def stage_negative(self):
         account = self.smoke["account"]["component_address"]
         variables = {"account": account}
@@ -817,9 +834,7 @@ fn main() {{
 }}
 """, {**variables, "tari": TARI_TOKEN})
 
-        victim = self.wallet.call("accounts.get_default")["account"]["component_address"]
-        if victim == account:
-            raise StageFailed(f"{SMOKE_ACCOUNT} is the wallet's default account; another account is needed as the victim")
+        victim = self.ensure_on_chain(RECV_ACCOUNT, self.recv)
         self.expect_failure("withdraw from another key's account", f"""
 {fee_main()}
 fn main() {{
