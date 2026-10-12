@@ -41,9 +41,7 @@ pub struct DatabaseOptions {
     /// recommended to set this to 0.
     pub epoch_history_length: u64,
     /// The number of epochs back from the current epoch to keep substate down proofs for, counted from the epoch of
-    /// the destruction each proves. A destruction older than this is served unproven. A record serves a proof the
-    /// state tree cannot once the tree prunes the version it proves the substate up at, so the window should span
-    /// well over `state_history_length` versions.
+    /// the destruction each proves. A destruction older than this is served unproven.
     /// The default is 72, about a day of epochs.
     pub down_proof_history_length: u64,
     /// Whether to store additional debugging data in the database. This may increase storage requirements and slow
