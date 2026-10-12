@@ -139,7 +139,13 @@ fn commit_version<TTx>(
     let batch = create_substate_update_batch(EPOCH, records.iter().copied());
     let downed = batch.downed_iter().collect::<Vec<_>>();
     tx.substates_commit_batch(batch).unwrap();
-    index_substate_down_proofs(tx, downed, commit_proof_for_block).unwrap();
+    index_substate_down_proofs(
+        tx,
+        downed,
+        DatabaseOptions::default().state_history_length,
+        commit_proof_for_block,
+    )
+    .unwrap();
 }
 
 fn up(record: &SubstateRecord) -> SubstateTreeChange {

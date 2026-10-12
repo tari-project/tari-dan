@@ -722,6 +722,7 @@ impl TestBuilder {
                         tari_ootle_common_types::MAX_BLOCK_VALIDATION_SHARD_OUTPUT_BYTES,
                     exhaust_burn_rate: ExhaustBurnRate::new(500),
                 },
+                state_history_length: tari_state_store_rocksdb::DatabaseOptions::default().state_history_length,
                 state_tree_cleanup_interval: Duration::from_secs(1000),
                 epoch_gc_interval: Duration::from_secs(1000),
                 epoch_end_grace_period: Duration::from_secs(1),

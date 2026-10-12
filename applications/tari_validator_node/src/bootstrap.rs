@@ -271,6 +271,7 @@ pub async fn spawn_services(
         &config.validator_node.templates,
     ));
 
+    let state_history_length = db_options.state_history_length;
     let state_store = ValidatorNodeStateStore::open(&config.validator_node.state_db_path, db_options)?;
 
     #[cfg(feature = "metrics")]
@@ -449,6 +450,7 @@ pub async fn spawn_services(
         transaction_validator,
         tx_hotstuff_events,
         consensus_constants.clone(),
+        state_history_length,
     )
     .await;
     handles.push(consensus_join_handle);
