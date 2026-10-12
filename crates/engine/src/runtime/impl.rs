@@ -1155,6 +1155,13 @@ where
         if let Err(reason) = Event::validate_custom_topic(&topic) {
             return Err(RuntimeError::InvalidEventTopic { topic, reason });
         }
+        // The template name is guest-supplied and, alone or joined to a dotted topic, can spell a
+        // reserved topic, so the prefixed topic is validated as a whole.
+        let module = self.tracker.get_template_module_name()?;
+        let topic = format!("{module}.{topic}");
+        if let Err(reason) = Event::validate_custom_topic(&topic) {
+            return Err(RuntimeError::InvalidEventTopic { topic, reason });
+        }
         Self::check_metadata_values("payload", &payload)?;
 
         self.invoke_modules_on_runtime_call("emit_event")?;
@@ -1169,8 +1176,6 @@ where
         })?;
         let substate_id = component_address_option.map(SubstateId::Component);
         let template_address = self.tracker.get_template_address()?;
-        let module = self.tracker.get_template_module_name()?;
-        let topic = format!("{module}.{topic}");
 
         self.tracker
             .add_event(Event::custom(substate_id, template_address, topic, payload))?;
