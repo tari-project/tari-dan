@@ -60,7 +60,7 @@ pub fn generate_template_def(ast: &TemplateAst) -> Result<TokenStream> {
     if template_name_as_str == RESERVED_TEMPLATE_NAME {
         return Err(syn::Error::new_spanned(
             &ast.template_name,
-            format!("Template name '{RESERVED_TEMPLATE_NAME}' is reserved for standard events"),
+            format!("Template name '{RESERVED_TEMPLATE_NAME}' is not permitted"),
         ));
     }
 
@@ -590,7 +590,7 @@ mod tests {
         )
         .unwrap();
         let err = generate_template_def(&ast).unwrap_err();
-        assert!(err.to_string().contains("reserved"), "unexpected error: {err}");
+        assert!(err.to_string().contains("not permitted"), "unexpected error: {err}");
 
         let module = parse2::<syn::ItemMod>(
             TokenStream::from_str("mod std { pub fn add(a: u32, b: u32) -> u32 { a + b } }").unwrap(),
@@ -602,6 +602,6 @@ mod tests {
         })
         .unwrap();
         let err = generate_template_def(&ast).unwrap_err();
-        assert!(err.to_string().contains("reserved"), "unexpected error: {err}");
+        assert!(err.to_string().contains("not permitted"), "unexpected error: {err}");
     }
 }
