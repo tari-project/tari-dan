@@ -1,0 +1,1 @@
+-- The cleared cache rows cannot be restored; they refill on demand.

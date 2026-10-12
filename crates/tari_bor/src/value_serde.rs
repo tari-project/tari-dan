@@ -3,8 +3,8 @@
 //
 //! Serde `Serialize` / `Deserialize` for [`Value`].
 //!
-//! Only used in JSON-style contexts. CBOR encoding always goes through minicbor's
-//! `Encode`/`Decode` and never through serde.
+//! Used for JSON and for the [`crate::serde_codec`] CBOR route, which stores serde types holding a
+//! `Value`. Consensus encoding goes through minicbor's `Encode`/`Decode` and never through serde.
 //!
 //! ## Representation
 //!
@@ -65,7 +65,8 @@ const JSON_NUMBER_SENTINEL: &str = "$serde_json::private::Number";
 impl Serialize for Value {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         match self {
-            Value::Null => s.serialize_unit(),
+            // `serialize_unit` is format-defined: `serde_codec` writes `()` as an empty array.
+            Value::Null => s.serialize_none(),
             Value::Bool(b) => s.serialize_bool(*b),
             Value::Integer(i) => {
                 if let Ok(n) = i64::try_from(*i) {
@@ -526,5 +527,15 @@ mod tests {
             "tagged" => Value::Tag(100, Box::new(Value::Bytes(vec![1, 2, 3]))),
         });
         assert_eq!(json_roundtrip(&v), v);
+    }
+
+    #[test]
+    fn null_round_trips_through_the_serde_cbor_codec() {
+        let v = crate::cbor!({
+            "missing" => null,
+            "items" => [null, 1u32],
+        });
+        let bytes = crate::serde_codec::to_vec(&v).unwrap();
+        assert_eq!(crate::serde_codec::from_slice::<Value>(&bytes).unwrap(), v);
     }
 }
