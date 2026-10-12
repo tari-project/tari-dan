@@ -986,3 +986,47 @@ fn no_engine_call_is_dispatched_after_one_has_failed() {
     );
     assert!(logged.records < 10, "{} records logged", logged.records);
 }
+
+/// An engine call that fails while the engine is still handling another — here, one the template's
+/// `tari_alloc` makes as the engine stages a response — is the cause of that call failing, so it
+/// stays the reject reason.
+#[test]
+fn a_failure_while_staging_a_response_stays_the_reject_reason() {
+    use tari_template_lib::{args::EmitLogArg, types::LogLevel};
+
+    let arg = tari_bor::encode(&EmitLogArg {
+        message: "staged".to_string(),
+        level: LogLevel::Info,
+    })
+    .unwrap();
+    let arg_len = arg.len();
+    let code = template_module_importing(
+        TARI_ENGINE_IMPORT,
+        &format!(
+            r#"
+        (global $in_main (mut i32) (i32.const 0))
+        (data (i32.const 4096) "{}")
+        (func (export "tari_alloc") (param i32) (result i32)
+          (if (result i32) (global.get $in_main)
+            (then
+              (drop (call $tari_engine (i32.const 0x7fff) (i32.const 0) (i32.const 0)))
+              (i32.const 0))
+            (else (i32.const 1024))))
+        (func (export "tari_free") (param i32))
+        (func (export "Buggy_main") (param i32 i32) (result i32)
+          (global.set $in_main (i32.const 1))
+          (drop (call $tari_engine (i32.const 0) (i32.const 4096) (i32.const {arg_len})))
+          (global.set $in_main (i32.const 0))
+          (i32.const 20))
+        "#,
+            wat_bytes(&arg)
+        ),
+    );
+
+    let (result, _) = call_logged(code);
+    let reason = result.expect_err("a call whose response could not be staged was accepted");
+    assert!(
+        reason.to_string().contains("Invalid engine op"),
+        "the reject reason is not the first failure: {reason}"
+    );
+}
