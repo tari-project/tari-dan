@@ -183,7 +183,9 @@ impl SpendCondition {
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize))]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum AtomicCondition {
-    /// Gated on a native access rule evaluated against the transaction's auth scope.
+    /// Gated on a native access rule evaluated against the auth scope of the call frame performing the spend, as
+    /// for a component method or resource rule: caller badges name that frame's immediate caller, and proofs held
+    /// in that frame count towards the rule.
     #[n(0)]
     AccessRule(#[n(0)] AccessRule),
     /// Gated on a stateless WASM predicate over the spending transfer. The referenced template function introspects
