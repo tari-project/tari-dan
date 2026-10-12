@@ -60,6 +60,16 @@ pub enum StateVersionProofSource {
     Received { commit_proof: Vec<u8> },
 }
 
+impl StateVersionProofSource {
+    /// The committed block whose stored commit proof this source cites, if any.
+    pub fn block_id(&self) -> Option<&BlockId> {
+        match self {
+            Self::Committed { block_id } => Some(block_id),
+            Self::Received { .. } => None,
+        }
+    }
+}
+
 /// Checks that `shard_root_proof` proves the leaf of `shard` at `shard_root` and `state_version` in the state
 /// merkle root of `commit_proof`'s block, and that the block is one of `network` whose shard group holds `shard`.
 ///

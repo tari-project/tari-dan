@@ -26,12 +26,6 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::ootle::storage::substate_down_proof";
 
-/// How far below the destroying state version to look for a version to prove the substate up at.
-///
-/// The state tree keeps the nodes of a bounded number of recent versions, so a version further back than that cannot
-/// produce a leaf proof, and the substate was up at every version in between.
-const MAX_UP_VERSION_LOOKBACK: Version = 128;
-
 /// The half of a [`SubstateDownProof`] that stops being producible once the substate goes down: proof that it was
 /// committed at shard state version `state_version`.
 ///
@@ -111,9 +105,13 @@ pub fn resolve_substate_down_proof<TTx: StateStoreReadTransaction>(
 /// with no stored commit proof, and what it returns is stored, so that the record stays servable once the block is
 /// pruned. A substate for which no proof can be assembled - such as on a node that state-synced past every version it
 /// was up at - gets no record, and is served as an unproven Down.
+///
+/// `up_version_lookback` is how many versions below the destroying one to try. It should be the number of versions
+/// the state tree keeps the nodes of: an older version has no nodes to prove the substate's leaf from.
 pub fn index_substate_down_proofs<TTx, I, F>(
     tx: &mut TTx,
     downed: I,
+    up_version_lookback: Version,
     commit_proof_for_block: F,
 ) -> Result<(), StorageError>
 where
@@ -122,7 +120,7 @@ where
     I: IntoIterator<Item = DownedSubstate>,
     F: FnMut(&TTx::Target, &BlockId) -> Option<Vec<u8>>,
 {
-    let mut sources = UpVersionSources::new(commit_proof_for_block);
+    let mut sources = UpVersionSources::new(up_version_lookback, commit_proof_for_block);
     for downed in downed {
         match sources.build_record(&**tx, &downed)? {
             Some(record) => {
@@ -150,6 +148,8 @@ where
 /// A block typically takes down many substates of one shard at one state version, and all of them are proved up at
 /// the same newest earlier version, so one lookup of that version and of its commit proof serve every one of them.
 struct UpVersionSources<F> {
+    /// How many versions below the destroying one to try.
+    lookback: Version,
     commit_proof_for_block: F,
     /// `None` records a version this node holds no proof of.
     version_proofs: HashMap<(Shard, Version), Option<StateVersionProof>>,
@@ -161,8 +161,9 @@ struct UpVersionSources<F> {
 }
 
 impl<F> UpVersionSources<F> {
-    fn new(commit_proof_for_block: F) -> Self {
+    fn new(lookback: Version, commit_proof_for_block: F) -> Self {
         Self {
+            lookback,
             commit_proof_for_block,
             version_proofs: HashMap::new(),
             usable: HashMap::new(),
@@ -191,7 +192,7 @@ impl<F> UpVersionSources<F> {
         let lowest = substate
             .created()
             .at_state_version
-            .max(highest.saturating_sub(MAX_UP_VERSION_LOOKBACK));
+            .max(highest.saturating_sub(self.lookback));
 
         for state_version in (lowest..=highest).rev() {
             let Some(candidate) = self.version_proof(tx, downed.shard, state_version)? else {

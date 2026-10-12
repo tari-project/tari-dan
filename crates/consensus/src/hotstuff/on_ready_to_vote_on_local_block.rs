@@ -1815,7 +1815,12 @@ where TConsensusSpec: ConsensusSpec
         {
             let _timer = TraceTimer::debug(LOG_TARGET, "commit_block");
             let downed = block.commit_block(tx, commit_qc_id, &version_updates)?;
-            index_substate_down_proofs(tx, downed, committed_block_commit_proof)?;
+            index_substate_down_proofs(
+                tx,
+                downed,
+                self.config.state_history_length,
+                committed_block_commit_proof,
+            )?;
         }
 
         let finalized_transactions = {

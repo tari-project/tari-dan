@@ -114,6 +114,8 @@ pub(crate) struct ShardSync<'a, TStore, TValidator = NoVersionProofs> {
     /// The streaming rate, in bytes per second, at which the bytes of a version extend its time allowance. Zero
     /// grants no extension.
     min_throughput_bytes_per_sec: u64,
+    /// How many versions below a destroying one to look for a version to prove the substate up at.
+    up_version_lookback: Version,
     /// Validates the commit proofs of the state version proofs the stream carries, if it was asked to carry them.
     version_proofs: Option<&'a TValidator>,
 }
@@ -126,6 +128,7 @@ impl<'a, TStore: StateStore> ShardSync<'a, TStore> {
         shard: Shard,
         checkpoint_shard_root: TreeHash,
         checkpoint_state_version: Version,
+        up_version_lookback: Version,
     ) -> Self {
         Self {
             network,
@@ -137,6 +140,7 @@ impl<'a, TStore: StateStore> ShardSync<'a, TStore> {
             checkpoint_state_version_is_trusted: false,
             progress_timeout: None,
             min_throughput_bytes_per_sec: 0,
+            up_version_lookback,
             version_proofs: None,
         }
     }
@@ -155,6 +159,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
             checkpoint_state_version_is_trusted: self.checkpoint_state_version_is_trusted,
             progress_timeout: self.progress_timeout,
             min_throughput_bytes_per_sec: self.min_throughput_bytes_per_sec,
+            up_version_lookback: self.up_version_lookback,
             version_proofs: Some(validator),
         }
     }
@@ -643,6 +648,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                     msg_epoch,
                     state_version,
                     updates.drain(..),
+                    self.up_version_lookback,
                 )?;
 
                 // Persist tree changes
@@ -754,6 +760,7 @@ fn commit_updates<TTx, I>(
     epoch: Epoch,
     state_version: Version,
     updates: I,
+    up_version_lookback: Version,
 ) -> Result<(), StorageError>
 where
     TTx: StateStoreWriteTransaction + Deref,
@@ -775,7 +782,12 @@ where
             },
         }));
 
-    index_substate_down_proofs(tx, batch.downed_iter(), committed_block_commit_proof)?;
+    index_substate_down_proofs(
+        tx,
+        batch.downed_iter(),
+        up_version_lookback,
+        committed_block_commit_proof,
+    )?;
     SubstateRecord::commit_batch(tx, batch)?;
 
     Ok(())
@@ -847,6 +859,7 @@ mod tests {
     const NETWORK: Network = Network::LocalNet;
     const NUM_PRESHARDS: NumPreshards = NumPreshards::P256;
     const EPOCH: Epoch = Epoch(1);
+    const UP_VERSION_LOOKBACK: Version = 100;
     const HONEST: u8 = 1;
     const POISON: u8 = 0xBA;
 
@@ -1018,6 +1031,7 @@ mod tests {
             shard(),
             root_after(checkpoint),
             version_after(checkpoint),
+            UP_VERSION_LOOKBACK,
         );
         let verified_version = sync.discard_unverified_state()?;
         sync.sync_from_stream(
@@ -1071,6 +1085,7 @@ mod tests {
             shard(),
             root_after(&checkpoint),
             version_after(&checkpoint),
+            UP_VERSION_LOOKBACK,
         );
         assert_eq!(sync.local_state_root(Some(3)).unwrap(), root_after(&checkpoint));
         assert_eq!(rewind_point(&store), None);
@@ -1132,6 +1147,7 @@ mod tests {
             shard(),
             root_after(&verified),
             version_after(&verified),
+            UP_VERSION_LOOKBACK,
         );
         assert_eq!(shard_sync.local_state_root(Some(1)).unwrap(), root_after(&verified));
 
@@ -1180,6 +1196,7 @@ mod tests {
             shard(),
             SPARSE_MERKLE_PLACEHOLDER_HASH,
             0,
+            UP_VERSION_LOOKBACK,
         );
         assert_eq!(sync.start_state_version(None).unwrap(), 1);
         assert_eq!(sync.start_state_version(Some(41)).unwrap(), 42);
@@ -1200,6 +1217,7 @@ mod tests {
             shard(),
             root_after(&honest),
             version_after(&honest),
+            UP_VERSION_LOOKBACK,
         );
 
         // The peer stalls after one version and the sync is dropped mid-stream, as on shutdown.
@@ -1223,7 +1241,15 @@ mod tests {
         shard: Shard,
         updates: Vec<SubstateUpdateProof>,
     ) -> Option<Result<Option<Version>, RpcStateSyncError>> {
-        let sync = ShardSync::new(NETWORK, NUM_PRESHARDS, store, shard, SPARSE_MERKLE_PLACEHOLDER_HASH, 1);
+        let sync = ShardSync::new(
+            NETWORK,
+            NUM_PRESHARDS,
+            store,
+            shard,
+            SPARSE_MERKLE_PLACEHOLDER_HASH,
+            1,
+            UP_VERSION_LOOKBACK,
+        );
         let stalled = stream::iter(vec![batch_in(shard, 1, updates)]).chain(stream::pending());
         sync.sync_from_stream(&mut StateSyncStats::default(), None, stalled)
             .now_or_never()
@@ -1240,6 +1266,7 @@ mod tests {
             other_shard(),
             root_after(&other_verified),
             version_after(&other_verified),
+            UP_VERSION_LOOKBACK,
         )
         .sync_from_stream(
             &mut StateSyncStats::default(),
@@ -1373,6 +1400,7 @@ mod tests {
             shard(),
             root_after(checkpoint),
             version_after(checkpoint),
+            UP_VERSION_LOOKBACK,
         )
         .with_version_proofs(&validator);
         let verified_version = sync.discard_unverified_state()?;
@@ -1507,6 +1535,7 @@ mod tests {
             shard(),
             root_after(&checkpoint),
             version_after(&checkpoint),
+            UP_VERSION_LOOKBACK,
         );
         let mut stats = StateSyncStats::default();
 
@@ -1571,6 +1600,7 @@ mod tests {
             shard(),
             root_after(&checkpoint),
             version_after(&checkpoint),
+            UP_VERSION_LOOKBACK,
         )
         .with_trusted_checkpoint_version(true);
         let mut stats = StateSyncStats::default();
@@ -1608,6 +1638,7 @@ mod tests {
             shard(),
             root_after(&checkpoint),
             version_after(&checkpoint),
+            UP_VERSION_LOOKBACK,
         );
         let mut stats = StateSyncStats::default();
 
@@ -1658,6 +1689,7 @@ mod tests {
             shard(),
             root_after(checkpoint),
             version_after(checkpoint),
+            UP_VERSION_LOOKBACK,
         )
         .with_progress_timeout(timeout)
     }
@@ -1786,6 +1818,7 @@ mod tests {
             shard(),
             root_after(&checkpoint),
             version_after(&checkpoint),
+            UP_VERSION_LOOKBACK,
         )
         .with_version_proofs(&validator)
         .sync_from_stream(&mut StateSyncStats::default(), None, stream::iter(responses))

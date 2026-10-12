@@ -67,6 +67,8 @@ pub struct RpcStateSyncClientProtocol<TConsensusSpec: ConsensusSpec> {
     state_store: TConsensusSpec::StateStore,
     client_factory: TariValidatorNodeRpcClientFactory,
     signer_service: TConsensusSpec::SignerService,
+    /// The number of state versions the state store keeps the tree nodes of.
+    state_history_length: Version,
     stats: StateSyncStats,
     skip_sync: bool,
     /// Checkpoints fetched and validated during the current sync, by shard group. A checkpoint is stored only
@@ -89,6 +91,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         state_store: TConsensusSpec::StateStore,
         client_factory: TariValidatorNodeRpcClientFactory,
         signer_service: TConsensusSpec::SignerService,
+        state_history_length: Version,
     ) -> Self {
         Self {
             network,
@@ -96,6 +99,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             state_store,
             client_factory,
             signer_service,
+            state_history_length,
             stats: StateSyncStats::default(),
             skip_sync: false,
             unsaved_checkpoints: HashMap::new(),
@@ -221,6 +225,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             shard,
             checkpoint_shard_root,
             checkpoint.get_shard_state_version(shard),
+            self.state_history_length,
         );
         // A V0 checkpoint commits no state versions, so only from V1 does its version bound the stream.
         let checkpoint_commits_state_versions = checkpoint

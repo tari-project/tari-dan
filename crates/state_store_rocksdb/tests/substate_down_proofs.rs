@@ -139,7 +139,13 @@ fn commit_version<TTx>(
     let batch = create_substate_update_batch(EPOCH, records.iter().copied());
     let downed = batch.downed_iter().collect::<Vec<_>>();
     tx.substates_commit_batch(batch).unwrap();
-    index_substate_down_proofs(tx, downed, commit_proof_for_block).unwrap();
+    index_substate_down_proofs(
+        tx,
+        downed,
+        DatabaseOptions::default().state_history_length,
+        commit_proof_for_block,
+    )
+    .unwrap();
 }
 
 fn up(record: &SubstateRecord) -> SubstateTreeChange {
@@ -589,4 +595,56 @@ fn rewinding_a_destruction_removes_its_down_proof_from_epoch_gc() {
         .with_write_tx(|tx| tx.epoch_cleanup_step(EPOCH, EpochCleanupStep::SubstateDownProofs, usize::MAX))
         .unwrap();
     assert_eq!(pruned, 0, "the rewound destruction's epoch index entry survived");
+}
+
+#[test]
+fn a_substate_destroyed_after_its_shard_idles_past_the_retention_window_is_recorded() {
+    const HISTORY: u64 = 3;
+    let (db, _dir) = create_rocksdb_with_opts(DatabaseOptions::default().with_down_proof_history_length(HISTORY));
+
+    const SEED: u32 = 7;
+    let target = build_substate_record(&substate_id_seed(SEED << 24), SubstateVersion::ZERO, 1);
+    let shard = target.created().in_shard;
+    let shard_group = ShardGroup::new(shard, shard);
+    let target_id = target.to_versioned_substate_id();
+    let neighbour = build_substate_record(&substate_id_seed((SEED << 24) | 1), SubstateVersion::ZERO, 1);
+
+    let block_id = BlockId::from([7u8; 32]);
+    let mut tx = db.create_write_tx().unwrap();
+    commit_version(
+        &mut tx,
+        shard,
+        1,
+        vec![up(&target), up(&neighbour)],
+        &[&target, &neighbour],
+        no_committed_blocks,
+    );
+    let tree = group_tree(&*tx, shard_group);
+    tx.state_version_proofs_insert(&StateVersionProof {
+        shard,
+        state_version: 1,
+        source: StateVersionProofSource::Committed { block_id },
+        shard_root_proof: tree.get_proof(shard).unwrap().1,
+    })
+    .unwrap();
+    tx.block_commit_proofs_insert(&block_id, &commit_proof(shard_group, 2, tree.root()).to_bytes())
+        .unwrap();
+    tx.commit().unwrap();
+
+    // The shard does not move while epoch GC passes far beyond the epoch of its latest proof, and its block is pruned.
+    db.with_write_tx(|tx| tx.epoch_cleanup(EPOCH + Epoch(100))).unwrap();
+    db.with_write_tx(|tx| tx.state_tree_nodes_clear_stale(num_preshards(), usize::MAX))
+        .unwrap();
+
+    let mut tx = db.create_write_tx().unwrap();
+    commit_version(
+        &mut tx,
+        shard,
+        2,
+        vec![SubstateTreeChange::Down { id: target_id.clone() }],
+        &[&destroyed(&target, 2)],
+        no_committed_blocks,
+    );
+    let record = tx.substate_down_proofs_get(shard, &target_id).unwrap();
+    assert_eq!(record.map(|record| record.state_version), Some(1));
 }
