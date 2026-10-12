@@ -137,9 +137,9 @@ fn commit_version<TTx>(
     }
     tx.state_tree_shard_versions_set(shard, version).unwrap();
     let batch = create_substate_update_batch(EPOCH, records.iter().copied());
-    let downed = batch.downed();
+    let downed = batch.downed_iter().collect::<Vec<_>>();
     tx.substates_commit_batch(batch).unwrap();
-    index_substate_down_proofs(tx, &downed, commit_proof_for_block).unwrap();
+    index_substate_down_proofs(tx, downed, commit_proof_for_block).unwrap();
 }
 
 fn up(record: &SubstateRecord) -> SubstateTreeChange {
