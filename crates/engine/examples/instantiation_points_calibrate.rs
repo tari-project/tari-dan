@@ -280,6 +280,15 @@ fn module_of_functions_with_locals(functions: usize, locals: usize) -> Vec<u8> {
     wat::parse_str(wat).expect("valid wat")
 }
 
+/// A module of `functions` functions whose body is `body`.
+fn module_of_functions(functions: usize, body: &str) -> Vec<u8> {
+    let func = format!("(func (local i32) {body})");
+    let mut wat = String::from("(module (memory 1)");
+    wat.extend(std::iter::repeat_n(func.as_str(), functions));
+    wat.push(')');
+    wat::parse_str(wat).expect("valid wat")
+}
+
 /// Best compile time of `code` over [`COMPILE_TRIALS`]. The module need not be a loadable template:
 /// a refusal for a missing definition comes after the compile it times.
 fn compile_ms(code: &[u8]) -> f64 {
@@ -363,6 +372,160 @@ fn print_compile_costs(rate: f64) {
         per_local_ms * rate / limits::PER_TEMPLATE_COMPILE_BYTE as f64,
         limits::TEMPLATE_COMPILE_BYTES_PER_VARIABLE,
     );
+
+    print_metering_check_costs(rate);
+    print_builtin_compile_counts(rate);
+}
+
+fn read_leb_u32(bytes: &[u8], pos: &mut usize) -> u32 {
+    let mut value = 0u32;
+    for shift in (0..35).step_by(7) {
+        let byte = bytes[*pos];
+        *pos += 1;
+        value |= u32::from(byte & 0x7f) << shift;
+        if byte & 0x80 == 0 {
+            break;
+        }
+    }
+    value
+}
+
+/// `code` without the custom sections a publish refuses, such as the `name` section the built-in
+/// templates are compiled with.
+fn strip_custom_sections(code: &[u8]) -> Vec<u8> {
+    let mut stripped = code[..8].to_vec();
+    let mut pos = 8;
+    while pos < code.len() {
+        let start = pos;
+        let id = code[pos];
+        pos += 1;
+        let size = read_leb_u32(code, &mut pos) as usize;
+        let end = pos + size;
+        let keep = id != 0 || {
+            let name_len = read_leb_u32(code, &mut pos) as usize;
+            &code[pos..pos + name_len] == tari_template_abi::TEMPLATE_DEF_CUSTOM_SECTION.as_bytes()
+        };
+        if keep {
+            stripped.extend_from_slice(&code[start..end]);
+        }
+        pos = end;
+    }
+    stripped
+}
+
+/// Prints what each built-in template's counts bill it as against its size, and its compile
+/// against its charge. A real template should stay billed by its size.
+fn print_builtin_compile_counts(rate: f64) {
+    for template in tari_template_builtin::all_builtin_templates() {
+        let code = &strip_custom_sections(template.binary);
+        let structure = WasmModule::prevalidate_code(code).expect("built-in template is admitted");
+        let counts = structure.compile;
+        let charged_ms = limits::template_compile_points(code.len() as u64, &counts) as f64 / rate;
+        let ms = compile_ms(code);
+        println!(
+            "{}: {} bytes, counts bill {} ({} checks, {} in the largest function); compile {ms:.1} ms, charged \
+             {charged_ms:.1} ms ({:.2}x)",
+            template.name,
+            code.len(),
+            limits::template_compile_count_bytes(&counts),
+            counts.metering_checks,
+            counts.largest_function_metering_checks,
+            ms / charged_ms,
+        );
+    }
+}
+
+const MEMORY_FILL: &str = "(memory.fill (i32.const 0) (i32.const 0) (i32.const 0))";
+
+/// Prints Cranelift's cost per metering check spread over many functions, expressed the same way,
+/// its growth within one function, and the compile of the costliest single function the function
+/// limits admit, against its charge.
+fn print_metering_check_costs(rate: f64) {
+    let max_checks = limits::WASM_LIMITS.max_function_metering_checks;
+    let max_loops = limits::WASM_LIMITS.max_function_loops;
+    let max_depth = limits::WASM_LIMITS.max_function_nesting_depth;
+
+    // Modules asking for as much compile work as a module may, spread over a few large functions
+    // or many small ones: wasmer's parallelism depends on how its functions bucket. A check follows
+    // each `loop` and its `end`, and each `block`'s `end`, `br_if` and `memory.fill`.
+    // `TEMPLATE_COMPILE_BYTES_PER_METERING_CHECK` is right when none of these compiles far above its
+    // charge.
+    let max_bytes = limits::ENGINE_LIMITS.max_template_binary_size_bytes as u64;
+    for (name, body, checks_per_repeat) in [
+        ("loops", "(loop)", 2),
+        ("blocks", "(block)", 1),
+        ("br_ifs", "(br_if 0 (local.get 0))", 1),
+        ("memory.fills", MEMORY_FILL, 1),
+    ] {
+        for functions in [32u64, 128, 512, 2047] {
+            // Less one check for the function's closing `end` and a byte for its local.
+            let per_function = (max_bytes / functions - limits::TEMPLATE_COMPILE_BYTES_PER_FUNCTION - 1) /
+                limits::TEMPLATE_COMPILE_BYTES_PER_METERING_CHECK -
+                1;
+            let loop_limit = (max_loops as u64).min(limits::WASM_LIMITS.max_module_loops as u64 / functions);
+            let repeats = (per_function / checks_per_repeat)
+                .min(max_checks as u64 / checks_per_repeat - 1)
+                .min(if name == "loops" { loop_limit } else { u64::MAX });
+            let code = module_of_functions(functions as usize, &body.repeat(repeats as usize));
+            let Ok(structure) = WasmModule::prevalidate_code(&code) else {
+                println!("{functions} functions of {repeats} {name}: refused");
+                continue;
+            };
+            let charged_ms = limits::template_compile_points(code.len() as u64, &structure.compile) as f64 / rate;
+            let ms = compile_ms(&code);
+            println!(
+                "{functions} functions of {repeats} {name} ({} bytes): {ms:.1} ms, charged {charged_ms:.1} ms ({:.1}x)",
+                code.len(),
+                ms / charged_ms
+            );
+        }
+    }
+
+    // A function's compile is `a·n + c·n²` in its checks `n`, so two sizes fit `c`.
+    // `TEMPLATE_COMPILE_FUNCTION_CHECKS_SQUARED_PER_BYTE` must stay below the figure printed.
+    for (name, body) in [("block", "(block)"), ("br_if", "(br_if 0 (local.get 0))")] {
+        let n = max_checks / 2;
+        let half = compile_ms(&module_of_functions(1, &body.repeat(n / 2)));
+        let full = compile_ms(&module_of_functions(1, &body.repeat(n)));
+        let c_ms = (full - 2.0 * half) / (n * n / 2) as f64;
+        println!(
+            "per {name} check squared in one function: {c_ms:.2e} ms -> one byte of the byte price per {:.0} (billed \
+             per {})",
+            limits::PER_TEMPLATE_COMPILE_BYTE as f64 / (c_ms * rate),
+            limits::TEMPLATE_COMPILE_FUNCTION_CHECKS_SQUARED_PER_BYTE,
+        );
+    }
+
+    // A function is compiled on one thread, so these are what the function limits bound.
+    let loops_then_blocks = format!(
+        "{}{}",
+        "(loop)".repeat(max_loops),
+        "(block)".repeat(max_checks - 2 * max_loops - 1)
+    );
+    let nested = format!(
+        "{}{}{}",
+        "(block ".repeat(max_depth - 1),
+        "(block)".repeat(max_checks - max_depth),
+        ")".repeat(max_depth - 1)
+    );
+    let worst_cases = [
+        ("blocks", "(block)".repeat(max_checks - 1)),
+        ("br_ifs", "(br_if 0 (local.get 0))".repeat(max_checks - 1)),
+        ("memory.fills", MEMORY_FILL.repeat(max_checks - 1)),
+        ("loops then blocks", loops_then_blocks),
+        ("nested blocks", nested),
+    ];
+    for (name, body) in worst_cases {
+        let code = module_of_functions(1, &body);
+        let structure = WasmModule::prevalidate_code(&code).expect("within the function limits");
+        let charged_ms = limits::template_compile_points(code.len() as u64, &structure.compile) as f64 / rate;
+        let ms = compile_ms(&code);
+        println!(
+            "one function of {name} at the limits ({} bytes): {ms:.1} ms, charged {charged_ms:.1} ms ({:.1}x)",
+            code.len(),
+            ms / charged_ms
+        );
+    }
 }
 
 fn main() {

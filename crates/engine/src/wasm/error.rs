@@ -147,6 +147,19 @@ pub enum WasmValidationError {
     TooManyModuleFunctions { max_functions: usize },
     #[error("Module's functions declare more than {max_variables} parameters and locals")]
     TooManyModuleVariables { max_variables: usize },
+    #[error("Function {function} contains more than {max_checks} control-flow and bulk-memory operators")]
+    TooManyFunctionMeteringChecks { function: u32, max_checks: usize },
+    #[error("Function {function} contains more than {max_loops} loops")]
+    TooManyFunctionLoops { function: u32, max_loops: usize },
+    #[error("Module contains more than {max_loops} loops")]
+    TooManyModuleLoops { max_loops: usize },
+    #[error("Function {function} nests blocks more than {max_depth} deep")]
+    FunctionNestedTooDeep { function: u32, max_depth: usize },
+    #[error(
+        "Module asks the compile for the work of a {billed_bytes}-byte binary, more than the {max_bytes}-byte publish \
+         limit"
+    )]
+    TooMuchCompileWork { billed_bytes: u64, max_bytes: usize },
     #[error("Module does not export `{name}`")]
     MissingExport { name: String },
     #[error("Export `{name}` has signature `{signature}`, expected `{expected}`")]
@@ -224,6 +237,11 @@ impl WasmValidationError {
             Self::TooManyGlobals { .. } |
             Self::TooManyModuleFunctions { .. } |
             Self::TooManyModuleVariables { .. } |
+            Self::TooManyFunctionMeteringChecks { .. } |
+            Self::TooManyFunctionLoops { .. } |
+            Self::TooManyModuleLoops { .. } |
+            Self::FunctionNestedTooDeep { .. } |
+            Self::TooMuchCompileWork { .. } |
             Self::MissingExport { .. } |
             Self::InvalidExportSignature { .. } => ExecutionFailureCode::TemplateError,
         }
