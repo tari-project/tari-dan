@@ -34,10 +34,16 @@ use crate::support::{
 
 pub type MessageFilter = Box<dyn Fn(&TestAddress, &TestAddress, &HotstuffMessage) -> bool + Sync + Send + 'static>;
 
+/// Transforms a message in flight for a given (from, to) pair. Models a Byzantine transport/peer:
+/// unlike `MessageFilter` (which can only drop), this can rewrite message contents.
+pub type MessageMutator =
+    Box<dyn Fn(&TestAddress, &TestAddress, HotstuffMessage) -> HotstuffMessage + Sync + Send + 'static>;
+
 pub fn spawn_network(
     channels: Vec<ValidatorChannels>,
     shutdown_signal: ShutdownSignal,
     message_filter: Option<MessageFilter>,
+    message_mutator: Option<MessageMutator>,
 ) -> TestNetwork {
     let tx_new_transactions = channels
         .iter()
@@ -83,6 +89,7 @@ pub fn spawn_network(
         offline_destinations: offline_destinations.clone(),
         shutdown_signal,
         message_filter,
+        message_mutator,
     }
     .spawn();
 
@@ -222,6 +229,7 @@ pub struct TestNetworkWorker {
     offline_destinations: Arc<RwLock<Vec<TestAddress>>>,
     shutdown_signal: ShutdownSignal,
     message_filter: Option<MessageFilter>,
+    message_mutator: Option<MessageMutator>,
 }
 
 impl TestNetworkWorker {
@@ -327,6 +335,10 @@ impl TestNetworkWorker {
     pub async fn handle_broadcast(&mut self, from: TestAddress, to_addrs: Vec<TestAddress>, msg: HotstuffMessage) {
         log::debug!("✉️ Broadcast {} from {} to {}", msg, from, to_addrs.iter().join(", "));
         for to in to_addrs {
+            let msg = match &self.message_mutator {
+                Some(mutate) => mutate(&from, &to, msg.clone()),
+                None => msg.clone(),
+            };
             if let Some(message_filter) = &self.message_filter &&
                 !message_filter(&from, &to, &msg)
             {
@@ -355,6 +367,10 @@ impl TestNetworkWorker {
     }
 
     async fn handle_leader(&mut self, from: TestAddress, to: TestAddress, msg: HotstuffMessage) {
+        let msg = match &self.message_mutator {
+            Some(mutate) => mutate(&from, &to, msg),
+            None => msg,
+        };
         if let Some(message_filter) = &self.message_filter &&
             !message_filter(&from, &to, &msg)
         {

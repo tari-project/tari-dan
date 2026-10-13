@@ -3,6 +3,8 @@
 #[cfg(test)]
 mod catch_up_on_proposal_ahead;
 #[cfg(test)]
+mod command_trimming_censorship;
+#[cfg(test)]
 mod catch_up_rewind;
 #[cfg(test)]
 mod consensus;

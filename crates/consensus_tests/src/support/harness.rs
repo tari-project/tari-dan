@@ -54,6 +54,7 @@ use tokio::{
 
 use super::{
     MessageFilter,
+    MessageMutator,
     NetworkSendObserver,
     TEST_NUM_PRESHARDS,
     TEST_WASM_EXECUTION_POINTS,
@@ -665,6 +666,7 @@ pub struct TestBuilder {
     rocks_path: Option<String>,
     timeout: Option<Duration>,
     message_filter: Option<MessageFilter>,
+    message_mutator: Option<MessageMutator>,
     send_observer: Option<NetworkSendObserver>,
     failure_nodes: Vec<TestAddress>,
     config: HotstuffConfig,
@@ -682,6 +684,7 @@ impl TestBuilder {
             timeout: Some(DEFAULT_PACEMAKER_BLOCK_TIME * 3),
             rocks_path: None,
             message_filter: None,
+            message_mutator: None,
             send_observer: None,
             failure_nodes: Vec::new(),
             claim_keys: None,
@@ -782,6 +785,11 @@ impl TestBuilder {
 
     pub fn with_message_filter(mut self, message_filter: MessageFilter) -> Self {
         self.message_filter = Some(message_filter);
+        self
+    }
+
+    pub fn with_message_mutator(mut self, message_mutator: MessageMutator) -> Self {
+        self.message_mutator = Some(message_mutator);
         self
     }
 
@@ -891,7 +899,7 @@ impl TestBuilder {
             shutdown.to_signal(),
         )
         .await;
-        let network = spawn_network(channels, shutdown.to_signal(), self.message_filter);
+        let network = spawn_network(channels, shutdown.to_signal(), self.message_filter, self.message_mutator);
 
         Test {
             validators,

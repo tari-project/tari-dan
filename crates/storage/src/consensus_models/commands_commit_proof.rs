@@ -37,6 +37,15 @@ impl CommandsCommitProof {
         }
     }
 
+    /// Test-only: mutable access to the command list. Replacing a `Command` entry with
+    /// `CommandOrHash::Hash(same_hash)` does not change the merkle root (see `CommandOrHash::hash`), so this models a
+    /// Byzantine transport trimming a command out of a genuine, already-signed commit proof.
+    pub fn commands_mut(&mut self) -> &mut Vec<CommandOrHash> {
+        match self {
+            Self::V1(proof) => &mut proof.commands,
+        }
+    }
+
     pub fn applicable_commands_iter(&self) -> impl Iterator<Item = &Command> + '_ {
         self.commands().iter().filter_map(|cmd| cmd.command())
     }
@@ -234,6 +243,33 @@ impl CommandsCommitProofV1 {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode, CborLen)]
+// SECURITY (GHSA-hgp9-3vqw-2fp2): the sender chooses, per recipient shard group, which commands are sent as
+// `Command` (full) vs `Hash` (trimmed) based on whether the command involves that recipient
+// (`generate_transaction_commands_commit_proof_for_shard_group`). `CommandOrHash::hash` is defined so a `Command`
+// and a `Hash` of the same content produce the SAME leaf hash, which is what lets this trimming leave the proof's
+// merkle root (and therefore every signature and QC over it) unchanged -- this is also what makes it exploitable: a
+// relayer in the message path can apply the exact same trim to a command that DOES involve the recipient, and the
+// recipient has no way to tell a legitimate trim from a malicious one using only this proof.
+//
+// Confirmed end-to-end in `consensus_tests::command_trimming_censorship`: with one relevant `Command` entry trimmed
+// to `Hash` in flight, the affected transaction never resolves (no commit, no abort) -- a permanent liveness bug
+// for that one transaction, not a bounded delay. See the security advisory for full detail.
+//
+// A verifiably sound fix needs one of:
+//   1. Bind a per-recipient-shard-group relevance commitment into the SAME authenticated data the recipient
+//      already checks. This is harder than it sounds: the merkle root this proof is checked against
+//      (`commit_proof.header.command_merkle_root`) is a field of the ORIGINAL block header, computed once by the
+//      generating committee before any recipient-specific proof exists, and reused unchanged for every recipient.
+//      Making relevance provable without the full command therefore means changing what the block header commits
+//      to, which is a wire/protocol-level change (affects block ids and QC signing broadly) and needs design
+//      input from the team, not a solo patch to this file.
+//   2. A non-cryptographic liveness backstop: if a transaction stays unresolved past a generous multiple of normal
+//      commit latency after a foreign proposal for its block has been accepted, re-request that exact block_id
+//      from a different member of the foreign committee rather than treating the first accepted copy as final.
+//      This doesn't make trimming detectable, but bounds the damage from "permanent" to "delayed, with retries
+//      against other peers" -- PROVIDED the local liveness/retry wiring correctly tracks "which transactions are
+//      still waiting on evidence from which foreign shard group", which needs care to get right in this
+//      event-driven HotStuff implementation (see `OnReceiveForeignProposalHandler`).
 pub enum CommandOrHash {
     /// The full command data
     #[n(0)]

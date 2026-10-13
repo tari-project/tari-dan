@@ -391,6 +391,12 @@ impl ForeignProposal {
         &self.commit_proof
     }
 
+    /// Test-only: mutable access to the commit proof, so a Byzantine transport can trim a command to its bare hash
+    /// without touching the merkle root (CommandOrHash::hash is the same for Command(c) and Hash(c.hash())).
+    pub fn commit_proof_mut(&mut self) -> &mut CommandsCommitProof {
+        &mut self.commit_proof
+    }
+
     pub fn block_pledge(&self) -> &BlockPledge {
         &self.block_pledge
     }
