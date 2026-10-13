@@ -379,3 +379,29 @@ mod block_query_operations {
         tx.rollback().unwrap();
     }
 }
+
+mod block_filters {
+    use super::*;
+
+    #[test]
+    fn non_numeric_filter_on_numeric_column_matches_nothing() {
+        let (db, _tmp) = create_rocksdb();
+        let mut tx = db.create_write_tx().unwrap();
+        commit_chain(&mut tx, &create_chain(3));
+
+        for filter_index in [1, 2, 4, 5] {
+            for filter in ["abc", "1a", "-1"] {
+                let count = tx
+                    .filtered_blocks_get_count(Some(filter_index), Some(filter.to_string()))
+                    .unwrap();
+                assert_eq!(count, 0, "filter_index {filter_index}, filter {filter:?}");
+                let blocks = tx
+                    .blocks_get_paginated(10, 0, Some(filter_index), Some(filter.to_string()), None, None)
+                    .unwrap();
+                assert!(blocks.is_empty(), "filter_index {filter_index}, filter {filter:?}");
+            }
+        }
+
+        tx.rollback().unwrap();
+    }
+}
