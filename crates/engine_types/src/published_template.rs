@@ -209,6 +209,11 @@ impl PublishedTemplate {
         hash_template_code(&self.binary)
     }
 
+    pub fn to_template_address(&self) -> PublishedTemplateAddress {
+        let binary_hash = self.to_binary_hash();
+        PublishedTemplateAddress::from_author_and_binary_hash(&self.author, &binary_hash)
+    }
+
     pub fn into_template_metadata(self) -> PublishedTemplateMetadata {
         let binary_hash = self.to_binary_hash();
         PublishedTemplateMetadata {
