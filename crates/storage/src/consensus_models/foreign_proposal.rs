@@ -22,6 +22,10 @@ use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use super::{BlockPledge, Command, CommandOrHash, CommandsCommitProof, LockedEpoch};
 use crate::{StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
 
+/// How many epochs either side of the local epoch a foreign proposal may come from. Prepare and accept rounds may
+/// be conducted in the epoch before or after an epoch end.
+pub const FOREIGN_PROPOSAL_EPOCH_WINDOW: u64 = 1;
+
 #[derive(Debug, Clone, Deserialize, Serialize, minicbor::Encode, minicbor::Decode, minicbor::CborLen)]
 pub struct ForeignProposalRecord {
     #[n(0)]

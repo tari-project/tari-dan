@@ -37,6 +37,7 @@ use crate::{
     consensus_models::{
         BlockTransactionExecution,
         Evidence,
+        FOREIGN_PROPOSAL_EPOCH_WINDOW,
         LeaderFee,
         LocalOnlyAtom,
         LockedEpoch,
@@ -50,9 +51,9 @@ use crate::{
 const LOG_TARGET: &str = "tari::ootle::storage::transaction_pool";
 
 /// Epochs after a transaction's `max_epoch` that a shard group holding it in `LocalPrepared` keeps waiting for the
-/// other involved shard groups. Foreign proposals are accepted from one epoch either side of the local epoch, so a
-/// foreign proposal made in `max_epoch` can still arrive during the epoch after it.
-pub const LOCAL_PREPARED_GRACE_EPOCHS: u64 = 1;
+/// other involved shard groups. A foreign proposal made in `max_epoch` is accepted until the local epoch moves past
+/// [`FOREIGN_PROPOSAL_EPOCH_WINDOW`] epochs after it.
+pub const LOCAL_PREPARED_GRACE_EPOCHS: u64 = FOREIGN_PROPOSAL_EPOCH_WINDOW;
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionPool<TStateStore> {
