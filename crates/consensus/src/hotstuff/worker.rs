@@ -169,6 +169,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         let transaction_manager = ConsensusTransactionManager::new(
             transaction_executor.clone(),
             config.consensus_constants.max_transaction_validity_epochs,
+            config.consensus_constants.max_block_pledge_bytes,
         );
 
         Self {

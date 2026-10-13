@@ -10,6 +10,12 @@ use crate::hotstuff::substate_store::LockStatus;
 pub enum PreparedTransaction {
     LocalOnly(Box<LocalPreparedTransaction>),
     MultiShard(MultiShardPreparedTransaction),
+    /// The transaction's local inputs do not fit in what the block being proposed can still pledge to foreign
+    /// shard groups. Nothing was locked for it.
+    PledgeBudgetReached {
+        total_bytes: usize,
+        max_bytes: usize,
+    },
 }
 
 impl PreparedTransaction {
@@ -32,6 +38,7 @@ impl PreparedTransaction {
                 LocalPreparedTransaction::EarlyAbort { .. } => &DEFAULT_LOCK_STATUS,
             },
             Self::MultiShard(multishard) => &multishard.lock_status,
+            Self::PledgeBudgetReached { .. } => &DEFAULT_LOCK_STATUS,
         }
     }
 
@@ -42,6 +49,7 @@ impl PreparedTransaction {
                 LocalPreparedTransaction::EarlyAbort { .. } => LockStatus::new(),
             },
             Self::MultiShard(multishard) => multishard.lock_status,
+            Self::PledgeBudgetReached { .. } => LockStatus::new(),
         }
     }
 

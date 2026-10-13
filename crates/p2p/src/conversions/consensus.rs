@@ -922,6 +922,7 @@ impl From<AbortReason> for proto::consensus::AbortReason {
             AbortReason::FeePaymentInMainIntent => Self::FeePaymentInMainIntent,
             AbortReason::EpochExpired => Self::EpochExpired,
             AbortReason::ValidityWindowTooLong => Self::ValidityWindowTooLong,
+            AbortReason::InputPledgeTooLarge => Self::InputPledgeTooLarge,
         }
     }
 }
@@ -942,6 +943,7 @@ impl TryFrom<proto::consensus::AbortReason> for AbortReason {
             proto::consensus::AbortReason::FeePaymentInMainIntent => Ok(Self::FeePaymentInMainIntent),
             proto::consensus::AbortReason::EpochExpired => Ok(Self::EpochExpired),
             proto::consensus::AbortReason::ValidityWindowTooLong => Ok(Self::ValidityWindowTooLong),
+            proto::consensus::AbortReason::InputPledgeTooLarge => Ok(Self::InputPledgeTooLarge),
         }
     }
 }

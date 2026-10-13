@@ -10,4 +10,5 @@ export type AbortReason =
   | "InsufficientFeesPaid"
   | "FeePaymentInMainIntent"
   | "EpochExpired"
-  | "ValidityWindowTooLong";
+  | "ValidityWindowTooLong"
+  | "InputPledgeTooLarge";
