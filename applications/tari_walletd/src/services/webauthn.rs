@@ -9,6 +9,12 @@ use webauthn_rs::prelude::{Passkey, PasskeyAuthentication, PasskeyRegistration};
 
 use crate::services::{SessionData, SessionStore, SessionStoreError};
 
+/// Upper bound on in-progress registration or authentication ceremonies of each kind. Ceremonies are started by
+/// unauthenticated callers, and a single-user wallet only ever has a handful in flight. A full store evicts its
+/// oldest session, so under sustained ceremony-start traffic an in-flight ceremony survives only this many later
+/// starts.
+const MAX_PENDING_SESSIONS: usize = 8;
+
 #[derive(Debug, Error)]
 pub enum WebauthnServiceError {
     #[error("Session store error: {0}")]
@@ -84,8 +90,8 @@ where TStore: WalletStore
     pub fn new(wallet_store: TStore, session_ttl: Duration) -> Self {
         Self {
             wallet_store,
-            registration_sessions: SessionStore::new(session_ttl),
-            auth_sessions: SessionStore::new(session_ttl),
+            registration_sessions: SessionStore::new(session_ttl, MAX_PENDING_SESSIONS),
+            auth_sessions: SessionStore::new(session_ttl, MAX_PENDING_SESSIONS),
         }
     }
 
