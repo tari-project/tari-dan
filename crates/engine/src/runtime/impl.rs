@@ -1655,6 +1655,22 @@ where
                     });
                 }
 
+                if let Some(ref view_key) = arg.view_key {
+                    // Ristretto encodings are unique, so all-zero bytes is the only encoding of the identity.
+                    if view_key.is_zero() {
+                        return Err(RuntimeError::InvalidArgument {
+                            argument: "CreateResourceArg",
+                            reason: "View key cannot be the identity point".to_string(),
+                        });
+                    }
+                    RistrettoPublicKey::from_canonical_bytes(view_key.as_bytes()).map_err(|e| {
+                        RuntimeError::InvalidArgument {
+                            argument: "CreateResourceArg",
+                            reason: format!("View key is not a canonical Ristretto point: {e}"),
+                        }
+                    })?;
+                }
+
                 if arg.divisibility > limits::MAX_DIVISIBILITY {
                     return Err(RuntimeError::InvalidArgument {
                         argument: "CreateResourceArg",
