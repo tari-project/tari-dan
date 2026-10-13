@@ -35,7 +35,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateId, SubstateValue},
 };
 use tari_epoch_manager::service::EpochManagerHandle;
-use tari_indexer_client::types::{ListSubstateItem, NonFungibleSubstate, UtxoStateUpdateSet};
+use tari_indexer_client::types::{ListSubstateItem, UtxoStateUpdateSet};
 use tari_indexer_lib::{
     cached_substate_manager::{
         CachedSubstateManager,
@@ -475,19 +475,6 @@ impl SubstateManager {
             Some(row) => Ok(Some(row.try_into()?)),
             None => Ok(None),
         }
-    }
-
-    pub async fn get_non_fungibles_by_resource_address(
-        &self,
-        address: ResourceAddress,
-        limit: usize,
-        offset: usize,
-    ) -> Result<Vec<NonFungibleSubstate>, SubstateManagerError> {
-        let nfts = self
-            .substate_store
-            .with_read_tx(move |tx| tx.get_non_fungibles_by_resource_address(address, limit, offset))
-            .await?;
-        Ok(nfts)
     }
 }
 

@@ -305,57 +305,6 @@
         }
       }
     },
-    "/non-fungibles": {
-      "post": {
-        "tags": [
-          "handlers::nfts"
-        ],
-        "description": "Get non-fungibles by resource address",
-        "operationId": "get_non_fungibles",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GetNonFungiblesRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GetNonFungiblesResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/resources/tari": {
       "get": {
         "tags": [
@@ -1694,43 +1643,6 @@
           }
         }
       },
-      "GetNonFungiblesRequest": {
-        "type": "object",
-        "required": [
-          "address",
-          "start_index",
-          "end_index"
-        ],
-        "properties": {
-          "address": {
-            "type": "string"
-          },
-          "end_index": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "start_index": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          }
-        }
-      },
-      "GetNonFungiblesResponse": {
-        "type": "object",
-        "required": [
-          "non_fungibles"
-        ],
-        "properties": {
-          "non_fungibles": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/NonFungibleSubstate"
-            }
-          }
-        }
-      },
       "GetResourceResponse": {
         "type": "object",
         "required": [
@@ -2116,27 +2028,6 @@
                 }
               ]
             }
-          }
-        }
-      },
-      "NonFungibleSubstate": {
-        "type": "object",
-        "required": [
-          "address",
-          "version",
-          "substate"
-        ],
-        "properties": {
-          "address": {
-            "type": "string"
-          },
-          "substate": {
-            "type": "object"
-          },
-          "version": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
           }
         }
       },

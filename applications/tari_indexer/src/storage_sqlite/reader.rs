@@ -21,12 +21,11 @@ use tari_common_types::types::FixedHash;
 use tari_engine_types::{
     Utxo,
     events::Event,
-    substate::{Substate, SubstateId, SubstateValue},
+    substate::{Substate, SubstateId},
     transaction_receipt::TransactionReceipt,
 };
 use tari_indexer_client::types::{
     ListSubstateItem,
-    NonFungibleSubstate,
     TransactionEntry,
     TransactionResultSummary,
     TransactionSource,
@@ -362,48 +361,6 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
                         substate_resp.id,
                         Substate::new(substate_resp.version, substate_resp.substate),
                     )
-                })
-            })
-            .collect()
-    }
-
-    fn get_non_fungibles_by_resource_address(
-        &mut self,
-        resource_address: ResourceAddress,
-        limit: usize,
-        offset: usize,
-    ) -> Result<Vec<NonFungibleSubstate>, StorageError> {
-        use crate::storage_sqlite::schema::substates;
-
-        let res = substates::table
-            .filter(substates::address.like(format!("nft_{}_%", resource_address.as_object_key())))
-            .limit(limit as i64)
-            .offset(offset as i64)
-            .load_iter::<SubstateRecord, _>(self.connection())
-            .map_err(|e| StorageError::QueryError {
-                reason: format!("get_non_fungibles_by_resource_address: {}", e),
-            })?;
-
-        res.into_iter()
-            .map(|res| {
-                let row = res.map_err(|e| StorageError::QueryError {
-                    reason: format!("get_non_fungibles_by_resource_address: {}", e),
-                })?;
-                let value: SubstateValue =
-                    serde_json::from_str(&row.data).map_err(|e| StorageError::DataInconsistency {
-                        details: format!("Failed to parse substate data: {}", e),
-                    })?;
-
-                Ok(NonFungibleSubstate {
-                    address: row.address.parse().map_err(|e| StorageError::DataInconsistency {
-                        details: format!("Failed to parse address: {}", e),
-                    })?,
-                    version: u64::try_from(row.version).map(SubstateVersion::new).map_err(|e| {
-                        StorageError::DataInconsistency {
-                            details: format!("Version overflow {}", e),
-                        }
-                    })?,
-                    substate: value,
                 })
             })
             .collect()
