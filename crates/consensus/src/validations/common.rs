@@ -551,6 +551,13 @@ mod tests {
         assert!(!is_rejected(Network::Esmeralda, ProtocolVersion::V1, v1_activation));
         assert!(is_rejected(Network::Esmeralda, ProtocolVersion::V0, v1_activation));
         assert!(is_rejected(Network::Esmeralda, ProtocolVersion::V2, v1_activation));
+
+        let v2_activation = Epoch(12220);
+        let before = Epoch(v2_activation.as_u64() - 1);
+        assert!(!is_rejected(Network::Esmeralda, ProtocolVersion::V1, before));
+        assert!(is_rejected(Network::Esmeralda, ProtocolVersion::V2, before));
+        assert!(!is_rejected(Network::Esmeralda, ProtocolVersion::V2, v2_activation));
+        assert!(is_rejected(Network::Esmeralda, ProtocolVersion::V1, v2_activation));
     }
 
     #[test]
