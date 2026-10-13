@@ -73,6 +73,7 @@ use tari_ootle_wallet_sdk::{
 use tari_template_lib_types::{
     Amount,
     ComponentAddress,
+    ConfidentialOutputAddress,
     EncryptedData,
     NonFungibleId,
     ResourceAddress,
@@ -260,6 +261,93 @@ impl<'a> WriteTransaction<'a> {
         self.stealth_outputs_release_by_lock_id(lock_id)?;
 
         Ok(affected_balances)
+    }
+
+    /// Finalizes the confidential outputs held by `lock_id` against the transaction's diff. Only inputs the diff
+    /// downs are spent and only change outputs it ups are confirmed; an accepted result may carry no confidential
+    /// substates at all (e.g. the fee was paid but the main intent was rejected), so the rest are released.
+    fn confidential_outputs_finalize_by_lock_id(
+        &mut self,
+        lock_id: WalletLockId,
+        diff: &SubstateDiff,
+    ) -> Result<(), WalletStorageError> {
+        const OPERATION: &str = "confidential_outputs_finalize_by_lock_id";
+        use crate::schema::{confidential_outputs, vaults};
+
+        let locked_outputs = confidential_outputs::table
+            .inner_join(vaults::table)
+            .select((
+                confidential_outputs::id,
+                vaults::resource_address,
+                confidential_outputs::commitment,
+            ))
+            .filter(confidential_outputs::lock_id.eq(lock_id))
+            .load::<(i32, String, String)>(self.connection())
+            .map_err(|e| WalletStorageError::general(OPERATION, e))?;
+
+        let up_id_index = diff
+            .up_iter()
+            .filter_map(|(id, _)| id.as_confidential_output_address())
+            .collect::<HashSet<_>>();
+        let down_id_index = diff
+            .down_iter()
+            .filter_map(|(id, _)| id.as_confidential_output_address())
+            .collect::<HashSet<_>>();
+        let mut to_confirm = vec![];
+        let mut to_spend = vec![];
+
+        for (id, resx, commitment) in locked_outputs {
+            let resource_address: ResourceAddress = resx.parse().map_err(|_| WalletStorageError::DecodingError {
+                operation: OPERATION,
+                item: "vault resource address",
+                details: format!("Corrupt db: invalid resource address '{resx}' for confidential output {id}"),
+            })?;
+            let commitment =
+                PedersenCommitmentBytes::from_hex(&commitment).map_err(|_| WalletStorageError::DecodingError {
+                    operation: OPERATION,
+                    item: "output commitment",
+                    details: "Corrupt db: invalid hex representation".to_string(),
+                })?;
+
+            let addr = ConfidentialOutputAddress::new(resource_address, commitment);
+            if up_id_index.contains(&addr) {
+                to_confirm.push(id);
+            } else if down_id_index.contains(&addr) {
+                to_spend.push(id);
+            } else {
+                // Lock will be released (i.e. LockedUnconfirmed outputs deleted, LockedForSpend -> Unspent)
+            }
+        }
+
+        if !to_confirm.is_empty() {
+            diesel::update(confidential_outputs::table)
+                .filter(confidential_outputs::lock_id.eq(lock_id))
+                .filter(confidential_outputs::status.eq(OutputStatus::LockedUnconfirmed.as_key_str()))
+                .filter(confidential_outputs::id.eq_any(to_confirm))
+                .set((
+                    confidential_outputs::status.eq(OutputStatus::Unspent.as_key_str()),
+                    confidential_outputs::lock_id.eq::<Option<i32>>(None),
+                    confidential_outputs::locked_at.eq::<Option<PrimitiveDateTime>>(None),
+                ))
+                .execute(self.connection())
+                .map_err(|e| WalletStorageError::general(OPERATION, e))?;
+        }
+
+        if !to_spend.is_empty() {
+            diesel::update(confidential_outputs::table)
+                .filter(confidential_outputs::lock_id.eq(lock_id))
+                .filter(confidential_outputs::status.eq(OutputStatus::LockedForSpend.as_key_str()))
+                .filter(confidential_outputs::id.eq_any(to_spend))
+                .set((
+                    confidential_outputs::status.eq(OutputStatus::Spent.as_key_str()),
+                    confidential_outputs::lock_id.eq::<Option<i32>>(None),
+                    confidential_outputs::locked_at.eq::<Option<PrimitiveDateTime>>(None),
+                ))
+                .execute(self.connection())
+                .map_err(|e| WalletStorageError::general(OPERATION, e))?;
+        }
+
+        self.confidential_outputs_release_by_lock_id(lock_id)
     }
 
     /// Reads the vault and revealed amount reserved by `lock_id` before the lock is finalized, so the
@@ -1774,36 +1862,6 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         Ok(())
     }
 
-    fn confidential_outputs_finalize_by_lock_id(&mut self, lock_id: WalletLockId) -> Result<(), WalletStorageError> {
-        use crate::schema::confidential_outputs;
-
-        // Unlock locked unconfirmed confidential_outputs
-        diesel::update(confidential_outputs::table)
-            .filter(confidential_outputs::lock_id.eq(lock_id))
-            .filter(confidential_outputs::status.eq(OutputStatus::LockedUnconfirmed.as_key_str()))
-            .set((
-                confidential_outputs::status.eq(OutputStatus::Unspent.as_key_str()),
-                confidential_outputs::lock_id.eq::<Option<i32>>(None),
-                confidential_outputs::locked_at.eq::<Option<PrimitiveDateTime>>(None),
-            ))
-            .execute(self.connection())
-            .map_err(|e| WalletStorageError::general("outputs_finalize_by_proof_id", e))?;
-
-        // Mark locked confidential_outputs as spent
-        diesel::update(confidential_outputs::table)
-            .filter(confidential_outputs::lock_id.eq(lock_id))
-            .filter(confidential_outputs::status.eq(OutputStatus::LockedForSpend.as_key_str()))
-            .set((
-                confidential_outputs::status.eq(OutputStatus::Spent.as_key_str()),
-                confidential_outputs::lock_id.eq::<Option<i32>>(None),
-                confidential_outputs::locked_at.eq::<Option<PrimitiveDateTime>>(None),
-            ))
-            .execute(self.connection())
-            .map_err(|e| WalletStorageError::general("outputs_finalize_by_proof_id", e))?;
-
-        Ok(())
-    }
-
     fn confidential_outputs_release_by_lock_id(&mut self, lock_id: WalletLockId) -> Result<(), WalletStorageError> {
         use crate::schema::confidential_outputs;
 
@@ -2460,7 +2518,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
     fn locks_unlock_finalized(&mut self, lock_id: WalletLockId, diff: &SubstateDiff) -> Result<(), WalletStorageError> {
         let affected_stealth_balances = self.stealth_outputs_finalize_by_lock_id(lock_id, diff)?;
-        self.confidential_outputs_finalize_by_lock_id(lock_id)?;
+        self.confidential_outputs_finalize_by_lock_id(lock_id, diff)?;
         // Capture the revealed spend before vaults_finalized_locked_revealed_funds deletes the vault lock
         // and decrements the vault's revealed balance, so the decrease can be recorded as a balance change.
         let revealed_spend = self.locked_revealed_spend(lock_id)?;

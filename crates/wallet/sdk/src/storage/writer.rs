@@ -170,8 +170,6 @@ pub trait WalletStoreWriter: CommittableStore {
         lock_id: WalletLockId,
     ) -> Result<ConfidentialOutputModel, WalletStorageError>;
     fn confidential_outputs_insert(&mut self, output: ConfidentialOutputModel) -> Result<(), WalletStorageError>;
-    /// Mark outputs as finalized
-    fn confidential_outputs_finalize_by_lock_id(&mut self, lock_id: WalletLockId) -> Result<(), WalletStorageError>;
     /// Release outputs that were locked and remove pending unconfirmed outputs for this proof
     fn confidential_outputs_release_by_lock_id(&mut self, lock_id: WalletLockId) -> Result<(), WalletStorageError>;
 
