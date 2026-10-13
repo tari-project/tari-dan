@@ -1,6 +1,8 @@
 //    Copyright 2025 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
+use tari_template_lib::types::stealth;
+
 pub struct WasmLimits {
     /// Maximum number of function arguments
     pub max_function_arguments: usize,
@@ -678,12 +680,14 @@ pub struct StealthLimits {
 /// the aggregate, capping how much verification a single transaction can stack — which keeps any one transaction
 /// from consuming a whole block's budget by itself. The per-transaction caps are a consensus-relevant execution
 /// rule enforced uniformly during execution, not just a mempool heuristic.
+///
+/// The per-transfer collection limits are the bounds `tari_template_lib_types` applies when decoding a statement.
 pub const STEALTH_LIMITS: StealthLimits = StealthLimits {
-    max_inputs: 1000,
-    max_outputs: 16,
-    max_conditions_per_conjunction: 16,
+    max_inputs: stealth::MAX_STEALTH_INPUTS,
+    max_outputs: stealth::MAX_STEALTH_OUTPUTS,
+    max_conditions_per_conjunction: stealth::MAX_CONDITIONS_PER_CONJUNCTION,
     max_witness_data_len: 4096,
-    max_inclusion_proof_len: 32,
+    max_inclusion_proof_len: stealth::MAX_INCLUSION_PROOF_LEN,
     max_transfers_per_transaction: 64,
     max_fee_intent_transfers: 1,
     max_total_inputs_per_transaction: 1024,
