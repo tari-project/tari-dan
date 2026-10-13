@@ -395,7 +395,8 @@ where TConsensusSpec: ConsensusSpec
                     requests.shard_group(),
                     block_id,
                 );
-                // If a FP is never received + proposed by any local member, the transaction will TIMEOUT and ABORT
+                // A transaction left waiting in LocalPrepared on this proposal aborts once its max_epoch has passed
+                // (see `TransactionPoolRecord::is_local_prepared_expired_at`)
                 continue;
             }
 
@@ -523,12 +524,9 @@ pub(super) fn validate_evidence_and_pledges_match(
                 shard_group: foreign_shard_group,
                 details: e.into(),
             })?;
-    // TODO: any error will** result in transactions that never resolve.
-    // ** unless the foreign shard sends it again with the correct evidence and pledges
-    // Possible ways to handle this:
-    // - Send a message to the foreign shard to request the pledges again (but why would they return the correct pledges
-    //   this time?)
-    // - Immediately ABORT all transactions with invalid pledges in the block - this is the safest option
+    // A rejected proposal is never applied. A transaction waiting on it in LocalPrepared aborts once its max_epoch has
+    // passed (see `TransactionPoolRecord::is_local_prepared_expired_at`); one that has already sent its LocalAccept
+    // keeps waiting for the foreign shard group.
     let mut num_applicable = 0usize;
     for (is_local_accept, atom) in proposal.full_commands_iter().filter_map(|cmd| {
         cmd.local_prepare()

@@ -59,6 +59,7 @@ use tokio::task;
 use crate::{
     hotstuff::{
         HotstuffConfig,
+        abort_if_local_prepared_expired,
         apply_leader_fee_to_substate_store,
         block_change_set::ProposedBlockChangeSet,
         calculate_state_merkle_root,
@@ -411,7 +412,7 @@ where TConsensusSpec: ConsensusSpec
         let batch = if should_not_propose_commands {
             ProposalBatch::default()
         } else {
-            self.fetch_next_proposal_batch(tx, state_anchor_leaf, next_height)?
+            self.fetch_next_proposal_batch(tx, state_anchor_leaf, epoch, next_height)?
         };
         debug!(target: LOG_TARGET, "🌿 PROPOSE: {} (justify: {}) {batch}", highest_seen_block.height(), justify_block.height());
 
@@ -552,6 +553,7 @@ where TConsensusSpec: ConsensusSpec
             // justified block, and to propose a transaction that a foreign proposal in this block has just
             // moved to ABORT with the decision that move implies.
             change_set.apply_transaction_update(&mut transaction);
+            let expired_abort = abort_if_local_prepared_expired(&mut transaction, epoch);
             // Replicas withhold their vote unless the updated record is ready to leave its stage, so readiness is
             // judged on the same record here.
             if !transaction.is_ready_for_pending_stage(local_committee_info.shard_group()) {
@@ -568,6 +570,9 @@ where TConsensusSpec: ConsensusSpec
             executed_weight += transaction.proposal_weight();
             num_executed += 1;
             let tx_id = *transaction.id();
+            if let Some(execution) = expired_abort {
+                executed_transactions.insert(tx_id, execution);
+            }
             // Entries already present (e.g. foreign-proposal aborts from the change set) were not executed
             // for this block, so only count executions newly produced by the command conversion below.
             let had_execution = executed_transactions.contains_key(&tx_id);
@@ -737,6 +742,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &TTx,
         state_anchor_leaf: LeafBlock,
+        epoch: Epoch,
         next_height: NodeHeight,
     ) -> Result<ProposalBatch, HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "fetch_next_proposal_batch");
@@ -809,6 +815,7 @@ where TConsensusSpec: ConsensusSpec
                     max_tx_count,
                     heavy_turn,
                     state_anchor_leaf.block_id(),
+                    epoch,
                 )
             })
             .transpose()?

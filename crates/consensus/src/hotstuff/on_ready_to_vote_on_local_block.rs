@@ -49,6 +49,7 @@ use crate::{
     hotstuff::{
         HotstuffConfig,
         ProposalValidationError,
+        abort_if_local_prepared_expired,
         apply_leader_fee_to_substate_store,
         block_change_set::{BlockDecision, ProposedBlockChangeSet},
         calculate_state_merkle_root,
@@ -1111,6 +1112,10 @@ where TConsensusSpec: ConsensusSpec
             );
             return Ok(Some(NoVoteReason::TransactionNotInPool));
         };
+
+        if let Some(execution) = abort_if_local_prepared_expired(&mut tx_rec, block.epoch()) {
+            proposed_block_change_set.add_transaction_execution(*tx_rec.id(), execution)?;
+        }
 
         if tx_rec.current_stage().is_new() {
             // CASE: This was sequenced immediately as LocalAccept, which can only mean either we are aborting or we are
