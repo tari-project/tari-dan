@@ -115,6 +115,7 @@ use crate::metrics::{
     MeteredEpochOracle,
     PrometheusConsensusMetrics,
     PrometheusEpochOracleMetrics,
+    PrometheusExecutionMetrics,
     StateStoreMemoryCollector,
 };
 use crate::{
@@ -415,7 +416,11 @@ pub async fn spawn_services(
         )),
     );
     // The executor resolves the exhaust burn rate for each transaction's execution epoch.
-    let transaction_executor = TariBlockTransactionExecutor::new(transaction_processor);
+    let transaction_executor = TariBlockTransactionExecutor::new(
+        transaction_processor,
+        #[cfg(feature = "metrics")]
+        PrometheusExecutionMetrics::register(tari_metrics_registry),
+    );
 
     let transaction_validator = TariBlockTransactionValidator::new(
         create_node_transaction_validator(config.network, template_provider.clone(), &consensus_constants).boxed(),
