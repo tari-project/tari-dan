@@ -28,6 +28,7 @@ use tari_indexer_client::types::{
 use tari_indexer_lib::substate_cache::{FetchWatermark, SubstateCacheEntry, SubstateCacheEntryRef};
 use tari_ootle_common_types::{
     Epoch,
+    NodeHeight,
     ShardGroup,
     StateVersion,
     SubstateVersion,
@@ -240,15 +241,24 @@ pub trait IndexerStoreReadTransaction {
 
     // -------------------------------- Verified State Roots -------------------------------- //
 
-    /// True if `root` is a committee-validated state merkle root recorded for `(epoch, shard_group)`.
-    /// This is the read-path trust decision: a hit lets a substate value proof be verified against
-    /// `root` without re-validating the serving validator's commit proof.
-    fn is_state_root_trusted(
+    /// The height of the block `root` was recorded at, if it is a committee-validated state merkle
+    /// root recorded for `(epoch, shard_group)`. This is the read-path trust decision: a hit lets a
+    /// substate value proof be verified against `root` without re-validating the serving
+    /// validator's commit proof.
+    fn get_verified_state_root_height(
         &mut self,
         epoch: Epoch,
         shard_group: ShardGroup,
         root: &FixedHash,
-    ) -> Result<bool, StorageError>;
+    ) -> Result<Option<NodeHeight>, StorageError>;
+
+    /// The height of the highest verified state root recorded at `epoch` for any shard group
+    /// overlapping `shard_group`.
+    fn get_latest_verified_height_overlapping(
+        &mut self,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+    ) -> Result<Option<NodeHeight>, StorageError>;
 
     /// The most recently committed verified state root recorded for `(epoch, shard_group)`, if any.
     fn get_latest_verified_state_root(

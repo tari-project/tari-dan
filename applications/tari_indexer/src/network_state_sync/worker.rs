@@ -84,9 +84,11 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::indexer::network_state_sync::worker";
-/// How often a shard group whose committee has not yet been seen committing in the epoch manager's
-/// epoch is probed again.
-const CONSENSUS_EPOCH_PROBE_INTERVAL: Duration = Duration::from_secs(10);
+/// How often every shard group's committed tip is probed and recorded.
+///
+/// The latest recorded tip is what a verified read's anchor must be recent against, so this bounds
+/// how far that reference trails the chain when no read refreshes it.
+const COMMITTED_TIP_PROBE_INTERVAL: Duration = Duration::from_secs(10);
 /// The most a peer may stream, in encoded bytes, for one state version before completing it. A
 /// version is buffered whole and committed at once, so this bounds the memory a peer can hold to a
 /// constant multiple of it: the buffered updates are held decoded, alongside what is derived from
@@ -530,34 +532,39 @@ impl NetworkWideStateSync {
         // The groups wind down on `cancel`; the probe loop is dropped once they have.
         tokio::select! {
             result = followed => result,
-            never = self.track_consensus_epoch(sync_plan, epoch.clone()) => match never {},
+            never = self.track_committed_tips(sync_plan) => match never {},
         }
     }
 
-    /// Probes each shard group whose committee has not been seen committing in the epoch manager's
-    /// epoch, every [`CONSENSUS_EPOCH_PROBE_INTERVAL`], so that [`ConsensusEpoch`] follows a committee
-    /// into a new epoch soon after its end-of-epoch block. A followed stream only probes when it
-    /// reopens, which on a quiet network is up to a stream deadline away.
-    async fn track_consensus_epoch(&self, sync_plan: &SyncPlan, epoch: watch::Receiver<Epoch>) -> Infallible {
+    /// Probes every shard group's committed tip each [`COMMITTED_TIP_PROBE_INTERVAL`], records it in
+    /// the verified-root store, and observes its epoch.
+    ///
+    /// A followed stream only probes when it reopens, which on a quiet network is up to a stream
+    /// deadline away and on a busy one may be never. Probing here keeps [`ConsensusEpoch`] following a
+    /// committee into a new epoch soon after its end-of-epoch block, and keeps the latest recorded
+    /// tip, which a verified read's anchor must be recent against, near the chain's.
+    async fn track_committed_tips(&self, sync_plan: &SyncPlan) -> Infallible {
         let mut pools = sync_plan.committee_pools().clone();
-        let mut interval = time::interval(CONSENSUS_EPOCH_PROBE_INTERVAL);
+        let mut interval = time::interval(COMMITTED_TIP_PROBE_INTERVAL);
         interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
         loop {
             interval.tick().await;
-            let target = *epoch.borrow();
-            for shard_group in self.consensus_epoch.groups_behind(target) {
-                let Some(pool) = pools.get_mut(&shard_group) else {
-                    continue;
-                };
+            for (shard_group, pool) in &mut pools {
+                let shard_group = *shard_group;
                 let mut session = match pool.new_session().await {
                     Ok(session) => session,
                     Err(e) => {
-                        debug!(target: LOG_TARGET, "No session to probe the consensus epoch of shard group {shard_group}: {e}");
+                        debug!(target: LOG_TARGET, "No session to probe the committed tip of shard group {shard_group}: {e}");
                         continue;
                     },
                 };
                 match self.validator_status.probe(&mut session, shard_group).await {
-                    Ok(Some(tip)) => self.consensus_epoch.observe(tip.shard_group, tip.epoch),
+                    Ok(Some(tip)) => {
+                        self.consensus_epoch.observe(tip.shard_group, tip.epoch);
+                        if let Err(e) = self.persist_verified_tip(tip).await {
+                            warn!(target: LOG_TARGET, "⚠️ Failed to record verified state root for shard group {shard_group}: {e}");
+                        }
+                    },
                     Ok(None) => {},
                     Err(e) => {
                         warn!(target: LOG_TARGET, "⚠️ Validator {} for shard group {} served an INVALID commit proof: {}", session.peer_address(), shard_group, e);

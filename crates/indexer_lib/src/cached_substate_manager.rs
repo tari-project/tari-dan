@@ -39,6 +39,7 @@ use tari_epoch_manager::EpochManagerReader;
 use tari_ootle_common_types::{
     Epoch,
     NodeAddressable,
+    NodeHeight,
     NumPreshards,
     ShardGroup,
     SubstateAddress,
@@ -93,14 +94,33 @@ pub const DEFAULT_NEGATIVE_CACHE_TTL: Duration = Duration::from_secs(60);
 /// The trust decision is keyed on the 32-byte `state_merkle_root` scoped by `(epoch, shard_group)`:
 /// a node cannot produce a substate value proof that verifies against a root a quorum already
 /// signed, so reusing such a root is exactly as sound as re-validating the commit proof.
+///
+/// The heights of the recorded tips are also what bounds how old an anchor may be: see
+/// [`ANCHOR_HEIGHT_TOLERANCE`].
 #[async_trait]
 pub trait TrustedRootStore: std::fmt::Debug + Send + Sync + 'static {
-    /// True if `root` is a recorded, committee-validated state merkle root for `(epoch, shard_group)`.
-    async fn is_trusted(&self, epoch: Epoch, shard_group: ShardGroup, root: FixedHash) -> Result<bool, IndexerError>;
+    /// The height of the block `root` was recorded at, if `root` is a recorded, committee-validated state merkle
+    /// root for `(epoch, shard_group)`.
+    async fn trusted_root_height(
+        &self,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+        root: FixedHash,
+    ) -> Result<Option<NodeHeight>, IndexerError>;
+
+    /// The height of the highest tip recorded at `epoch` for any shard group overlapping `shard_group`.
+    async fn latest_height(&self, epoch: Epoch, shard_group: ShardGroup) -> Result<Option<NodeHeight>, IndexerError>;
 
     /// Records a newly committee-validated tip so subsequent reads at this root hit the fast path.
     async fn record(&self, tip: VerifiedBlockTip) -> Result<(), IndexerError>;
 }
+
+/// How many blocks an anchor may trail the latest tip validated for its shard group and still prove a read.
+///
+/// A root is quorum-signed for good, so its signatures say nothing about whether the state it commits is still the
+/// live one. A member a few blocks behind the latest validated tip answers with state that is at most that old; one
+/// further behind may answer with a substate that has since gone down, so its answer is left unproven.
+pub const ANCHOR_HEIGHT_TOLERANCE: u64 = 16;
 
 /// How many validated commit-proof tips a manager remembers. Reads cite the latest few blocks of each shard group, so
 /// a small memo covers them; when it fills it starts over.
@@ -127,6 +147,8 @@ enum BatchTrust {
     Proven,
     /// The responder had no committed block to anchor against, so it proved nothing.
     Unanchored,
+    /// The responder's anchor is too old to show what is live now, so it proved nothing.
+    Stale,
 }
 
 /// Outcome of a substate lookup together with whether the value was committee-verified.
@@ -711,6 +733,14 @@ where
                     );
                     unproven.get_or_insert(batch);
                 },
+                Ok(BatchTrust::Stale) => {
+                    debug!(
+                        target: LOG_TARGET,
+                        "{} anchored this batch to a block too old to prove it; asking another member",
+                        member.address
+                    );
+                    unproven.get_or_insert(batch);
+                },
                 // Fail closed: an unverifiable batch disqualifies this member.
                 Err(e) => {
                     warn!(target: LOG_TARGET, "⚠️Rejected substate batch from {}: {}", member.address, e);
@@ -736,9 +766,10 @@ where
 
     /// Verifies every value proof in `batch` against the batch's single anchor.
     ///
-    /// A batch that carries an anchor must prove every result it returns; one that carries no anchor
-    /// proves nothing, which is not misbehaviour and is reported as [`BatchTrust::Unanchored`] for the
-    /// caller to weigh against what other members offer.
+    /// A batch that carries an anchor must prove every result it returns; one that carries no anchor,
+    /// or one too old to prove anything, proves nothing, which is not misbehaviour and is reported as
+    /// [`BatchTrust::Unanchored`] or [`BatchTrust::Stale`] for the caller to weigh against what other
+    /// members offer.
     async fn verify_substate_batch(&self, batch: &SubstateBatch) -> Result<BatchTrust, IndexerError> {
         if !self.verify_substate_proofs {
             return Ok(BatchTrust::NotRequired);
@@ -747,7 +778,9 @@ where
             return Ok(BatchTrust::Unanchored);
         };
 
-        let trusted_root = self.trusted_root_from_commit_proof(commit_proof).await?;
+        let Some(trusted_root) = self.trusted_root_from_commit_proof(commit_proof).await? else {
+            return Ok(BatchTrust::Stale);
+        };
         // A batch answers with heads, which a down proof cannot settle (it says nothing about later versions), so
         // the down proofs a batch carries are not checked.
         for substate in &batch.substates {
@@ -889,13 +922,17 @@ where
         // not provable and is left to the existing f+1 agreement.
         match &result {
             SubstateResult::Up { substate } => {
-                self.verify_substate_proof(
-                    substate_requirement.substate_id(),
-                    substate.version(),
-                    Some(substate.substate_value()),
-                    &proof,
-                )
-                .await?;
+                let proven = self
+                    .verify_substate_proof(
+                        substate_requirement.substate_id(),
+                        substate.version(),
+                        Some(substate.substate_value()),
+                        &proof,
+                    )
+                    .await?;
+                if !proven {
+                    return Ok((result, None));
+                }
             },
             SubstateResult::Down { version } => {
                 // Only a down proof shows the version was ever up; without one, the Down is left to f+1
@@ -1032,14 +1069,18 @@ where
         }
     }
 
+    /// Verifies `proof` of `(substate_id, version)` holding `value`. Returns `Ok(false)` when its anchor is too old to
+    /// prove anything (see [`Self::trusted_root_from_commit_proof`]); an invalid proof is an error.
     async fn verify_substate_proof(
         &self,
         substate_id: &SubstateId,
         version: SubstateVersion,
         value: Option<&SubstateValue>,
         proof: &SubstateProofData,
-    ) -> Result<(), IndexerError> {
-        let trusted_root = self.trusted_root_from_commit_proof(&proof.commit_proof).await?;
+    ) -> Result<bool, IndexerError> {
+        let Some(trusted_root) = self.trusted_root_from_commit_proof(&proof.commit_proof).await? else {
+            return Ok(false);
+        };
         verify_substate_value_proof_against_root(
             &proof.substate_value_proof,
             substate_id,
@@ -1051,7 +1092,7 @@ where
             &trusted_root,
         )
         .map_err(|e| IndexerError::SubstateProofVerificationFailed { details: e.to_string() })?;
-        Ok(())
+        Ok(true)
     }
 
     /// Establishes the shard-group state merkle root that value proofs anchored to `commit_proof`
@@ -1061,7 +1102,14 @@ where
     /// committing it, independently of any value proof that goes on to cite it. That is what makes it
     /// safe to establish once and reuse for a whole batch of value proofs, and to record for later
     /// reads.
-    async fn trusted_root_from_commit_proof(&self, commit_proof: &[u8]) -> Result<TrustedStateRoot, IndexerError> {
+    ///
+    /// A value proof against the root shows what was live at its block, so the root answers a read
+    /// only while that block is recent. `None` when it is not: see [`Self::anchor_epoch_is_live`] and
+    /// [`Self::anchor_height_is_recent`].
+    async fn trusted_root_from_commit_proof(
+        &self,
+        commit_proof: &[u8],
+    ) -> Result<Option<TrustedStateRoot>, IndexerError> {
         let commit_proof_bytes = commit_proof;
         let commit_proof = decode_commit_proof(commit_proof_bytes)?;
         let epoch = commit_proof.epoch();
@@ -1070,25 +1118,85 @@ where
             .map_err(|e| IndexerError::SubstateProofVerificationFailed { details: e.to_string() })?;
         let root = commit_proof.state_merkle_root();
 
+        // Settled before anything is validated, since the committee of an epoch this old may no
+        // longer be known.
+        if !self.anchor_epoch_is_live(epoch, shard_group).await? {
+            debug!(target: LOG_TARGET, "Anchor at epoch {epoch} {shard_group} is from an epoch that has ended");
+            return Ok(None);
+        }
+
         // Fast path: if this exact (epoch, shard_group, root) was already committee-validated and
         // recorded in the trusted-root store, skip re-validating the commit proof's QC chain (and the
         // committee lookup). A node cannot forge a value proof that verifies against a root a quorum
-        // already signed, so this is as sound as the full path.
-        if let Some(store) = &self.trusted_root_store &&
-            store.is_trusted(epoch, shard_group, root).await?
-        {
+        // already signed, so this is as sound as the full path. The header's height is not what the
+        // committee signed here, so the root is as recent as the block it was recorded at.
+        let recorded_height = match &self.trusted_root_store {
+            Some(store) => store.trusted_root_height(epoch, shard_group, root).await?,
+            None => None,
+        };
+        let height = match recorded_height {
+            Some(height) => {
+                debug!(
+                    target: LOG_TARGET,
+                    "trusted-root HIT at epoch {epoch} {shard_group}: skipped commit-proof validation"
+                );
+                height
+            },
+            None => self.validated_tip_from_commit_proof(commit_proof_bytes).await?.height,
+        };
+
+        if !self.anchor_height_is_recent(epoch, shard_group, height).await? {
             debug!(
                 target: LOG_TARGET,
-                "trusted-root HIT at epoch {epoch} {shard_group}: skipped commit-proof validation"
+                "Anchor at {height} of epoch {epoch} {shard_group} trails the latest validated tip by more than \
+                 {ANCHOR_HEIGHT_TOLERANCE} blocks"
             );
-            return Ok(TrustedStateRoot {
-                epoch,
-                shard_group,
-                root,
-            });
+            return Ok(None);
         }
 
-        Ok(self.validated_tip_from_commit_proof(commit_proof_bytes).await?.into())
+        Ok(Some(TrustedStateRoot {
+            epoch,
+            shard_group,
+            root,
+        }))
+    }
+
+    /// Whether `epoch` is one a committee covering `shard_group` may still be committing in.
+    ///
+    /// A committee commits in the epoch manager's epoch or, until its end-of-epoch block, in the one
+    /// before. Once a tip of a later epoch has been validated for a shard group overlapping
+    /// `shard_group`, the committee there has moved on too.
+    async fn anchor_epoch_is_live(&self, epoch: Epoch, shard_group: ShardGroup) -> Result<bool, IndexerError> {
+        let current_epoch = self.committee_provider.current_epoch().await?;
+        if epoch < current_epoch.saturating_sub(Epoch(1)) {
+            return Ok(false);
+        }
+        let Some(store) = &self.trusted_root_store else {
+            return Ok(true);
+        };
+        Ok(store
+            .latest_height(epoch.saturating_add(1u64), shard_group)
+            .await?
+            .is_none())
+    }
+
+    /// Whether a block at `height` of `(epoch, shard_group)` is within [`ANCHOR_HEIGHT_TOLERANCE`]
+    /// blocks of the latest tip validated for that shard group.
+    ///
+    /// Only the tips in the trusted-root store are known, so without one every height is recent.
+    async fn anchor_height_is_recent(
+        &self,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+        height: NodeHeight,
+    ) -> Result<bool, IndexerError> {
+        let Some(store) = &self.trusted_root_store else {
+            return Ok(true);
+        };
+        let Some(latest) = store.latest_height(epoch, shard_group).await? else {
+            return Ok(true);
+        };
+        Ok(height.as_u64().saturating_add(ANCHOR_HEIGHT_TOLERANCE) >= latest.as_u64())
     }
 
     /// Validates `commit_proof` against its shard group committee, so that every field of the returned tip, its height
@@ -1124,9 +1232,9 @@ where
         // fail an otherwise-verified read.
         if let Some(store) = &self.trusted_root_store {
             let trusted = store
-                .is_trusted(epoch, shard_group, verified_tip.state_merkle_root)
+                .trusted_root_height(epoch, shard_group, verified_tip.state_merkle_root)
                 .await
-                .unwrap_or(false);
+                .is_ok_and(|height| height.is_some());
             if !trusted && let Err(e) = store.record(verified_tip).await {
                 warn!(target: LOG_TARGET, "Failed to record verified root at epoch {epoch} {shard_group}: {e}");
             }
@@ -1203,6 +1311,8 @@ mod tests {
         proven_batch: Option<SubstateBatch>,
         /// Members whose proven reads fail at once, so that a read can only settle on another member's answer.
         failing_members: HashSet<Addr>,
+        /// Answered on a proven read as up, with the given proof.
+        up_with_proof: HashMap<SubstateId, (Substate, SubstateProofData)>,
     }
 
     #[derive(Clone)]
@@ -1265,6 +1375,14 @@ mod tests {
             if let Some((version, proof)) = self.0.down_with_proof.get(substate_req.substate_id()) {
                 return Ok((SubstateResult::Down { version: *version }, Some(proof.clone())));
             }
+            if let Some((substate, proof)) = self.0.up_with_proof.get(substate_req.substate_id()) {
+                return Ok((
+                    SubstateResult::Up {
+                        substate: Box::new(substate.clone()),
+                    },
+                    Some(proof.clone()),
+                ));
+            }
             Ok((self.get_substate(substate_req).await?, None))
         }
 
@@ -1314,8 +1432,8 @@ mod tests {
     }
 
     /// Serves one committee for every shard group, except at `.1`, an epoch whose committees it does not know. `.2`
-    /// counts the committee lookups.
-    struct FakeEpochManager(Arc<Committee<Addr>>, Option<Epoch>, Arc<AtomicUsize>);
+    /// counts the committee lookups, and `.3` is the current epoch.
+    struct FakeEpochManager(Arc<Committee<Addr>>, Option<Epoch>, Arc<AtomicUsize>, Epoch);
 
     impl EpochManagerReader for FakeEpochManager {
         type Addr = Addr;
@@ -1377,7 +1495,7 @@ mod tests {
         }
 
         async fn current_epoch(&self) -> Result<Epoch, EpochManagerError> {
-            Ok(Epoch(1))
+            Ok(self.3)
         }
 
         async fn get_current_epoch_hash(&self) -> Result<FixedHash, EpochManagerError> {
@@ -1499,7 +1617,7 @@ mod tests {
         let manager = CachedSubstateManager::new(
             Network::LocalNet,
             NumPreshards::P256,
-            FakeEpochManager(Arc::new(committee), None, Arc::default()),
+            FakeEpochManager(Arc::new(committee), None, Arc::default(), Epoch(1)),
             FakeClient(network.clone(), None),
             FakeCache::default(),
         );
@@ -1575,8 +1693,17 @@ mod tests {
 
     #[async_trait::async_trait]
     impl TrustedRootStore for TrustEverything {
-        async fn is_trusted(&self, _: Epoch, _: ShardGroup, _: FixedHash) -> Result<bool, IndexerError> {
-            Ok(true)
+        async fn trusted_root_height(
+            &self,
+            _: Epoch,
+            _: ShardGroup,
+            _: FixedHash,
+        ) -> Result<Option<NodeHeight>, IndexerError> {
+            Ok(Some(NodeHeight::zero()))
+        }
+
+        async fn latest_height(&self, _: Epoch, _: ShardGroup) -> Result<Option<NodeHeight>, IndexerError> {
+            Ok(None)
         }
 
         async fn record(&self, _: VerifiedBlockTip) -> Result<(), IndexerError> {
@@ -2507,5 +2634,268 @@ mod tests {
 
         assert_eq!(lookup.proof.unwrap().substate_value_proof, vec![1]);
         assert_eq!(network.single_requests.load(Ordering::Relaxed), 0);
+    }
+
+    /// Committee-validated tips, as the trusted-root store records them.
+    #[derive(Debug, Default)]
+    struct RecordedTips(Mutex<Vec<VerifiedBlockTip>>);
+
+    impl RecordedTips {
+        fn with(tips: impl IntoIterator<Item = (Epoch, ShardGroup, u64, FixedHash)>) -> Arc<Self> {
+            let tips = tips
+                .into_iter()
+                .map(|(epoch, shard_group, height, state_merkle_root)| VerifiedBlockTip {
+                    epoch,
+                    shard_group,
+                    height: NodeHeight(height),
+                    block_id: FixedHash::zero(),
+                    epoch_hash: FixedHash::zero(),
+                    state_merkle_root,
+                })
+                .collect();
+            Arc::new(Self(Mutex::new(tips)))
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl TrustedRootStore for RecordedTips {
+        async fn trusted_root_height(
+            &self,
+            epoch: Epoch,
+            shard_group: ShardGroup,
+            root: FixedHash,
+        ) -> Result<Option<NodeHeight>, IndexerError> {
+            Ok(self
+                .0
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|tip| tip.epoch == epoch && tip.shard_group == shard_group && tip.state_merkle_root == root)
+                .map(|tip| tip.height))
+        }
+
+        async fn latest_height(
+            &self,
+            epoch: Epoch,
+            shard_group: ShardGroup,
+        ) -> Result<Option<NodeHeight>, IndexerError> {
+            Ok(self
+                .0
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|tip| tip.epoch == epoch && tip.shard_group.overlaps_shard_group(&shard_group))
+                .map(|tip| tip.height)
+                .max())
+        }
+
+        async fn record(&self, tip: VerifiedBlockTip) -> Result<(), IndexerError> {
+            self.0.lock().unwrap().push(tip);
+            Ok(())
+        }
+    }
+
+    /// A live substate and its inclusion proof against the root of a tree covering every shard, which holds only it.
+    fn proven_up(id: &SubstateId) -> (Substate, Vec<u8>, tari_state_tree::TreeHash) {
+        use tari_engine_types::substate::hash_substate;
+        use tari_ootle_common_types::{ToSubstateAddress, VersionedSubstateId, shard::Shard};
+        use tari_state_tree::{
+            SPARSE_MERKLE_PLACEHOLDER_HASH,
+            ShardGroupRootTree,
+            SpreadPrefixStateTree,
+            StateTreePayload,
+            SubstateTreeChange,
+            SubstateValueProof,
+            memory_store::MemoryTreeStore,
+        };
+
+        let substate = live(std::slice::from_ref(id)).remove(id).unwrap();
+        let versioned = VersionedSubstateId::new(id.clone(), substate.version());
+        let shard = versioned.to_substate_address().to_shard(NumPreshards::P256);
+        let mut store = MemoryTreeStore::<StateTreePayload>::new();
+        let shard_root = SpreadPrefixStateTree::new(&mut store)
+            .put_substate_changes(None, 1, vec![SubstateTreeChange::Up {
+                id: versioned.clone(),
+                value_hash: hash_substate(
+                    Network::LocalNet,
+                    substate.substate_value(),
+                    substate.version(),
+                    PROOF_EPOCH,
+                ),
+            }])
+            .unwrap();
+        let tree = ShardGroupRootTree::build(
+            tari_engine_types::ProtocolVersion::at(Network::LocalNet, PROOF_EPOCH),
+            [
+                (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0),
+                (shard, shard_root, 1),
+            ],
+        )
+        .unwrap();
+        let (_, _, leaf_proof) = SpreadPrefixStateTree::new(&mut store).get_proof(1, &versioned).unwrap();
+        let value_proof = SubstateValueProof::new(shard_root, 1, tree.get_proof(shard).unwrap().1, leaf_proof);
+        (
+            substate,
+            tari_bor::serde_codec::to_vec(&value_proof).unwrap(),
+            tree.root(),
+        )
+    }
+
+    fn all_shards() -> ShardGroup {
+        group(1, NumPreshards::P256.as_u32())
+    }
+
+    /// A manager in `current_epoch` whose only member answers a proven read of a live substate with an inclusion proof
+    /// anchored at a block of [`PROOF_EPOCH`] at `anchor_height`, its commit proof signed by a quorum, and whose
+    /// trusted-root store holds the tips `recorded` returns, given the anchor's root.
+    fn anchored_up_setup(
+        current_epoch: Epoch,
+        anchor_height: u64,
+        recorded: impl FnOnce(FixedHash) -> Vec<(Epoch, ShardGroup, u64, FixedHash)>,
+    ) -> (
+        SubstateId,
+        CachedSubstateManager<FakeEpochManager, FakeClient, FakeCache>,
+    ) {
+        use tari_crypto::tari_utilities::ByteArray;
+
+        let keys = (1..=4)
+            .map(tari_ootle_common_types::crypto::create_key_pair_from_seed)
+            .collect::<Vec<_>>();
+        let committee = Committee::new(
+            keys.iter()
+                .enumerate()
+                .map(|(i, (_, public))| CommitteeMember {
+                    address: format!("vn{i}"),
+                    public_key: RistrettoPublicKeyBytes::from_bytes(public.as_bytes()).unwrap(),
+                    vote_power: VotePower::of(1),
+                })
+                .collect(),
+        );
+        let signers = keys[..3].iter().map(|(secret, _)| secret.clone()).collect::<Vec<_>>();
+
+        let id = component_id(1);
+        let (substate, value_proof, root) = proven_up(&id);
+        let commit_proof = signed_commit_proof(all_shards(), anchor_height, root, &signers);
+        let (mut manager, _) = manager(FakeNetwork {
+            up_with_proof: [(
+                id.clone(),
+                (substate, SubstateProofData {
+                    substate_value_proof: value_proof,
+                    commit_proof,
+                    proof_epoch: PROOF_EPOCH.as_u64(),
+                    substate_down_proof: None,
+                    destroyed_at_state_version: None,
+                }),
+            )]
+            .into(),
+            ..Default::default()
+        });
+        manager.committee_provider.0 = Arc::new(committee);
+        manager.committee_provider.3 = current_epoch;
+        let store = RecordedTips::with(recorded(FixedHash::new(root.into_array())));
+        let manager = manager
+            .with_substate_proof_verification(true)
+            .with_trusted_root_store(store);
+        (id, manager)
+    }
+
+    /// Whether the only member's answer to a read of `id` comes back proven.
+    async fn proves_read(
+        manager: &CachedSubstateManager<FakeEpochManager, FakeClient, FakeCache>,
+        id: &SubstateId,
+    ) -> bool {
+        let (result, proof) = manager
+            .get_substate_from_vn(&"vn0".to_string(), SubstateRequirementRef::new(id, None))
+            .await
+            .unwrap();
+        assert!(matches!(result, SubstateResult::Up { .. }));
+        proof.is_some()
+    }
+
+    const NEWER_ROOT: FixedHash = FixedHash::new([0xee; 32]);
+
+    /// A root signed for a block well behind the latest tip the indexer has validated for its shard group proves
+    /// nothing, however validly it is signed; one a few blocks behind still does.
+    #[tokio::test]
+    async fn an_anchor_far_behind_the_latest_validated_tip_proves_nothing() {
+        let (id, manager) = anchored_up_setup(PROOF_EPOCH, 4, |_| vec![(PROOF_EPOCH, all_shards(), 100, NEWER_ROOT)]);
+        assert!(!proves_read(&manager, &id).await);
+
+        let (id, manager) = anchored_up_setup(PROOF_EPOCH, 4, |_| vec![(PROOF_EPOCH, all_shards(), 10, NEWER_ROOT)]);
+        assert!(proves_read(&manager, &id).await);
+    }
+
+    /// A root the store vouches for is as old as the block it was recorded at, whatever height the header citing it
+    /// claims.
+    #[tokio::test]
+    async fn a_trusted_root_recorded_far_behind_the_latest_tip_proves_nothing() {
+        let (id, manager) = anchored_up_setup(PROOF_EPOCH, 100, |root| {
+            vec![
+                (PROOF_EPOCH, all_shards(), 1, root),
+                (PROOF_EPOCH, all_shards(), 100, NEWER_ROOT),
+            ]
+        });
+        assert!(!proves_read(&manager, &id).await);
+    }
+
+    /// A batch anchored well behind the latest validated tip proves nothing, so its results are served unproven.
+    #[tokio::test]
+    async fn a_batch_anchored_far_behind_the_latest_validated_tip_is_unproven() {
+        for (latest_height, proven) in [(100, false), (10, true)] {
+            let id = component_id(1);
+            let (substate, value_proof, root) = proven_up(&id);
+            let (manager, _) = manager(FakeNetwork {
+                proven_batch: Some(SubstateBatch {
+                    commit_proof: Some(unsigned_commit_proof(all_shards(), 4, root)),
+                    substates: vec![tari_validator_node_rpc::client::BatchedSubstate {
+                        substate_id: id.clone(),
+                        result: SubstateResult::Up {
+                            substate: Box::new(substate),
+                        },
+                        value_proof: Some(value_proof),
+                        proof_epoch: PROOF_EPOCH.as_u64(),
+                        substate_down_proof: None,
+                    }],
+                    missing: vec![],
+                }),
+                ..Default::default()
+            });
+            // The unsigned anchor's root is recorded, standing in for a validated one.
+            let store = RecordedTips::with([
+                (PROOF_EPOCH, all_shards(), 4, FixedHash::new(root.into_array())),
+                (PROOF_EPOCH, all_shards(), latest_height, NEWER_ROOT),
+            ]);
+            let manager = manager
+                .with_substate_proof_verification(true)
+                .with_trusted_root_store(store);
+
+            let found = manager
+                .fetch_and_cache_substates(std::slice::from_ref(&id))
+                .await
+                .unwrap();
+
+            assert_eq!(found[&id].proof.is_some(), proven, "latest tip at {latest_height}");
+        }
+    }
+
+    /// An anchor older than the previous epoch proves nothing, and no committee is asked to validate it.
+    #[tokio::test]
+    async fn an_anchor_from_before_the_previous_epoch_proves_nothing() {
+        let (id, manager) = anchored_up_setup(PROOF_EPOCH.saturating_add(2u64), 4, |_| vec![]);
+        let lookups = manager.committee_provider.2.clone();
+        assert!(!proves_read(&manager, &id).await);
+        assert_eq!(lookups.load(Ordering::Relaxed), 0);
+    }
+
+    /// A committee trails the epoch manager into a new epoch, so an anchor from the previous epoch proves a read until
+    /// a tip of the new epoch is validated for a shard group overlapping the anchor's.
+    #[tokio::test]
+    async fn an_anchor_from_the_previous_epoch_proves_nothing_once_the_new_epoch_has_a_tip() {
+        let next_epoch = PROOF_EPOCH.saturating_add(1u64);
+        let (id, manager) = anchored_up_setup(next_epoch, 4, |_| vec![]);
+        assert!(proves_read(&manager, &id).await);
+
+        let (id, manager) = anchored_up_setup(next_epoch, 4, |_| vec![(next_epoch, group(1, 128), 2, NEWER_ROOT)]);
+        assert!(!proves_read(&manager, &id).await);
     }
 }

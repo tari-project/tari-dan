@@ -66,18 +66,6 @@ impl ConsensusEpoch {
         self.current()
             .map(|epoch| epoch.clamp(epoch_manager_epoch.saturating_sub(Epoch(1)), epoch_manager_epoch))
     }
-
-    /// The shard groups observed in an epoch before `epoch`, or not observed at all.
-    pub fn groups_behind(&self, epoch: Epoch) -> Vec<ShardGroup> {
-        self.inner
-            .read()
-            .unwrap_or_else(|e| e.into_inner())
-            .groups
-            .iter()
-            .filter(|(_, observed)| observed.is_none_or(|e| e < epoch))
-            .map(|(sg, _)| *sg)
-            .collect()
-    }
 }
 
 impl Inner {
@@ -116,7 +104,6 @@ mod tests {
         consensus_epoch.observe(sg(0, 127), Epoch(6));
         consensus_epoch.observe(sg(128, 255), Epoch(5));
         assert_eq!(consensus_epoch.current(), Some(Epoch(5)));
-        assert_eq!(consensus_epoch.groups_behind(Epoch(6)), vec![sg(128, 255)]);
     }
 
     #[test]
