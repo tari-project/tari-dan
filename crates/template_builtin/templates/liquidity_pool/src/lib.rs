@@ -295,7 +295,7 @@ mod template {
 
             // add the liquidity to the pool
             let pool = self.get_pool_from_resource(resource);
-            self.get_pool_vault(pool).deposit(bucket);
+            self.deposit_revealed(pool, bucket);
         }
 
         pub fn protected_remove_liquidity(&mut self, resource_address: ResourceAddress, amount: Amount) -> Bucket {
@@ -309,7 +309,8 @@ mod template {
         }
 
         /// A simple swap method that uses a constant product formula without fees.
-        /// This method makes the liquidity pool conform to the swap interface
+        /// This method makes the liquidity pool conform to the swap interface.
+        /// A confidential input must hold only revealed funds.
         pub fn swap(&mut self, input_bucket: Bucket) -> Bucket {
             self.swap_constant_product(input_bucket)
         }
@@ -358,7 +359,7 @@ mod template {
             assert!(output_amount.is_positive(), "Swap input too small to yield any output");
 
             // Perform the swap
-            self.get_pool_vault(input_pool).deposit(input_bucket);
+            self.deposit_revealed(input_pool, input_bucket);
             let output_bucket = self.get_pool_vault(output_pool).withdraw(output_amount);
 
             emit_event("swap", metadata![
@@ -434,6 +435,15 @@ mod template {
                 Pool::A => &self.vault_a,
                 Pool::B => &self.vault_b,
             }
+        }
+
+        /// Deposits a caller's bucket into the pool. The pool prices and pays out revealed funds only, so a
+        /// confidential bucket must carry no commitments: none of the pool's methods could ever withdraw them.
+        fn deposit_revealed(&self, pool: Pool, bucket: Bucket) {
+            if bucket.resource_type() == ResourceType::Confidential {
+                bucket.assert_contains_no_confidential_funds();
+            }
+            self.get_pool_vault(pool).deposit(bucket);
         }
 
         fn lp_total_supply(&self) -> Amount {
