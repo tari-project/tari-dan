@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_consensus::{
-    hotstuff::substate_store::{LockFailedError, PendingSubstateStore, SubstateStoreError},
+    hotstuff::substate_store::{InputPledge, LockFailedError, PendingSubstateStore, SubstateStoreError},
     traits::{BlockTransactionExecutorError, CertificateStore, ReadableSubstateStore, WriteableSubstateStore},
 };
 use tari_consensus_types::{BlockId, LeafBlock};
@@ -495,6 +495,80 @@ fn a_put_diff_upping_over_a_live_version_is_fatal() {
         err.ok_lock_failed().unwrap_err(),
         SubstateStoreError::ExpectedSubstateDown { .. }
     ));
+}
+
+#[test]
+fn an_input_pledged_by_two_commands_is_counted_once() {
+    let (store, _tmp) = create_store();
+    let a = add_substate(&store, 0, SubstateVersion::ZERO);
+    let b = add_substate(&store, 1, SubstateVersion::ZERO);
+
+    let tx = store.create_read_tx().unwrap();
+    let mut store = create_pending_store::<TestStore>(&tx);
+    let pledge = store.pledge_inputs([a.as_versioned_ref()], usize::MAX).unwrap();
+    assert_eq!(pledge, InputPledge::Pledged);
+    let one_input = store.pledge_bytes();
+    assert!(one_input > 0);
+
+    store
+        .pledge_inputs([a.as_versioned_ref(), b.as_versioned_ref()], usize::MAX)
+        .unwrap();
+    // Both substates have values of the same size
+    assert_eq!(store.pledge_bytes(), 2 * one_input);
+}
+
+#[test]
+fn a_proposing_store_refuses_inputs_past_its_pledge_budget() {
+    let (store, _tmp) = create_store();
+    let a = add_substate(&store, 0, SubstateVersion::ZERO);
+    let b = add_substate(&store, 1, SubstateVersion::ZERO);
+
+    let tx = store.create_read_tx().unwrap();
+    let one_input = {
+        let mut store = create_pending_store::<TestStore>(&tx);
+        store.pledge_inputs([a.as_versioned_ref()], usize::MAX).unwrap();
+        store.pledge_bytes()
+    };
+
+    let mut store = create_pending_store::<TestStore>(&tx).with_pledge_budget(one_input);
+    assert_eq!(
+        store.pledge_inputs([a.as_versioned_ref()], usize::MAX).unwrap(),
+        InputPledge::Pledged
+    );
+    assert_eq!(
+        store.pledge_inputs([b.as_versioned_ref()], usize::MAX).unwrap(),
+        InputPledge::BlockBudgetReached {
+            total_bytes: 2 * one_input,
+            max_bytes: one_input,
+        }
+    );
+    // An input already in the block's pledge adds nothing to it
+    assert_eq!(
+        store.pledge_inputs([a.as_versioned_ref()], usize::MAX).unwrap(),
+        InputPledge::Pledged
+    );
+    assert_eq!(store.pledge_bytes(), one_input);
+}
+
+#[test]
+fn inputs_over_the_transaction_limit_are_not_pledged() {
+    let (store, _tmp) = create_store();
+    let a = add_substate(&store, 0, SubstateVersion::ZERO);
+    let b = add_substate(&store, 1, SubstateVersion::ZERO);
+
+    let tx = store.create_read_tx().unwrap();
+    let mut store = create_pending_store::<TestStore>(&tx);
+    store.pledge_inputs([a.as_versioned_ref()], usize::MAX).unwrap();
+    let one_input = store.pledge_bytes();
+
+    let mut store = create_pending_store::<TestStore>(&tx);
+    assert_eq!(
+        store
+            .pledge_inputs([a.as_versioned_ref(), b.as_versioned_ref()], one_input)
+            .unwrap(),
+        InputPledge::TransactionTooLarge { bytes: 2 * one_input }
+    );
+    assert_eq!(store.pledge_bytes(), 0);
 }
 
 /// The diff of a transaction that takes `id` as a WRITE input: it spends the locked version and creates the next.

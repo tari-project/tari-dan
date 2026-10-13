@@ -15,6 +15,7 @@ use tari_ootle_common_types::{
     NumPreshards,
     ProtocolVersion,
     ShardGroup,
+    VersionedSubstateIdRef,
     committee::{Committee, CommitteeInfo},
     derive_fee_pool_address,
     optional::Optional,
@@ -32,6 +33,7 @@ use tari_ootle_storage::{
         EpochCheckpoint,
         PendingShardStateTreeDiff,
         SubstateChange,
+        TransactionPoolRecord,
         TransactionRecord,
         TreeRootSummary,
     },
@@ -447,6 +449,29 @@ pub(crate) fn filter_diff_for_committee(committee_info: &CommitteeInfo, diff: &S
                 .collect(),
         );
     filtered_diff
+}
+
+/// Whether a block's foreign proposals total more than `max_bytes` while it carries more than one. A single foreign
+/// proposal is always admitted so that none is left unproposable. Each node sums the sizes of its own stored copies,
+/// and copies of one proposal can differ in their commit proofs, so a leader packs against
+/// `max_block_foreign_proposal_bytes` and a validator checks against the larger
+/// `max_block_validation_foreign_proposal_bytes`.
+pub(crate) fn exceeds_block_foreign_proposal_bytes(total_bytes: usize, num_proposals: usize, max_bytes: usize) -> bool {
+    num_proposals > 1 && total_bytes > max_bytes
+}
+
+/// The inputs that `local_shard_group` pledged for the transaction when it prepared it, which its LocalAccept pledges
+/// again to the shard groups that only receive outputs.
+pub(crate) fn local_pledged_inputs(
+    tx_rec: &TransactionPoolRecord,
+    local_shard_group: ShardGroup,
+) -> impl Iterator<Item = VersionedSubstateIdRef<'_>> {
+    tx_rec
+        .evidence()
+        .get(&local_shard_group)
+        .into_iter()
+        .flat_map(|evidence| evidence.all_pledged_inputs_iter())
+        .map(|(id, lock)| VersionedSubstateIdRef::new(id, lock.version))
 }
 
 pub fn apply_leader_fee_to_substate_store<TTx: StateStoreReadTransaction>(

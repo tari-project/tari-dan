@@ -53,7 +53,13 @@ pub fn derive_keypair_from_address(addr: &TestAddress) -> (PrivateKey, Ristretto
     (secret_key, public_key)
 }
 
-pub fn make_test_component(entity_id: EntityId) -> SubstateValue {
+/// A component whose state is a byte string of `state_size` bytes, or null if `state_size` is zero.
+pub fn make_test_component_with_state_size(entity_id: EntityId, state_size: usize) -> SubstateValue {
+    let state = if state_size == 0 {
+        tari_bor::Value::Null
+    } else {
+        tari_bor::Value::Bytes(vec![0xAB; state_size])
+    };
     SubstateValue::Component(Component {
         header: ComponentHeader {
             template_address: Default::default(),
@@ -61,9 +67,7 @@ pub fn make_test_component(entity_id: EntityId) -> SubstateValue {
             access_rules: Default::default(),
             entity_id,
         },
-        body: ComponentBody {
-            state: tari_bor::Value::Null,
-        },
+        body: ComponentBody { state },
     })
 }
 

@@ -111,6 +111,20 @@ pub enum NoVoteReason {
     BlockExecutionPointsExceeded { total_points: u64, max_points: u64 },
     #[error("Block puts up {total_bytes} bytes of substates in one shard, exceeding the maximum {max_bytes}")]
     BlockShardOutputBytesExceeded { total_bytes: usize, max_bytes: usize },
+    #[error(
+        "Block pledges {total_bytes} bytes of input substates to foreign shard groups, exceeding the maximum \
+         {max_bytes}"
+    )]
+    BlockPledgeBytesExceeded { total_bytes: usize, max_bytes: usize },
+    #[error(
+        "Block carries {num_proposals} foreign proposals totalling {total_bytes} bytes, exceeding the maximum \
+         {max_bytes}"
+    )]
+    BlockForeignProposalBytesExceeded {
+        num_proposals: usize,
+        total_bytes: usize,
+        max_bytes: usize,
+    },
     #[error("Transaction {transaction_id} has substate lock conflicts and must be deferred to a later block")]
     DeferrableLockConflict { transaction_id: TransactionId },
     /// Locking succeeded but the transaction's state diff does not apply over the pending store. An honest proposer
@@ -171,6 +185,8 @@ impl NoVoteReason {
             Self::BlockWeightExceeded { .. } => "BlockWeightExceeded",
             Self::BlockExecutionPointsExceeded { .. } => "BlockExecutionPointsExceeded",
             Self::BlockShardOutputBytesExceeded { .. } => "BlockShardOutputBytesExceeded",
+            Self::BlockPledgeBytesExceeded { .. } => "BlockPledgeBytesExceeded",
+            Self::BlockForeignProposalBytesExceeded { .. } => "BlockForeignProposalBytesExceeded",
             Self::DeferrableLockConflict { .. } => "DeferrableLockConflict",
             Self::ConflictingTransactionProposed { .. } => "ConflictingTransactionProposed",
         }

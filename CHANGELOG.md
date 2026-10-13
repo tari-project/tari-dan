@@ -13,6 +13,9 @@ See [standard-version](https://github.com/conventional-changelog/standard-versio
   local database started on 0.46.0 (igor, nextnet, stagenet, mainnet, localnet) runs V2 from genesis; wipe its
   data directory before upgrading. `check_activation_schedule` does not detect this, because the genesis
   version is unchanged.
+- **Blocks bound the input bytes they pledge across shard groups and the foreign proposals they carry**:
+  validators upgrade together, and a cross-shard transaction whose inputs in one shard group exceed 1.5 MiB now
+  aborts with `INPUT_PLEDGE_TOO_LARGE`. (#2894)
 
 ## [0.46.0](https://github.com/tari-project/tari-ootle/compare/v0.45.0...v0.46.0) (2026-10-07)
 

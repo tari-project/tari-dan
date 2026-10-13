@@ -39,7 +39,7 @@ use super::{PledgedTransaction, PreparedTransaction};
 use crate::{
     hotstuff::{
         block_change_set::ProposedBlockChangeSet,
-        substate_store::{LockStatus, PendingSubstateStore, SubstateStoreError},
+        substate_store::{InputPledge, LockStatus, PendingSubstateStore, SubstateStoreError},
     },
     tracing::TraceTimer,
     traits::{BlockTransactionExecutor, BlockTransactionExecutorError, ReadableSubstateStore},
@@ -51,17 +51,59 @@ const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::block_transaction_ex
 pub struct ConsensusTransactionManager<TExecutor, TStateStore> {
     executor: TExecutor,
     max_transaction_validity_epochs: u64,
+    max_transaction_pledge_bytes: usize,
     _store: PhantomData<TStateStore>,
 }
 
 impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
     ConsensusTransactionManager<TExecutor, TStateStore>
 {
-    pub fn new(executor: TExecutor, max_transaction_validity_epochs: u64) -> Self {
+    pub fn new(executor: TExecutor, max_transaction_validity_epochs: u64, max_transaction_pledge_bytes: usize) -> Self {
         Self {
             executor,
             max_transaction_validity_epochs,
+            max_transaction_pledge_bytes,
             _store: PhantomData,
+        }
+    }
+
+    /// Adds the transaction's local inputs to what the block pledges to foreign shard groups, before they are
+    /// locked. Returns what the transaction is prepared as instead if they cannot be pledged: an abort if they are
+    /// more than any block may pledge, or a deferral if they only do not fit in this block. Only the shard group
+    /// holding the inputs measures them, so it aborts unilaterally and the other shard groups adopt the abort from
+    /// its foreign proposal.
+    fn pledge_local_inputs<'i, TTx: StateStoreReadTransaction, I>(
+        &self,
+        store: &mut PendingSubstateStore<TTx>,
+        transaction_id: &TransactionId,
+        inputs: I,
+    ) -> Result<Option<PreparedTransaction>, BlockTransactionExecutorError>
+    where
+        I: IntoIterator<Item = VersionedSubstateIdRef<'i>>,
+    {
+        match store.pledge_inputs(inputs, self.max_transaction_pledge_bytes)? {
+            InputPledge::Pledged => Ok(None),
+            InputPledge::TransactionTooLarge { bytes } => {
+                warn!(
+                    target: LOG_TARGET,
+                    "⚠️ PREPARE: Transaction {transaction_id} pledges {bytes} bytes of local inputs, more than the {} a \
+                     block may pledge. Aborting.",
+                    self.max_transaction_pledge_bytes,
+                );
+                let execution = TransactionExecution::abort(transaction_id, RejectReason::Abort {
+                    reason: AbortReason::InputPledgeTooLarge,
+                });
+                Ok(Some(PreparedTransaction::new_multishard_executed(
+                    execution,
+                    LockStatus::new(),
+                )))
+            },
+            InputPledge::BlockBudgetReached { total_bytes, max_bytes } => {
+                Ok(Some(PreparedTransaction::PledgeBudgetReached {
+                    total_bytes,
+                    max_bytes,
+                }))
+            },
         }
     }
 
@@ -459,6 +501,16 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                 // CASE: Multishard transaction, all inputs are local, consensus with output shard groups
                 // pending
                 let requested_locks = execution.resolved_inputs();
+                if let Some(prepared) = self.pledge_local_inputs(
+                    store,
+                    &transaction_id,
+                    requested_locks
+                        .iter()
+                        .filter(|lock| local_committee_info.includes_substate_id(lock.substate_id()))
+                        .map(|lock| lock.to_versioned_substate_id_ref()),
+                )? {
+                    return Ok(prepared);
+                }
                 let lock_status = store.try_lock_all(transaction_id, requested_locks, false)?;
                 if let Some(err) = lock_status.hard_conflict() {
                     warn!(target: LOG_TARGET, "⚠️ PREPARE: Hard conflict when locking inputs: {err}");
@@ -525,6 +577,18 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
             return Ok(PreparedTransaction::new_multishard_executed(execution, lock_status));
         }
 
+        if let Some(prepared) = self.pledge_local_inputs(
+            store,
+            &transaction_id,
+            execution
+                .resolved_inputs()
+                .iter()
+                .filter(|lock| local_committee_info.includes_substate_id(lock.substate_id()))
+                .map(|lock| lock.to_versioned_substate_id_ref()),
+        )? {
+            return Ok(prepared);
+        }
+
         let requested_locks = execution
             .resolved_inputs()
             .iter()
@@ -563,6 +627,14 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                 Ok(declared_lock_intent(decl, *version).with_pledged_value(substate.substate_value()))
             })
             .collect::<Result<Vec<_>, SubstateStoreError>>()?;
+
+        if let Some(prepared) = self.pledge_local_inputs(
+            store,
+            &transaction_id,
+            requested_locks.iter().map(|lock| lock.to_versioned_substate_id_ref()),
+        )? {
+            return Ok(prepared);
+        }
 
         let mut evidence = Evidence::from_lock_intents(
             local_committee_info.num_preshards(),
