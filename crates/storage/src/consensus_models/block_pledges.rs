@@ -268,6 +268,11 @@ impl SubstatePledge {
 }
 
 /// Used to detect and prevent duplicate pledges without making SubstateValue implement Hash/PartialEq/Eq
+///
+/// NB: equality and hashing identify a pledge by its substate id, version and lock type only. The pledged value is
+/// deliberately ignored, so two `Input` pledges with the same id and version but different values compare equal. Do not
+/// use these traits to check that a pledge value was not substituted: that is what the evidence value hash checked in
+/// `get_committed_pledge` is for.
 impl Hash for SubstatePledge {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.substate_id().hash(state);
