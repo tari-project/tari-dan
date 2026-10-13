@@ -2,7 +2,10 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_ootle_transaction::args;
-use tari_template_lib::types::{ComponentAddress, Metadata, ResourceAddress, bytes::Bytes};
+use tari_template_lib::types::{
+    ComponentAddress, Metadata, ResourceAddress, bytes::Bytes, crypto::RistrettoPublicKeyBytes,
+};
+use tari_utilities::byte_array::ByteArray;
 use tari_template_test_tooling::{
     TemplateTest,
     support::{confidential::generate_confidential_output_statement, value_proof::value_proofs_for_commitment},
@@ -180,5 +183,54 @@ fn update_metadata_can_set_symbol_when_not_previously_set() {
     assert!(
         reason.to_string().to_lowercase().contains("token symbol"),
         "expected symbol-immutability reason, got: {reason}"
+    );
+}
+
+#[test]
+fn create_rejects_invalid_view_key() {
+    let mut test = TemplateTest::new(CRATE_PATH, vec!["tests/templates/resource"]);
+    let key = test.secret_key().clone();
+
+    // 1. Non-canonical point (garbage bytes)
+    let garbage = RistrettoPublicKeyBytes::from_bytes(&[0xFFu8; 32]).unwrap();
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_function(
+                test.get_template_address("ResourceTest"),
+                "create_confidential_with_view_key",
+                args![garbage],
+            )
+            .build_and_seal(&key),
+        vec![],
+    );
+    assert!(
+        reason.to_string().contains("View key is not a canonical Ristretto point"),
+        "expected non-canonical point rejection, got: {reason}"
+    );
+
+    // 2. Identity point
+    let identity = RistrettoPublicKeyBytes::zero();
+    let reason = test.execute_expect_failure(
+        test.transaction()
+            .call_function(
+                test.get_template_address("ResourceTest"),
+                "create_confidential_with_view_key",
+                args![identity],
+            )
+            .build_and_seal(&key),
+        vec![],
+    );
+    assert!(
+        reason.to_string().contains("View key cannot be the identity point"),
+        "expected identity point rejection, got: {reason}"
+    );
+
+    // 3. Valid non-identity canonical point succeeds
+    let valid_key = RistrettoPublicKeyBytes::from_bytes(test.public_key().as_bytes()).unwrap();
+    let _component: ComponentAddress = test.call_function(
+        "ResourceTest",
+        "create_confidential_with_view_key",
+        args![valid_key],
+        vec![],
     );
 }
