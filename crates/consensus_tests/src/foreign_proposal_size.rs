@@ -23,6 +23,7 @@ use crate::support::{Test, TestAddress, TestVnDestination, build_transaction_fro
 const TEST_FRAME_BYTES: usize = 256 * 1024;
 const TEST_MAX_BLOCK_PLEDGE_BYTES: usize = 128 * 1024;
 const TEST_MAX_BLOCK_FOREIGN_PROPOSAL_BYTES: usize = 160 * 1024;
+const TEST_MAX_BLOCK_VALIDATION_FOREIGN_PROPOSAL_BYTES: usize = 192 * 1024;
 const LARGE_COMPONENT_STATE_BYTES: usize = 100 * 1024;
 
 fn message_size(msg: &HotstuffMessage) -> usize {
@@ -57,6 +58,7 @@ async fn start_test() -> (Test, Arc<AtomicUsize>) {
         .modify_consensus_constants(|constants| {
             constants.max_block_pledge_bytes = TEST_MAX_BLOCK_PLEDGE_BYTES;
             constants.max_block_foreign_proposal_bytes = TEST_MAX_BLOCK_FOREIGN_PROPOSAL_BYTES;
+            constants.max_block_validation_foreign_proposal_bytes = TEST_MAX_BLOCK_VALIDATION_FOREIGN_PROPOSAL_BYTES;
         })
         .start()
         .await;

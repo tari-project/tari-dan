@@ -45,8 +45,13 @@ const MAX_TRANSACTION_SIZE_BYTES: usize = 1_310_720; // 1 MiB + 256 KiB
 /// A max-size substate with half a MiB to spare, so a transaction reading one is never aborted.
 const MAX_BLOCK_PLEDGE_BYTES: usize = 1536 * 1024;
 
-/// Leaves 1.5 MiB of the 4 MiB transport frame for the local block the foreign proposals travel with.
+/// Leaves 1.5 MiB of the 4 MiB transport frame for the local block the foreign proposals travel with. Nothing bounds
+/// a block's encoded size directly: the 1.5 MiB is an estimate of what `max_block_weight` and
+/// `max_commands_in_block` admit.
 const MAX_BLOCK_FOREIGN_PROPOSAL_BYTES: usize = 2560 * 1024;
+
+/// Half a MiB above the proposal budget, which absorbs the differences between copies of the same foreign proposal.
+const MAX_BLOCK_VALIDATION_FOREIGN_PROPOSAL_BYTES: usize = 3 * 1024 * 1024;
 
 #[derive(Clone, Debug)]
 pub struct ConsensusConstants {
@@ -164,13 +169,21 @@ pub struct ConsensusConstants {
     /// never aborted. CONSENSUS RULE: must be uniform network-wide, otherwise nodes diverge on block
     /// validity and on which transactions abort.
     pub max_block_pledge_bytes: usize,
-    /// The most encoded bytes of foreign proposals a block may carry when it carries more than one. A
-    /// local proposal travels with every foreign proposal it includes, in one message that must fit the
-    /// transport's frame limit (4 MiB), so this must leave room for the block itself. A single foreign
-    /// proposal is always admitted: its pledge is bounded by `max_block_pledge_bytes`, and holding it
-    /// back would leave it unproposable. CONSENSUS RULE: must be uniform network-wide, otherwise nodes
-    /// diverge on block validity.
+    /// The most encoded bytes of foreign proposals a leader packs into a block that carries more than
+    /// one. A local proposal travels with every foreign proposal it includes, in one message that must
+    /// fit the transport's frame limit (4 MiB), so this must leave room for the block itself. That room
+    /// is an estimate rather than an enforced bound, because a block's encoded size is limited only
+    /// through its weight and command count. A single foreign proposal is always admitted: its pledge is
+    /// bounded by `max_block_pledge_bytes`, and holding it back would leave it unproposable. The
+    /// proposing half of `max_block_validation_foreign_proposal_bytes`.
     pub max_block_foreign_proposal_bytes: usize,
+    /// The most encoded bytes of foreign proposals a block that carries more than one may carry to be
+    /// voted for. Each node measures its own stored copy of each foreign proposal, and copies of one
+    /// proposal can differ in their commit proofs (the certificates each sender observed), so this sits
+    /// above `max_block_foreign_proposal_bytes` by enough that a validator's copies never take an
+    /// honest block over it. CONSENSUS RULE: must be uniform network-wide, otherwise nodes diverge on
+    /// block validity.
+    pub max_block_validation_foreign_proposal_bytes: usize,
     /// The share of collected fees that is burned rather than paid to leaders, in basis points, for a
     /// context that has no epoch to resolve against: a dry run, a fee estimate, a test harness. The
     /// user's price is the fee table alone; this only splits what was collected.
@@ -244,6 +257,7 @@ impl ConsensusConstants {
         max_block_validation_shard_output_bytes: MAX_BLOCK_VALIDATION_SHARD_OUTPUT_BYTES,
         max_block_pledge_bytes: MAX_BLOCK_PLEDGE_BYTES,
         max_block_foreign_proposal_bytes: MAX_BLOCK_FOREIGN_PROPOSAL_BYTES,
+        max_block_validation_foreign_proposal_bytes: MAX_BLOCK_VALIDATION_FOREIGN_PROPOSAL_BYTES,
         exhaust_burn_rate: ExhaustBurnRate::new(500), // 5%
         max_transaction_validity_epochs: 2160,
     };
@@ -301,6 +315,7 @@ impl ConsensusConstants {
         max_block_validation_shard_output_bytes: MAX_BLOCK_VALIDATION_SHARD_OUTPUT_BYTES,
         max_block_pledge_bytes: MAX_BLOCK_PLEDGE_BYTES,
         max_block_foreign_proposal_bytes: MAX_BLOCK_FOREIGN_PROPOSAL_BYTES,
+        max_block_validation_foreign_proposal_bytes: MAX_BLOCK_VALIDATION_FOREIGN_PROPOSAL_BYTES,
         exhaust_burn_rate: ExhaustBurnRate::new(500), // 5%
         max_transaction_validity_epochs: 2160,
     };
@@ -350,6 +365,7 @@ impl ConsensusConstants {
         max_block_validation_shard_output_bytes: MAX_BLOCK_VALIDATION_SHARD_OUTPUT_BYTES,
         max_block_pledge_bytes: MAX_BLOCK_PLEDGE_BYTES,
         max_block_foreign_proposal_bytes: MAX_BLOCK_FOREIGN_PROPOSAL_BYTES,
+        max_block_validation_foreign_proposal_bytes: MAX_BLOCK_VALIDATION_FOREIGN_PROPOSAL_BYTES,
         exhaust_burn_rate: ExhaustBurnRate::new(500), // 5%
         max_transaction_validity_epochs: 2160,
     };
@@ -413,6 +429,7 @@ impl ConsensusConstants {
             max_block_validation_shard_output_bytes: MAX_BLOCK_VALIDATION_SHARD_OUTPUT_BYTES,
             max_block_pledge_bytes: MAX_BLOCK_PLEDGE_BYTES,
             max_block_foreign_proposal_bytes: MAX_BLOCK_FOREIGN_PROPOSAL_BYTES,
+            max_block_validation_foreign_proposal_bytes: MAX_BLOCK_VALIDATION_FOREIGN_PROPOSAL_BYTES,
             exhaust_burn_rate: ExhaustBurnRate::new(500), // 5%
             max_transaction_validity_epochs: 2160,
         }
@@ -530,6 +547,12 @@ mod tests {
             );
             // A leader checks a transaction's diff against the budget before putting it, so it never overshoots.
             assert!(constants.max_block_validation_shard_output_bytes >= constants.max_block_shard_output_bytes);
+            // A validator measures its own copies of the foreign proposals, whose commit proofs may be larger than
+            // the leader's.
+            assert!(
+                constants.max_block_validation_foreign_proposal_bytes >=
+                    constants.max_block_foreign_proposal_bytes + 256 * 1024
+            );
         }
     }
 
@@ -552,11 +575,12 @@ mod tests {
 
     /// A transaction whose pledge alone is over the block's pledge budget is aborted, so the budget must admit a
     /// max-size substate with room for its id. A local block carries several foreign proposals in one message, so
-    /// their budget must leave room for the block within the 4 MiB transport frame.
+    /// their budget must leave room for the block within the 4 MiB transport frame. A block's encoded size is not
+    /// bounded directly, so the room is an estimate of what the block weight and command caps admit.
     #[test]
     fn pledges_and_foreign_proposals_fit_the_frame() {
         const FRAME_BYTES: usize = 4 * 1024 * 1024;
-        const MIN_BLOCK_ROOM_BYTES: usize = 1024 * 1024;
+        const ESTIMATED_BLOCK_ROOM_BYTES: usize = 1024 * 1024;
         for constants in [
             ConsensusConstants::mainnet(),
             ConsensusConstants::devnet(7),
@@ -568,7 +592,7 @@ mod tests {
                     tari_engine_types::limits::ENGINE_LIMITS.max_substate_size + 64 * 1024
             );
             assert!(constants.max_block_foreign_proposal_bytes >= constants.max_block_pledge_bytes);
-            assert!(constants.max_block_foreign_proposal_bytes + MIN_BLOCK_ROOM_BYTES <= FRAME_BYTES);
+            assert!(constants.max_block_foreign_proposal_bytes + ESTIMATED_BLOCK_ROOM_BYTES <= FRAME_BYTES);
         }
     }
 

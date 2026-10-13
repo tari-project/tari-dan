@@ -69,8 +69,9 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
 
     /// Adds the transaction's local inputs to what the block pledges to foreign shard groups, before they are
     /// locked. Returns what the transaction is prepared as instead if they cannot be pledged: an abort if they are
-    /// more than any block may pledge, which every shard group reaches alike, or a deferral if they only do not fit
-    /// in this block.
+    /// more than any block may pledge, or a deferral if they only do not fit in this block. Only the shard group
+    /// holding the inputs measures them, so it aborts unilaterally and the other shard groups adopt the abort from
+    /// its foreign proposal.
     fn pledge_local_inputs<'i, TTx: StateStoreReadTransaction, I>(
         &self,
         store: &mut PendingSubstateStore<TTx>,

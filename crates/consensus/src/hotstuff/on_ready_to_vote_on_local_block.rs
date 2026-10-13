@@ -831,7 +831,14 @@ where TConsensusSpec: ConsensusSpec
                     },
                 }
             },
-            PreparedTransaction::MultiShard(_) | PreparedTransaction::PledgeBudgetReached { .. } => {
+            PreparedTransaction::PledgeBudgetReached { .. } => {
+                return Err(HotStuffError::InvariantError(format!(
+                    "Transaction {} in block {} was deferred for the pledge budget, which only a proposing store has",
+                    atom.id(),
+                    block,
+                )));
+            },
+            PreparedTransaction::MultiShard(_) => {
                 warn!(
                     target: LOG_TARGET,
                     "❌ transaction {} in block {} is not Local-Only but was proposed as LocalOnly",
@@ -1678,10 +1685,13 @@ where TConsensusSpec: ConsensusSpec
         };
 
         // CONSENSUS RULE: the block travels with its foreign proposals in one message, so together they may not exceed
-        // `max_block_foreign_proposal_bytes`. Summed as each is evaluated against the block's full count, so the
-        // verdict does not depend on the order they are evaluated in.
+        // `max_block_validation_foreign_proposal_bytes`. Summed as each is evaluated against the block's full count,
+        // so the verdict does not depend on the order they are evaluated in.
         *foreign_proposal_bytes = foreign_proposal_bytes.saturating_add(tari_bor::encoded_len(fp.proposal()));
-        let max_foreign_proposal_bytes = self.config.consensus_constants.max_block_foreign_proposal_bytes;
+        let max_foreign_proposal_bytes = self
+            .config
+            .consensus_constants
+            .max_block_validation_foreign_proposal_bytes;
         if exceeds_block_foreign_proposal_bytes(
             *foreign_proposal_bytes,
             num_foreign_proposals,

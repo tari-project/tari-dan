@@ -735,6 +735,8 @@ impl TestBuilder {
                         tari_ootle_common_types::MAX_BLOCK_VALIDATION_SHARD_OUTPUT_BYTES,
                     max_block_pledge_bytes: ConsensusConstants::DEVNET.max_block_pledge_bytes,
                     max_block_foreign_proposal_bytes: ConsensusConstants::DEVNET.max_block_foreign_proposal_bytes,
+                    max_block_validation_foreign_proposal_bytes: ConsensusConstants::DEVNET
+                        .max_block_validation_foreign_proposal_bytes,
                     exhaust_burn_rate: ExhaustBurnRate::new(500),
                 },
                 state_tree_cleanup_interval: Duration::from_secs(1000),

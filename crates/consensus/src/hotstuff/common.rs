@@ -451,9 +451,11 @@ pub(crate) fn filter_diff_for_committee(committee_info: &CommitteeInfo, diff: &S
     filtered_diff
 }
 
-/// Consensus rule: a block's foreign proposals may total no more than `max_bytes` when it carries more than one. A
-/// single foreign proposal is always admitted so that none is left unproposable. A pure function of its inputs, so
-/// that the proposer and every validator reach the same verdict.
+/// Whether a block's foreign proposals total more than `max_bytes` while it carries more than one. A single foreign
+/// proposal is always admitted so that none is left unproposable. Each node sums the sizes of its own stored copies,
+/// and copies of one proposal can differ in their commit proofs, so a leader packs against
+/// `max_block_foreign_proposal_bytes` and a validator checks against the larger
+/// `max_block_validation_foreign_proposal_bytes`.
 pub(crate) fn exceeds_block_foreign_proposal_bytes(total_bytes: usize, num_proposals: usize, max_bytes: usize) -> bool {
     num_proposals > 1 && total_bytes > max_bytes
 }
