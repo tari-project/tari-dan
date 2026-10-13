@@ -423,6 +423,34 @@ mod tests {
             .unwrap()
     }
 
+    /// An unspent output's `(resource, public nonce, tag)` is unique among unspent rows. A clash
+    /// means some sync peer was faulty, and must not fail the commit, which would stall the shard's
+    /// sync on every peer.
+    #[tokio::test]
+    async fn an_unspent_utxo_clashing_with_a_stored_one_is_skipped() {
+        use tari_template_lib_types::{UtxoAddress, UtxoId};
+
+        use crate::storage_sqlite::models::UtxoUpdateRecord;
+
+        let (_dir, store) = store_with_utxos(&[(1, 1)]).await;
+        let UtxoUpdateRecord::Unspent(mut clashing) = unspent_at(1, 2) else {
+            unreachable!()
+        };
+        let clashing_address = UtxoAddress::new(utxo_resource(), UtxoId::from_array([99; 32]));
+        clashing.address = clashing_address.clone();
+
+        let skipped = store
+            .with_write_tx(move |tx| {
+                tx.batch_insert_utxo_updates(Epoch(1), [UtxoUpdateRecord::Unspent(clashing), unspent_at(2, 2)])
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(skipped, [clashing_address]);
+        let set = read_updates(&store, 0, 10).await;
+        assert_eq!(set.updates.len(), 2);
+    }
+
     #[tokio::test]
     async fn a_read_stops_on_a_version_boundary_not_mid_version() {
         // Limit 4 falls inside the 3-row group at version 20.
@@ -1283,9 +1311,9 @@ mod tests {
         );
     }
 
-    /// A receipt address is written once on the network, so a second receipt under one comes from a
-    /// faulty sync peer. It must neither fail the commit, which would stall the shard's sync on every
-    /// peer, nor displace the stored receipt or its events.
+    /// A receipt address is written once on the network, so a conflict at one means some sync peer
+    /// was faulty. It must neither fail the commit, which would stall the shard's sync on every peer,
+    /// nor displace the stored receipt or its events.
     #[tokio::test]
     async fn a_receipt_at_a_stored_address_is_skipped() {
         let (_dir, store) = temp_store().await;

@@ -49,6 +49,7 @@ use tari_template_lib_types::{
     ResourceAddress,
     TemplateAddress,
     TransactionReceiptAddress,
+    UtxoAddress,
     UtxoId,
     crypto::{RistrettoPublicKeyBytes, UtxoTag},
 };
@@ -290,11 +291,13 @@ pub trait IndexerStoreWriteTransaction {
     fn commit(self) -> Result<(), StorageError>;
     fn rollback(self) -> Result<(), StorageError>;
     fn key_value_set<K: AsRef<str>, V: Serialize>(&mut self, key: K, value: V) -> Result<(), StorageError>;
+    /// Applies each UTXO update, returning the addresses of unspent outputs skipped because an
+    /// unspent row already holds their `(resource, public nonce, tag)`. The stored row is kept.
     fn batch_insert_utxo_updates<I: IntoIterator<Item = UtxoUpdateRecord>>(
         &mut self,
         epoch: Epoch,
         updates: I,
-    ) -> Result<(), StorageError>;
+    ) -> Result<Vec<UtxoAddress>, StorageError>;
     fn upsert_substate(&mut self, substate: &SubstateData) -> Result<(), StorageError>;
     /// Inserts each receipt with its events, skipping any whose address already holds a receipt.
     /// A receipt address is written once on the network, so the stored receipt is kept: replacing
@@ -476,6 +479,8 @@ pub struct InsertedReceipt {
     pub transaction_id: TransactionId,
     pub outcome: FinalizeOutcome,
     pub fee_receipt: FeeReceipt,
+    /// Events the receipt carries, before the event filters.
+    pub num_events: usize,
 }
 
 /// An event that was inserted into the database, with its assigned auto-increment ID.

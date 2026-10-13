@@ -40,7 +40,7 @@ use tari_ootle_storage::{
 };
 use tari_rpc_framework::RpcRequestOptions;
 use tari_shutdown::ShutdownSignal;
-use tari_template_lib_types::{Amount, TemplateAddress, TransactionReceiptAddress};
+use tari_template_lib_types::{Amount, TemplateAddress, TransactionReceiptAddress, UtxoAddress};
 use tokio::{
     sync::{broadcast, watch},
     time,
@@ -977,8 +977,6 @@ impl NetworkWideStateSync {
             // The stream flushes (has_more == false) once per state version, so each commit must fold
             // only that version's delta.
             let version = std::mem::take(&mut version_buf);
-            let event_count: usize = version.transactions.iter().map(|(_, t)| t.events.len()).sum();
-            self.stats.increase_events(event_count);
 
             let mut progress = progress.lock().await;
             progress.record_state_version(shard, state_version, msg_epoch);
@@ -1003,6 +1001,7 @@ impl NetworkWideStateSync {
                 })
                 .await?;
             drop(progress);
+            self.stats.increase_events(committed.num_receipt_events);
             if committed.retired_cache_entries > 0 {
                 debug!(target: LOG_TARGET, "Retired {} cached substates for shard {shard} at state version {state_version}", committed.retired_cache_entries);
                 #[cfg(feature = "metrics")]
@@ -1011,6 +1010,9 @@ impl NetworkWideStateSync {
             }
             for address in &committed.skipped_receipts {
                 warn!(target: LOG_TARGET, "⚠️ Peer {} streamed receipt {address} at v{state_version} of shard {shard}, which is already indexed. Kept the indexed receipt", session.peer_address());
+            }
+            for address in &committed.skipped_utxos {
+                warn!(target: LOG_TARGET, "⚠️ Peer {} streamed unspent output {address} at v{state_version} of shard {shard}, whose nonce and tag an indexed unspent output already holds. Kept the indexed output", session.peer_address());
             }
             for address in &committed.skipped_templates {
                 warn!(target: LOG_TARGET, "⚠️ Peer {} streamed template {address} at v{state_version} of shard {shard}, which is already catalogued. Kept the catalogued entry", session.peer_address());
@@ -1338,11 +1340,15 @@ struct VersionBuf {
 /// has committed.
 struct CommittedVersion {
     retired_cache_entries: usize,
+    /// Events carried by the inserted receipts, before the event filters.
+    num_receipt_events: usize,
     /// One per receipt the commit inserted.
     finalized: Vec<TransactionFinalizedEvent>,
     inserted_events: Vec<InsertedEvent>,
     /// Receipts left out because their address already held one.
     skipped_receipts: Vec<TransactionReceiptAddress>,
+    /// Unspent outputs left out because an unspent output with their nonce and tag is indexed.
+    skipped_utxos: Vec<UtxoAddress>,
     /// Templates left out because the catalogue already held them.
     skipped_templates: Vec<TemplateAddress>,
 }
@@ -1369,7 +1375,7 @@ impl VersionBuf {
         // without the other would break.
         let retired_cache_entries = tx.substate_cache_invalidate(self.invalidations, state_version)?;
         debug!(target: LOG_TARGET, "✅ Committing {} UTXOs for shard {shard} (epoch: {epoch})", self.utxos.len());
-        tx.batch_insert_utxo_updates(epoch, self.utxos)?;
+        let skipped_utxos = tx.batch_insert_utxo_updates(epoch, self.utxos)?;
         for substate_data in self.validator_fee_pools {
             tx.upsert_substate(&substate_data)?;
         }
@@ -1405,6 +1411,7 @@ impl VersionBuf {
 
         Ok(CommittedVersion {
             retired_cache_entries,
+            num_receipt_events: inserted.receipts.iter().map(|receipt| receipt.num_events).sum(),
             finalized: inserted
                 .receipts
                 .into_iter()
@@ -1415,6 +1422,7 @@ impl VersionBuf {
                 .collect(),
             inserted_events: inserted.events,
             skipped_receipts: inserted.skipped,
+            skipped_utxos,
             skipped_templates,
         })
     }
@@ -1642,9 +1650,10 @@ mod tests {
                 .unwrap()
         }
 
-        /// A receipt address is written once on the network, so a second receipt under one is a sync
-        /// peer's fault. It is kept out of the totals and the finalize events, and does not fail the
-        /// commit: every peer would resend it from the same cursor, stalling the shard for good.
+        /// A receipt address is written once on the network, so a conflict at one means some sync peer
+        /// was faulty. The incoming receipt is kept out of the totals and the finalize events, and does
+        /// not fail the commit: every peer would resend it from the same cursor, stalling the shard for
+        /// good.
         #[tokio::test]
         async fn a_receipt_already_indexed_is_neither_counted_nor_announced_again() {
             let dir = tempfile::tempdir().unwrap();

@@ -25,7 +25,7 @@ use tari_ootle_storage::{
 };
 use tari_ootle_storage_sqlite::SqliteTransaction;
 use tari_ootle_transaction::{Transaction, TransactionId};
-use tari_template_lib_types::{TemplateAddress, TransactionReceiptAddress};
+use tari_template_lib_types::{TemplateAddress, TransactionReceiptAddress, UtxoAddress};
 use tari_validator_node_rpc::client::{SubstateProofData, SubstateResult};
 
 use crate::{
@@ -116,10 +116,11 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
         &mut self,
         epoch: Epoch,
         updates: I,
-    ) -> Result<(), StorageError> {
+    ) -> Result<Vec<UtxoAddress>, StorageError> {
         const OPERATION: &str = "batch_insert_utxo_updates";
         use crate::storage_sqlite::schema::utxos;
 
+        let mut skipped = Vec::new();
         for update in updates {
             match update {
                 UtxoUpdateRecord::Unspent(unspent) => {
@@ -141,10 +142,14 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
                         is_frozen: unspent.is_frozen,
                     };
                     // batch insert results in "cannot start a transaction within a transaction" error
-                    diesel::insert_into(utxos::table)
+                    let num_inserted = diesel::insert_into(utxos::table)
                         .values(insert)
+                        .on_conflict_do_nothing()
                         .execute(self.connection())
                         .map_err(|e| StorageError::general(OPERATION, format!("insert error: {e}")))?;
+                    if num_inserted == 0 {
+                        skipped.push(unspent.address);
+                    }
                 },
                 UtxoUpdateRecord::Spent(spent) => {
                     let resource_address = spent.address.resource_address().to_string();
@@ -169,7 +174,7 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
             }
         }
 
-        Ok(())
+        Ok(skipped)
     }
 
     fn upsert_substate(&mut self, substate: &SubstateData) -> Result<(), StorageError> {
@@ -311,6 +316,7 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
                 transaction_id,
                 outcome: receipt.outcome,
                 fee_receipt: receipt.fee_receipt,
+                num_events: receipt.events.len(),
             });
         }
 
