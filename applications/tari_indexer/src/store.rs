@@ -18,7 +18,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateId},
     transaction_receipt::TransactionReceipt,
 };
-use tari_indexer_client::types::{ListSubstateItem, TransactionEntry, TransactionSource, UtxoStateUpdateSet};
+use tari_indexer_client::types::{TransactionEntry, TransactionSource, UtxoStateUpdateSet};
 use tari_indexer_lib::substate_cache::{FetchWatermark, SubstateCacheEntry, SubstateCacheEntryRef};
 use tari_ootle_common_types::{
     Epoch,
@@ -28,7 +28,6 @@ use tari_ootle_common_types::{
     SubstateVersion,
     optional::Optional,
     shard::Shard,
-    substate_type::SubstateType,
 };
 use tari_ootle_storage::{
     Ordering,
@@ -89,14 +88,6 @@ pub trait IndexerStoreReader: Send + Sync + 'static {
 }
 
 pub trait IndexerStoreReadTransaction {
-    fn list_substates(
-        &mut self,
-        by_id: Option<&SubstateId>,
-        filter_by_type: Option<SubstateType>,
-        filter_by_template: Option<TemplateAddress>,
-        limit: Option<u64>,
-        offset: Option<u64>,
-    ) -> Result<Vec<ListSubstateItem>, StorageError>;
     fn get_substate(
         &mut self,
         address: &SubstateId,
