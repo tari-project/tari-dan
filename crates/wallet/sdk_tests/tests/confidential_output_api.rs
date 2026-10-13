@@ -5,12 +5,17 @@ mod support;
 
 use ootle_byte_type::ToByteType;
 use tari_crypto::commitment::HomomorphicCommitmentFactory;
-use tari_engine_types::{crypto::get_commitment_factory, substate::SubstateDiff};
+use tari_engine_types::{
+    confidential_output::ConfidentialOutput,
+    crypto::{OutputBody, get_commitment_factory},
+    substate::{Substate, SubstateDiff, SubstateId},
+};
+use tari_ootle_common_types::SubstateVersion;
 use tari_ootle_wallet_sdk::{
     models::{ConfidentialOutputModel, KeyBranch, KeyId, OutputStatus},
     storage::{ReadableWalletStore, WalletStoreReader},
 };
-use tari_template_lib::types::EncryptedData;
+use tari_template_lib::types::{ConfidentialOutputAddress, EncryptedData, constants::STEALTH_TARI_RESOURCE_ADDRESS};
 
 use crate::support::Test;
 
@@ -100,7 +105,27 @@ fn outputs_locked_and_finalized() {
     let balance = test.get_unspent_balance();
     assert_eq!(balance, 100);
 
-    let diff = SubstateDiff::new();
+    let output_id = |commitment| {
+        SubstateId::ConfidentialOutput(ConfidentialOutputAddress::new(
+            STEALTH_TARI_RESOURCE_ADDRESS,
+            commitment,
+        ))
+    };
+    let mut diff = SubstateDiff::new();
+    diff.down(output_id(commitment_25), SubstateVersion::ZERO);
+    diff.down(output_id(commitment_49), SubstateVersion::ZERO);
+    diff.up(
+        output_id(commitment_change),
+        Substate::new(SubstateVersion::ZERO, ConfidentialOutput {
+            output: OutputBody {
+                public_nonce: Default::default(),
+                encrypted_data: EncryptedData::try_from(vec![0; EncryptedData::min_size()]).unwrap(),
+                minimum_value_promise: 0,
+                viewable_balance: None,
+            },
+            is_frozen: false,
+        }),
+    );
     locks_api.finalize_lock(lock_id, &diff).unwrap();
 
     {
