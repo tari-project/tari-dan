@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::*;
-use tari_bor::{BorError, ByteCounter, decode_exact_with_max_depth, encode_into_writer, encoded_len};
+use tari_bor::{BorError, ByteCounter, decode_exact, encode_into_writer, encoded_len};
 use tari_engine_types::{indexed_value::IndexedValue, limits};
 use tari_template_abi::{
     CallInfo,
@@ -57,7 +57,7 @@ use wasmer::{AsStoreMut, AsStoreRef, Function, FunctionEnv, FunctionEnvMut, Inst
 
 use crate::{
     abi_metrics,
-    runtime::{ComputeAllowance, ComputeFunding, Runtime, RuntimeError},
+    runtime::{ComputeAllowance, ComputeFunding, EngineArgChargeError, EngineArgs, Runtime, RuntimeError},
     wasm::{
         InstanceResetError,
         LoadedWasmTemplate,
@@ -346,9 +346,9 @@ impl WasmProcess {
             None => return fail_engine_call(env.data_mut(), WasmExecutionError::InvalidEngineOp { op }),
         };
 
-        // Defence in depth: `max_internal_call_size` sits above what a template can build inside
-        // `WASM_LIMITS.max_memory_pages`, since the argument and its encoded copy must both fit, so
-        // a template reaching this limit runs out of linear memory first.
+        // Bounds the host work a single engine call can be charged for. `max_internal_call_size`
+        // sits at about what a template can build inside `WASM_LIMITS.max_memory_pages`, where the
+        // argument and its encoded copy must both fit beside the stack.
         if arg_len as usize > limits::ENGINE_LIMITS.max_internal_call_size {
             return fail_engine_call(env.data_mut(), WasmExecutionError::EngineCallArgSizeExceeded {
                 limit: limits::ENGINE_LIMITS.max_internal_call_size,
@@ -389,33 +389,37 @@ impl WasmProcess {
             }),
             EngineOp::ComponentInvoke => {
                 Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: ComponentInvokeArg| {
-                    state
-                        .interface()
-                        .component_invoke(arg.component_ref, arg.action, arg.args.into())
+                    state.interface().component_invoke(
+                        arg.component_ref,
+                        arg.action,
+                        EngineArgs::metered(arg.args, state),
+                    )
                 })
             },
             EngineOp::ResourceInvoke => {
                 Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: ResourceInvokeArg| {
-                    state
-                        .interface()
-                        .resource_invoke(arg.resource_ref, arg.action, arg.args.into())
+                    state.interface().resource_invoke(
+                        arg.resource_ref,
+                        arg.action,
+                        EngineArgs::metered(arg.args, state),
+                    )
                 })
             },
             EngineOp::VaultInvoke => Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: VaultInvokeArg| {
                 state
                     .interface()
-                    .vault_invoke(arg.vault_ref, arg.action, arg.args.into())
+                    .vault_invoke(arg.vault_ref, arg.action, EngineArgs::metered(arg.args, state))
             }),
             EngineOp::BucketInvoke => Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: BucketInvokeArg| {
                 state
                     .interface()
-                    .bucket_invoke(arg.bucket_ref, arg.action, arg.args.into())
+                    .bucket_invoke(arg.bucket_ref, arg.action, EngineArgs::metered(arg.args, state))
             }),
             EngineOp::NonFungibleInvoke => {
                 Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: NonFungibleInvokeArg| {
                     state
                         .interface()
-                        .non_fungible_invoke(arg.address, arg.action, arg.args.into())
+                        .non_fungible_invoke(arg.address, arg.action, EngineArgs::metered(arg.args, state))
                 })
             },
             EngineOp::GenerateUniqueId => Self::handle(&mut env, op, arg_ptr, arg_len, |state, _arg: ()| {
@@ -428,7 +432,9 @@ impl WasmProcess {
             },
             EngineOp::CallerContextInvoke => {
                 Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: CallerContextInvokeArg| {
-                    state.interface().caller_context_invoke(arg.action, arg.args.into())
+                    state
+                        .interface()
+                        .caller_context_invoke(arg.action, EngineArgs::metered(arg.args, state))
                 })
             },
             EngineOp::AddressAllocationInvoke => Self::handle(
@@ -447,12 +453,14 @@ impl WasmProcess {
                 state.interface().emit_event(arg.topic, arg.payload)
             }),
             EngineOp::CallInvoke => Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: CallInvokeArg| {
-                state.interface().call_invoke(arg.action, arg.args.into())
+                state
+                    .interface()
+                    .call_invoke(arg.action, EngineArgs::metered(arg.args, state))
             }),
             EngineOp::ProofInvoke => Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: ProofInvokeArg| {
                 state
                     .interface()
-                    .proof_invoke(arg.proof_ref, arg.action, arg.args.into())
+                    .proof_invoke(arg.proof_ref, arg.action, EngineArgs::metered(arg.args, state))
             }),
             EngineOp::BuiltinTemplateInvoke => Self::handle(
                 &mut env,
@@ -463,7 +471,9 @@ impl WasmProcess {
             ),
             EngineOp::IntrinsicInvoke => {
                 Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: IntrinsicInvokeArg| {
-                    state.interface().intrinsic_invoke(arg.intrinsic, arg.args.into())
+                    state
+                        .interface()
+                        .intrinsic_invoke(arg.intrinsic, EngineArgs::metered(arg.args, state))
                 })
             },
             EngineOp::SpendContextInvoke => {
@@ -501,13 +511,17 @@ impl WasmProcess {
         let span = abi_metrics::Span::start();
         let decoded = {
             let (env_mut, mut store) = env.data_and_store_mut();
+            // An engine op's payload is whatever the guest wrote into its memory, decoded here on the
+            // validator's own stack and outside the Wasmer meter, so it is charged for first.
+            let interface = env_mut.state()?.interface();
             // SAFETY: WasmProcess is not used concurrently and templates are not able to spawn threads
             unsafe {
                 env_mut.with_memory_slice(&mut store, arg_ptr, arg_len, |arg| {
-                    // An engine op's payload is whatever the guest wrote into its memory, decoded
-                    // here on the validator's own stack.
-                    decode_exact_with_max_depth(arg, limits::MAX_CBOR_NESTING_DEPTH)
-                        .map_err(WasmExecutionError::EngineArgDecodeFailed)
+                    interface.charge_engine_arg(arg).map_err(|e| match e {
+                        EngineArgChargeError::Unreadable(e) => WasmExecutionError::EngineArgDecodeFailed(e),
+                        EngineArgChargeError::Runtime(e) => e.into(),
+                    })?;
+                    decode_exact(arg).map_err(WasmExecutionError::EngineArgDecodeFailed)
                 })
             }??
         };

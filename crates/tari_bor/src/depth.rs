@@ -16,10 +16,10 @@ use minicbor::{Decoder, data::Type, decode};
 pub fn check_nesting_depth(input: &[u8], max_depth: usize) -> Result<(), decode::Error> {
     // Malformed input passes: the decode that follows produces a parse error far more specific than
     // anything this walk could say.
-    if !matches!(walk(&mut Decoder::new(input), max_depth), Ok(None)) {
+    if !matches!(walk(&mut Decoder::new(input), max_depth, u64::MAX), Ok(Walk::TooDeep)) {
         return Ok(());
     }
-    Err(decode::Error::message("maximum CBOR nesting depth exceeded"))
+    Err(too_deep())
 }
 
 /// Counts the data items making up the first item in `input`: that item and every item nested in
@@ -29,13 +29,44 @@ pub fn check_nesting_depth(input: &[u8], max_depth: usize) -> Result<(), decode:
 /// its bytes, so this count, rather than the input's length, is what prices that decode. Like
 /// [`check_nesting_depth`] it is iterative and reads only item heads.
 pub fn count_data_items(input: &[u8]) -> Result<u64, decode::Error> {
-    // A walk bounded at `usize::MAX` is never cut short for depth.
-    Ok(walk(&mut Decoder::new(input), usize::MAX)?.unwrap_or(u64::MAX))
+    // A walk bounded at `usize::MAX` is never cut short for depth, nor at `u64::MAX` for items.
+    match walk(&mut Decoder::new(input), usize::MAX, u64::MAX)? {
+        Walk::Items(items) => Ok(items),
+        Walk::TooDeep | Walk::TooMany => Ok(u64::MAX),
+    }
 }
 
-/// Walks the heads of the first item in `d`, returning how many items it holds, or `None` once an
-/// item nests deeper than `max_depth`.
-fn walk(d: &mut Decoder<'_>, max_depth: usize) -> Result<Option<u64>, decode::Error> {
+/// Counts the data items making up the first item in `input`, as [`count_data_items`] does, reading
+/// no more than `max_items` of them, and rejects it as [`check_nesting_depth`] does: one walk that
+/// both prices a decode and guards it, and whose own cost a caller can bound before it runs.
+///
+/// Returns `None` once the input holds more than `max_items` items. Input nested deeper than
+/// `max_depth`, and input the walk cannot read, fail, since there is no count to give for either.
+pub fn count_data_items_bounded(input: &[u8], max_depth: usize, max_items: u64) -> Result<Option<u64>, decode::Error> {
+    match walk(&mut Decoder::new(input), max_depth, max_items)? {
+        Walk::Items(items) => Ok(Some(items)),
+        Walk::TooMany => Ok(None),
+        Walk::TooDeep => Err(too_deep()),
+    }
+}
+
+fn too_deep() -> decode::Error {
+    decode::Error::message("maximum CBOR nesting depth exceeded")
+}
+
+/// How a [`walk`] ended.
+enum Walk {
+    /// The first item was read in full, holding this many items.
+    Items(u64),
+    /// An item nested deeper than the depth bound.
+    TooDeep,
+    /// The input holds more items than the item bound.
+    TooMany,
+}
+
+/// Walks the heads of the first item in `d`, stopping once an item nests deeper than `max_depth` or
+/// once more than `max_items` items have been read.
+fn walk(d: &mut Decoder<'_>, max_depth: usize, max_items: u64) -> Result<Walk, decode::Error> {
     // Items still to read per open container, innermost last: `Some(n)` for a definite-length
     // container, `None` for an indefinite-length one that ends at a break byte. The outermost frame
     // is the single top-level item, so an item's nesting depth is `stack.len() - 1`.
@@ -45,7 +76,7 @@ fn walk(d: &mut Decoder<'_>, max_depth: usize) -> Result<Option<u64>, decode::Er
 
     loop {
         let Some(frame) = stack.last().copied() else {
-            return Ok(Some(items));
+            return Ok(Walk::Items(items));
         };
         match frame {
             Some(0) => {
@@ -66,13 +97,16 @@ fn walk(d: &mut Decoder<'_>, max_depth: usize) -> Result<Option<u64>, decode::Er
         // rather than where a container is opened, so an empty container at the bound is accepted
         // exactly as a scalar there is.
         if stack.len() - 1 > max_depth {
-            return Ok(None);
+            return Ok(Walk::TooDeep);
         }
 
         if let Some(Some(n)) = stack.last_mut() {
             *n -= 1;
         }
         items = items.saturating_add(1);
+        if items > max_items {
+            return Ok(Walk::TooMany);
+        }
 
         let remaining = match d.datatype()? {
             Type::Array | Type::ArrayIndef => d.array()?,
@@ -87,6 +121,9 @@ fn walk(d: &mut Decoder<'_>, max_depth: usize) -> Result<Option<u64>, decode::Er
                 for chunk in d.bytes_iter()? {
                     chunk?;
                     items = items.saturating_add(1);
+                    if items > max_items {
+                        return Ok(Walk::TooMany);
+                    }
                 }
                 continue;
             },
@@ -94,6 +131,9 @@ fn walk(d: &mut Decoder<'_>, max_depth: usize) -> Result<Option<u64>, decode::Er
                 for chunk in d.str_iter()? {
                     chunk?;
                     items = items.saturating_add(1);
+                    if items > max_items {
+                        return Ok(Walk::TooMany);
+                    }
                 }
                 continue;
             },
@@ -215,6 +255,44 @@ mod tests {
         let mut deep = vec![0x81u8; 10_000];
         deep.push(0x00);
         assert_eq!(count_data_items(&deep).unwrap(), 10_001);
+    }
+
+    #[test]
+    fn a_bounded_count_rejects_input_nested_beyond_the_depth_bound() {
+        let mut at_bound = vec![0x81u8; MAX];
+        at_bound.push(0x00);
+        assert_eq!(
+            count_data_items_bounded(&at_bound, MAX, u64::MAX).unwrap(),
+            Some(MAX as u64 + 1)
+        );
+
+        let mut over_bound = vec![0x81u8; MAX + 1];
+        over_bound.push(0x00);
+        assert!(count_data_items_bounded(&over_bound, MAX, u64::MAX).is_err());
+
+        for input in [&[][..], &[0x81][..], &[0x1c][..]] {
+            assert!(
+                count_data_items_bounded(input, MAX, u64::MAX).is_err(),
+                "counted {input:x?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_bounded_count_stops_once_the_input_holds_more_items_than_the_item_bound() {
+        for (input, items) in [
+            (&[0x83, 0x01, 0x02, 0x03][..], 4),             // [1, 2, 3]
+            (&[0x5f, 0x41, 0x01, 0x41, 0x02, 0xff][..], 3), // (_ h'01', h'02')
+            (&[0x7f, 0x61, 0x61, 0x60, 0xff][..], 3),       // (_ "a", "")
+        ] {
+            assert_eq!(count_data_items_bounded(input, MAX, items).unwrap(), Some(items));
+            assert_eq!(count_data_items_bounded(input, MAX, items - 1).unwrap(), None);
+        }
+
+        // The walk stops at the bound rather than reading to the end: the rest is never parsed.
+        let mut truncated = vec![0x9a, 0x00, 0x01, 0x00, 0x00];
+        truncated.extend([0x00; 10]);
+        assert_eq!(count_data_items_bounded(&truncated, MAX, 10).unwrap(), None);
     }
 
     #[test]
