@@ -19,15 +19,39 @@ use tari_ootle_transaction::{
     MAX_TRANSACTION_ACCESS_RULE_NODES,
     MAX_TRANSACTION_INSTRUCTION_ARGS,
     MAX_TRANSACTION_INSTRUCTIONS,
+    MAX_TRANSACTION_STEALTH_INPUTS,
+    MAX_TRANSACTION_STEALTH_OUTPUTS,
+    ResourceAddressRef,
     Transaction,
-    args::InstructionArg,
+    args::{InstructionArg, WorkspaceOffsetId},
 };
 use tari_swarm::messaging::MAX_MESSAGE_SIZE;
 use tari_template_lib::types::{
+    Amount,
+    EncryptedData,
     FunctionName,
     Hash32,
-    access_rules::{AccessRule, ComponentAccessRules, RestrictedAccessRule},
-    crypto::RistrettoPublicKeyBytes,
+    access_rules::{AccessRule, ComponentAccessRules, MAX_ACCESS_RULE_NODES, RestrictedAccessRule},
+    bytes::Bytes,
+    crypto::{BalanceProofSignature, PedersenCommitmentBytes, RangeProofBytes, RistrettoPublicKeyBytes, UtxoTag},
+    stealth::{
+        AtomicCondition,
+        BuiltinPredicate,
+        CovenantBalanceClaim,
+        MAX_STEALTH_INPUTS,
+        MAX_STEALTH_OUTPUTS,
+        MerkleProof,
+        SpendAuthorization,
+        SpendCondition,
+        SpendWitness,
+        StealthInput,
+        StealthInputsStatement,
+        StealthOutputsStatement,
+        StealthTransferStatement,
+        StealthUnspentOutput,
+        TemplateFunction,
+        UnspentOutput,
+    },
 };
 
 /// `ConsensusConstants::max_transaction_size_bytes`: the most bytes a transaction may encode to and
@@ -88,11 +112,25 @@ fn a_transaction_at_every_instruction_limit_stays_within_the_same_bound() {
             rules.method(format!("{i:x}"), AccessRule::AllowAll)
         });
         let calls = MAX_TRANSACTION_INSTRUCTION_ARGS / MAX_INSTRUCTION_ARGS;
-        (0..calls)
+        let input_transfers = MAX_TRANSACTION_STEALTH_INPUTS.div_ceil(MAX_STEALTH_INPUTS);
+        let output_transfers = MAX_TRANSACTION_STEALTH_OUTPUTS / MAX_STEALTH_OUTPUTS;
+        let mut list = (0..calls)
             .map(|_| call_function(MAX_INSTRUCTION_ARGS))
             .chain([create_account(rules)])
-            .chain((calls + 1..MAX_TRANSACTION_INSTRUCTIONS).map(|_| Instruction::DropAllProofsInWorkspace))
-            .collect::<Vec<_>>()
+            .chain((0..input_transfers).map(|i| {
+                let num_inputs = (MAX_TRANSACTION_STEALTH_INPUTS - i * MAX_STEALTH_INPUTS).min(MAX_STEALTH_INPUTS);
+                stealth_transfer(key_path_inputs(num_inputs), vec![], vec![])
+            }))
+            .chain((0..output_transfers).map(|_| {
+                stealth_transfer(
+                    vec![],
+                    (0..MAX_STEALTH_OUTPUTS).map(|_| stealth_output()).collect(),
+                    vec![],
+                )
+            }))
+            .collect::<Vec<_>>();
+        list.resize(MAX_TRANSACTION_INSTRUCTIONS, Instruction::DropAllProofsInWorkspace);
+        list
     };
     let transaction = Transaction::builder_localnet(Epoch(1))
         .with_fee_instructions(list())
@@ -243,6 +281,198 @@ fn arguments_spread_over_max_size_instructions_are_refused_within_the_same_bound
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let wire = largest_within_byte_cap(MAX_TRANSACTION_INSTRUCTIONS, |n| {
         (0..n).map(|_| call_function(32)).collect()
+    });
+    assert_refused_within_bound(wire);
+}
+
+fn stealth_transfer(
+    inputs: Vec<StealthInput>,
+    outputs: Vec<StealthUnspentOutput>,
+    covenant_claims: Vec<CovenantBalanceClaim>,
+) -> Instruction {
+    Instruction::StealthTransfer {
+        resource_address_ref: ResourceAddressRef::Workspace(WorkspaceOffsetId::new(0)),
+        statement: StealthTransferStatement {
+            inputs_statement: StealthInputsStatement {
+                inputs,
+                revealed_amount: Amount::ZERO,
+            },
+            outputs_statement: StealthOutputsStatement {
+                outputs,
+                revealed_output: None,
+                agg_range_proof: RangeProofBytes::empty(),
+            },
+            balance_proof: None,
+            covenant_claims,
+        },
+        revealed_input_bucket: None,
+    }
+}
+
+fn script_path_input(leaf: SpendCondition, proof: MerkleProof) -> StealthInput {
+    StealthInput::with_witness(PedersenCommitmentBytes::zero(), SpendWitness::script_path(leaf, proof))
+}
+
+/// A transfer spending one input through the script path, revealing `leaf`.
+fn script_path_transfer(leaf: SpendCondition) -> Instruction {
+    stealth_transfer(vec![script_path_input(leaf, MerkleProof::empty())], vec![], vec![])
+}
+
+fn key_path_inputs(n: usize) -> Vec<StealthInput> {
+    (0..n)
+        .map(|_| StealthInput::new(PedersenCommitmentBytes::zero()))
+        .collect()
+}
+
+fn stealth_output() -> StealthUnspentOutput {
+    StealthUnspentOutput {
+        output: UnspentOutput {
+            commitment: PedersenCommitmentBytes::zero(),
+            sender_public_nonce: RistrettoPublicKeyBytes::zero(),
+            encrypted_data: EncryptedData::empty(),
+            minimum_value_promise: 0,
+            viewable_balance_proof: None,
+        },
+        auth: SpendAuthorization::Key(RistrettoPublicKeyBytes::zero()),
+        tag: UtxoTag::new(0),
+    }
+}
+
+fn covenant_claim() -> CovenantBalanceClaim {
+    CovenantBalanceClaim {
+        partition_input_index: 0,
+        revealed_amount: Amount::ZERO,
+        signature: BalanceProofSignature::zero(),
+    }
+}
+
+/// One spend condition of wide access rules as large as the byte cap allows.
+#[test]
+fn a_max_size_spend_condition_of_access_rules_is_refused_within_the_same_bound() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let wire = largest_within_byte_cap(usize::MAX, |n| {
+        vec![script_path_transfer(SpendCondition::all((0..n).map(|_| {
+            AtomicCondition::AccessRule(wide_rule(MAX_ACCESS_RULE_NODES - 1))
+        })))]
+    });
+    assert_refused_within_bound(wire);
+}
+
+/// One spend condition of the cheapest atom to encode, as many as the byte cap allows.
+#[test]
+fn a_max_size_spend_condition_of_builtins_is_refused_within_the_same_bound() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let wire = largest_within_byte_cap(usize::MAX, |n| {
+        vec![script_path_transfer(SpendCondition::all(
+            (0..n).map(|_| AtomicCondition::Builtin(BuiltinPredicate::AfterEpoch(0))),
+        ))]
+    });
+    assert_refused_within_bound(wire);
+}
+
+/// One spend condition calling a template function with as many arguments as the byte cap allows.
+#[test]
+fn a_max_size_template_function_argument_list_is_refused_within_the_same_bound() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let wire = largest_within_byte_cap(usize::MAX, |n| {
+        vec![script_path_transfer(SpendCondition::template_function(
+            TemplateFunction::new(
+                Hash32::from_array([1; 32]),
+                FunctionName::default(),
+                (0..n).map(|_| Bytes::default()).collect(),
+            ),
+        ))]
+    });
+    assert_refused_within_bound(wire);
+}
+
+/// Spend conditions of wide access rules on as many inputs as the byte cap allows.
+#[test]
+fn spend_conditions_spread_over_max_size_inputs_are_refused_within_the_same_bound() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let leaf = || SpendCondition::access_rule(wide_rule(32));
+    let wire = largest_within_byte_cap(usize::MAX, |n| {
+        vec![stealth_transfer(
+            (0..n)
+                .map(|_| script_path_input(leaf(), MerkleProof::empty()))
+                .collect(),
+            vec![],
+            vec![],
+        )]
+    });
+    assert_refused_within_bound(wire);
+}
+
+/// Spend conditions of wide access rules on as many transfers as the byte cap allows.
+#[test]
+fn spend_conditions_spread_over_max_size_instructions_are_refused_within_the_same_bound() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let wire = largest_within_byte_cap(MAX_TRANSACTION_INSTRUCTIONS, |n| {
+        (0..n)
+            .map(|_| script_path_transfer(SpendCondition::access_rule(wide_rule(32))))
+            .collect()
+    });
+    assert_refused_within_bound(wire);
+}
+
+/// One transfer spending as many inputs as the byte cap allows.
+#[test]
+fn a_max_size_stealth_input_list_is_refused_within_the_same_bound() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let wire = largest_within_byte_cap(usize::MAX, |n| {
+        vec![stealth_transfer(key_path_inputs(n), vec![], vec![])]
+    });
+    assert_refused_within_bound(wire);
+}
+
+/// Stealth inputs on as many transfers as the byte cap allows.
+#[test]
+fn stealth_inputs_spread_over_max_size_instructions_are_refused_within_the_same_bound() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let wire = largest_within_byte_cap(MAX_TRANSACTION_INSTRUCTIONS, |n| {
+        (0..n)
+            .map(|_| stealth_transfer(key_path_inputs(16), vec![], vec![]))
+            .collect()
+    });
+    assert_refused_within_bound(wire);
+}
+
+/// One input whose inclusion proof is as long as the byte cap allows.
+#[test]
+fn a_max_size_inclusion_proof_is_refused_within_the_same_bound() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let wire = largest_within_byte_cap(usize::MAX, |n| {
+        let proof = MerkleProof::new((0..n).map(|_| Hash32::from_array([1; 32])).collect());
+        let leaf = SpendCondition::access_rule(AccessRule::AllowAll);
+        vec![stealth_transfer(vec![script_path_input(leaf, proof)], vec![], vec![])]
+    });
+    assert_refused_within_bound(wire);
+}
+
+/// One transfer creating as many outputs as the byte cap allows.
+#[test]
+fn a_max_size_stealth_output_list_is_refused_within_the_same_bound() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let wire = largest_within_byte_cap(usize::MAX, |n| {
+        vec![stealth_transfer(
+            vec![],
+            (0..n).map(|_| stealth_output()).collect(),
+            vec![],
+        )]
+    });
+    assert_refused_within_bound(wire);
+}
+
+/// One transfer carrying as many covenant claims as the byte cap allows.
+#[test]
+fn a_max_size_covenant_claim_list_is_refused_within_the_same_bound() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let wire = largest_within_byte_cap(usize::MAX, |n| {
+        vec![stealth_transfer(
+            vec![],
+            vec![],
+            (0..n).map(|_| covenant_claim()).collect(),
+        )]
     });
     assert_refused_within_bound(wire);
 }

@@ -1,8 +1,8 @@
 //    Copyright 2025 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use minicbor::{CborLen, Decode, Encode};
-use tari_bor::adapters::boxed_slice;
+use minicbor::{CborLen, Decode, Decoder, Encode, decode};
+use tari_bor::adapters::{bounded_vec, boxed_slice};
 use tari_template_abi::rust::prelude::*;
 
 use super::ViewableBalanceProof;
@@ -11,7 +11,7 @@ use crate::{
     FunctionName,
     Hash32,
     TemplateAddress,
-    access_rules::AccessRule,
+    access_rules::{AccessRule, MAX_ACCESS_RULE_NODES},
     bytes::Bytes,
     crypto::{PedersenCommitmentBytes, RistrettoPublicKeyBytes, UtxoTag},
 };
@@ -129,11 +129,40 @@ impl StealthUnspentOutput {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SpendCondition(
     #[n(0)]
-    #[cbor(with = "boxed_slice")]
+    #[cbor(
+        encode_with = "boxed_slice::encode",
+        decode_with = "decode_conditions",
+        cbor_len = "boxed_slice::cbor_len"
+    )]
     Box<[AtomicCondition]>,
 );
 
+/// The most atoms one [`SpendCondition`] conjunction may hold. Decoding refuses a longer one.
+pub const MAX_CONDITIONS_PER_CONJUNCTION: usize = 16;
+
+fn decode_conditions<'b, C>(d: &mut Decoder<'b>, ctx: &mut C) -> Result<Box<[AtomicCondition]>, decode::Error> {
+    let mut num_nodes = 0;
+    bounded_vec::decode_with_fn(d, ctx, MAX_CONDITIONS_PER_CONJUNCTION, |d, ctx| {
+        let condition = AtomicCondition::decode(d, ctx)?;
+        num_nodes += condition.num_nodes();
+        if num_nodes > MAX_ACCESS_RULE_NODES {
+            return Err(decode::Error::message(
+                "spend condition holds more than MAX_ACCESS_RULE_NODES nodes",
+            ));
+        }
+        Ok(condition)
+    })
+    .map(Vec::into_boxed_slice)
+}
+
 impl SpendCondition {
+    /// The number of nodes this condition holds: one for each atom, plus the nodes of each atom's access rule and
+    /// one for each argument bound to a template function. Decoding refuses a condition holding more than
+    /// [`MAX_ACCESS_RULE_NODES`].
+    pub fn num_nodes(&self) -> usize {
+        self.0.iter().map(AtomicCondition::num_nodes).sum()
+    }
+
     /// A conjunction leaf requiring every given atom to hold. Must be non-empty and within
     /// `STEALTH_LIMITS.max_conditions_per_conjunction`, both checked at spend time.
     pub fn all(conditions: impl IntoIterator<Item = AtomicCondition>) -> Self {
@@ -212,6 +241,14 @@ impl AtomicCondition {
     pub const fn is_data_owning_builtin(&self) -> bool {
         matches!(self, Self::Builtin(predicate) if predicate.consumes_data())
     }
+
+    fn num_nodes(&self) -> usize {
+        1 + match self {
+            Self::AccessRule(rule) => rule.num_nodes(),
+            Self::TemplateFunction(func) => func.args.len(),
+            Self::Builtin(_) | Self::Covenant(_) => 0,
+        }
+    }
 }
 
 /// A stateless WASM predicate that gates the spend of a stealth UTXO.
@@ -233,7 +270,12 @@ pub struct TemplateFunction {
     /// Bound parameters, positional — one CBOR-encoded value per leading (non-`SpendContext`) parameter, matching the
     /// engine's `Vec<Bytes>` call ABI. Baked into the condition at creation; the spender cannot alter them.
     #[n(2)]
+    #[cbor(decode_with = "decode_template_function_args")]
     pub args: Vec<Bytes>,
+}
+
+fn decode_template_function_args<'b, C>(d: &mut Decoder<'b>, ctx: &mut C) -> Result<Vec<Bytes>, decode::Error> {
+    bounded_vec::decode(d, ctx, MAX_ACCESS_RULE_NODES)
 }
 
 impl TemplateFunction {
@@ -377,5 +419,37 @@ mod tests {
             let decoded: SpendCondition = tari_bor::decode(&bytes).unwrap();
             assert_eq!(decoded, cond);
         }
+    }
+
+    fn roundtrips<T>(value: &T) -> bool
+    where T: Encode<()> + for<'b> Decode<'b, ()> + PartialEq {
+        let bytes = tari_bor::encode(value).unwrap();
+        tari_bor::decode::<T>(&bytes).is_ok_and(|decoded| decoded == *value)
+    }
+
+    fn builtins(n: usize) -> SpendCondition {
+        SpendCondition::all((0..n).map(|_| AtomicCondition::Builtin(BuiltinPredicate::AfterEpoch(0))))
+    }
+
+    fn template_function(num_args: usize) -> SpendCondition {
+        SpendCondition::template_function(TemplateFunction::new(
+            Hash32::from_array([0u8; 32]),
+            FunctionName::default(),
+            (0..num_args).map(|_| Bytes::default()).collect(),
+        ))
+    }
+
+    #[test]
+    fn spend_condition_decodes_up_to_max_conditions() {
+        assert!(roundtrips(&builtins(MAX_CONDITIONS_PER_CONJUNCTION)));
+        assert!(!roundtrips(&builtins(MAX_CONDITIONS_PER_CONJUNCTION + 1)));
+    }
+
+    #[test]
+    fn spend_condition_decodes_up_to_max_nodes() {
+        let at_limit = template_function(MAX_ACCESS_RULE_NODES - 1);
+        assert_eq!(at_limit.num_nodes(), MAX_ACCESS_RULE_NODES);
+        assert!(roundtrips(&at_limit));
+        assert!(!roundtrips(&template_function(MAX_ACCESS_RULE_NODES)));
     }
 }

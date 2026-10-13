@@ -229,8 +229,9 @@ impl<'b, C> Decode<'b, C> for RestrictedAccessRule {
     }
 }
 
-/// The most nodes one decoded access rule tree, or one [`ComponentAccessRules`], may hold, as counted by
-/// [`AccessRule::num_nodes`] and [`ComponentAccessRules::num_nodes`].
+/// The most nodes one decoded access rule tree, one [`ComponentAccessRules`], or the spend conditions one stealth
+/// transfer reveals may hold, as counted by [`AccessRule::num_nodes`], [`ComponentAccessRules::num_nodes`] and
+/// [`StealthTransferStatement::num_nodes`](crate::stealth::StealthTransferStatement::num_nodes).
 ///
 /// Each node encodes in a few bytes but decodes to a fixed-size slot many times larger, so the byte size of an
 /// encoding does not bound the memory its decode takes. Decoding refuses anything over this bound.

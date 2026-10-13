@@ -1,7 +1,7 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_engine_types::limits::WASM_LIMITS;
+use tari_engine_types::limits::{STEALTH_LIMITS, WASM_LIMITS};
 use tari_template_lib_types::{OwnerRule, access_rules::MAX_ACCESS_RULE_NODES};
 
 use crate::{Instruction, MAX_TRANSACTION_INSTRUCTIONS};
@@ -17,11 +17,18 @@ pub const MAX_TRANSACTION_INSTRUCTION_ARGS: usize = MAX_TRANSACTION_INSTRUCTIONS
 
 /// The most access rule nodes a list of instructions may carry in total, counted as
 /// [`ComponentAccessRules::num_nodes`](tari_template_lib_types::access_rules::ComponentAccessRules::num_nodes)
-/// counts them.
+/// and [`StealthTransferStatement::num_nodes`](tari_template_lib_types::stealth::StealthTransferStatement::num_nodes)
+/// count them.
 ///
 /// A node decodes to a fixed-size value however few bytes encode it, so, like the instruction count, this bounds
 /// the memory decoding a transaction takes.
 pub const MAX_TRANSACTION_ACCESS_RULE_NODES: usize = MAX_ACCESS_RULE_NODES;
+
+/// The most stealth inputs a list of instructions may spend in total: the most a transaction may spend.
+pub const MAX_TRANSACTION_STEALTH_INPUTS: usize = STEALTH_LIMITS.max_total_inputs_per_transaction;
+
+/// The most stealth outputs a list of instructions may create in total: the most a transaction may create.
+pub const MAX_TRANSACTION_STEALTH_OUTPUTS: usize = STEALTH_LIMITS.max_total_outputs_per_transaction;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum InstructionLimitError {
@@ -33,16 +40,25 @@ pub enum InstructionLimitError {
     TooManyArguments { max: usize, actual: usize },
     #[error("The instructions' access rules hold {actual} nodes in total, but the maximum allowed is {max}")]
     TooManyAccessRuleNodes { max: usize, actual: usize },
+    #[error("A stealth transfer holds more inputs, outputs, covenant claims, conditions or proof hashes than it may")]
+    StealthTransferTooLarge,
+    #[error("The instructions spend {actual} stealth inputs in total, but the maximum allowed is {max}")]
+    TooManyStealthInputs { max: usize, actual: usize },
+    #[error("The instructions create {actual} stealth outputs in total, but the maximum allowed is {max}")]
+    TooManyStealthOutputs { max: usize, actual: usize },
 }
 
-/// Tallies the call arguments and access rule nodes a list of instructions carries, refusing an instruction that
-/// takes the list past a limit.
+/// Tallies the call arguments, access rule nodes and stealth inputs and outputs a list of instructions carries,
+/// refusing an instruction that takes the list past a limit.
 ///
 /// Decoding an instruction list applies these limits, so a list that passes them is one every peer can decode.
+/// Access rule nodes include the spend condition nodes of stealth transfers.
 #[derive(Debug, Clone, Default)]
 pub struct InstructionLimitTracker {
     num_args: usize,
     num_access_rule_nodes: usize,
+    num_stealth_inputs: usize,
+    num_stealth_outputs: usize,
 }
 
 impl InstructionLimitTracker {
@@ -69,6 +85,13 @@ impl InstructionLimitTracker {
                 }
                 Ok(())
             },
+            Instruction::StealthTransfer { statement, .. } => {
+                if !statement.is_within_decode_limits() {
+                    return Err(InstructionLimitError::StealthTransferTooLarge);
+                }
+                self.add_access_rule_nodes(statement.num_nodes())?;
+                self.add_stealth_inputs_and_outputs(statement.stealth_inputs().len(), statement.stealth_outputs().len())
+            },
             Instruction::PutLastInstructionOutputOnWorkspace { .. } |
             Instruction::ClaimBurn { .. } |
             Instruction::ClaimValidatorFees { .. } |
@@ -77,7 +100,6 @@ impl InstructionLimitTracker {
             Instruction::TakeFromBucket { .. } |
             Instruction::PublishTemplate { .. } |
             Instruction::AllocateAddress { .. } |
-            Instruction::StealthTransfer { .. } |
             Instruction::PayFeeFromBucket { .. } |
             Instruction::PutIntoBucket { .. } => Ok(()),
         }
@@ -116,18 +138,54 @@ impl InstructionLimitTracker {
         }
         Ok(())
     }
+
+    fn add_stealth_inputs_and_outputs(
+        &mut self,
+        num_inputs: usize,
+        num_outputs: usize,
+    ) -> Result<(), InstructionLimitError> {
+        self.num_stealth_inputs += num_inputs;
+        if self.num_stealth_inputs > MAX_TRANSACTION_STEALTH_INPUTS {
+            return Err(InstructionLimitError::TooManyStealthInputs {
+                max: MAX_TRANSACTION_STEALTH_INPUTS,
+                actual: self.num_stealth_inputs,
+            });
+        }
+        self.num_stealth_outputs += num_outputs;
+        if self.num_stealth_outputs > MAX_TRANSACTION_STEALTH_OUTPUTS {
+            return Err(InstructionLimitError::TooManyStealthOutputs {
+                max: MAX_TRANSACTION_STEALTH_OUTPUTS,
+                actual: self.num_stealth_outputs,
+            });
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use tari_template_lib_types::{
         AccessRule,
+        Amount,
         access_rules::{ComponentAccessRules, RestrictedAccessRule},
-        crypto::RistrettoPublicKeyBytes,
+        crypto::{PedersenCommitmentBytes, RangeProofBytes, RistrettoPublicKeyBytes},
+        stealth::{
+            MAX_STEALTH_INPUTS,
+            MerkleProof,
+            SpendCondition,
+            SpendWitness,
+            StealthInput,
+            StealthInputsStatement,
+            StealthOutputsStatement,
+            StealthTransferStatement,
+        },
     };
 
     use super::*;
-    use crate::args::InstructionArg;
+    use crate::{
+        ResourceAddressRef,
+        args::{InstructionArg, WorkspaceOffsetId},
+    };
 
     fn call_function(num_args: usize) -> Instruction {
         Instruction::CallFunction {
@@ -211,6 +269,84 @@ mod tests {
             Err(InstructionLimitError::AccessRulesTooLarge {
                 max: MAX_ACCESS_RULE_NODES,
                 actual: MAX_ACCESS_RULE_NODES + 1
+            })
+        );
+    }
+
+    fn stealth_transfer(inputs: Vec<StealthInput>) -> Instruction {
+        Instruction::StealthTransfer {
+            resource_address_ref: ResourceAddressRef::Workspace(WorkspaceOffsetId::new(0)),
+            statement: StealthTransferStatement {
+                inputs_statement: StealthInputsStatement {
+                    inputs,
+                    revealed_amount: Amount::ZERO,
+                },
+                outputs_statement: StealthOutputsStatement {
+                    outputs: vec![],
+                    revealed_output: None,
+                    agg_range_proof: RangeProofBytes::empty(),
+                },
+                balance_proof: None,
+                covenant_claims: vec![],
+            },
+            revealed_input_bucket: None,
+        }
+    }
+
+    fn key_path_inputs(n: usize) -> Vec<StealthInput> {
+        (0..n)
+            .map(|_| StealthInput::new(PedersenCommitmentBytes::zero()))
+            .collect()
+    }
+
+    fn script_path_input(rule: AccessRule) -> StealthInput {
+        StealthInput::with_witness(
+            PedersenCommitmentBytes::zero(),
+            SpendWitness::script_path(SpendCondition::access_rule(rule), MerkleProof::empty()),
+        )
+    }
+
+    #[test]
+    fn it_refuses_a_stealth_transfer_outside_its_decode_limits() {
+        assert_eq!(
+            add_all(&[stealth_transfer(key_path_inputs(MAX_STEALTH_INPUTS + 1))]),
+            Err(InstructionLimitError::StealthTransferTooLarge)
+        );
+    }
+
+    #[test]
+    fn it_refuses_stealth_inputs_over_the_list_limit() {
+        let first = MAX_STEALTH_INPUTS;
+        let second = MAX_TRANSACTION_STEALTH_INPUTS + 1 - first;
+        assert_eq!(
+            add_all(&[
+                stealth_transfer(key_path_inputs(first)),
+                stealth_transfer(key_path_inputs(second))
+            ]),
+            Err(InstructionLimitError::TooManyStealthInputs {
+                max: MAX_TRANSACTION_STEALTH_INPUTS,
+                actual: MAX_TRANSACTION_STEALTH_INPUTS + 1
+            })
+        );
+    }
+
+    #[test]
+    fn it_counts_spend_conditions_as_access_rule_nodes() {
+        let Instruction::CreateAccount {
+            owner_rule: Some(OwnerRule::ByAccessRule(rule)),
+            ..
+        } = create_account(MAX_TRANSACTION_ACCESS_RULE_NODES - 1)
+        else {
+            unreachable!()
+        };
+        // The spend condition's atom is one node besides the rule's own.
+        let transfer = stealth_transfer(vec![script_path_input(rule)]);
+        add_all(std::slice::from_ref(&transfer)).unwrap();
+        assert_eq!(
+            add_all(&[create_account(1), transfer]),
+            Err(InstructionLimitError::TooManyAccessRuleNodes {
+                max: MAX_TRANSACTION_ACCESS_RULE_NODES,
+                actual: MAX_TRANSACTION_ACCESS_RULE_NODES + 1
             })
         );
     }
