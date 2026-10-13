@@ -20,11 +20,15 @@ use tari_ootle_transaction::{Epoch, Transaction, args};
 use tari_template_lib::{
     models::Account,
     types::{
+        AccessRule,
         Amount,
         ComponentAddress,
         ConfidentialOutputAddress,
+        OwnerRule,
         confidential::{ConfidentialOutputStatement, ConfidentialWithdrawProof},
+        constants::TARI_TOKEN,
         crypto::{CommitmentValueProof, PedersenCommitmentBytes, RistrettoPublicKeyBytes},
+        metadata,
     },
 };
 use tari_template_test_tooling::{
@@ -928,4 +932,94 @@ fn burning_a_bucket_holding_commitments_with_value_proofs_decreases_total_supply
     );
 
     assert_eq!(read_total_supply(&test, &faucet_resx), Some(Amount::from(300u64)));
+}
+
+/// The liquidity pool prices and pays out only revealed funds, so it refuses a confidential bucket that carries
+/// commitments, while still accepting one that is fully revealed.
+#[test]
+fn liquidity_pool_rejects_confidential_commitments() {
+    let (confidential_proof, mask, value_proofs) = mint_statement(100_000, None);
+    let (mut test, faucet, faucet_resx) = setup(confidential_proof, value_proofs, None);
+    let faucet_resx = faucet_resx.as_resource_address().unwrap();
+    let pool_template = test.get_template_address("TwoResourceLiquidityPool");
+    let (owner, owner_proof, owner_secret) = test.create_funded_account();
+
+    test.call_method::<()>(faucet, "mint_revealed", args![20_000], vec![]);
+
+    let revealed = ConfidentialWithdrawProof::revealed_withdraw::<u64>;
+
+    test.execute_expect_success(
+        Transaction::builder_localnet(Epoch(1))
+            .allocate_component_address("pool")
+            .call_function(pool_template, "create", args![
+                OwnerRule::OwnedBySigner,
+                AccessRule::AllowAll,
+                TARI_TOKEN,
+                faucet_resx,
+                metadata!["name" => "TARI-Confidential Liquidity Pool"],
+                Workspace("pool"),
+            ])
+            .call_method(faucet, "take_free_coins", args![revealed(10_000)])
+            .put_last_instruction_output_on_workspace("conf_coins")
+            .call_method(owner, "withdraw", args![TARI_TOKEN, 10_000])
+            .put_last_instruction_output_on_workspace("tari_coins")
+            .call_method("pool", "contribute", args![
+                Workspace("tari_coins"),
+                Workspace("conf_coins")
+            ])
+            .put_last_instruction_output_on_workspace("contribution")
+            .call_method(owner, "deposit", args![Workspace("contribution.0")])
+            .call_method(owner, "deposit", args![Workspace("contribution.1")])
+            .call_method(owner, "deposit", args![Workspace("contribution.2")])
+            .build_and_seal(&owner_secret),
+        vec![owner_proof.clone()],
+    );
+
+    let (pool, _) = test
+        .read_only_state_store()
+        .get_components_by_template_address(pool_template)
+        .unwrap()
+        .pop()
+        .unwrap();
+
+    // A 50,000 commitment alongside 1,000 revealed
+    let mixed = || generate_withdraw_proof(&mask, 50_000, Some(49_000), 1_000u64).proof;
+
+    for method in ["swap", "swap_constant_product"] {
+        let reason = test.execute_expect_failure(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(faucet, "take_free_coins", args![mixed()])
+                .put_last_instruction_output_on_workspace("input")
+                .call_method(pool, method, args![Workspace("input")])
+                .put_last_instruction_output_on_workspace("output")
+                .call_method(owner, "deposit", args![Workspace("output")])
+                .build_and_seal(&owner_secret),
+            vec![owner_proof.clone()],
+        );
+        assert_reject_reason(&reason, "Expected bucket to have no confidential commitments");
+    }
+
+    let reason = test.execute_expect_failure(
+        Transaction::builder_localnet(Epoch(1))
+            .call_method(faucet, "take_free_coins", args![mixed()])
+            .put_last_instruction_output_on_workspace("input")
+            .call_method(pool, "protected_add_liquidity", args![Workspace("input")])
+            .build_and_seal(&owner_secret),
+        vec![owner_proof.clone()],
+    );
+    assert_reject_reason(&reason, "Expected bucket to have no confidential commitments");
+
+    test.execute_expect_success(
+        Transaction::builder_localnet(Epoch(1))
+            .call_method(faucet, "take_free_coins", args![revealed(1_000)])
+            .put_last_instruction_output_on_workspace("input")
+            .call_method(pool, "swap", args![Workspace("input")])
+            .put_last_instruction_output_on_workspace("output")
+            .call_method(owner, "deposit", args![Workspace("output")])
+            .call_method(faucet, "take_free_coins", args![revealed(1_000)])
+            .put_last_instruction_output_on_workspace("added")
+            .call_method(pool, "protected_add_liquidity", args![Workspace("added")])
+            .build_and_seal(&owner_secret),
+        vec![owner_proof],
+    );
 }
