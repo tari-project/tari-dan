@@ -323,7 +323,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        storage_sqlite::models::{SubstateCacheInvalidation, VerifiedStateRoot},
+        storage_sqlite::models::{Key, SubstateCacheInvalidation, VerifiedStateRoot},
         store::{IndexerStoreReadTransaction, IndexerStoreReader, IndexerStoreWriteTransaction},
     };
 
@@ -421,6 +421,34 @@ mod tests {
             })
             .await
             .unwrap()
+    }
+
+    /// An unspent output's `(resource, public nonce, tag)` is unique among unspent rows. A clash
+    /// means some sync peer was faulty, and must not fail the commit, which would stall the shard's
+    /// sync on every peer.
+    #[tokio::test]
+    async fn an_unspent_utxo_clashing_with_a_stored_one_is_skipped() {
+        use tari_template_lib_types::{UtxoAddress, UtxoId};
+
+        use crate::storage_sqlite::models::UtxoUpdateRecord;
+
+        let (_dir, store) = store_with_utxos(&[(1, 1)]).await;
+        let UtxoUpdateRecord::Unspent(mut clashing) = unspent_at(1, 2) else {
+            unreachable!()
+        };
+        let clashing_address = UtxoAddress::new(utxo_resource(), UtxoId::from_array([99; 32]));
+        clashing.address = clashing_address.clone();
+
+        let skipped = store
+            .with_write_tx(move |tx| {
+                tx.batch_insert_utxo_updates(Epoch(1), [UtxoUpdateRecord::Unspent(clashing), unspent_at(2, 2)])
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(skipped, [clashing_address]);
+        let set = read_updates(&store, 0, 10).await;
+        assert_eq!(set.updates.len(), 2);
     }
 
     #[tokio::test]
@@ -1281,6 +1309,51 @@ mod tests {
             plan.contains("transactions_source_id_idx"),
             "source filtered listing does not use the source index: {plan}"
         );
+    }
+
+    /// A receipt address is written once on the network, so a conflict at one means some sync peer
+    /// was faulty. It must neither fail the commit, which would stall the shard's sync on every peer,
+    /// nor displace the stored receipt or its events.
+    #[tokio::test]
+    async fn a_receipt_at_a_stored_address_is_skipped() {
+        let (_dir, store) = temp_store().await;
+        insert_receipts(&store, vec![(1, receipt_with_events_at(Epoch(2), 1))]).await;
+
+        let conflicting = TransactionReceipt {
+            fee_receipt: FeeReceiptBuilder::default().with_total_fees_paid(999).build(),
+            ..receipt_with_events_at(Epoch(3), 2)
+        };
+        let inserted = store
+            .with_write_tx(move |tx| {
+                tx.batch_insert_transaction_receipts(
+                    [
+                        (receipt_address(2), receipt_at(Epoch(3))),
+                        (receipt_address(1), conflicting),
+                    ],
+                    &[],
+                )
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(
+            inserted.receipts.iter().map(|r| r.transaction_id).collect::<Vec<_>>(),
+            [TransactionId::new([2; 32])]
+        );
+        assert_eq!(inserted.skipped, [receipt_address(1)]);
+        assert!(inserted.events.is_empty());
+
+        let stored = store
+            .with_read_tx(|tx| tx.get_transaction_receipt(&receipt_address(1)))
+            .await
+            .unwrap();
+        assert_eq!(stored.fee_receipt.total_fees_paid(), 123);
+        assert_eq!(event_epochs(&store).await, [2]);
+        let count = store
+            .with_read_tx(|tx| tx.key_value_get_value::<_, u64>(Key::TransactionReceiptCount))
+            .await
+            .unwrap();
+        assert_eq!(count, 2);
     }
 
     async fn insert_transactions(store: &SqliteIndexerStore, max_epochs: &[Epoch]) -> Vec<TransactionId> {
