@@ -333,6 +333,14 @@ impl WasmProcess {
         arg_ptr: WasmPtr<u8>,
         arg_len: u32,
     ) -> WasmPtr<u8> {
+        // A recorded engine error already fails the invocation, but the template may ignore the
+        // null it was answered with and keep calling. Nothing it calls from here on can change the
+        // outcome, so nothing is dispatched: the first failure stays the reject reason, and no host
+        // work is done on behalf of an invocation that is already lost.
+        if env.data().has_last_engine_error() {
+            return WasmPtr::null();
+        }
+
         let op = match EngineOp::from_i32(op) {
             Some(op) => op,
             None => return fail_engine_call(env.data_mut(), WasmExecutionError::InvalidEngineOp { op }),
@@ -760,14 +768,17 @@ fn transaction_headroom(runtime: &Runtime) -> TransactionHeadroom {
 /// Fails an engine call with `err`, answering the template with a null pointer.
 ///
 /// The recorded error is what reaches the transaction, as its reject reason; the log line is the
-/// validator's own record of it. A template is free to ignore the null and call again, so only the
-/// first failure of an invocation is logged: each one after it is validator I/O the template would
-/// get for the price of a host call.
+/// validator's own record of it. Only the first failure of an invocation is recorded and logged:
+/// it is the cause of any that follow, and logging each one after it is validator I/O the template
+/// would get for the price of a host call. The early return in `tari_engine_entrypoint` keeps most
+/// later failures from getting this far. The check here covers a failure recorded while a call is
+/// still being handled, by an engine call the template's `tari_alloc` makes as the engine stages
+/// that call's response.
 fn fail_engine_call<T>(env: &mut WasmEnv<T>, err: WasmExecutionError) -> WasmPtr<u8> {
     if !env.has_last_engine_error() {
         log::error!(target: LOG_TARGET, "{}", err);
+        env.set_last_engine_error(err);
     }
-    env.set_last_engine_error(err);
     WasmPtr::null()
 }
 

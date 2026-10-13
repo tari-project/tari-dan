@@ -937,3 +937,96 @@ fn refused_template_log_entries_are_not_logged() {
         logged.records
     );
 }
+
+/// Once an engine call has failed, the invocation is lost, so the engine dispatches nothing the
+/// template calls after it: valid log entries emitted after a refused one are neither retained nor
+/// echoed, and the first failure stays the reject reason.
+#[test]
+fn no_engine_call_is_dispatched_after_one_has_failed() {
+    use tari_template_lib::{args::EmitLogArg, types::LogLevel};
+
+    let encode = |message: String| {
+        tari_bor::encode(&EmitLogArg {
+            message,
+            level: LogLevel::Error,
+        })
+        .unwrap()
+    };
+    let oversized = encode("x".repeat(limits::ENGINE_LIMITS.max_log_size_bytes + 1));
+    let valid = encode("after the refusal".to_string());
+    let (oversized_len, valid_len) = (oversized.len(), valid.len());
+    let code = template_module_importing(
+        TARI_ENGINE_IMPORT,
+        &format!(
+            r#"
+        (data (i32.const 4096) "{}")
+        (data (i32.const 65536) "{}")
+        (func (export "tari_alloc") (param i32) (result i32) (i32.const 1024))
+        (func (export "tari_free") (param i32))
+        (func (export "Buggy_main") (param i32 i32) (result i32)
+          (local $i i32)
+          (drop (call $tari_engine (i32.const 0) (i32.const 65536) (i32.const {oversized_len})))
+          (local.set $i (i32.const 200))
+          (loop $again
+            (drop (call $tari_engine (i32.const 0) (i32.const 4096) (i32.const {valid_len})))
+            (local.set $i (i32.sub (local.get $i) (i32.const 1)))
+            (br_if $again (local.get $i)))
+          (i32.const 20))
+        "#,
+            wat_bytes(&valid),
+            wat_bytes(&oversized)
+        ),
+    );
+
+    let (result, logged) = call_logged(code);
+    let reason = result.expect_err("a call whose first log entry was refused was accepted");
+    assert!(
+        reason.to_string().contains("Log entry of"),
+        "the reject reason is not the first failure: {reason}"
+    );
+    assert!(logged.records < 10, "{} records logged", logged.records);
+}
+
+/// An engine call that fails while the engine is still handling another — here, one the template's
+/// `tari_alloc` makes as the engine stages a response — is the cause of that call failing, so it
+/// stays the reject reason.
+#[test]
+fn a_failure_while_staging_a_response_stays_the_reject_reason() {
+    use tari_template_lib::{args::EmitLogArg, types::LogLevel};
+
+    let arg = tari_bor::encode(&EmitLogArg {
+        message: "staged".to_string(),
+        level: LogLevel::Info,
+    })
+    .unwrap();
+    let arg_len = arg.len();
+    let code = template_module_importing(
+        TARI_ENGINE_IMPORT,
+        &format!(
+            r#"
+        (global $in_main (mut i32) (i32.const 0))
+        (data (i32.const 4096) "{}")
+        (func (export "tari_alloc") (param i32) (result i32)
+          (if (result i32) (global.get $in_main)
+            (then
+              (drop (call $tari_engine (i32.const 0x7fff) (i32.const 0) (i32.const 0)))
+              (i32.const 0))
+            (else (i32.const 1024))))
+        (func (export "tari_free") (param i32))
+        (func (export "Buggy_main") (param i32 i32) (result i32)
+          (global.set $in_main (i32.const 1))
+          (drop (call $tari_engine (i32.const 0) (i32.const 4096) (i32.const {arg_len})))
+          (global.set $in_main (i32.const 0))
+          (i32.const 20))
+        "#,
+            wat_bytes(&arg)
+        ),
+    );
+
+    let (result, _) = call_logged(code);
+    let reason = result.expect_err("a call whose response could not be staged was accepted");
+    assert!(
+        reason.to_string().contains("Invalid engine op"),
+        "the reject reason is not the first failure: {reason}"
+    );
+}
