@@ -10,7 +10,9 @@ use webauthn_rs::prelude::{Passkey, PasskeyAuthentication, PasskeyRegistration};
 use crate::services::{SessionData, SessionStore, SessionStoreError};
 
 /// Upper bound on in-progress registration or authentication ceremonies of each kind. Ceremonies are started by
-/// unauthenticated callers, and a single-user wallet only ever has a handful in flight.
+/// unauthenticated callers, and a single-user wallet only ever has a handful in flight. A full store evicts its
+/// oldest session, so under sustained ceremony-start traffic an in-flight ceremony survives only this many later
+/// starts.
 const MAX_PENDING_SESSIONS: usize = 64;
 
 #[derive(Debug, Error)]

@@ -175,16 +175,12 @@ mod tests {
 
     #[tokio::test]
     async fn expired_sessions_are_not_returned_and_are_pruned_on_add() {
-        let ttl = Duration::from_secs(60);
-        let store = SessionStore::new(ttl, 64);
-        let Some(expired_at) = Instant::now().checked_sub(ttl * 2) else {
-            return;
-        };
-        let expired = store.add(TestSession(expired_at)).await.unwrap();
+        let store = SessionStore::new(Duration::from_millis(1), 64);
+        let expired = store.add(TestSession(Instant::now())).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(5)).await;
         assert!(store.get(&expired).await.is_err());
 
-        let live = store.add(TestSession(Instant::now())).await.unwrap();
-        assert!(store.get(&live).await.is_ok());
+        store.add(TestSession(Instant::now())).await.unwrap();
         let sessions = store.sessions.read().await;
         assert!(!sessions.by_id.contains_key(&expired));
         assert_eq!(sessions.by_age.len(), 1);
