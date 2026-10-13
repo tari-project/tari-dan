@@ -12492,7 +12492,7 @@ dependencies = [
 
 [[package]]
 name = "tari_ootle_template_build"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "syn 2.0.117",
  "tari_ootle_template_metadata",
@@ -12503,7 +12503,7 @@ dependencies = [
 
 [[package]]
 name = "tari_ootle_template_metadata"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "borsh",
  "cargo_toml",
@@ -13153,7 +13153,7 @@ dependencies = [
 
 [[package]]
 name = "tari_template_builtin"
-version = "0.43.0"
+version = "0.43.1"
 dependencies = [
  "anyhow",
  "minicbor",
