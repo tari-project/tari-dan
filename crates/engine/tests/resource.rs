@@ -3,13 +3,17 @@
 
 use tari_ootle_transaction::args;
 use tari_template_lib::types::{
-    ComponentAddress, Metadata, ResourceAddress, bytes::Bytes, crypto::RistrettoPublicKeyBytes,
+    ComponentAddress,
+    Metadata,
+    ResourceAddress,
+    bytes::Bytes,
+    crypto::RistrettoPublicKeyBytes,
 };
-use tari_utilities::byte_array::ByteArray;
 use tari_template_test_tooling::{
     TemplateTest,
     support::{confidential::generate_confidential_output_statement, value_proof::value_proofs_for_commitment},
 };
+use tari_utilities::byte_array::ByteArray;
 
 const CRATE_PATH: &str = env!("CARGO_MANIFEST_DIR");
 
@@ -204,7 +208,9 @@ fn create_rejects_invalid_view_key() {
         vec![],
     );
     assert!(
-        reason.to_string().contains("View key is not a canonical Ristretto point"),
+        reason
+            .to_string()
+            .contains("View key is not a canonical Ristretto point"),
         "expected non-canonical point rejection, got: {reason}"
     );
 
