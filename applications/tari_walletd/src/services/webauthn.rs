@@ -13,7 +13,7 @@ use crate::services::{SessionData, SessionStore, SessionStoreError};
 /// unauthenticated callers, and a single-user wallet only ever has a handful in flight. A full store evicts its
 /// oldest session, so under sustained ceremony-start traffic an in-flight ceremony survives only this many later
 /// starts.
-const MAX_PENDING_SESSIONS: usize = 64;
+const MAX_PENDING_SESSIONS: usize = 8;
 
 #[derive(Debug, Error)]
 pub enum WebauthnServiceError {
