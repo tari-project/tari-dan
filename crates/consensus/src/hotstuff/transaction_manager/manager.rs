@@ -681,22 +681,28 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         );
 
         let proposed_foreign_pledges = change_set.get_foreign_pledges(&transaction_id);
-        let resolved_inputs = foreign_pledges
+        let mut resolved_inputs: HashMap<SubstateRequirement, Substate> = HashMap::new();
+        for (id, substate) in foreign_pledges
             .into_iter()
-            // NOTE: that duplicate pledges (which should not happen) will be NOT overwritten by the proposed ones due to HashMap from_iter behaviour
             .chain(proposed_foreign_pledges.cloned())
-            // Exclude any output pledges
             .filter_map(|pledge| pledge.into_input())
-            .map(|(id, substate)|
-                {
-                    let version = id.version();
-                    (
-                        // SubstateRequirement
-                        id.into(),
-                        Substate::new(version, substate),
-                    )
-                })
-            .collect::<HashMap<_, _>>();
+        {
+            let version = id.version();
+            let req: SubstateRequirement = id.into();
+            if let Some(existing) = resolved_inputs.get(&req) {
+                // Duplicate pledges must refer to the same substate version and value
+                if existing.version() != version {
+                    return Err(BlockTransactionExecutorError::InvariantError(format!(
+                        "Conflicting versions for duplicate foreign pledge on substate {}: existing version {}, proposed version {}",
+                        req.substate_id(),
+                        existing.version(),
+                        version
+                    )));
+                }
+            } else {
+                resolved_inputs.insert(req, Substate::new(version, substate));
+            }
+        }
 
         // Check that we have all the required foreign input pledges
         if let Some(req) = non_local_inputs
