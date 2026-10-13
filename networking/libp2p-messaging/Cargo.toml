@@ -11,6 +11,7 @@ license.workspace = true
 libp2p = { workspace = true }
 
 async-trait = { workspace = true }
+bytes = { workspace = true }
 prost = { workspace = true, optional = true }
 smallvec = { workspace = true }
 futures-bounded = { workspace = true }

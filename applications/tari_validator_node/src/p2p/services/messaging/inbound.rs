@@ -4,12 +4,16 @@
 use std::future::Future;
 
 use libp2p::PeerId;
+use prost::Message;
 use tari_consensus::{messages::HotstuffMessage, traits::InboundMessagingError};
 use tari_epoch_manager::{EpochManagerReader, service::EpochManagerHandle};
 use tari_networking::InboundMessage;
 use tari_ootle_common_types::Epoch;
 use tari_ootle_p2p::{PeerAddress, proto};
-use tokio::sync::mpsc;
+use tokio::{
+    sync::mpsc,
+    task::{self, JoinHandle},
+};
 
 use crate::p2p::logging::MessageLogger;
 
@@ -26,97 +30,125 @@ impl ValidatorRegistry for EpochManagerHandle<PeerAddress> {
     }
 }
 
-pub struct ConsensusInboundMessaging<TMsgLogger, TRegistry = EpochManagerHandle<PeerAddress>> {
+/// A direct message decoded from the bytes it arrived as, or the reason it was refused.
+pub type DirectMessageResult = Result<(PeerId, HotstuffMessage), InboundMessagingError>;
+
+/// Spawns the task that decodes direct messages taken off the inbound queue, one at a time, ahead of consensus.
+///
+/// A decoded message can occupy many times the bytes it arrived as, and decoding a large one takes time, so it runs
+/// on this task and the consensus worker only ever receives decoded messages. The task decodes a message only once
+/// consensus has taken the previous one, so at most one decoded message waits for it.
+pub fn spawn_direct_message_decoder<TRegistry>(
+    rx_inbound: mpsc::Receiver<InboundMessage>,
+    validators: TRegistry,
+) -> (mpsc::Receiver<DirectMessageResult>, JoinHandle<anyhow::Result<()>>)
+where
+    TRegistry: ValidatorRegistry + Send + Sync + 'static,
+{
+    let (tx_decoded, rx_decoded) = mpsc::channel(1);
+    let join_handle = task::spawn(decode_direct_messages(rx_inbound, tx_decoded, validators));
+    (rx_decoded, join_handle)
+}
+
+async fn decode_direct_messages<TRegistry: ValidatorRegistry>(
+    mut rx_inbound: mpsc::Receiver<InboundMessage>,
+    tx_decoded: mpsc::Sender<DirectMessageResult>,
+    validators: TRegistry,
+) -> anyhow::Result<()> {
+    loop {
+        let Ok(slot) = tx_decoded.reserve().await else {
+            return Ok(());
+        };
+        let inbound = tokio::select! {
+            _ = tx_decoded.closed() => return Ok(()),
+            maybe_msg = rx_inbound.recv() => match maybe_msg {
+                Some(inbound) => inbound,
+                None => return Ok(()),
+            },
+        };
+        slot.send(decode_direct_message(inbound, &validators).await);
+    }
+}
+
+async fn decode_direct_message<TRegistry: ValidatorRegistry>(
+    inbound: InboundMessage,
+    validators: &TRegistry,
+) -> DirectMessageResult {
+    let InboundMessage {
+        peer_id: from, message, ..
+    } = inbound;
+    let invalid = |reason: String| InboundMessagingError::InvalidMessage {
+        reason: format!("from peer {from}: {reason}"),
+    };
+    let msg = proto::consensus::HotStuffMessage::decode(message)
+        .map_err(|err| invalid(format!("undecodable message: {err}")))?;
+    check_sender(from, &msg, validators).await?;
+    let msg = HotstuffMessage::try_from(msg).map_err(|err| invalid(err.to_string()))?;
+    Ok((from, msg))
+}
+
+pub struct ConsensusInboundMessaging<TMsgLogger> {
     local_address: PeerAddress,
-    rx_inbound_msg: mpsc::Receiver<InboundMessage<proto::consensus::HotStuffMessage>>,
+    rx_direct: mpsc::Receiver<DirectMessageResult>,
     rx_gossip: mpsc::Receiver<(PeerId, HotstuffMessage)>,
     rx_loopback: mpsc::UnboundedReceiver<HotstuffMessage>,
     msg_logger: TMsgLogger,
-    validators: TRegistry,
-    /// A direct message taken off the queue whose sender is still being checked. It is held here rather than
-    /// in the `next_message` future, so a caller that drops that future part way does not lose it.
-    awaiting_sender_check: Option<(PeerId, proto::consensus::HotStuffMessage)>,
 }
 
-impl<TMsgLogger: MessageLogger, TRegistry: ValidatorRegistry> ConsensusInboundMessaging<TMsgLogger, TRegistry> {
+impl<TMsgLogger: MessageLogger> ConsensusInboundMessaging<TMsgLogger> {
     pub fn new(
         local_address: PeerAddress,
-        rx_inbound_msg: mpsc::Receiver<InboundMessage<proto::consensus::HotStuffMessage>>,
+        rx_direct: mpsc::Receiver<DirectMessageResult>,
         rx_gossip: mpsc::Receiver<(PeerId, HotstuffMessage)>,
         rx_loopback: mpsc::UnboundedReceiver<HotstuffMessage>,
         msg_logger: TMsgLogger,
-        validators: TRegistry,
     ) -> Self {
         Self {
             local_address,
-            rx_inbound_msg,
+            rx_direct,
             rx_gossip,
             rx_loopback,
             msg_logger,
-            validators,
-            awaiting_sender_check: None,
         }
     }
 
-    fn handle_message(
-        &self,
-        from: PeerId,
-        msg: proto::consensus::HotStuffMessage,
-    ) -> Option<Result<(PeerAddress, HotstuffMessage), InboundMessagingError>> {
-        match HotstuffMessage::try_from(msg) {
-            Ok(msg) => {
-                self.msg_logger
-                    .log_inbound_message(&from.to_string(), msg.as_type_str(), "", &msg);
-                Some(Ok((from.into(), msg)))
-            },
-            Err(err) => Some(Err(InboundMessagingError::InvalidMessage {
-                reason: format!("from peer {from}: {err}"),
-            })),
-        }
+    fn log_inbound(&self, from: &PeerId, msg: &HotstuffMessage) {
+        self.msg_logger
+            .log_inbound_message(&from.to_string(), msg.as_type_str(), "", msg);
     }
 }
 
-impl<TMsgLogger, TRegistry> tari_consensus::traits::InboundMessaging
-    for ConsensusInboundMessaging<TMsgLogger, TRegistry>
-where
-    TMsgLogger: MessageLogger + Send,
-    TRegistry: ValidatorRegistry + Send + Sync,
+impl<TMsgLogger> tari_consensus::traits::InboundMessaging for ConsensusInboundMessaging<TMsgLogger>
+where TMsgLogger: MessageLogger + Send
 {
     type Addr = PeerAddress;
 
     async fn next_message(&mut self) -> Option<Result<(Self::Addr, HotstuffMessage), InboundMessagingError>> {
-        if self.awaiting_sender_check.is_none() {
-            tokio::select! {
-                // BIASED: messaging priority is loopback, then other
-                biased;
-                maybe_msg = self.rx_loopback.recv() => return maybe_msg.map(|msg| {
-                    self.msg_logger.log_inbound_message(
-                       &self.local_address.to_string(),
-                       msg.as_type_str(),
-                       "",
-                       &msg,
-                    );
-                    Ok((self.local_address, msg))
-                }),
-                maybe_msg = self.rx_inbound_msg.recv() => {
-                    let inbound = maybe_msg?;
-                    if validator_only_epoch(&inbound.message).is_none() {
-                        return self.handle_message(inbound.peer_id, inbound.message);
-                    }
-                    self.awaiting_sender_check = Some((inbound.peer_id, inbound.message));
-                },
-                maybe_msg = self.rx_gossip.recv() => {
-                    let (from, msg) = maybe_msg?;
-                    self.msg_logger
-                        .log_inbound_message(&from.to_string(), msg.as_type_str(), "", &msg);
-                    return Some(Ok((from.into(), msg)));
-                },
-            }
-        }
-
-        match resolve_sender_check(&mut self.awaiting_sender_check, &self.validators).await? {
-            Ok((from, msg)) => self.handle_message(from, msg),
-            Err(err) => Some(Err(err)),
+        tokio::select! {
+            // BIASED: messaging priority is loopback, then other
+            biased;
+            maybe_msg = self.rx_loopback.recv() => maybe_msg.map(|msg| {
+                self.msg_logger.log_inbound_message(
+                   &self.local_address.to_string(),
+                   msg.as_type_str(),
+                   "",
+                   &msg,
+                );
+                Ok((self.local_address, msg))
+            }),
+            maybe_msg = self.rx_direct.recv() => {
+                let (from, msg) = match maybe_msg? {
+                    Ok(decoded) => decoded,
+                    Err(err) => return Some(Err(err)),
+                };
+                self.log_inbound(&from, &msg);
+                Some(Ok((from.into(), msg)))
+            },
+            maybe_msg = self.rx_gossip.recv() => {
+                let (from, msg) = maybe_msg?;
+                self.log_inbound(&from, &msg);
+                Some(Ok((from.into(), msg)))
+            },
         }
     }
 }
@@ -133,40 +165,36 @@ fn validator_only_epoch(msg: &proto::consensus::HotStuffMessage) -> Option<Epoch
     }
 }
 
-/// Checks the sender of the message held in `pending`, releasing it only once the check completes. A caller that
-/// drops this future part way leaves the message in `pending` for the next call to check again.
-async fn resolve_sender_check<TRegistry: ValidatorRegistry>(
-    pending: &mut Option<(PeerId, proto::consensus::HotStuffMessage)>,
+/// Refuses `msg` when only a validator registered for its epoch may send it and `from` is not one.
+async fn check_sender<TRegistry: ValidatorRegistry>(
+    from: PeerId,
+    msg: &proto::consensus::HotStuffMessage,
     validators: &TRegistry,
-) -> Option<Result<(PeerId, proto::consensus::HotStuffMessage), InboundMessagingError>> {
-    let (from, msg) = pending.as_ref()?;
-    let rejection = match validator_only_epoch(msg) {
-        Some(epoch) if !validators.is_registered(epoch, &(*from).into()).await => Some(epoch),
-        _ => None,
-    };
-    let (from, msg) = pending.take()?;
-    match rejection {
-        Some(epoch) => Some(Err(InboundMessagingError::InvalidMessage {
-            reason: format!("peer {from} sent transactions for {epoch} but is not a validator registered for it"),
-        })),
-        None => Some(Ok((from, msg))),
+) -> Result<(), InboundMessagingError> {
+    match validator_only_epoch(msg) {
+        Some(epoch) if !validators.is_registered(epoch, &from.into()).await => {
+            Err(InboundMessagingError::InvalidMessage {
+                reason: format!("peer {from} sent transactions for {epoch} but is not a validator registered for it"),
+            })
+        },
+        _ => Ok(()),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        collections::HashSet,
-        sync::atomic::{AtomicBool, Ordering},
-        time::Duration,
-    };
+    use std::collections::{HashMap, HashSet};
 
+    use prost::bytes::Bytes;
+    use tari_consensus::traits::InboundMessaging;
+    use tari_networking::{MessageQueueSender, MessagingMode, message_queue};
     use tari_ootle_p2p::proto::{
-        consensus::{HotStuffMessage, MissingTransactionsResponse, hot_stuff_message::Message},
+        consensus::{HotStuffMessage, MissingTransactionsResponse, SyncRequest, hot_stuff_message::Message},
         transaction::Transaction,
     };
 
     use super::*;
+    use crate::p2p::logging::NopLogger;
 
     struct Registered(HashSet<PeerAddress>);
 
@@ -174,28 +202,6 @@ mod tests {
         async fn is_registered(&self, _epoch: Epoch, address: &PeerAddress) -> bool {
             self.0.contains(address)
         }
-    }
-
-    /// Never answers its first lookup, then answers every later one as registered.
-    struct StallsOnce(AtomicBool);
-
-    impl ValidatorRegistry for StallsOnce {
-        async fn is_registered(&self, _epoch: Epoch, _address: &PeerAddress) -> bool {
-            if !self.0.swap(true, Ordering::SeqCst) {
-                std::future::pending::<()>().await;
-            }
-            true
-        }
-    }
-
-    async fn check_sender<TRegistry: ValidatorRegistry>(
-        validators: &TRegistry,
-        from: PeerId,
-        msg: HotStuffMessage,
-    ) -> Result<(PeerId, HotStuffMessage), InboundMessagingError> {
-        resolve_sender_check(&mut Some((from, msg)), validators)
-            .await
-            .expect("a message is pending")
     }
 
     fn transactions_response() -> HotStuffMessage {
@@ -216,7 +222,7 @@ mod tests {
         let validator = PeerId::random();
         let registry = Registered(HashSet::from([validator.into()]));
 
-        let err = check_sender(&registry, PeerId::random(), transactions_response())
+        let err = check_sender(PeerId::random(), &transactions_response(), &registry)
             .await
             .unwrap_err();
         assert!(err.to_string().contains("not a validator"), "{err}");
@@ -227,7 +233,7 @@ mod tests {
         let validator = PeerId::random();
         let registry = Registered(HashSet::from([validator.into()]));
 
-        check_sender(&registry, validator, transactions_response())
+        check_sender(validator, &transactions_response(), &registry)
             .await
             .unwrap();
     }
@@ -239,25 +245,98 @@ mod tests {
             message: Some(Message::RequestMissingTransactions(Default::default())),
         };
 
-        check_sender(&registry, PeerId::random(), request).await.unwrap();
+        check_sender(PeerId::random(), &request, &registry).await.unwrap();
+    }
+
+    /// The gossip and loopback senders, held so those channels stay open.
+    type OpenChannels = (
+        mpsc::Sender<(PeerId, HotstuffMessage)>,
+        mpsc::UnboundedSender<HotstuffMessage>,
+    );
+
+    /// Direct messaging fed through the decoder from a queue of the given byte budget.
+    fn direct_messaging(
+        max_queued_bytes: usize,
+    ) -> (
+        ConsensusInboundMessaging<NopLogger>,
+        MessagingMode,
+        MessageQueueSender,
+        OpenChannels,
+    ) {
+        let (tx_messages, rx_messages) = message_queue(8, max_queued_bytes);
+        let (rx_direct, _decoder) = spawn_direct_message_decoder(rx_messages, Registered(HashSet::new()));
+        let (tx_gossip, rx_gossip) = mpsc::channel(1);
+        let (tx_loopback, rx_loopback) = mpsc::unbounded_channel();
+        let messaging =
+            ConsensusInboundMessaging::new(PeerId::random().into(), rx_direct, rx_gossip, rx_loopback, NopLogger);
+        let mode = MessagingMode::Enabled {
+            tx_messages: tx_messages.clone(),
+            tx_gossip_messages_by_topic: HashMap::new(),
+        };
+        (messaging, mode, tx_messages, (tx_gossip, tx_loopback))
+    }
+
+    fn encoded_sync_request(epoch: u64) -> Bytes {
+        let request = HotStuffMessage {
+            message: Some(Message::SyncRequest(SyncRequest { epoch, block_height: 7 })),
+        };
+        Bytes::from(prost::Message::encode_to_vec(&request))
+    }
+
+    /// Yields to the runtime until the decoder has run as far as it can.
+    async fn let_decoder_settle() {
+        for _ in 0..100 {
+            tokio::task::yield_now().await;
+        }
     }
 
     #[tokio::test]
-    async fn a_check_dropped_part_way_keeps_the_message_for_the_next_call() {
-        let registry = StallsOnce(AtomicBool::new(false));
+    async fn a_direct_message_is_decoded_once_taken_off_the_queue() {
+        let (mut messaging, mode, queue, _open) = direct_messaging(1024);
         let from = PeerId::random();
-        let mut pending = Some((from, transactions_response()));
 
-        let dropped =
-            tokio::time::timeout(Duration::from_millis(10), resolve_sender_check(&mut pending, &registry)).await;
-        assert!(dropped.is_err(), "the first lookup never answers");
-        assert!(pending.is_some(), "the message survives the dropped check");
+        mode.send_message(from, encoded_sync_request(3)).unwrap();
 
-        let (resolved_from, _) = resolve_sender_check(&mut pending, &registry)
-            .await
-            .expect("the message is still pending")
+        let (sender, msg) = messaging.next_message().await.unwrap().unwrap();
+        assert_eq!(sender, from);
+        assert!(
+            matches!(msg, HotstuffMessage::CatchUpSyncRequest(ref req) if req.epoch == Epoch(3)),
+            "{msg:?}"
+        );
+        assert_eq!(queue.queued_bytes(), 0);
+    }
+
+    #[tokio::test]
+    async fn the_decoder_runs_at_most_one_message_ahead_of_consensus() {
+        let (mut messaging, mode, queue, _open) = direct_messaging(1024);
+        let len = encoded_sync_request(1).len();
+        for epoch in 1..=3 {
+            mode.send_message(PeerId::random(), encoded_sync_request(epoch))
+                .unwrap();
+        }
+
+        let_decoder_settle().await;
+        assert_eq!(
+            queue.queued_bytes(),
+            2 * len,
+            "one message is decoded ahead and the rest stay encoded in the queue"
+        );
+
+        let (_, first) = messaging.next_message().await.unwrap().unwrap();
+        assert!(matches!(first, HotstuffMessage::CatchUpSyncRequest(ref req) if req.epoch == Epoch(1)));
+        let_decoder_settle().await;
+        assert_eq!(queue.queued_bytes(), len);
+    }
+
+    #[tokio::test]
+    async fn an_undecodable_direct_message_is_refused() {
+        let (mut messaging, mode, queue, _open) = direct_messaging(1024);
+
+        mode.send_message(PeerId::random(), Bytes::from_static(&[0xff; 8]))
             .unwrap();
-        assert_eq!(resolved_from, from);
-        assert!(pending.is_none());
+
+        let err = messaging.next_message().await.unwrap().unwrap_err();
+        assert!(err.to_string().contains("undecodable"), "{err}");
+        assert_eq!(queue.queued_bytes(), 0, "the refused message released its budget");
     }
 }

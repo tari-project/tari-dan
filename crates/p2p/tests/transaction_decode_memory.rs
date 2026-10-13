@@ -2,71 +2,22 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 //! Heap cost of decoding a peer-supplied transaction.
-//!
-//! Kept in a test binary of its own because it installs a counting global allocator, and any other
-//! test running alongside it would be counted too. The tests here take [`SERIAL`] for the same reason.
 
-use std::{
-    alloc::{GlobalAlloc, Layout, System},
-    hint::black_box,
-    sync::{
-        Mutex,
-        atomic::{AtomicUsize, Ordering},
-    },
-};
+mod support;
+
+use std::{hint::black_box, sync::atomic::Ordering};
 
 use prost::Message;
+use support::{OUTSTANDING, PEAK, SERIAL};
 use tari_consensus::messages::MissingTransactionsResponse;
 use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_ootle_p2p::proto;
 use tari_ootle_transaction::{Epoch, Instruction, MAX_TRANSACTION_INSTRUCTIONS, Transaction};
-
-static SERIAL: Mutex<()> = Mutex::new(());
+use tari_swarm::messaging::MAX_MESSAGE_SIZE;
 
 /// `ConsensusConstants::max_transaction_size_bytes`: the most bytes a transaction may encode to and
 /// still be relayed.
 const MAX_TRANSACTION_SIZE_BYTES: usize = 1_310_720;
-
-/// The most bytes the direct messaging protocol accepts in one consensus message.
-const MAX_MESSAGE_SIZE: usize = 4 * 1024 * 1024;
-
-struct Counting;
-
-static OUTSTANDING: AtomicUsize = AtomicUsize::new(0);
-static PEAK: AtomicUsize = AtomicUsize::new(0);
-
-unsafe impl GlobalAlloc for Counting {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let ptr = unsafe { System.alloc(layout) };
-        if !ptr.is_null() {
-            let now = OUTSTANDING.fetch_add(layout.size(), Ordering::Relaxed) + layout.size();
-            PEAK.fetch_max(now, Ordering::Relaxed);
-        }
-        ptr
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        OUTSTANDING.fetch_sub(layout.size(), Ordering::Relaxed);
-        unsafe { System.dealloc(ptr, layout) };
-    }
-
-    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        let new_ptr = unsafe { System.realloc(ptr, layout, new_size) };
-        if !new_ptr.is_null() {
-            if new_size >= layout.size() {
-                let grown = new_size - layout.size();
-                let now = OUTSTANDING.fetch_add(grown, Ordering::Relaxed) + grown;
-                PEAK.fetch_max(now, Ordering::Relaxed);
-            } else {
-                OUTSTANDING.fetch_sub(layout.size() - new_size, Ordering::Relaxed);
-            }
-        }
-        new_ptr
-    }
-}
-
-#[global_allocator]
-static ALLOC: Counting = Counting;
 
 /// The most heap decoding one transaction may take, whatever it carries: both instruction lists at their
 /// limit, plus room for the lists' growth while they decode.
