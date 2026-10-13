@@ -464,6 +464,17 @@ where
             self.is_initial_bootstrap_complete = true;
         }
 
+        // A relay can be lost without a circuit ever closing (a failed dial or listen), so a node that needs a relay
+        // re-selects one on each tick until it holds a circuit.
+        if self.needs_relay() &&
+            !self.relays.has_active_relay() &&
+            self.relays
+                .selected_relay()
+                .is_none_or(|r| !self.swarm.is_connected(&r.peer_id))
+        {
+            self.attempt_relay_reservation();
+        }
+
         // Periodically refresh the peer list from the rendezvous servers (if any) to pick up newly-registered peers.
         self.discover_rendezvous_peers(None);
 

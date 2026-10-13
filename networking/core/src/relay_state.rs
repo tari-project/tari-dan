@@ -15,8 +15,7 @@ pub(crate) const MAX_DISCOVERED_RELAY_ADDRESSES: usize = 8;
 ///
 /// Configured relays come from the node's config and are kept for the lifetime of the node. Discovered relays are
 /// peers that advertise the relay protocol themselves. Their claims are unverified, so they are bounded in number and
-/// addresses, held only while the peer is connected, never dialed by bootstrap, and only selected when no configured
-/// relay exists.
+/// addresses, held only while the peer is connected, and only selected when no relay is configured.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct RelayState {
     selected_relay: Option<RelayPeer>,
@@ -53,16 +52,14 @@ impl RelayState {
         self.selected_relay.as_mut()
     }
 
-    /// Selects `peer_id` as the relay if it is a known candidate. A selected configured relay is never displaced by a
-    /// discovered one.
+    /// Selects `peer_id` as the relay if it is a candidate. A discovered relay is a candidate only when no relay is
+    /// configured.
     pub fn set_relay_peer(&mut self, peer_id: PeerId, dialled_address: Option<Multiaddr>) -> bool {
-        if let Some(selected) = self.selected_relay.as_ref() {
-            if selected.peer_id == peer_id {
-                return true;
-            }
-            if self.is_configured_relay(&selected.peer_id) && !self.is_configured_relay(&peer_id) {
-                return false;
-            }
+        if self.selected_relay.as_ref().is_some_and(|p| p.peer_id == peer_id) {
+            return true;
+        }
+        if !self.configured_relays.is_empty() && !self.is_configured_relay(&peer_id) {
+            return false;
         }
 
         if let Some(addrs) = self.addresses_of(&peer_id) {
@@ -213,7 +210,7 @@ mod tests {
     }
 
     #[test]
-    fn discovered_relays_are_never_dialed_by_bootstrap() {
+    fn configured_relays_exclude_discovered_relays() {
         let configured = PeerId::random();
         let mut state = RelayState::new([(configured, addr(1))]);
         state.set_discovered_relay(PeerId::random(), [addr(2)]);
@@ -238,6 +235,10 @@ mod tests {
 
         assert!(!state.set_relay_peer(discovered[0], None));
         assert_eq!(state.selected_relay().unwrap().peer_id, configured);
+
+        state.clear_selected_relay();
+        assert!(!state.set_relay_peer(discovered[0], None));
+        assert!(state.selected_relay().is_none());
     }
 
     #[test]
