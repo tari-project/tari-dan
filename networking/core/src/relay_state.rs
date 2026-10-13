@@ -112,8 +112,16 @@ impl RelayState {
         true
     }
 
+    /// Forgets a discovered relay. A selection of that relay without a circuit is cleared with it, so the node never
+    /// re-dials addresses it no longer holds. A selection with a circuit is left for the circuit's close to replace.
     pub fn remove_discovered_relay(&mut self, peer: &PeerId) {
-        self.discovered_relays.remove(peer);
+        if self.discovered_relays.remove(peer).is_some() &&
+            self.selected_relay
+                .as_ref()
+                .is_some_and(|r| r.peer_id == *peer && !r.has_circuit())
+        {
+            self.selected_relay = None;
+        }
     }
 
     pub fn clear_selected_relay(&mut self) {
@@ -126,15 +134,15 @@ impl RelayState {
         } else {
             &self.configured_relays
         };
-        let Some((peer, addrs)) = candidates.iter().choose(&mut rand::rng()) else {
-            return;
-        };
-        self.selected_relay = Some(RelayPeer {
-            peer_id: *peer,
-            addresses: addrs.iter().cloned().collect(),
-            circuit_connection_id: None,
-            remote_address: None,
-        });
+        self.selected_relay = candidates
+            .iter()
+            .choose(&mut rand::rng())
+            .map(|(peer, addrs)| RelayPeer {
+                peer_id: *peer,
+                addresses: addrs.iter().cloned().collect(),
+                circuit_connection_id: None,
+                remote_address: None,
+            });
     }
 
     fn addresses_of(&self, peer_id: &PeerId) -> Option<&HashSet<Multiaddr>> {
@@ -259,5 +267,28 @@ mod tests {
         state.set_discovered_relay(discovered, [addr(1)]);
         state.select_random_relay();
         assert_eq!(state.selected_relay().unwrap().peer_id, discovered);
+    }
+
+    #[test]
+    fn removed_discovered_relay_is_deselected() {
+        let mut state = RelayState::new([]);
+        let discovered = PeerId::random();
+        state.set_discovered_relay(discovered, [addr(1)]);
+        assert!(state.set_relay_peer(discovered, None));
+
+        state.remove_discovered_relay(&discovered);
+        assert!(state.selected_relay().is_none());
+    }
+
+    #[test]
+    fn select_random_relay_without_candidates_clears_selection() {
+        let mut state = RelayState::new([]);
+        let discovered = PeerId::random();
+        state.set_discovered_relay(discovered, [addr(1)]);
+        state.select_random_relay();
+        state.discovered_relays.clear();
+
+        state.select_random_relay();
+        assert!(state.selected_relay().is_none());
     }
 }
