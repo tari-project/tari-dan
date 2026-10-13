@@ -31,13 +31,13 @@ impl PrometheusExecutionMetrics {
         let registry = registry.sub_registry_with_prefix("execution");
         Self {
             // Most transactions execute in well under a millisecond, so buckets start at 10µs to
-            // resolve that mode. 17 doublings reach ~0.65s; anything slower lands in +Inf.
+            // resolve that mode. 17 buckets reach ~0.65s; anything slower lands in +Inf.
             execution_seconds: Family::new_with_constructor(
                 (|| Histogram::new(exponential_buckets(0.000_01, 2.0, 17))) as fn() -> Histogram,
             )
             .register_at(
                 "transaction_seconds",
-                "Time the engine spent executing one transaction, excluding finalization, in seconds, by outcome",
+                "Time the engine spent executing one transaction, in seconds, by outcome",
                 registry,
             ),
         }
