@@ -14,9 +14,10 @@ use tari_common_types::types::FixedHash;
 use tari_engine_types::{
     Utxo,
     events::Event,
+    fees::FeeReceipt,
     published_template::PublishedTemplateMetadata,
     substate::{Substate, SubstateId},
-    transaction_receipt::TransactionReceipt,
+    transaction_receipt::{FinalizeOutcome, TransactionReceipt},
 };
 use tari_indexer_client::types::{
     ListSubstateItem,
@@ -48,6 +49,7 @@ use tari_template_lib_types::{
     ResourceAddress,
     TemplateAddress,
     TransactionReceiptAddress,
+    UtxoAddress,
     UtxoId,
     crypto::{RistrettoPublicKeyBytes, UtxoTag},
 };
@@ -289,17 +291,22 @@ pub trait IndexerStoreWriteTransaction {
     fn commit(self) -> Result<(), StorageError>;
     fn rollback(self) -> Result<(), StorageError>;
     fn key_value_set<K: AsRef<str>, V: Serialize>(&mut self, key: K, value: V) -> Result<(), StorageError>;
+    /// Applies each UTXO update, returning the addresses of unspent outputs skipped because an
+    /// unspent row already holds their `(resource, public nonce, tag)`. The stored row is kept.
     fn batch_insert_utxo_updates<I: IntoIterator<Item = UtxoUpdateRecord>>(
         &mut self,
         epoch: Epoch,
         updates: I,
-    ) -> Result<(), StorageError>;
+    ) -> Result<Vec<UtxoAddress>, StorageError>;
     fn upsert_substate(&mut self, substate: &SubstateData) -> Result<(), StorageError>;
+    /// Inserts each receipt with its events, skipping any whose address already holds a receipt.
+    /// A receipt address is written once on the network, so the stored receipt is kept: replacing
+    /// it would let any later stream rewrite a transaction's recorded outcome.
     fn batch_insert_transaction_receipts<I: IntoIterator<Item = (TransactionReceiptAddress, TransactionReceipt)>>(
         &mut self,
         receipts: I,
         event_filters: &[EventFilter],
-    ) -> Result<Vec<InsertedEvent>, StorageError>;
+    ) -> Result<InsertedReceipts, StorageError>;
     /// Records a transaction submitted directly to this indexer. A row already stored from gossip is
     /// upgraded to [`TransactionSource::Local`]: the network gossips a submission straight back, and
     /// which of the two writes lands first is a race that must not decide the recorded source. Only
@@ -341,6 +348,13 @@ pub trait IndexerStoreWriteTransaction {
         template_address: &TemplateAddress,
         metadata: &PublishedTemplateMetadata,
     ) -> Result<(), StorageError>;
+    /// Records a template's catalogue entry unless it already has one, returning whether it was
+    /// inserted. A template is published once, so an entry already held is never rewritten.
+    fn insert_or_ignore_template_catalogue(
+        &mut self,
+        template_address: &TemplateAddress,
+        metadata: &PublishedTemplateMetadata,
+    ) -> Result<bool, StorageError>;
 
     fn insert_watched_substate(
         &mut self,
@@ -448,6 +462,25 @@ pub struct EventsPage {
     /// `None` once no further rows can match. A page can be shorter than the limit, or empty,
     /// and still carry a cursor when a wildcard scan stopped at its limit.
     pub next_cursor: Option<i64>,
+}
+
+/// What [`IndexerStoreWriteTransaction::batch_insert_transaction_receipts`] wrote.
+#[derive(Debug, Default)]
+pub struct InsertedReceipts {
+    pub receipts: Vec<InsertedReceipt>,
+    /// Addresses that already held a receipt, which was kept as stored.
+    pub skipped: Vec<TransactionReceiptAddress>,
+    /// The events of the inserted receipts that matched the event filters.
+    pub events: Vec<InsertedEvent>,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertedReceipt {
+    pub transaction_id: TransactionId,
+    pub outcome: FinalizeOutcome,
+    pub fee_receipt: FeeReceipt,
+    /// Events the receipt carries, before the event filters.
+    pub num_events: usize,
 }
 
 /// An event that was inserted into the database, with its assigned auto-increment ID.
