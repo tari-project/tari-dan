@@ -9,8 +9,6 @@ import type {
   GetNetworkEconomicsResponse,
   GetNetworkInfoResponse,
   GetNetworkSyncStateResponse,
-  GetNonFungiblesRequest,
-  GetNonFungiblesResponse,
   GetResourceResponse,
   GetSubstatesRequest,
   GetSubstatesResponse,
@@ -119,10 +117,6 @@ export class IndexerClient {
 
   public listValidators(params: Partial<ListValidatorsRequest> = {}): Promise<ListValidatorsResponse> {
     return this.transport.sendGet(`validators`, params);
-  }
-
-  public getNonFungibles(params: GetNonFungiblesRequest): Promise<GetNonFungiblesResponse> {
-    return this.transport.sendGet(`non-fungibles`, params);
   }
 
   public substatesGet(id: SubstateId, params: IndexerGetSubstateRequest): Promise<IndexerGetSubstateResponse> {

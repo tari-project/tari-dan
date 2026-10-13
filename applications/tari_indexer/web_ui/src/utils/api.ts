@@ -24,8 +24,6 @@ import { IndexerClient } from "@tari-project/indexer-client";
 import type {
   GetNetworkEconomicsResponse,
   GetNetworkSyncStateResponse,
-  GetNonFungiblesRequest,
-  GetNonFungiblesResponse,
   GetTransactionReceiptResponse,
   IndexerGetConnectionsResponse,
   IndexerGetIdentityResponse,
@@ -118,9 +116,6 @@ export const getSubstate = (
       include_proof: false,
     }),
   );
-export const getNonFungibles = (request: GetNonFungiblesRequest): Promise<GetNonFungiblesResponse> =>
-  client().then((c) => c.getNonFungibles(request));
-
 export const getTransaction = (transaction_id: string): Promise<IndexerGetTransactionResponse> =>
   client().then((c) => c.getTransaction(transaction_id));
 

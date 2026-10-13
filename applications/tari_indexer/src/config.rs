@@ -531,8 +531,6 @@ pub struct IndexerRateLimitsConfig {
     pub substates_rate: RefillRate,
     /// /utxos/* – default 300 req / 10s burst (30/s sustained)
     pub utxos_fetch_rate: RefillRate,
-    /// GET /non-fungibles – default 200 req / 10s burst (20/s sustained)
-    pub non_fungibles_rate: RefillRate,
     /// GET /transactions/* read endpoints – default 200 req / 10s burst (20/s sustained)
     pub transactions_rate: RefillRate,
     /// GET /epoch-checkpoints/* – default 20 req / 10s burst (2/s sustained). Below the other reads: a
@@ -563,7 +561,6 @@ impl Default for IndexerRateLimitsConfig {
             transactions_dry_run_submit_rate: RefillRate::new(30.0, window).unwrap(),
             substates_rate: RefillRate::new(300.0, window).unwrap(),
             utxos_fetch_rate: RefillRate::new(300.0, window).unwrap(),
-            non_fungibles_rate: RefillRate::new(200.0, window).unwrap(),
             transactions_rate: RefillRate::new(200.0, window).unwrap(),
             epoch_checkpoints_rate: default_epoch_checkpoints_rate(),
             reads_rate: default_reads_rate(),

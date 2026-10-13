@@ -19,13 +19,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateId},
     transaction_receipt::{FinalizeOutcome, TransactionReceipt},
 };
-use tari_indexer_client::types::{
-    ListSubstateItem,
-    NonFungibleSubstate,
-    TransactionEntry,
-    TransactionSource,
-    UtxoStateUpdateSet,
-};
+use tari_indexer_client::types::{TransactionEntry, TransactionSource, UtxoStateUpdateSet};
 use tari_indexer_lib::substate_cache::{FetchWatermark, SubstateCacheEntry, SubstateCacheEntryRef};
 use tari_ootle_common_types::{
     Epoch,
@@ -35,7 +29,6 @@ use tari_ootle_common_types::{
     SubstateVersion,
     optional::Optional,
     shard::Shard,
-    substate_type::SubstateType,
 };
 use tari_ootle_storage::{
     Ordering,
@@ -97,14 +90,6 @@ pub trait IndexerStoreReader: Send + Sync + 'static {
 }
 
 pub trait IndexerStoreReadTransaction {
-    fn list_substates(
-        &mut self,
-        by_id: Option<&SubstateId>,
-        filter_by_type: Option<SubstateType>,
-        filter_by_template: Option<TemplateAddress>,
-        limit: Option<u64>,
-        offset: Option<u64>,
-    ) -> Result<Vec<ListSubstateItem>, StorageError>;
     fn get_substate(
         &mut self,
         address: &SubstateId,
@@ -112,12 +97,6 @@ pub trait IndexerStoreReadTransaction {
     ) -> Result<Option<SubstateRecord>, StorageError>;
 
     fn get_substates(&mut self, ids: &[SubstateId]) -> Result<HashMap<SubstateId, Substate>, StorageError>;
-    fn get_non_fungibles_by_resource_address(
-        &mut self,
-        resource_address: ResourceAddress,
-        limit: usize,
-        offset: usize,
-    ) -> Result<Vec<NonFungibleSubstate>, StorageError>;
 
     /// Returns the events matching `query` with id below `before_id` (or from the newest when
     /// `None`), newest first, skipping the first `offset` matches.

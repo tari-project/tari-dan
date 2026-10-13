@@ -64,12 +64,11 @@ streaming interface for consuming UTXO updates from a running indexer.
 |--------|------|------|-------------|
 | `get_template_definition(address)` | GET | `/templates/{template_address}` | Fetch a template definition by its address |
 
-### Resources & Non-Fungibles
+### Resources
 
 | Method | HTTP | Path | Description |
 |--------|------|------|-------------|
 | `get_resource(address)` | GET | `/resources/{resource_address}` | Fetch a resource by ID |
-| `get_non_fungibles(req)` | GET | `/non-fungibles` | Get non-fungibles by resource address |
 
 ### UTXOs
 

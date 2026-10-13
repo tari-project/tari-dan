@@ -27,7 +27,6 @@ use tari_template_abi::TemplateDef;
 use tari_template_lib_types::{
     Amount,
     Hash32,
-    NonFungibleAddress,
     ResourceAddress,
     TemplateAddress,
     TransactionReceiptAddress,
@@ -570,39 +569,6 @@ pub struct GetIdentityResponse {
     #[cfg_attr(feature = "utoipa", schema(value_type = String))]
     pub public_key: RistrettoPublicKeyBytes,
     pub public_addresses: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-pub struct GetNonFungiblesRequest {
-    #[cfg_attr(feature = "utoipa", schema(value_type = String))]
-    pub address: ResourceAddress,
-    #[cfg_attr(feature = "ts", ts(type = "number | bigint | string"))]
-    #[serde(deserialize_with = "ootle_serde::str_number::deserialize")]
-    pub start_index: u64,
-    #[cfg_attr(feature = "ts", ts(type = "number | bigint | string"))]
-    #[serde(deserialize_with = "ootle_serde::str_number::deserialize")]
-    pub end_index: u64,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-pub struct GetNonFungiblesResponse {
-    pub non_fungibles: Vec<NonFungibleSubstate>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
-#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
-pub struct NonFungibleSubstate {
-    #[cfg_attr(feature = "utoipa", schema(value_type = String))]
-    pub address: NonFungibleAddress,
-    #[cfg_attr(feature = "utoipa", schema(value_type = u64))]
-    pub version: SubstateVersion,
-    #[cfg_attr(feature = "utoipa", schema(value_type = Object))]
-    pub substate: SubstateValue,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

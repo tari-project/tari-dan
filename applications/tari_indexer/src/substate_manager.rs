@@ -35,7 +35,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateId, SubstateValue},
 };
 use tari_epoch_manager::service::EpochManagerHandle;
-use tari_indexer_client::types::{ListSubstateItem, NonFungibleSubstate, UtxoStateUpdateSet};
+use tari_indexer_client::types::UtxoStateUpdateSet;
 use tari_indexer_lib::{
     cached_substate_manager::{
         CachedSubstateManager,
@@ -56,13 +56,11 @@ use tari_ootle_common_types::{
     SubstateVersion,
     optional::IsNotFoundError,
     shard::Shard,
-    substate_type::SubstateType,
 };
 use tari_ootle_p2p::PeerAddress;
 use tari_ootle_storage::{StorageError, consensus_models::VerifiedBlockTip};
 use tari_template_lib_types::{
     ResourceAddress,
-    TemplateAddress,
     UtxoId,
     crypto::{RistrettoPublicKeyBytes, UtxoTag},
 };
@@ -205,24 +203,6 @@ impl SubstateManager {
             cache_manager: cached_substates,
             substate_store: self.substate_store,
         }
-    }
-
-    pub async fn get_stored_substates_by_filters(
-        &self,
-        by_id: Option<&SubstateId>,
-        filter_by_type: Option<SubstateType>,
-        filter_by_template: Option<TemplateAddress>,
-        limit: Option<u64>,
-        offset: Option<u64>,
-    ) -> Result<Vec<ListSubstateItem>, SubstateManagerError> {
-        let by_id = by_id.cloned();
-        let substates = self
-            .substate_store
-            .with_read_tx(move |tx| {
-                tx.list_substates(by_id.as_ref(), filter_by_type, filter_by_template, limit, offset)
-            })
-            .await?;
-        Ok(substates)
     }
 
     pub async fn get_utxo_updates(
@@ -475,19 +455,6 @@ impl SubstateManager {
             Some(row) => Ok(Some(row.try_into()?)),
             None => Ok(None),
         }
-    }
-
-    pub async fn get_non_fungibles_by_resource_address(
-        &self,
-        address: ResourceAddress,
-        limit: usize,
-        offset: usize,
-    ) -> Result<Vec<NonFungibleSubstate>, SubstateManagerError> {
-        let nfts = self
-            .substate_store
-            .with_read_tx(move |tx| tx.get_non_fungibles_by_resource_address(address, limit, offset))
-            .await?;
-        Ok(nfts)
     }
 }
 

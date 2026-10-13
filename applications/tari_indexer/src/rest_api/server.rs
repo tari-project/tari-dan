@@ -55,7 +55,6 @@ const REQUEST_BODY_LIMIT: usize = 4 * 1024 * 1024; // 4 MB
     handlers::network::get_connections,
     handlers::substates::get_substate,
     handlers::substates::fetch_substates,
-    handlers::nfts::get_non_fungibles,
     handlers::resources::get_tari,
     handlers::resources::get_resource,
     handlers::indexer_events::sse_events,
@@ -180,12 +179,6 @@ fn api_routes(rate_limits: &IndexerRateLimitsConfig, sse_metrics: &SseConnection
         trusted_headers,
         abandoned_request_cost: 0.0,
     };
-    let non_fungibles_limiter = RateLimitConfig {
-        enabled: rate_limits.enabled,
-        limiter: IpRateLimiter::new(rate_limits.non_fungibles_rate),
-        trusted_headers,
-        abandoned_request_cost: 0.0,
-    };
     let epoch_checkpoints_limiter = RateLimitConfig {
         enabled: rate_limits.enabled,
         limiter: IpRateLimiter::new(rate_limits.epoch_checkpoints_rate),
@@ -285,9 +278,6 @@ fn api_routes(rate_limits: &IndexerRateLimitsConfig, sse_metrics: &SseConnection
                 )
                 .route_layer(middleware::from_fn_with_state(reads_limiter.clone(), rate_limit_middleware))
             )
-            // GET /non-fungibles – per-IP rate limit (rate_limits.non_fungibles_rate)
-            .route("/non-fungibles", get(handlers::nfts::get_non_fungibles)
-                .route_layer(middleware::from_fn_with_state(non_fungibles_limiter, rate_limit_middleware)))
             .nest("/utxos", Router::new()
                 // GET /utxos – per-IP rate limit (rate_limits.utxos_fetch_rate)
                 .route("/", get(handlers::utxos::list_utxos)
@@ -387,5 +377,20 @@ mod tests {
             }
             assert!(limited, "{path} served {ATTEMPTS} requests from one IP without a 429");
         }
+    }
+
+    #[tokio::test]
+    async fn non_fungibles_listing_is_not_served() {
+        let router = api_routes(&IndexerRateLimitsConfig::default(), &sse_metrics());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
+                .await
+                .unwrap();
+        });
+
+        let path = "/non-fungibles?address=resource_00&start_index=0&end_index=10";
+        assert_eq!(status_of(addr, path).await, 404);
     }
 }

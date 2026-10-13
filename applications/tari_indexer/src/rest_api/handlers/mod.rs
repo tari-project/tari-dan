@@ -6,7 +6,6 @@ pub mod epoch_checkpoints;
 pub mod indexer_events;
 pub mod misc;
 pub mod network;
-pub mod nfts;
 pub mod resources;
 pub mod substates;
 pub mod templates;
