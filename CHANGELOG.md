@@ -3,51 +3,89 @@
 All notable changes to this project will be documented in this file.
 See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
-## Unreleased
+## [0.46.0](https://github.com/tari-project/tari-ootle/compare/v0.45.0...v0.46.0) (2026-10-13)
+
+Introduces protocol version V2: block headers commit to a transaction merkle root, substate proofs
+bind to their shard, and foreign pledges are authenticated. Esmeralda activates V2 at epoch 12220.
+Validator storage moves hot consensus state into memory, and a broad hardening pass bounds what
+peers, templates and transactions can make a node do.
 
 ### ⚠️ Upgrade notes
 
-- **Protocol V2 now also binds every substate proof to its shard**: each leaf of a block's state merkle root
-  commits to its shard. No persistent network depends on V2 state roots yet: esmeralda has not scheduled V2.
-- **V2 state merkle roots change, so every network started on V2 must be reset.** Any non-esmeralda network or
-  local database started on 0.46.0 (igor, nextnet, stagenet, mainnet, localnet) runs V2 from genesis; wipe its
-  data directory before upgrading. `check_activation_schedule` does not detect this, because the genesis
-  version is unchanged.
-- **Blocks bound the input bytes they pledge across shard groups and the foreign proposals they carry**:
-  validators upgrade together, and a cross-shard transaction whose inputs in one shard group exceed 1.5 MiB now
-  aborts with `INPUT_PLEDGE_TOO_LARGE`. (#2894)
-
-## [0.46.0](https://github.com/tari-project/tari-ootle/compare/v0.45.0...v0.46.0) (2026-10-07)
-
-Introduces protocol version V2, whose block headers commit to a transaction merkle root. Also fixes
-burn claims, bounds per-transaction and per-block state writes, and hardens networking, the indexer
-and the wallet against misbehaving peers.
-
-### ⚠️ Upgrade notes
-
-- **Esmeralda activates protocol V2 at epoch 12220**; every other network starts at V2. All
-  esmeralda validators and indexers must run 0.46.0 before that epoch. (#2804)
-- **A claimed burn UTXO is minted to the claim key, not the sealer.** (#2800)
+- **Esmeralda activates protocol V2 at epoch 12220.** All esmeralda validators and indexers must run
+  0.46.0 before that epoch. (#2804, #2762, #2798)
+- **Every other network starts at V2 and must be reset**; wipe its data directory before
+  upgrading. (#2804, #2867)
+- **Validator databases migrate on first start** and cannot then be opened by an older binary.
+  (#2862, #2863, #2868, #2878)
+- **Template return values are no longer in transaction results** or dry runs; read component state
+  or events instead, and use `TemplateTest::return_values()` in tests. (#2859)
+- **Publish fees change** and modules with too many functions or too much compile work are refused.
+  (#2881)
+- **Cross-shard transactions whose inputs in one shard group exceed 1.5 MiB abort** with
+  `INPUT_PLEDGE_TOO_LARGE`. (#2894)
 - **Transactions may persist at most 4 MiB of state**; larger ones fail. (#2821)
+- **m-of-n access rules that list a requirement twice are rejected.** (#2851)
+- **A claimed burn UTXO is minted to the claim key, not the sealer.** (#2800)
+- **Wallet daemon: only the wallet's own session can approve a transaction request.** API keys can no
+  longer hold that grant, and WebRTC apps need walletd started with `--enable-webrtc`. (#2855)
 
 ### Features
 
-- **Transaction merkle root in block headers** (V2), proving whether a block finalized a
-  transaction. (#2804)
+- **Transaction merkle root in block headers**, proving whether a block finalized a transaction. (#2804)
+- **Shard-bound substate proofs and sound Down proofs.** (#2762, #2867)
+- **Wallet daemon signing requests** for out-of-band co-signing, with an approval page in the UI.
+  (#2849, #2850)
+- **Faster validator storage**: substate locks, block diffs and pending state tree diffs are held in
+  memory. (#2862, #2863, #2868, #2879)
 
 ### Bug fixes
 
-- **consensus:** blocks bound the bytes they write per shard, so state sync can always progress. (#2821)
+- **consensus:** foreign pledge values and embedded foreign proposals are authenticated. (#2798, #2827)
+- **consensus:** blocks bound the bytes they write per shard and pledge across shard groups, and
+  the foreign proposals they carry. (#2821, #2894)
+- **consensus:** proposals are packed in random order and oversized transactions get a capped share
+  of a block. (#2866)
+- **consensus:** a timeout certificate is bound to its epoch and view, and the future-epoch sync
+  probe to the local shard group. (#2835, #2836)
 - **consensus:** the leader-skip walk saturates at the top of the height range. (#2825)
 - **engine:** nested template calls share one WASM compute budget. (#2817)
+- **engine:** scanning and decoding call arguments, and handling return values, are charged. (#2858, #2888)
+- **engine:** template log output is bounded and reaches the host log only once the receipt keeps
+  it. (#2882, #2884)
+- **engine:** event topics and view keys are validated in full. (#2880, #2895)
+- **transaction:** access rules and call arguments are bounded at decode, and the builder signs the
+  finished body. (#2852, #2893)
+- **template_builtin:** the liquidity pool rejects confidential deposits, and the account vault map
+  is bounded. (#2853, #2900)
+- **template_macros:** constructors returning a tuple compile. (#2871)
+- **state sync:** liveness is hardened, streamed state is proven only at proof points, and pruned
+  blocks' state versions stay provable. (#2864, #2876, #2878)
+- **state sync:** batches split by encoded size. (#2812)
+- **storage:** down proofs, state version proofs and commit proofs are pruned once nothing cites
+  them. (#2874, #2877)
+- **storage:** a block's commands are held in a validated canonical list, and a non-numeric block
+  filter matches nothing. (#2869, #2897)
 - **epoch_manager:** committees are reassigned when the current epoch's hash is corrected. (#2810)
-- **networking:** idle RPC sessions close and inbound connections are capped. (#2816)
-- **validator:** state sync batches split by encoded size; the metrics server is split from JSON-RPC. (#2812, #2815)
-- **indexer:** remaining public read routes are rate limited and checkpoint pages capped at 20. (#2823)
+- **networking:** idle RPC sessions close, inbound connections and peer-learnt relays are capped,
+  and direct messages decode in the consumer. (#2816, #2856, #2887, #2896)
+- **validator:** the metrics server is split from JSON-RPC. (#2815)
+- **indexer:** transaction results need committee agreement, verified substate reads need a recent
+  anchor, and public read routes are rate limited. (#2823, #2838, #2885)
+- **indexer:** submit bursts no longer fail with "database is locked", and cached component state
+  keeps null. (#2865, #2870)
 - **wallet:** indexer requests are bounded so an unresponsive indexer fails over, and substates
   whose value does not match their id are refused. (#2802, #2813)
-- **walletd:** a burn claim's revealed fee is capped at its local price, and a transfer proof's
-  change nets out the revealed amount. (#2803, #2824)
+- **wallet:** confidential outputs finalize against the transaction diff, and paying a fee with a
+  swap needs an explicit swap input. (#2837, #2898)
+- **walletd:** a burn claim's revealed fee is capped at its local price, a transfer proof's change
+  nets out the revealed amount, `detect_inputs` refuses signed submissions, and pending WebAuthn
+  sessions are bounded. (#2803, #2824, #2854, #2899)
+
+### Dependencies
+
+- **wasmer 7.5.0**; event-listener, cxx and gix-hash bumped to drop unsound or advisory-flagged
+  releases. (#2828, #2829, #2830, #2831, #2834)
 
 ## [0.45.0](https://github.com/tari-project/tari-ootle/compare/v0.44.0...v0.45.0) (2026-10-06)
 
