@@ -10,6 +10,7 @@ pub struct Config {
     pub sync_timeout: Duration,
     pub max_want_list_len: usize,
     pub max_failure_retries: usize,
+    pub max_clock_drift: Duration,
 }
 
 impl Default for Config {
@@ -19,6 +20,7 @@ impl Default for Config {
             sync_timeout: Duration::from_secs(10),
             max_want_list_len: 1000,
             max_failure_retries: 3,
+            max_clock_drift: Duration::from_secs(300),
         }
     }
 }

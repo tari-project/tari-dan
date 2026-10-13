@@ -36,6 +36,11 @@ impl SignedPeerRecord {
             .is_valid(&peer_signature_challenge(&self.addresses, &self.updated_at))
     }
 
+    pub fn is_updated_at_within(&self, max_drift: Duration) -> bool {
+        let now = epoch_time_now();
+        self.updated_at <= now.saturating_add(max_drift)
+    }
+
     pub fn to_peer_id(&self) -> PeerId {
         self.signature.public_key.to_peer_id()
     }
@@ -207,7 +212,7 @@ fn sign_peer_rec(keypair: &identity::Keypair, addresses: &HashSet<Multiaddr>, up
     PeerSignature::sign(keypair, &msg)
 }
 
-fn peer_signature_challenge<'a, I: IntoIterator<Item = &'a Multiaddr>>(
+pub(crate) fn peer_signature_challenge<'a, I: IntoIterator<Item = &'a Multiaddr>>(
     addresses: I,
     updated_at: &Duration,
 ) -> [u8; 64] {
@@ -220,4 +225,42 @@ fn peer_signature_challenge<'a, I: IntoIterator<Item = &'a Multiaddr>>(
     }
     hasher.update(updated_at.as_secs().to_be_bytes());
     hasher.finalize().into()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{sync::Arc, time::Duration};
+
+    use libp2p::identity;
+
+    use super::*;
+
+    #[test]
+    fn test_signed_peer_record_validity_and_time_drift() {
+        let keypair = Arc::new(identity::Keypair::generate_ed25519());
+        let mut local_rec = LocalPeerRecord::new(keypair);
+        local_rec.add_address("/ip4/127.0.0.1/tcp/8000".parse().unwrap());
+
+        let signed_rec = SignedPeerRecord::from(local_rec);
+        assert!(signed_rec.is_valid());
+        assert!(signed_rec.is_updated_at_within(Duration::from_secs(300)));
+
+        // Record with corrupted signature fails is_valid
+        let mut corrupted_rec = signed_rec.clone();
+        corrupted_rec.signature.signature[0] ^= 0xff;
+        assert!(!corrupted_rec.is_valid());
+
+        // Record with timestamp beyond max_drift fails is_updated_at_within
+        let far_future = epoch_time_now() + Duration::from_secs(10_000);
+        let keypair2 = identity::Keypair::generate_ed25519();
+        let addrs = vec!["/ip4/127.0.0.1/tcp/8000".parse().unwrap()];
+        let sig = PeerSignature::sign(&keypair2, &peer_signature_challenge(&addrs, &far_future));
+        let future_rec = SignedPeerRecord {
+            addresses: addrs,
+            updated_at: far_future,
+            signature: sig,
+        };
+        assert!(future_rec.is_valid());
+        assert!(!future_rec.is_updated_at_within(Duration::from_secs(300)));
+    }
 }

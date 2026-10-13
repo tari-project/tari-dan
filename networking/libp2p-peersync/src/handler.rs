@@ -46,9 +46,9 @@ use crate::{
     store::PeerStore,
 };
 
-pub(crate) type Framed<In, Out = In> = asynchronous_codec::Framed<Stream, quick_protobuf_codec::Codec<In, Out>>;
-pub(crate) type FramedOutbound = Framed<proto::Message, proto::WantPeerResponse>;
-pub(crate) type FramedInbound = Framed<proto::WantPeerResponse, proto::Message>;
+pub(crate) type Framed<In, Out = In, S = Stream> = asynchronous_codec::Framed<S, quick_protobuf_codec::Codec<In, Out>>;
+pub(crate) type FramedOutbound<S = Stream> = Framed<proto::Message, proto::WantPeerResponse, S>;
+pub(crate) type FramedInbound<S = Stream> = Framed<proto::WantPeerResponse, proto::Message, S>;
 
 #[derive(Debug)]
 pub enum HandlerAction {
@@ -93,7 +93,7 @@ impl<TStore: PeerStore> Handler<TStore> {
             pending_events: VecDeque::new(),
             must_request_substream: true,
             tasks: futures_bounded::FuturesSet::new(config.sync_timeout, config.max_concurrent_streams),
-            config: Default::default(),
+            config: config.clone(),
             semaphore,
             aquired: None,
         }
@@ -146,6 +146,7 @@ where TStore: PeerStore
         let (stream, _protocol) = outbound.protocol;
         let framed = new_framed_codec(stream, MAX_MESSAGE_SIZE);
         let store = self.store.clone();
+        let config = self.config.clone();
 
         let pending_local_peer_record = self.pending_local_peer_record.take();
         let fut = outbound_request_want_list_task(
@@ -154,6 +155,7 @@ where TStore: PeerStore
             store,
             self.current_want_list.clone(),
             pending_local_peer_record,
+            config,
         );
 
         if self.tasks.try_push(fut).is_err() {
