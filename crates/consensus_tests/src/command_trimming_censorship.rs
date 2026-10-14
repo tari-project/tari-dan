@@ -38,17 +38,12 @@ fn trim_command_for_tx(msg: &mut HotstuffMessage, target_tx: &TransactionId, tri
         };
         let commands = fp.commit_proof_mut().commands_mut();
         for entry in commands.iter_mut() {
-            let is_target = matches!(
-                entry,
-                CommandOrHash::Command(cmd)
-                    if cmd.transaction().is_some_and(|t| t.id() == target_tx)
-            );
-            if is_target {
-                if let CommandOrHash::Command(cmd) = entry {
-                    let hash = cmd.hash(protocol_version);
-                    *entry = CommandOrHash::Hash(hash);
-                    *trimmed.lock().unwrap() += 1;
-                }
+            if let CommandOrHash::Command(cmd) = entry &&
+                cmd.transaction().is_some_and(|t| t.id() == target_tx)
+            {
+                let hash = cmd.hash(protocol_version);
+                *entry = CommandOrHash::Hash(hash);
+                *trimmed.lock().unwrap() += 1;
             }
         }
     };
@@ -147,7 +142,8 @@ async fn trimmed_foreign_command_outcome() {
     );
 
     if resolved {
-        test.assert_all_validators_have_decision(tx.id(), Decision::Commit).await;
+        test.assert_all_validators_have_decision(tx.id(), Decision::Commit)
+            .await;
         eprintln!("RESULT: transaction resolved (COMMIT) despite the trimmed command — no permanent hang observed.");
     } else {
         eprintln!(
@@ -161,5 +157,8 @@ async fn trimmed_foreign_command_outcome() {
 
     // The test intentionally does not assert a specific outcome: the whole point of running it is to
     // find out, honestly, whether this is a liveness bug (hang) or merely a delay/no-op (recovers).
-    assert!(num_trimmed > 0, "the mutator never saw the target command — test setup did not exercise the bug");
+    assert!(
+        num_trimmed > 0,
+        "the mutator never saw the target command — test setup did not exercise the bug"
+    );
 }

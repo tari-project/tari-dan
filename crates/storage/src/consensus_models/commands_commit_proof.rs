@@ -256,20 +256,20 @@ impl CommandsCommitProofV1 {
 // for that one transaction, not a bounded delay. See the security advisory for full detail.
 //
 // A verifiably sound fix needs one of:
-//   1. Bind a per-recipient-shard-group relevance commitment into the SAME authenticated data the recipient
-//      already checks. This is harder than it sounds: the merkle root this proof is checked against
+//   1. Bind a per-recipient-shard-group relevance commitment into the SAME authenticated data the recipient already
+//      checks. This is harder than it sounds: the merkle root this proof is checked against
 //      (`commit_proof.header.command_merkle_root`) is a field of the ORIGINAL block header, computed once by the
 //      generating committee before any recipient-specific proof exists, and reused unchanged for every recipient.
-//      Making relevance provable without the full command therefore means changing what the block header commits
-//      to, which is a wire/protocol-level change (affects block ids and QC signing broadly) and needs design
-//      input from the team, not a solo patch to this file.
+//      Making relevance provable without the full command therefore means changing what the block header commits to,
+//      which is a wire/protocol-level change (affects block ids and QC signing broadly) and needs design input from the
+//      team, not a solo patch to this file.
 //   2. A non-cryptographic liveness backstop: if a transaction stays unresolved past a generous multiple of normal
-//      commit latency after a foreign proposal for its block has been accepted, re-request that exact block_id
-//      from a different member of the foreign committee rather than treating the first accepted copy as final.
-//      This doesn't make trimming detectable, but bounds the damage from "permanent" to "delayed, with retries
-//      against other peers" -- PROVIDED the local liveness/retry wiring correctly tracks "which transactions are
-//      still waiting on evidence from which foreign shard group", which needs care to get right in this
-//      event-driven HotStuff implementation (see `OnReceiveForeignProposalHandler`).
+//      commit latency after a foreign proposal for its block has been accepted, re-request that exact block_id from a
+//      different member of the foreign committee rather than treating the first accepted copy as final. This doesn't
+//      make trimming detectable, but bounds the damage from "permanent" to "delayed, with retries against other peers"
+//      -- PROVIDED the local liveness/retry wiring correctly tracks "which transactions are still waiting on evidence
+//      from which foreign shard group", which needs care to get right in this event-driven HotStuff implementation (see
+//      `OnReceiveForeignProposalHandler`).
 pub enum CommandOrHash {
     /// The full command data
     #[n(0)]

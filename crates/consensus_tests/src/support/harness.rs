@@ -899,7 +899,12 @@ impl TestBuilder {
             shutdown.to_signal(),
         )
         .await;
-        let network = spawn_network(channels, shutdown.to_signal(), self.message_filter, self.message_mutator);
+        let network = spawn_network(
+            channels,
+            shutdown.to_signal(),
+            self.message_filter,
+            self.message_mutator,
+        );
 
         Test {
             validators,
