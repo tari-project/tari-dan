@@ -27,16 +27,17 @@ pub struct ValidatedConfidentialWithdrawProof {
 /// The native-execution metering points [`validate_confidential_withdraw`] costs for this proof.
 /// Charged against the payment-funded allowance *before* any verification runs, so a non-paying
 /// transaction cannot extract the crypto work for free. Must stay in lock-step with what
-/// [`validate_confidential_withdraw`] actually verifies: a revealed-only proof (no inputs and no
-/// confidential outputs) short-circuits to a plain balance check with no crypto, so it prices at
-/// zero; any input or output brings the balance-proof verification and the per-item crypto.
+/// [`validate_confidential_withdraw`] actually verifies: a proof that is
+/// [`ConfidentialWithdrawProof::is_revealed_only`] short-circuits to a plain balance check with no
+/// crypto, so it prices at zero; every other proof is charged at least the balance-proof
+/// verification, plus the per-item crypto for each input and output.
 pub fn withdraw_native_points(proof: &ConfidentialWithdrawProof, has_view_key: bool) -> u64 {
     use crate::limits::NativeExecutionPoints as P;
-    let num_outputs =
-        u64::from(proof.output_proof.output.is_some()) + u64::from(proof.output_proof.change_statement.is_some());
-    if proof.inputs.is_empty() && num_outputs == 0 {
+    if proof.is_revealed_only() {
         return 0;
     }
+    let num_outputs =
+        u64::from(proof.output_proof.output.is_some()) + u64::from(proof.output_proof.change_statement.is_some());
     let per_output = P::PER_OUTPUT.saturating_add(if has_view_key {
         P::PER_OUTPUT_VIEWABLE_SURCHARGE
     } else {
@@ -87,6 +88,16 @@ pub(crate) fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Pede
             input_revealed_amount,
             output_revealed_amount: withdraw_proof.output_proof.output_revealed_amount,
             change_revealed_amount: withdraw_proof.output_proof.change_revealed_amount,
+        });
+    }
+
+    // With no inputs and no confidential outputs the public excess is a multiple of H alone, which no balance proof
+    // can sign for, so revealed-only is the only valid form of this shape.
+    if withdraw_proof.inputs.is_empty() && validated_proof.output.is_none() && validated_proof.change_output.is_none() {
+        return Err(ResourceError::InvalidBalanceProof {
+            details: "A withdraw with no inputs and no confidential outputs must be revealed-only: a zero balance \
+                      proof, an empty range proof and non-zero revealed amounts"
+                .to_string(),
         });
     }
 
@@ -150,4 +161,55 @@ pub(crate) fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Pede
         output_revealed_amount: withdraw_proof.output_proof.output_revealed_amount,
         change_revealed_amount: withdraw_proof.output_proof.change_revealed_amount,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use tari_crypto::{keys::PublicKey, ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
+    use tari_template_lib::types::crypto::{BalanceProofSignature, RistrettoPublicKeyBytes, Scalar32Bytes};
+
+    use super::*;
+    use crate::limits::NativeExecutionPoints;
+
+    /// A revealed withdraw carrying a decodable, non-zero balance proof: no inputs and no
+    /// confidential outputs, but not revealed-only.
+    fn revealed_shape_with_balance_proof() -> ConfidentialWithdrawProof {
+        let nonce = RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::from(1u64));
+        let mut proof = ConfidentialWithdrawProof::revealed_withdraw(1000u64);
+        proof.balance_proof = BalanceProofSignature::new(
+            RistrettoPublicKeyBytes::from_bytes(nonce.as_bytes()).unwrap(),
+            Scalar32Bytes::from_bytes(RistrettoSecretKey::from(1u64).as_bytes()).unwrap(),
+        );
+        proof
+    }
+
+    #[test]
+    fn revealed_only_withdraw_prices_at_zero() {
+        let proof = ConfidentialWithdrawProof::revealed_withdraw(1000u64);
+        assert!(proof.is_revealed_only());
+        assert_eq!(withdraw_native_points(&proof, false), 0);
+        validate_confidential_withdraw([], None, proof).unwrap();
+    }
+
+    #[test]
+    fn withdraw_without_inputs_or_outputs_that_is_not_revealed_only_is_priced() {
+        let proof = revealed_shape_with_balance_proof();
+        assert!(!proof.is_revealed_only());
+        assert_eq!(
+            withdraw_native_points(&proof, false),
+            NativeExecutionPoints::PER_STATEMENT
+        );
+    }
+
+    #[test]
+    fn withdraw_without_inputs_or_outputs_that_is_not_revealed_only_is_rejected_before_verification() {
+        let err = validate_confidential_withdraw([], None, revealed_shape_with_balance_proof()).unwrap_err();
+        assert!(
+            matches!(
+                &err,
+                ResourceError::InvalidBalanceProof { details } if details.contains("must be revealed-only")
+            ),
+            "unexpected error: {err:?}"
+        );
+    }
 }
