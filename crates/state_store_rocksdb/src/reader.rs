@@ -2081,15 +2081,10 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         height: NodeHeight,
         proposed_by: &RistrettoPublicKeyBytes,
     ) -> Result<usize, StorageError> {
-        let mut count = 0;
-        for key in self
+        let count = self
             .db()
             .cf(parked_block::ByProposerQuery)?
-            .query_prefix_range_key_iterator(Ordering::default(), &(epoch, height, *proposed_by))
-        {
-            key?;
-            count += 1;
-        }
+            .count_prefix(&(epoch, height, *proposed_by))?;
         Ok(count)
     }
 
