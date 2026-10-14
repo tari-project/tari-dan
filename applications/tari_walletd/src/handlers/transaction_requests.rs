@@ -20,6 +20,7 @@ use tari_ootle_common_types::optional::Optional;
 use tari_ootle_wallet_sdk::{
     models::{
         EffectiveStatus,
+        LockOwner,
         OutputStatus,
         TransactionRequestCreatedEvent,
         TransactionRequestId,
@@ -101,42 +102,12 @@ pub async fn handle_create(
     let model = {
         let mut tx = sdk.store().create_write_tx()?;
 
-        // A request may hold only locks its own caller created, that no
-        // transaction or other live request already holds. Rejecting the
-        // request releases its locks, so a lock held by two requests would be
-        // released under the other one.
-        let mut held = if req.lock_ids.is_empty() {
-            HashSet::new()
-        } else {
-            tx.transaction_requests_list()?
-                .into_iter()
-                .filter(|r| {
-                    matches!(
-                        r.effective_status_now(),
-                        EffectiveStatus::Pending | EffectiveStatus::Approved | EffectiveStatus::Submitting
-                    )
-                })
-                .flat_map(|r| r.lock_ids)
-                .collect::<HashSet<_>>()
-        };
-        let caller = auth.lock_owner();
-        for lock_id in &req.lock_ids {
-            let lock = tx.locks_get(*lock_id).optional()?;
-            let available = lock.is_some_and(|l| l.owner == caller && l.transaction_id.is_none());
-            // One error for every case, so the call does not reveal which lock
-            // ids exist.
-            if !available || !held.insert(*lock_id) {
-                return Err(invalid_params(
-                    "lock_ids",
-                    Some(format!(
-                        "lock {lock_id} does not exist, was created by another caller, or is already in use"
-                    )),
-                ));
-            }
+        ensure_free_locks_of(&mut *tx, auth.lock_owner(), &req.lock_ids, "lock_ids")?;
 
-            // Hold the inputs across the approval window. The transfer-selection
-            // handlers lock for five minutes, which is a selection deadline, not
-            // a deadline a person can meet.
+        // Hold the inputs across the approval window. The transfer-selection
+        // handlers lock for five minutes, which is a selection deadline, not a
+        // deadline a person can meet.
+        for lock_id in &req.lock_ids {
             tx.locks_extend_timeout(*lock_id, ttl + LOCK_GRACE)?;
         }
 
@@ -348,6 +319,48 @@ pub async fn handle_submit(
     Ok(TransactionRequestSubmitResponse {
         transaction_id: response.transaction_id,
     })
+}
+
+/// Refuses `lock_ids` unless `caller` created each lock and neither a
+/// transaction nor a live request holds it. Rejecting a request releases its
+/// locks, so a lock held by two requests would be released under the other.
+///
+/// Every refusal is the same error on `field`, so the call does not reveal
+/// which lock ids exist.
+pub(crate) fn ensure_free_locks_of<R: WalletStoreReader>(
+    reader: &mut R,
+    caller: LockOwner,
+    lock_ids: &[WalletLockId],
+    field: &'static str,
+) -> Result<(), anyhow::Error> {
+    if lock_ids.is_empty() {
+        return Ok(());
+    }
+    let mut held = reader
+        .transaction_requests_list()?
+        .into_iter()
+        .filter(|r| {
+            matches!(
+                r.effective_status_now(),
+                EffectiveStatus::Pending | EffectiveStatus::Approved | EffectiveStatus::Submitting
+            )
+        })
+        .flat_map(|r| r.lock_ids)
+        .collect::<HashSet<_>>();
+
+    for lock_id in lock_ids {
+        let lock = reader.locks_get(*lock_id).optional()?;
+        let free = lock.is_some_and(|l| l.owner == caller && l.transaction_id.is_none());
+        if !free || !held.insert(*lock_id) {
+            return Err(invalid_params(
+                field,
+                Some(format!(
+                    "lock {lock_id} does not exist, was created by another caller, or is already in use"
+                )),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Guarded transition to `to`, refusing an already-expired request.
