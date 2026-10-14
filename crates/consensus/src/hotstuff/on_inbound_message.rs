@@ -117,15 +117,23 @@ const FIXED_MESSAGE_SIZE: usize = 64 * 1024;
 /// importing blocks, not from a buffer.
 const MAX_VIEW_LOOKAHEAD: NodeHeight = NodeHeight(20);
 
-/// What each sender may hold of [`MAX_BUFFERED_BYTES`] at most: an even share across a committee of
-/// `committee_size`, and never less than one message of the largest charge.
-fn max_buffered_bytes_per_sender(committee_size: usize) -> usize {
-    (MAX_BUFFERED_BYTES / committee_size.max(1)).max(UNBOUNDED_MESSAGE_SIZE)
+/// Whose share of the buffer a message is charged to. Senders outside our committee all draw on one share:
+/// their identities cost nothing to multiply, so a share each would let enough of them fill the buffer.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum BufferShare<TAddr> {
+    Member(TAddr),
+    Outsider,
+}
+
+/// What each share may hold of [`MAX_BUFFERED_BYTES`] at most: an even split between the `committee_size`
+/// members and the outsiders' share, and never less than one message of the largest charge.
+fn max_buffered_bytes_per_share(committee_size: usize) -> usize {
+    (MAX_BUFFERED_BYTES / committee_size.saturating_add(1)).max(UNBOUNDED_MESSAGE_SIZE)
 }
 
 pub struct MessageBuffer<TConsensusSpec: ConsensusSpec> {
     network: Network,
-    buffer: ViewBuffer<TConsensusSpec::Addr, HotstuffMessage>,
+    buffer: ViewBuffer<BufferShare<TConsensusSpec::Addr>, (TConsensusSpec::Addr, HotstuffMessage)>,
     /// The highest justify certificate already reported as [`InboundMessage::ProposalAhead`], so that each
     /// certificate's signatures are checked and reported at most once.
     highest_reported_ahead: Option<View>,
@@ -173,7 +181,7 @@ impl<TConsensusSpec: ConsensusSpec> MessageBuffer<TConsensusSpec> {
         );
         if has_processed_first_block {
             // Drain all buffered messages for the current view
-            if let Some((from, message)) = self.buffer.pop_front(&next_view) {
+            if let Some((_, (from, message))) = self.buffer.pop_front(&next_view) {
                 return Ok(Some(InboundMessage::Ready { from, message }));
             }
         }
@@ -414,17 +422,22 @@ impl<TConsensusSpec: ConsensusSpec> MessageBuffer<TConsensusSpec> {
 /// Buffers `msg` from `from`, which names `view` ahead of `current_view`. Returns whether it was buffered.
 ///
 /// A message for our epoch is buffered only from a member of our committee, the only senders whose messages
-/// for a view of ours consensus can use. A message for the next epoch is bounded by the sender budget alone; it
-/// is further than every view of ours, so it never displaces one.
+/// for a view of ours consensus can use. A message for the next epoch is bounded by its [`BufferShare`] alone;
+/// it is further than every view of ours, so it never displaces one.
 fn push_to_buffer<TAddr: Eq + Hash + Clone + Display>(
-    buffer: &mut ViewBuffer<TAddr, HotstuffMessage>,
+    buffer: &mut ViewBuffer<BufferShare<TAddr>, (TAddr, HotstuffMessage)>,
     local_committee: &Committee<TAddr>,
     current_view: View,
     view: View,
     from: TAddr,
     msg: HotstuffMessage,
 ) -> bool {
-    if view.epoch == current_view.epoch && !local_committee.contains(&from) {
+    let share = if local_committee.contains(&from) {
+        BufferShare::Member(from.clone())
+    } else {
+        BufferShare::Outsider
+    };
+    if view.epoch == current_view.epoch && share == BufferShare::Outsider {
         debug!(
             target: LOG_TARGET,
             "🗑️ Discarding message {} for view {} from {}, who is not a member of our committee",
@@ -448,8 +461,8 @@ fn push_to_buffer<TAddr: Eq + Hash + Clone + Display>(
     }
 
     let size = buffered_message_size(&msg);
-    let max_sender_size = max_buffered_bytes_per_sender(local_committee.len());
-    match buffer.insert(view, from.clone(), msg, size, max_sender_size) {
+    let max_share_size = max_buffered_bytes_per_share(local_committee.len());
+    match buffer.insert(view, share.clone(), (from.clone(), msg), size, max_share_size) {
         Ok(inserted) => {
             if inserted.num_evicted > 0 {
                 debug!(
@@ -465,15 +478,15 @@ fn push_to_buffer<TAddr: Eq + Hash + Clone + Display>(
             }
             true
         },
-        Err(msg) => {
+        Err((_, msg)) => {
             debug!(
                 target: LOG_TARGET,
-                "🗑️ Discarding message {} for view {} from {}: the buffer is full of messages for views at or nearer than it ({} of {} bytes held for the sender, {} of {} bytes, {} of {} messages)",
+                "🗑️ Discarding message {} for view {} from {}: the buffer is full of messages for views at or nearer than it ({} of {} bytes held for the sender's share, {} of {} bytes, {} of {} messages)",
                 msg,
                 view,
                 from,
-                buffer.sender_size(&from),
-                max_sender_size,
+                buffer.sender_size(&share),
+                max_share_size,
                 buffer.size(),
                 buffer.max_size(),
                 buffer.len(),
@@ -856,7 +869,9 @@ mod tests {
             )
         }
 
-        fn new_buffer() -> ViewBuffer<String, HotstuffMessage> {
+        type Buffer = ViewBuffer<BufferShare<String>, (String, HotstuffMessage)>;
+
+        fn new_buffer() -> Buffer {
             ViewBuffer::new(MAX_BUFFERED_MESSAGES, MAX_BUFFERED_BYTES)
         }
 
@@ -870,7 +885,7 @@ mod tests {
             })
         }
 
-        fn push(buffer: &mut ViewBuffer<String, HotstuffMessage>, view: View, from: &str) -> bool {
+        fn push(buffer: &mut Buffer, view: View, from: &str) -> bool {
             push_to_buffer(
                 buffer,
                 &committee(),
@@ -881,14 +896,14 @@ mod tests {
             )
         }
 
-        fn flood(buffer: &mut ViewBuffer<String, HotstuffMessage>, view: View, from: &str) {
+        fn flood(buffer: &mut Buffer, view: View, from: &str) {
             for _ in 0..MAX_BUFFERED_BYTES / UNBOUNDED_MESSAGE_SIZE * 2 {
                 push(buffer, view, from);
             }
         }
 
-        fn drain_senders(buffer: &mut ViewBuffer<String, HotstuffMessage>, view: View) -> Vec<String> {
-            std::iter::from_fn(|| buffer.pop_front(&view).map(|(from, _)| from)).collect()
+        fn drain_senders(buffer: &mut Buffer, view: View) -> Vec<String> {
+            std::iter::from_fn(|| buffer.pop_front(&view).map(|(_, (from, _))| from)).collect()
         }
 
         #[test]
@@ -915,12 +930,14 @@ mod tests {
         }
 
         #[test]
-        fn one_sender_cannot_fill_the_buffer_for_the_next_epoch() {
+        fn many_outsiders_cannot_fill_the_buffer_for_the_next_epoch() {
             let mut buffer = new_buffer();
-            flood(&mut buffer, NEXT_EPOCH_VIEW, "outsider");
+            for i in 0..MAX_BUFFERED_BYTES / UNBOUNDED_MESSAGE_SIZE {
+                flood(&mut buffer, NEXT_EPOCH_VIEW, &format!("outsider-{i}"));
+            }
 
-            assert!(push(&mut buffer, NEXT_EPOCH_VIEW, "next-epoch-member"));
-            assert!(drain_senders(&mut buffer, NEXT_EPOCH_VIEW).contains(&"next-epoch-member".to_string()));
+            assert!(push(&mut buffer, NEXT_EPOCH_VIEW, "2"));
+            assert!(drain_senders(&mut buffer, NEXT_EPOCH_VIEW).contains(&"2".to_string()));
         }
     }
 }
