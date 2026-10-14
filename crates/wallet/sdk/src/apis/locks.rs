@@ -9,7 +9,7 @@ use tari_ootle_transaction::TransactionId;
 use tari_template_lib::types::{Amount, VaultId};
 
 use crate::{
-    models::{WalletLockDropGuard, WalletLockId},
+    models::{LockOwner, WalletLockDropGuard, WalletLockId},
     storage::{ReadableWalletStore, WalletStorageError, WalletStoreReader, WalletStoreWriter, WriteableWalletStore},
 };
 
@@ -26,7 +26,9 @@ impl<'a, TStore> LocksApi<'a, TStore> {
 
 impl<'a, TStore: WriteableWalletStore> LocksApi<'a, TStore> {
     pub fn create_lock(&self) -> Result<WalletLockDropGuard<'a, TStore>, LocksApiError> {
-        let lock_id = self.store.with_write_tx(|tx| tx.locks_create(None))?;
+        let lock_id = self
+            .store
+            .with_write_tx(|tx| tx.locks_create(None, LockOwner::Wallet))?;
         Ok(WalletLockDropGuard::new(lock_id, self.store))
     }
 
@@ -34,7 +36,17 @@ impl<'a, TStore: WriteableWalletStore> LocksApi<'a, TStore> {
         &self,
         timeout: Duration,
     ) -> Result<WalletLockDropGuard<'a, TStore>, LocksApiError> {
-        let lock_id = self.store.with_write_tx(|tx| tx.locks_create(Some(timeout)))?;
+        self.create_owned_lock_with_timeout(timeout, LockOwner::Wallet)
+    }
+
+    /// A lock whose id is handed back to `owner`, who alone may later name it
+    /// in a transaction request.
+    pub fn create_owned_lock_with_timeout(
+        &self,
+        timeout: Duration,
+        owner: LockOwner,
+    ) -> Result<WalletLockDropGuard<'a, TStore>, LocksApiError> {
+        let lock_id = self.store.with_write_tx(|tx| tx.locks_create(Some(timeout), owner))?;
         Ok(WalletLockDropGuard::new(lock_id, self.store))
     }
 

@@ -34,6 +34,7 @@ impl<'a> JwtApi<'a> {
             permissions,
             exp: exp.as_secs(),
             delegated: false,
+            delegation_id: None,
         })
     }
 
@@ -65,12 +66,11 @@ impl<'a> JwtApi<'a> {
         Ok(token_data.claims.permissions)
     }
 
-    /// Validate the bearer JWT and return its permissions and whether it is a
-    /// delegated token.
-    pub fn check_auth_delegation(&self, token: Option<&Bearer>) -> Result<(Permissions, bool), AuthError> {
+    /// Validate the bearer JWT and return all of its claims, including
+    /// whether it is a delegated token.
+    pub fn check_auth_claims(&self, token: Option<&Bearer>) -> Result<Claims, AuthError> {
         let token = token.ok_or(AuthError::AccessDeniedNoBearerToken)?;
-        let claims = self.decode_jwt(token.token())?.claims;
-        Ok((claims.permissions, claims.delegated))
+        Ok(self.decode_jwt(token.token())?.claims)
     }
 
     /// Like [`Self::check_auth`], but refuses a delegated token: only a token

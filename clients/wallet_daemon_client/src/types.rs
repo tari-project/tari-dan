@@ -166,9 +166,11 @@ pub struct TransactionRequestCreateRequest {
     /// it is altered after creation.
     #[serde(default)]
     pub signatures: Vec<TransactionSignature>,
-    /// Locks holding this request's inputs. Their timeouts are extended to
-    /// outlive the approval window. Stealth spend keys are derived from these
-    /// at submit -- a caller cannot name them.
+    /// Locks holding this request's inputs, as returned to this same caller by
+    /// the handler that selected them. Each must be unspent and not held by
+    /// another live request. Their timeouts are extended to outlive the
+    /// approval window. Stealth spend keys are derived from these at submit --
+    /// a caller cannot name them.
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(type = "Array<number>"))]
     pub lock_ids: Vec<WalletLockId>,

@@ -10,4 +10,9 @@ export type Claims = {
    * never counts as the wallet's own interactive session.
    */
   delegated: boolean;
+  /**
+   * Random per `webrtc.start` call, so two connected peers are told apart:
+   * each may act only on the wallet locks its own session created.
+   */
+  delegation_id?: bigint | null;
 };

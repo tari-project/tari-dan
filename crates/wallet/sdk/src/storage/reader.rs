@@ -41,6 +41,7 @@ use crate::{
         TransactionRequestModel,
         TransactionStatus,
         VaultModel,
+        WalletLock,
         WalletLockId,
         WalletTransaction,
     },
@@ -215,6 +216,9 @@ pub trait WalletStoreReader {
         &mut self,
         transaction_id: TransactionId,
     ) -> Result<WalletLockId, WalletStorageError>;
+
+    /// Returns `NotFound` when no lock has this id.
+    fn locks_get(&mut self, lock_id: WalletLockId) -> Result<WalletLock, WalletStorageError>;
 
     // Transaction requests
     /// Fetch a request by its public id. Returns `NotFound` when absent; use

@@ -62,6 +62,7 @@ impl RefreshTokenStore {
                 permissions,
                 exp,
                 delegated: false,
+                delegation_id: None,
             },
             expires_at: Instant::now() + self.expiry,
         };

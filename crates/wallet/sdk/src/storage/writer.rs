@@ -35,6 +35,7 @@ use crate::{
         ImportedKeyId,
         KeyId,
         KeyType,
+        LockOwner,
         NewAccountData,
         NewSigningRequest,
         NonFungibleToken,
@@ -294,16 +295,19 @@ pub trait WalletStoreWriter: CommittableStore {
     fn signing_requests_delete_expired(&mut self) -> Result<usize, WalletStorageError>;
 
     // Locks
-    fn locks_create(&mut self, timeout: Option<Duration>) -> Result<WalletLockId, WalletStorageError>;
+    fn locks_create(&mut self, timeout: Option<Duration>, owner: LockOwner)
+    -> Result<WalletLockId, WalletStorageError>;
 
     fn locks_delete(&mut self, lock_id: WalletLockId) -> Result<(), WalletStorageError>;
 
-    /// Set the lock's deadline to `timeout` from now, or `None` to make it
-    /// exempt from [`Self::locks_release_stale`] entirely. Used to hold inputs
-    /// across an approval window that outlives the deadline the
-    /// transfer-selection handler chose.
-    fn locks_set_timeout(&mut self, lock_id: WalletLockId, timeout: Option<Duration>)
-    -> Result<(), WalletStorageError>;
+    /// Push the deadline of a lock not yet linked to a transaction out to at
+    /// least `timeout` from now. A later deadline stands, and a lock with no
+    /// deadline keeps none: this only ever delays
+    /// [`Self::locks_release_stale`]. Used to hold inputs across an approval
+    /// window that outlives the deadline the transfer-selection handler chose.
+    ///
+    /// Returns `NotFound` when no unlinked lock has this id.
+    fn locks_extend_timeout(&mut self, lock_id: WalletLockId, timeout: Duration) -> Result<(), WalletStorageError>;
 
     fn locks_link_transaction(
         &mut self,

@@ -51,6 +51,7 @@ use tari_ootle_wallet_sdk::{
         TransactionRequestModel,
         TransactionStatus,
         VaultModel,
+        WalletLock,
         WalletLockId,
         WalletTransaction,
         WebauthnRegistrationPasskeyModel,
@@ -1532,6 +1533,23 @@ impl WalletStoreReader for ReadTransaction<'_> {
             })?;
 
         Ok(lock_id)
+    }
+
+    fn locks_get(&mut self, lock_id: WalletLockId) -> Result<WalletLock, WalletStorageError> {
+        const OPERATION: &str = "locks_get";
+        use crate::schema::locks;
+
+        locks::table
+            .filter(locks::id.eq(lock_id))
+            .first::<models::Lock>(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general(OPERATION, e))?
+            .ok_or_else(|| WalletStorageError::NotFound {
+                operation: OPERATION,
+                entity: "locks".to_string(),
+                key: lock_id.to_string(),
+            })?
+            .try_into_wallet_lock()
     }
 
     fn non_fungible_token_get_by_nft_id(

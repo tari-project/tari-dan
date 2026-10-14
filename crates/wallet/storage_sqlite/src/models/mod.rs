@@ -19,6 +19,7 @@ mod transaction_request;
 mod vault;
 
 mod authored_template;
+mod lock;
 mod non_fungible_tokens;
 mod resource;
 mod signing_request;
@@ -33,6 +34,7 @@ pub use authored_template::*;
 pub use balance_change::*;
 pub use confidential_output::*;
 pub use config::*;
+pub use lock::*;
 pub use non_fungible_tokens::*;
 pub use resource::*;
 pub use signing_request::*;

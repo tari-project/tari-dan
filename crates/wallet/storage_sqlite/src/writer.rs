@@ -49,6 +49,7 @@ use tari_ootle_wallet_sdk::{
         ImportedKeyId,
         KeyId,
         KeyType,
+        LockOwner,
         NewAccountData,
         NewSigningRequest,
         NonFungibleToken,
@@ -2142,19 +2143,27 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     // locks
-    fn locks_create(&mut self, timeout: Option<Duration>) -> Result<WalletLockId, WalletStorageError> {
+    fn locks_create(
+        &mut self,
+        timeout: Option<Duration>,
+        owner: LockOwner,
+    ) -> Result<WalletLockId, WalletStorageError> {
         const OPERATION: &str = "locks_create";
         use crate::schema::locks;
 
+        let owner = models::encode_lock_owner(owner);
         if let Some(timeout) = timeout {
             let timeout_seconds = i32::try_from(timeout.as_secs()).unwrap_or(i32::MAX);
             diesel::insert_into(locks::table)
-                .values(locks::timeout_at.eq(dsl::sql(&format!("datetime('now', '+{} seconds')", timeout_seconds))))
+                .values((
+                    locks::timeout_at.eq(dsl::sql(&format!("datetime('now', '+{} seconds')", timeout_seconds))),
+                    locks::owner.eq(owner),
+                ))
                 .execute(self.connection())
                 .map_err(|e| WalletStorageError::general(OPERATION, e))?;
         } else {
             diesel::insert_into(locks::table)
-                .default_values()
+                .values(locks::owner.eq(owner))
                 .execute(self.connection())
                 .map_err(|e| WalletStorageError::general(OPERATION, e))?;
         }
@@ -2445,26 +2454,23 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         .map_err(|e| WalletStorageError::general(OPERATION, e))
     }
 
-    fn locks_set_timeout(
-        &mut self,
-        lock_id: WalletLockId,
-        timeout: Option<Duration>,
-    ) -> Result<(), WalletStorageError> {
-        const OPERATION: &str = "locks_set_timeout";
+    fn locks_extend_timeout(&mut self, lock_id: WalletLockId, timeout: Duration) -> Result<(), WalletStorageError> {
+        const OPERATION: &str = "locks_extend_timeout";
         use crate::schema::locks;
 
-        let query = diesel::update(locks::table.filter(locks::id.eq(lock_id)));
-        let rows_affected = match timeout {
-            Some(timeout) => {
-                let timeout_seconds = i32::try_from(timeout.as_secs()).unwrap_or(i32::MAX);
-                query
-                    .set(locks::timeout_at.eq(dsl::sql(&format!("datetime('now', '+{} seconds')", timeout_seconds))))
-                    .execute(self.connection())
-            },
-            None => query
-                .set(locks::timeout_at.eq(None::<PrimitiveDateTime>))
-                .execute(self.connection()),
-        }
+        let timeout_seconds = i32::try_from(timeout.as_secs()).unwrap_or(i32::MAX);
+        // `datetime()` on both sides normalises the stored text so MAX compares
+        // instants. A NULL deadline stays NULL.
+        let rows_affected = diesel::update(
+            locks::table
+                .filter(locks::id.eq(lock_id))
+                .filter(locks::transaction_id.is_null()),
+        )
+        .set(locks::timeout_at.eq(dsl::sql(&format!(
+            "CASE WHEN timeout_at IS NULL THEN NULL ELSE MAX(datetime(timeout_at), datetime('now', \
+             '+{timeout_seconds} seconds')) END"
+        ))))
+        .execute(self.connection())
         .map_err(|e| WalletStorageError::general(OPERATION, e))?;
 
         if rows_affected == 0 {

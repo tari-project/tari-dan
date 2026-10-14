@@ -19,7 +19,7 @@ use tari_engine_types::{
 };
 use tari_ootle_common_types::{Epoch, SubstateVersion, optional::IsNotFoundError};
 use tari_ootle_wallet_sdk::{
-    models::{ConfidentialOutputModel, KeyBranch, KeyId, OutputStatus, VaultModel, WalletLockId},
+    models::{ConfidentialOutputModel, KeyBranch, KeyId, LockOwner, OutputStatus, VaultModel, WalletLockId},
     storage::{CommittableStore, ReadableWalletStore, WalletStoreReader, WalletStoreWriter, WriteableWalletStore},
 };
 use tari_ootle_wallet_storage_sqlite::SqliteWalletStore;
@@ -127,7 +127,7 @@ fn setup_locked_transfer() -> (SqliteWalletStore, WalletLockId) {
     tx.confidential_outputs_insert(confidential_output(INPUT, 1_000, OutputStatus::Unspent, None))
         .unwrap();
 
-    let lock_id = tx.locks_create(None).unwrap();
+    let lock_id = tx.locks_create(None, LockOwner::Wallet).unwrap();
     let locked = tx
         .confidential_outputs_lock_smallest_amount(&vault_address(), lock_id)
         .unwrap();
