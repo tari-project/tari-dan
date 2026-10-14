@@ -861,8 +861,7 @@ where TSubstream: AsyncRead + AsyncWrite + Unpin + Send
             let resp_result = match resp_result {
                 Some(r) => r,
                 None => {
-                    // The consumer has dropped the receiver before all responses are received.
-                    // Closing
+                    self.abandon_request(request_id).await?;
                     break;
                 },
             };
@@ -942,9 +941,10 @@ where TSubstream: AsyncRead + AsyncWrite + Unpin + Send
             match Self::convert_to_result(resp) {
                 Ok(resp) => {
                     let is_finished = resp.is_finished();
-                    // If the consumer drops the receiver, we can stop sending responses.
                     if response_tx.is_closed() {
-                        // We have timed out on the response but since we've closed, we just exit
+                        if !is_finished {
+                            self.abandon_request(request_id).await?;
+                        }
                         break;
                     } else {
                         let _result = response_tx.send(Ok(resp)).await;
@@ -973,6 +973,26 @@ where TSubstream: AsyncRead + AsyncWrite + Unpin + Send
         }
 
         Ok(())
+    }
+
+    /// Tells the server that the consumer of `request_id` has gone, so that it stops producing the response. The
+    /// server serves a session's requests one at a time, and a followed stream has no end of its own, so every later
+    /// request on the session waits on this.
+    async fn abandon_request(&mut self, request_id: u16) -> Result<(), RpcError> {
+        debug!(
+            target: LOG_TARGET,
+            "(peer={}) Abandoning request #{} (protocol = {})",
+            self.peer_id,
+            request_id,
+            self.protocol_name()
+        );
+        let fin = proto::RpcRequest {
+            request_id: u32::from(request_id),
+            flags: u32::from(RpcMessageFlags::FIN.bits()),
+            deadline: self.config.deadline.map(|t| t.as_secs().max(1)).unwrap_or(0),
+            ..Default::default()
+        };
+        self.send_request(fin).await
     }
 
     async fn send_request(&mut self, req: proto::RpcRequest) -> Result<(), RpcError> {

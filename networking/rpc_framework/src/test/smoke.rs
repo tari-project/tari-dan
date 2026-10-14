@@ -6,9 +6,11 @@
 
 use std::{sync::Arc, time::Duration};
 
-use futures::StreamExt;
+use bytes::Bytes;
+use futures::{SinkExt, StreamExt};
 use libp2p::{PeerId, StreamProtocol};
 use libp2p_substream::{ProtocolEvent, ProtocolNotification};
+use prost::Message;
 use tari_shutdown::Shutdown;
 use tokio::{
     io::DuplexStream,
@@ -26,18 +28,21 @@ use crate::{
     RpcError,
     RpcServer,
     RpcServerBuilder,
+    RpcStatus,
     RpcStatusCode,
     error::HandshakeRejectReason,
     framing,
     framing::CanonicalFraming,
     handshake::decode_session_rejection,
     max_response_payload_size,
+    proto,
     test::greeting_service::{
         GreetingClient,
         GreetingRpc,
         GreetingServer,
         GreetingService,
         SayHelloRequest,
+        SayHelloResponse,
         SlowGreetingService,
         SlowStreamRequest,
     },
@@ -383,6 +388,146 @@ async fn a_session_recovers_from_an_abandoned_stream() {
         .await
         .unwrap();
     assert_eq!(resp.greeting, "Jambo Yathvan");
+}
+
+/// A stream that never ends on its own, as a followed stream does not.
+fn endless_stream() -> SlowStreamRequest {
+    SlowStreamRequest {
+        num_items: u32::MAX,
+        item_size: 10,
+        delay_ms: 10,
+    }
+}
+
+async fn until_no_stream_is_live(service: &GreetingService) {
+    time::timeout(Duration::from_secs(5), async {
+        while service.live_streams() > 0 {
+            time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the server went on producing a stream nobody was reading");
+}
+
+#[tokio::test]
+async fn abandoning_a_stream_stops_the_server_producing_it() {
+    let service_impl = GreetingService::default();
+    let server = TestRpcServer::with_sessions(service_impl.clone(), 1);
+    let mut client = connect(server.dial()).await.unwrap();
+
+    let mut resp = client.slow_stream(endless_stream()).await.unwrap();
+    resp.next().await.unwrap().unwrap();
+    assert_eq!(service_impl.live_streams(), 1);
+    drop(resp);
+
+    // Nothing else is asked of the session: the abandonment alone has to reach the server.
+    until_no_stream_is_live(&service_impl).await;
+}
+
+#[tokio::test]
+async fn a_request_after_an_abandoned_endless_stream_is_answered() {
+    let service_impl = GreetingService::default();
+    let server = TestRpcServer::with_sessions(service_impl.clone(), 1);
+    let mut client = connect(server.dial()).await.unwrap();
+
+    let mut resp = client.slow_stream(endless_stream()).await.unwrap();
+    resp.next().await.unwrap().unwrap();
+    drop(resp);
+
+    let resp = client
+        .say_hello(SayHelloRequest {
+            name: "Yathvan".to_string(),
+            language: 1,
+        })
+        .await
+        .unwrap();
+    assert_eq!(resp.greeting, "Jambo Yathvan");
+}
+
+const SAY_HELLO_METHOD: u32 = 1;
+const SLOW_STREAM_METHOD: u32 = 7;
+
+fn raw_request(request_id: u32, method: u32, payload: Vec<u8>) -> Bytes {
+    proto::RpcRequest {
+        request_id,
+        method,
+        deadline: 5,
+        payload,
+        ..Default::default()
+    }
+    .encode_to_vec()
+    .into()
+}
+
+/// Reads past whatever is left of earlier requests to the response to `request_id`.
+async fn raw_response(framed: &mut CanonicalFraming<TestSubstream>, request_id: u32) -> proto::RpcResponse {
+    time::timeout(Duration::from_secs(5), async {
+        loop {
+            let resp = proto::RpcResponse::decode(framed.next().await.unwrap().unwrap()).unwrap();
+            if resp.request_id == request_id {
+                break resp;
+            }
+        }
+    })
+    .await
+    .expect("the server did not answer a request sent while it was streaming")
+}
+
+/// Starts an endless stream on a session opened with no client of the framework's own, which sends only what each
+/// test makes it send.
+async fn raw_session_streaming(server: &TestRpcServer, window: usize) -> CanonicalFraming<TestSubstream> {
+    let mut framed = server.dial_with_window(window);
+    Handshake::new(&mut framed).perform_client_handshake().await.unwrap();
+    framed
+        .send(raw_request(1, SLOW_STREAM_METHOD, endless_stream().encode_to_vec()))
+        .await
+        .unwrap();
+    framed
+}
+
+fn assert_greeted(resp: &proto::RpcResponse) {
+    assert_eq!(resp.status, RpcStatus::ok().as_code());
+    assert_eq!(
+        SayHelloResponse::decode(resp.payload.as_slice()).unwrap().greeting,
+        "Jambo Yathvan"
+    );
+}
+
+fn hello() -> Vec<u8> {
+    SayHelloRequest {
+        name: "Yathvan".to_string(),
+        language: 1,
+    }
+    .encode_to_vec()
+}
+
+#[tokio::test]
+async fn a_request_sent_while_a_stream_runs_ends_the_stream_and_is_answered() {
+    let service_impl = GreetingService::default();
+    let server = TestRpcServer::with_sessions(service_impl.clone(), 1);
+    let mut framed = raw_session_streaming(&server, TRANSPORT_WINDOW).await;
+    let first = proto::RpcResponse::decode(framed.next().await.unwrap().unwrap()).unwrap();
+    assert_eq!(first.request_id, 1);
+
+    // The next request goes out with the stream still running and no FIN sent for it.
+    framed.send(raw_request(2, SAY_HELLO_METHOD, hello())).await.unwrap();
+
+    assert_greeted(&raw_response(&mut framed, 2).await);
+    until_no_stream_is_live(&service_impl).await;
+}
+
+#[tokio::test]
+async fn a_request_sent_while_the_server_is_held_up_writing_a_stream_is_answered() {
+    let service_impl = GreetingService::default();
+    let server = TestRpcServer::with_sessions(service_impl.clone(), 1);
+    // A window smaller than one frame of the stream, read by nobody, holds the server up mid-write.
+    let mut framed = raw_session_streaming(&server, 4).await;
+    time::sleep(Duration::from_millis(100)).await;
+
+    framed.send(raw_request(2, SAY_HELLO_METHOD, hello())).await.unwrap();
+
+    assert_greeted(&raw_response(&mut framed, 2).await);
+    until_no_stream_is_live(&service_impl).await;
 }
 
 #[tokio::test]
