@@ -29,7 +29,6 @@ mod bootstrap;
 pub mod cli;
 pub mod config;
 mod dry_run;
-pub mod graphql;
 mod rest_api;
 #[cfg(feature = "web_ui")]
 mod web_ui;
@@ -64,14 +63,11 @@ use tari_ootle_p2p::PeerAddress;
 use tari_ootle_storage::global::{DbFactory, GlobalDb};
 use tari_ootle_storage_sqlite::{SqliteDbFactory, global::SqliteGlobalDbAdapter};
 use tari_shutdown::ShutdownSignal;
-use tokio::task;
 use tokio_stream::{Stream, StreamExt};
 
 use crate::{
     bootstrap::{Services, spawn_services},
     config::ApplicationConfig,
-    event_manager::EventManager,
-    graphql::server::run_graphql,
     ipc::{IpcError, IpcMessage},
 };
 
@@ -116,17 +112,6 @@ where
     )
     .await?;
 
-    // Run the GraphQL API
-    let graphql_address = config.indexer.graphql_address;
-    if let Some(address) = graphql_address {
-        info!(target: LOG_TARGET, "🌐 Started GraphQL server on {}", address);
-        task::spawn(run_graphql(
-            address,
-            services.substate_manager.clone(),
-            services.store.clone(),
-        ));
-    }
-
     // Run the REST API
     let listen_addr = config.indexer.api_listen_address;
     if let Some(listen_addr) = listen_addr {
@@ -157,23 +142,7 @@ where
                 )
             })?;
 
-            // graphql
-            let public_graphql_url = config
-                .indexer
-                .web_ui_public_graphql_url
-                .filter(|_| graphql_address.is_some())
-                .or_else(|| graphql_address.map(|a| format!("http://{a}")))
-                .map(|addr| {
-                    url::Url::parse(&addr).map_err(|err| {
-                        ExitError::new(
-                            ExitCode::ConfigError,
-                            format!("Invalid public GraphQL url '{addr}': {err}"),
-                        )
-                    })
-                })
-                .transpose()?;
-
-            tokio::spawn(web_ui::server::serve(address, public_api_address, public_graphql_url));
+            tokio::spawn(web_ui::server::serve(address, public_api_address));
         }
     }
     #[cfg(not(feature = "web_ui"))]

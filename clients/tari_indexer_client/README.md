@@ -4,8 +4,7 @@
 [![Documentation](https://docs.rs/tari_indexer_client/badge.svg)](https://docs.rs/tari_indexer_client)
 
 Client library for the Tari Ootle indexer node. Provides a typed async REST
-client, a GraphQL client, Server-Sent Events (SSE) streaming, and a protobuf
-streaming interface for consuming UTXO updates from a running indexer.
+client, Server-Sent Events (SSE) streaming, and a protobuf streaming interface for consuming UTXO updates from a running indexer.
 
 ## Features
 

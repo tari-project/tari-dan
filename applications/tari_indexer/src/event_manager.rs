@@ -20,60 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use log::*;
-use tari_engine_types::{events::Event, substate::SubstateId};
-use tari_ootle_transaction::TransactionId;
-use tari_template_lib_types::ResourceAddress;
-
-use crate::{
-    storage_sqlite::SqliteIndexerStore,
-    store::{EventQuery, IndexerStoreReadTransaction, IndexerStoreReader},
-};
-
-const LOG_TARGET: &str = "tari::indexer::event_manager";
-
 /// The deepest `offset` an event query accepts. SQLite walks every skipped row, so an unbounded
 /// offset makes a single request scan the whole events table.
 pub const MAX_EVENT_QUERY_OFFSET: u32 = 10_000;
 
 /// The most rows one wildcard topic query examines.
 pub const WILDCARD_TOPIC_SCAN_LIMIT: u32 = 10_000;
-
-#[derive(Debug, Clone)]
-pub struct EventManager {
-    substate_store: SqliteIndexerStore,
-}
-
-impl EventManager {
-    pub fn new(substate_store: SqliteIndexerStore) -> Self {
-        Self { substate_store }
-    }
-
-    pub async fn get_events_from_db(
-        &self,
-        topic: Option<&str>,
-        substate_id: Option<&SubstateId>,
-        resource_address: Option<&ResourceAddress>,
-        offset: u32,
-        limit: u32,
-    ) -> Result<Vec<(TransactionId, Event)>, anyhow::Error> {
-        let query = EventQuery {
-            topic: topic.map(str::to_owned),
-            substate_id: substate_id.cloned(),
-            template_address: None,
-            resource_address: resource_address.copied(),
-            wildcard_scan_limit: WILDCARD_TOPIC_SCAN_LIMIT,
-        };
-        let events = self
-            .substate_store
-            .with_read_tx(move |tx| tx.get_events(&query, None, offset, limit))
-            .await?
-            .events
-            .into_iter()
-            .map(|(_, transaction_id, event)| (transaction_id, event))
-            .collect::<Vec<_>>();
-
-        debug!(target: LOG_TARGET, "Found {} events", events.len());
-        Ok(events)
-    }
-}

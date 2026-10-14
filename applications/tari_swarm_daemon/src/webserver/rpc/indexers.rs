@@ -22,7 +22,6 @@ pub struct IndexerInfo {
     pub name: String,
     pub web: Url,
     pub api_url: Url,
-    pub graphql: Url,
     pub is_running: bool,
 }
 
@@ -33,7 +32,6 @@ pub async fn list(context: &HandlerContext, _req: ListIndexersRequest) -> Result
         .into_iter()
         .map(|instance| {
             let api_url = instance.get_public_api_url();
-            let graphql: Url = instance.get_public_graphql_url();
             let web = instance.get_public_web_url();
 
             Ok(IndexerInfo {
@@ -41,7 +39,6 @@ pub async fn list(context: &HandlerContext, _req: ListIndexersRequest) -> Result
                 name: instance.name,
                 web,
                 api_url,
-                graphql,
                 is_running: instance.is_running,
             })
         })

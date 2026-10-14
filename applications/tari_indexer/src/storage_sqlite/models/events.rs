@@ -21,12 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
-use std::convert::TryFrom;
-
-use diesel::sql_types::{Nullable, Text};
-use serde::{Deserialize, Serialize};
 use tari_ootle_storage::time::PrimitiveDateTime;
-use tari_template_lib_types::Hash32;
 
 use crate::storage_sqlite::schema::*;
 
@@ -55,43 +50,4 @@ pub struct NewEvent<'a> {
     pub substate_id: Option<String>,
     pub resource_address: Option<String>,
     pub epoch: i64,
-}
-
-#[derive(Clone, Debug, QueryableByName, Deserialize, Serialize)]
-pub struct EventData {
-    #[diesel(sql_type = Text)]
-    pub template_address: String,
-    #[diesel(sql_type = Text)]
-    pub tx_hash: String,
-    #[diesel(sql_type = Text)]
-    pub topic: String,
-    #[diesel(sql_type = Text)]
-    pub payload: String,
-    #[diesel(sql_type = Nullable<Text>)]
-    pub substate_id: Option<String>,
-    #[diesel(sql_type = Nullable<Text>)]
-    pub resource_address: Option<String>,
-}
-
-impl TryFrom<EventData> for crate::graphql::model::events::Event {
-    type Error = anyhow::Error;
-
-    fn try_from(event_data: EventData) -> Result<Self, Self::Error> {
-        let substate_id = event_data.substate_id;
-
-        let template_address = Hash32::from_hex(&event_data.template_address)?.into_array();
-
-        let tx_hash = Hash32::from_hex(&event_data.tx_hash)?.into_array();
-
-        let payload = serde_json::from_str(event_data.payload.as_str())?;
-
-        Ok(Self {
-            substate_id,
-            template_address,
-            tx_hash,
-            payload,
-            topic: event_data.topic,
-            resource_address: event_data.resource_address,
-        })
-    }
 }

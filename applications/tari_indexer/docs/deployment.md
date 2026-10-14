@@ -73,10 +73,10 @@
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │              Tari Indexer                           │   │
 │  │                                                     │   │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │   │
-│  │  │   REST API  │  │  GraphQL    │  │   Web UI    │ │   │
-│  │  │  Port 18300 │  │ Port 18301  │  │ Port 15000  │ │   │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘ │   │
+│  │  ┌─────────────┐  ┌─────────────┐                  │   │
+│  │  │   REST API  │  │   Web UI    │                  │   │
+│  │  │  Port 18300 │  │ Port 15000  │                  │   │
+│  │  └─────────────┘  └─────────────┘                  │   │
 │  │                                                     │   │
 │  │  ┌─────────────────────────────────────────────────┐ │   │
 │  │  │              SQLite Database                    │ │   │
@@ -193,7 +193,6 @@
 **Port Requirements:**
 - **P2P listener**: Configurable (default: varies by config)
 - **REST API**: Configurable (default: 18300)
-- **GraphQL API**: Configurable (default: 18301)
 - **Web UI**: Configurable (default: 15000)
 
 ## Security Considerations
@@ -207,7 +206,6 @@ ufw allow [P2P_PORT]
 
 # Allow API access (restrict to trusted networks)
 ufw allow from [TRUSTED_NETWORK] to any port 18300
-ufw allow from [TRUSTED_NETWORK] to any port 18301
 
 # Allow Web UI access (optional, restrict as needed)
 ufw allow from [TRUSTED_NETWORK] to any port 15000

@@ -31,7 +31,6 @@ use tari_indexer::{
     run_indexer,
 };
 use tari_indexer_client::{
-    graphql_client::IndexerGraphQLClient,
     rest_api_client::IndexerRestApiClient,
     types::{
         GetNonFungiblesRequest,
@@ -63,7 +62,6 @@ pub struct IndexerProcess {
     pub name: String,
     pub port: u16,
     pub api_port: u16,
-    pub graphql_port: u16,
     pub base_node_grpc_port: u16,
     pub web_ui_port: u16,
     pub handle: task::JoinHandle<anyhow::Result<()>>,
@@ -147,17 +145,12 @@ impl IndexerProcess {
         let client = self.get_indexer_client();
         client.get_template_catalogue_entry(template_address).await.unwrap()
     }
-
-    pub async fn get_graphql_indexer_client(&self) -> IndexerGraphQLClient {
-        let endpoint: Url = Url::parse(&format!("http://localhost:{}", self.graphql_port)).unwrap();
-        IndexerGraphQLClient::connect(endpoint).unwrap()
-    }
 }
 
 pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_node_name: String) {
     // each spawned indexer will use different ports
     let (port, api_port) = get_os_assigned_ports();
-    let (graphql_port, web_ui_port) = get_os_assigned_ports();
+    let (web_ui_port, _) = get_os_assigned_ports();
     let base_node_grpc_port = world.get_base_node(&base_node_name).grpc_port;
     let name = indexer_name.clone();
 
@@ -204,7 +197,6 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         // OS-assigned port to avoid contention between concurrently running indexers
         config.indexer.metrics_listen_address = Some("127.0.0.1:0".parse().unwrap());
         config.indexer.web_ui_address = Some(format!("127.0.0.1:{}", web_ui_port).parse().unwrap());
-        config.indexer.graphql_address = Some(format!("127.0.0.1:{}", graphql_port).parse().unwrap());
 
         // store all events in the database using an empty filter
         config.indexer.event_filters = vec![];
@@ -229,7 +221,6 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         web_ui_port,
         handle,
         api_port,
-        graphql_port,
         ipc_sender,
         temp_dir_path: base_dir_path,
         shutdown,

@@ -125,26 +125,6 @@ impl<'a> ProcessContext<'a> {
         }
     }
 
-    pub fn get_public_graphql_url(&self) -> Url {
-        match self.settings.get("public_graphql_url") {
-            Some(url) => url.parse().expect("Invalid GraphQL URL"),
-            None => {
-                let public_ip = self
-                    .settings
-                    .get("public_ip")
-                    .map(|s| s.as_str())
-                    .unwrap_or("127.0.0.1");
-                let port = self
-                    .port_allocator
-                    .get("graphql")
-                    .expect("Graphql port must be allocated before calling get_graphql_url");
-                format!("http://{public_ip}:{port}")
-                    .parse()
-                    .expect("Invalid GraphQL URL")
-            },
-        }
-    }
-
     pub async fn get_free_port(&mut self, name: &'static str) -> anyhow::Result<u16> {
         Ok(self.port_allocator.get_or_next_port(name).await)
     }

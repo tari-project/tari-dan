@@ -35,15 +35,11 @@ use url::Url;
 
 const LOG_TARGET: &str = "tari::indexer::web_ui::server";
 
-pub async fn serve(address: SocketAddr, api_address: Url, graphql_address: Option<Url>) -> Result<(), anyhow::Error> {
+pub async fn serve(address: SocketAddr, api_address: Url) -> Result<(), anyhow::Error> {
     let api_address = Arc::new(api_address);
 
     let router = Router::new()
         .route("/rest_api_address", get(|| async move { api_address.to_string() }))
-        .route(
-            "/graphql_address",
-            get(|| async move { graphql_address.map(|a| a.to_string()).unwrap_or_default() }),
-        )
         .fallback(handler);
 
     info!(target: LOG_TARGET, "🕸️ Web UI started at http://{}", address);

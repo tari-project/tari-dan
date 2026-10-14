@@ -387,10 +387,9 @@ impl TariWorld {
         // indexes
         for (name, node) in &self.indexers {
             cucumber_log!(
-                "Indexer \"{}\": json rpc port \"{}\", graphql port \"{}\", web ui port  \"{}\", temp dir path \"{}\"",
+                "Indexer \"{}\": json rpc port \"{}\", web ui port  \"{}\", temp dir path \"{}\"",
                 name,
                 node.api_port,
-                node.graphql_port,
                 node.web_ui_port,
                 node.temp_dir_path
             );

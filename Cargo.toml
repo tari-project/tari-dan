@@ -185,8 +185,6 @@ libp2p-substream = { path = "networking/libp2p-substream" }
 
 # third-party dependencies
 anyhow = "1.0.100"
-async-graphql = "7.0.17"
-async-graphql-axum = "7.0.17"
 async-semaphore = "1.2.1"
 async-trait = "0.1.89"
 asynchronous-codec = "0.7.0"

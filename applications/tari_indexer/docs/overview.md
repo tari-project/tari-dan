@@ -17,7 +17,7 @@ The Tari Indexer solves these problems by:
 
 1. **Aggregating data** from across the sharded network into a single queryable database
 2. **Maintaining history** of all transactions, substates, and events
-3. **Providing multiple APIs** (REST, GraphQL, Web UI) for different use cases
+3. **Providing multiple APIs** (REST, Web UI) for different use cases
 4. **Caching substates** locally for fast retrieval
 5. **Streaming real-time updates** to connected applications
 
@@ -59,7 +59,6 @@ The indexer continuously scans and stores several types of data:
 ### Data Access APIs
 
 - **REST API**: Traditional HTTP endpoints for programmatic access
-- **GraphQL API**: Flexible query interface for complex data retrieval
 - **Web UI**: Browser-based interface for exploring network data
 - **UTXO Streaming**: Real-time WebSocket streaming of UTXO changes
 

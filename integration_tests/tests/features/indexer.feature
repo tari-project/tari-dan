@@ -56,17 +56,7 @@ Feature: Indexer node
     # Scan the network for the event emitted on ACC creation
     When indexer INDEXER scans the network events for account ACC with topics std.component.created,std.component.updated
 
-  Scenario: Indexer GraphQL requests work
-    # Initialize a base node, wallet, miner and VN
-    Given a base node BASE
-
-    # Initialize an indexer
-    Given an indexer IDX connected to base node BASE
-
-    # Check GraphQL request
-    Then IDX indexer GraphQL request works
-
-  Scenario: Indexer GraphQL requests events over network substate indexing
+  Scenario: Indexer serves events over network substate indexing
     Given a network with registered validator VN and wallet daemon WALLET_D
 
     When I create an account ACC_1 via the wallet daemon WALLET_D with 1 XTR
@@ -80,7 +70,7 @@ Feature: Indexer node
     # Scan the network for the event emitted on ACC_2 creation
     When indexer INDEXER scans the network events for account ACC_2 with topics std.component.created
 
-  Scenario: Indexer GraphQL filtering and pagination of events
+  Scenario: Indexer filtering and pagination of events
     Given a network with registered validator VN and wallet daemon WALLET_D
 
     # publish template

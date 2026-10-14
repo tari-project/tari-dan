@@ -47,17 +47,11 @@ Main indexer application settings.
 # API server listening address (default: "127.0.0.1:18300")
 #api_listen_address = "127.0.0.1:18300"
 
-# GraphQL server address (default: "127.0.0.1:18301")
-#graphql_address = "127.0.0.1:18301"
-
 # Web UI server address (default: "127.0.0.1:15000")
 #web_ui_address = "127.0.0.1:15000"
 
 # Public API URL for web UI (optional, defaults to api_listen_address)
 #web_ui_public_api_url = "https://myindexer.example.com:18300"
-
-# Public GraphQL URL for web UI (optional, defaults to graphql_address)
-#web_ui_public_graphql_url = "https://myindexer.example.com:18301"
 
 # Block scanning interval in seconds (default: 10)
 #block_scanning_interval = 10
@@ -359,7 +353,6 @@ export TARI_BASE_DIR=/opt/tari
 # Indexer-specific overrides
 export TARI_INDEXER_API_LISTEN_ADDRESS=0.0.0.0:18300
 export TARI_INDEXER_WEB_UI_PUBLIC_API_URL=https://api.myindexer.com
-export TARI_INDEXER_WEB_UI_PUBLIC_GRAPHQL_URL=https://graphql.myindexer.com
 export TARI_INDEXER_MINOTARI_NODE_GRPC_URL=http://localhost:18142
 ```
 
@@ -414,7 +407,6 @@ network = "esmeralda"
 api_listen_address = "0.0.0.0:18300"
 web_ui_address = "0.0.0.0:15000"
 web_ui_public_api_url = "https://indexer.example.com:18300"
-web_ui_public_graphql_url = "https://indexer.example.com:18301"
 block_scanning_interval = 10
 state_scanning_interval = 60
 

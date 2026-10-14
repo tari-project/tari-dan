@@ -142,14 +142,6 @@ Tables include:
 - Swagger/OpenAPI documentation generation
 - WebSocket support for real-time UTXO streaming
 
-**GraphQL API Server**
-
-- Flexible query interface for complex data relationships
-- Schema-driven API with strong typing
-- Supports nested queries and data aggregation
-- Optimized query execution with caching
-- Real-time subscriptions for live data
-
 **Web UI Server**
 
 - Serves the React-based web interface

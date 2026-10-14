@@ -127,16 +127,11 @@ pub struct IndexerConfig {
     /// separate from the API server, so that metrics can be bound to a private interface while the API is public.
     /// Only used when the `metrics` feature is enabled (default = "127.0.0.1:18302"); `None` disables the listener.
     pub metrics_listen_address: Option<SocketAddr>,
-    /// GraphQL port of the indexer application
-    pub graphql_address: Option<SocketAddr>,
     /// The address of the Web UI
     pub web_ui_address: Option<SocketAddr>,
     /// The publicly-accessible URL that the UI uses to connect to the API.
     /// If this is None, then the api_listen_address will be used.
     pub web_ui_public_api_url: Option<String>,
-    /// The jrpc address where the UI should connect to the GraphQL API(it can be the same as the json_rpc_address, but
-    /// doesn't have to be), if this will be None, then the listen_addr will be used.
-    pub web_ui_public_graphql_url: Option<String>,
     /// How often do we want to scan the second layer for new versions
     #[serde(with = "serializers::seconds")]
     pub block_scanning_interval: Duration,
@@ -475,10 +470,8 @@ impl Default for IndexerConfig {
             p2p: P2pConfig::default(),
             api_listen_address: Some("127.0.0.1:18300".parse().unwrap()),
             metrics_listen_address: Some("127.0.0.1:18302".parse().unwrap()),
-            graphql_address: Some("127.0.0.1:18301".parse().unwrap()),
             web_ui_address: Some("127.0.0.1:15000".parse().unwrap()),
             web_ui_public_api_url: None,
-            web_ui_public_graphql_url: None,
             block_scanning_interval: Duration::from_secs(10),
             state_scanning_interval: Duration::from_secs(60),
             state_sync_stream_deadline: default_state_sync_stream_deadline(),
