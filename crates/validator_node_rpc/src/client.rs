@@ -531,13 +531,7 @@ impl<TMsg: MessageSpec> RpcMultiPool<TMsg> {
         // transport allows, and the pool is shared by every caller: holding the lock across the dial
         // would queue all of them - including those bound for peers that are up - behind the one that
         // is down.
-        let client: rpc_service::ValidatorNodeRpcClient =
-            time::timeout(CONNECT_TIMEOUT, self.networking.connect_rpc(*addr))
-                .await
-                .map_err(|_| ValidatorNodeRpcClientError::ConnectTimeout {
-                    peer_id: *addr,
-                    timeout: CONNECT_TIMEOUT,
-                })??;
+        let client = self.connect_unpooled(addr).await?;
 
         let mut sessions = self.sessions.write().await;
         // Another caller may have connected to the same peer while this dial was in flight. Keep
@@ -549,6 +543,22 @@ impl<TMsg: MessageSpec> RpcMultiPool<TMsg> {
                 Ok(client)
             },
         }
+    }
+
+    /// Opens a session with `addr` that no other caller shares. A session serves one request at a time, so a
+    /// long-lived stream belongs on one of these: on the pooled session it holds every other caller's request to
+    /// the peer until it ends. The session closes when the last clone of the client is dropped.
+    pub async fn connect_unpooled(
+        &self,
+        addr: &PeerId,
+    ) -> Result<rpc_service::ValidatorNodeRpcClient, ValidatorNodeRpcClientError> {
+        let client = time::timeout(CONNECT_TIMEOUT, self.networking.connect_rpc(*addr))
+            .await
+            .map_err(|_| ValidatorNodeRpcClientError::ConnectTimeout {
+                peer_id: *addr,
+                timeout: CONNECT_TIMEOUT,
+            })??;
+        Ok(client)
     }
 
     async fn connected_session(&self, addr: &PeerId) -> Option<rpc_service::ValidatorNodeRpcClient> {
