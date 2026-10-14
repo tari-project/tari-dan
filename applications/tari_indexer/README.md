@@ -173,7 +173,6 @@ The indexer consists of several key components:
 - **Storage Layer**: SQLite-based data persistence
 - **REST Server**: HTTP API endpoints
 - **P2P Networking**: Communication with validator nodes
-- **Event Manager**: Real-time event processing
 - **Web UI Server**: Static file serving for the web interface
 
 ## License

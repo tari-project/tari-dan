@@ -73,13 +73,6 @@ applications requiring centralized data access.
 - Handles state reconciliation when inconsistencies are detected
 - Supports event filtering to focus on relevant data
 
-**Event Manager**
-
-- Processes and categorizes all network events
-- Maintains event ordering and relationships
-- Supports real-time event streaming to connected clients
-- Implements configurable event filtering and routing
-
 **Substate Manager**
 
 - Manages the lifecycle of substates (blockchain state objects)
