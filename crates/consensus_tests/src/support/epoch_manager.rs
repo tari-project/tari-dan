@@ -235,8 +235,9 @@ impl TestEpochManager {
         self
     }
 
-    /// Gives `epoch` a committee layout of its own. Its members must also belong to a committee added with
-    /// `add_committees`.
+    /// Gives `epoch` a committee layout of its own, read only by `get_committee_info_by_validator_address` and
+    /// `get_random_committee_member`. Every other lookup returns the `add_committees` layout for any epoch. Its
+    /// members must also belong to a committee added with `add_committees`.
     pub async fn set_epoch_committees(
         &self,
         epoch: Epoch,
@@ -579,7 +580,8 @@ pub struct TestEpochManagerState {
     #[allow(clippy::type_complexity)]
     pub validator_nodes: HashMap<TestAddress, (ValidatorNode<TestAddress>, ShardGroup)>,
     pub committees: HashMap<ShardGroup, Arc<Committee<TestAddress>>>,
-    /// Layouts of epochs whose committees differ from `committees`.
+    /// Layouts of epochs whose committees differ from `committees`. See `TestEpochManager::set_epoch_committees`
+    /// for the lookups that read them.
     #[allow(clippy::type_complexity)]
     pub epoch_committees: HashMap<Epoch, HashMap<ShardGroup, Arc<Committee<TestAddress>>>>,
     pub address_shard: HashMap<TestAddress, ShardGroup>,
