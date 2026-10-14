@@ -63,6 +63,7 @@ pub trait GreetingRpc: Send + Sync + 'static {
 pub struct GreetingService {
     greetings: Vec<String>,
     call_count: Arc<AtomicUsize>,
+    live_streams: Arc<AtomicUsize>,
 }
 
 impl GreetingService {
@@ -73,11 +74,17 @@ impl GreetingService {
         Self {
             greetings: greetings.iter().map(ToString::to_string).collect(),
             call_count: Default::default(),
+            live_streams: Default::default(),
         }
     }
 
     pub fn call_count(&self) -> usize {
         self.call_count.load(Ordering::SeqCst)
+    }
+
+    /// The number of `slow_stream` responses still being produced.
+    pub fn live_streams(&self) -> usize {
+        self.live_streams.load(Ordering::SeqCst)
     }
 
     fn inc_call_count(&self) {
@@ -157,6 +164,8 @@ impl GreetingRpc for GreetingService {
 
         let (tx, rx) = mpsc::channel(1);
         let item = iter::repeat_n(0u8, item_size as usize).collect::<Vec<_>>();
+        let live_streams = self.live_streams.clone();
+        live_streams.fetch_add(1, Ordering::SeqCst);
         tokio::spawn(async move {
             for _ in 0..num_items {
                 time::sleep(Duration::from_millis(delay_ms)).await;
@@ -165,6 +174,7 @@ impl GreetingRpc for GreetingService {
                     break;
                 }
             }
+            live_streams.fetch_sub(1, Ordering::SeqCst);
         });
 
         Ok(Streaming::new(rx))

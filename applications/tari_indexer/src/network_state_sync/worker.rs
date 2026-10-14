@@ -606,7 +606,7 @@ impl NetworkWideStateSync {
                     .await;
                 continue;
             }
-            let mut session = match pool.new_session().await {
+            let mut session = match pool.new_stream_session().await {
                 Ok(s) => s,
                 Err(e) => {
                     warn!(target: LOG_TARGET, "⚠️ Failed to create session for shard group {}: {}", shard_group, e);
