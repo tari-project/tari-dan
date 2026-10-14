@@ -81,6 +81,7 @@ pub fn handle_start(
         )
     })?;
     claim.delegated = true;
+    claim.delegation_id = Some(rand::random());
     let permissions_token = jwt.grant(&claim).map_err(|e| {
         JsonRpcResponse::error(
             answer_id.clone(),

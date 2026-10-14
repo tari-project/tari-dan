@@ -126,7 +126,12 @@ fn a_lock_records_its_owner() {
     let db = open_store();
     let mut tx = db.create_write_tx().unwrap();
 
-    for owner in [LockOwner::Wallet, LockOwner::Delegated, LockOwner::ApiKey(7)] {
+    for owner in [
+        LockOwner::Wallet,
+        LockOwner::Delegated(u64::MAX),
+        LockOwner::Delegated(3),
+        LockOwner::ApiKey(7),
+    ] {
         let lock = tx.locks_create(None, owner).unwrap();
         assert_eq!(tx.locks_get(lock).unwrap().owner, owner);
     }

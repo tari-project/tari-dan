@@ -17,8 +17,9 @@ pub enum LockOwner {
     /// The wallet's own interactive session, or the wallet itself for a lock
     /// it takes and links internally.
     Wallet,
-    /// A connected app presenting a token `webrtc.start` minted.
-    Delegated,
+    /// A connected app, by the id of the `webrtc.start` call that minted its
+    /// token.
+    Delegated(u64),
     /// An API key, by its id. Names are not unique; ids are.
     ApiKey(i32),
 }

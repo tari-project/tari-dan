@@ -121,6 +121,7 @@ impl TestDaemon {
             .generate_auth_claims(Permissions::from_str(permissions).unwrap())
             .unwrap();
         claims.delegated = delegated;
+        claims.delegation_id = delegated.then(rand::random);
         Authorization::<Bearer>::bearer(&context.jwt_api().grant(&claims).unwrap())
             .unwrap()
             .0

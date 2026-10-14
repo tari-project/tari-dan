@@ -602,6 +602,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn connected_apps_cannot_hold_each_others_locks() {
+        let daemon = TestDaemon::start().await;
+        let app = daemon.delegated_session("transaction_requests:create");
+        let other_app = daemon.delegated_session("transaction_requests:create");
+        let lock_id = lock_for(&daemon, owner_of(&daemon, &other_app));
+
+        let err = handle_create(&daemon.context, Some(&app), create_request(vec![lock_id], 60 * 60))
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("lock_ids"), "{err}");
+
+        handle_create(
+            &daemon.context,
+            Some(&other_app),
+            create_request(vec![lock_id], 60 * 60),
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
     async fn a_request_holds_its_own_callers_lock_across_the_approval_window() {
         let daemon = TestDaemon::start().await;
         let tool = daemon.api_key("htlc-swap-tool", "transaction_requests:create");

@@ -49,6 +49,8 @@ pub struct AuthIdentity {
     pub api_key_id: Option<i32>,
     /// The caller presented a token `webrtc.start` minted for a connected app.
     pub delegated: bool,
+    /// Which `webrtc.start` call minted the delegated token.
+    pub delegation_id: Option<u64>,
 }
 
 impl AuthIdentity {
@@ -56,7 +58,7 @@ impl AuthIdentity {
     pub fn lock_owner(&self) -> LockOwner {
         match self.api_key_id {
             Some(id) => LockOwner::ApiKey(id),
-            None if self.delegated => LockOwner::Delegated,
+            None if self.delegated => LockOwner::Delegated(self.delegation_id.unwrap_or_default()),
             None => LockOwner::Wallet,
         }
     }
@@ -222,14 +224,16 @@ impl HandlerContext {
                 api_key_name: Some(row.name),
                 api_key_id: Some(row.id),
                 delegated: false,
+                delegation_id: None,
             }
         } else {
-            let (permissions, delegated) = self.jwt_api().check_auth_delegation(Some(bearer))?;
+            let claims = self.jwt_api().check_auth_claims(Some(bearer))?;
             AuthIdentity {
-                permissions,
+                permissions: claims.permissions,
                 api_key_name: None,
                 api_key_id: None,
-                delegated,
+                delegated: claims.delegated,
+                delegation_id: claims.delegation_id,
             }
         };
 
