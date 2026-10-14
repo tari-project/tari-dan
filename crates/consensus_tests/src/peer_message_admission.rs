@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     sync::{
         Arc,
         Mutex,
@@ -11,19 +11,34 @@ use std::{
     time::Duration,
 };
 
+use ootle_byte_type::ToByteType;
 use tari_common_types::types::PrivateKey;
 use tari_consensus::{
-    hotstuff::MAX_PENDING_REQUESTS_PER_NOTIFIER,
+    hotstuff::{MAX_PARKED_BLOCKS_PER_PROPOSER_PER_HEIGHT, MAX_PENDING_REQUESTS_PER_NOTIFIER},
     messages::{
         ForeignProposalNotificationMessage,
         ForeignProposalRequestMessage,
         HotstuffMessage,
         MissingTransactionsRequest,
+        ProposalMessage,
     },
     traits::InboundMessagingError,
 };
-use tari_consensus_types::{BlockId, Decision};
+use tari_consensus_types::{
+    BlockId,
+    Decision,
+    LockedBlock,
+    ProposalCertificate,
+    ToSignatureMessage,
+    ValidatorSchnorrSignature,
+};
 use tari_ootle_common_types::{Epoch, NodeHeight, SubstateLockType, committee::Committee};
+use tari_ootle_storage::{
+    StateStore,
+    StateStoreReadTransaction,
+    StorageError,
+    consensus_models::{Block, BlockHeader, BookkeepingModel, Command, LocalOnlyAtom},
+};
 use tari_ootle_transaction::{Transaction, TransactionId};
 use tokio::time::sleep;
 
@@ -32,8 +47,10 @@ use crate::support::{
     Test,
     TestAddress,
     TestVnDestination,
+    Validator,
     build_transaction_from,
     committee_number_to_shard_group,
+    helpers,
     logging::setup_logger,
 };
 
@@ -286,6 +303,164 @@ async fn a_notification_from_an_epoch_with_a_different_committee_layout_does_not
     test.stop();
     test.assert_all_validators_have_decision(tx.id(), Decision::Commit)
         .await;
+    test.assert_all_validators_committed(tx.id());
+}
+
+/// A block signed by `proposer` that is otherwise valid on `template`'s chain, extends `justify` and cites a
+/// transaction no validator holds, so the receiver can only park it.
+fn block_citing_an_unknown_transaction(
+    template: &Block,
+    justify: &ProposalCertificate,
+    proposer: &TestAddress,
+    seed: u32,
+) -> Block {
+    let (secret_key, public_key) = helpers::derive_keypair_from_address(proposer);
+    let mut tx_id = [0xab; 32];
+    tx_id[..4].copy_from_slice(&seed.to_le_bytes());
+    let commands = BTreeSet::from([Command::LocalOnly(LocalOnlyAtom {
+        id: TransactionId::new(tx_id),
+        decision: Decision::Commit,
+        transaction_fee: 0,
+        leader_fee: None,
+    })]);
+    let header = template.header();
+    let mut forged = BlockHeader::create_unsigned(
+        header.network(),
+        header.protocol_version(),
+        justify.calculate_block_id(),
+        justify.calculate_id(),
+        None,
+        justify.height() + NodeHeight(1),
+        header.epoch(),
+        header.shard_group(),
+        public_key.to_byte_type(),
+        *header.state_merkle_root(),
+        &commands,
+        0,
+        header.timestamp(),
+        *header.epoch_hash(),
+        *header.accumulated_data(),
+        header.extra_data().clone(),
+    )
+    .unwrap();
+    let signature =
+        ValidatorSchnorrSignature::sign(&secret_key, forged.to_signature_message(), &mut rand::rng()).unwrap();
+    forged.set_signature(signature.to_byte_type());
+    Block::new(forged, justify.clone(), commands, None)
+}
+
+fn count_parked(validator: &Validator, blocks: &[Block]) -> usize {
+    validator
+        .state_store
+        .with_read_tx(|tx| {
+            blocks
+                .iter()
+                .map(|block| tx.parked_block_exists(block.id()))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .unwrap()
+        .into_iter()
+        .filter(|parked| *parked)
+        .count()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn blocks_citing_unknown_transactions_do_not_stay_parked() {
+    setup_logger();
+    let victim = TestAddress::new("1");
+    let sender = TestAddress::new("2");
+    let mut test = Test::builder().add_committee(0, vec!["1", "2", "3", "4"]).start().await;
+    test.start_epoch(Epoch(1)).await;
+    test.wait_for_all_validators_to_start_consensus().await;
+
+    test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
+    commit_until_pool_is_empty(&mut test, &victim).await;
+
+    let (leaf, locked_height, committed) = test
+        .get_validator(&victim)
+        .state_store
+        .with_read_tx(|tx| {
+            let leaf = Block::get(tx, test.get_validator(&victim).get_leaf_block().block_id())?;
+            let locked_height = LockedBlock::get(tx, Epoch(1))?.height;
+            let mut committed = Vec::new();
+            let mut block = leaf.clone();
+            while !block.height().is_zero() {
+                if !block.is_dummy() && block.justify().height() + NodeHeight(1) <= locked_height {
+                    committed.push(block.clone());
+                }
+                block = block.get_parent(tx)?;
+            }
+            Ok::<_, StorageError>((leaf, locked_height, committed))
+        })
+        .unwrap();
+    assert!(
+        !committed.is_empty(),
+        "no block at or below locked height {locked_height}"
+    );
+
+    let tx_inbound = test.get_validator(&victim).tx_inbound_message.clone();
+    let mut seed = 0;
+    let mut forge = |template: &Block, justify: &ProposalCertificate| {
+        seed += 1;
+        block_citing_an_unknown_transaction(template, justify, &sender, seed)
+    };
+
+    // A genuine certificate for a height the victim has already locked admits no block worth keeping
+    let mut stale = Vec::new();
+    for block in &committed {
+        for _ in 0..10 {
+            stale.push(forge(block, block.justify()));
+        }
+    }
+    // A certificate above the locked height admits blocks the victim may yet need, but only a few per proposer
+    let fresh = (0..20).map(|_| forge(&leaf, leaf.justify())).collect::<Vec<_>>();
+    // A committee member may relay a block, but only a committee member's own proposal is kept
+    let relayed = (0..5)
+        .map(|seed| block_citing_an_unknown_transaction(&leaf, leaf.justify(), &TestAddress::new("outsider"), seed))
+        .collect::<Vec<_>>();
+
+    for block in stale.iter().chain(&fresh).chain(&relayed) {
+        tx_inbound
+            .send((
+                sender.clone(),
+                HotstuffMessage::new_catch_up_sync_response(ProposalMessage {
+                    block: block.clone(),
+                    foreign_proposals: vec![],
+                }),
+            ))
+            .await
+            .unwrap();
+    }
+    sleep(Duration::from_secs(2)).await;
+
+    assert_eq!(count_parked(test.get_validator(&victim), &stale), 0);
+    assert_eq!(count_parked(test.get_validator(&victim), &relayed), 0);
+    let parked_fresh = count_parked(test.get_validator(&victim), &fresh);
+    assert_eq!(
+        parked_fresh, MAX_PARKED_BLOCKS_PER_PROPOSER_PER_HEIGHT,
+        "one proposer's parked blocks at one height"
+    );
+
+    // Once the chain locks past them, none of them can ever be voted on
+    let (tx, _, _) = test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
+    loop {
+        test.on_block_committed().await;
+        let locked = test
+            .get_validator(&victim)
+            .state_store
+            .with_read_tx(|tx| LockedBlock::get(tx, Epoch(1)))
+            .unwrap();
+        if test.is_transaction_pool_empty() && locked.height > leaf.height() {
+            break;
+        }
+        assert!(
+            locked.height < leaf.height() + NodeHeight(20),
+            "chain did not lock past the parked blocks"
+        );
+    }
+    assert_eq!(count_parked(test.get_validator(&victim), &fresh), 0);
+
+    test.stop();
     test.assert_all_validators_committed(tx.id());
 }
 

@@ -144,6 +144,7 @@ use crate::{
         lock_conflict::LockConflictCf,
         missing_transactions,
         missing_transactions::MissingTransactionCf,
+        parked_block,
         parked_block::{ParkedBlockCf, ParkedBlockDataRef},
         pending_state_tree_diff::{PendingStateTreeDiffRecordCf, ShardStateTreeDiff, ShardStateTreeDiffRef},
         state_sync_rewind_point::StateSyncRewindPointCf,
@@ -325,6 +326,11 @@ impl<'a, TAddr: NodeAddressable> RocksDbStateStoreWriteTransaction<'a, TAddr> {
         };
         let data = codec.encode(&parked_block_data)?;
         cf.put_raw_value(block.id(), &data, OPERATION)?;
+        self.db().cf(parked_block::ParkedBlockEpochHeightIndex)?.put(
+            &parked_block::epoch_height_index_key(block),
+            &(),
+            OPERATION,
+        )?;
 
         Ok(())
     }
@@ -334,6 +340,9 @@ impl<'a, TAddr: NodeAddressable> RocksDbStateStoreWriteTransaction<'a, TAddr> {
         let cf = self.db().cf(ParkedBlockCf)?;
         let data = cf.get(block_id, OPERATION)?;
         cf.delete_or_not_found(block_id, OPERATION)?;
+        self.db()
+            .cf(parked_block::ParkedBlockEpochHeightIndex)?
+            .delete(&parked_block::epoch_height_index_key(&data.block), OPERATION)?;
 
         Ok((data.block, data.foreign_proposals))
     }
@@ -1162,12 +1171,35 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
             }
         }
 
-        // TODO: we do not clear older blocks (height < current block height). This could potentially leave stale
-        // entries.
-
         // None left, remove and return the block
         let block_and_fp = self.parked_blocks_remove(&block_id)?;
         Ok(Some(block_and_fp))
+    }
+
+    fn parked_blocks_remove_up_to(&mut self, epoch: Epoch, height: NodeHeight) -> Result<usize, StorageError> {
+        const OPERATION: &str = "parked_blocks_remove_up_to";
+        let db = self.db();
+        let index_cf = db.cf(parked_block::ParkedBlockEpochHeightIndex)?;
+        let keys = db
+            .cf(parked_block::ByEpochHeightQuery)?
+            .query_end_range_key_iterator(Ordering::Ascending, &(epoch, height + NodeHeight(1)))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let parked_cf = db.cf(ParkedBlockCf)?;
+        let missing_cf = db.cf(MissingTransactionCf)?;
+        let missing_index_cf = db.cf(missing_transactions::MissingTransactionBlockIdIndex)?;
+        let missing_by_block = db.cf(missing_transactions::ByBlockIdQuery)?;
+        for key in &keys {
+            let (_, _, _, block_id) = key;
+            for (block_id, transaction_id) in missing_by_block.query_prefix_range_keys(Ordering::default(), block_id)? {
+                missing_cf.delete(&(transaction_id, block_id), OPERATION)?;
+                missing_index_cf.delete(&(block_id, transaction_id), OPERATION)?;
+            }
+            parked_cf.delete(block_id, OPERATION)?;
+            index_cf.delete(key, OPERATION)?;
+        }
+
+        Ok(keys.len())
     }
 
     fn foreign_parked_blocks_insert(&mut self, park_block: &ForeignParkedProposal) -> Result<(), StorageError> {

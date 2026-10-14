@@ -499,6 +499,12 @@ pub trait StateStoreReadTransaction: Sized {
     ) -> Result<SubstatePledges, StorageError>;
     // -------------------------------- Parked blocks / Missing Transactions -------------------------------- //
     fn parked_block_exists(&self, block_id: &BlockId) -> Result<bool, StorageError>;
+    fn parked_blocks_count_by_proposer(
+        &self,
+        epoch: Epoch,
+        height: NodeHeight,
+        proposed_by: &RistrettoPublicKeyBytes,
+    ) -> Result<usize, StorageError>;
 
     // -------------------------------- Foreign parked block -------------------------------- //
     fn foreign_parked_blocks_exists(&self, block_id: &BlockId) -> Result<bool, StorageError>;
@@ -661,6 +667,10 @@ pub trait StateStoreWriteTransaction {
         height: NodeHeight,
         transaction_id: &TransactionId,
     ) -> Result<Option<(Block, Vec<ForeignProposal>)>, StorageError>;
+
+    /// Removes every parked block, with its missing-transaction records, from earlier epochs and from `epoch` up to and
+    /// including `height`. Returns the number of blocks removed.
+    fn parked_blocks_remove_up_to(&mut self, epoch: Epoch, height: NodeHeight) -> Result<usize, StorageError>;
 
     // -------------------------------- Foreign parked block -------------------------------- //
     fn foreign_parked_blocks_insert(&mut self, park_block: &ForeignParkedProposal) -> Result<(), StorageError>;
