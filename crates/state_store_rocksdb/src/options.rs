@@ -40,6 +40,10 @@ pub struct DatabaseOptions {
     /// The default is 1, which means we keep the previous epoch's data until this epoch has passed. It is not
     /// recommended to set this to 0.
     pub epoch_history_length: u64,
+    /// The number of epochs back from the current epoch to keep substate down proofs for, counted from the epoch of
+    /// the destruction each proves. A destruction older than this is served unproven.
+    /// The default is 72, about a day of epochs.
+    pub down_proof_history_length: u64,
     /// Whether to store additional debugging data in the database. This may increase storage requirements and slow
     /// down some operations, so it should only be enabled for debugging purposes.
     pub debugging_data: bool,
@@ -86,6 +90,13 @@ impl DatabaseOptions {
         self
     }
 
+    /// The number of epochs back from the current epoch to keep substate down proofs for. See
+    /// [`Self::down_proof_history_length`].
+    pub fn with_down_proof_history_length(mut self, down_proof_history_length: u64) -> Self {
+        self.down_proof_history_length = down_proof_history_length;
+        self
+    }
+
     /// Whether epoch GC prunes finalized transaction bookkeeping once it ages past
     /// `epoch_history_length`. Disable to retain the full transaction history (an archival node).
     pub fn with_prune_transaction_history(mut self, prune_transaction_history: bool) -> Self {
@@ -118,6 +129,7 @@ impl Default for DatabaseOptions {
         Self {
             state_history_length: 100,
             epoch_history_length: 1,
+            down_proof_history_length: 72,
             debugging_data: false,
             prune_transaction_history: true,
             memory_budget_bytes: DEFAULT_MEMORY_BUDGET_BYTES,

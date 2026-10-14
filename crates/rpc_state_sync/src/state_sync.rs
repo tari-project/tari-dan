@@ -3,7 +3,8 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    time::Instant,
+    hash::Hash,
+    time::{Duration, Instant},
 };
 
 use anyhow::anyhow;
@@ -15,6 +16,7 @@ use tari_consensus::{
     traits::{ConsensusSpec, SyncManager, SyncStatus},
 };
 use tari_consensus_types::{LeafBlock, ProposalCertificate};
+use tari_engine_types::ProtocolVersion;
 use tari_epoch_manager::EpochManagerReader;
 use tari_ootle_common_types::{
     Epoch,
@@ -50,6 +52,14 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::ootle::rpc_state_sync";
+/// The number of sync runs a peer that served invalid state is left out of, unless configured otherwise.
+pub const DEFAULT_SYNC_PEER_SKIP_RUNS: u32 = 3;
+/// The base time a peer's state stream has to complete each version, unless configured otherwise. A version's
+/// allowance grows with its bytes at the minimum throughput.
+pub const DEFAULT_SYNC_PROGRESS_TIMEOUT: Duration = Duration::from_secs(60);
+/// The streaming rate, in bytes per second, at which a version's bytes extend its time allowance, unless configured
+/// otherwise.
+pub const DEFAULT_SYNC_MIN_THROUGHPUT_BYTES_PER_SEC: u64 = 256 * 1024;
 
 pub struct RpcStateSyncClientProtocol<TConsensusSpec: ConsensusSpec> {
     network: Network,
@@ -57,12 +67,19 @@ pub struct RpcStateSyncClientProtocol<TConsensusSpec: ConsensusSpec> {
     state_store: TConsensusSpec::StateStore,
     client_factory: TariValidatorNodeRpcClientFactory,
     signer_service: TConsensusSpec::SignerService,
+    /// The number of state versions the state store keeps the tree nodes of.
+    state_history_length: Version,
     stats: StateSyncStats,
     skip_sync: bool,
     /// Checkpoints fetched and validated during the current sync, by shard group. A checkpoint is stored only
     /// once every shard synced from it matches it, since a stored checkpoint tells peers this node holds that
-    /// state.
+    /// state. Its shard states are trusted, so a stream that fails against it is the streaming peer's fault.
     unsaved_checkpoints: HashMap<ShardGroup, EpochCheckpoint>,
+    /// Peers that served invalid state, left out of the next `peer_skip_runs` sync runs.
+    skipped_peers: SkippedPeers<PeerAddress>,
+    peer_skip_runs: u32,
+    progress_timeout: Duration,
+    min_throughput_bytes_per_sec: u64,
 }
 
 impl<TConsensusSpec> RpcStateSyncClientProtocol<TConsensusSpec>
@@ -74,6 +91,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         state_store: TConsensusSpec::StateStore,
         client_factory: TariValidatorNodeRpcClientFactory,
         signer_service: TConsensusSpec::SignerService,
+        state_history_length: Version,
     ) -> Self {
         Self {
             network,
@@ -81,9 +99,45 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             state_store,
             client_factory,
             signer_service,
+            state_history_length,
             stats: StateSyncStats::default(),
             skip_sync: false,
             unsaved_checkpoints: HashMap::new(),
+            skipped_peers: SkippedPeers::default(),
+            peer_skip_runs: DEFAULT_SYNC_PEER_SKIP_RUNS,
+            progress_timeout: DEFAULT_SYNC_PROGRESS_TIMEOUT,
+            min_throughput_bytes_per_sec: DEFAULT_SYNC_MIN_THROUGHPUT_BYTES_PER_SEC,
+        }
+    }
+
+    /// Sets the base time a peer's state stream has to complete each version. Zero sets no limit.
+    pub fn with_progress_timeout(mut self, progress_timeout: Duration) -> Self {
+        self.progress_timeout = progress_timeout;
+        self
+    }
+
+    /// Sets the streaming rate, in bytes per second, at which a version's bytes extend its time allowance. Zero
+    /// grants no extension beyond the base time.
+    pub fn with_min_throughput(mut self, bytes_per_sec: u64) -> Self {
+        self.min_throughput_bytes_per_sec = bytes_per_sec;
+        self
+    }
+
+    /// Sets the number of sync runs a peer that served invalid state is left out of.
+    pub fn with_peer_skip_runs(mut self, peer_skip_runs: u32) -> Self {
+        self.peer_skip_runs = peer_skip_runs;
+        self
+    }
+
+    /// Leaves `peer` out of the next sync runs if `err` shows it served invalid state. A transport failure says
+    /// nothing about the peer's state, so it does not count.
+    fn skip_peer_if_misbehaved(&mut self, peer: &PeerAddress, err: &RpcStateSyncError) {
+        if err.is_peer_fault() {
+            warn!(
+                target: LOG_TARGET,
+                "🛜 Leaving {peer} out of the next {} state sync run(s): {err}", self.peer_skip_runs
+            );
+            self.skipped_peers.skip(*peer, self.peer_skip_runs);
         }
     }
 
@@ -114,8 +168,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             info!(target: LOG_TARGET, "🛜 Checkpoint already stored: {cp}");
             return Ok(Some(cp));
         }
-        if let Some(cp) = self.unsaved_checkpoints.get(&for_shard_group) {
-            return Ok(Some(cp.clone()));
+        if let Some(checkpoint) = self.unsaved_checkpoints.get(&for_shard_group) {
+            return Ok(Some(checkpoint.clone()));
         }
 
         self.stats.total_requests += 1;
@@ -171,9 +225,19 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             shard,
             checkpoint_shard_root,
             checkpoint.get_shard_state_version(shard),
+            self.state_history_length,
         );
+        // A V0 checkpoint commits no state versions, so only from V1 does its version bound the stream.
+        let checkpoint_commits_state_versions = checkpoint
+            .protocol_version()
+            .map_err(|e| RpcStateSyncError::InvalidResponse(e.into()))? >=
+            ProtocolVersion::V1;
         let validator = CommitteeProofValidator::new(&self.epoch_manager, checkpoint.epoch());
-        let shard_sync = shard_sync.with_version_proofs(&validator);
+        let shard_sync = shard_sync
+            .with_version_proofs(&validator)
+            .with_trusted_checkpoint_version(checkpoint_commits_state_versions)
+            .with_progress_timeout(self.progress_timeout)
+            .with_min_throughput(self.min_throughput_bytes_per_sec);
         let maybe_persisted_state_version = shard_sync.discard_unverified_state()?;
 
         if shard_sync.local_state_root(maybe_persisted_state_version)? == checkpoint_shard_root {
@@ -230,7 +294,8 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         local_shard_group: ShardGroup,
         current_epoch: Epoch,
         our_vn_addr: &PeerAddress,
-    ) -> Result<HashMap<ShardGroup, SyncSource>, RpcStateSyncError> {
+        skipped_peers: &HashSet<PeerAddress>,
+    ) -> Result<HashMap<ShardGroup, SyncSource<PeerAddress>>, RpcStateSyncError> {
         // We are behind at least one epoch.
         // We get the current substate range, and we ask committees from previous epoch in this range to give us
         // data.
@@ -257,7 +322,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             .map(|(shard_group, signing_committee)| {
                 (
                     shard_group,
-                    SyncSource::new(signing_committee, &local_committee, our_vn_addr),
+                    SyncSource::new(signing_committee, &local_committee, our_vn_addr, skipped_peers),
                 )
             })
             .collect::<HashMap<_, _>>();
@@ -294,7 +359,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         shard_group: ShardGroup,
         epoch: Epoch,
         num_preshards: NumPreshards,
-        source: &SyncSource,
+        source: &SyncSource<PeerAddress>,
     ) -> Result<Option<Version>, RpcStateSyncError> {
         let prev_epoch = epoch
             .checked_sub(Epoch(1))
@@ -304,7 +369,9 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         let mut last_hard_error = None;
         let mut saw_unavailable_peer = false;
 
-        for member in &source.serving_peers {
+        // A peer that served invalid state earlier in this run is left out of the rest of it too.
+        let peers = leave_out_skipped(&source.serving_peers, |addr| self.skipped_peers.is_skipped(addr));
+        for member in &peers {
             let mut client = match self.establish_rpc_session(&member.address).await {
                 Ok(c) => c,
                 Err(err) => {
@@ -347,6 +414,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                         target: LOG_TARGET,
                         "⚠️Failed to fetch checkpoint from {member}: {err}. Attempting another peer if available"
                     );
+                    self.skip_peer_if_misbehaved(&member.address, &err);
                     last_hard_error = Some(err);
                     continue;
                 },
@@ -373,6 +441,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
                         target: LOG_TARGET,
                         "⚠️Failed to sync state from {member}: {err}. Attempting another peer if available"
                     );
+                    self.skip_peer_if_misbehaved(&member.address, &err);
                     last_hard_error = Some(err);
                     continue;
                 },
@@ -396,7 +465,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         &mut self,
         current_epoch: Epoch,
         num_preshards: NumPreshards,
-        sources: &HashMap<ShardGroup, SyncSource>,
+        sources: &HashMap<ShardGroup, SyncSource<PeerAddress>>,
     ) -> Result<Option<Version>, RpcStateSyncError> {
         let mut last_error = None;
 
@@ -452,8 +521,9 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         };
         let our_vn = self.epoch_manager.get_our_validator_node(current_epoch).await?;
         let local_info = self.epoch_manager.get_local_committee_info(current_epoch).await?;
+        let skipped_peers = self.skipped_peers.start_run(current_epoch);
         let sync_sources = match self
-            .get_sync_sources(local_info.shard_group(), current_epoch, &our_vn.address)
+            .get_sync_sources(local_info.shard_group(), current_epoch, &our_vn.address, &skipped_peers)
             .await
         {
             Ok(sources) => sources,
@@ -511,22 +581,24 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 
 /// Where to sync one shard group's state from. Checkpoint validity depends only on the quorum signatures of
 /// the committee that produced it, so who serves the bytes is chosen for availability rather than trust.
-struct SyncSource {
+struct SyncSource<TAddr> {
     /// The previous epoch's committee for the shard group. Its quorum threshold and voting powers are the
     /// only thing a fetched checkpoint is validated against.
-    signing_committee: Committee<PeerAddress>,
+    signing_committee: Committee<TAddr>,
     /// Peers to request the checkpoint and state from, in order of preference, excluding this node.
     /// Members of our current committee are running consensus and hold the previous epoch's state for our
     /// whole shard group (either as continuing members or because they synced it from the same checkpoint),
     /// so they come first; signing-committee members that left at the epoch boundary are the fallback.
-    serving_peers: Vec<CommitteeMember<PeerAddress>>,
+    /// Peers in `skipped_peers` are left out, unless that would leave none.
+    serving_peers: Vec<CommitteeMember<TAddr>>,
 }
 
-impl SyncSource {
+impl<TAddr: Clone + Eq + Hash> SyncSource<TAddr> {
     fn new(
-        signing_committee: Committee<PeerAddress>,
-        local_committee: &Committee<PeerAddress>,
-        our_vn_addr: &PeerAddress,
+        signing_committee: Committee<TAddr>,
+        local_committee: &Committee<TAddr>,
+        our_vn_addr: &TAddr,
+        skipped_peers: &HashSet<TAddr>,
     ) -> Self {
         let signing_addrs = signing_committee.address_iter().collect::<HashSet<_>>();
         let local_addrs = local_committee.address_iter().collect::<HashSet<_>>();
@@ -554,12 +626,79 @@ impl SyncSource {
                 tier.shuffle(&mut rng);
                 tier
             })
-            .collect();
+            .collect::<Vec<_>>();
 
         Self {
             signing_committee,
-            serving_peers,
+            serving_peers: leave_out_skipped(&serving_peers, |addr| skipped_peers.contains(addr)),
         }
+    }
+}
+
+/// The peers in `peers` that are not skipped, in order, or all of them if every one is skipped.
+fn leave_out_skipped<TAddr: Clone>(
+    peers: &[CommitteeMember<TAddr>],
+    is_skipped: impl Fn(&TAddr) -> bool,
+) -> Vec<CommitteeMember<TAddr>> {
+    let unskipped = peers
+        .iter()
+        .filter(|m| !is_skipped(&m.address))
+        .cloned()
+        .collect::<Vec<_>>();
+    if unskipped.is_empty() && !peers.is_empty() {
+        warn!(
+            target: LOG_TARGET,
+            "🛜 Every one of the {} peer(s) able to serve state is skipped for serving invalid state. Trying them \
+             anyway.",
+            peers.len()
+        );
+        return peers.to_vec();
+    }
+    unskipped
+}
+
+/// Peers that served invalid state, with the number of sync runs each is still left out of.
+#[derive(Debug)]
+struct SkippedPeers<TAddr> {
+    /// The highest epoch a run has been at. Committees change with the epoch, so the list starts empty when a run
+    /// moves past it. A run may target an epoch below it, as a probed target can lag the current epoch.
+    epoch: Option<Epoch>,
+    runs_left: HashMap<TAddr, u32>,
+}
+
+impl<TAddr> Default for SkippedPeers<TAddr> {
+    fn default() -> Self {
+        Self {
+            epoch: None,
+            runs_left: HashMap::new(),
+        }
+    }
+}
+
+impl<TAddr: Clone + Eq + Hash> SkippedPeers<TAddr> {
+    /// Leaves `peer` out of the next `runs` sync runs.
+    fn skip(&mut self, peer: TAddr, runs: u32) {
+        if runs > 0 {
+            self.runs_left.insert(peer, runs);
+        }
+    }
+
+    fn is_skipped(&self, peer: &TAddr) -> bool {
+        self.runs_left.contains_key(peer)
+    }
+
+    /// Starts a sync run at `epoch` and returns the peers it leaves out, counting the run against each of them.
+    fn start_run(&mut self, epoch: Epoch) -> HashSet<TAddr> {
+        if self.epoch.is_none_or(|current| epoch > current) {
+            self.runs_left.clear();
+            self.epoch = Some(epoch);
+        }
+        let skipped = self.runs_left.keys().cloned().collect();
+        self.runs_left.retain(|_, runs| {
+            *runs -= 1;
+            *runs > 0
+        });
+        skipped
     }
 }
 
@@ -998,6 +1137,113 @@ mod tests {
             public_key: RistrettoPublicKeyBytes::from([id; 32]),
             vote_power: VotePower::of(1),
         }
+    }
+
+    fn committee(ids: &[u8]) -> Committee<u8> {
+        Committee::new(ids.iter().map(|id| member(*id)).collect())
+    }
+
+    fn serving_peers(source: &SyncSource<u8>) -> HashSet<u8> {
+        source.serving_peers.iter().map(|m| m.address).collect()
+    }
+
+    #[test]
+    fn a_skipped_peer_is_left_out_of_the_next_runs() {
+        let signing = committee(&[1, 2, 3]);
+        let local = committee(&[0, 1, 2, 3]);
+        let mut skipped = SkippedPeers::default();
+        let epoch = Epoch(5);
+
+        assert!(skipped.start_run(epoch).is_empty());
+        skipped.skip(2, DEFAULT_SYNC_PEER_SKIP_RUNS);
+
+        for _ in 0..DEFAULT_SYNC_PEER_SKIP_RUNS {
+            let source = SyncSource::new(signing.clone(), &local, &0, &skipped.start_run(epoch));
+            assert_eq!(serving_peers(&source), HashSet::from([1, 3]));
+        }
+        let source = SyncSource::new(signing, &local, &0, &skipped.start_run(epoch));
+        assert_eq!(serving_peers(&source), HashSet::from([1, 2, 3]));
+        assert!(skipped.runs_left.is_empty());
+    }
+
+    #[test]
+    fn peers_that_joined_this_epoch_serve_state() {
+        let source = SyncSource::new(committee(&[1]), &committee(&[0, 1, 2]), &0, &HashSet::new());
+
+        assert_eq!(serving_peers(&source), HashSet::from([1, 2]));
+    }
+
+    #[test]
+    fn every_peer_is_tried_when_all_are_skipped() {
+        let signing = committee(&[1, 2]);
+        let local = committee(&[0, 1, 2]);
+        let mut skipped = SkippedPeers::default();
+        let epoch = Epoch(5);
+        skipped.start_run(epoch);
+        skipped.skip(1, DEFAULT_SYNC_PEER_SKIP_RUNS);
+        skipped.skip(2, DEFAULT_SYNC_PEER_SKIP_RUNS);
+
+        let source = SyncSource::new(signing, &local, &0, &skipped.start_run(epoch));
+
+        assert_eq!(serving_peers(&source), HashSet::from([1, 2]));
+    }
+
+    #[test]
+    fn a_peer_skipped_during_a_run_is_left_out_of_the_rest_of_it() {
+        let signing = committee(&[1, 2, 3]);
+        let local = committee(&[0, 1, 2, 3]);
+        let mut skipped = SkippedPeers::default();
+        let source = SyncSource::new(signing, &local, &0, &skipped.start_run(Epoch(5)));
+
+        skipped.skip(2, DEFAULT_SYNC_PEER_SKIP_RUNS);
+        let peers = leave_out_skipped(&source.serving_peers, |addr| skipped.is_skipped(addr));
+        assert_eq!(
+            peers.iter().map(|m| m.address).collect::<HashSet<_>>(),
+            HashSet::from([1, 3])
+        );
+
+        skipped.skip(1, DEFAULT_SYNC_PEER_SKIP_RUNS);
+        skipped.skip(3, DEFAULT_SYNC_PEER_SKIP_RUNS);
+        let peers = leave_out_skipped(&source.serving_peers, |addr| skipped.is_skipped(addr));
+        assert_eq!(peers.len(), 3);
+    }
+
+    #[test]
+    fn a_new_epoch_clears_the_skipped_peers() {
+        let mut skipped = SkippedPeers::default();
+        skipped.start_run(Epoch(5));
+        skipped.skip(1, DEFAULT_SYNC_PEER_SKIP_RUNS);
+
+        assert!(skipped.start_run(Epoch(6)).is_empty());
+        assert!(skipped.runs_left.is_empty());
+    }
+
+    #[test]
+    fn a_run_at_an_earlier_epoch_keeps_the_skipped_peers() {
+        let mut skipped = SkippedPeers::default();
+        skipped.start_run(Epoch(5));
+        skipped.skip(1, DEFAULT_SYNC_PEER_SKIP_RUNS);
+
+        assert_eq!(skipped.start_run(Epoch(4)), HashSet::from([1]));
+        assert_eq!(skipped.start_run(Epoch(5)), HashSet::from([1]));
+        assert!(skipped.start_run(Epoch(6)).is_empty());
+    }
+
+    #[test]
+    fn a_failure_against_the_checkpoint_is_the_streaming_peer_s_fault() {
+        let mismatch = RpcStateSyncError::StateRootMismatch {
+            expected: tari_state_tree::SPARSE_MERKLE_PLACEHOLDER_HASH,
+            actual: tari_state_tree::SPARSE_MERKLE_PLACEHOLDER_HASH,
+        };
+        assert!(mismatch.is_peer_fault());
+        assert!(RpcStateSyncError::ConflictsWithCheckpoint(anyhow!("above the checkpoint")).is_peer_fault());
+    }
+
+    #[test]
+    fn only_invalid_state_counts_as_misbehaviour() {
+        assert!(RpcStateSyncError::InvalidResponse(anyhow!("bad")).is_peer_fault());
+        assert!(!request_failed(RpcStatus::general("")).is_peer_fault());
+        assert!(!RpcStateSyncError::RpcError(RpcError::ReplyTimeout).is_peer_fault());
     }
 
     #[test]

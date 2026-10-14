@@ -92,6 +92,7 @@ mod tests {
     };
     use tari_state_tree::{
         JellyfishMerkleTree,
+        JmtHashScheme,
         LeafKey,
         Node,
         NodeKey,
@@ -105,7 +106,7 @@ mod tests {
 
     fn tree_diff() -> StateHashTreeDiff<SubstateAddress> {
         let store = MemoryTreeStore::new();
-        let jmt = JellyfishMerkleTree::new(&store);
+        let jmt = JellyfishMerkleTree::new(&store, JmtHashScheme::V1);
         let changes = (0..=255u8).map(|i| {
             let hash = TreeHash::new([i; 32]);
             (
@@ -113,7 +114,7 @@ mod tests {
                 Some((hash, SubstateAddress::from_bytes(&[i; 40]).unwrap())),
             )
         });
-        let (_, batch) = jmt.batch_put_value_set(changes, None, None, 1).unwrap();
+        let (_, batch) = jmt.batch_put_value_set(changes, None, 1).unwrap();
         let mut diff = StateHashTreeDiff::from(batch);
         diff.stale_tree_nodes
             .push(StaleTreeNode::Subtree(NodeKey::new_empty_path(0)));

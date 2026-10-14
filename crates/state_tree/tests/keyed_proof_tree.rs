@@ -1,7 +1,14 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_state_tree::{KeyedProofTree, LeafKey, SPARSE_MERKLE_PLACEHOLDER_HASH, StateTreeError, TreeHash};
+use tari_state_tree::{
+    JmtHashScheme,
+    KeyedProofTree,
+    LeafKey,
+    SPARSE_MERKLE_PLACEHOLDER_HASH,
+    StateTreeError,
+    TreeHash,
+};
 
 fn leaf(i: u8) -> (LeafKey, TreeHash) {
     (
@@ -18,7 +25,9 @@ fn an_empty_tree_has_the_placeholder_root_and_proves_absence() {
     let (key, _) = leaf(1);
     let (value, proof) = tree.get_proof(&key).unwrap();
     assert!(value.is_none());
-    proof.verify_exclusion(&tree.root(), &key).unwrap();
+    proof
+        .verify_exclusion_or_empty_tree(JmtHashScheme::V1, &tree.root(), &key)
+        .unwrap();
 }
 
 #[test]
@@ -29,16 +38,20 @@ fn every_leaf_proves_against_the_root_and_other_keys_prove_absent() {
     for (key, value) in &leaves {
         let (found, proof) = tree.get_proof(key).unwrap();
         assert!(found.is_some());
-        proof.verify_inclusion(&tree.root(), key, value).unwrap();
         proof
-            .verify_inclusion(&tree.root(), key, &TreeHash::new([0; 32]))
+            .verify_inclusion(JmtHashScheme::V1, &tree.root(), key, value)
+            .unwrap();
+        proof
+            .verify_inclusion(JmtHashScheme::V1, &tree.root(), key, &TreeHash::new([0; 32]))
             .unwrap_err();
     }
 
     let (absent, _) = leaf(9);
     let (found, proof) = tree.get_proof(&absent).unwrap();
     assert!(found.is_none());
-    proof.verify_exclusion(&tree.root(), &absent).unwrap();
+    proof
+        .verify_exclusion(JmtHashScheme::V1, &tree.root(), &absent)
+        .unwrap();
 }
 
 #[test]

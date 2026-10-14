@@ -22,8 +22,6 @@ use crate::{
         GetNetworkEconomicsResponse,
         GetNetworkInfoResponse,
         GetNetworkSyncStateResponse,
-        GetNonFungiblesRequest,
-        GetNonFungiblesResponse,
         GetResourceResponse,
         GetSubstateRequest,
         GetSubstateResponse,
@@ -166,13 +164,6 @@ impl IndexerRestApiClient {
         req: GetSubstateRequest,
     ) -> Result<GetSubstateResponse, IndexerRestClientError> {
         self.send_get(format!("substates/{id}"), req).await
-    }
-
-    pub async fn get_non_fungibles(
-        &self,
-        req: GetNonFungiblesRequest,
-    ) -> Result<GetNonFungiblesResponse, IndexerRestClientError> {
-        self.send_get("non-fungibles", req).await
     }
 
     pub async fn fetch_substates(

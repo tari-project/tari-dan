@@ -34,12 +34,10 @@ use tari_indexer_client::{
     graphql_client::IndexerGraphQLClient,
     rest_api_client::IndexerRestApiClient,
     types::{
-        GetNonFungiblesRequest,
         GetSubstateRequest,
         GetSubstateResponse,
         ListTemplateCatalogueRequest,
         ListTemplateCatalogueResponse,
-        NonFungibleSubstate,
         TemplateCatalogueItem,
     },
 };
@@ -95,30 +93,6 @@ impl IndexerProcess {
                 include_proof: false,
             })
             .await
-    }
-
-    pub async fn get_non_fungibles(
-        &self,
-        world: &TariWorld,
-        output_ref: String,
-        start_index: u64,
-        end_index: u64,
-    ) -> Vec<NonFungibleSubstate> {
-        let address = get_address_from_output(world, output_ref);
-
-        let Some(resource) = address.as_resource_address() else {
-            panic!("get_non_fungibles: Substate_id {} is not a resource address", address);
-        };
-
-        let params = GetNonFungiblesRequest {
-            address: resource,
-            start_index,
-            end_index,
-        };
-
-        let client = self.get_indexer_client();
-        let resp = client.get_non_fungibles(params).await.unwrap();
-        resp.non_fungibles
     }
 
     pub fn get_indexer_client(&self) -> IndexerRestApiClient {

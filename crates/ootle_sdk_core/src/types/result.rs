@@ -16,7 +16,7 @@ use crate::types::bytes::TransactionIdBytes;
 /// The stable, SCREAMING_SNAKE code for a canonical [`AbortReason`] variant.
 ///
 /// This is the **stable code set** for `AbortReason`. The strings are part of the public contract:
-/// hosts branch on them, so **never rename a code; only add**. Covers all 9 variants in
+/// hosts branch on them, so **never rename a code; only add**. Covers all 11 variants in
 /// `tari_engine_types::commit_result::AbortReason`.
 pub fn abort_code(reason: &AbortReason) -> &'static str {
     match reason {
@@ -30,6 +30,7 @@ pub fn abort_code(reason: &AbortReason) -> &'static str {
         AbortReason::FeePaymentInMainIntent => "FEE_PAYMENT_IN_MAIN_INTENT",
         AbortReason::EpochExpired => "EPOCH_EXPIRED",
         AbortReason::ValidityWindowTooLong => "VALIDITY_WINDOW_TOO_LONG",
+        AbortReason::InputPledgeTooLarge => "INPUT_PLEDGE_TOO_LARGE",
     }
 }
 
@@ -286,7 +287,7 @@ pub struct FinalizedResult {
 mod tests {
     use super::*;
 
-    /// Every canonical [`AbortReason`] variant — exhaustively listed so adding a 10th variant upstream
+    /// Every canonical [`AbortReason`] variant — exhaustively listed so adding a 12th variant upstream
     /// forces this test (and the canonical code set) to be updated, not silently dropped.
     const ALL_ABORT_REASONS: &[AbortReason] = &[
         AbortReason::ForeignPledgeInputConflict,
@@ -299,6 +300,7 @@ mod tests {
         AbortReason::FeePaymentInMainIntent,
         AbortReason::EpochExpired,
         AbortReason::ValidityWindowTooLong,
+        AbortReason::InputPledgeTooLarge,
     ];
 
     /// Every [`ExecutionFailureCode`] variant, exhaustively listed on the same contract as
@@ -407,7 +409,7 @@ mod tests {
         }
     }
 
-    /// Each of the 10 canonical `AbortReason` variants surfaces a non-empty, unique stable code.
+    /// Each of the 11 canonical `AbortReason` variants surfaces a non-empty, unique stable code.
     #[test]
     fn abort_codes_are_non_empty_and_unique() {
         let mut seen = std::collections::HashSet::new();
@@ -416,7 +418,7 @@ mod tests {
             assert!(!code.is_empty(), "abort code for {reason:?} is empty");
             assert!(seen.insert(code), "duplicate abort code {code} for {reason:?}");
         }
-        assert_eq!(seen.len(), 10, "expected exactly 10 canonical abort codes");
+        assert_eq!(seen.len(), 11, "expected exactly 11 canonical abort codes");
         assert_eq!(abort_code(&AbortReason::EpochExpired), "EPOCH_EXPIRED");
         assert_eq!(
             abort_code(&AbortReason::ValidityWindowTooLong),

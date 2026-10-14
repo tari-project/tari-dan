@@ -267,6 +267,10 @@ let bucket = account.withdraw(TARI, 100);
 shop.buy(bucket);  // 'bucket' references the withdraw result
 ```
 
+A name bound with `let` refers to that binding everywhere it appears, as a receiver, an argument or a list
+element, even when a variable of the same name is passed to `parse_manifest()`. A bare identifier resolves to a
+passed variable only when the manifest does not bind that name. A later `let` replaces an earlier one.
+
 ## ManifestValue (Rust API)
 
 When passing globals to `parse_manifest()`, construct `ManifestValue` instances:

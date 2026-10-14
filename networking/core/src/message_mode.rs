@@ -9,10 +9,9 @@ use std::{
     },
 };
 
+use bytes::Bytes;
 use libp2p::{PeerId, gossipsub};
 use tokio::sync::mpsc;
-
-use crate::message::MessageSpec;
 
 pub const TOPIC_DELIMITER: &str = "-";
 
@@ -183,10 +182,13 @@ impl GossipQueueSender {
 }
 
 /// An inbound direct message, carrying its reservation against the inbound queue's byte budget.
+///
+/// The message is held in the encoding it arrived in and decoded by the consumer. A decoded message can occupy many
+/// times its encoded size, so holding the encoding is what lets the queue charge exactly what it holds.
 #[derive(Debug)]
-pub struct InboundMessage<TMsg> {
+pub struct InboundMessage {
     pub peer_id: PeerId,
-    pub message: TMsg,
+    pub message: Bytes,
     /// Released when this message is dropped by the consumer. `None` until it is admitted.
     _queue_permit: Option<QueuePermit>,
 }
@@ -197,17 +199,17 @@ pub struct InboundMessage<TMsg> {
 /// serially into consensus while messages vary from small votes to block-sized proposals, so a
 /// count alone cannot bound memory without also throttling ordinary traffic. Admission does not
 /// block the networking worker; a message that does not fit is dropped.
-#[derive(Debug)]
-pub struct MessageQueueSender<TMsg> {
-    tx: mpsc::Sender<InboundMessage<TMsg>>,
+#[derive(Debug, Clone)]
+pub struct MessageQueueSender {
+    tx: mpsc::Sender<InboundMessage>,
     budget: QueueAccounting,
 }
 
 /// Creates a bounded inbound queue for direct messages.
-pub fn message_queue<TMsg>(
+pub fn message_queue(
     max_queued_messages: usize,
     max_queued_bytes: usize,
-) -> (MessageQueueSender<TMsg>, mpsc::Receiver<InboundMessage<TMsg>>) {
+) -> (MessageQueueSender, mpsc::Receiver<InboundMessage>) {
     let (tx, rx) = mpsc::channel(max_queued_messages);
     (
         MessageQueueSender {
@@ -218,18 +220,7 @@ pub fn message_queue<TMsg>(
     )
 }
 
-/// Cloning yields another handle to the same queue, independent of whether `TMsg` is itself
-/// cloneable — so `#[derive(Clone)]`, which would demand `TMsg: Clone`, is not usable here.
-impl<TMsg> Clone for MessageQueueSender<TMsg> {
-    fn clone(&self) -> Self {
-        Self {
-            tx: self.tx.clone(),
-            budget: self.budget.clone(),
-        }
-    }
-}
-
-impl<TMsg> MessageQueueSender<TMsg> {
+impl MessageQueueSender {
     /// Bytes currently held by queued messages.
     pub fn queued_bytes(&self) -> usize {
         self.budget.queued()
@@ -255,9 +246,8 @@ impl<TMsg> MessageQueueSender<TMsg> {
         self.budget.dropped_bytes()
     }
 
-    /// `len` is the message's encoded size on the wire; the decoded form is not measurable here, so
-    /// the wire size stands in for it.
-    fn try_send(&self, peer_id: PeerId, message: TMsg, len: usize) -> Result<(), MessageSendError> {
+    fn try_send(&self, peer_id: PeerId, message: Bytes) -> Result<(), MessageSendError> {
+        let len = message.len();
         let full = || {
             self.budget.record_drop(len);
             MessageSendError::QueueFull {
@@ -353,9 +343,9 @@ impl Drop for QueuePermit {
     }
 }
 
-pub enum MessagingMode<TMsg: MessageSpec> {
+pub enum MessagingMode {
     Enabled {
-        tx_messages: MessageQueueSender<TMsg::Message>,
+        tx_messages: MessageQueueSender,
         tx_gossip_messages_by_topic: HashMap<String, GossipQueueSender>,
     },
     /// Gossip topics are consumed, but the direct messaging protocol is not negotiated with peers.
@@ -367,20 +357,17 @@ pub enum MessagingMode<TMsg: MessageSpec> {
     Disabled,
 }
 
-impl<TMsg: MessageSpec> MessagingMode<TMsg> {
+impl MessagingMode {
     /// Whether the direct messaging protocol should be negotiated. Gossip is carried by gossipsub
     /// regardless, so this is false under [`MessagingMode::GossipOnly`].
     pub fn is_enabled(&self) -> bool {
         matches!(self, MessagingMode::Enabled { .. })
     }
-}
 
-impl<TMsg: MessageSpec> MessagingMode<TMsg> {
-    /// `len` is the message's encoded size on the wire, used to charge the inbound queue's byte
-    /// budget.
-    pub fn send_message(&self, peer_id: PeerId, msg: TMsg::Message, len: usize) -> Result<(), MessageSendError> {
+    /// Queues a direct message received from `peer_id`, still in the encoding it arrived in.
+    pub fn send_message(&self, peer_id: PeerId, msg: Bytes) -> Result<(), MessageSendError> {
         if let MessagingMode::Enabled { tx_messages, .. } = self {
-            tx_messages.try_send(peer_id, msg, len)?;
+            tx_messages.try_send(peer_id, msg)?;
         }
         Ok(())
     }
@@ -488,22 +475,20 @@ mod tests {
     }
 
     #[test]
-    fn direct_messages_are_bounded_by_wire_size() {
-        // The decoded message is not measurable here, so admission charges the wire size reported
-        // by the messaging layer rather than anything derived from the payload.
-        let (tx, mut rx) = message_queue::<&str>(16, 100);
+    fn direct_messages_are_charged_the_bytes_they_hold() {
+        let (tx, mut rx) = message_queue(16, 100);
         let peer = PeerId::random();
 
-        tx.try_send(peer, "small payload, large wire size", 60).unwrap();
+        tx.try_send(peer, Bytes::from(vec![0u8; 60])).unwrap();
         assert_eq!(tx.queued_bytes(), 60);
 
-        let err = tx.try_send(peer, "rejected", 60).unwrap_err();
+        let err = tx.try_send(peer, Bytes::from(vec![0u8; 60])).unwrap_err();
         assert!(matches!(err, MessageSendError::QueueFull { .. }));
         assert_eq!(tx.queued_bytes(), 60, "a rejected message must not hold budget");
 
         drop(rx.try_recv().unwrap());
         assert_eq!(tx.queued_bytes(), 0);
-        tx.try_send(peer, "fits again", 100).unwrap();
+        tx.try_send(peer, Bytes::from(vec![0u8; 100])).unwrap();
     }
 
     #[test]

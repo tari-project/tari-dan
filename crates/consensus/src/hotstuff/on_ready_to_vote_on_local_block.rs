@@ -38,6 +38,7 @@ use tari_ootle_storage::{
         ValidBlock,
         ValidatorStatsUpdate,
         index_committed_block_state_versions,
+        index_substate_down_proofs,
     },
 };
 use tari_sidechain::QuorumDecision;
@@ -48,15 +49,18 @@ use crate::{
     hotstuff::{
         HotstuffConfig,
         ProposalValidationError,
+        abort_if_local_prepared_expired,
         apply_leader_fee_to_substate_store,
         block_change_set::{BlockDecision, ProposedBlockChangeSet},
         calculate_state_merkle_root,
-        commit_proofs::generate_block_commit_proof,
+        commit_proofs::{committed_block_commit_proof, generate_block_commit_proof},
         error::HotStuffError,
         event::HotstuffEvent,
+        exceeds_block_foreign_proposal_bytes,
         exhaust_burn_rate::resolve_epoch_exhaust_burn_rate,
         filter_diff_for_committee,
         foreign_proposal_processor::process_foreign_block,
+        local_pledged_inputs,
         process_newly_justified_block,
         substate_store::{LockStatus, PendingSubstateStore, ShardedStateTree},
         transaction_manager::{
@@ -294,6 +298,8 @@ where TConsensusSpec: ConsensusSpec
         let mut total_exhaust_burn = parent.header().total_accumulated_exhaust_burn();
         let max_validation_execution_points = self.config.consensus_constants.max_block_validation_execution_points;
         let mut block_execution_points = 0u64;
+        let num_foreign_proposals = block.all_foreign_proposals().count();
+        let mut foreign_proposal_bytes = 0usize;
 
         for cmd in block.commands() {
             match cmd {
@@ -368,6 +374,8 @@ where TConsensusSpec: ConsensusSpec
                         fp_atom,
                         local_committee_info,
                         fp_atom.shard_group,
+                        num_foreign_proposals,
+                        &mut foreign_proposal_bytes,
                         &mut substate_store,
                         proposed_block_change_set,
                     )? {
@@ -501,6 +509,22 @@ where TConsensusSpec: ConsensusSpec
             let reason = NoVoteReason::BlockShardOutputBytesExceeded {
                 total_bytes: shard_output_bytes,
                 max_bytes: max_shard_output_bytes,
+            };
+            warn!(target: LOG_TARGET, "❌ NO VOTE: {reason}");
+            proposed_block_change_set.set_no_vote(reason);
+            return Ok(());
+        }
+
+        // CONSENSUS RULE: every foreign shard group receives a subset of the inputs this block pledges, inline in a
+        // single foreign proposal, so the block may not pledge more than `max_block_pledge_bytes`. Each input is
+        // counted once however many commands pledge it, so the total does not depend on the order they are
+        // evaluated in.
+        let max_pledge_bytes = self.config.consensus_constants.max_block_pledge_bytes;
+        let pledge_bytes = substate_store.pledge_bytes();
+        if pledge_bytes > max_pledge_bytes {
+            let reason = NoVoteReason::BlockPledgeBytesExceeded {
+                total_bytes: pledge_bytes,
+                max_bytes: max_pledge_bytes,
             };
             warn!(target: LOG_TARGET, "❌ NO VOTE: {reason}");
             proposed_block_change_set.set_no_vote(reason);
@@ -808,6 +832,13 @@ where TConsensusSpec: ConsensusSpec
                     },
                 }
             },
+            PreparedTransaction::PledgeBudgetReached { .. } => {
+                return Err(HotStuffError::InvariantError(format!(
+                    "Transaction {} in block {} was deferred for the pledge budget, which only a proposing store has",
+                    atom.id(),
+                    block,
+                )));
+            },
             PreparedTransaction::MultiShard(_) => {
                 warn!(
                     target: LOG_TARGET,
@@ -892,6 +923,13 @@ where TConsensusSpec: ConsensusSpec
                     block,
                 );
                 return Ok(Some(NoVoteReason::MultiShardProposedForLocalOnly));
+            },
+            PreparedTransaction::PledgeBudgetReached { .. } => {
+                return Err(HotStuffError::InvariantError(format!(
+                    "Transaction {} in block {} was deferred for the pledge budget, which only a proposing store has",
+                    atom.id(),
+                    block,
+                )));
             },
             PreparedTransaction::MultiShard(multishard) => {
                 // TODO: Because on_propose does not process foreign proposals before proposing, the decision abort
@@ -1075,6 +1113,10 @@ where TConsensusSpec: ConsensusSpec
             return Ok(Some(NoVoteReason::TransactionNotInPool));
         };
 
+        if let Some(execution) = abort_if_local_prepared_expired(&mut tx_rec, block.epoch()) {
+            proposed_block_change_set.add_transaction_execution(*tx_rec.id(), execution)?;
+        }
+
         if tx_rec.current_stage().is_new() {
             // CASE: This was sequenced immediately as LocalAccept, which can only mean either we are aborting or we are
             // an output-only Shard Group
@@ -1156,6 +1198,15 @@ where TConsensusSpec: ConsensusSpec
                 proposed_block_change_set,
             )?;
             let execution = execution.into_transaction_execution();
+
+            if execution.decision().is_commit() {
+                // Counted for the block pledge check once every command is evaluated. Preparing the transaction
+                // bounded what its inputs alone may pledge.
+                substate_store.pledge_inputs(
+                    local_pledged_inputs(&tx_rec, local_committee_info.shard_group()),
+                    usize::MAX,
+                )?;
+            }
 
             // TODO: can we modify input locks at this point? For multi-shard input transactions, we locked all inputs
             // as Write due to lack of information. We now know what locks are necessary, and this
@@ -1612,6 +1663,8 @@ where TConsensusSpec: ConsensusSpec
         fp_atom: &ForeignProposalAtom,
         local_committee_info: &CommitteeInfo,
         foreign_shard_group: ShardGroup,
+        num_foreign_proposals: usize,
+        foreign_proposal_bytes: &mut usize,
         substate_store: &mut PendingSubstateStore<TTx>,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
     ) -> Result<Option<NoVoteReason>, HotStuffError> {
@@ -1635,6 +1688,28 @@ where TConsensusSpec: ConsensusSpec
             );
             return Ok(Some(NoVoteReason::ForeignProposalNotReceived));
         };
+
+        // CONSENSUS RULE: the block travels with its foreign proposals in one message, so together they may not exceed
+        // `max_block_validation_foreign_proposal_bytes`. Summed as each is evaluated against the block's full count,
+        // so the verdict does not depend on the order they are evaluated in.
+        *foreign_proposal_bytes = foreign_proposal_bytes.saturating_add(tari_bor::encoded_len(fp.proposal()));
+        let max_foreign_proposal_bytes = self
+            .config
+            .consensus_constants
+            .max_block_validation_foreign_proposal_bytes;
+        if exceeds_block_foreign_proposal_bytes(
+            *foreign_proposal_bytes,
+            num_foreign_proposals,
+            max_foreign_proposal_bytes,
+        ) {
+            let reason = NoVoteReason::BlockForeignProposalBytesExceeded {
+                num_proposals: num_foreign_proposals,
+                total_bytes: *foreign_proposal_bytes,
+                max_bytes: max_foreign_proposal_bytes,
+            };
+            warn!(target: LOG_TARGET, "❌ NO VOTE: {reason}");
+            return Ok(Some(reason));
+        }
 
         // Case: cannot re-propose if it is already committed
         // TODO: if this is already proposed we need to reject if it is already proposed in the current block's
@@ -1813,7 +1888,13 @@ where TConsensusSpec: ConsensusSpec
 
         {
             let _timer = TraceTimer::debug(LOG_TARGET, "commit_block");
-            block.commit_block(tx, commit_qc_id, &version_updates)?;
+            let downed = block.commit_block(tx, commit_qc_id, &version_updates)?;
+            index_substate_down_proofs(
+                tx,
+                downed,
+                self.config.state_history_length,
+                committed_block_commit_proof,
+            )?;
         }
 
         let finalized_transactions = {

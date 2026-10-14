@@ -16,7 +16,7 @@ pub enum IndexerError {
     AllRequestsFailed { num_requested: usize },
     #[error("Validator node client error: {0}")]
     ValidatorNodeClientError(String),
-    #[error("Invalid substate state")]
+    #[error("Committee members did not agree on the substate's state, and none could prove it")]
     InvalidSubstateState,
     #[error("Invalid substate value")]
     InvalidSubstateValue,

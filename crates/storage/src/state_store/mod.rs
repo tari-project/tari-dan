@@ -46,6 +46,7 @@ use tari_ootle_common_types::{
     ShardStateVersions,
     SubstateAddress,
     ToSubstateAddress,
+    VersionedSubstateId,
     VersionedSubstateIdRef,
     shard::Shard,
 };
@@ -74,6 +75,7 @@ use crate::{
         StateVersionProof,
         StateVersionTransitions,
         SubstateChange,
+        SubstateDownProofRecord,
         SubstateLock,
         SubstatePledges,
         SubstateRecord,
@@ -331,9 +333,10 @@ pub trait StateStoreReadTransaction: Sized {
     ) -> Result<TransactionPoolRecord, StorageError>;
     fn transaction_pool_exists(&self, transaction_id: &TransactionId) -> Result<bool, StorageError>;
     fn transaction_pool_get_all(&self, limit: usize) -> Result<Vec<TransactionPoolRecord>, StorageError>;
-    /// Offers `f` every ready record that is not lock-conflicted, with the pending updates in the chain ending at
-    /// `block_id` applied. The order the records are offered in is unspecified.
-    fn transaction_pool_for_each_ready<F>(&self, block_id: &BlockId, f: F) -> Result<(), StorageError>
+    /// Offers `f` every record that is not lock-conflicted and is ready to propose in a block in `epoch` (see
+    /// [`TransactionPoolRecord::is_ready_to_propose_in`]), with the pending updates in the chain ending at `block_id`
+    /// applied. The order the records are offered in is unspecified.
+    fn transaction_pool_for_each_ready<F>(&self, block_id: &BlockId, epoch: Epoch, f: F) -> Result<(), StorageError>
     where F: FnMut(TransactionPoolRecord);
     fn transaction_pool_has_pending_state_updates(&self, block_id: &BlockId) -> Result<bool, StorageError>;
 
@@ -456,6 +459,13 @@ pub trait StateStoreReadTransaction: Sized {
     ) -> Result<Vec<StateVersionProof>, StorageError>;
     /// The CBOR-encoded commit proof of `block_id`, a block this node committed that produced state versions.
     fn block_commit_proofs_get(&self, block_id: &BlockId) -> Result<Vec<u8>, StorageError>;
+
+    /// The proof that `id` was committed before it went down in `shard`, if this node recorded one.
+    fn substate_down_proofs_get(
+        &self,
+        shard: Shard,
+        id: &VersionedSubstateId,
+    ) -> Result<Option<SubstateDownProofRecord>, StorageError>;
 
     // -------------------------------- Epoch checkpoint -------------------------------- //
     fn epoch_checkpoint_get_all_from_epoch(
@@ -777,10 +787,22 @@ pub trait StateStoreWriteTransaction {
     /// that they can be rewound if the sync never verifies them, even across a restart.
     fn state_sync_rewind_point_set(&mut self, shard: Shard, version: Version) -> Result<(), StorageError>;
     fn state_sync_rewind_point_remove(&mut self, shard: Shard) -> Result<(), StorageError>;
+    /// Stores `proof`. A proof point is kept for good. Any other proof is kept while its version is within
+    /// `state_history_length` versions of its shard's latest, or while a live down proof record cites it.
     fn state_version_proofs_insert(&mut self, proof: &StateVersionProof) -> Result<(), StorageError>;
-    /// Stores the CBOR-encoded commit proof of `block_id`. It is never pruned: the state version proofs that name the
-    /// block outlive it.
+    /// Stores the CBOR-encoded commit proof of `block_id`, which the block's state version proofs are served with once
+    /// the block is pruned. It is deleted with the last of those proofs.
     fn block_commit_proofs_insert(&mut self, block_id: &BlockId, commit_proof: &[u8]) -> Result<(), StorageError>;
+
+    /// Stores the down proof record of `id`, destroyed in `epoch`, which epoch GC prunes once `epoch` leaves the
+    /// down proof retention window. The state version proof the record cites is kept through `epoch` at least.
+    fn substate_down_proofs_insert(
+        &mut self,
+        epoch: Epoch,
+        shard: Shard,
+        id: &VersionedSubstateId,
+        record: &SubstateDownProofRecord,
+    ) -> Result<(), StorageError>;
 
     // -------------------------------- Epoch checkpoint -------------------------------- //
     fn epoch_checkpoint_save(&mut self, checkpoint: &EpochCheckpoint) -> Result<(), StorageError>;

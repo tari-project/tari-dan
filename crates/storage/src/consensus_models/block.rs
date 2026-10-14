@@ -78,7 +78,7 @@ use crate::{
         SubstateUpdateProof,
         TransactionRecord,
         block_header::BlockHeader,
-        substate_update_batch::SubstateUpdateBatch,
+        substate_update_batch::{DownedSubstate, SubstateUpdateBatch},
     },
 };
 
@@ -691,7 +691,8 @@ impl Block {
         TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
     {
-        self.commit_block(tx, commit_qc_id, &HashMap::new())
+        self.commit_block(tx, commit_qc_id, &HashMap::new())?;
+        Ok(())
     }
 
     pub fn commit_block<TTx>(
@@ -699,7 +700,7 @@ impl Block {
         tx: &mut TTx,
         commit_qc_id: &PcId,
         version_updates: &HashMap<Shard, Version>,
-    ) -> Result<(), StorageError>
+    ) -> Result<Vec<DownedSubstate>, StorageError>
     where
         TTx: StateStoreWriteTransaction + Deref,
         TTx::Target: StateStoreReadTransaction,
@@ -712,7 +713,7 @@ impl Block {
                 target: LOG_TARGET,
                 "🍼 COMMIT dummy block {}", self
             );
-            return Ok(());
+            return Ok(vec![]);
         }
 
         let Some(block_diff) = self.get_diff(&**tx).optional()? else {
@@ -722,7 +723,7 @@ impl Block {
             );
 
             // No diff to commit
-            return Ok(());
+            return Ok(vec![]);
         };
 
         // Consume the block diff
@@ -774,9 +775,10 @@ impl Block {
                 Ok(batch)
             })?;
 
+        let downed = batch.downed_iter().collect();
         SubstateRecord::commit_batch(tx, batch)?;
 
-        Ok(())
+        Ok(downed)
     }
 
     pub fn get_diff<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<BlockDiff, StorageError> {

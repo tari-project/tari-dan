@@ -75,10 +75,16 @@ pub fn migrate<TAddr: NodeAddressable + 'static>(
     };
 
     match maybe_version {
-        Some(version) if version.cmp(&CURRENT_VERSION).is_ge() => {
+        Some(version) if version == CURRENT_VERSION => {
             debug!(
                 target: LOG_TARGET,
                 "Database already bootstrapped at migration version {version} (current {CURRENT_VERSION})"
+            );
+        },
+        Some(version) if version > CURRENT_VERSION => {
+            anyhow::bail!(
+                "Database schema version {version} is newer than this binary's {CURRENT_VERSION}; upgrade the binary \
+                 or delete the database"
             );
         },
         Some(mut version) => {
@@ -114,4 +120,63 @@ pub fn migrate<TAddr: NodeAddressable + 'static>(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use tari_ootle_storage::{StateStore, StorageError};
+    use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
+    use tempfile::TempDir;
+
+    use super::*;
+
+    const OPERATION: &str = "test";
+
+    fn store_stamped(version: u64) -> (RocksDbStateStore<String>, TempDir) {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = RocksDbStateStore::<String>::open(tmp.path().join("rocksdb"), DatabaseOptions::default()).unwrap();
+        db.with_write_tx(|tx| {
+            tx.db()
+                .cf(DatabaseMigrationVersion)?
+                .put(&ByteColumn, &version, OPERATION)?;
+            Ok::<_, StorageError>(())
+        })
+        .unwrap();
+        (db, tmp)
+    }
+
+    fn run_migrate(db: &RocksDbStateStore<String>) -> anyhow::Result<()> {
+        db.with_write_tx(|tx| {
+            migrate(
+                tx,
+                Network::LocalNet,
+                &ConsensusConstants::devnet(1),
+                &GenesisCouncil::none(),
+            )
+        })
+    }
+
+    fn stored_version(db: &RocksDbStateStore<String>) -> u64 {
+        let tx = db.create_read_tx().unwrap();
+        tx.db()
+            .cf(DatabaseMigrationVersion)
+            .unwrap()
+            .get(&ByteColumn, OPERATION)
+            .unwrap()
+    }
+
+    #[test]
+    fn a_database_at_the_current_version_is_accepted() {
+        let (db, _tmp) = store_stamped(CURRENT_VERSION);
+        run_migrate(&db).unwrap();
+        assert_eq!(stored_version(&db), CURRENT_VERSION);
+    }
+
+    #[test]
+    fn a_database_newer_than_the_binary_is_refused() {
+        let (db, _tmp) = store_stamped(CURRENT_VERSION + 1);
+        let err = run_migrate(&db).unwrap_err();
+        assert!(err.to_string().contains("is newer than this binary"), "{err}");
+        assert_eq!(stored_version(&db), CURRENT_VERSION + 1);
+    }
 }

@@ -8,6 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use bytes::Bytes;
 use libp2p::{
     Multiaddr,
     PeerId,
@@ -40,7 +41,7 @@ use tari_swarm::{
     TariSwarm,
     is_supported_multiaddr,
     messaging,
-    messaging::{prost, prost::ProstCodec},
+    messaging::{BytesCodec, prost},
     protocol_ids,
     rendezvous,
     rendezvous::Namespace,
@@ -83,13 +84,13 @@ where
     _keypair: identity::Keypair,
     rx_request: mpsc::Receiver<NetworkingRequest<TMsg>>,
     tx_events: broadcast::Sender<NetworkingEvent>,
-    messaging_mode: MessagingMode<TMsg>,
+    messaging_mode: MessagingMode,
     active_connections: HashMap<PeerId, Vec<Connection>>,
     pending_substream_requests: HashMap<StreamId, ReplyTx<NegotiatedSubstream<Substream>>>,
     pending_dial_requests: HashMap<PeerId, Vec<ReplyTx<()>>>,
     substream_notifiers: Notifiers<Substream>,
     topic_peers: HashMap<TopicHash, Vec<PeerId>>,
-    swarm: TariSwarm<ProstCodec<TMsg::Message>>,
+    swarm: TariSwarm<BytesCodec>,
     config: crate::Config,
     rendezvous_state: RendezvousState,
     relays: RelayState,
@@ -111,8 +112,8 @@ where
         keypair: identity::Keypair,
         rx_request: mpsc::Receiver<NetworkingRequest<TMsg>>,
         tx_events: broadcast::Sender<NetworkingEvent>,
-        messaging_mode: MessagingMode<TMsg>,
-        swarm: TariSwarm<ProstCodec<TMsg::Message>>,
+        messaging_mode: MessagingMode,
+        swarm: TariSwarm<BytesCodec>,
         config: crate::Config,
         known_relay_nodes: Vec<(PeerId, Multiaddr)>,
         seed_peers: Vec<(Option<PeerId>, Multiaddr)>,
@@ -248,7 +249,7 @@ where
                     .behaviour_mut()
                     .messaging
                     .as_mut()
-                    .map(|m| m.send_message(peer, message))
+                    .map(|m| m.send_message(peer, prost::Message::encode_to_vec(&message).into()))
                 {
                     Some(Ok(_)) => {
                         debug!(target: LOG_TARGET, "📢 Queued message to peer {}", peer);
@@ -276,6 +277,7 @@ where
                     return Ok(());
                 };
 
+                let message = Bytes::from(prost::Message::encode_to_vec(&message));
                 let mut num_sent = 0;
                 for peer in destination {
                     match messaging_mut.send_message(peer, message.clone()) {
@@ -439,9 +441,9 @@ where
             }
         }
 
-        if self.active_connections.len() < self.relays.num_possible_relays() {
-            info!(target: LOG_TARGET, "🥾 BOOTSTRAP: dialing {} known relay peers", self.relays.num_possible_relays());
-            for (peer, addrs) in self.relays.possible_relays() {
+        if self.active_connections.len() < self.relays.num_configured_relays() {
+            info!(target: LOG_TARGET, "🥾 BOOTSTRAP: dialing {} known relay peers", self.relays.num_configured_relays());
+            for (peer, addrs) in self.relays.configured_relays() {
                 for addr in addrs {
                     self.swarm
                         .behaviour_mut()
@@ -449,25 +451,30 @@ where
                         .store_mut()
                         .add_address(peer, addr);
                 }
-                self.swarm
-                    .dial(
-                        DialOpts::peer_id(*peer)
-                            .addresses(addrs.iter().cloned().collect())
-                            .condition(PeerCondition::DisconnectedAndNotDialing)
-                            .extend_addresses_through_behaviour()
-                            .build(),
-                    )
-                    .or_else(|err| {
-                        // Peer already has pending dial or established connection - OK
-                        if matches!(&err, DialError::DialPeerConditionFalse(_)) {
-                            Ok(())
-                        } else {
-                            Err(err)
-                        }
-                    })?;
+                if let Err(err) = self.swarm.dial(
+                    DialOpts::peer_id(*peer)
+                        .addresses(addrs.iter().cloned().collect())
+                        .condition(PeerCondition::DisconnectedAndNotDialing)
+                        .extend_addresses_through_behaviour()
+                        .build(),
+                ) && !matches!(&err, DialError::DialPeerConditionFalse(_))
+                {
+                    warn!(target: LOG_TARGET, "🚨 Failed to dial relay {peer}: {err}");
+                }
             }
 
             self.is_initial_bootstrap_complete = true;
+        }
+
+        // A relay can be lost without a circuit ever closing (a failed dial or listen), so a node that needs a relay
+        // re-selects one on each tick until it holds a circuit.
+        if self.needs_relay() &&
+            !self.relays.has_active_relay() &&
+            self.relays
+                .selected_relay()
+                .is_none_or(|r| !self.swarm.is_connected(&r.peer_id))
+        {
+            self.attempt_relay_reservation();
         }
 
         // Periodically refresh the peer list from the rendezvous servers (if any) to pick up newly-registered peers.
@@ -478,7 +485,7 @@ where
 
     async fn on_swarm_event(
         &mut self,
-        event: SwarmEvent<TariNodeBehaviourEvent<ProstCodec<TMsg::Message>>>,
+        event: SwarmEvent<TariNodeBehaviourEvent<BytesCodec>>,
     ) -> Result<(), NetworkingError> {
         match event {
             SwarmEvent::Behaviour(event) => self.on_behaviour_event(event).await?,
@@ -510,6 +517,7 @@ where
                         entry.get_mut().retain(|c| c.connection_id != connection_id);
                         if entry.get().is_empty() {
                             entry.remove_entry();
+                            self.relays.remove_discovered_relay(&peer_id);
                         }
                     },
                     Entry::Vacant(_) => {
@@ -563,10 +571,7 @@ where
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn on_behaviour_event(
-        &mut self,
-        event: TariNodeBehaviourEvent<ProstCodec<TMsg::Message>>,
-    ) -> Result<(), NetworkingError> {
+    async fn on_behaviour_event(&mut self, event: TariNodeBehaviourEvent<BytesCodec>) -> Result<(), NetworkingError> {
         use TariNodeBehaviourEvent::*;
         #[cfg(feature = "metrics")]
         self.record_metrics(&event);
@@ -693,7 +698,7 @@ where
                 length,
             }) => {
                 info!(target: LOG_TARGET, "📧 Rx Messaging: peer {peer_id} ({length} bytes)");
-                if let Err(e) = self.messaging_mode.send_message(peer_id, message, length) {
+                if let Err(e) = self.messaging_mode.send_message(peer_id, message) {
                     warn!(target: LOG_TARGET, "📧 Inbound message dropped: {e}");
                 }
             },
@@ -824,7 +829,7 @@ where
     }
 
     #[cfg(feature = "metrics")]
-    fn record_metrics(&mut self, event: &TariNodeBehaviourEvent<ProstCodec<TMsg::Message>>) {
+    fn record_metrics(&mut self, event: &TariNodeBehaviourEvent<BytesCodec>) {
         use tari_swarm::metrics::Recorder;
         if let Some(metrics) = self.metrics.as_ref() {
             metrics.record(event);
@@ -892,6 +897,10 @@ where
         }
 
         Ok(())
+    }
+
+    fn needs_relay(&self) -> bool {
+        self.config.reachability_mode.is_private() || self.swarm.behaviour().autonat.nat_status() == NatStatus::Private
     }
 
     fn attempt_relay_reservation(&mut self) {
@@ -1013,6 +1022,7 @@ where
             })
             .unwrap_or(false);
 
+        let mut relay_addresses = Vec::new();
         for address in info.listen_addrs {
             if is_p2p_address(&address) && address.is_global_ip() {
                 // If the peer has a p2p-circuit address, immediately upgrade to a direct connection (DCUtR /
@@ -1024,17 +1034,24 @@ where
                     let _ignore = self
                         .swarm
                         .dial(DialOpts::peer_id(peer_id).addresses(vec![address.clone()]).build());
-                } else if is_relay && !is_through_relay_address(&address) {
-                    // Otherwise, if the peer advertises as a relay we'll add them
-                    info!(target: LOG_TARGET, "📡 Adding peer {peer_id} {address} as a relay");
-                    self.relays.add_possible_relay(peer_id, address.clone());
-                    if !self.relays.has_active_relay() {
-                        self.relays.set_relay_peer(peer_id, Some(address.clone()));
-                    }
+                } else if is_relay && !is_through_relay_address(&address) && is_address_of_peer(&address, &peer_id) {
+                    relay_addresses.push(address);
                 } else {
                     // Nothing to do
                 }
             }
+        }
+
+        // Identify is sent again on push and on every new connection, so this replaces the peer's relay addresses
+        // and drops the peer if it no longer advertises any.
+        let first_relay_address = relay_addresses.first().cloned();
+        let is_discovered_relay = self.relays.set_discovered_relay(peer_id, relay_addresses);
+        if is_discovered_relay {
+            info!(target: LOG_TARGET, "📡 Adding peer {peer_id} as a relay");
+        }
+        let is_relay_candidate = is_discovered_relay || (is_relay && self.relays.is_configured_relay(&peer_id));
+        if is_relay_candidate && !self.relays.has_active_relay() && self.needs_relay() {
+            self.relays.set_relay_peer(peer_id, first_relay_address);
         }
 
         // If this peer is the selected relay that was dialed previously, listen on the circuit address
@@ -1208,6 +1225,14 @@ fn is_p2p_address(address: &Multiaddr) -> bool {
     address.iter().any(|p| matches!(p, Protocol::P2p(_)))
 }
 
+/// Returns true if every /p2p/ component of the address names `peer_id`.
+fn is_address_of_peer(address: &Multiaddr, peer_id: &PeerId) -> bool {
+    address.iter().all(|p| match p {
+        Protocol::P2p(id) => id == *peer_id,
+        _ => true,
+    })
+}
+
 fn is_through_relay_address(address: &Multiaddr) -> bool {
     let mut found_p2p_circuit = false;
     for protocol in address {
@@ -1237,5 +1262,19 @@ where K: Eq + Hash {
     const HASHMAP_EXCESS_ENTRIES_SHRINK_THRESHOLD: usize = 50;
     if map.len() + HASHMAP_EXCESS_ENTRIES_SHRINK_THRESHOLD < map.capacity() {
         map.shrink_to_fit();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn address_of_peer_rejects_foreign_p2p_id() {
+        let peer = PeerId::random();
+        let other = PeerId::random();
+        let base: Multiaddr = "/ip4/1.1.1.1/tcp/1".parse().unwrap();
+        assert!(is_address_of_peer(&base.clone().with(Protocol::P2p(peer)), &peer));
+        assert!(!is_address_of_peer(&base.with(Protocol::P2p(other)), &peer));
     }
 }

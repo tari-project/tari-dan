@@ -27,7 +27,7 @@ mod r#impl;
 pub use r#impl::RuntimeInterfaceImpl;
 
 mod engine_args;
-pub use crate::runtime::engine_args::EngineArgs;
+pub use crate::runtime::engine_args::{EngineArgChargeError, EngineArgs};
 
 mod error;
 pub use error::*;
@@ -287,6 +287,16 @@ pub trait RuntimeInterface {
     /// allowance as native verification.
     fn charge_return_value(&self, bytes: u64, items: u64) -> Result<(), RuntimeError>;
 
+    /// Charges the host-side decode of CBOR a template wrote, `input`, before it is decoded: an
+    /// engine call's argument, or a value nested in one. Priced by
+    /// [`tari_engine_types::limits::engine_arg_points`] and charged against the same compute
+    /// allowance as native verification.
+    ///
+    /// Counting the items is itself host work, so the walk that counts them reads only as many
+    /// items as the transaction can still pay for, and checks their nesting depth on the way.
+    /// Input holding more is charged what was read and fails out of compute.
+    fn charge_engine_arg(&self, input: &[u8]) -> Result<(), EngineArgChargeError>;
+
     /// The template instances this transaction has created. A borrow of it must not be held across a
     /// template call, which may reach it again through a nested call.
     fn wasm_instances(&self) -> &RefCell<WasmInstanceCache>;
@@ -367,6 +377,11 @@ impl Runtime {
 
     pub fn interface(&self) -> &dyn RuntimeInterface {
         &*self.interface
+    }
+
+    /// A handle to the interface that can outlive this borrow of the runtime.
+    pub fn shared_interface(&self) -> Rc<dyn RuntimeInterface> {
+        self.interface.clone()
     }
 }
 

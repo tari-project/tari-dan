@@ -7,7 +7,12 @@ use indexmap::IndexMap;
 use log::*;
 use tari_common_types::types::FixedHash;
 use tari_consensus_types::{BlockId, HighPc, HighTc, LeafBlock, PcId, ProposalCertificate, ShardGroupAccumulatedData};
-use tari_engine_types::{ValidatorFeePool, fees::ExhaustBurnRate, substate::SubstateDiff};
+use tari_engine_types::{
+    ValidatorFeePool,
+    commit_result::{AbortReason, RejectReason},
+    fees::ExhaustBurnRate,
+    substate::SubstateDiff,
+};
 use tari_ootle_common_types::{
     Epoch,
     NodeAddressable,
@@ -15,6 +20,7 @@ use tari_ootle_common_types::{
     NumPreshards,
     ProtocolVersion,
     ShardGroup,
+    VersionedSubstateIdRef,
     committee::{Committee, CommitteeInfo},
     derive_fee_pool_address,
     optional::Optional,
@@ -32,12 +38,14 @@ use tari_ootle_storage::{
         EpochCheckpoint,
         PendingShardStateTreeDiff,
         SubstateChange,
+        TransactionExecution,
+        TransactionPoolRecord,
         TransactionRecord,
         TreeRootSummary,
     },
 };
 use tari_ootle_transaction::Network;
-use tari_state_tree::{JellyfishMerkleTree, SPARSE_MERKLE_PLACEHOLDER_HASH, StateTreeError};
+use tari_state_tree::{JellyfishMerkleTree, JmtHashScheme, SPARSE_MERKLE_PLACEHOLDER_HASH, StateTreeError};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{
@@ -384,7 +392,7 @@ where
     // adding global shard first
     if let Some(version) = tx.state_tree_versions_get_latest(Shard::global())? {
         let scoped_store = ShardScopedTreeStoreReader::new(tx, Shard::global());
-        let jmt = JellyfishMerkleTree::new(&scoped_store);
+        let jmt = JellyfishMerkleTree::new(&scoped_store, JmtHashScheme::V1);
         let root_hash = jmt
             .get_root_hash(version)
             .map_err(|e| HotStuffError::StateTreeError(e.into()))?;
@@ -411,7 +419,7 @@ where
         };
 
         let scoped_store = ShardScopedTreeStoreReader::new(tx, shard);
-        let jmt = JellyfishMerkleTree::new(&scoped_store);
+        let jmt = JellyfishMerkleTree::new(&scoped_store, JmtHashScheme::V1);
         let root_hash = jmt
             .get_root_hash(version)
             .map_err(|e| HotStuffError::StateTreeError(e.into()))?;
@@ -447,6 +455,29 @@ pub(crate) fn filter_diff_for_committee(committee_info: &CommitteeInfo, diff: &S
                 .collect(),
         );
     filtered_diff
+}
+
+/// Whether a block's foreign proposals total more than `max_bytes` while it carries more than one. A single foreign
+/// proposal is always admitted so that none is left unproposable. Each node sums the sizes of its own stored copies,
+/// and copies of one proposal can differ in their commit proofs, so a leader packs against
+/// `max_block_foreign_proposal_bytes` and a validator checks against the larger
+/// `max_block_validation_foreign_proposal_bytes`.
+pub(crate) fn exceeds_block_foreign_proposal_bytes(total_bytes: usize, num_proposals: usize, max_bytes: usize) -> bool {
+    num_proposals > 1 && total_bytes > max_bytes
+}
+
+/// The inputs that `local_shard_group` pledged for the transaction when it prepared it, which its LocalAccept pledges
+/// again to the shard groups that only receive outputs.
+pub(crate) fn local_pledged_inputs(
+    tx_rec: &TransactionPoolRecord,
+    local_shard_group: ShardGroup,
+) -> impl Iterator<Item = VersionedSubstateIdRef<'_>> {
+    tx_rec
+        .evidence()
+        .get(&local_shard_group)
+        .into_iter()
+        .flat_map(|evidence| evidence.all_pledged_inputs_iter())
+        .map(|(id, lock)| VersionedSubstateIdRef::new(id, lock.version))
 }
 
 pub fn apply_leader_fee_to_substate_store<TTx: StateStoreReadTransaction>(
@@ -502,6 +533,37 @@ pub(crate) fn get_highest_seen_justified_view<TTx: StateStoreReadTransaction>(
         .map(|high_tc| high_tc.height())
         .unwrap_or_default();
     Ok(high_pc.max(high_tc))
+}
+
+/// Moves `tx_rec` to ABORT if, for a block in `epoch`, it has outlived its validity window in `LocalPrepared` (see
+/// [`TransactionPoolRecord::is_local_prepared_expired_at`]). Returns the abort execution the block must record.
+///
+/// The proposer and every replica apply this to the record as the block's foreign proposals leave it, before deciding
+/// the transaction's next command, so they agree on whether the block's LocalAccept is an ABORT.
+pub fn abort_if_local_prepared_expired(
+    tx_rec: &mut TransactionPoolRecord,
+    epoch: Epoch,
+) -> Option<TransactionExecution> {
+    if !tx_rec.is_local_prepared_expired_at(epoch) {
+        return None;
+    }
+
+    info!(
+        target: LOG_TARGET,
+        "⏰ Transaction {} is still waiting on foreign shard groups in {} after its max_epoch {}. Aborting.",
+        tx_rec.id(),
+        epoch,
+        tx_rec.max_epoch(),
+    );
+    let execution = TransactionExecution::abort(tx_rec.id(), RejectReason::Abort {
+        reason: AbortReason::EpochExpired,
+    });
+    tx_rec
+        .set_local_decision(execution.decision())
+        .set_transaction_fee(0)
+        .set_exhaust_burn(0)
+        .no_leader_fee();
+    Some(execution)
 }
 
 /// Records the prepare/accept evidence for the commands in `new_leaf_block` and its not-yet-justified ancestors,

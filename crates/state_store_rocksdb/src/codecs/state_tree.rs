@@ -4,7 +4,7 @@
 use std::io;
 
 use anyhow::anyhow;
-use tari_state_tree::{NibblePath, Node, NodeKey, StaleTreeNode, StateTreePayload, Version, cbor};
+use tari_state_tree::{NibblePath, Node, NodeKey, StaleTreeNode, StateTreePayload, Version};
 
 use crate::{
     codecs::{DbDecoder, DbEncoder},
@@ -88,12 +88,15 @@ impl DbDecoder<NodeKey> for NodeKeyCodec {
                 source: anyhow!("Invalid nibble path bytes. Could not read {} bytes", num_path_bytes),
             });
         }
-        let nibble_path_bytes = bytes[path_start..path_end].to_vec();
+        let nibble_path_bytes = &bytes[path_start..path_end];
         let nibble_path = if is_even {
             NibblePath::new_even(nibble_path_bytes)
         } else {
             NibblePath::new_odd(nibble_path_bytes)
-        };
+        }
+        .map_err(|e| RocksDbStorageError::DecodeError {
+            source: anyhow!("Invalid nibble path: {e}"),
+        })?;
         Ok((NodeKey::new(version, nibble_path), path_end))
     }
 }
@@ -108,13 +111,13 @@ impl<'a> DbEncoder<&'a NodeKey> for NodeKeyCodec {
     }
 }
 
-/// [`Node`]s in `tari_state_tree::cbor`'s native encoding.
+/// [`Node`]s in `tari_jellyfish`'s native minicbor encoding.
 #[derive(Default)]
 pub struct TreeNodeCodec;
 
 impl DbEncoder<Node<StateTreePayload>> for TreeNodeCodec {
     fn encode_len(&self, value: &Node<StateTreePayload>) -> Result<usize, RocksDbStorageError> {
-        Ok(cbor::node::cbor_len(value, &mut ()))
+        Ok(minicbor::len(value))
     }
 
     fn encode_into<W: io::Write>(
@@ -122,9 +125,10 @@ impl DbEncoder<Node<StateTreePayload>> for TreeNodeCodec {
         value: &Node<StateTreePayload>,
         writer: &mut W,
     ) -> Result<(), RocksDbStorageError> {
-        let mut encoder = minicbor::Encoder::new(minicbor::encode::write::Writer::new(writer));
-        cbor::node::encode(value, &mut encoder, &mut ()).map_err(|e| RocksDbStorageError::EncodeError {
-            source: anyhow!("TreeNodeCodec: {e}"),
+        minicbor::encode(value, minicbor::encode::write::Writer::new(writer)).map_err(|e| {
+            RocksDbStorageError::EncodeError {
+                source: anyhow!("TreeNodeCodec: {e}"),
+            }
         })
     }
 }
@@ -132,34 +136,28 @@ impl DbEncoder<Node<StateTreePayload>> for TreeNodeCodec {
 impl DbDecoder<Node<StateTreePayload>> for TreeNodeCodec {
     fn decode(&self, bytes: &[u8]) -> Result<(Node<StateTreePayload>, usize), RocksDbStorageError> {
         let mut decoder = minicbor::Decoder::new(bytes);
-        let node = cbor::node::decode(&mut decoder, &mut ()).map_err(|e| RocksDbStorageError::DecodeError {
+        let node = decoder.decode().map_err(|e| RocksDbStorageError::DecodeError {
             source: anyhow!("TreeNodeCodec: {e}"),
         })?;
         Ok((node, decoder.position()))
     }
 }
 
-/// Lists of [`StaleTreeNode`]s in `tari_state_tree::cbor`'s native encoding.
+/// Lists of [`StaleTreeNode`]s in `tari_jellyfish`'s native minicbor encoding.
 #[derive(Default)]
 pub struct StaleTreeNodesCodec;
 
 impl StaleTreeNodesCodec {
     fn encoded_len(nodes: &[StaleTreeNode]) -> usize {
-        nodes.iter().fold(minicbor::len(nodes.len() as u64), |acc, stale| {
-            acc + cbor::stale_tree_node::cbor_len(stale, &mut ())
-        })
+        minicbor::len(nodes)
     }
 
     fn encode_slice_into<W: io::Write>(nodes: &[StaleTreeNode], writer: &mut W) -> Result<(), RocksDbStorageError> {
-        let encode_error = |e| RocksDbStorageError::EncodeError {
-            source: anyhow!("StaleTreeNodesCodec: {e}"),
-        };
-        let mut encoder = minicbor::Encoder::new(minicbor::encode::write::Writer::new(writer));
-        encoder.array(nodes.len() as u64).map_err(encode_error)?;
-        for stale in nodes {
-            cbor::stale_tree_node::encode(stale, &mut encoder, &mut ()).map_err(encode_error)?;
-        }
-        Ok(())
+        minicbor::encode(nodes, minicbor::encode::write::Writer::new(writer)).map_err(|e| {
+            RocksDbStorageError::EncodeError {
+                source: anyhow!("StaleTreeNodesCodec: {e}"),
+            }
+        })
     }
 
     /// Encodes `nodes` as a stored list, without first collecting them into a `Vec`.
@@ -192,7 +190,7 @@ impl DbDecoder<Vec<StaleTreeNode>> for StaleTreeNodesCodec {
             .ok_or_else(|| decode_error(minicbor::decode::Error::message("expected a definite-length array")))?;
         let mut nodes = Vec::with_capacity(len.min(4096) as usize);
         for _ in 0..len {
-            nodes.push(cbor::stale_tree_node::decode(&mut decoder, &mut ()).map_err(decode_error)?);
+            nodes.push(decoder.decode().map_err(decode_error)?);
         }
         Ok((nodes, decoder.position()))
     }
@@ -205,6 +203,7 @@ mod tests {
     use rand::RngExt;
     use tari_state_tree::{
         JellyfishMerkleTree,
+        JmtHashScheme,
         LeafKey,
         StaleTreeNode,
         TreeHash,
@@ -217,7 +216,7 @@ mod tests {
     #[test]
     fn encode_decode() {
         let version = 1;
-        let nibble_path = NibblePath::new_odd(vec![0x01, 0x02, 0x03, 0x04 << 4]);
+        let nibble_path = NibblePath::new_odd(&[0x01, 0x02, 0x03, 0x04 << 4]).unwrap();
         let key = NodeKey::new(version, nibble_path);
         let codec = NodeKeyCodec;
         let encoded1 = codec.encode(&key).unwrap();
@@ -225,7 +224,7 @@ mod tests {
         assert_eq!(key, decoded);
 
         let version = 2;
-        let nibble_path = NibblePath::new_even(vec![0x01, 0x02, 0x03, 0x04]);
+        let nibble_path = NibblePath::new_even(&[0x01, 0x02, 0x03, 0x04]).unwrap();
         let key = NodeKey::new(version, nibble_path);
 
         let encoded = codec.encode(&key).unwrap();
@@ -237,12 +236,12 @@ mod tests {
     #[test]
     fn smoke() {
         let mut store = MemoryTreeStore::new();
-        let jmt = JellyfishMerkleTree::new(&store);
+        let jmt = JellyfishMerkleTree::new(&store, JmtHashScheme::V1);
         let changes = iter::repeat_with(|| TreeHash::new(random_bytes()))
             .take(100)
             .map(|hash| (LeafKey::new(hash), Some((hash, ()))));
 
-        let (_, update) = jmt.batch_put_value_set(changes, None, None, 1).unwrap();
+        let (_, update) = jmt.batch_put_value_set(changes, None, 1).unwrap();
 
         let codec = NodeKeyCodec;
         for (key, node) in update.node_batch {
@@ -257,14 +256,12 @@ mod tests {
                 .unwrap();
         }
 
-        let jmt = JellyfishMerkleTree::new(&store);
+        let jmt = JellyfishMerkleTree::new(&store, JmtHashScheme::V1);
         let changes = iter::repeat_with(|| TreeHash::new(random_bytes()))
             .take(100)
             .map(|hash| (LeafKey::new(hash), Some((hash, ()))))
             .collect::<Vec<_>>();
-        let (_, update) = jmt
-            .batch_put_value_set(changes.iter().copied(), None, Some(1), 2)
-            .unwrap();
+        let (_, update) = jmt.batch_put_value_set(changes.iter().copied(), Some(1), 2).unwrap();
 
         for (key, node) in update.node_batch {
             let encoded = codec.encode(&key).unwrap();
@@ -277,9 +274,9 @@ mod tests {
                 .record_stale_tree_node(StaleTreeNode::Node(stale_tree_node.node_key))
                 .unwrap();
         }
-        let jmt = JellyfishMerkleTree::new(&store);
+        let jmt = JellyfishMerkleTree::new(&store, JmtHashScheme::V1);
         let _unused = jmt
-            .batch_put_value_set(changes.into_iter().map(|(key, _)| (key, None)), None, Some(2), 3)
+            .batch_put_value_set(changes.into_iter().map(|(key, _)| (key, None)), Some(2), 3)
             .unwrap();
     }
 

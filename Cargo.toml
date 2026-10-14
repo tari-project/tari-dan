@@ -1,5 +1,5 @@
 [workspace.package]
-version = "0.46.0"
+version = "0.46.1"
 edition = "2024"
 authors = ["The Tari Development Community"]
 repository = "https://github.com/tari-project/tari-ootle"
@@ -107,9 +107,9 @@ tari_ootle_p2p = { path = "crates/p2p" }
 tari_ootle_storage = { path = "crates/storage" }
 tari_ootle_storage_sqlite = { path = "crates/storage_sqlite" }
 tari_ootle_wallet_crypto = { path = "crates/wallet/crypto", version = "0.47" }
-tari_ootle_wallet_sdk = { path = "crates/wallet/sdk", version = "0.47.0" }
+tari_ootle_wallet_sdk = { path = "crates/wallet/sdk", version = "0.48.0" }
 tari_ootle_wallet_sdk_services = { path = "crates/wallet/sdk_services" }
-tari_ootle_wallet_storage_sqlite = { path = "crates/wallet/storage_sqlite", version = "0.47.0" }
+tari_ootle_wallet_storage_sqlite = { path = "crates/wallet/storage_sqlite", version = "0.48.0" }
 tari_epoch_manager = { path = "crates/epoch_manager" }
 tari_epoch_oracles = { path = "crates/epoch_oracles" }
 tari_indexer_lib = { path = "crates/indexer_lib" }
@@ -121,27 +121,27 @@ tari_transaction_manifest = { path = "crates/transaction_manifest", version = "0
 tari_validator_node_rpc = { path = "crates/validator_node_rpc" }
 sqlite_message_logger = { path = "networking/sqlite_message_logger" }
 tari_base_node_client = { path = "clients/base_node_client" }
-tari_indexer_client = { path = "clients/tari_indexer_client", default-features = false, version = "0.46" }
+tari_indexer_client = { path = "clients/tari_indexer_client", default-features = false, version = "0.47" }
 tari_networking = { path = "networking/core" }
 tari_rpc_framework = { path = "networking/rpc_framework" }
 tari_rpc_macros = { path = "networking/rpc_macros" }
 tari_swarm = { path = "networking/swarm" }
 tari_validator_node_client = { path = "clients/validator_node_client" }
 tari_validator_rollback = { path = "utilities/validator_rollback", version = "0.46" }
-tari_ootle_walletd_client = { path = "clients/wallet_daemon_client", version = "0.47.0" }
+tari_ootle_walletd_client = { path = "clients/wallet_daemon_client", version = "0.48.0" }
 transaction_generator = { path = "utilities/transaction_generator" }
 
 # Dependency crates on crates.io (update versions here as well when updating the workspace version)
 tari_consensus_types = { path = "crates/consensus_types", version = "0.46.0" }
 tari_ootle_common_types = { path = "crates/common_types", version = "0.46.0" }
 tari_engine_types = { path = "crates/engine_types", version = "0.46.0" }
-tari_template_builtin = { path = "crates/template_builtin", version = "0.43.0" }
+tari_template_builtin = { path = "crates/template_builtin", version = "0.43.1" }
 tari_ootle_transaction = { path = "crates/transaction", version = "0.46.0" }
 tari_ootle_transaction_validation = { path = "crates/transaction_validation" }
 
 # Template lib
-tari_ootle_template_build = { path = "crates/template_build", version = "0.14" }
-tari_ootle_template_metadata = { path = "crates/template_metadata", version = "0.14" }
+tari_ootle_template_build = { path = "crates/template_build", version = "0.15" }
+tari_ootle_template_metadata = { path = "crates/template_metadata", version = "0.15" }
 tari_ootle_template_provider = { path = "crates/template_provider" }
 tari_template_lib = { version = "0.34.0", path = "crates/template_lib" }
 tari_template_lib_types = { version = "0.34.0", path = "crates/template_lib_types", default-features = false }
@@ -155,25 +155,25 @@ ootle-wasm-core = { path = "crates/ootle_wasm/core", version = "0.46.0" }
 ootle_sdk_core = { path = "crates/ootle_sdk_core", version = "0.46" }
 
 # external minotari/tari dependencies
-minotari_app_grpc = { version = "6.1.0-pre.0", default-features = false }
-minotari_app_utilities = "6.1.0-pre.0"
-minotari_node_grpc_client = "6.1.0-pre.0"
-minotari_wallet_grpc_client = "6.1.0-pre.0"
-tari_common = "6.1.0-pre.0"
-tari_common_sqlite = "6.1.0-pre.0"
-tari_common_types = "6.1.0-pre.0"
-tari_jellyfish = "6.1.0-pre.0"
-tari_metrics = "6.1.0-pre.0"
-tari_mmr = "6.1.0-pre.0"
-tari_node_components = "6.1.0-pre.0"
-tari_script = "6.1.0-pre.0"
-tari_shutdown = "6.1.0-pre.0"
-tari_sidechain = "6.1.0-pre.0"
-tari_transaction_components = "6.1.0-pre.0"
+minotari_app_grpc = { version = "6.2.0-pre.0", default-features = false }
+minotari_app_utilities = "6.2.0-pre.0"
+minotari_node_grpc_client = "6.2.0-pre.0"
+minotari_wallet_grpc_client = "6.2.0-pre.0"
+tari_common = "6.2.0-pre.0"
+tari_common_sqlite = "6.2.0-pre.0"
+tari_common_types = "6.2.0-pre.0"
+tari_jellyfish = "6.2.0-pre.0"
+tari_metrics = "6.2.0-pre.0"
+tari_mmr = "6.2.0-pre.0"
+tari_node_components = "6.2.0-pre.0"
+tari_script = "6.2.0-pre.0"
+tari_shutdown = "6.2.0-pre.0"
+tari_sidechain = "6.2.0-pre.0"
+tari_transaction_components = "6.2.0-pre.0"
 
 tari_crypto = "0.24.0"
 tari_utilities = "0.10"
-tari_hashing = "6.1.0-pre.0"
+tari_hashing = "6.2.0-pre.0"
 
 ## Ledger
 ootle_ledger_common = { path = "crates/wallet/ledger/common", version = "0.2.0" }

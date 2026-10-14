@@ -243,9 +243,12 @@ fn a_module_dense_in_functions_is_charged_for_each_function() {
         .expect("the publish should fail after the fee is paid");
     assert_reject_reason(reason, TEMPLATE_DEF_CUSTOM_SECTION);
 
+    // Each function's closing `end` is followed by its one metering check.
     let compile = template_compile_points(code.len() as u64, &CompileCounts {
         functions: functions as u64,
         variables: 0,
+        metering_checks: functions as u64,
+        largest_function_metering_checks: 1,
     });
     assert!(
         compile > template_compile_points(code.len() as u64, &CompileCounts::default()),
@@ -344,6 +347,8 @@ fn a_module_dense_in_locals_is_charged_for_each_local() {
     let compile = template_compile_points(code.len() as u64, &CompileCounts {
         functions: functions as u64,
         variables: locals as u64,
+        metering_checks: functions as u64,
+        largest_function_metering_checks: 1,
     });
     assert!(
         compile > template_compile_points(code.len() as u64, &CompileCounts::default()),
@@ -396,6 +401,244 @@ fn a_module_with_too_many_locals_is_refused_before_the_compile() {
     assert!(
         result.native_execution_points < template_compile_points(code.len() as u64, &CompileCounts::default()),
         "a module refused for its local count was charged {} native points",
+        result.native_execution_points
+    );
+}
+
+/// A module of `functions` functions whose body is `body`.
+fn module_of_functions(functions: usize, body: &str) -> Vec<u8> {
+    let func = format!("(func {body})");
+    let mut wat = String::from("(module");
+    wat.extend(iter::repeat_n(func.as_str(), functions));
+    wat.push(')');
+    wat::parse_str(wat).unwrap()
+}
+
+/// Publishes `code` with fees on, expecting it refused with `error` after the fee is paid and
+/// before the compile is charged for.
+fn assert_refused_before_the_compile(code: Vec<u8>, error: String) {
+    use tari_engine_types::limits::{CompileCounts, template_compile_points};
+
+    let mut test = TemplateTest::new(CRATE_PATH, &[] as &[&str]);
+    let (account, owner_proof, key, _) = test.create_funded_account_with_keypair();
+    test.enable_fees();
+
+    let result = test
+        .try_execute(
+            Transaction::builder_localnet(Epoch(1))
+                .pay_fee_from_component(account, 2_000_000u64)
+                .publish_template(code.clone())
+                .build_and_seal(&key),
+            vec![owner_proof],
+        )
+        .expect("execution failed");
+
+    let (_, reason) = result
+        .finalize
+        .fee_accept_transaction_reject()
+        .expect("the publish should fail after the fee is paid");
+    assert_reject_reason_with_code(reason, error, ExecutionFailureCode::TemplateError);
+    assert!(
+        result.native_execution_points < template_compile_points(code.len() as u64, &CompileCounts::default()),
+        "a module refused before the compile was charged {} native points",
+        result.native_execution_points
+    );
+}
+
+/// Cranelift's time on a function grows faster than linearly in its `loop`s, so the loop cap is
+/// checked before the compile.
+#[test]
+fn a_function_with_too_many_loops_is_refused_before_the_compile() {
+    use tari_engine_types::limits::WASM_LIMITS;
+
+    let max_loops = WASM_LIMITS.max_function_loops;
+    assert_refused_before_the_compile(
+        module_of_functions(1, &"(loop)".repeat(max_loops + 1)),
+        format!("Function 0 contains more than {max_loops} loops"),
+    );
+}
+
+/// Wasmer parallelises a compile across runs of function bytes, so a module of loops, three bytes
+/// each, compiles nearly serially however its loops are spread across functions.
+#[test]
+fn a_module_with_too_many_loops_is_refused_before_the_compile() {
+    use tari_engine_types::limits::WASM_LIMITS;
+
+    let max_loops = WASM_LIMITS.max_module_loops;
+    let loops_per_function = WASM_LIMITS.max_function_loops;
+    let functions = max_loops / loops_per_function + 1;
+    assert_refused_before_the_compile(
+        module_of_functions(functions, &"(loop)".repeat(loops_per_function)),
+        format!("Module contains more than {max_loops} loops"),
+    );
+}
+
+/// A metering check is compiled after each control-flow operator, and a function is compiled on
+/// one thread at a cost that grows faster than linearly in its checks.
+#[test]
+fn a_function_with_too_many_control_flow_operators_is_refused_before_the_compile() {
+    use tari_engine_types::limits::WASM_LIMITS;
+
+    let max_checks = WASM_LIMITS.max_function_metering_checks;
+    // Each block's `end` is followed by a check, and the function's own closing `end` by one more.
+    assert_refused_before_the_compile(
+        module_of_functions(1, &"(block)".repeat(max_checks)),
+        format!("Function 0 contains more than {max_checks} control-flow and bulk-memory operators"),
+    );
+}
+
+/// The bulk meter compiles a check of its own after each bulk-memory operator, which counts
+/// towards the same limit.
+#[test]
+fn a_function_with_too_many_bulk_memory_operators_is_refused_before_the_compile() {
+    use tari_engine_types::limits::WASM_LIMITS;
+
+    let max_checks = WASM_LIMITS.max_function_metering_checks;
+    let fill = "(memory.fill (i32.const 0) (i32.const 0) (i32.const 0))".repeat(max_checks);
+    let code = wat::parse_str(format!("(module (memory 1) (func {fill}))")).unwrap();
+    assert_refused_before_the_compile(
+        code,
+        format!("Function 0 contains more than {max_checks} control-flow and bulk-memory operators"),
+    );
+}
+
+#[test]
+fn a_function_nested_too_deep_is_refused_before_the_compile() {
+    use tari_engine_types::limits::WASM_LIMITS;
+
+    let max_depth = WASM_LIMITS.max_function_nesting_depth;
+    let body = format!("{}{}", "(block ".repeat(max_depth + 1), ")".repeat(max_depth + 1));
+    assert_refused_before_the_compile(
+        module_of_functions(1, &body),
+        format!("Function 0 nests blocks more than {max_depth} deep"),
+    );
+}
+
+/// No function exceeds a limit here, but together they ask for more compile work than a binary at
+/// the size cap is billed for, from a binary a fraction of that size.
+#[test]
+fn a_module_asking_more_compile_work_than_the_size_cap_is_refused_before_the_compile() {
+    use tari_engine_types::limits::{CompileCounts, ENGINE_LIMITS, WASM_LIMITS, template_compile_count_bytes};
+
+    let max_checks = WASM_LIMITS.max_function_metering_checks;
+    let functions = 8;
+    // A one-byte `return` is the smallest operator a check follows.
+    let code = module_of_functions(functions, &"(return)".repeat(max_checks - 1));
+    let billed_bytes = template_compile_count_bytes(&CompileCounts {
+        functions: functions as u64,
+        variables: 0,
+        metering_checks: (functions * max_checks) as u64,
+        largest_function_metering_checks: max_checks as u64,
+    });
+    assert!(code.len() < ENGINE_LIMITS.max_template_binary_size_bytes / 8);
+
+    assert_refused_before_the_compile(
+        code,
+        format!(
+            "Module asks the compile for the work of a {billed_bytes}-byte binary, more than the {}-byte publish limit",
+            ENGINE_LIMITS.max_template_binary_size_bytes
+        ),
+    );
+}
+
+/// A function is compiled on one thread at a cost that grows with the square of its metering
+/// checks, so a module is billed at least that for its largest function.
+#[test]
+fn a_large_function_is_charged_for_compiling_on_one_thread() {
+    use tari_engine_types::limits::{CompileCounts, template_compile_points};
+
+    let checks = 4_000;
+    let code = module_of_functions(1, &"(return)".repeat(checks - 1));
+
+    let mut test = TemplateTest::new(CRATE_PATH, &[] as &[&str]);
+    let (account, owner_proof, key, _) = test.create_funded_account_with_keypair();
+    test.enable_fees();
+
+    let result = test
+        .try_execute(
+            Transaction::builder_localnet(Epoch(1))
+                .pay_fee_from_component(account, 2_000_000u64)
+                .publish_template(code.clone())
+                .build_and_seal(&key),
+            vec![owner_proof],
+        )
+        .expect("execution failed");
+    let (_, reason) = result
+        .finalize
+        .fee_accept_transaction_reject()
+        .expect("the publish should fail after the fee is paid");
+    assert_reject_reason(reason, TEMPLATE_DEF_CUSTOM_SECTION);
+
+    let summed = CompileCounts {
+        functions: 1,
+        variables: 0,
+        metering_checks: checks as u64,
+        largest_function_metering_checks: 0,
+    };
+    let compile = template_compile_points(code.len() as u64, &CompileCounts {
+        largest_function_metering_checks: checks as u64,
+        ..summed
+    });
+    assert!(
+        compile > template_compile_points(code.len() as u64, &summed),
+        "a function of {checks} metering checks is billed no more than their sum"
+    );
+    assert!(
+        result.native_execution_points >= compile,
+        "a publish of one function of {checks} metering checks charged {} native points, under the {compile} its \
+         compile costs",
+        result.native_execution_points
+    );
+}
+
+/// The operator a metering check follows can be a single byte, far less than the check's compile
+/// costs at the byte price, so a module dense in them is billed by their count rather than its
+/// size.
+#[test]
+fn a_module_dense_in_metering_checks_is_charged_for_each_check() {
+    use tari_engine_types::limits::{CompileCounts, template_compile_points};
+
+    let functions = 16;
+    let checks_per_function = 2_000;
+    let code = module_of_functions(functions, &"(return)".repeat(checks_per_function - 1));
+
+    let mut test = TemplateTest::new(CRATE_PATH, &[] as &[&str]);
+    let (account, owner_proof, key, _) = test.create_funded_account_with_keypair();
+    test.enable_fees();
+
+    // Refused after the compile for lacking a template definition, by which point the compile has
+    // been charged.
+    let result = test
+        .try_execute(
+            Transaction::builder_localnet(Epoch(1))
+                .pay_fee_from_component(account, 2_000_000u64)
+                .publish_template(code.clone())
+                .build_and_seal(&key),
+            vec![owner_proof],
+        )
+        .expect("execution failed");
+    let (_, reason) = result
+        .finalize
+        .fee_accept_transaction_reject()
+        .expect("the publish should fail after the fee is paid");
+    assert_reject_reason(reason, TEMPLATE_DEF_CUSTOM_SECTION);
+
+    let compile = template_compile_points(code.len() as u64, &CompileCounts {
+        functions: functions as u64,
+        variables: 0,
+        metering_checks: (functions * checks_per_function) as u64,
+        largest_function_metering_checks: checks_per_function as u64,
+    });
+    assert!(
+        compile > template_compile_points(code.len() as u64, &CompileCounts::default()),
+        "a {}-byte module of {} metering checks is billed no more than its size",
+        code.len(),
+        functions * checks_per_function
+    );
+    assert!(
+        result.native_execution_points >= compile,
+        "a publish of {} metering checks charged {} native points, under the {compile} its compile costs",
+        functions * checks_per_function,
         result.native_execution_points
     );
 }

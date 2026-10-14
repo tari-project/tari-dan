@@ -3,7 +3,7 @@
 
 use log::*;
 use tari_common_types::types::CompressedPublicKey;
-use tari_consensus_types::ProposalCertificate;
+use tari_consensus_types::{BlockId, ProposalCertificate};
 use tari_crypto::{ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
 use tari_ootle_common_types::optional::Optional;
 use tari_ootle_storage::{
@@ -90,6 +90,14 @@ pub fn state_version_commit_proof<TTx: StateStoreReadTransaction>(
         },
         StateVersionProofSource::Received { commit_proof } => Ok(commit_proof),
     }
+}
+
+/// The encoded commit proof of `block_id`, a block this node committed, or `None` if it has none stored and can no
+/// longer build one (the block or its certificates have been pruned).
+pub fn committed_block_commit_proof<TTx: StateStoreReadTransaction>(tx: &TTx, block_id: &BlockId) -> Option<Vec<u8>> {
+    state_version_commit_proof(tx, StateVersionProofSource::Committed { block_id: *block_id })
+        .inspect_err(|e| debug!(target: LOG_TARGET, "No commit proof for block {block_id}: {e}"))
+        .ok()
 }
 
 pub fn generate_block_commit_proof<TTx: StateStoreReadTransaction>(

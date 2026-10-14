@@ -1,7 +1,8 @@
 //    Copyright 2026 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use minicbor::{CborLen, Decode, Encode};
+use minicbor::{CborLen, Decode, Decoder, Encode, decode};
+use tari_bor::adapters::bounded_vec;
 use tari_template_abi::rust::prelude::*;
 
 use super::SpendCondition;
@@ -84,7 +85,15 @@ impl SpendWitness {
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize))]
 pub struct MerkleProof {
     #[n(0)]
+    #[cbor(decode_with = "decode_siblings")]
     pub siblings: Vec<Hash32>,
+}
+
+/// The most sibling hashes one [`MerkleProof`] may hold. Decoding refuses a longer proof.
+pub const MAX_INCLUSION_PROOF_LEN: usize = 32;
+
+fn decode_siblings<'b, C>(d: &mut Decoder<'b>, ctx: &mut C) -> Result<Vec<Hash32>, decode::Error> {
+    bounded_vec::decode(d, ctx, MAX_INCLUSION_PROOF_LEN)
 }
 
 impl MerkleProof {

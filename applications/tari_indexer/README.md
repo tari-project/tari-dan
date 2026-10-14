@@ -127,7 +127,6 @@ When running, the REST API is available at the configured address (default: `htt
 - `/templates` - Template information
 - `/transactions` - Transaction data
 - `/substates` - Substate queries
-- `/nfts` - NFT tracking
 - `/utxos/stream` - UTXO streaming
 - `/network` - Network information
 

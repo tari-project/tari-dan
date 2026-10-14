@@ -263,6 +263,10 @@ impl<T> WasmEnv<T> {
         self.last_panic = Some(message);
     }
 
+    pub(super) fn has_last_panic(&self) -> bool {
+        self.last_panic.is_some()
+    }
+
     /// Hands out the template's `tari_alloc` as an owned handle, for callers that must let go of
     /// their borrow of this environment before calling it. `tari_alloc` is template code, and
     /// template code can call `tari_engine`, which takes its own `&mut` to this environment.
@@ -292,6 +296,10 @@ impl<T> WasmEnv<T> {
     /// whatever the template panicked with on the null instead.
     pub(super) fn set_last_engine_error<E: Into<WasmExecutionError>>(&mut self, error: E) {
         self.last_engine_error = Some(error.into());
+    }
+
+    pub(super) fn has_last_engine_error(&self) -> bool {
+        self.last_engine_error.is_some()
     }
 
     pub(super) fn take_last_engine_error(&mut self) -> Option<WasmExecutionError> {

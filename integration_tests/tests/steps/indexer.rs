@@ -292,26 +292,6 @@ async fn assert_indexer_substate_version(
     assert_eq!(substate.version, version);
 }
 
-#[then(expr = "the indexer {word} returns {int} non fungibles for resource {word}")]
-async fn assert_indexer_non_fungible_list(
-    world: &mut TariWorld,
-    indexer_name: String,
-    count: usize,
-    output_ref: String,
-) {
-    let indexer = world.get_indexer(&indexer_name);
-    assert!(!indexer.handle.is_finished(), "Indexer {} is not running", indexer_name);
-    let nfts = indexer.get_non_fungibles(world, output_ref, 0, count as u64).await;
-    cucumber_log!("indexer.get_non_fungibles result: {:?}", nfts);
-    assert_eq!(
-        nfts.len(),
-        count,
-        "Unexpected number of NFTs returned. Expected: {}, Actual: {}",
-        count,
-        nfts.len()
-    );
-}
-
 #[then(expr = "the indexer {word} has at least {int} template(s) in the catalogue")]
 async fn assert_indexer_catalogue_count(world: &mut TariWorld, indexer_name: String, min_count: usize) {
     let indexer = world.get_indexer(&indexer_name);

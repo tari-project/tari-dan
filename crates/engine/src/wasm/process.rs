@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::*;
-use tari_bor::{BorError, ByteCounter, decode_exact_with_max_depth, encode_into_writer, encoded_len};
+use tari_bor::{BorError, ByteCounter, decode_exact, encode_into_writer, encoded_len};
 use tari_engine_types::{indexed_value::IndexedValue, limits};
 use tari_template_abi::{
     CallInfo,
@@ -57,7 +57,7 @@ use wasmer::{AsStoreMut, AsStoreRef, Function, FunctionEnv, FunctionEnvMut, Inst
 
 use crate::{
     abi_metrics,
-    runtime::{ComputeAllowance, ComputeFunding, Runtime, RuntimeError},
+    runtime::{ComputeAllowance, ComputeFunding, EngineArgChargeError, EngineArgs, Runtime, RuntimeError},
     wasm::{
         InstanceResetError,
         LoadedWasmTemplate,
@@ -333,32 +333,27 @@ impl WasmProcess {
         arg_ptr: WasmPtr<u8>,
         arg_len: u32,
     ) -> WasmPtr<u8> {
+        // A recorded engine error already fails the invocation, but the template may ignore the
+        // null it was answered with and keep calling. Nothing it calls from here on can change the
+        // outcome, so nothing is dispatched: the first failure stays the reject reason, and no host
+        // work is done on behalf of an invocation that is already lost.
+        if env.data().has_last_engine_error() {
+            return WasmPtr::null();
+        }
+
         let op = match EngineOp::from_i32(op) {
             Some(op) => op,
-            None => {
-                log::error!(target: LOG_TARGET, "Invalid opcode: {}", op);
-                env.data_mut()
-                    .set_last_engine_error(WasmExecutionError::InvalidEngineOp { op });
-                return WasmPtr::null();
-            },
+            None => return fail_engine_call(env.data_mut(), WasmExecutionError::InvalidEngineOp { op }),
         };
 
-        // Defence in depth: `max_internal_call_size` sits above what a template can build inside
-        // `WASM_LIMITS.max_memory_pages`, since the argument and its encoded copy must both fit, so
-        // a template reaching this limit runs out of linear memory first.
+        // Bounds the host work a single engine call can be charged for. `max_internal_call_size`
+        // sits at about what a template can build inside `WASM_LIMITS.max_memory_pages`, where the
+        // argument and its encoded copy must both fit beside the stack.
         if arg_len as usize > limits::ENGINE_LIMITS.max_internal_call_size {
-            log::error!(
-                target: LOG_TARGET,
-                "Engine call size limit of {} bytes exceeded: {} bytes",
-                limits::ENGINE_LIMITS.max_internal_call_size,
-                arg_len
-            );
-            env.data_mut()
-                .set_last_engine_error(WasmExecutionError::EngineCallArgSizeExceeded {
-                    limit: limits::ENGINE_LIMITS.max_internal_call_size,
-                    size: arg_len as usize,
-                });
-            return WasmPtr::null();
+            return fail_engine_call(env.data_mut(), WasmExecutionError::EngineCallArgSizeExceeded {
+                limit: limits::ENGINE_LIMITS.max_internal_call_size,
+                size: arg_len as usize,
+            });
         }
 
         {
@@ -394,33 +389,37 @@ impl WasmProcess {
             }),
             EngineOp::ComponentInvoke => {
                 Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: ComponentInvokeArg| {
-                    state
-                        .interface()
-                        .component_invoke(arg.component_ref, arg.action, arg.args.into())
+                    state.interface().component_invoke(
+                        arg.component_ref,
+                        arg.action,
+                        EngineArgs::metered(arg.args, state),
+                    )
                 })
             },
             EngineOp::ResourceInvoke => {
                 Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: ResourceInvokeArg| {
-                    state
-                        .interface()
-                        .resource_invoke(arg.resource_ref, arg.action, arg.args.into())
+                    state.interface().resource_invoke(
+                        arg.resource_ref,
+                        arg.action,
+                        EngineArgs::metered(arg.args, state),
+                    )
                 })
             },
             EngineOp::VaultInvoke => Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: VaultInvokeArg| {
                 state
                     .interface()
-                    .vault_invoke(arg.vault_ref, arg.action, arg.args.into())
+                    .vault_invoke(arg.vault_ref, arg.action, EngineArgs::metered(arg.args, state))
             }),
             EngineOp::BucketInvoke => Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: BucketInvokeArg| {
                 state
                     .interface()
-                    .bucket_invoke(arg.bucket_ref, arg.action, arg.args.into())
+                    .bucket_invoke(arg.bucket_ref, arg.action, EngineArgs::metered(arg.args, state))
             }),
             EngineOp::NonFungibleInvoke => {
                 Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: NonFungibleInvokeArg| {
                     state
                         .interface()
-                        .non_fungible_invoke(arg.address, arg.action, arg.args.into())
+                        .non_fungible_invoke(arg.address, arg.action, EngineArgs::metered(arg.args, state))
                 })
             },
             EngineOp::GenerateUniqueId => Self::handle(&mut env, op, arg_ptr, arg_len, |state, _arg: ()| {
@@ -433,7 +432,9 @@ impl WasmProcess {
             },
             EngineOp::CallerContextInvoke => {
                 Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: CallerContextInvokeArg| {
-                    state.interface().caller_context_invoke(arg.action, arg.args.into())
+                    state
+                        .interface()
+                        .caller_context_invoke(arg.action, EngineArgs::metered(arg.args, state))
                 })
             },
             EngineOp::AddressAllocationInvoke => Self::handle(
@@ -452,12 +453,14 @@ impl WasmProcess {
                 state.interface().emit_event(arg.topic, arg.payload)
             }),
             EngineOp::CallInvoke => Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: CallInvokeArg| {
-                state.interface().call_invoke(arg.action, arg.args.into())
+                state
+                    .interface()
+                    .call_invoke(arg.action, EngineArgs::metered(arg.args, state))
             }),
             EngineOp::ProofInvoke => Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: ProofInvokeArg| {
                 state
                     .interface()
-                    .proof_invoke(arg.proof_ref, arg.action, arg.args.into())
+                    .proof_invoke(arg.proof_ref, arg.action, EngineArgs::metered(arg.args, state))
             }),
             EngineOp::BuiltinTemplateInvoke => Self::handle(
                 &mut env,
@@ -468,7 +471,9 @@ impl WasmProcess {
             ),
             EngineOp::IntrinsicInvoke => {
                 Self::handle(&mut env, op, arg_ptr, arg_len, |state, arg: IntrinsicInvokeArg| {
-                    state.interface().intrinsic_invoke(arg.intrinsic, arg.args.into())
+                    state
+                        .interface()
+                        .intrinsic_invoke(arg.intrinsic, EngineArgs::metered(arg.args, state))
                 })
             },
             EngineOp::SpendContextInvoke => {
@@ -483,13 +488,7 @@ impl WasmProcess {
         let clamped = Self::clamp_in_flight_meter(&mut env);
         let result = result.and_then(|ptr| clamped.map(|()| ptr));
 
-        result.unwrap_or_else(|err| {
-            // The recorded error is what reaches the transaction, as its reject reason. This line is
-            // the validator's own record of it.
-            log::error!(target: LOG_TARGET, "{}", err);
-            env.data_mut().set_last_engine_error(err);
-            WasmPtr::null()
-        })
+        result.unwrap_or_else(|err| fail_engine_call(env.data_mut(), err))
     }
 
     fn handle<T, U, E>(
@@ -512,15 +511,17 @@ impl WasmProcess {
         let span = abi_metrics::Span::start();
         let decoded = {
             let (env_mut, mut store) = env.data_and_store_mut();
+            // An engine op's payload is whatever the guest wrote into its memory, decoded here on the
+            // validator's own stack and outside the Wasmer meter, so it is charged for first.
+            let interface = env_mut.state()?.interface();
             // SAFETY: WasmProcess is not used concurrently and templates are not able to spawn threads
             unsafe {
                 env_mut.with_memory_slice(&mut store, arg_ptr, arg_len, |arg| {
-                    // An engine op's payload is whatever the guest wrote into its memory, decoded
-                    // here on the validator's own stack.
-                    decode_exact_with_max_depth(arg, limits::MAX_CBOR_NESTING_DEPTH).map_err(|e| {
-                        log::error!(target: LOG_TARGET, "Failed to decode args for engine call: {}", e);
-                        WasmExecutionError::EngineArgDecodeFailed(e)
-                    })
+                    interface.charge_engine_arg(arg).map_err(|e| match e {
+                        EngineArgChargeError::Unreadable(e) => WasmExecutionError::EngineArgDecodeFailed(e),
+                        EngineArgChargeError::Runtime(e) => e.into(),
+                    })?;
+                    decode_exact(arg).map_err(WasmExecutionError::EngineArgDecodeFailed)
                 })
             }??
         };
@@ -778,6 +779,23 @@ fn transaction_headroom(runtime: &Runtime) -> TransactionHeadroom {
     }
 }
 
+/// Fails an engine call with `err`, answering the template with a null pointer.
+///
+/// The recorded error is what reaches the transaction, as its reject reason; the log line is the
+/// validator's own record of it. Only the first failure of an invocation is recorded and logged:
+/// it is the cause of any that follow, and logging each one after it is validator I/O the template
+/// would get for the price of a host call. The early return in `tari_engine_entrypoint` keeps most
+/// later failures from getting this far. The check here covers a failure recorded while a call is
+/// still being handled, by an engine call the template's `tari_alloc` makes as the engine stages
+/// that call's response.
+fn fail_engine_call<T>(env: &mut WasmEnv<T>, err: WasmExecutionError) -> WasmPtr<u8> {
+    if !env.has_last_engine_error() {
+        log::error!(target: LOG_TARGET, "{}", err);
+        env.set_last_engine_error(err);
+    }
+    WasmPtr::null()
+}
+
 /// Reports an engine call `tari_engine_entrypoint` refused. It can only signal a refusal by
 /// returning a null pointer, which a template is free to ignore, so the recorded refusal is what
 /// actually fails the call. It takes precedence over any error the alloc or free itself returned,
@@ -823,6 +841,12 @@ fn debug_handler<T: Send + 'static>(mut env: FunctionEnvMut<WasmEnv<T>>, arg_ptr
 /// `Self::alloc_response` suspends that window while it writes an engine call's response through
 /// the template's `tari_alloc`, so a panic raised inside that allocation reaches the transaction as
 /// a plain runtime error with no message attached.
+///
+/// `on_panic` is a host call, not a trap, so a template may make it any number of times in one
+/// invocation. Only the first report is kept, it is read no further than
+/// `max_panic_message_size`, and it is logged at debug level only: the message reaches the
+/// transaction as its reject reason, and anything more would be validator work the template gets
+/// for the price of a host call.
 fn on_panic_handler<T: Send + 'static>(
     mut env: FunctionEnvMut<WasmEnv<T>>,
     msg_ptr: WasmPtr<u8>,
@@ -831,56 +855,32 @@ fn on_panic_handler<T: Send + 'static>(
     col: i32,
 ) {
     let (state, mut store) = env.data_and_store_mut();
-    if !state.is_in_template_invocation() {
+    if !state.is_in_template_invocation() || state.has_last_panic() {
         return;
     }
 
     let Ok(msg_len) = u32::try_from(msg_len) else {
-        log::error!(
-            target: WASM_DEBUG_LOG_TARGET,
-            "📣 PANIC: ({}:{}) WASM template reported a negative panic message length ({})",
-            line, col, msg_len
-        );
         return;
     };
+    let limit = limits::ENGINE_LIMITS.max_panic_message_size;
+    let len = msg_len.min(u32::try_from(limit).unwrap_or(u32::MAX));
 
     // SAFETY: There is no way to call this function concurrently
-    let panic_message = unsafe {
-        state.with_memory_slice(&mut store, msg_ptr, msg_len, |msg_bytes| {
-            if msg_bytes.len() > limits::ENGINE_LIMITS.max_panic_message_size {
-                let Ok(msg) = str::from_utf8(msg_bytes) else {
-                    error!(target: WASM_DEBUG_LOG_TARGET, "📣 PANIC: ({}:{}) <invalid utf8 message>", line, col);
-                    return None;
-                };
-                log::error!(target: WASM_DEBUG_LOG_TARGET, "📣 PANIC: ({}:{}) {}", line, col, msg);
-                let limit = limits::ENGINE_LIMITS.max_panic_message_size;
-                let mut end = limit;
-                // Ensure we truncate at a char boundary (to avoid a panic when calling truncate)
-                while end > 0 && !msg.is_char_boundary(end) {
-                    end -= 1;
-                }
-                error!(target: LOG_TARGET, "Panic message size limit exceeded: for panic {}", msg);
-                Some(msg[..end].to_string())
-            } else {
-                let msg = String::from_utf8_lossy(msg_bytes);
-                log::error!(target: WASM_DEBUG_LOG_TARGET, "📣 PANIC: ({}:{}) {}", line, col, msg);
-                Some(msg.into_owned())
-            }
+    let message = unsafe {
+        state.with_memory_slice(&mut store, msg_ptr, len, |msg_bytes| {
+            // Lossy decoding can lengthen invalid input, so the decoded message is bounded again.
+            let mut msg = String::from_utf8_lossy(msg_bytes).into_owned();
+            msg.truncate(msg.floor_char_boundary(limit));
+            msg
         })
     }
     .unwrap_or_else(|err| {
-        log::error!(
-            target: WASM_DEBUG_LOG_TARGET,
-            "📣 PANIC: WASM template panicked but did not provide a valid memory pointer to on_panic callback: {}",
-            err
-        );
-        Some(format!(
+        format!(
             "WASM panicked but did not provide a valid message pointer to on_panic callback: {}",
             err
-        ))
+        )
     });
 
-    if let Some(message) = panic_message {
-        state.set_last_panic(message);
-    }
+    log::debug!(target: WASM_DEBUG_LOG_TARGET, "📣 PANIC: ({}:{}) {}", line, col, message);
+    state.set_last_panic(message);
 }

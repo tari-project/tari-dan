@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use anyhow::anyhow;
 use libp2p::{Multiaddr, PeerId, identity::Keypair};
 use tari_shutdown::ShutdownSignal;
-use tari_swarm::{is_supported_multiaddr, messaging, messaging::prost::ProstCodec};
+use tari_swarm::{is_supported_multiaddr, messaging, messaging::BytesCodec};
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinHandle,
@@ -16,13 +16,14 @@ use crate::{MessagingMode, NetworkingHandle, message::MessageSpec, worker::Netwo
 
 pub struct Builder<'a, TMsg: MessageSpec> {
     identity: Keypair,
-    messaging_mode: MessagingMode<TMsg>,
+    messaging_mode: MessagingMode,
     config: crate::Config,
     seed_peers: Vec<(Option<PeerId>, Multiaddr)>,
     #[cfg(feature = "metrics")]
     registry: Option<&'a mut libp2p::metrics::Registry>,
     #[cfg(not(feature = "metrics"))]
     _marker: std::marker::PhantomData<&'a ()>,
+    _spec: std::marker::PhantomData<TMsg>,
 }
 
 impl<'a, TMsg: MessageSpec> Builder<'a, TMsg>
@@ -43,20 +44,13 @@ where
             registry: None,
             #[cfg(not(feature = "metrics"))]
             _marker: std::marker::PhantomData,
+            _spec: std::marker::PhantomData,
         }
     }
 
-    pub fn with_messaging_mode<TNewMsg: MessageSpec>(self, mode: MessagingMode<TNewMsg>) -> Builder<'a, TNewMsg> {
-        Builder {
-            identity: self.identity,
-            messaging_mode: mode,
-            config: self.config,
-            seed_peers: self.seed_peers,
-            #[cfg(feature = "metrics")]
-            registry: self.registry,
-            #[cfg(not(feature = "metrics"))]
-            _marker: std::marker::PhantomData,
-        }
+    pub fn with_messaging_mode(mut self, mode: MessagingMode) -> Self {
+        self.messaging_mode = mode;
+        self
     }
 
     pub fn then(self, f: impl FnOnce(Self) -> Self) -> Self {
@@ -92,6 +86,7 @@ where
             registry,
             #[cfg(not(feature = "metrics"))]
                 _marker: _,
+            _spec: _,
         } = self;
 
         for (_, addr) in &seed_peers {
@@ -101,11 +96,7 @@ where
         }
 
         config.swarm.enable_messaging = messaging_mode.is_enabled();
-        let swarm = tari_swarm::create_swarm::<ProstCodec<TMsg::Message>>(
-            identity.clone(),
-            HashSet::new(),
-            config.swarm.clone(),
-        )?;
+        let swarm = tari_swarm::create_swarm::<BytesCodec>(identity.clone(), HashSet::new(), config.swarm.clone())?;
         let local_peer_id = *swarm.local_peer_id();
         let (tx, rx) = mpsc::channel(1);
         let (tx_events, _) = broadcast::channel(100);

@@ -322,19 +322,20 @@ impl ManifestParser {
                             .next()
                             .ok_or_else(|| syn::Error::new_spanned(path, "Invalid function call, empty path"))?;
 
-                        if let Some(second) = iter.next() {
-                            // Two segments: Template::function()
-                            ManifestIntent::InvokeTemplate(InvokeIntent {
-                                output_variable: Some(output_binding),
-                                component_variable: None,
-                                template_variable: Some(first.ident.clone()),
-                                function_name: second.ident.clone(),
-                                arguments: build_arguments(call.args)?,
-                            })
-                        } else {
-                            // Single segment: local function call
-                            ManifestIntent::CallLocalFunction(first.ident.clone())
-                        }
+                        // Two segments: Template::function(). A local function call has one.
+                        let Some(second) = iter.next() else {
+                            return Err(syn::Error::new_spanned(
+                                path,
+                                "a local function call has no value to bind",
+                            ));
+                        };
+                        ManifestIntent::InvokeTemplate(InvokeIntent {
+                            output_variable: Some(output_binding),
+                            component_variable: None,
+                            template_variable: Some(first.ident.clone()),
+                            function_name: second.ident.clone(),
+                            arguments: build_arguments(call.args)?,
+                        })
                     },
                     _ => return Err(syn::Error::new_spanned(call.func, "Invalid function call")),
                 }

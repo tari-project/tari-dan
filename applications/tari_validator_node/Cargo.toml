@@ -87,7 +87,9 @@ console-subscriber = { version = "0.4.1", optional = true }
 tari_common = { workspace = true, features = ["build"] }
 
 [dev-dependencies]
+tari_sidechain = { workspace = true }
 tempfile = { workspace = true }
+tari_template_lib_types = { workspace = true }
 
 [package.metadata.cargo-machete]
 ignored = [

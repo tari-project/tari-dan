@@ -54,6 +54,7 @@ use tari_ootle_common_types::{
     NumPreshards,
     ShardGroup,
     ToSubstateAddress,
+    VersionedSubstateId,
     optional::Optional,
     shard::Shard,
 };
@@ -78,9 +79,11 @@ use tari_ootle_storage::{
         NoVoteReason,
         PendingShardStateTreeDiff,
         StateVersionProof,
+        StateVersionProofSource,
         SubstateChange,
         SubstateCreated,
         SubstateDestroyed,
+        SubstateDownProofRecord,
         SubstateLock,
         SubstatePledges,
         SubstateRecord,
@@ -92,11 +95,12 @@ use tari_ootle_storage::{
         TransactionRecord,
         ValidatorStatsUpdate,
         VoteEquivocation,
+        is_state_version_proof_point,
     },
     time,
 };
 use tari_ootle_transaction::TransactionId;
-use tari_state_tree::{Child, Nibble, Node, NodeKey, NodeType, StaleTreeNode, StateTreePayload, Version};
+use tari_state_tree::{Children, Node, NodeKey, NodeType, StaleTreeNode, StateTreePayload, Version};
 
 use crate::{
     block_diff_table::BlockDiffEntry,
@@ -153,9 +157,18 @@ use crate::{
         state_tree,
         state_tree::{StateTreeCf, StateTreeStaleNodesCf},
         state_tree_shard_versions::StateTreeShardVersionCf,
-        state_version_proof::{BlockCommitProofCf, StateVersionProofCf},
+        state_version_proof::{
+            BlockCommitProofCf,
+            BlockCommitProofCitationByBlockQuery,
+            BlockCommitProofCitationCf,
+            StateVersionProofByEpochQuery,
+            StateVersionProofCf,
+            StateVersionProofEpochIndex,
+            StateVersionProofRetentionCf,
+        },
         substate,
         substate::{SubstateCf, SubstateHeadData},
+        substate_down_proof::{SubstateDownProofByEpochQuery, SubstateDownProofCf, SubstateDownProofEpochIndex},
         substate_locks::BlockLockSetCf,
         transaction::TransactionCf,
         transaction_pool::TransactionPoolCf,
@@ -1407,6 +1420,8 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         let substates_cf = db.cf(SubstateCf)?;
         let head_cf = db.cf(substate::HeadIndex)?;
         let unpruned_cf = db.cf(substate::UnprunedDownedValuesIndex)?;
+        let down_proofs_cf = db.cf(SubstateDownProofCf)?;
+        let down_proofs_epoch_index = db.cf(SubstateDownProofEpochIndex)?;
 
         let start_version = target_state_version.saturating_add(1);
         let mut touched: HashSet<SubstateId> = HashSet::new();
@@ -1438,6 +1453,8 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
                         touched.insert(substate.substate_id.clone());
                         substate.destroyed = None;
                         substates_cf.put(address, &substate, OPERATION)?;
+                        down_proofs_cf.delete(&(shard, *address), OPERATION)?;
+                        down_proofs_epoch_index.delete(&(record.epoch, shard, *address), OPERATION)?;
                         stats.substates_destroyed_restored += 1;
                     },
                 }
@@ -1635,6 +1652,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
     ) -> Result<usize, StorageError> {
         const OPERATION: &str = "state_tree_nodes_clear_stale";
 
+        let db = self.db();
         let cf = self.db().cf(StateTreeCf)?;
         let versions_cf = self.db().cf(StateTreeShardVersionCf)?;
         let stale_cf = self.db().cf(state_tree::ByStateTreeStaleShardVersionQuery)?;
@@ -1706,6 +1724,13 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
                 // The record goes in the same transaction as its nodes, so a version is never left half-cleared.
                 stale_nodes_cf.delete(&(shard, version), OPERATION)?;
                 num_deleted += delete_buffer.len() + 1;
+                // Every committed version records its stale nodes, and the nodes made stale at `version` are the last
+                // of the tree at the version below it, so that version can no longer be proved up in.
+                if let Some(below) = version.checked_sub(1) &&
+                    state_version_proofs::prune_out_of_window(&db, (shard, below))?
+                {
+                    num_deleted += 1;
+                }
             }
         }
 
@@ -1764,8 +1789,8 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
             )
             .map(|res| res.map(|(key, _)| key))
             .collect::<Result<Vec<_>, _>>()?;
-        for key in &proof_keys {
-            proofs_cf.delete(key, OPERATION)?;
+        for key in proof_keys {
+            state_version_proofs::remove(&db, key)?;
         }
 
         // 4. Reset the latest-version pointer to the highest version with surviving tree nodes. The pointer must
@@ -1805,9 +1830,20 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
 
     fn state_version_proofs_insert(&mut self, proof: &StateVersionProof) -> Result<(), StorageError> {
         const OPERATION: &str = "state_version_proofs_insert";
-        self.db()
-            .cf(StateVersionProofCf)?
-            .put(&(proof.shard, proof.state_version), proof, OPERATION)?;
+        let db = self.db();
+        let key = (proof.shard, proof.state_version);
+        let proofs_cf = db.cf(StateVersionProofCf)?;
+        let cited_block = proof.source.block_id();
+        if let Some(existing) = proofs_cf.get(&key, OPERATION).optional()? &&
+            existing.source.block_id() != cited_block
+        {
+            state_version_proofs::release_source(&db, proof.shard, &existing.source)?;
+        }
+        proofs_cf.put(&key, proof, OPERATION)?;
+        if let Some(block_id) = cited_block {
+            db.cf(BlockCommitProofCitationCf)?
+                .put(&(*block_id, proof.shard), &(), OPERATION)?;
+        }
         Ok(())
     }
 
@@ -1816,6 +1852,23 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         self.db()
             .cf(BlockCommitProofCf)?
             .put_raw_value(block_id, commit_proof, OPERATION)?;
+        Ok(())
+    }
+
+    fn substate_down_proofs_insert(
+        &mut self,
+        epoch: Epoch,
+        shard: Shard,
+        id: &VersionedSubstateId,
+        record: &SubstateDownProofRecord,
+    ) -> Result<(), StorageError> {
+        const OPERATION: &str = "substate_down_proofs_insert";
+        let db = self.db();
+        let address = id.to_substate_address();
+        db.cf(SubstateDownProofCf)?.put(&(shard, address), record, OPERATION)?;
+        db.cf(SubstateDownProofEpochIndex)?
+            .put(&(epoch, shard, address), &(), OPERATION)?;
+        state_version_proofs::retain_through(&db, (shard, record.state_version), epoch)?;
         Ok(())
     }
 
@@ -1939,13 +1992,23 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         step: EpochCleanupStep,
         limit: usize,
     ) -> Result<usize, StorageError> {
-        let Some(prune_epoch) = epoch.checked_sub(self.options.epoch_history_length) else {
+        let history_length = match step {
+            EpochCleanupStep::SubstateDownProofs | EpochCleanupStep::StateVersionProofs => {
+                self.options.down_proof_history_length
+            },
+            _ => self.options.epoch_history_length,
+        };
+        let Some(prune_epoch) = epoch.checked_sub(history_length) else {
             return Ok(0);
         };
 
         let db = self.db();
         match step {
             EpochCleanupStep::DownedSubstateValues => self.substates_prune_downed_values(prune_epoch, limit),
+            EpochCleanupStep::SubstateDownProofs => cleanup::substate_down_proofs_for_epoch(&db, prune_epoch, limit),
+            EpochCleanupStep::StateVersionProofs => {
+                cleanup::state_version_proofs_for_epoch(&db, prune_epoch, self.options.state_history_length, limit)
+            },
             EpochCleanupStep::Blocks => cleanup::blocks_for_epoch(&db, prune_epoch, limit),
             EpochCleanupStep::ProposalCertificates => cleanup::proposal_certificates_for_epoch(&db, prune_epoch, limit),
             EpochCleanupStep::TimeoutCertificates => cleanup::timeout_certificates_for_epoch(&db, prune_epoch, limit),
@@ -2032,7 +2095,7 @@ fn recurse_subtree_depth_first_post_order<'a>(
     cf: &'a CfContext<Transaction<TransactionDB>, StateTreeCf>,
     shard: Shard,
     parent_key: NodeKey,
-    children: IndexMap<Nibble, Child>,
+    children: Children,
 ) -> impl Iterator<Item = (Shard, NodeKey)> + 'a {
     const OPERATION: &str = "recurse_subtree";
     let parent_after_child = Some((shard, parent_key.clone()));
@@ -2040,7 +2103,13 @@ fn recurse_subtree_depth_first_post_order<'a>(
     children
         .into_iter()
         .flat_map(move |(nibble, child)| -> Box<dyn Iterator<Item = (Shard, NodeKey)>> {
-            let child_key = parent_key.gen_child_node_key(child.version, nibble);
+            let child_key = match parent_key.gen_child_node_key(child.version, nibble) {
+                Ok(child_key) => child_key,
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Cannot derive the child of stale node ({shard}, {parent_key}) at {nibble:?}: {e}");
+                    return Box::new(iter::empty());
+                },
+            };
             match child.node_type{
                 NodeType::Leaf => {
                     Box::new(iter::once((shard, child_key)))
@@ -2068,6 +2137,116 @@ fn recurse_subtree_depth_first_post_order<'a>(
         })
         // Emit the parent key after all children
         .chain(parent_after_child)
+}
+
+/// Upkeep of [`StateVersionProofCf`] entries, the retention of those that are not proof points, and the
+/// [`BlockCommitProofCf`] entries they cite.
+mod state_version_proofs {
+    use super::*;
+
+    /// Keeps the proof of `key`, unless it is a proof point, through at least `epoch`.
+    pub fn retain_through(db: &DbWriteContext<'_>, key: (Shard, Version), epoch: Epoch) -> Result<(), StorageError> {
+        const OPERATION: &str = "state_version_proofs::retain_through";
+        let (shard, version) = key;
+        if is_state_version_proof_point(version) {
+            return Ok(());
+        }
+        let retention = db.cf(StateVersionProofRetentionCf)?;
+        let index = db.cf(StateVersionProofEpochIndex)?;
+        match retention.get(&key, OPERATION).optional()? {
+            Some(current) if current >= epoch => return Ok(()),
+            Some(current) => index.delete(&(current, shard, version), OPERATION)?,
+            None => {},
+        }
+        index.put(&(epoch, shard, version), &(), OPERATION)?;
+        retention.put(&key, &epoch, OPERATION)?;
+        Ok(())
+    }
+
+    /// Deletes the proof of `key`, which has left its shard's version window, unless it is a proof point or a live
+    /// down proof record cites it. Only a proof that holds a citation of its block is deleted: a proof stored without
+    /// one may be cited by a record that holds no retention for it. Returns whether the proof was deleted.
+    pub fn prune_out_of_window(db: &DbWriteContext<'_>, key: (Shard, Version)) -> Result<bool, StorageError> {
+        const OPERATION: &str = "state_version_proofs::prune_out_of_window";
+        let (shard, version) = key;
+        if is_state_version_proof_point(version) || db.cf(StateVersionProofRetentionCf)?.exists(&key, OPERATION)? {
+            return Ok(false);
+        }
+        let Some(proof) = db.cf(StateVersionProofCf)?.get(&key, OPERATION).optional()? else {
+            return Ok(false);
+        };
+        let Some(block_id) = proof.source.block_id() else {
+            return Ok(false);
+        };
+        if !db
+            .cf(BlockCommitProofCitationCf)?
+            .exists(&(*block_id, shard), OPERATION)?
+        {
+            return Ok(false);
+        }
+        remove(db, key)?;
+        Ok(true)
+    }
+
+    /// The lowest version of `shard` inside its version window. The stale-node pass deletes the trees of the versions
+    /// below it, so no new down proof record is proved up at them.
+    pub fn window_floor(
+        db: &DbWriteContext<'_>,
+        shard: Shard,
+        state_history_length: u64,
+    ) -> Result<Version, StorageError> {
+        const OPERATION: &str = "state_version_proofs::window_floor";
+        let max_version = db
+            .cf(StateTreeShardVersionCf)?
+            .get(&shard, OPERATION)
+            .optional()?
+            .unwrap_or(0);
+        Ok(max_version.saturating_sub(state_history_length))
+    }
+
+    /// Deletes the proof of `key` with its retention, and the commit proof it cites if no other proof cites it.
+    pub fn remove(db: &DbWriteContext<'_>, key: (Shard, Version)) -> Result<(), StorageError> {
+        const OPERATION: &str = "state_version_proofs::remove";
+        let (shard, version) = key;
+        let retention = db.cf(StateVersionProofRetentionCf)?;
+        if let Some(epoch) = retention.get(&key, OPERATION).optional()? {
+            db.cf(StateVersionProofEpochIndex)?
+                .delete(&(epoch, shard, version), OPERATION)?;
+            retention.delete(&key, OPERATION)?;
+        }
+        let proofs = db.cf(StateVersionProofCf)?;
+        if let Some(proof) = proofs.get(&key, OPERATION).optional()? {
+            proofs.delete(&key, OPERATION)?;
+            release_source(db, shard, &proof.source)?;
+        }
+        Ok(())
+    }
+
+    /// Drops the citation of `source`'s block by the proof of `shard`, and deletes the block's commit proof once no
+    /// proof cites it. A proof with no citation leaves the commit proof in place: a block's proofs are stored in one
+    /// write, so either all of them cite the block or none do.
+    pub fn release_source(
+        db: &DbWriteContext<'_>,
+        shard: Shard,
+        source: &StateVersionProofSource,
+    ) -> Result<(), StorageError> {
+        const OPERATION: &str = "state_version_proofs::release_source";
+        let Some(block_id) = source.block_id() else {
+            return Ok(());
+        };
+        let citations = db.cf(BlockCommitProofCitationCf)?;
+        if !citations.exists(&(*block_id, shard), OPERATION)? {
+            return Ok(());
+        }
+        citations.delete(&(*block_id, shard), OPERATION)?;
+        let remaining = db
+            .cf(BlockCommitProofCitationByBlockQuery)?
+            .query_prefix_range_keys(Ordering::Ascending, block_id)?;
+        if remaining.is_empty() {
+            db.cf(BlockCommitProofCf)?.delete(block_id, OPERATION)?;
+        }
+        Ok(())
+    }
 }
 
 mod cleanup {
@@ -2187,6 +2366,62 @@ mod cleanup {
         let cf = db.cf(validator_liveness_log::ValidatorLivenessLogCf)?;
         for key in &keys {
             cf.delete(key, OPERATION)?;
+        }
+        Ok(keys.len())
+    }
+
+    pub fn substate_down_proofs_for_epoch(
+        db: &DbWriteContext<'_>,
+        up_to_epoch: Epoch,
+        limit: usize,
+    ) -> Result<usize, StorageError> {
+        const OPERATION: &str = "cleanup::substate_down_proofs_for_epoch";
+        let up_to_epoch = up_to_epoch + Epoch(1); // Make it inclusive
+        let keys = db.cf(SubstateDownProofByEpochQuery)?.query_range_keys_limited(
+            Ordering::Ascending,
+            Epoch::zero()..up_to_epoch,
+            limit,
+        )?;
+
+        let records = db.cf(SubstateDownProofCf)?;
+        let index = db.cf(SubstateDownProofEpochIndex)?;
+        for key in &keys {
+            let (_, shard, address) = key;
+            records.delete(&(*shard, *address), OPERATION)?;
+            index.delete(key, OPERATION)?;
+        }
+        Ok(keys.len())
+    }
+
+    pub fn state_version_proofs_for_epoch(
+        db: &DbWriteContext<'_>,
+        up_to_epoch: Epoch,
+        state_history_length: u64,
+        limit: usize,
+    ) -> Result<usize, StorageError> {
+        const OPERATION: &str = "cleanup::state_version_proofs_for_epoch";
+        let up_to_epoch = up_to_epoch + Epoch(1); // Make it inclusive
+        let keys = db.cf(StateVersionProofByEpochQuery)?.query_range_keys_limited(
+            Ordering::Ascending,
+            Epoch::zero()..up_to_epoch,
+            limit,
+        )?;
+
+        let index = db.cf(StateVersionProofEpochIndex)?;
+        let retention = db.cf(StateVersionProofRetentionCf)?;
+        // A proof whose citation expires inside its shard's version window stays for the stale-node pass, which
+        // reaches its version once the window passes it.
+        for (epoch, shard, version) in &keys {
+            let key = (*shard, *version);
+            index.delete(&(*epoch, *shard, *version), OPERATION)?;
+            if retention.get(&key, OPERATION).optional()? != Some(*epoch) {
+                continue;
+            }
+            if *version < state_version_proofs::window_floor(db, *shard, state_history_length)? {
+                state_version_proofs::remove(db, key)?;
+            } else {
+                retention.delete(&key, OPERATION)?;
+            }
         }
         Ok(keys.len())
     }

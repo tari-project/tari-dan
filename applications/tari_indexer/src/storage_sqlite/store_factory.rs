@@ -323,7 +323,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        storage_sqlite::models::{SubstateCacheInvalidation, VerifiedStateRoot},
+        storage_sqlite::models::{Key, SubstateCacheInvalidation, VerifiedStateRoot},
         store::{IndexerStoreReadTransaction, IndexerStoreReader, IndexerStoreWriteTransaction},
     };
 
@@ -421,6 +421,34 @@ mod tests {
             })
             .await
             .unwrap()
+    }
+
+    /// An unspent output's `(resource, public nonce, tag)` is unique among unspent rows. A clash
+    /// means some sync peer was faulty, and must not fail the commit, which would stall the shard's
+    /// sync on every peer.
+    #[tokio::test]
+    async fn an_unspent_utxo_clashing_with_a_stored_one_is_skipped() {
+        use tari_template_lib_types::{UtxoAddress, UtxoId};
+
+        use crate::storage_sqlite::models::UtxoUpdateRecord;
+
+        let (_dir, store) = store_with_utxos(&[(1, 1)]).await;
+        let UtxoUpdateRecord::Unspent(mut clashing) = unspent_at(1, 2) else {
+            unreachable!()
+        };
+        let clashing_address = UtxoAddress::new(utxo_resource(), UtxoId::from_array([99; 32]));
+        clashing.address = clashing_address.clone();
+
+        let skipped = store
+            .with_write_tx(move |tx| {
+                tx.batch_insert_utxo_updates(Epoch(1), [UtxoUpdateRecord::Unspent(clashing), unspent_at(2, 2)])
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(skipped, [clashing_address]);
+        let set = read_updates(&store, 0, 10).await;
+        assert_eq!(set.updates.len(), 2);
     }
 
     #[tokio::test]
@@ -643,24 +671,62 @@ mod tests {
         // The newest 16 (heights 4..=19) remain trusted; the oldest 3 (1..=3) were pruned.
         for h in 4..=19u64 {
             let root = FixedHash::new([h as u8; 32]);
-            assert!(
+            assert_eq!(
                 store
-                    .with_read_tx(move |tx| tx.is_state_root_trusted(Epoch(1), shard_group(), &root))
+                    .with_read_tx(move |tx| tx.get_verified_state_root_height(Epoch(1), shard_group(), &root))
                     .await
                     .unwrap(),
+                Some(NodeHeight(h)),
                 "height {h} should still be trusted"
             );
         }
         for h in 1..=3u64 {
             let root = FixedHash::new([h as u8; 32]);
             assert!(
-                !store
-                    .with_read_tx(move |tx| tx.is_state_root_trusted(Epoch(1), shard_group(), &root))
+                store
+                    .with_read_tx(move |tx| tx.get_verified_state_root_height(Epoch(1), shard_group(), &root))
                     .await
-                    .unwrap(),
+                    .unwrap()
+                    .is_none(),
                 "height {h} should have been pruned"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn the_latest_verified_height_spans_overlapping_shard_groups_of_an_epoch() {
+        let (_dir, store) = temp_store().await;
+        for (epoch, group, height) in [
+            (Epoch(1), ShardGroup::new(0, 127), 30u64),
+            (Epoch(1), ShardGroup::new(128, 255), 50),
+            (Epoch(2), ShardGroup::new(0, 255), 70),
+        ] {
+            let root = VerifiedStateRoot {
+                epoch,
+                shard_group: group,
+                height: NodeHeight(height),
+                block_hash: FixedHash::zero(),
+                state_merkle_root: FixedHash::new([height as u8; 32]),
+            };
+            store
+                .with_write_tx(move |tx| tx.upsert_verified_state_root(&root))
+                .await
+                .unwrap();
+        }
+
+        let latest = |epoch, group| {
+            let store = store.clone();
+            async move {
+                store
+                    .with_read_tx(move |tx| tx.get_latest_verified_height_overlapping(epoch, group))
+                    .await
+                    .unwrap()
+            }
+        };
+        assert_eq!(latest(Epoch(1), ShardGroup::new(0, 127)).await, Some(NodeHeight(30)));
+        assert_eq!(latest(Epoch(1), ShardGroup::new(100, 200)).await, Some(NodeHeight(50)));
+        assert_eq!(latest(Epoch(2), ShardGroup::new(0, 63)).await, Some(NodeHeight(70)));
+        assert_eq!(latest(Epoch(3), ShardGroup::new(0, 255)).await, None);
     }
 
     #[tokio::test]
@@ -674,19 +740,21 @@ mod tests {
                 .unwrap();
         }
         let hash = FixedHash::new([5u8; 32]);
-        assert!(
+        assert_eq!(
             store
-                .with_read_tx(move |tx| tx.is_state_root_trusted(Epoch(1), shard_group(), &hash))
+                .with_read_tx(move |tx| tx.get_verified_state_root_height(Epoch(1), shard_group(), &hash))
                 .await
-                .unwrap()
+                .unwrap(),
+            Some(NodeHeight(5))
         );
         // An unrecorded root is not trusted.
         let other = FixedHash::new([99u8; 32]);
         assert!(
-            !store
-                .with_read_tx(move |tx| tx.is_state_root_trusted(Epoch(1), shard_group(), &other))
+            store
+                .with_read_tx(move |tx| tx.get_verified_state_root_height(Epoch(1), shard_group(), &other))
                 .await
                 .unwrap()
+                .is_none()
         );
     }
 
@@ -1241,6 +1309,51 @@ mod tests {
             plan.contains("transactions_source_id_idx"),
             "source filtered listing does not use the source index: {plan}"
         );
+    }
+
+    /// A receipt address is written once on the network, so a conflict at one means some sync peer
+    /// was faulty. It must neither fail the commit, which would stall the shard's sync on every peer,
+    /// nor displace the stored receipt or its events.
+    #[tokio::test]
+    async fn a_receipt_at_a_stored_address_is_skipped() {
+        let (_dir, store) = temp_store().await;
+        insert_receipts(&store, vec![(1, receipt_with_events_at(Epoch(2), 1))]).await;
+
+        let conflicting = TransactionReceipt {
+            fee_receipt: FeeReceiptBuilder::default().with_total_fees_paid(999).build(),
+            ..receipt_with_events_at(Epoch(3), 2)
+        };
+        let inserted = store
+            .with_write_tx(move |tx| {
+                tx.batch_insert_transaction_receipts(
+                    [
+                        (receipt_address(2), receipt_at(Epoch(3))),
+                        (receipt_address(1), conflicting),
+                    ],
+                    &[],
+                )
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(
+            inserted.receipts.iter().map(|r| r.transaction_id).collect::<Vec<_>>(),
+            [TransactionId::new([2; 32])]
+        );
+        assert_eq!(inserted.skipped, [receipt_address(1)]);
+        assert!(inserted.events.is_empty());
+
+        let stored = store
+            .with_read_tx(|tx| tx.get_transaction_receipt(&receipt_address(1)))
+            .await
+            .unwrap();
+        assert_eq!(stored.fee_receipt.total_fees_paid(), 123);
+        assert_eq!(event_epochs(&store).await, [2]);
+        let count = store
+            .with_read_tx(|tx| tx.key_value_get_value::<_, u64>(Key::TransactionReceiptCount))
+            .await
+            .unwrap();
+        assert_eq!(count, 2);
     }
 
     async fn insert_transactions(store: &SqliteIndexerStore, max_epochs: &[Epoch]) -> Vec<TransactionId> {
@@ -2340,6 +2453,8 @@ mod tests {
             substate_value_proof: vec![marker],
             commit_proof: vec![marker; 2],
             proof_epoch: u64::from(marker),
+            substate_down_proof: None,
+            destroyed_at_state_version: None,
         };
         let id = id.clone();
         store

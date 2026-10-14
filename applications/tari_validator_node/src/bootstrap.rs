@@ -115,6 +115,7 @@ use crate::metrics::{
     MeteredEpochOracle,
     PrometheusConsensusMetrics,
     PrometheusEpochOracleMetrics,
+    PrometheusExecutionMetrics,
     StateStoreMemoryCollector,
 };
 use crate::{
@@ -139,7 +140,7 @@ use crate::{
         services::{
             consensus_gossip::{self},
             mempool::{self, MempoolHandle},
-            messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging},
+            messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging, spawn_direct_message_decoder},
         },
     },
     template_prewarm::{self, TemplatePrewarmHooks},
@@ -271,6 +272,7 @@ pub async fn spawn_services(
         &config.validator_node.templates,
     ));
 
+    let state_history_length = db_options.state_history_length;
     let state_store = ValidatorNodeStateStore::open(&config.validator_node.state_db_path, db_options)?;
 
     #[cfg(feature = "metrics")]
@@ -383,13 +385,15 @@ pub async fn spawn_services(
     let message_logger = NopLogger; // SqliteMessageLogger::new(config.validator_node.data_dir.join("message_log.sqlite"));
     let local_address = PeerAddress::from(keypair.public_key().clone());
     let (loopback_sender, loopback_receiver) = mpsc::unbounded_channel();
+    let (rx_direct_consensus_messages, join_handle) =
+        spawn_direct_message_decoder(rx_consensus_messages, epoch_manager.clone());
+    handles.push(join_handle);
     let inbound_messaging = ConsensusInboundMessaging::new(
         local_address,
-        rx_consensus_messages,
+        rx_direct_consensus_messages,
         rx_consensus_gossip_messages,
         loopback_receiver,
         message_logger.clone(),
-        epoch_manager.clone(),
     );
     let outbound_messaging = ConsensusOutboundMessaging::new(
         loopback_sender,
@@ -412,7 +416,11 @@ pub async fn spawn_services(
         )),
     );
     // The executor resolves the exhaust burn rate for each transaction's execution epoch.
-    let transaction_executor = TariBlockTransactionExecutor::new(transaction_processor);
+    let transaction_executor = TariBlockTransactionExecutor::new(
+        transaction_processor,
+        #[cfg(feature = "metrics")]
+        PrometheusExecutionMetrics::register(tari_metrics_registry),
+    );
 
     let transaction_validator = TariBlockTransactionValidator::new(
         create_node_transaction_validator(config.network, template_provider.clone(), &consensus_constants).boxed(),
@@ -449,6 +457,7 @@ pub async fn spawn_services(
         transaction_validator,
         tx_hotstuff_events,
         consensus_constants.clone(),
+        state_history_length,
     )
     .await;
     handles.push(consensus_join_handle);

@@ -44,6 +44,8 @@ pub enum ManifestError {
     InvalidVariableType(String),
     #[error("Template alias '{alias}' not defined")]
     TemplateAliasNotDefined { alias: String },
+    #[error("Template alias '{alias}' is already defined for a different template")]
+    TemplateAliasRedefined { alias: String },
     #[error("Invalid instruction: {reason}")]
     InvalidInstruction { reason: String },
     #[error("Maximum call depth of {max} exceeded")]

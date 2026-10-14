@@ -38,10 +38,9 @@ use tari_ootle_storage::{
         VerifiedBlockTip,
     },
 };
-use tari_ootle_transaction::TransactionId;
 use tari_rpc_framework::RpcRequestOptions;
 use tari_shutdown::ShutdownSignal;
-use tari_template_lib_types::{Amount, TemplateAddress, TransactionReceiptAddress};
+use tari_template_lib_types::{Amount, TemplateAddress, TransactionReceiptAddress, UtxoAddress};
 use tokio::{
     sync::{broadcast, watch},
     time,
@@ -58,6 +57,7 @@ use crate::{
 };
 use crate::{
     network_state_sync::{
+        EventFilter,
         committee_client::{ValidatorCommitteeRpcPool, ValidatorRpcSession},
         config::NetworkWideStateSyncConfig,
         consensus_epoch::ConsensusEpoch,
@@ -84,9 +84,11 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::indexer::network_state_sync::worker";
-/// How often a shard group whose committee has not yet been seen committing in the epoch manager's
-/// epoch is probed again.
-const CONSENSUS_EPOCH_PROBE_INTERVAL: Duration = Duration::from_secs(10);
+/// How often every shard group's committed tip is probed and recorded.
+///
+/// The latest recorded tip is what a verified read's anchor must be recent against, so this bounds
+/// how far that reference trails the chain when no read refreshes it.
+const COMMITTED_TIP_PROBE_INTERVAL: Duration = Duration::from_secs(10);
 /// The most a peer may stream, in encoded bytes, for one state version before completing it. A
 /// version is buffered whole and committed at once, so this bounds the memory a peer can hold to a
 /// constant multiple of it: the buffered updates are held decoded, alongside what is derived from
@@ -530,34 +532,39 @@ impl NetworkWideStateSync {
         // The groups wind down on `cancel`; the probe loop is dropped once they have.
         tokio::select! {
             result = followed => result,
-            never = self.track_consensus_epoch(sync_plan, epoch.clone()) => match never {},
+            never = self.track_committed_tips(sync_plan) => match never {},
         }
     }
 
-    /// Probes each shard group whose committee has not been seen committing in the epoch manager's
-    /// epoch, every [`CONSENSUS_EPOCH_PROBE_INTERVAL`], so that [`ConsensusEpoch`] follows a committee
-    /// into a new epoch soon after its end-of-epoch block. A followed stream only probes when it
-    /// reopens, which on a quiet network is up to a stream deadline away.
-    async fn track_consensus_epoch(&self, sync_plan: &SyncPlan, epoch: watch::Receiver<Epoch>) -> Infallible {
+    /// Probes every shard group's committed tip each [`COMMITTED_TIP_PROBE_INTERVAL`], records it in
+    /// the verified-root store, and observes its epoch.
+    ///
+    /// A followed stream only probes when it reopens, which on a quiet network is up to a stream
+    /// deadline away and on a busy one may be never. Probing here keeps [`ConsensusEpoch`] following a
+    /// committee into a new epoch soon after its end-of-epoch block, and keeps the latest recorded
+    /// tip, which a verified read's anchor must be recent against, near the chain's.
+    async fn track_committed_tips(&self, sync_plan: &SyncPlan) -> Infallible {
         let mut pools = sync_plan.committee_pools().clone();
-        let mut interval = time::interval(CONSENSUS_EPOCH_PROBE_INTERVAL);
+        let mut interval = time::interval(COMMITTED_TIP_PROBE_INTERVAL);
         interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
         loop {
             interval.tick().await;
-            let target = *epoch.borrow();
-            for shard_group in self.consensus_epoch.groups_behind(target) {
-                let Some(pool) = pools.get_mut(&shard_group) else {
-                    continue;
-                };
+            for (shard_group, pool) in &mut pools {
+                let shard_group = *shard_group;
                 let mut session = match pool.new_session().await {
                     Ok(session) => session,
                     Err(e) => {
-                        debug!(target: LOG_TARGET, "No session to probe the consensus epoch of shard group {shard_group}: {e}");
+                        debug!(target: LOG_TARGET, "No session to probe the committed tip of shard group {shard_group}: {e}");
                         continue;
                     },
                 };
                 match self.validator_status.probe(&mut session, shard_group).await {
-                    Ok(Some(tip)) => self.consensus_epoch.observe(tip.shard_group, tip.epoch),
+                    Ok(Some(tip)) => {
+                        self.consensus_epoch.observe(tip.shard_group, tip.epoch);
+                        if let Err(e) = self.persist_verified_tip(tip).await {
+                            warn!(target: LOG_TARGET, "⚠️ Failed to record verified state root for shard group {shard_group}: {e}");
+                        }
+                    },
                     Ok(None) => {},
                     Err(e) => {
                         warn!(target: LOG_TARGET, "⚠️ Validator {} for shard group {} served an INVALID commit proof: {}", session.peer_address(), shard_group, e);
@@ -599,7 +606,7 @@ impl NetworkWideStateSync {
                     .await;
                 continue;
             }
-            let mut session = match pool.new_session().await {
+            let mut session = match pool.new_stream_session().await {
                 Ok(s) => s,
                 Err(e) => {
                     warn!(target: LOG_TARGET, "⚠️ Failed to create session for shard group {}: {}", shard_group, e);
@@ -854,14 +861,7 @@ impl NetworkWideStateSync {
         // Buffers accumulate a single (shard, state version) at a time: the responder splits an
         // oversized version into chunks flagged `has_more`, and the last chunk flushes them.
         let mut num_updates = 0usize;
-        let mut invalidations_buf = Vec::new();
-        let mut utxos_buf = Vec::new();
-        let mut transactions_buf = Vec::new();
-        let mut validator_fee_pools_buf = Vec::new();
-        let mut template_catalogue_buf: Vec<(TemplateAddress, PublishedTemplateMetadata)> = Vec::new();
-        let mut xtr_claimed = Amount::zero();
-        let mut xtr_fees = Amount::zero();
-        let mut xtr_receipt_burn = Amount::zero();
+        let mut version_buf = VersionBuf::default();
 
         loop {
             let result = tokio::select! {
@@ -964,21 +964,7 @@ impl NetworkWideStateSync {
                         details: format!("Failed to convert substate update: {}", e),
                     })?;
 
-                extend_bufs_from_substate_update(
-                    &self.notify,
-                    shard,
-                    state_version,
-                    update,
-                    value_filters,
-                    &mut invalidations_buf,
-                    &mut utxos_buf,
-                    &mut transactions_buf,
-                    &mut validator_fee_pools_buf,
-                    &mut template_catalogue_buf,
-                    &mut xtr_claimed,
-                    &mut xtr_fees,
-                    &mut xtr_receipt_burn,
-                )?;
+                version_buf.extend_from_substate_update(shard, state_version, update, value_filters);
             }
             if batch.has_more {
                 debug!(target: LOG_TARGET, "🌍️ more updates for shard {shard} (epoch: {msg_epoch}, state version: {state_version})");
@@ -988,17 +974,9 @@ impl NetworkWideStateSync {
             debug!(target: LOG_TARGET, "🌍️ Received {num_updates} updates for shard {shard} (epoch: {msg_epoch}, state version: {state_version})");
 
             self.stats.increase_state_updates(std::mem::take(&mut num_updates));
-            let invalidations = std::mem::take(&mut invalidations_buf);
-            let utxos = std::mem::take(&mut utxos_buf);
-            let transactions = std::mem::take(&mut transactions_buf);
-            let validator_fee_pools = std::mem::take(&mut validator_fee_pools_buf);
-            let template_catalogue = std::mem::take(&mut template_catalogue_buf);
-
-            let utxos_len = utxos.len();
-            let transactions_len = transactions.len();
-            let template_catalogue_len = template_catalogue.len();
-            let event_count: usize = transactions.iter().map(|(_, t)| t.events.len()).sum();
-            self.stats.increase_events(event_count);
+            // The stream flushes (has_more == false) once per state version, so each commit must fold
+            // only that version's delta.
+            let version = std::mem::take(&mut version_buf);
 
             let mut progress = progress.lock().await;
             progress.record_state_version(shard, state_version, msg_epoch);
@@ -1006,57 +984,44 @@ impl NetworkWideStateSync {
 
             let event_filters = self.config.event_filters.clone();
             let watched_templates = self.config.watched_templates.clone();
-            let xtr_claimed_snapshot = xtr_claimed;
-            let xtr_fees_snapshot = xtr_fees;
-            let xtr_receipt_burn_snapshot = xtr_receipt_burn;
 
-            let (inserted_events, retired_cache_entries) = self
+            let committed = self
                 .store
                 .clone()
-                .with_write_tx(move |tx| -> Result<(Vec<InsertedEvent>, usize), StorageError> {
-                    // Must commit with the watermark below: the substate cache serves an entry on the
-                    // argument that it holds every transition up to that watermark, which a reader
-                    // seeing one of the two without the other would break.
-                    let retired_cache_entries = tx.substate_cache_invalidate(invalidations, state_version)?;
-                    debug!(target: LOG_TARGET, "✅ Committing {} UTXOs for shard {shard} (epoch: {msg_epoch})", utxos_len);
-                    tx.batch_insert_utxo_updates(msg_epoch, utxos)?;
-                    for substate_data in validator_fee_pools {
-                        tx.upsert_substate(&substate_data)?;
-                    }
-                    debug!(target: LOG_TARGET, "✅ Committing {} transactions for shard {shard} (epoch: {msg_epoch})", transactions_len);
-                    let inserted = tx.batch_insert_transaction_receipts(transactions, &event_filters)?;
-                    if !watched_templates.is_empty() {
-                        process_watched_substate_events(tx, &inserted, &watched_templates)?;
-                    }
-
-                    if !template_catalogue.is_empty() {
-                        debug!(target: LOG_TARGET, "✅ Upserting {} template catalogue entries for shard {shard} (epoch: {msg_epoch})", template_catalogue_len);
-                        for (template_addr, metadata) in template_catalogue {
-                            tx.upsert_template_catalogue(&template_addr, &metadata)?;
-                        }
-                    }
-
-                    tx.key_value_set(Key::SyncProgress, sync_progress_snapshot)?;
-                    add_to_total(tx, Key::TariAccumulatedClaimed, xtr_claimed_snapshot)?;
-                    add_to_total(tx, Key::TariAccumulatedFees, xtr_fees_snapshot)?;
-                    add_to_total(tx, Key::TariAccumulatedReceiptExhaustBurn, xtr_receipt_burn_snapshot)?;
-                    Ok((inserted, retired_cache_entries))
+                .with_write_tx(move |tx| {
+                    version.commit(
+                        tx,
+                        shard,
+                        state_version,
+                        msg_epoch,
+                        sync_progress_snapshot,
+                        &event_filters,
+                        &watched_templates,
+                    )
                 })
                 .await?;
             drop(progress);
-            if retired_cache_entries > 0 {
-                debug!(target: LOG_TARGET, "Retired {retired_cache_entries} cached substates for shard {shard} at state version {state_version}");
+            self.stats.increase_events(committed.num_receipt_events);
+            if committed.retired_cache_entries > 0 {
+                debug!(target: LOG_TARGET, "Retired {} cached substates for shard {shard} at state version {state_version}", committed.retired_cache_entries);
                 #[cfg(feature = "metrics")]
-                self.substate_cache_metrics.add_invalidations(retired_cache_entries);
+                self.substate_cache_metrics
+                    .add_invalidations(committed.retired_cache_entries);
+            }
+            for address in &committed.skipped_receipts {
+                warn!(target: LOG_TARGET, "⚠️ Peer {} streamed receipt {address} at v{state_version} of shard {shard}, which is already indexed. Kept the indexed receipt", session.peer_address());
+            }
+            for address in &committed.skipped_utxos {
+                warn!(target: LOG_TARGET, "⚠️ Peer {} streamed unspent output {address} at v{state_version} of shard {shard}, whose nonce and tag an indexed unspent output already holds. Kept the indexed output", session.peer_address());
+            }
+            for address in &committed.skipped_templates {
+                warn!(target: LOG_TARGET, "⚠️ Peer {} streamed template {address} at v{state_version} of shard {shard}, which is already catalogued. Kept the catalogued entry", session.peer_address());
             }
 
-            // The stream flushes (has_more == false) once per state version, so each commit must fold only
-            // that version's delta. Reset the running totals here, mirroring the buffer drains above.
-            xtr_claimed = Amount::zero();
-            xtr_fees = Amount::zero();
-            xtr_receipt_burn = Amount::zero();
-
-            for inserted in inserted_events {
+            for finalized in committed.finalized {
+                self.notify.notify(finalized);
+            }
+            for inserted in committed.inserted_events {
                 self.transaction_event_notify.notify(TransactionEvent {
                     id: inserted.id,
                     transaction_id: inserted.transaction_id,
@@ -1359,131 +1324,215 @@ fn process_watched_substate_events(
     Ok(())
 }
 
-/// Sorts one streamed transition into the buffers a commit is assembled from.
-///
-/// A transition that retires anything cached reaches `invalidations_buf`, which for a substate's
-/// first creation is the record that it did not exist. Only those whose substate `value_filters` selects carry a
-/// value; the rest arrive as an id and a version under `ALL_HASHES` and must reach nothing else -
-/// indexing one, counting it in the economic totals or emitting an event for it would all be reading
-/// a value that was never sent.
-fn extend_bufs_from_substate_update(
-    notify: &Notify<IndexerEvent>,
-    shard: Shard,
-    state_version: StateVersion,
-    update: SubstateUpdateProof,
-    value_filters: SubstateValueFilterFlags,
-    invalidations_buf: &mut Vec<SubstateCacheInvalidation>,
-    utxos_buf: &mut Vec<UtxoUpdateRecord>,
-    transactions_buf: &mut Vec<(TransactionReceiptAddress, TransactionReceipt)>,
-    validator_fee_pools_buf: &mut Vec<SubstateData>,
-    template_catalogue_buf: &mut Vec<(TemplateAddress, PublishedTemplateMetadata)>,
-    xtr_claimed_mut: &mut Amount,
-    xtr_fees_mut: &mut Amount,
-    xtr_receipt_burn_mut: &mut Amount,
-) -> Result<(), NetworkStateSyncError> {
-    invalidations_buf.extend(match &update {
-        SubstateUpdateProof::Create(create) => {
-            SubstateCacheInvalidation::created(create.substate.substate_id(), create.substate.version)
-        },
-        SubstateUpdateProof::Destroy(destroy) => Some(SubstateCacheInvalidation::destroyed(
-            destroy.substate_id.clone(),
-            destroy.version,
-        )),
-    });
+/// One streamed state version, buffered whole until the chunk that completes it and then committed
+/// in a single write transaction.
+#[derive(Default)]
+struct VersionBuf {
+    invalidations: Vec<SubstateCacheInvalidation>,
+    utxos: Vec<UtxoUpdateRecord>,
+    transactions: Vec<(TransactionReceiptAddress, TransactionReceipt)>,
+    validator_fee_pools: Vec<SubstateData>,
+    template_catalogue: Vec<(TemplateAddress, PublishedTemplateMetadata)>,
+    xtr_claimed: Amount,
+}
 
-    if !value_filters.contains_substate(update.substate_id()) {
-        return Ok(());
-    }
+/// What committing a [`VersionBuf`] wrote, for the caller to announce once the write transaction
+/// has committed.
+struct CommittedVersion {
+    retired_cache_entries: usize,
+    /// Events carried by the inserted receipts, before the event filters.
+    num_receipt_events: usize,
+    /// One per receipt the commit inserted.
+    finalized: Vec<TransactionFinalizedEvent>,
+    inserted_events: Vec<InsertedEvent>,
+    /// Receipts left out because their address already held one.
+    skipped_receipts: Vec<TransactionReceiptAddress>,
+    /// Unspent outputs left out because an unspent output with their nonce and tag is indexed.
+    skipped_utxos: Vec<UtxoAddress>,
+    /// Templates left out because the catalogue already held them.
+    skipped_templates: Vec<TemplateAddress>,
+}
 
-    match &update {
-        SubstateUpdateProof::Create(create) => {
-            if create.substate.substate_id().is_template() {
-                if let Some(metadata) = &create.substate.template_metadata &&
-                    let Some(template_addr) = create.substate.substate_id().as_template()
-                {
-                    template_catalogue_buf.push((template_addr.as_template_address(), metadata.clone()));
+impl VersionBuf {
+    /// Writes the version, with `sync_progress` recording it, and folds what it inserted into the
+    /// running totals.
+    ///
+    /// The receipt-sourced totals are taken from the receipts actually inserted, so a receipt whose
+    /// address is already indexed is neither counted again nor announced.
+    #[expect(clippy::too_many_arguments)]
+    fn commit(
+        self,
+        tx: &mut SqliteStoreWriteTransaction<'_>,
+        shard: Shard,
+        state_version: StateVersion,
+        epoch: Epoch,
+        sync_progress: SyncProgress,
+        event_filters: &[EventFilter],
+        watched_templates: &HashSet<TemplateAddress>,
+    ) -> Result<CommittedVersion, StorageError> {
+        // Must commit with the watermark below: the substate cache serves an entry on the argument
+        // that it holds every transition up to that watermark, which a reader seeing one of the two
+        // without the other would break.
+        let retired_cache_entries = tx.substate_cache_invalidate(self.invalidations, state_version)?;
+        debug!(target: LOG_TARGET, "✅ Committing {} UTXOs for shard {shard} (epoch: {epoch})", self.utxos.len());
+        let skipped_utxos = tx.batch_insert_utxo_updates(epoch, self.utxos)?;
+        for substate_data in self.validator_fee_pools {
+            tx.upsert_substate(&substate_data)?;
+        }
+        debug!(target: LOG_TARGET, "✅ Committing {} transactions for shard {shard} (epoch: {epoch})", self.transactions.len());
+        let inserted = tx.batch_insert_transaction_receipts(self.transactions, event_filters)?;
+        if !watched_templates.is_empty() {
+            process_watched_substate_events(tx, &inserted.events, watched_templates)?;
+        }
+
+        let mut skipped_templates = Vec::new();
+        if !self.template_catalogue.is_empty() {
+            debug!(target: LOG_TARGET, "✅ Inserting {} template catalogue entries for shard {shard} (epoch: {epoch})", self.template_catalogue.len());
+            for (template_addr, metadata) in self.template_catalogue {
+                if !tx.insert_or_ignore_template_catalogue(&template_addr, &metadata)? {
+                    skipped_templates.push(template_addr);
                 }
-                return Ok(());
             }
-            match create.substate.value().value() {
-                Some(SubstateValue::Utxo(utxo)) => {
-                    if let Some(address) = create.substate.substate_id().as_utxo_address() {
-                        let is_frozen = utxo.is_frozen();
-                        if let Some(ref output) = utxo.output {
-                            utxos_buf.push(UtxoUpdateRecord::Unspent(Box::new(UtxoUnspent {
-                                address,
-                                version: update.version(),
-                                shard,
-                                state_version,
-                                utxo_output: output.clone(),
-                                is_frozen,
-                            })));
-                        }
-                    } else {
-                        warn!(target: LOG_TARGET, "⚠️ NEVER HAPPEN: Received UTXO substate with invalid address: {}", create.substate.substate_id());
-                    };
-                },
-                Some(SubstateValue::TransactionReceipt(receipt)) => {
-                    if let Some(address) = update.substate_id().as_transaction_receipt_address() {
-                        // Accumulate the realized-share pair from the same receipt: what the payer spent
-                        // and the burn taken out of it, so `burn / paid` recovers the share independent
-                        // of the header-sourced burn total.
-                        let fee_receipt = receipt.fee_receipt();
-                        *xtr_receipt_burn_mut += Amount::from(fee_receipt.exhaust_burn());
-                        *xtr_fees_mut += Amount::from(fee_receipt.total_fees_paid());
+        }
 
-                        notify.notify(TransactionFinalizedEvent {
-                            transaction_id: TransactionId::from_receipt_address(address),
-                            outcome: receipt.outcome,
-                        });
-                        transactions_buf.push((address, receipt.clone()));
-                    } else {
-                        warn!(target: LOG_TARGET, "⚠️ NEVER HAPPEN: Received Transaction Receipt substate with invalid address: {}", create.substate.substate_id());
-                    }
-                },
-                Some(SubstateValue::ValidatorFeePool(_)) => {
-                    validator_fee_pools_buf.push(SubstateData {
-                        substate_id: create.substate.substate_id().clone(),
-                        version: create.substate.version,
-                        value: create.substate.value().clone(),
-                        template_metadata: None,
-                    });
-                },
-                Some(SubstateValue::ClaimedOutputTombstone(claim)) => {
-                    *xtr_claimed_mut += Amount::from(claim.value);
-                },
-                Some(_) => {
-                    warn!(target: LOG_TARGET, "⚠️ NEVER HAPPEN: Received unexpected substate value for created substate: {}", create.substate.substate_id());
-                },
-                None => {
-                    let id = create.substate.substate_id();
-                    if id.is_transaction_receipt() {
-                        warn!(target: LOG_TARGET, "⚠️ Received tx receipt {id} update with no value, it may have been pruned and so will not be indexed");
-                    }
-                    if let Some(addr) = id.as_utxo_address() {
-                        debug!(target: LOG_TARGET, "🌍️ Received UTXO substate {addr} creation with no value. Ignoring as this means it is spent later.");
-                    }
-                },
-            }
-        },
-        SubstateUpdateProof::Destroy(destroy) => match &destroy.substate_id {
-            SubstateId::Utxo(address) => {
-                utxos_buf.push(UtxoUpdateRecord::Spent(UtxoSpent {
-                    address: address.clone(),
-                    shard,
-                    version: update.version(),
-                    state_version,
-                }));
-            },
+        // Each receipt's realized-share pair: what the payer spent and the burn taken out of it, so
+        // `burn / paid` recovers the share independent of the header-sourced burn total.
+        let mut xtr_fees = Amount::zero();
+        let mut xtr_receipt_burn = Amount::zero();
+        for receipt in &inserted.receipts {
+            xtr_fees += Amount::from(receipt.fee_receipt.total_fees_paid());
+            xtr_receipt_burn += Amount::from(receipt.fee_receipt.exhaust_burn());
+        }
 
-            other if other.is_read_only() => {
-                warn!(target: LOG_TARGET, "⚠️ NEVER HAPPEN: Received destroy for read only substate: {}", destroy.substate_id);
-            },
-            _ => {},
-        },
+        tx.key_value_set(Key::SyncProgress, sync_progress)?;
+        add_to_total(tx, Key::TariAccumulatedClaimed, self.xtr_claimed)?;
+        add_to_total(tx, Key::TariAccumulatedFees, xtr_fees)?;
+        add_to_total(tx, Key::TariAccumulatedReceiptExhaustBurn, xtr_receipt_burn)?;
+
+        Ok(CommittedVersion {
+            retired_cache_entries,
+            num_receipt_events: inserted.receipts.iter().map(|receipt| receipt.num_events).sum(),
+            finalized: inserted
+                .receipts
+                .into_iter()
+                .map(|receipt| TransactionFinalizedEvent {
+                    transaction_id: receipt.transaction_id,
+                    outcome: receipt.outcome,
+                })
+                .collect(),
+            inserted_events: inserted.events,
+            skipped_receipts: inserted.skipped,
+            skipped_utxos,
+            skipped_templates,
+        })
     }
 
-    Ok(())
+    /// Sorts one streamed transition into the buffers the commit is assembled from.
+    ///
+    /// A transition that retires anything cached reaches `invalidations`, which for a substate's first
+    /// creation is the record that it did not exist. Only those whose substate `value_filters` selects
+    /// carry a value; the rest arrive as an id and a version under `ALL_HASHES` and must reach nothing
+    /// else - indexing one, counting it in the economic totals or emitting an event for it would all be
+    /// reading a value that was never sent.
+    fn extend_from_substate_update(
+        &mut self,
+        shard: Shard,
+        state_version: StateVersion,
+        update: SubstateUpdateProof,
+        value_filters: SubstateValueFilterFlags,
+    ) {
+        self.invalidations.extend(match &update {
+            SubstateUpdateProof::Create(create) => {
+                SubstateCacheInvalidation::created(create.substate.substate_id(), create.substate.version)
+            },
+            SubstateUpdateProof::Destroy(destroy) => Some(SubstateCacheInvalidation::destroyed(
+                destroy.substate_id.clone(),
+                destroy.version,
+            )),
+        });
+
+        if !value_filters.contains_substate(update.substate_id()) {
+            return;
+        }
+
+        match &update {
+            SubstateUpdateProof::Create(create) => {
+                if create.substate.substate_id().is_template() {
+                    if let Some(metadata) = &create.substate.template_metadata &&
+                        let Some(template_addr) = create.substate.substate_id().as_template()
+                    {
+                        self.template_catalogue
+                            .push((template_addr.as_template_address(), metadata.clone()));
+                    }
+                    return;
+                }
+                match create.substate.value().value() {
+                    Some(SubstateValue::Utxo(utxo)) => {
+                        if let Some(address) = create.substate.substate_id().as_utxo_address() {
+                            let is_frozen = utxo.is_frozen();
+                            if let Some(ref output) = utxo.output {
+                                self.utxos.push(UtxoUpdateRecord::Unspent(Box::new(UtxoUnspent {
+                                    address,
+                                    version: update.version(),
+                                    shard,
+                                    state_version,
+                                    utxo_output: output.clone(),
+                                    is_frozen,
+                                })));
+                            }
+                        } else {
+                            warn!(target: LOG_TARGET, "⚠️ NEVER HAPPEN: Received UTXO substate with invalid address: {}", create.substate.substate_id());
+                        };
+                    },
+                    Some(SubstateValue::TransactionReceipt(receipt)) => {
+                        if let Some(address) = update.substate_id().as_transaction_receipt_address() {
+                            self.transactions.push((address, receipt.clone()));
+                        } else {
+                            warn!(target: LOG_TARGET, "⚠️ NEVER HAPPEN: Received Transaction Receipt substate with invalid address: {}", create.substate.substate_id());
+                        }
+                    },
+                    Some(SubstateValue::ValidatorFeePool(_)) => {
+                        self.validator_fee_pools.push(SubstateData {
+                            substate_id: create.substate.substate_id().clone(),
+                            version: create.substate.version,
+                            value: create.substate.value().clone(),
+                            template_metadata: None,
+                        });
+                    },
+                    Some(SubstateValue::ClaimedOutputTombstone(claim)) => {
+                        self.xtr_claimed += Amount::from(claim.value);
+                    },
+                    Some(_) => {
+                        warn!(target: LOG_TARGET, "⚠️ NEVER HAPPEN: Received unexpected substate value for created substate: {}", create.substate.substate_id());
+                    },
+                    None => {
+                        let id = create.substate.substate_id();
+                        if id.is_transaction_receipt() {
+                            warn!(target: LOG_TARGET, "⚠️ Received tx receipt {id} update with no value, it may have been pruned and so will not be indexed");
+                        }
+                        if let Some(addr) = id.as_utxo_address() {
+                            debug!(target: LOG_TARGET, "🌍️ Received UTXO substate {addr} creation with no value. Ignoring as this means it is spent later.");
+                        }
+                    },
+                }
+            },
+            SubstateUpdateProof::Destroy(destroy) => match &destroy.substate_id {
+                SubstateId::Utxo(address) => {
+                    self.utxos.push(UtxoUpdateRecord::Spent(UtxoSpent {
+                        address: address.clone(),
+                        shard,
+                        version: update.version(),
+                        state_version,
+                    }));
+                },
+
+                other if other.is_read_only() => {
+                    warn!(target: LOG_TARGET, "⚠️ NEVER HAPPEN: Received destroy for read only substate: {}", destroy.substate_id);
+                },
+                _ => {},
+            },
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1536,6 +1585,131 @@ mod tests {
                 .unwrap();
 
             assert_eq!(total(&store, Key::TariAccumulatedFees).await, Amount::from(42u64));
+        }
+    }
+
+    mod version_commit {
+        use tari_engine_types::{fees::FeeReceiptBuilder, transaction_receipt::FinalizeOutcome};
+        use tari_ootle_transaction::TransactionId;
+        use tari_template_lib_types::{Hash32, crypto::RistrettoPublicKeyBytes};
+
+        use super::*;
+        use crate::store::IndexerStore;
+
+        const SHARD: Shard = Shard::from_u32(1);
+
+        fn receipt_address(n: u8) -> TransactionReceiptAddress {
+            TransactionId::new([n; 32]).into_receipt_address()
+        }
+
+        fn receipt(outcome: FinalizeOutcome, total_fees_paid: u64) -> TransactionReceipt {
+            TransactionReceipt {
+                outcome,
+                diff_summary: Default::default(),
+                fee_withdrawals: [].into(),
+                events: [].into(),
+                fee_receipt: FeeReceiptBuilder::default()
+                    .with_total_fees_paid(total_fees_paid)
+                    .build(),
+                epoch: Epoch(1),
+                intent_commitment: Default::default(),
+            }
+        }
+
+        fn template_metadata(name: &str) -> PublishedTemplateMetadata {
+            PublishedTemplateMetadata {
+                template_name: name.to_string(),
+                author_public_key: RistrettoPublicKeyBytes::default(),
+                binary_hash: Hash32::default(),
+                at_epoch: 1,
+                metadata_hash: None,
+            }
+        }
+
+        async fn commit(store: &SqliteIndexerStore, version: u64, buf: VersionBuf) -> CommittedVersion {
+            store
+                .with_write_tx(move |tx| {
+                    buf.commit(
+                        tx,
+                        SHARD,
+                        StateVersion::new(version),
+                        Epoch(1),
+                        SyncProgress::default(),
+                        &[],
+                        &HashSet::new(),
+                    )
+                })
+                .await
+                .unwrap()
+        }
+
+        async fn total_fees(store: &SqliteIndexerStore) -> Amount {
+            store
+                .with_read_tx(|tx| tx.key_value_get_value::<_, Amount>(Key::TariAccumulatedFees))
+                .await
+                .unwrap()
+        }
+
+        /// A receipt address is written once on the network, so a conflict at one means some sync peer
+        /// was faulty. The incoming receipt is kept out of the totals and the finalize events, and does
+        /// not fail the commit: every peer would resend it from the same cursor, stalling the shard for
+        /// good.
+        #[tokio::test]
+        async fn a_receipt_already_indexed_is_neither_counted_nor_announced_again() {
+            let dir = tempfile::tempdir().unwrap();
+            let store = SqliteIndexerStore::try_create(dir.path().join("indexer.db")).unwrap();
+
+            let committed = commit(&store, 1, VersionBuf {
+                transactions: vec![(receipt_address(1), receipt(FinalizeOutcome::FeeIntentCommit, 100))],
+                ..Default::default()
+            })
+            .await;
+            assert_eq!(committed.finalized.len(), 1);
+            assert_eq!(total_fees(&store).await, Amount::from(100u64));
+
+            let committed = commit(&store, 2, VersionBuf {
+                transactions: vec![
+                    (receipt_address(1), receipt(FinalizeOutcome::Commit, 999)),
+                    (receipt_address(2), receipt(FinalizeOutcome::Commit, 5)),
+                ],
+                ..Default::default()
+            })
+            .await;
+
+            let finalized = committed.finalized.iter().map(|f| f.transaction_id).collect::<Vec<_>>();
+            assert_eq!(finalized, [TransactionId::new([2; 32])]);
+            assert_eq!(committed.skipped_receipts, [receipt_address(1)]);
+            assert_eq!(total_fees(&store).await, Amount::from(105u64));
+            let stored = store
+                .with_read_tx(|tx| tx.get_transaction_receipt(&receipt_address(1)))
+                .await
+                .unwrap();
+            assert!(stored.outcome.is_fee_intent_commit());
+        }
+
+        #[tokio::test]
+        async fn a_catalogued_template_is_not_rewritten() {
+            let dir = tempfile::tempdir().unwrap();
+            let store = SqliteIndexerStore::try_create(dir.path().join("indexer.db")).unwrap();
+            let address = TemplateAddress::from_array([7; 32]);
+
+            commit(&store, 1, VersionBuf {
+                template_catalogue: vec![(address, template_metadata("original"))],
+                ..Default::default()
+            })
+            .await;
+            let committed = commit(&store, 2, VersionBuf {
+                template_catalogue: vec![(address, template_metadata("rewritten"))],
+                ..Default::default()
+            })
+            .await;
+
+            assert_eq!(committed.skipped_templates, [address]);
+            let entry = store
+                .with_read_tx(move |tx| tx.get_template_catalogue_entry(&address))
+                .await
+                .unwrap();
+            assert_eq!(entry.template_name, "original");
         }
     }
 

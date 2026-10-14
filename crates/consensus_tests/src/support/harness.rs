@@ -69,7 +69,7 @@ use crate::{
         address::TestAddress,
         epoch_manager::TestEpochManager,
         executions_store::ExecuteSpec,
-        helpers::make_test_component,
+        helpers::make_test_component_with_state_size,
         network::{TestNetwork, TestVnDestination, spawn_network},
         table::Table,
         validator::Validator,
@@ -166,6 +166,16 @@ impl Test {
     }
 
     pub fn create_substates_on_vns(&self, dest: TestVnDestination, num: usize) -> Vec<VersionedSubstateId> {
+        self.create_substates_on_vns_with_state_size(dest, num, 0)
+    }
+
+    /// Creates components whose state is a byte string of `state_size` bytes.
+    pub fn create_substates_on_vns_with_state_size(
+        &self,
+        dest: TestVnDestination,
+        num: usize,
+        state_size: usize,
+    ) -> Vec<VersionedSubstateId> {
         assert!(
             num <= u8::MAX as usize,
             "Creating more than 255 substates is not supported"
@@ -192,7 +202,10 @@ impl Test {
         let substates = substate_ids
             .iter()
             .map(|id| {
-                let value = make_test_component(id.substate_id().as_component_address().unwrap().entity_id());
+                let value = make_test_component_with_state_size(
+                    id.substate_id().as_component_address().unwrap().entity_id(),
+                    state_size,
+                );
                 let shard = id.to_shard(TEST_NUM_PRESHARDS);
                 SubstateRecord::new(
                     Network::LocalNet,
@@ -720,8 +733,13 @@ impl TestBuilder {
                     max_block_shard_output_bytes: tari_ootle_common_types::MAX_BLOCK_SHARD_OUTPUT_BYTES,
                     max_block_validation_shard_output_bytes:
                         tari_ootle_common_types::MAX_BLOCK_VALIDATION_SHARD_OUTPUT_BYTES,
+                    max_block_pledge_bytes: ConsensusConstants::DEVNET.max_block_pledge_bytes,
+                    max_block_foreign_proposal_bytes: ConsensusConstants::DEVNET.max_block_foreign_proposal_bytes,
+                    max_block_validation_foreign_proposal_bytes: ConsensusConstants::DEVNET
+                        .max_block_validation_foreign_proposal_bytes,
                     exhaust_burn_rate: ExhaustBurnRate::new(500),
                 },
+                state_history_length: tari_state_store_rocksdb::DatabaseOptions::default().state_history_length,
                 state_tree_cleanup_interval: Duration::from_secs(1000),
                 epoch_gc_interval: Duration::from_secs(1000),
                 epoch_end_grace_period: Duration::from_secs(1),

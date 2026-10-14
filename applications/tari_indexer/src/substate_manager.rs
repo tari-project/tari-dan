@@ -35,7 +35,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateId, SubstateValue},
 };
 use tari_epoch_manager::service::EpochManagerHandle;
-use tari_indexer_client::types::{ListSubstateItem, NonFungibleSubstate, UtxoStateUpdateSet};
+use tari_indexer_client::types::UtxoStateUpdateSet;
 use tari_indexer_lib::{
     cached_substate_manager::{
         CachedSubstateManager,
@@ -48,19 +48,19 @@ use tari_indexer_lib::{
 };
 use tari_ootle_common_types::{
     Epoch,
+    NodeHeight,
+    NumPreshards,
     ShardGroup,
     StateVersion,
     SubstateRequirementRef,
     SubstateVersion,
     optional::IsNotFoundError,
     shard::Shard,
-    substate_type::SubstateType,
 };
 use tari_ootle_p2p::PeerAddress;
 use tari_ootle_storage::{StorageError, consensus_models::VerifiedBlockTip};
 use tari_template_lib_types::{
     ResourceAddress,
-    TemplateAddress,
     UtxoId,
     crypto::{RistrettoPublicKeyBytes, UtxoTag},
 };
@@ -105,9 +105,21 @@ impl std::fmt::Debug for SqliteTrustedRootStore {
 
 #[async_trait]
 impl TrustedRootStore for SqliteTrustedRootStore {
-    async fn is_trusted(&self, epoch: Epoch, shard_group: ShardGroup, root: FixedHash) -> Result<bool, IndexerError> {
+    async fn trusted_root_height(
+        &self,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+        root: FixedHash,
+    ) -> Result<Option<NodeHeight>, IndexerError> {
         self.store
-            .with_read_tx(move |tx| tx.is_state_root_trusted(epoch, shard_group, &root))
+            .with_read_tx(move |tx| tx.get_verified_state_root_height(epoch, shard_group, &root))
+            .await
+            .map_err(|e: StorageError| IndexerError::TrustedRootStoreError(e.to_string()))
+    }
+
+    async fn latest_height(&self, epoch: Epoch, shard_group: ShardGroup) -> Result<Option<NodeHeight>, IndexerError> {
+        self.store
+            .with_read_tx(move |tx| tx.get_latest_verified_height_overlapping(epoch, shard_group))
             .await
             .map_err(|e: StorageError| IndexerError::TrustedRootStoreError(e.to_string()))
     }
@@ -131,6 +143,7 @@ pub struct SubstateManager {
 impl SubstateManager {
     pub fn new(
         network: Network,
+        num_preshards: NumPreshards,
         substate_store: SqliteIndexerStore,
         epoch_manager: EpochManagerHandle<PeerAddress>,
         validator_node_client_factory: TariValidatorNodeRpcClientFactory,
@@ -144,6 +157,7 @@ impl SubstateManager {
         });
         let cached_substates = CachedSubstateManager::new(
             network,
+            num_preshards,
             epoch_manager.clone(),
             validator_node_client_factory.clone(),
             substate_cache,
@@ -171,6 +185,12 @@ impl SubstateManager {
         self
     }
 
+    /// See [`CachedSubstateManager::with_cache_writes`].
+    pub fn with_cache_writes(mut self, enabled: bool) -> Self {
+        self.cache_manager = self.cache_manager.with_cache_writes(enabled);
+        self
+    }
+
     /// Whether substates served by this manager are verified against the shard group committee.
     pub fn verifies_substates(&self) -> bool {
         self.cache_manager.verifies_substates()
@@ -183,24 +203,6 @@ impl SubstateManager {
             cache_manager: cached_substates,
             substate_store: self.substate_store,
         }
-    }
-
-    pub async fn get_stored_substates_by_filters(
-        &self,
-        by_id: Option<&SubstateId>,
-        filter_by_type: Option<SubstateType>,
-        filter_by_template: Option<TemplateAddress>,
-        limit: Option<u64>,
-        offset: Option<u64>,
-    ) -> Result<Vec<ListSubstateItem>, SubstateManagerError> {
-        let by_id = by_id.cloned();
-        let substates = self
-            .substate_store
-            .with_read_tx(move |tx| {
-                tx.list_substates(by_id.as_ref(), filter_by_type, filter_by_template, limit, offset)
-            })
-            .await?;
-        Ok(substates)
     }
 
     pub async fn get_utxo_updates(
@@ -453,19 +455,6 @@ impl SubstateManager {
             Some(row) => Ok(Some(row.try_into()?)),
             None => Ok(None),
         }
-    }
-
-    pub async fn get_non_fungibles_by_resource_address(
-        &self,
-        address: ResourceAddress,
-        limit: usize,
-        offset: usize,
-    ) -> Result<Vec<NonFungibleSubstate>, SubstateManagerError> {
-        let nfts = self
-            .substate_store
-            .with_read_tx(move |tx| tx.get_non_fungibles_by_resource_address(address, limit, offset))
-            .await?;
-        Ok(nfts)
     }
 }
 

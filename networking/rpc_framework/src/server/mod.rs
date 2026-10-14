@@ -44,7 +44,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt, stream::FuturesUnordered};
 use libp2p::{PeerId, StreamProtocol};
 use libp2p_substream::{ProtocolEvent, ProtocolNotification};
@@ -73,7 +73,7 @@ use crate::{
     message::{RpcMethod, RpcResponse},
     notify::ProtocolNotificationRx,
     proto,
-    server::early_close::EarlyClose,
+    server::early_close::{EarlyClose, EarlyCloseError},
 };
 
 const LOG_TARGET: &str = "libp2p::rpc::server";
@@ -562,6 +562,9 @@ struct ActivePeerRpcService<TSvc, TSubstream> {
     service: TSvc,
     framed: EarlyClose<CanonicalFraming<TSubstream>>,
     logging_context_string: Arc<String>,
+    /// A request the client sent while a response was still streaming to it, which ended that response. It is served
+    /// before anything else is read.
+    next_request: Option<BytesMut>,
 }
 
 impl<TSvc, TSubstream> ActivePeerRpcService<TSvc, TSubstream>
@@ -584,6 +587,7 @@ where
             peer_id: node_id,
             service,
             framed: EarlyClose::new(framed),
+            next_request: None,
         }
     }
 
@@ -612,14 +616,20 @@ where
 
     async fn run(&mut self) -> Result<(), RpcServerError> {
         loop {
-            let Ok(next) = time::timeout(self.config.idle_session_timeout, self.framed.next()).await else {
-                debug!(
-                    target: LOG_TARGET,
-                    "({}) Closing session after {:.0?} without a request",
-                    self.logging_context_string,
-                    self.config.idle_session_timeout
-                );
-                break;
+            let next = match self.next_request.take() {
+                Some(frame) => Some(Ok(frame)),
+                None => {
+                    let Ok(next) = time::timeout(self.config.idle_session_timeout, self.framed.next()).await else {
+                        debug!(
+                            target: LOG_TARGET,
+                            "({}) Closing session after {:.0?} without a request",
+                            self.logging_context_string,
+                            self.config.idle_session_timeout
+                        );
+                        break;
+                    };
+                    next
+                },
             };
             let Some(result) = next else {
                 break;
@@ -858,7 +868,19 @@ where
                 time::timeout(wait, stream.next()),
             );
 
-            let result = next_item.await;
+            // The client sends nothing of its own while a response is outstanding, so whatever it does send means it is
+            // done with this one. Watching for it is what ends a stream that would otherwise run for as long as the
+            // session does.
+            let result = tokio::select! {
+                biased;
+                inbound = self.framed.next() => {
+                    if self.stream_continues_after_inbound(request_id, inbound)? {
+                        continue;
+                    }
+                    break;
+                },
+                result = next_item => result,
+            };
             match result {
                 Ok(Some(msg)) => {
                     #[cfg(feature = "metrics")]
@@ -870,7 +892,9 @@ where
                         msg.len()
                     );
 
-                    self.framed.send(msg).await?;
+                    if !self.send_stream_frame(request_id, msg).await? {
+                        break;
+                    }
                     deadline_at = Instant::now() + deadline;
                 },
                 Ok(None) => {
@@ -885,7 +909,9 @@ where
                     let keepalive = Bytes::from(RpcResponse::keepalive(request_id).to_proto().encode_to_vec());
                     #[cfg(feature = "metrics")]
                     metrics::outbound_response_bytes(&self.peer_id, &self.protocol).observe(keepalive.len() as f64);
-                    self.framed.send(keepalive).await?;
+                    if !self.send_stream_frame(request_id, keepalive).await? {
+                        break;
+                    }
                 },
                 Err(_) => {
                     debug!(
@@ -907,6 +933,73 @@ where
             }
         } // end loop
         Ok(())
+    }
+
+    /// Sends one frame of the response to `request_id`, returning whether the response goes on. A send held up by a
+    /// client that has stopped reading is cut short by the first frame the client sends, which is taken as it would
+    /// be between frames. The response ends there whatever that frame is: the one being sent may never have been
+    /// queued, and the response cannot go on with a gap in it.
+    async fn send_stream_frame(&mut self, request_id: u32, frame: Bytes) -> Result<bool, RpcServerError> {
+        match self.framed.send(frame).await {
+            Ok(()) => Ok(true),
+            Err(EarlyCloseError::UnexpectedMessage(inbound)) => {
+                self.stream_continues_after(request_id, inbound);
+                Ok(false)
+            },
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    /// Takes what the client's side of the session yielded while the response to `request_id` was streaming,
+    /// returning whether the response goes on.
+    fn stream_continues_after_inbound(
+        &mut self,
+        request_id: u32,
+        inbound: Option<io::Result<BytesMut>>,
+    ) -> Result<bool, RpcServerError> {
+        match inbound {
+            Some(Ok(frame)) => Ok(self.stream_continues_after(request_id, frame)),
+            Some(Err(err)) => Err(err.into()),
+            None => {
+                debug!(
+                    target: LOG_TARGET,
+                    "({}) Client closed the session while request #{} was streaming",
+                    self.logging_context_string,
+                    request_id
+                );
+                Ok(false)
+            },
+        }
+    }
+
+    /// Takes a frame the client sent while the response to `request_id` was streaming, returning whether the
+    /// response goes on. A FIN for `request_id` abandons it. A FIN for any other request concerns one already
+    /// answered. Anything else is the client's next request, served once this response has ended.
+    fn stream_continues_after(&mut self, request_id: u32, frame: BytesMut) -> bool {
+        let fin = u32::from(RpcMessageFlags::FIN.bits());
+        match proto::RpcRequest::decode(frame.as_ref()) {
+            Ok(req) if req.flags & fin != 0 => {
+                if req.request_id == request_id {
+                    debug!(
+                        target: LOG_TARGET,
+                        "({}) Client abandoned request #{}", self.logging_context_string, request_id
+                    );
+                    false
+                } else {
+                    true
+                }
+            },
+            _ => {
+                debug!(
+                    target: LOG_TARGET,
+                    "({}) Client sent its next request while request #{} was streaming. Ending the stream",
+                    self.logging_context_string,
+                    request_id
+                );
+                self.next_request = Some(frame);
+                false
+            },
+        }
     }
 }
 

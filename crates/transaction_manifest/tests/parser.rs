@@ -1170,3 +1170,163 @@ fn list_passes_a_tuple() {
     let decoded: (u64, String) = tari_bor::decode(bytes).unwrap();
     assert_eq!(decoded, (123, "hello".to_string()));
 }
+
+fn caller_component() -> ManifestValue {
+    SubstateId::Component(ComponentAddress::new([9u8; ObjectKey::LENGTH].into())).into()
+}
+
+#[test]
+fn manifest_binding_shadows_input_variable_in_every_position() {
+    let manifest = r#"
+        fn main() {
+            let acc = new_component_addr!();
+            acc.withdraw(TARI, acc);
+        }
+    "#;
+    let globals = HashMap::from([("acc".to_string(), caller_component())]);
+
+    let ManifestInstructions { instructions, .. } =
+        parse_manifest(manifest, globals, Default::default(), Default::default()).unwrap();
+
+    let Instruction::CallMethod { call, args, .. } = &instructions[1] else {
+        panic!("expected a method call");
+    };
+    assert_eq!(*call, ComponentReference::Workspace(0));
+    assert_eq!(args[1], InstructionArg::Workspace(WorkspaceOffsetId::new(0)));
+}
+
+#[test]
+fn output_binding_shadows_input_variable() {
+    let manifest = r#"
+        fn main() {
+            let src = var!["src"];
+            let bucket = src.withdraw(TARI, 10);
+            src.deposit(bucket);
+        }
+    "#;
+    let globals = HashMap::from([
+        ("src".to_string(), caller_component()),
+        ("bucket".to_string(), "1".parse().unwrap()),
+    ]);
+
+    let ManifestInstructions { instructions, .. } =
+        parse_manifest(manifest, globals, Default::default(), Default::default()).unwrap();
+
+    let Instruction::CallMethod { args, .. } = &instructions[2] else {
+        panic!("expected a method call");
+    };
+    assert_eq!(*args, vec![InstructionArg::Workspace(WorkspaceOffsetId::new(0))]);
+}
+
+#[test]
+fn later_binding_shadows_earlier_input_alias() {
+    let manifest = r#"
+        fn main() {
+            let acc = var!["acc"];
+            let acc = new_component_addr!();
+            acc.withdraw(TARI, acc);
+        }
+    "#;
+    let globals = HashMap::from([("acc".to_string(), caller_component())]);
+
+    let ManifestInstructions { instructions, .. } =
+        parse_manifest(manifest, globals, Default::default(), Default::default()).unwrap();
+
+    let Instruction::CallMethod { call, args, .. } = &instructions[1] else {
+        panic!("expected a method call");
+    };
+    assert_eq!(*call, ComponentReference::Workspace(0));
+    assert_eq!(args[1], InstructionArg::Workspace(WorkspaceOffsetId::new(0)));
+}
+
+#[test]
+fn list_rejects_workspace_value_shadowing_input_variable() {
+    let manifest = format!(
+        r#"
+        use template_{LIST_TEMPLATE} as MyTemplate;
+
+        fn main() {{
+            let bucket = MyTemplate::make();
+            MyTemplate::create([1u8, bucket]);
+        }}
+    "#
+    );
+    let globals = HashMap::from([("bucket".to_string(), "1".parse().unwrap())]);
+
+    let err = parse_manifest(&manifest, globals, Default::default(), Default::default())
+        .err()
+        .expect("a workspace value cannot be a list element");
+    assert!(err.to_string().contains("bucket"), "{err}");
+}
+
+#[test]
+fn template_alias_cannot_be_redefined() {
+    let manifest = format!(
+        r#"
+        use template_{LIST_TEMPLATE} as Account;
+
+        fn main() {{
+            Account::create();
+        }}
+    "#
+    );
+
+    let err = parse_manifest(&manifest, HashMap::new(), Default::default(), Default::default())
+        .err()
+        .expect("the built-in Account alias cannot be redefined");
+    assert!(err.to_string().contains("Account"), "{err}");
+}
+
+#[test]
+fn blob_binding_shadows_earlier_binding() {
+    let manifest = r#"
+        fn main() {
+            let acc = var!["acc"];
+            let acc = blob!("wasm");
+            acc.withdraw(TARI, 10);
+        }
+    "#;
+    let globals = HashMap::from([("acc".to_string(), caller_component())]);
+    let blob_inputs = HashMap::from([("wasm".to_string(), tari_ootle_transaction::Blob::from(vec![1u8]))]);
+
+    let err = parse_manifest(manifest, globals, Default::default(), blob_inputs)
+        .err()
+        .expect("the later blob binding replaces the input alias");
+    assert!(err.to_string().contains("blob"), "{err}");
+}
+
+#[test]
+fn later_binding_shadows_blob_binding() {
+    let manifest = r#"
+        fn main() {
+            let template = blob!("wasm");
+            let template = var!["template"];
+            publish_template!(template);
+        }
+    "#;
+    let globals = HashMap::from([("template".to_string(), caller_component())]);
+    let blob_inputs = HashMap::from([("wasm".to_string(), tari_ootle_transaction::Blob::from(vec![1u8]))]);
+
+    let err = parse_manifest(manifest, globals, Default::default(), blob_inputs)
+        .err()
+        .expect("the later input binding replaces the blob binding");
+    assert!(err.to_string().contains("publish_template!"), "{err}");
+}
+
+#[test]
+fn local_function_call_cannot_be_bound() {
+    let manifest = r#"
+        fn helper() {
+            drop_all_proofs!();
+        }
+
+        fn main() {
+            let x = helper();
+        }
+    "#;
+
+    let err = parse_manifest(manifest, HashMap::new(), Default::default(), Default::default())
+        .err()
+        .expect("a local function call has no value to bind");
+    assert!(err.to_string().contains("local function"), "{err}");
+}

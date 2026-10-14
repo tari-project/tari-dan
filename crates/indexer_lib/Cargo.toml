@@ -25,6 +25,12 @@ thiserror = { workspace = true }
 prometheus-client = { workspace = true, optional = true }
 
 [dev-dependencies]
+tari_consensus_types = { workspace = true }
+tari_crypto = { workspace = true }
+anyhow = { workspace = true }
+tari_bor = { workspace = true, default-features = true }
+tari_sidechain = { workspace = true }
+tari_state_tree = { workspace = true }
 tari_ootle_transaction = { workspace = true }
 tari_template_lib_types = { workspace = true }
 

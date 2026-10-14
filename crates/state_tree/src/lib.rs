@@ -3,13 +3,14 @@
 
 pub use tari_jellyfish::*;
 
-pub mod cbor;
-
 mod error;
 pub use error::*;
 
 pub mod key_mapper;
 pub mod memory_store;
+
+mod jmt_hash_scheme;
+pub use jmt_hash_scheme::*;
 
 mod shard_state_leaf;
 pub use shard_state_leaf::*;

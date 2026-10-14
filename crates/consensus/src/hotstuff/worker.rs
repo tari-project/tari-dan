@@ -169,6 +169,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         let transaction_manager = ConsensusTransactionManager::new(
             transaction_executor.clone(),
             config.consensus_constants.max_transaction_validity_epochs,
+            config.consensus_constants.max_block_pledge_bytes,
         );
 
         Self {
@@ -576,6 +577,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 from.clone(),
                 msg,
                 &self.on_receive_new_transaction,
+                &mut self.on_receive_foreign_proposal,
             )
             .await?
         {
@@ -1081,8 +1083,11 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             let highest_block = HighestSeenBlock::get(tx, epoch_state.epoch())?;
             // Propose quickly if there are UTXOs to mint or transactions to propose
             let propose_now = ForeignProposalRecord::has_unconfirmed(tx, epoch_state.epoch())? ||
-                self.transaction_pool
-                    .has_ready_or_pending_transaction_updates(tx, highest_block.block_id())?;
+                self.transaction_pool.has_ready_or_pending_transaction_updates(
+                    tx,
+                    highest_block.block_id(),
+                    epoch_state.epoch(),
+                )?;
 
             Ok::<_, HotStuffError>(propose_now)
         })?;

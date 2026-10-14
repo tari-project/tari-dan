@@ -15,6 +15,7 @@ use crate::{
     Blobs,
     ComponentReference,
     Instruction,
+    InstructionLimitTracker,
     MAX_TRANSACTION_INSTRUCTIONS,
     ResourceAddressRef,
     Signable,
@@ -25,7 +26,14 @@ pub(crate) fn decode_instructions<'b, C>(
     d: &mut minicbor::Decoder<'b>,
     ctx: &mut C,
 ) -> Result<Vec<Instruction>, minicbor::decode::Error> {
-    tari_bor::adapters::bounded_vec::decode(d, ctx, MAX_TRANSACTION_INSTRUCTIONS)
+    let mut limits = InstructionLimitTracker::new();
+    tari_bor::adapters::bounded_vec::decode_with_fn(d, ctx, MAX_TRANSACTION_INSTRUCTIONS, |d, ctx| {
+        let instruction: Instruction = minicbor::Decode::decode(d, ctx)?;
+        limits
+            .add(&instruction)
+            .map_err(|e| minicbor::decode::Error::message(e.to_string()))?;
+        Ok(instruction)
+    })
 }
 
 #[derive(Debug, Clone, borsh::BorshSerialize, minicbor::Encode, minicbor::Decode, minicbor::CborLen)]

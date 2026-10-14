@@ -56,6 +56,7 @@ use tari_ootle_common_types::{
     SubstateAddress,
     SubstateVersion,
     ToSubstateAddress,
+    VersionedSubstateId,
     VersionedSubstateIdRef,
     displayable::Displayable,
     optional::Optional,
@@ -81,6 +82,7 @@ use tari_ootle_storage::{
         SubstateCreate,
         SubstateData,
         SubstateDestroy,
+        SubstateDownProofRecord,
         SubstateLock,
         SubstatePledges,
         SubstateRecord,
@@ -146,6 +148,7 @@ use crate::{
         state_version_proof::{BlockCommitProofCf, StateVersionProofCf},
         substate,
         substate::SubstateCf,
+        substate_down_proof::SubstateDownProofCf,
         transaction::TransactionCf,
         transaction_pool::TransactionPoolCf,
         transaction_pool_state_update,
@@ -1056,47 +1059,6 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         // This operation is implemented in a naive way, by manually looping all blocks in the database.
         // This is only used for JSON-RPC get_blocks. This does not scale well.
 
-        let block_filter = |block: &Block| {
-            let Some(filter) = &filter else {
-                return true;
-            };
-            if filter.is_empty() {
-                return true;
-            }
-            let Some(filter_index) = filter_index else {
-                return true;
-            };
-            match filter_index {
-                0 => block.id().to_string().contains(filter),
-                1 => {
-                    let Ok(epoch_number) = filter.parse::<u64>() else {
-                        return false;
-                    };
-                    block.epoch() == Epoch(epoch_number)
-                },
-                2 => {
-                    let Ok(height_number) = filter.parse::<u64>() else {
-                        return false;
-                    };
-                    block.height() == NodeHeight(height_number)
-                },
-                4 => {
-                    let Ok(cmd_number) = filter.parse::<usize>() else {
-                        return false;
-                    };
-                    block.command_count() >= cmd_number
-                },
-                5 => {
-                    let Ok(fee) = filter.parse::<u64>() else {
-                        return false;
-                    };
-                    block.total_leader_fee() >= fee
-                },
-                7 => block.proposed_by().to_string().contains(filter),
-                _ => true,
-            }
-        };
-
         let Some(locked) = self.get_current_locked_block().optional()? else {
             return Ok(vec![]);
         };
@@ -1128,7 +1090,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
 
             let block = cf.get(&block_id, OPERATION)?;
 
-            if block_filter(&block) {
+            if block_matches_filter(&block, filter_index, filter.as_deref()) {
                 blocks.push(block);
                 if blocks.len() >= limit as usize {
                     break;
@@ -1166,37 +1128,6 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
     ) -> Result<u64, StorageError> {
         const OPERATION: &str = "filtered_blocks_get_count";
 
-        let block_filter = |block: &Block| {
-            let mut res = true;
-            if let Some(filter) = &filter &&
-                !filter.is_empty() &&
-                let Some(filter_index) = filter_index
-            {
-                match filter_index {
-                    0 => res = block.id().to_string().contains(filter),
-                    1 => {
-                        let epoch_number = filter.parse::<u64>().unwrap();
-                        res = block.epoch() == Epoch(epoch_number);
-                    },
-                    2 => {
-                        let height_number = filter.parse::<u64>().unwrap();
-                        res = block.height() == NodeHeight(height_number);
-                    },
-                    4 => {
-                        let cmd_number = filter.parse::<usize>().unwrap();
-                        res = block.command_count() >= cmd_number;
-                    },
-                    5 => {
-                        let fee = filter.parse::<u64>().unwrap();
-                        res = block.total_leader_fee() >= fee;
-                    },
-                    7 => res = block.proposed_by().to_string().contains(filter),
-                    _ => (),
-                }
-            }
-            res
-        };
-
         let cf = self.db().cf(BlockCf)?;
 
         let no_filters = filter_index.is_none() || filter.as_ref().is_none_or(|x| x.is_empty());
@@ -1210,7 +1141,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         let mut count = 0;
         for result in iter {
             let block = result?;
-            if block_filter(&block) {
+            if block_matches_filter(&block, filter_index, filter.as_deref()) {
                 count += 1;
             }
         }
@@ -1406,8 +1337,15 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         Ok(transactions)
     }
 
-    fn transaction_pool_for_each_ready<F>(&self, block_id: &BlockId, mut f: F) -> Result<(), StorageError>
-    where F: FnMut(TransactionPoolRecord) {
+    fn transaction_pool_for_each_ready<F>(
+        &self,
+        block_id: &BlockId,
+        epoch: Epoch,
+        mut f: F,
+    ) -> Result<(), StorageError>
+    where
+        F: FnMut(TransactionPoolRecord),
+    {
         const OPERATION: &str = "transaction_pool_for_each_ready";
         if !self.blocks_exists(block_id)? {
             return Err(StorageError::QueryError {
@@ -1444,7 +1382,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
             if let Some(update) = updates.remove(tx.id()) {
                 update.merge_into(&mut tx);
             }
-            if tx.is_ready() {
+            if tx.is_ready_to_propose_in(epoch) {
                 f(tx);
             }
         }
@@ -1968,6 +1906,20 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         Ok(commit_proof)
     }
 
+    fn substate_down_proofs_get(
+        &self,
+        shard: Shard,
+        id: &VersionedSubstateId,
+    ) -> Result<Option<SubstateDownProofRecord>, StorageError> {
+        const OPERATION: &str = "substate_down_proofs_get";
+        let record = self
+            .db()
+            .cf(SubstateDownProofCf)?
+            .get(&(shard, id.to_substate_address()), OPERATION)
+            .optional()?;
+        Ok(record)
+    }
+
     fn state_sync_rewind_points_get_all(&self) -> Result<Vec<(Shard, Version)>, StorageError> {
         const OPERATION: &str = "state_sync_rewind_points_get_all";
         let points = self
@@ -2192,5 +2144,31 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         }
 
         Ok(false)
+    }
+}
+
+/// Applies a JSON-RPC block-list filter. `filter_index` names the column as the VN web UI numbers them. A filter that
+/// does not parse as a number for a numeric column matches no block.
+fn block_matches_filter(block: &Block, filter_index: Option<usize>, filter: Option<&str>) -> bool {
+    let Some(filter) = filter.filter(|f| !f.is_empty()) else {
+        return true;
+    };
+    let Some(filter_index) = filter_index else {
+        return true;
+    };
+    match filter_index {
+        0 => block.id().to_string().contains(filter),
+        1 => filter
+            .parse::<u64>()
+            .is_ok_and(|epoch_number| block.epoch() == Epoch(epoch_number)),
+        2 => filter
+            .parse::<u64>()
+            .is_ok_and(|height_number| block.height() == NodeHeight(height_number)),
+        4 => filter
+            .parse::<usize>()
+            .is_ok_and(|cmd_number| block.command_count() >= cmd_number),
+        5 => filter.parse::<u64>().is_ok_and(|fee| block.total_leader_fee() >= fee),
+        7 => block.proposed_by().to_string().contains(filter),
+        _ => true,
     }
 }

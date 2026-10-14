@@ -22,16 +22,25 @@ use tari_ootle_storage::{
 };
 use tari_ootle_transaction::Transaction;
 
+#[cfg(feature = "metrics")]
+use crate::metrics::PrometheusExecutionMetrics;
+
 const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::block_transaction_executor";
 
 #[derive(Debug, Clone)]
 pub struct TariBlockTransactionExecutor<TExecutor> {
     executor: TExecutor,
+    #[cfg(feature = "metrics")]
+    metrics: PrometheusExecutionMetrics,
 }
 
 impl<TExecutor: TransactionExecutor<ReadOnlyMemoryStateStore>> TariBlockTransactionExecutor<TExecutor> {
-    pub fn new(executor: TExecutor) -> Self {
-        Self { executor }
+    pub fn new(executor: TExecutor, #[cfg(feature = "metrics")] metrics: PrometheusExecutionMetrics) -> Self {
+        Self {
+            executor,
+            #[cfg(feature = "metrics")]
+            metrics,
+        }
     }
 
     fn add_substates_to_memory_db<'a, I: IntoIterator<Item = (&'a SubstateRequirement, &'a Substate)>>(
@@ -84,6 +93,10 @@ where
             .executor
             .execute(transaction, state_db.into_read_only(), virtual_substates, burn_rate)
             .map_err(|e| BlockTransactionExecutorError::ExecutionThreadFailure(e.to_string()))?;
+
+        #[cfg(feature = "metrics")]
+        self.metrics
+            .on_executed(&exec_output.result.finalize.result, exec_output.result.execution_time);
 
         // Generate the resolved inputs to set the specific version and required lock flag, as we know it after
         // execution

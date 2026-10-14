@@ -5,7 +5,7 @@ use tari_engine_types::substate::SubstateId;
 use tari_networking::NetworkingError;
 use tari_ootle_common_types::Epoch;
 use tari_ootle_storage::{StorageError, consensus_models::TransactionPoolError};
-use tari_ootle_transaction::{BlobValidationError, Network, TransactionId};
+use tari_ootle_transaction::{BlobValidationError, InstructionLimitError, Network, TransactionId};
 use tari_template_lib::types::TemplateAddress;
 
 #[derive(thiserror::Error, Debug)]
@@ -121,6 +121,11 @@ pub enum TransactionValidationError {
         max: usize,
         actual: usize,
     },
+    #[error("Transaction {transaction_id} exceeds an instruction limit: {source}")]
+    InstructionLimitExceeded {
+        transaction_id: TransactionId,
+        source: InstructionLimitError,
+    },
     #[error("Transaction {transaction_id} has invalid blob references: {source}")]
     InvalidBlobReferences {
         transaction_id: TransactionId,
@@ -196,6 +201,7 @@ impl TransactionValidationError {
             Self::TooManySignatures { .. } |
             Self::TooManyInputs { .. } |
             Self::TooManyInstructions { .. } |
+            Self::InstructionLimitExceeded { .. } |
             Self::InvalidBlobReferences { .. } => true,
         }
     }
@@ -309,6 +315,10 @@ mod tests {
                 transaction_id: tx_id(),
                 max: 1,
                 actual: 2,
+            },
+            TransactionValidationError::InstructionLimitExceeded {
+                transaction_id: tx_id(),
+                source: InstructionLimitError::TooManyCallArguments { max: 1, actual: 2 },
             },
             TransactionValidationError::InvalidBlobReferences {
                 transaction_id: tx_id(),

@@ -82,5 +82,22 @@ mod template {
             self.confidential.deposit(joined);
             assert_eq!(self.confidential.commitment_count(), 1);
         }
+
+        pub fn create_confidential_with_view_key(view_key: RistrettoPublicKeyBytes) -> Component<Self> {
+            let fungible = ResourceBuilder::public_fungible().initial_supply(1000u32);
+            let non_fungible = ResourceBuilder::non_fungible()
+                .initial_supply([NonFungibleId::from_u64(1), NonFungibleId::from_u64(2)]);
+            let confidential = ResourceBuilder::confidential()
+                .with_view_key(view_key)
+                .initial_supply(ConfidentialOutputStatement::mint_revealed(1000u32));
+
+            Component::new(Self {
+                fungible: Vault::from_bucket(fungible),
+                non_fungible: Vault::from_bucket(non_fungible),
+                confidential: Vault::from_bucket(confidential),
+            })
+            .with_access_rules(AccessRules::allow_all())
+            .create()
+        }
     }
 }

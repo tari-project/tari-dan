@@ -59,16 +59,19 @@ use tokio::task;
 use crate::{
     hotstuff::{
         HotstuffConfig,
+        abort_if_local_prepared_expired,
         apply_leader_fee_to_substate_store,
         block_change_set::ProposedBlockChangeSet,
         calculate_state_merkle_root,
         epoch_state::EpochState,
         error::HotStuffError,
+        exceeds_block_foreign_proposal_bytes,
         exhaust_burn_rate::resolve_epoch_exhaust_burn_rate,
         filter_diff_for_committee,
         foreign_proposal_processor::process_foreign_block,
+        local_pledged_inputs,
         process_newly_justified_block,
-        substate_store::PendingSubstateStore,
+        substate_store::{InputPledge, PendingSubstateStore},
         transaction_manager::{
             ConsensusTransactionManager,
             EvidenceOrExecution,
@@ -401,14 +404,15 @@ where TConsensusSpec: ConsensusSpec
         let mut accumulated_data = *state_anchor.header().accumulated_data();
 
         let mut substate_store =
-            PendingSubstateStore::init(tx, state_anchor_leaf, self.config.consensus_constants.num_preshards)?;
+            PendingSubstateStore::init(tx, state_anchor_leaf, self.config.consensus_constants.num_preshards)?
+                .with_pledge_budget(self.config.consensus_constants.max_block_pledge_bytes);
 
         let mut executed_transactions = HashMap::new();
 
         let batch = if should_not_propose_commands {
             ProposalBatch::default()
         } else {
-            self.fetch_next_proposal_batch(tx, state_anchor_leaf, next_height)?
+            self.fetch_next_proposal_batch(tx, state_anchor_leaf, epoch, next_height)?
         };
         debug!(target: LOG_TARGET, "🌿 PROPOSE: {} (justify: {}) {batch}", highest_seen_block.height(), justify_block.height());
 
@@ -549,6 +553,7 @@ where TConsensusSpec: ConsensusSpec
             // justified block, and to propose a transaction that a foreign proposal in this block has just
             // moved to ABORT with the decision that move implies.
             change_set.apply_transaction_update(&mut transaction);
+            let expired_abort = abort_if_local_prepared_expired(&mut transaction, epoch);
             // Replicas withhold their vote unless the updated record is ready to leave its stage, so readiness is
             // judged on the same record here.
             if !transaction.is_ready_for_pending_stage(local_committee_info.shard_group()) {
@@ -565,6 +570,9 @@ where TConsensusSpec: ConsensusSpec
             executed_weight += transaction.proposal_weight();
             num_executed += 1;
             let tx_id = *transaction.id();
+            if let Some(execution) = expired_abort {
+                executed_transactions.insert(tx_id, execution);
+            }
             // Entries already present (e.g. foreign-proposal aborts from the change set) were not executed
             // for this block, so only count executions newly produced by the command conversion below.
             let had_execution = executed_transactions.contains_key(&tx_id);
@@ -734,6 +742,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &TTx,
         state_anchor_leaf: LeafBlock,
+        epoch: Epoch,
         next_height: NodeHeight,
     ) -> Result<ProposalBatch, HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "fetch_next_proposal_batch");
@@ -748,7 +757,7 @@ where TConsensusSpec: ConsensusSpec
         let max_block_weight = self.config.consensus_constants.max_block_weight;
         let max_commands = self.config.consensus_constants.max_commands_in_block;
 
-        let foreign_proposals =
+        let mut foreign_proposals =
             ForeignProposalRecord::get_all_new(tx, state_anchor_leaf.block_id(), MAX_FOREIGN_PROPOSALS_PER_BLOCK)?;
 
         if !foreign_proposals.is_empty() {
@@ -757,6 +766,32 @@ where TConsensusSpec: ConsensusSpec
                 "🌿 Found {} foreign proposals for next block",
                 foreign_proposals.len()
             );
+        }
+
+        // The block travels with every foreign proposal it includes, so they are taken in order for as long as they
+        // fit the byte budget. The rest stay new for a later block.
+        let max_foreign_proposal_bytes = self.config.consensus_constants.max_block_foreign_proposal_bytes;
+        let mut foreign_proposal_bytes = 0usize;
+        let num_fitting = foreign_proposals
+            .iter()
+            .enumerate()
+            .take_while(|(idx, fp)| {
+                let total_bytes = foreign_proposal_bytes.saturating_add(tari_bor::encoded_len(fp.proposal()));
+                if exceeds_block_foreign_proposal_bytes(total_bytes, idx + 1, max_foreign_proposal_bytes) {
+                    return false;
+                }
+                foreign_proposal_bytes = total_bytes;
+                true
+            })
+            .count();
+        if num_fitting < foreign_proposals.len() {
+            info!(
+                target: LOG_TARGET,
+                "📦 PROPOSE: foreign proposal budget ({max_foreign_proposal_bytes} bytes) reached after {num_fitting} \
+                 of {} foreign proposal(s); deferring the rest to a later block",
+                foreign_proposals.len(),
+            );
+            foreign_proposals.truncate(num_fitting);
         }
 
         let foreign_proposal_weight: u64 = foreign_proposals
@@ -780,6 +815,7 @@ where TConsensusSpec: ConsensusSpec
                     max_tx_count,
                     heavy_turn,
                     state_anchor_leaf.block_id(),
+                    epoch,
                 )
             })
             .transpose()?
@@ -836,6 +872,15 @@ where TConsensusSpec: ConsensusSpec
         }
 
         match prepared {
+            PreparedTransaction::PledgeBudgetReached { total_bytes, max_bytes } => {
+                info!(
+                    target: LOG_TARGET,
+                    "📦 PROPOSE: transaction {} would take the block's pledge to {total_bytes} bytes, past the \
+                     {max_bytes} budget. Deferring it to a later block",
+                    pool_tx.id(),
+                );
+                Ok(None)
+            },
             PreparedTransaction::LocalOnly(local) => match *local {
                 LocalPreparedTransaction::Accept { execution, .. } => {
                     pool_tx
@@ -1025,6 +1070,23 @@ where TConsensusSpec: ConsensusSpec
         let tx = substate_store.read_transaction();
         let transaction = tx_rec.get_transaction(tx)?;
         let execution = self.execute_transaction(tx, state_anchor, transaction, change_set, locked_epoch.clone())?;
+
+        if execution.decision().is_commit() {
+            // Preparing the transaction bounded what its inputs alone may pledge, so only the block budget applies
+            let pledge = substate_store.pledge_inputs(
+                local_pledged_inputs(&tx_rec, local_committee_info.shard_group()),
+                usize::MAX,
+            )?;
+            if let InputPledge::BlockBudgetReached { total_bytes, max_bytes } = pledge {
+                info!(
+                    target: LOG_TARGET,
+                    "📦 PROPOSE: LocalAccept of transaction {} would take the block's pledge to {total_bytes} bytes, \
+                     past the {max_bytes} budget. Deferring it to a later block",
+                    tx_rec.id(),
+                );
+                return Ok(None);
+            }
+        }
 
         // Try to lock all local outputs
         let local_outputs = execution

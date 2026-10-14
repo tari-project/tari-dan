@@ -116,6 +116,10 @@ message GetSubstateResponse {
   // The epoch the substate value hash was computed at, needed by the verifier to re-derive the leaf
   // value hash and bind it to the returned substate value. Only meaningful for status Up.
   uint64 proof_epoch = 9;
+  // CBOR-encoded SubstateDownProof, for status Down only: an inclusion proof of the substate at an earlier
+  // committed root, with that root's commit proof, and its exclusion proof under `commit_proof`'s root. A Down is
+  // sent with no proof fields at all when the responder holds no such proof.
+  bytes substate_down_proof = 10;
 }
 
 enum SubstateStatus {
@@ -380,6 +384,10 @@ message ProvenSubstate {
   // The epoch the substate value hash was computed at, needed by the verifier to re-derive the leaf
   // value hash and bind it to the returned value. Only meaningful for an up substate.
   uint64 proof_epoch = 3;
+  // Always empty: a batch answers with each substate's head, which a down proof cannot settle, since it says
+  // nothing of later versions. Kept for wire compatibility. A down proof is served by GetSubstate for a read of the
+  // version it names.
+  bytes substate_down_proof = 4;
 }
 
 message MissingSubstates {

@@ -38,6 +38,8 @@ use crate::template::ast::{TemplateAst, TypeAst};
 /// Maximum length of a template name in bytes.
 const MAX_TEMPLATE_NAME_LENGTH: usize = 64;
 
+const RESERVED_TEMPLATE_NAME: &str = "std";
+
 pub fn generate_template_def(ast: &TemplateAst) -> Result<TokenStream> {
     let template_name_as_str = ast.template_name.to_string();
 
@@ -50,6 +52,15 @@ pub fn generate_template_def(ast: &TemplateAst) -> Result<TokenStream> {
                 MAX_TEMPLATE_NAME_LENGTH,
                 template_name_as_str.len()
             ),
+        ));
+    }
+
+    // The engine prefixes a template's event topics with its name, and topics starting with `std.`
+    // belong to the engine's standard events.
+    if template_name_as_str == RESERVED_TEMPLATE_NAME {
+        return Err(syn::Error::new_spanned(
+            &ast.template_name,
+            format!("Template name '{RESERVED_TEMPLATE_NAME}' is not permitted"),
         ));
     }
 
@@ -562,5 +573,35 @@ mod tests {
 
         assert_eq!(funcs[1].name, "mul");
         assert!(!funcs[1].is_mut);
+    }
+
+    #[test]
+    fn rejects_the_reserved_template_name() {
+        let ast = parse2::<TemplateAst>(
+            TokenStream::from_str(indoc! {"
+                mod test_template {
+                    pub struct std {}
+                    impl std {
+                        pub fn create() -> Self { }
+                    }
+                }
+            "})
+            .unwrap(),
+        )
+        .unwrap();
+        let err = generate_template_def(&ast).unwrap_err();
+        assert!(err.to_string().contains("not permitted"), "unexpected error: {err}");
+
+        let module = parse2::<syn::ItemMod>(
+            TokenStream::from_str("mod std { pub fn add(a: u32, b: u32) -> u32 { a + b } }").unwrap(),
+        )
+        .unwrap();
+        let ast = TemplateAst::from_item_mod(module, TemplateOptions {
+            stateless: true,
+            ..Default::default()
+        })
+        .unwrap();
+        let err = generate_template_def(&ast).unwrap_err();
+        assert!(err.to_string().contains("not permitted"), "unexpected error: {err}");
     }
 }

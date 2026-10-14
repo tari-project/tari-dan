@@ -171,6 +171,7 @@ enum AbortReason {
   FEE_PAYMENT_IN_MAIN_INTENT = 8;
   EPOCH_EXPIRED = 9;
   VALIDITY_WINDOW_TOO_LONG = 10;
+  INPUT_PLEDGE_TOO_LARGE = 11;
 }
 
 message Evidence {

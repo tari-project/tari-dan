@@ -21,17 +21,10 @@ use tari_common_types::types::FixedHash;
 use tari_engine_types::{
     Utxo,
     events::Event,
-    substate::{Substate, SubstateId, SubstateValue},
+    substate::{Substate, SubstateId},
     transaction_receipt::TransactionReceipt,
 };
-use tari_indexer_client::types::{
-    ListSubstateItem,
-    NonFungibleSubstate,
-    TransactionEntry,
-    TransactionResultSummary,
-    TransactionSource,
-    UtxoStateUpdateSet,
-};
+use tari_indexer_client::types::{TransactionEntry, TransactionResultSummary, TransactionSource, UtxoStateUpdateSet};
 use tari_indexer_lib::substate_cache::SubstateCacheEntry;
 use tari_ootle_common_types::{
     Epoch,
@@ -244,73 +237,6 @@ fn decode_event_row(row: EventRecord) -> Result<(i64, TransactionId, Event), Sto
 }
 
 impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
-    fn list_substates(
-        &mut self,
-        by_id: Option<&SubstateId>,
-        by_type: Option<SubstateType>,
-        by_template_address: Option<TemplateAddress>,
-        limit: Option<u64>,
-        offset: Option<u64>,
-    ) -> Result<Vec<ListSubstateItem>, StorageError> {
-        use crate::storage_sqlite::schema::substates;
-
-        let mut query = substates::table.into_boxed();
-
-        if let Some(substate_id) = by_id {
-            query = query.filter(substates::address.eq(substate_id.to_string()));
-        }
-
-        if let Some(template_address) = by_template_address {
-            query = query.filter(substates::template_address.eq(template_address.to_string()));
-        }
-
-        if let Some(substate_type) = by_type {
-            let address_like = format!("{}_%", substate_type.as_prefix_str());
-            query = query.filter(substates::address.like(address_like));
-        }
-
-        if let Some(limit) = limit {
-            query = query.limit(limit as i64);
-        }
-        if let Some(offset) = offset {
-            query = query.offset(offset as i64);
-        }
-
-        let substates = query
-            .order_by(substates::id.desc())
-            .load_iter::<SubstateRecord, _>(self.connection())
-            .map_err(|e| StorageError::QueryError {
-                reason: format!("list_substates: {}", e),
-            })?;
-
-        let items = substates
-            .into_iter()
-            .map(|res| {
-                let s = res.map_err(|e| StorageError::QueryError {
-                    reason: format!("list_substates: {}", e),
-                })?;
-                let substate_id = SubstateId::from_str(&s.address).map_err(|e| StorageError::DataInconsistency {
-                    details: format!("Invalid substate address {}: {}", s.address, e),
-                })?;
-                let version = s.version as u64;
-                let template_address = s.template_address.map(|h| deserialize_hex_try_from(&h)).transpose()?;
-                let timestamp = s.updated_at;
-                Ok(ListSubstateItem {
-                    substate_id,
-                    module_name: s.module_name,
-                    version: SubstateVersion::new(version),
-                    template_address,
-                    timestamp,
-                })
-            })
-            .collect::<Result<_, StorageError>>()
-            .map_err(|e| StorageError::QueryError {
-                reason: format!("list_substates: invalid substate items: {}", e),
-            })?;
-
-        Ok(items)
-    }
-
     fn get_substate(
         &mut self,
         address: &SubstateId,
@@ -362,48 +288,6 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
                         substate_resp.id,
                         Substate::new(substate_resp.version, substate_resp.substate),
                     )
-                })
-            })
-            .collect()
-    }
-
-    fn get_non_fungibles_by_resource_address(
-        &mut self,
-        resource_address: ResourceAddress,
-        limit: usize,
-        offset: usize,
-    ) -> Result<Vec<NonFungibleSubstate>, StorageError> {
-        use crate::storage_sqlite::schema::substates;
-
-        let res = substates::table
-            .filter(substates::address.like(format!("nft_{}_%", resource_address.as_object_key())))
-            .limit(limit as i64)
-            .offset(offset as i64)
-            .load_iter::<SubstateRecord, _>(self.connection())
-            .map_err(|e| StorageError::QueryError {
-                reason: format!("get_non_fungibles_by_resource_address: {}", e),
-            })?;
-
-        res.into_iter()
-            .map(|res| {
-                let row = res.map_err(|e| StorageError::QueryError {
-                    reason: format!("get_non_fungibles_by_resource_address: {}", e),
-                })?;
-                let value: SubstateValue =
-                    serde_json::from_str(&row.data).map_err(|e| StorageError::DataInconsistency {
-                        details: format!("Failed to parse substate data: {}", e),
-                    })?;
-
-                Ok(NonFungibleSubstate {
-                    address: row.address.parse().map_err(|e| StorageError::DataInconsistency {
-                        details: format!("Failed to parse address: {}", e),
-                    })?,
-                    version: u64::try_from(row.version).map(SubstateVersion::new).map_err(|e| {
-                        StorageError::DataInconsistency {
-                            details: format!("Version overflow {}", e),
-                        }
-                    })?,
-                    substate: value,
                 })
             })
             .collect()
@@ -1149,25 +1033,56 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
             .collect()
     }
 
-    fn is_state_root_trusted(
+    fn get_verified_state_root_height(
         &mut self,
         epoch: Epoch,
         shard_group: ShardGroup,
         root: &FixedHash,
-    ) -> Result<bool, StorageError> {
-        const OPERATION: &str = "is_state_root_trusted";
+    ) -> Result<Option<NodeHeight>, StorageError> {
+        const OPERATION: &str = "get_verified_state_root_height";
         use crate::storage_sqlite::schema::verified_state_roots;
-        let count: i64 = verified_state_roots::table
+        let height: Option<i64> = verified_state_roots::table
+            .select(verified_state_roots::block_height)
             .filter(verified_state_roots::epoch.eq(epoch.as_u64() as i64))
             .filter(verified_state_roots::shard_group.eq(shard_group.to_parsable_string()))
             .filter(verified_state_roots::state_merkle_root.eq(serialize_hex(root)))
-            .limit(1)
-            .count()
-            .get_result(self.connection())
+            .first(self.connection())
+            .optional()
             .map_err(|e| StorageError::QueryError {
                 reason: format!("{OPERATION}: {e}"),
             })?;
-        Ok(count > 0)
+        Ok(height.map(|h| NodeHeight(h as u64)))
+    }
+
+    fn get_latest_verified_height_overlapping(
+        &mut self,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+    ) -> Result<Option<NodeHeight>, StorageError> {
+        const OPERATION: &str = "get_latest_verified_height_overlapping";
+        use crate::storage_sqlite::schema::verified_state_roots;
+        let latest_by_group: Vec<(String, Option<i64>)> = verified_state_roots::table
+            .filter(verified_state_roots::epoch.eq(epoch.as_u64() as i64))
+            .group_by(verified_state_roots::shard_group)
+            .select((
+                verified_state_roots::shard_group,
+                diesel::dsl::max(verified_state_roots::block_height),
+            ))
+            .load(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("{OPERATION}: {e}"),
+            })?;
+
+        let mut latest = None;
+        for (group, height) in latest_by_group {
+            let group = ShardGroup::from_str(&group).map_err(|e| StorageError::DataInconsistency {
+                details: format!("{OPERATION}: {e}"),
+            })?;
+            if group.overlaps_shard_group(&shard_group) {
+                latest = latest.max(height.map(|h| NodeHeight(h as u64)));
+            }
+        }
+        Ok(latest)
     }
 
     fn get_latest_verified_state_root(
@@ -1247,6 +1162,8 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
             substate_value_proof: value_proof,
             commit_proof,
             proof_epoch: proof_epoch as u64,
+            substate_down_proof: None,
+            destroyed_at_state_version: None,
         }))
     }
 }

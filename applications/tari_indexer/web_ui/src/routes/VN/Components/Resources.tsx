@@ -20,35 +20,23 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import {
-  Box,
-  Grid,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Typography,
-} from "@mui/material";
-import { convertCborValue, NonFungibleSubstate, shortenString } from "@tari-project/ootle-ts-bindings";
+import { Box, Grid, Stack, Typography } from "@mui/material";
+import { shortenString } from "@tari-project/ootle-ts-bindings";
 import { useMemo } from "react";
 import { useParams } from "react-router-dom";
-import { useGetNonFungibles, useGetSubstate } from "../../../api/hooks/useSubstates";
+import { useGetSubstate } from "../../../api/hooks/useSubstates";
 import CopyToClipboard from "../../../Components/CopyToClipboard";
 import FetchStatusCheck from "../../../Components/FetchStatusCheck";
 import { formatCurrency } from "../../../utils/helpers";
-import NftRow, { type NftData } from "./NftRow";
 
 function Resources() {
   const { resourceAddress } = useParams();
 
   const {
     data: substateData,
-    isLoading: substateLoading,
-    isError: substateError,
-    error: substateErrorMessage,
+    isLoading,
+    isError,
+    error: errorMessage,
   } = useGetSubstate({
     address: resourceAddress,
     version: null,
@@ -62,97 +50,6 @@ function Resources() {
     }
     return substateData.substate.Resource;
   }, [substateData]);
-
-  const isNonFungible = resource?.resource_type === "NonFungible";
-
-  const {
-    data: nonFungiblesData,
-    isLoading: nftLoading,
-    isError: nftError,
-    error: nftErrorMessage,
-  } = useGetNonFungibles({
-    address: resourceAddress,
-    enabled: !!resourceAddress && isNonFungible,
-  });
-
-  const nfts = useMemo(() => {
-    if (!nonFungiblesData?.non_fungibles) return [];
-
-    const processedNfts: NftData[] = [];
-    nonFungiblesData.non_fungibles.forEach((nft: NonFungibleSubstate) => {
-      if (!("NonFungible" in nft.substate)) {
-        console.error("NonFungible not found in substate");
-        return;
-      }
-      let nftData;
-      try {
-        nftData = convertCborValue(nft.substate.NonFungible?.data);
-      } catch (e) {
-        console.error("Error converting CBOR value:", e);
-        return;
-      }
-      if (nftData) {
-        let mutableData;
-        try {
-          mutableData = convertCborValue(nft.substate.NonFungible?.mutable_data);
-        } catch (e) {
-          console.error("Error converting mutable CBOR value:", e);
-        }
-
-        const { name, amount } = nftData;
-        const { image_url } = mutableData || {};
-        const nftId = nft.address.id;
-        const key = Object.keys(nftId)[0];
-        const idValue = nftId[key as keyof typeof nftId];
-        const address = `${key}_${idValue}`;
-        const cleanTitle = name || `NFT ${idValue}`;
-
-        processedNfts.push({
-          img: image_url,
-          title: cleanTitle,
-          address,
-          version: nft.version,
-          nft,
-          amount,
-        });
-      }
-    });
-    return processedNfts;
-  }, [nonFungiblesData]);
-
-  const isLoading = substateLoading || (isNonFungible && nftLoading);
-  const isError = substateError || nftError;
-  const errorMessage = substateErrorMessage || nftErrorMessage;
-
-  const EmptyPlaceHolder = () => (
-    <Stack alignItems="center" justifyContent="center" sx={{ py: 8 }}>
-      <Typography variant="h6" color="text.secondary" gutterBottom>
-        No NFTs found
-      </Typography>
-      <Typography variant="body2" color="text.secondary">
-        This resource doesn't have any NFTs or they couldn't be loaded.
-      </Typography>
-    </Stack>
-  );
-
-  const DisplayNFTs = () => {
-    return (
-      <TableContainer>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>NFTs ({nfts.length})</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {nfts.map((nftData, index) => (
-              <NftRow key={`${nftData.address}-${index}`} nftData={nftData} />
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    );
-  };
 
   return (
     <FetchStatusCheck
@@ -203,8 +100,6 @@ function Resources() {
             </Grid>
           </Grid>
         </Box>
-
-        {isNonFungible && <>{nfts.length === 0 ? <EmptyPlaceHolder /> : <DisplayNFTs />}</>}
       </Stack>
     </FetchStatusCheck>
   );

@@ -1,7 +1,12 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{borrow::Cow, collections::HashMap, fmt::Display, iter};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    iter,
+};
 
 use indexmap::IndexMap;
 use log::*;
@@ -49,6 +54,13 @@ pub struct PendingSubstateStore<'store, TTx: StateStoreReadTransaction> {
     /// Encoded bytes of the substates this block puts up and the ids of those it puts down, per shard.
     /// Each shard's total is what the block adds to that shard's next state version.
     shard_output_bytes: HashMap<Shard, usize>,
+    /// Input substates this block pledges to foreign shard groups. Every foreign shard group's pledge from this block
+    /// is a subset of these.
+    pledged_inputs: HashSet<VersionedSubstateId>,
+    /// Encoded bytes of `pledged_inputs`, as they travel in a block pledge.
+    pledge_bytes: usize,
+    /// The most bytes [`Self::pledge_inputs`] lets this block pledge, if it is being proposed.
+    max_pledge_bytes: Option<usize>,
     new_locks: IndexMap<SubstateId, Vec<SubstateLock>>,
     parent_block: LeafBlock,
     /// Read once for every branch-scoped read at `parent_block`. `store` is borrowed shared for as long as this lives,
@@ -66,11 +78,22 @@ impl<'a, TTx: StateStoreReadTransaction> PendingSubstateStore<'a, TTx> {
             head: HashMap::new(),
             changes: Vec::new(),
             shard_output_bytes: HashMap::new(),
+            pledged_inputs: HashSet::new(),
+            pledge_bytes: 0,
+            max_pledge_bytes: None,
             new_locks: IndexMap::new(),
             parent_block,
             parent_chain,
             num_preshards,
         })
+    }
+
+    /// Makes [`Self::pledge_inputs`] refuse inputs that would take the block's pledge past `max_bytes`. A proposer
+    /// sets this so it defers what does not fit; a validator leaves it unset and checks [`Self::pledge_bytes`] once
+    /// the whole block is evaluated.
+    pub fn with_pledge_budget(mut self, max_bytes: usize) -> Self {
+        self.max_pledge_bytes = Some(max_bytes);
+        self
     }
 
     /// The block this store builds on.
@@ -916,6 +939,54 @@ impl<'store, TTx: StateStoreReadTransaction> PendingSubstateStore<'store, TTx> {
         })
     }
 
+    /// Adds a transaction's local inputs to the substates this block pledges to foreign shard groups.
+    ///
+    /// Nothing is added if the inputs alone come to more than `max_transaction_bytes`, or if they would take the
+    /// block past its pledge budget (see [`Self::with_pledge_budget`]). An input another command of the block already
+    /// pledges is counted once, because a block pledge carries each substate once.
+    pub fn pledge_inputs<'i, I>(
+        &mut self,
+        inputs: I,
+        max_transaction_bytes: usize,
+    ) -> Result<InputPledge, SubstateStoreError>
+    where
+        I: IntoIterator<Item = VersionedSubstateIdRef<'i>>,
+    {
+        let mut transaction_bytes = 0usize;
+        let mut new_inputs = HashSet::new();
+        let mut new_bytes = 0usize;
+        for id in inputs {
+            let substate = self.get(id)?;
+            let bytes = up_encoded_len(id.substate_id(), &substate);
+            transaction_bytes = transaction_bytes.saturating_add(bytes);
+            let id = id.to_owned();
+            if !self.pledged_inputs.contains(&id) && new_inputs.insert(id) {
+                new_bytes = new_bytes.saturating_add(bytes);
+            }
+        }
+
+        if transaction_bytes > max_transaction_bytes {
+            return Ok(InputPledge::TransactionTooLarge {
+                bytes: transaction_bytes,
+            });
+        }
+        let total_bytes = self.pledge_bytes.saturating_add(new_bytes);
+        if let Some(max_bytes) = self.max_pledge_bytes &&
+            total_bytes > max_bytes
+        {
+            return Ok(InputPledge::BlockBudgetReached { total_bytes, max_bytes });
+        }
+
+        self.pledged_inputs.extend(new_inputs);
+        self.pledge_bytes = total_bytes;
+        Ok(InputPledge::Pledged)
+    }
+
+    /// The encoded bytes of the input substates this block pledges to foreign shard groups.
+    pub fn pledge_bytes(&self) -> usize {
+        self.pledge_bytes
+    }
+
     pub fn changes(&self) -> &Vec<SubstateChange> {
         &self.changes
     }
@@ -958,6 +1029,21 @@ impl<'store, TTx: StateStoreReadTransaction> PendingSubstateStore<'store, TTx> {
     pub fn into_parts(self) -> (Vec<SubstateChange>, IndexMap<SubstateId, Vec<SubstateLock>>) {
         (self.changes, self.new_locks)
     }
+}
+
+/// The outcome of [`PendingSubstateStore::pledge_inputs`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InputPledge {
+    Pledged,
+    /// The transaction's inputs alone are more than one block may pledge.
+    TransactionTooLarge {
+        bytes: usize,
+    },
+    /// The inputs fit an empty block but not alongside what this block already pledges.
+    BlockBudgetReached {
+        total_bytes: usize,
+        max_bytes: usize,
+    },
 }
 
 #[derive(Debug, Default)]

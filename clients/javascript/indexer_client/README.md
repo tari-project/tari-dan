@@ -65,12 +65,11 @@ const result = await client.submitTransaction({ transaction, is_dry_run: false }
 |--------|------|------|-------------|
 | `templatesGet(address)` | GET | `/templates/{template_address}` | Fetch a template definition by its address |
 
-### Resources & Non-Fungibles
+### Resources
 
 | Method | HTTP | Path | Description |
 |--------|------|------|-------------|
 | `resourcesGet(address)` | GET | `/resources/{resource_address}` | Fetch a resource by ID |
-| `getNonFungibles(params)` | GET | `/non-fungibles` | Get non-fungibles by resource address |
 
 ### Transaction Receipts
 

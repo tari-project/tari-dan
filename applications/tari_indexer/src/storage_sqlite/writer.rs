@@ -25,7 +25,7 @@ use tari_ootle_storage::{
 };
 use tari_ootle_storage_sqlite::SqliteTransaction;
 use tari_ootle_transaction::{Transaction, TransactionId};
-use tari_template_lib_types::{TemplateAddress, TransactionReceiptAddress};
+use tari_template_lib_types::{TemplateAddress, TransactionReceiptAddress, UtxoAddress};
 use tari_validator_node_rpc::client::{SubstateProofData, SubstateResult};
 
 use crate::{
@@ -51,7 +51,13 @@ use crate::{
         reader::SqliteStoreReadTransaction,
         serialization::{serialize_cbor, serialize_hex, serialize_json},
     },
-    store::{IndexerStoreReadTransaction, IndexerStoreWriteTransaction, InsertedEvent},
+    store::{
+        IndexerStoreReadTransaction,
+        IndexerStoreWriteTransaction,
+        InsertedEvent,
+        InsertedReceipt,
+        InsertedReceipts,
+    },
 };
 
 const LOG_TARGET: &str = "tari::indexer::storage_sqlite::writer";
@@ -110,10 +116,11 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
         &mut self,
         epoch: Epoch,
         updates: I,
-    ) -> Result<(), StorageError> {
+    ) -> Result<Vec<UtxoAddress>, StorageError> {
         const OPERATION: &str = "batch_insert_utxo_updates";
         use crate::storage_sqlite::schema::utxos;
 
+        let mut skipped = Vec::new();
         for update in updates {
             match update {
                 UtxoUpdateRecord::Unspent(unspent) => {
@@ -135,10 +142,14 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
                         is_frozen: unspent.is_frozen,
                     };
                     // batch insert results in "cannot start a transaction within a transaction" error
-                    diesel::insert_into(utxos::table)
+                    let num_inserted = diesel::insert_into(utxos::table)
                         .values(insert)
+                        .on_conflict_do_nothing()
                         .execute(self.connection())
                         .map_err(|e| StorageError::general(OPERATION, format!("insert error: {e}")))?;
+                    if num_inserted == 0 {
+                        skipped.push(unspent.address);
+                    }
                 },
                 UtxoUpdateRecord::Spent(spent) => {
                     let resource_address = spent.address.resource_address().to_string();
@@ -163,7 +174,7 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
             }
         }
 
-        Ok(())
+        Ok(skipped)
     }
 
     fn upsert_substate(&mut self, substate: &SubstateData) -> Result<(), StorageError> {
@@ -232,19 +243,17 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
         &mut self,
         receipts: I,
         event_filters: &[EventFilter],
-    ) -> Result<Vec<InsertedEvent>, StorageError> {
+    ) -> Result<InsertedReceipts, StorageError> {
         const OPERATION: &str = "batch_insert_transaction_receipts";
         use crate::storage_sqlite::schema::{events, transaction_receipts, transactions};
 
-        let mut inserted_events = Vec::new();
-        let mut num_receipts = 0u64;
+        let mut inserted = InsertedReceipts::default();
 
         for (receipt_addr, receipt) in receipts {
-            num_receipts += 1;
             let receipt_addr_hex = serialize_hex(receipt_addr.as_object_key());
             let transaction_id = TransactionId::from_receipt_address(receipt_addr);
 
-            diesel::insert_into(transaction_receipts::table)
+            let num_inserted = diesel::insert_into(transaction_receipts::table)
                 .values((
                     transaction_receipts::address.eq(&receipt_addr_hex),
                     transaction_receipts::data.eq(serialize_json(&receipt)?),
@@ -252,8 +261,14 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
                     transaction_receipts::total_fees_paid.eq(receipt.fee_receipt.total_fees_paid() as i64),
                     transaction_receipts::epoch.eq(encode_retention_epoch(receipt.epoch)),
                 ))
+                .on_conflict(transaction_receipts::address)
+                .do_nothing()
                 .execute(self.connection())
                 .map_err(|e| StorageError::general(OPERATION, e))?;
+            if num_inserted == 0 {
+                inserted.skipped.push(receipt_addr);
+                continue;
+            }
 
             // The receipt carries the epoch the transaction committed in, which supersedes the
             // max_epoch recorded at submission as the retention key. Most synced receipts belong to
@@ -290,21 +305,28 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
                         reason: format!("{OPERATION}: {}", e),
                     })?;
 
-                inserted_events.push(InsertedEvent {
+                inserted.events.push(InsertedEvent {
                     id,
                     transaction_id,
                     event: Arc::new(event),
                 });
             }
+
+            inserted.receipts.push(InsertedReceipt {
+                transaction_id,
+                outcome: receipt.outcome,
+                fee_receipt: receipt.fee_receipt,
+                num_events: receipt.events.len(),
+            });
         }
 
-        if num_receipts > 0 {
+        if !inserted.receipts.is_empty() {
             let count =
                 Optional::optional(self.key_value_get_value::<_, u64>(Key::TransactionReceiptCount))?.unwrap_or(0);
-            self.key_value_set(Key::TransactionReceiptCount, count + num_receipts)?;
+            self.key_value_set(Key::TransactionReceiptCount, count + inserted.receipts.len() as u64)?;
         }
 
-        Ok(inserted_events)
+        Ok(inserted)
     }
 
     fn upsert_submitted_transaction(
@@ -507,6 +529,24 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
             .map_err(|e| StorageError::general(OPERATION, e))?;
 
         Ok(())
+    }
+
+    fn insert_or_ignore_template_catalogue(
+        &mut self,
+        template_address: &TemplateAddress,
+        metadata: &PublishedTemplateMetadata,
+    ) -> Result<bool, StorageError> {
+        const OPERATION: &str = "insert_or_ignore_template_catalogue";
+        use crate::storage_sqlite::schema::template_catalogue;
+
+        let num_inserted = diesel::insert_into(template_catalogue::table)
+            .values(&NewTemplateCatalogueRow::from((*template_address, metadata)))
+            .on_conflict(template_catalogue::template_address)
+            .do_nothing()
+            .execute(self.connection())
+            .map_err(|e| StorageError::general(OPERATION, e))?;
+
+        Ok(num_inserted > 0)
     }
 
     fn insert_watched_substate(

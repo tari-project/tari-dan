@@ -520,6 +520,9 @@ impl ShardGroupEvidence {
         &self.inputs
     }
 
+    /// Iterates the inputs that have a pledge lock. Inputs that are not pledged (`None`) are skipped, so a check
+    /// applied to every item of this iterator says nothing about those inputs. Callers that require every input to
+    /// be pledged must also check [`Self::is_all_inputs_pledged`].
     pub fn all_pledged_inputs_iter(&self) -> impl Iterator<Item = (&SubstateId, &EvidenceInputLockData)> {
         self.inputs.iter().filter_map(|(id, ev)| Some((id, ev.as_ref()?)))
     }

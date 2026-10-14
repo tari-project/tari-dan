@@ -14,26 +14,21 @@ use tari_common_types::types::FixedHash;
 use tari_engine_types::{
     Utxo,
     events::Event,
+    fees::FeeReceipt,
     published_template::PublishedTemplateMetadata,
     substate::{Substate, SubstateId},
-    transaction_receipt::TransactionReceipt,
+    transaction_receipt::{FinalizeOutcome, TransactionReceipt},
 };
-use tari_indexer_client::types::{
-    ListSubstateItem,
-    NonFungibleSubstate,
-    TransactionEntry,
-    TransactionSource,
-    UtxoStateUpdateSet,
-};
+use tari_indexer_client::types::{TransactionEntry, TransactionSource, UtxoStateUpdateSet};
 use tari_indexer_lib::substate_cache::{FetchWatermark, SubstateCacheEntry, SubstateCacheEntryRef};
 use tari_ootle_common_types::{
     Epoch,
+    NodeHeight,
     ShardGroup,
     StateVersion,
     SubstateVersion,
     optional::Optional,
     shard::Shard,
-    substate_type::SubstateType,
 };
 use tari_ootle_storage::{
     Ordering,
@@ -47,6 +42,7 @@ use tari_template_lib_types::{
     ResourceAddress,
     TemplateAddress,
     TransactionReceiptAddress,
+    UtxoAddress,
     UtxoId,
     crypto::{RistrettoPublicKeyBytes, UtxoTag},
 };
@@ -94,14 +90,6 @@ pub trait IndexerStoreReader: Send + Sync + 'static {
 }
 
 pub trait IndexerStoreReadTransaction {
-    fn list_substates(
-        &mut self,
-        by_id: Option<&SubstateId>,
-        filter_by_type: Option<SubstateType>,
-        filter_by_template: Option<TemplateAddress>,
-        limit: Option<u64>,
-        offset: Option<u64>,
-    ) -> Result<Vec<ListSubstateItem>, StorageError>;
     fn get_substate(
         &mut self,
         address: &SubstateId,
@@ -109,12 +97,6 @@ pub trait IndexerStoreReadTransaction {
     ) -> Result<Option<SubstateRecord>, StorageError>;
 
     fn get_substates(&mut self, ids: &[SubstateId]) -> Result<HashMap<SubstateId, Substate>, StorageError>;
-    fn get_non_fungibles_by_resource_address(
-        &mut self,
-        resource_address: ResourceAddress,
-        limit: usize,
-        offset: usize,
-    ) -> Result<Vec<NonFungibleSubstate>, StorageError>;
 
     /// Returns the events matching `query` with id below `before_id` (or from the newest when
     /// `None`), newest first, skipping the first `offset` matches.
@@ -240,15 +222,24 @@ pub trait IndexerStoreReadTransaction {
 
     // -------------------------------- Verified State Roots -------------------------------- //
 
-    /// True if `root` is a committee-validated state merkle root recorded for `(epoch, shard_group)`.
-    /// This is the read-path trust decision: a hit lets a substate value proof be verified against
-    /// `root` without re-validating the serving validator's commit proof.
-    fn is_state_root_trusted(
+    /// The height of the block `root` was recorded at, if it is a committee-validated state merkle
+    /// root recorded for `(epoch, shard_group)`. This is the read-path trust decision: a hit lets a
+    /// substate value proof be verified against `root` without re-validating the serving
+    /// validator's commit proof.
+    fn get_verified_state_root_height(
         &mut self,
         epoch: Epoch,
         shard_group: ShardGroup,
         root: &FixedHash,
-    ) -> Result<bool, StorageError>;
+    ) -> Result<Option<NodeHeight>, StorageError>;
+
+    /// The height of the highest verified state root recorded at `epoch` for any shard group
+    /// overlapping `shard_group`.
+    fn get_latest_verified_height_overlapping(
+        &mut self,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+    ) -> Result<Option<NodeHeight>, StorageError>;
 
     /// The most recently committed verified state root recorded for `(epoch, shard_group)`, if any.
     fn get_latest_verified_state_root(
@@ -279,17 +270,22 @@ pub trait IndexerStoreWriteTransaction {
     fn commit(self) -> Result<(), StorageError>;
     fn rollback(self) -> Result<(), StorageError>;
     fn key_value_set<K: AsRef<str>, V: Serialize>(&mut self, key: K, value: V) -> Result<(), StorageError>;
+    /// Applies each UTXO update, returning the addresses of unspent outputs skipped because an
+    /// unspent row already holds their `(resource, public nonce, tag)`. The stored row is kept.
     fn batch_insert_utxo_updates<I: IntoIterator<Item = UtxoUpdateRecord>>(
         &mut self,
         epoch: Epoch,
         updates: I,
-    ) -> Result<(), StorageError>;
+    ) -> Result<Vec<UtxoAddress>, StorageError>;
     fn upsert_substate(&mut self, substate: &SubstateData) -> Result<(), StorageError>;
+    /// Inserts each receipt with its events, skipping any whose address already holds a receipt.
+    /// A receipt address is written once on the network, so the stored receipt is kept: replacing
+    /// it would let any later stream rewrite a transaction's recorded outcome.
     fn batch_insert_transaction_receipts<I: IntoIterator<Item = (TransactionReceiptAddress, TransactionReceipt)>>(
         &mut self,
         receipts: I,
         event_filters: &[EventFilter],
-    ) -> Result<Vec<InsertedEvent>, StorageError>;
+    ) -> Result<InsertedReceipts, StorageError>;
     /// Records a transaction submitted directly to this indexer. A row already stored from gossip is
     /// upgraded to [`TransactionSource::Local`]: the network gossips a submission straight back, and
     /// which of the two writes lands first is a race that must not decide the recorded source. Only
@@ -331,6 +327,13 @@ pub trait IndexerStoreWriteTransaction {
         template_address: &TemplateAddress,
         metadata: &PublishedTemplateMetadata,
     ) -> Result<(), StorageError>;
+    /// Records a template's catalogue entry unless it already has one, returning whether it was
+    /// inserted. A template is published once, so an entry already held is never rewritten.
+    fn insert_or_ignore_template_catalogue(
+        &mut self,
+        template_address: &TemplateAddress,
+        metadata: &PublishedTemplateMetadata,
+    ) -> Result<bool, StorageError>;
 
     fn insert_watched_substate(
         &mut self,
@@ -438,6 +441,25 @@ pub struct EventsPage {
     /// `None` once no further rows can match. A page can be shorter than the limit, or empty,
     /// and still carry a cursor when a wildcard scan stopped at its limit.
     pub next_cursor: Option<i64>,
+}
+
+/// What [`IndexerStoreWriteTransaction::batch_insert_transaction_receipts`] wrote.
+#[derive(Debug, Default)]
+pub struct InsertedReceipts {
+    pub receipts: Vec<InsertedReceipt>,
+    /// Addresses that already held a receipt, which was kept as stored.
+    pub skipped: Vec<TransactionReceiptAddress>,
+    /// The events of the inserted receipts that matched the event filters.
+    pub events: Vec<InsertedEvent>,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertedReceipt {
+    pub transaction_id: TransactionId,
+    pub outcome: FinalizeOutcome,
+    pub fee_receipt: FeeReceipt,
+    /// Events the receipt carries, before the event filters.
+    pub num_events: usize,
 }
 
 /// An event that was inserted into the database, with its assigned auto-increment ID.

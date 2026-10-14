@@ -244,8 +244,9 @@ impl<TStore: StateReader> StateTracker<TStore> {
         self.write_with(|state| state.push_event(event))
     }
 
-    pub fn add_log(&self, log: LogEntry) -> Result<(), RuntimeError> {
-        self.write_with(|state| state.push_log(log))
+    /// Adds `log` to the transaction's logs, handing it to `on_added` only if it was accepted.
+    pub fn add_log<F: FnOnce(&LogEntry)>(&self, log: LogEntry, on_added: F) -> Result<(), RuntimeError> {
+        self.write_with(|state| state.push_log(log).map(on_added))
     }
 
     /// Returns `true` the first time a given template address is seen within this transaction's
@@ -433,6 +434,20 @@ impl<TStore: StateReader> StateTracker<TStore> {
         }
         self.write_with(|state| state.fee_state_mut().accumulate_native_points(points));
         Ok(())
+    }
+
+    /// The most points [`Self::charge_native_execution`] would accept in one charge now, so that work
+    /// priced as it runs can be bounded to what the transaction can pay for before it starts.
+    pub fn native_execution_headroom(&self) -> u64 {
+        let native = self.accumulated_native_points();
+        let cap_remaining = limits::MAX_NATIVE_POINTS_PER_TRANSACTION.saturating_sub(native);
+        match self.compute_allowance() {
+            Some(allowance) => {
+                let consumed = self.accumulated_wasm_points().saturating_add(native);
+                cap_remaining.min(allowance.points.saturating_sub(consumed))
+            },
+            None => cap_remaining,
+        }
     }
 
     /// Chooses the state that finalization will persist.

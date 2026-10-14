@@ -1,13 +1,15 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use minicbor::{CborLen, Decode, Encode};
+use minicbor::{CborLen, Decode, Decoder, Encode, decode};
+use tari_bor::adapters::bounded_vec;
 use tari_template_abi::rust::{prelude::*, vec};
 
-use super::{SpendWitness, StealthUnspentOutput};
+use super::{MAX_CONDITIONS_PER_CONJUNCTION, MAX_INCLUSION_PROOF_LEN, SpendWitness, StealthUnspentOutput};
 use crate::{
     Amount,
     UtxoAddress,
+    access_rules::MAX_ACCESS_RULE_NODES,
     crypto::{BalanceProofSignature, PedersenCommitmentBytes, RangeProofBytes, RistrettoPublicKeyBytes},
 };
 
@@ -45,6 +47,7 @@ impl RevealedOutput {
 pub struct StealthOutputsStatement {
     /// The stealth outputs that are to be created
     #[n(0)]
+    #[cbor(decode_with = "decode_outputs")]
     pub outputs: Vec<StealthUnspentOutput>,
     /// The revealed funds to output, and the key authorised to take them. When set, a bucket containing the revealed
     /// stealth funds is created for `receiver`. `None` is the only encoding of "no revealed output": a zero amount is
@@ -107,6 +110,12 @@ impl StealthInput {
     pub fn with_witness(commitment: PedersenCommitmentBytes, witness: SpendWitness) -> Self {
         Self { commitment, witness }
     }
+
+    /// The nodes of the spend condition this input reveals, if any (see
+    /// [`SpendCondition::num_nodes`](super::SpendCondition::num_nodes)).
+    pub fn num_nodes(&self) -> usize {
+        self.witness.as_script_path().map_or(0, |(leaf, _, _)| leaf.num_nodes())
+    }
 }
 
 impl From<&UtxoAddress> for StealthInput {
@@ -134,6 +143,7 @@ impl From<&PedersenCommitmentBytes> for StealthInput {
 pub struct StealthInputsStatement {
     /// The stealth inputs that are to be spent
     #[n(0)]
+    #[cbor(decode_with = "decode_inputs")]
     pub inputs: Vec<StealthInput>,
     /// The total amount of revealed funds being spent.
     #[n(1)]
@@ -200,8 +210,39 @@ pub struct StealthTransferStatement {
     /// requires value conservation. Empty when no spent input gates on a covenant.
     #[n(3)]
     #[cfg_attr(feature = "serde", serde(default))]
-    #[cbor(default)]
+    #[cbor(default, decode_with = "decode_covenant_claims")]
     pub covenant_claims: Vec<CovenantBalanceClaim>,
+}
+
+/// The most stealth inputs one [`StealthInputsStatement`] may spend. Decoding refuses more.
+pub const MAX_STEALTH_INPUTS: usize = 1000;
+
+/// The most stealth outputs one [`StealthOutputsStatement`] may create. Decoding refuses more.
+pub const MAX_STEALTH_OUTPUTS: usize = 16;
+
+// Each input decodes to a fixed-size value however few bytes encode it, and its spend condition counts toward one
+// node bound shared by every input of the statement.
+fn decode_inputs<'b, C>(d: &mut Decoder<'b>, ctx: &mut C) -> Result<Vec<StealthInput>, decode::Error> {
+    let mut num_nodes = 0;
+    bounded_vec::decode_with_fn(d, ctx, MAX_STEALTH_INPUTS, |d, ctx| {
+        let input = StealthInput::decode(d, ctx)?;
+        num_nodes += input.num_nodes();
+        if num_nodes > MAX_ACCESS_RULE_NODES {
+            return Err(decode::Error::message(
+                "stealth inputs hold more than MAX_ACCESS_RULE_NODES spend condition nodes",
+            ));
+        }
+        Ok(input)
+    })
+}
+
+fn decode_outputs<'b, C>(d: &mut Decoder<'b>, ctx: &mut C) -> Result<Vec<StealthUnspentOutput>, decode::Error> {
+    bounded_vec::decode(d, ctx, MAX_STEALTH_OUTPUTS)
+}
+
+// A transfer carries at most one claim per input partition, and so at most one per input.
+fn decode_covenant_claims<'b, C>(d: &mut Decoder<'b>, ctx: &mut C) -> Result<Vec<CovenantBalanceClaim>, decode::Error> {
+    bounded_vec::decode(d, ctx, MAX_STEALTH_INPUTS)
 }
 
 impl StealthTransferStatement {
@@ -233,5 +274,101 @@ impl StealthTransferStatement {
 
     pub fn stealth_inputs(&self) -> &[StealthInput] {
         &self.inputs_statement.inputs
+    }
+
+    /// The nodes of every spend condition the inputs reveal (see
+    /// [`SpendCondition::num_nodes`](super::SpendCondition::num_nodes)).
+    pub fn num_nodes(&self) -> usize {
+        self.stealth_inputs().iter().map(StealthInput::num_nodes).sum()
+    }
+
+    /// Whether every collection in this statement is within the bound its decode applies: the input, output and
+    /// covenant claim counts, the atoms of each revealed spend condition, each inclusion proof's length, and the
+    /// spend condition nodes of all inputs together.
+    pub fn is_within_decode_limits(&self) -> bool {
+        self.stealth_inputs().len() <= MAX_STEALTH_INPUTS &&
+            self.stealth_outputs().len() <= MAX_STEALTH_OUTPUTS &&
+            self.covenant_claims.len() <= MAX_STEALTH_INPUTS &&
+            self.num_nodes() <= MAX_ACCESS_RULE_NODES &&
+            self.stealth_inputs().iter().all(|input| {
+                input.witness.as_script_path().is_none_or(|(leaf, proof, _)| {
+                    leaf.conditions().len() <= MAX_CONDITIONS_PER_CONJUNCTION &&
+                        proof.siblings.len() <= MAX_INCLUSION_PROOF_LEN
+                })
+            })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        Hash32,
+        crypto::RangeProofBytes,
+        stealth::{AtomicCondition, BuiltinPredicate, MerkleProof, SpendCondition},
+    };
+
+    fn statement(inputs: Vec<StealthInput>) -> StealthTransferStatement {
+        StealthTransferStatement {
+            inputs_statement: StealthInputsStatement {
+                inputs,
+                revealed_amount: Amount::ZERO,
+            },
+            outputs_statement: StealthOutputsStatement {
+                outputs: vec![],
+                revealed_output: None,
+                agg_range_proof: RangeProofBytes::empty(),
+            },
+            balance_proof: None,
+            covenant_claims: vec![],
+        }
+    }
+
+    fn script_path_input(num_conditions: usize, proof_len: usize) -> StealthInput {
+        let leaf =
+            SpendCondition::all((0..num_conditions).map(|_| AtomicCondition::Builtin(BuiltinPredicate::AfterEpoch(0))));
+        let proof = MerkleProof::new((0..proof_len).map(|_| Hash32::from_array([1; 32])).collect());
+        StealthInput::with_witness(PedersenCommitmentBytes::zero(), SpendWitness::script_path(leaf, proof))
+    }
+
+    /// Decoding a statement and checking it against its decode limits agree.
+    fn assert_decodes(statement: &StealthTransferStatement, expected: bool) {
+        let bytes = tari_bor::encode(statement).unwrap();
+        assert_eq!(tari_bor::decode::<StealthTransferStatement>(&bytes).is_ok(), expected);
+        assert_eq!(statement.is_within_decode_limits(), expected);
+    }
+
+    #[test]
+    fn statement_decodes_up_to_its_limits() {
+        let inputs = |n| {
+            (0..n)
+                .map(|_| StealthInput::new(PedersenCommitmentBytes::zero()))
+                .collect()
+        };
+        assert_decodes(&statement(inputs(MAX_STEALTH_INPUTS)), true);
+        assert_decodes(&statement(inputs(MAX_STEALTH_INPUTS + 1)), false);
+
+        assert_decodes(&statement(vec![script_path_input(1, MAX_INCLUSION_PROOF_LEN)]), true);
+        assert_decodes(
+            &statement(vec![script_path_input(1, MAX_INCLUSION_PROOF_LEN + 1)]),
+            false,
+        );
+        assert_decodes(
+            &statement(vec![script_path_input(MAX_CONDITIONS_PER_CONJUNCTION + 1, 0)]),
+            false,
+        );
+    }
+
+    #[test]
+    fn spend_condition_nodes_are_bounded_across_inputs() {
+        let per_input = MAX_CONDITIONS_PER_CONJUNCTION;
+        let num_inputs = MAX_ACCESS_RULE_NODES / per_input;
+        let at_limit = statement((0..num_inputs).map(|_| script_path_input(per_input, 0)).collect());
+        assert_eq!(at_limit.num_nodes(), MAX_ACCESS_RULE_NODES);
+        assert_decodes(&at_limit, true);
+
+        let mut over_limit = at_limit;
+        over_limit.inputs_statement.inputs.push(script_path_input(1, 0));
+        assert_decodes(&over_limit, false);
     }
 }

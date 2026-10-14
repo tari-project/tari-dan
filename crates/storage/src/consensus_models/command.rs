@@ -589,28 +589,32 @@ mod borsh_discriminant_tests {
         }
     }
 
+    fn sidechain_atom() -> tari_sidechain::TransactionAtom {
+        tari_sidechain::TransactionAtom::from_bytes(vec![])
+    }
+
     #[test]
     fn discriminants_match_the_sidechain_enum() {
         let cases: [(Command, tari_sidechain::Command); 7] = [
             (
                 Command::LocalOnly(local_only_atom()),
-                tari_sidechain::Command::LocalOnly,
+                tari_sidechain::Command::LocalOnly(sidechain_atom()),
             ),
             (
                 Command::LocalPrepare(multi_shard_atom()),
-                tari_sidechain::Command::LocalPrepare,
+                tari_sidechain::Command::LocalPrepare(sidechain_atom()),
             ),
             (
                 Command::LocalAccept(multi_shard_atom()),
-                tari_sidechain::Command::LocalAccept,
+                tari_sidechain::Command::LocalAccept(sidechain_atom()),
             ),
             (
                 Command::AllAccept(multi_shard_atom()),
-                tari_sidechain::Command::AllAccept,
+                tari_sidechain::Command::AllAccept(sidechain_atom()),
             ),
             (
                 Command::SomeAccept(multi_shard_atom()),
-                tari_sidechain::Command::SomeAccept,
+                tari_sidechain::Command::SomeAccept(sidechain_atom()),
             ),
             (
                 Command::ForeignProposal(foreign_proposal_atom()),

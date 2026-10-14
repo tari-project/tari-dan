@@ -652,6 +652,10 @@ pub enum AbortReason {
     /// permits. Evaluated against the pinned epoch, so every shard group reaches the same verdict.
     #[n(9)]
     ValidityWindowTooLong,
+    /// The transaction's inputs held by one shard group are more than a block may pledge to the other shard
+    /// groups involved, so no block could deliver them.
+    #[n(10)]
+    InputPledgeTooLarge,
 }
 
 impl Display for AbortReason {
