@@ -27,6 +27,7 @@ use tari_consensus::{
 use tari_consensus_types::{
     BlockId,
     Decision,
+    HighPc,
     LockedBlock,
     ProposalCertificate,
     ToSignatureMessage,
@@ -399,7 +400,6 @@ async fn blocks_citing_unknown_transactions_do_not_stay_parked() {
         "no block at or below locked height {locked_height}"
     );
 
-    let tx_inbound = test.get_validator(&victim).tx_inbound_message.clone();
     let mut seed = 0;
     let mut forge = |template: &Block, justify: &ProposalCertificate| {
         seed += 1;
@@ -420,34 +420,16 @@ async fn blocks_citing_unknown_transactions_do_not_stay_parked() {
         .map(|seed| block_citing_an_unknown_transaction(&leaf, leaf.justify(), &TestAddress::new("outsider"), seed))
         .collect::<Vec<_>>();
 
-    // Another member's block is parked whatever the sender's count, so once it is parked every block sent before it
-    // has been processed
     let sentinel = block_citing_an_unknown_transaction(&leaf, leaf.justify(), &TestAddress::new("3"), u32::MAX);
-
-    for block in stale.iter().chain(&relayed).chain(&fresh).chain([&sentinel]) {
-        tx_inbound
-            .send((
-                sender.clone(),
-                HotstuffMessage::new_catch_up_sync_response(ProposalMessage {
-                    block: block.clone(),
-                    foreign_proposals: vec![],
-                }),
-            ))
-            .await
-            .unwrap();
-    }
-    let sentinel = [sentinel];
-    for _ in 0..200 {
-        if count_parked(test.get_validator(&victim), &sentinel) == 1 {
-            break;
-        }
-        sleep(Duration::from_millis(100)).await;
-    }
-    assert_eq!(
-        count_parked(test.get_validator(&victim), &sentinel),
-        1,
-        "the victim did not process the blocks"
-    );
+    let sentinel = send_blocks_until_sentinel_is_parked(
+        &test,
+        &victim,
+        &sender,
+        stale.iter().chain(&relayed).chain(&fresh),
+        sentinel,
+        HotstuffMessage::new_catch_up_sync_response,
+    )
+    .await;
 
     assert_eq!(count_parked(test.get_validator(&victim), &stale), 0);
     assert_eq!(count_parked(test.get_validator(&victim), &relayed), 0);
@@ -457,28 +439,115 @@ async fn blocks_citing_unknown_transactions_do_not_stay_parked() {
         "one proposer's parked blocks at one height"
     );
 
-    // Once the chain locks past them, none of them can ever be voted on
-    let (tx, _, _) = test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
-    loop {
-        test.on_block_committed().await;
-        let locked = test
-            .get_validator(&victim)
-            .state_store
-            .with_read_tx(|tx| LockedBlock::get(tx, Epoch(1)))
-            .unwrap();
-        if test.is_transaction_pool_empty() && locked.height > leaf.height() {
-            break;
-        }
-        assert!(
-            locked.height < leaf.height() + NodeHeight(20),
-            "chain did not lock past the parked blocks"
-        );
-    }
+    let tx = commit_until_locked_past(&mut test, &victim, leaf.height()).await;
     assert_eq!(count_parked(test.get_validator(&victim), &fresh), 0);
     assert_eq!(count_parked(test.get_validator(&victim), &sentinel), 0);
 
     test.stop();
-    test.assert_all_validators_committed(tx.id());
+    test.assert_all_validators_committed(&tx);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn proposals_citing_unknown_transactions_do_not_stay_parked() {
+    setup_logger();
+    let victim = TestAddress::new("1");
+    let sender = TestAddress::new("2");
+    let mut test = Test::builder().add_committee(0, vec!["1", "2", "3", "4"]).start().await;
+    test.start_epoch(Epoch(1)).await;
+    test.wait_for_all_validators_to_start_consensus().await;
+
+    test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
+    commit_until_pool_is_empty(&mut test, &victim).await;
+
+    // Blocks for the view the victim is in pass the proposal path's view and height checks
+    let (high_qc, template) = test
+        .get_validator(&victim)
+        .state_store
+        .with_read_tx(|tx| {
+            let high_pc = HighPc::get(tx, Epoch(1))?;
+            let high_qc = tx.proposal_certificates_get(Epoch(1), high_pc.id())?;
+            let template = Block::get(tx, &high_qc.calculate_block_id())?;
+            Ok::<_, StorageError>((high_qc, template))
+        })
+        .unwrap();
+
+    // Distinct proposals from one member for one view, whether or not that member leads it
+    let flood = (0..20)
+        .map(|seed| block_citing_an_unknown_transaction(&template, &high_qc, &sender, seed))
+        .collect::<Vec<_>>();
+    let sentinel = block_citing_an_unknown_transaction(&template, &high_qc, &TestAddress::new("3"), u32::MAX);
+    let sentinel =
+        send_blocks_until_sentinel_is_parked(&test, &victim, &sender, &flood, sentinel, HotstuffMessage::new_proposal)
+            .await;
+
+    assert_eq!(
+        count_parked(test.get_validator(&victim), &flood),
+        MAX_PARKED_BLOCKS_PER_PROPOSER_PER_HEIGHT,
+        "one proposer's parked blocks at one height"
+    );
+
+    let tx = commit_until_locked_past(&mut test, &victim, high_qc.height() + NodeHeight(1)).await;
+    assert_eq!(count_parked(test.get_validator(&victim), &flood), 0);
+    assert_eq!(count_parked(test.get_validator(&victim), &sentinel), 0);
+
+    test.stop();
+    test.assert_all_validators_committed(&tx);
+}
+
+/// Sends `blocks` and then `sentinel` to `victim` as `to_message` builds them, and waits until `sentinel` is parked.
+/// `sentinel` must be another proposer's block, which is parked whatever the sender's count, so that once it is parked
+/// every block sent before it has been processed.
+async fn send_blocks_until_sentinel_is_parked<'a>(
+    test: &Test,
+    victim: &TestAddress,
+    sender: &TestAddress,
+    blocks: impl IntoIterator<Item = &'a Block>,
+    sentinel: Block,
+    to_message: fn(ProposalMessage) -> HotstuffMessage,
+) -> [Block; 1] {
+    let tx_inbound = test.get_validator(victim).tx_inbound_message.clone();
+    let sentinel = [sentinel];
+    for block in blocks.into_iter().cloned().chain(sentinel.iter().cloned()) {
+        tx_inbound
+            .send((
+                sender.clone(),
+                to_message(ProposalMessage {
+                    block,
+                    foreign_proposals: vec![],
+                }),
+            ))
+            .await
+            .unwrap();
+    }
+
+    for _ in 0..200 {
+        if count_parked(test.get_validator(victim), &sentinel) == 1 {
+            return sentinel;
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+    panic!("the victim did not process the blocks");
+}
+
+/// Commits a transaction and waits until `victim` has locked a block above `height`. Once the chain locks past them,
+/// no parked block at or below `height` can ever be voted on.
+async fn commit_until_locked_past(test: &mut Test, victim: &TestAddress, height: NodeHeight) -> TransactionId {
+    let (tx, _, _) = test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
+    loop {
+        test.on_block_committed().await;
+        let locked = test
+            .get_validator(victim)
+            .state_store
+            .with_read_tx(|tx| LockedBlock::get(tx, Epoch(1)))
+            .unwrap();
+        if test.is_transaction_pool_empty() && locked.height > height {
+            return *tx.id();
+        }
+        assert!(
+            locked.height < height + NodeHeight(20),
+            "chain did not lock past the parked blocks"
+        );
+    }
 }
 
 /// Commits a transaction with inputs on committee 0 and outputs on committees 1 and 2.
