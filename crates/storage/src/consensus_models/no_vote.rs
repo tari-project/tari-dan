@@ -90,8 +90,6 @@ pub enum NoVoteReason {
     EndOfEpochBurnRateMismatch { local_bps: u16, proposed_bps: u16 },
     #[error("The state Merkle root does not match")]
     StateMerkleRootMismatch,
-    #[error("The command Merkle root does not match")]
-    CommandMerkleRootMismatch,
     #[error("Not all foreign input pledges are present")]
     NotAllForeignInputPledges,
     #[error(
@@ -178,7 +176,6 @@ impl NoVoteReason {
             Self::EndOfEpochBurnRateMismatch { .. } => "EndOfEpochBurnRateMismatch",
             Self::TotalLeaderFeeDisagreement => "TotalLeaderFeeDisagreement",
             Self::StateMerkleRootMismatch => "StateMerkleRootMismatch",
-            Self::CommandMerkleRootMismatch => "CommandMerkleRootMismatch",
             Self::NotAllForeignInputPledges => "NotAllForeignInputPledges",
             Self::ProposedBeforeShardGroupsReady { .. } => "ProposedBeforeShardGroupsReady",
             Self::InvalidEvidence { .. } => "InvalidEvidence",
