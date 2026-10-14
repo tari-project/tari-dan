@@ -131,7 +131,7 @@ mod confirm_all_transitions {
             .unwrap();
 
         let mut num_ready = 0;
-        tx.transaction_pool_for_each_ready(&block_id, |_| num_ready += 1)
+        tx.transaction_pool_for_each_ready(&block_id, Epoch(0), |_| num_ready += 1)
             .unwrap();
         assert_eq!(num_ready, 3);
 
@@ -156,6 +156,68 @@ mod confirm_all_transitions {
         let rec = tx.transaction_pool_get_for_blocks(&block_id, &atom3.id).unwrap();
         assert_eq!(rec.committed_stage(), TransactionPoolStage::LocalPrepared);
         assert_eq!(rec.pending_stage(), None);
+
+        tx.rollback().unwrap();
+    }
+
+    /// A LocalPrepared transaction that is not ready is offered for proposal once its max_epoch and the grace epoch
+    /// after it have passed, so the leader can propose its abort.
+    #[test]
+    fn it_offers_an_expired_local_prepared_transaction() {
+        let (db, _tmp) = create_rocksdb();
+        let mut tx = db.create_write_tx().unwrap();
+
+        let atom = create_tx_atom();
+        let network = Network::LocalNet;
+        let zero_block = Block::zero_block(network, num_preshards());
+        zero_block.insert(&mut tx).unwrap();
+        tx.proposal_certificates_save(zero_block.justify()).unwrap();
+        tx.blocks_set_qcs(zero_block.id(), Some(&PcId::zero()), Some(&PcId::zero()))
+            .unwrap();
+        let shard_group = zero_block.shard_group();
+
+        let block1 = Block::create(
+            network,
+            ProtocolVersion::V0,
+            *zero_block.id(),
+            zero_block.justify().clone(),
+            None,
+            NodeHeight(1),
+            Epoch(0),
+            shard_group,
+            Default::default(),
+            BlockCommands::init([Command::LocalPrepare(atom.clone())]).unwrap(),
+            Default::default(),
+            Default::default(),
+            SchnorrSignatureBytes::zero(),
+            EpochTime::now().as_u64(),
+            FixedHash::zero(),
+            ShardGroupAccumulatedData::default(),
+            ExtraData::default(),
+        )
+        .unwrap();
+        block1.insert(&mut tx).unwrap();
+        block1.as_locked().set(&mut tx).unwrap();
+        block1.as_leaf().set(&mut tx).unwrap();
+
+        tx.transaction_pool_insert_new(atom.id, atom.decision, &Evidence::empty(), false, false, Epoch(1), 0)
+            .unwrap();
+        let mut rec = tx.transaction_pool_get_all(1000).unwrap().pop().unwrap();
+        rec.set_next_stage_and_readiness(TransactionPoolStage::LocalPrepared, shard_group)
+            .unwrap();
+        rec.set_ready(false);
+        tx.transaction_pool_add_pending_update(&block1.as_leaf(), &TransactionPoolStatusUpdate::new(rec, true))
+            .unwrap();
+
+        let count_offered = |epoch| {
+            let mut num = 0;
+            tx.transaction_pool_for_each_ready(block1.id(), epoch, |_| num += 1)
+                .unwrap();
+            num
+        };
+        assert_eq!(count_offered(Epoch(1)), 0);
+        assert_eq!(count_offered(Epoch(2)), 0);
+        assert_eq!(count_offered(Epoch(3)), 1);
 
         tx.rollback().unwrap();
     }
@@ -822,7 +884,7 @@ mod get_batch_for_next_block {
         block_id: &BlockId,
     ) -> Vec<TransactionPoolRecord> {
         TransactionPool::<RocksDbStateStore<String>>::new()
-            .get_batch_for_next_block(tx, weight_budget, max_count, heavy_turn, block_id)
+            .get_batch_for_next_block(tx, weight_budget, max_count, heavy_turn, block_id, Epoch(0))
             .unwrap()
     }
 

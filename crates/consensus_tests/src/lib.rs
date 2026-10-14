@@ -15,6 +15,8 @@ mod epoch_change;
 #[cfg(test)]
 mod extends_justify;
 #[cfg(test)]
+mod foreign_prepare_timeout;
+#[cfg(test)]
 mod foreign_proposal_committee;
 #[cfg(test)]
 mod foreign_proposal_size;

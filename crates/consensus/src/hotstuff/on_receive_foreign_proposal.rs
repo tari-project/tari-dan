@@ -18,6 +18,7 @@ use tari_ootle_storage::{
         Block,
         CommandOrHash,
         CommandsCommitProof,
+        FOREIGN_PROPOSAL_EPOCH_WINDOW,
         ForeignProposal,
         ForeignProposalRecord,
         ForeignProposalStatus,
@@ -395,7 +396,9 @@ where TConsensusSpec: ConsensusSpec
                     requests.shard_group(),
                     block_id,
                 );
-                // If a FP is never received + proposed by any local member, the transaction will TIMEOUT and ABORT
+                // A transaction left waiting in LocalPrepared on this proposal aborts in the first epoch after its
+                // max_epoch plus `LOCAL_PREPARED_GRACE_EPOCHS` (see
+                // `TransactionPoolRecord::is_local_prepared_expired_at`)
                 continue;
             }
 
@@ -469,9 +472,8 @@ where TConsensusSpec: ConsensusSpec
         // Callers authenticate the proposal against its committee with `check_foreign_proposal` before this runs.
         // TODO: these should be in the validator helper module.
         let epoch = local_committee_info.epoch();
-        // Allow one epoch behind as Prepare/Accept rounds may have been conducted in the previous/subsequent epoch
-        // before/after epoch end
-        let epoch_range = epoch.saturating_sub(Epoch(1))..=epoch + Epoch(1);
+        let window = Epoch(FOREIGN_PROPOSAL_EPOCH_WINDOW);
+        let epoch_range = epoch.saturating_sub(window)..=epoch + window;
 
         if !epoch_range.contains(&proposal.epoch()) {
             warn!(
@@ -523,12 +525,10 @@ pub(super) fn validate_evidence_and_pledges_match(
                 shard_group: foreign_shard_group,
                 details: e.into(),
             })?;
-    // TODO: any error will** result in transactions that never resolve.
-    // ** unless the foreign shard sends it again with the correct evidence and pledges
-    // Possible ways to handle this:
-    // - Send a message to the foreign shard to request the pledges again (but why would they return the correct pledges
-    //   this time?)
-    // - Immediately ABORT all transactions with invalid pledges in the block - this is the safest option
+    // A rejected proposal is never applied. A transaction waiting on it in LocalPrepared aborts in the first epoch
+    // after its max_epoch plus `LOCAL_PREPARED_GRACE_EPOCHS` (see
+    // `TransactionPoolRecord::is_local_prepared_expired_at`); one that has already sent its LocalAccept keeps
+    // waiting for the foreign shard group.
     let mut num_applicable = 0usize;
     for (is_local_accept, atom) in proposal.full_commands_iter().filter_map(|cmd| {
         cmd.local_prepare()

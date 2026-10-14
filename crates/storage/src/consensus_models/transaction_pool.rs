@@ -37,6 +37,7 @@ use crate::{
     consensus_models::{
         BlockTransactionExecution,
         Evidence,
+        FOREIGN_PROPOSAL_EPOCH_WINDOW,
         LeaderFee,
         LocalOnlyAtom,
         LockedEpoch,
@@ -48,6 +49,11 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::ootle::storage::transaction_pool";
+
+/// Epochs after a transaction's `max_epoch` that a shard group holding it in `LocalPrepared` keeps waiting for the
+/// other involved shard groups. A foreign proposal made in `max_epoch` is accepted until the local epoch moves past
+/// [`FOREIGN_PROPOSAL_EPOCH_WINDOW`] epochs after it.
+pub const LOCAL_PREPARED_GRACE_EPOCHS: u64 = FOREIGN_PROPOSAL_EPOCH_WINDOW;
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionPool<TStateStore> {
@@ -122,7 +128,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         Ok(recs)
     }
 
-    /// Fetch ready transactions for the next block, bounded by a weight budget and a hard command
+    /// Fetch transactions ready to propose in a block in `epoch`, bounded by a weight budget and a hard command
     /// count cap. See [`select_proposal_batch`] for how records are chosen.
     pub fn get_batch_for_next_block(
         &self,
@@ -131,13 +137,14 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         max_count: usize,
         heavy_turn: bool,
         block_id: &BlockId,
+        epoch: Epoch,
     ) -> Result<Vec<TransactionPoolRecord>, TransactionPoolError> {
         if weight_budget == 0 || max_count == 0 {
             return Ok(Vec::new());
         }
         let mut rng = rand::rng();
         let mut sample = ProposalSample::new(weight_budget, max_count, heavy_turn);
-        tx.transaction_pool_for_each_ready(block_id, |rec| sample.offer(rec, &mut rng))?;
+        tx.transaction_pool_for_each_ready(block_id, epoch, |rec| sample.offer(rec, &mut rng))?;
         Ok(sample.into_batch(&mut rng))
     }
 
@@ -145,6 +152,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         &self,
         tx: &impl StateStoreReadTransaction,
         block_id: &BlockId,
+        epoch: Epoch,
     ) -> Result<bool, TransactionPoolError> {
         // Check if any pending transactions have state updates that need to be applied
         if tx.transaction_pool_has_pending_state_updates(block_id)? {
@@ -163,8 +171,8 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         // needs further proposals until it is.
         let mut reason = None;
         let found = tx.transaction_pool_any(true, |rec| {
-            if rec.is_ready() {
-                reason = Some("marked as ready");
+            if rec.is_ready_to_propose_in(epoch) {
+                reason = Some("ready to propose");
                 return true;
             }
             let needs_finalizing = matches!(
@@ -640,6 +648,24 @@ impl TransactionPoolRecord {
 
     pub fn is_ready_for_pending_stage(&self, local_shard_group: ShardGroup) -> bool {
         self.can_continue_to(self.current_stage(), local_shard_group)
+    }
+
+    /// True if, in `epoch`, this transaction has waited in `LocalPrepared` with a COMMIT decision for longer than its
+    /// validity window plus [`LOCAL_PREPARED_GRACE_EPOCHS`], and the local shard group must abort it.
+    ///
+    /// CONSENSUS RULE: the leader proposes, and every replica requires, `LocalAccept(ABORT)` for such a transaction.
+    /// Aborting here is safe because the local shard group has not sent its LocalAccept yet, and no shard group can
+    /// finalize COMMIT without it. A transaction in `LocalAccepted` is never expired by this rule: a foreign shard
+    /// group may already have finalized COMMIT on the strength of the local LocalAccept.
+    pub fn is_local_prepared_expired_at(&self, epoch: Epoch) -> bool {
+        self.current_stage().is_local_prepared() &&
+            self.current_decision().is_commit() &&
+            epoch.as_u64() > self.max_epoch.as_u64().saturating_add(LOCAL_PREPARED_GRACE_EPOCHS)
+    }
+
+    /// True if a block in `epoch` may propose this transaction's next command.
+    pub fn is_ready_to_propose_in(&self, epoch: Epoch) -> bool {
+        self.is_ready || self.is_local_prepared_expired_at(epoch)
     }
 
     pub fn current_local_decision(&self) -> Decision {
@@ -1245,6 +1271,46 @@ mod tests {
             // is the only thing bounding it, never an unbounded fill.
             let rec = record_with_weight_and_stage(0, TransactionPoolStage::New);
             assert_eq!(rec.proposal_weight(), 1);
+        }
+    }
+
+    mod is_local_prepared_expired_at {
+        use tari_engine_types::commit_result::AbortReason;
+
+        use super::{proposal_weight::record_with_weight_and_stage, *};
+
+        #[test]
+        fn it_expires_after_the_grace_epoch() {
+            let mut rec = record_with_weight_and_stage(1, TransactionPoolStage::LocalPrepared);
+            rec.is_ready = false;
+            assert_eq!(rec.max_epoch(), Epoch(1));
+
+            assert!(!rec.is_local_prepared_expired_at(Epoch(1)));
+            assert!(!rec.is_local_prepared_expired_at(Epoch(2)));
+            assert!(!rec.is_ready_to_propose_in(Epoch(2)));
+            assert!(rec.is_local_prepared_expired_at(Epoch(3)));
+            assert!(rec.is_ready_to_propose_in(Epoch(3)));
+        }
+
+        #[test]
+        fn it_never_expires_a_transaction_that_has_sent_its_local_accept() {
+            for stage in [
+                TransactionPoolStage::New,
+                TransactionPoolStage::LocalAccepted,
+                TransactionPoolStage::AllAccepted,
+                TransactionPoolStage::SomeAccepted,
+                TransactionPoolStage::LocalOnly,
+            ] {
+                let rec = record_with_weight_and_stage(1, stage);
+                assert!(!rec.is_local_prepared_expired_at(Epoch(100)), "{stage} must not expire");
+            }
+        }
+
+        #[test]
+        fn it_does_not_expire_a_transaction_already_aborting() {
+            let mut rec = record_with_weight_and_stage(1, TransactionPoolStage::LocalPrepared);
+            rec.set_local_decision(Decision::Abort(AbortReason::ExecutionFailure));
+            assert!(!rec.is_local_prepared_expired_at(Epoch(100)));
         }
     }
 

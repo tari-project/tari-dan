@@ -7,7 +7,12 @@ use indexmap::IndexMap;
 use log::*;
 use tari_common_types::types::FixedHash;
 use tari_consensus_types::{BlockId, HighPc, HighTc, LeafBlock, PcId, ProposalCertificate, ShardGroupAccumulatedData};
-use tari_engine_types::{ValidatorFeePool, fees::ExhaustBurnRate, substate::SubstateDiff};
+use tari_engine_types::{
+    ValidatorFeePool,
+    commit_result::{AbortReason, RejectReason},
+    fees::ExhaustBurnRate,
+    substate::SubstateDiff,
+};
 use tari_ootle_common_types::{
     Epoch,
     NodeAddressable,
@@ -33,6 +38,7 @@ use tari_ootle_storage::{
         EpochCheckpoint,
         PendingShardStateTreeDiff,
         SubstateChange,
+        TransactionExecution,
         TransactionPoolRecord,
         TransactionRecord,
         TreeRootSummary,
@@ -527,6 +533,37 @@ pub(crate) fn get_highest_seen_justified_view<TTx: StateStoreReadTransaction>(
         .map(|high_tc| high_tc.height())
         .unwrap_or_default();
     Ok(high_pc.max(high_tc))
+}
+
+/// Moves `tx_rec` to ABORT if, for a block in `epoch`, it has outlived its validity window in `LocalPrepared` (see
+/// [`TransactionPoolRecord::is_local_prepared_expired_at`]). Returns the abort execution the block must record.
+///
+/// The proposer and every replica apply this to the record as the block's foreign proposals leave it, before deciding
+/// the transaction's next command, so they agree on whether the block's LocalAccept is an ABORT.
+pub fn abort_if_local_prepared_expired(
+    tx_rec: &mut TransactionPoolRecord,
+    epoch: Epoch,
+) -> Option<TransactionExecution> {
+    if !tx_rec.is_local_prepared_expired_at(epoch) {
+        return None;
+    }
+
+    info!(
+        target: LOG_TARGET,
+        "⏰ Transaction {} is still waiting on foreign shard groups in {} after its max_epoch {}. Aborting.",
+        tx_rec.id(),
+        epoch,
+        tx_rec.max_epoch(),
+    );
+    let execution = TransactionExecution::abort(tx_rec.id(), RejectReason::Abort {
+        reason: AbortReason::EpochExpired,
+    });
+    tx_rec
+        .set_local_decision(execution.decision())
+        .set_transaction_fee(0)
+        .set_exhaust_burn(0)
+        .no_leader_fee();
+    Some(execution)
 }
 
 /// Records the prepare/accept evidence for the commands in `new_leaf_block` and its not-yet-justified ancestors,

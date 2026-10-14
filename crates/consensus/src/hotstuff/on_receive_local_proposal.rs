@@ -214,19 +214,6 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
 
         // First validate and save the attached foreign proposals
         let is_all_foreign_proposals_valid = self.store.with_write_tx(|tx| {
-            // TODO: Implement guaranteed finality in the face of a non-cooperating remote shard group.
-            // Suggested strategy:
-            // Given a transaction that is awaiting a foreign proposal for REQUEST_FOREIGN_PROPOSAL_TIMEOUT (e.g. 50)
-            // blocks
-            // - Load pending transactions that are awaiting foreign proposal for >= REQUEST_FOREIGN_PROPOSAL_TIMEOUT
-            // - Request foreign proposal from remote shard group [END]
-            //
-            // Given a transaction that is awaiting a foreign proposal for MISSING_FOREIGN_PROPOSAL_TIMEOUT (e.g. 100)
-            // blocks
-            // - Load pending transactions that are awaiting foreign proposal for >= MISSING_FOREIGN_PROPOSAL_TIMEOUT
-            // - Set abort and ready = true
-            // self.update_foreign_proposal_transactions(tx, valid_block.block())?;
-
             for foreign_proposal in foreign_proposals {
                 let mut foreign_proposal = ForeignProposalRecord::new(foreign_proposal);
                 if foreign_proposal.exists(&**tx)? {

@@ -1337,8 +1337,15 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         Ok(transactions)
     }
 
-    fn transaction_pool_for_each_ready<F>(&self, block_id: &BlockId, mut f: F) -> Result<(), StorageError>
-    where F: FnMut(TransactionPoolRecord) {
+    fn transaction_pool_for_each_ready<F>(
+        &self,
+        block_id: &BlockId,
+        epoch: Epoch,
+        mut f: F,
+    ) -> Result<(), StorageError>
+    where
+        F: FnMut(TransactionPoolRecord),
+    {
         const OPERATION: &str = "transaction_pool_for_each_ready";
         if !self.blocks_exists(block_id)? {
             return Err(StorageError::QueryError {
@@ -1375,7 +1382,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
             if let Some(update) = updates.remove(tx.id()) {
                 update.merge_into(&mut tx);
             }
-            if tx.is_ready() {
+            if tx.is_ready_to_propose_in(epoch) {
                 f(tx);
             }
         }
