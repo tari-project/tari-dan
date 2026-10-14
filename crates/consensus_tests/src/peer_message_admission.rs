@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     sync::{
         Arc,
         Mutex,
@@ -37,7 +37,7 @@ use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
     StorageError,
-    consensus_models::{Block, BlockHeader, BookkeepingModel, Command, LocalOnlyAtom},
+    consensus_models::{Block, BlockCommands, BlockHeader, BookkeepingModel, Command, LocalOnlyAtom},
 };
 use tari_ootle_transaction::{Transaction, TransactionId};
 use tokio::time::sleep;
@@ -317,12 +317,13 @@ fn block_citing_an_unknown_transaction(
     let (secret_key, public_key) = helpers::derive_keypair_from_address(proposer);
     let mut tx_id = [0xab; 32];
     tx_id[..4].copy_from_slice(&seed.to_le_bytes());
-    let commands = BTreeSet::from([Command::LocalOnly(LocalOnlyAtom {
+    let commands = BlockCommands::init([Command::LocalOnly(LocalOnlyAtom {
         id: TransactionId::new(tx_id),
         decision: Decision::Commit,
         transaction_fee: 0,
         leader_fee: None,
-    })]);
+    })])
+    .unwrap();
     let header = template.header();
     let mut forged = BlockHeader::create_unsigned(
         header.network(),
@@ -419,7 +420,11 @@ async fn blocks_citing_unknown_transactions_do_not_stay_parked() {
         .map(|seed| block_citing_an_unknown_transaction(&leaf, leaf.justify(), &TestAddress::new("outsider"), seed))
         .collect::<Vec<_>>();
 
-    for block in stale.iter().chain(&fresh).chain(&relayed) {
+    // Another member's block is parked whatever the sender's count, so once it is parked every block sent before it
+    // has been processed
+    let sentinel = block_citing_an_unknown_transaction(&leaf, leaf.justify(), &TestAddress::new("3"), u32::MAX);
+
+    for block in stale.iter().chain(&relayed).chain(&fresh).chain([&sentinel]) {
         tx_inbound
             .send((
                 sender.clone(),
@@ -431,7 +436,18 @@ async fn blocks_citing_unknown_transactions_do_not_stay_parked() {
             .await
             .unwrap();
     }
-    sleep(Duration::from_secs(2)).await;
+    let sentinel = [sentinel];
+    for _ in 0..200 {
+        if count_parked(test.get_validator(&victim), &sentinel) == 1 {
+            break;
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(
+        count_parked(test.get_validator(&victim), &sentinel),
+        1,
+        "the victim did not process the blocks"
+    );
 
     assert_eq!(count_parked(test.get_validator(&victim), &stale), 0);
     assert_eq!(count_parked(test.get_validator(&victim), &relayed), 0);
@@ -459,6 +475,7 @@ async fn blocks_citing_unknown_transactions_do_not_stay_parked() {
         );
     }
     assert_eq!(count_parked(test.get_validator(&victim), &fresh), 0);
+    assert_eq!(count_parked(test.get_validator(&victim), &sentinel), 0);
 
     test.stop();
     test.assert_all_validators_committed(tx.id());
