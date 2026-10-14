@@ -336,6 +336,147 @@ fn second_contribution_and_partial_redeem() {
     assert_eq!(vaults.get(&faucet_resource).unwrap().balance(), 3000);
 }
 
+struct PoolState {
+    reserve_tari: u64,
+    reserve_other: u64,
+    lp_supply: u64,
+}
+
+fn read_pool_state(test: &TemplateTest, pool_addr: ComponentAddress, other: ResourceAddress) -> PoolState {
+    let store = test.read_only_state_store();
+    let pool_body = store.get_component(pool_addr).unwrap();
+    let indexed = pool_body.body.to_indexed_well_known_types().unwrap();
+    let lp_resx = indexed.resource_addresses().first().copied().unwrap();
+    let vaults = indexed
+        .vault_ids()
+        .iter()
+        .map(|id| store.get_vault(id).unwrap())
+        .map(|v| (*v.resource_address(), v.balance().to_u64_checked().unwrap()))
+        .collect::<HashMap<_, _>>();
+    let lp_supply = store
+        .get_resource(&lp_resx)
+        .unwrap()
+        .total_supply()
+        .unwrap()
+        .to_u64_checked()
+        .unwrap();
+    PoolState {
+        reserve_tari: vaults[&TARI_TOKEN],
+        reserve_other: vaults[&other],
+        lp_supply,
+    }
+}
+
+/// Seeds a pool with reserves (3 TARI, 1_000_000 faucet), which mints 1732 LP, then contributes `(tari, other)`.
+/// A reserve of a few base units of A makes the B value of one unit of A large, so any rounding in the pool's
+/// favour on the B side is easy to observe.
+fn contribute_to_thin_pool(tari: u64, other: u64) -> (PoolState, PoolState) {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let template_address = test.get_template_address(TEMPLATE_NAME);
+    let (faucet_component, faucet_resource) = create_test_faucet_component(&mut test, 1_000_000_000_000u64);
+    let (user1, _user1_proof, user1_secret) = test.create_funded_account();
+
+    test.execute_expect_success(
+        Transaction::builder_localnet(Epoch(1))
+            .allocate_component_address("pool")
+            .call_function(template_address, "create", args![
+                OwnerRule::OwnedBySigner,
+                AccessRule::AllowAll,
+                TARI_TOKEN,
+                faucet_resource,
+                metadata!["name" => "TARI-Stablecoin Liquidity Pool"],
+                Workspace("pool"),
+            ])
+            .call_method(faucet_component, "take_free_coins_custom", args![1_000_000u64])
+            .put_last_instruction_output_on_workspace("faucet_coins")
+            .call_method(user1, "withdraw", args![TARI_TOKEN, 3u64])
+            .put_last_instruction_output_on_workspace("xtr_coins")
+            .call_method("pool", "contribute", args![
+                Workspace("xtr_coins"),
+                Workspace("faucet_coins")
+            ])
+            .put_last_instruction_output_on_workspace("contribution")
+            .call_method(user1, "deposit", args![Workspace("contribution.0")])
+            .call_method(user1, "deposit", args![Workspace("contribution.1")])
+            .call_method(user1, "deposit", args![Workspace("contribution.2")])
+            .finish()
+            .add_signer(&test.to_public_key_bytes(), &user1_secret)
+            .seal(test.secret_key()),
+        vec![],
+    );
+
+    let (pool_addr, _) = test
+        .read_only_state_store()
+        .get_components_by_template_address(template_address)
+        .unwrap()
+        .pop()
+        .unwrap();
+    let before = read_pool_state(&test, pool_addr, faucet_resource);
+    assert_eq!(before.reserve_tari, 3);
+    assert_eq!(before.reserve_other, 1_000_000);
+    assert_eq!(before.lp_supply, 1732);
+
+    test.execute_expect_success(
+        Transaction::builder_localnet(Epoch(1))
+            .call_method(faucet_component, "take_free_coins_custom", args![other])
+            .put_last_instruction_output_on_workspace("faucet_coins")
+            .call_method(user1, "withdraw", args![TARI_TOKEN, tari])
+            .put_last_instruction_output_on_workspace("xtr_coins")
+            .call_method(pool_addr, "contribute", args![
+                Workspace("xtr_coins"),
+                Workspace("faucet_coins")
+            ])
+            .put_last_instruction_output_on_workspace("contribution")
+            .call_method(user1, "deposit", args![Workspace("contribution.0")])
+            .call_method(user1, "deposit", args![Workspace("contribution.1")])
+            .call_method(user1, "deposit", args![Workspace("contribution.2")])
+            .finish()
+            .seal(&user1_secret),
+        vec![],
+    );
+
+    let after = read_pool_state(&test, pool_addr, faucet_resource);
+    (before, after)
+}
+
+/// The value backing each LP token must not fall for existing holders, and the pool must take no more of either
+/// resource than the minted LP is worth (rounded up by less than one base unit).
+#[track_caller]
+fn assert_contribution_is_proportional(before: &PoolState, after: &PoolState) {
+    let minted = u128::from(after.lp_supply - before.lp_supply);
+    let lp = u128::from(before.lp_supply);
+    for (reserve_before, reserve_after) in [
+        (before.reserve_tari, after.reserve_tari),
+        (before.reserve_other, after.reserve_other),
+    ] {
+        let reserve_before = u128::from(reserve_before);
+        let taken = u128::from(reserve_after) - reserve_before;
+        let owed = minted * reserve_before;
+        assert!(taken * lp >= owed, "pool took less than the minted LP is worth");
+        assert!(
+            taken * lp < owed + lp,
+            "pool took {taken} for {minted} LP, more than one unit above its value"
+        );
+    }
+}
+
+#[test]
+fn contribute_returns_the_excess_of_both_buckets() {
+    // Surplus B: the A bucket limits the mint, and only the B that mint is worth is taken.
+    let (before, after) = contribute_to_thin_pool(1, 400_000);
+    assert_eq!(after.lp_supply - before.lp_supply, 577);
+    assert_eq!(after.reserve_tari - before.reserve_tari, 1);
+    assert_eq!(after.reserve_other - before.reserve_other, 333_141);
+    assert_contribution_is_proportional(&before, &after);
+
+    // Surplus A: the B bucket limits the mint, and the remainder of both buckets is returned.
+    let (before, after) = contribute_to_thin_pool(10, 400_000);
+    assert_eq!(after.lp_supply - before.lp_supply, 692);
+    assert_eq!(after.reserve_tari - before.reserve_tari, 2);
+    assert_eq!(after.reserve_other - before.reserve_other, 399_539);
+    assert_contribution_is_proportional(&before, &after);
+}
+
 #[test]
 fn owner_adds_liquidity_only_after_bootstrap() {
     // Liquidity added through the owner-only `protected_add_liquidity` mints no LP, so it accrues to the existing LP

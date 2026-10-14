@@ -39,7 +39,7 @@ impl Pool {
 
 #[template]
 mod template {
-    use tari_template_lib::resource::TOKEN_SYMBOL;
+    use tari_template_lib::{resource::TOKEN_SYMBOL, types::precision::PrecisionAmount};
 
     use super::*;
 
@@ -162,38 +162,28 @@ mod template {
                     panic!("Inconsistent pool state: zero LP supply with non-zero reserve");
                 },
                 (true, true, true) => {
-                    // Normal case: existing LP supply and non-zero reserves
-                    // calculate the amount each contribution can be contributed to keep the ratio of the reserves the
-                    // same
-
+                    // Normal case: existing LP supply and non-zero reserves. Mint the most LP that both buckets can
+                    // pay for, then take from each bucket the amount of its reserve that LP is worth, rounded up in
+                    // favour of the pool. `mint <= amount * lp_supply / reserve` keeps each rounded-up take within its
+                    // bucket, and everything above it is returned as change.
+                    //
                     // Multiply before dividing: `PrecisionAmount` is a 192-bit *integer*, so dividing first
                     // truncates the ratio to zero whenever a contribution is smaller than its reserve. The wide
                     // intermediate holds the product without overflow.
-                    let required_contribution_a = a_amount
-                        .checked_mul(reserve_b)
-                        .and_then(|num| num.checked_div(reserve_a))
-                        .map(|b_required| (a_amount, b_required))
-                        .expect(OVERFLOW_MSG);
+                    let mint_for = |amount: PrecisionAmount, reserve: PrecisionAmount| {
+                        amount
+                            .checked_mul(lp_supply)
+                            .and_then(|num| num.checked_div(reserve))
+                            .expect(OVERFLOW_MSG)
+                    };
+                    let take_for = |mint: PrecisionAmount, reserve: PrecisionAmount| {
+                        mint.checked_mul(reserve)
+                            .and_then(|num| num.checked_div_ceil(lp_supply))
+                            .expect(OVERFLOW_MSG)
+                    };
 
-                    let required_contribution_b = b_amount
-                        .checked_mul(reserve_a)
-                        .and_then(|num| num.checked_div(reserve_b))
-                        .map(|a_required| (a_required, b_amount))
-                        .expect(OVERFLOW_MSG);
-
-                    [required_contribution_a, required_contribution_b]
-                        .into_iter()
-                        // filter only the contributions that are less than or equal to what the user provided
-                        .filter(|(c_a, c_b)| *c_a <= a_amount && *c_b <= b_amount)
-                        .map(|(c_a, c_b)| {
-                            let mint = c_a
-                                .checked_mul(lp_supply)
-                                .and_then(|num| num.checked_div(reserve_a))
-                                .expect(OVERFLOW_MSG);
-                            (mint, c_a, c_b)
-                        })
-                        .max_by(|(mint_a, _, _), (mint_b, _, _)| mint_a.cmp(mint_b))
-                        .expect("Insufficient contribution amounts for existing pool reserves")
+                    let mint = mint_for(a_amount, reserve_a).min(mint_for(b_amount, reserve_b));
+                    (mint, take_for(mint, reserve_a), take_for(mint, reserve_b))
                 },
                 (true, _, _) => {
                     // One or both reserves are zero with existing LP supply. LP Supply should always represent
