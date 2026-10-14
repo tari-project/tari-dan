@@ -511,9 +511,10 @@ impl WasmProcess {
         let span = abi_metrics::Span::start();
         let decoded = {
             let (env_mut, mut store) = env.data_and_store_mut();
+            let interface = env_mut.state()?.interface();
+            interface.charge_engine_call()?;
             // An engine op's payload is whatever the guest wrote into its memory, decoded here on the
             // validator's own stack and outside the Wasmer meter, so it is charged for first.
-            let interface = env_mut.state()?.interface();
             // SAFETY: WasmProcess is not used concurrently and templates are not able to spawn threads
             unsafe {
                 env_mut.with_memory_slice(&mut store, arg_ptr, arg_len, |arg| {
@@ -532,19 +533,23 @@ impl WasmProcess {
         sample.handler_ns = span.finish();
 
         let span = abi_metrics::Span::start();
-        let len = encoded_len(&resp);
+        let mut response = Vec::with_capacity(encoded_len(&resp));
+        encode_into_writer(&resp, &mut response)?;
         sample.encode_ns = span.finish();
-        sample.resp_bytes = len;
+        sample.resp_bytes = response.len();
+
+        // The handler built the response outside the Wasmer meter, and a template pays the same for a
+        // call whatever it is answered with, so the response is charged for before it is handed over.
+        env.data().state()?.interface().charge_engine_response(&response)?;
 
         let span = abi_metrics::Span::start();
-        let ptr = Self::alloc_response(env, len)?;
+        let ptr = Self::alloc_response(env, response.len())?;
         sample.alloc_ns = span.finish();
 
-        // Encode response directly into the WASM memory. The WASM code is responsible for freeing it.
+        // The WASM code is responsible for freeing the response.
         let span = abi_metrics::Span::start();
         let (env_mut, mut store) = env.data_and_store_mut();
-        let mut writer = env_mut.memory_writer(&mut store, ptr)?;
-        encode_into_writer(&resp, &mut writer)?;
+        env_mut.memory_writer(&mut store, ptr)?.write_all_to_mem(&response)?;
         sample.encode_ns += span.finish();
 
         abi_metrics::record_engine_op(op, sample);

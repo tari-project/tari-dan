@@ -16,13 +16,16 @@ use tari_engine_types::{
 };
 use tari_ootle_transaction::{Epoch, Transaction, args, builder::named_args::NamedArg};
 use tari_template_abi::CallInfo;
-use tari_template_lib::types::{
-    ComponentAddress,
-    Metadata,
-    NonFungibleId,
-    TemplateAddress,
-    bytes::Bytes,
-    constants::{NFT_FAUCET_COMPONENT_ADDRESS, NFT_FAUCET_RESOURCE_ADDRESS},
+use tari_template_lib::{
+    args::{ConsensusAction, ConsensusInvokeArg, InvokeResult},
+    types::{
+        ComponentAddress,
+        Metadata,
+        NonFungibleId,
+        TemplateAddress,
+        bytes::Bytes,
+        constants::{NFT_FAUCET_COMPONENT_ADDRESS, NFT_FAUCET_RESOURCE_ADDRESS},
+    },
 };
 use tari_template_test_tooling::{TemplateTest, support::assert_error::assert_reject_reason};
 
@@ -323,16 +326,22 @@ fn a_nested_return_value_is_charged_per_item() {
 
     // The outer call passes `len` to the engine and returns the count, and both encodings widen
     // with it. The engine reads `len` three times: in the engine call's argument, in the call's
-    // arguments nested in it, and as the callee's argument nested in those.
+    // arguments nested in it, and as the callee's argument nested in those. The callee's value then
+    // reaches the caller as the engine call's response.
     let width = |len: u32| tari_bor::encode(&len).unwrap().len() as u64;
     let count_charge = |len: u32| limits::return_value_points(width(len), 1);
     let call_arg_charge = |len: u32| 3 * limits::engine_arg_points(width(len), 0);
+    let response_charge = |len: u32| {
+        let (bytes, items) = returned_items(len);
+        limits::engine_response_points(bytes, items)
+    };
     assert_eq!(
         large_points - small_points,
-        return_value_charge(large) + count_charge(large) + call_arg_charge(large) -
+        return_value_charge(large) + count_charge(large) + call_arg_charge(large) + response_charge(large) -
             return_value_charge(small) -
             count_charge(small) -
-            call_arg_charge(small),
+            call_arg_charge(small) -
+            response_charge(small),
         "a nested call returning {large} items rather than {small} must cost exactly the difference in return-value \
          charges"
     );
@@ -551,4 +560,121 @@ fn a_cross_template_call_argument_is_charged_per_item_it_holds() {
         large_points - small_points,
         limits::engine_arg_points(0, items)
     );
+}
+
+/// A `PushItToTheLimit` component whose state holds `data_len` bytes of data and `items` zeros.
+fn component_with_state(test: &mut TemplateTest, data_len: usize, items: u32) -> ComponentAddress {
+    let component: ComponentAddress =
+        test.call_function(TEMPLATE_NAME, "new", args![Bytes::from(vec![0u8; data_len])], vec![]);
+    if items > 0 {
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(component, "set_items", args![items])
+                .build_and_seal(test.secret_key()),
+            vec![],
+        );
+    }
+    component
+}
+
+/// Native points `reads` more reads of `component`'s state, each answered with the state and left
+/// undecoded, are charged than a single read.
+fn native_points_for_extra_reads(test: &mut TemplateTest, component: ComponentAddress, reads: u32) -> u64 {
+    let mut native_points = |reads: u32| {
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(component, "read_state_undecoded", args![reads])
+                .build_and_seal(test.secret_key()),
+            vec![],
+        )
+        .native_execution_points
+    };
+    native_points(1 + reads) - native_points(1)
+}
+
+/// An engine call's response is built and copied on the host, outside the Wasmer meter, and the
+/// template pays no more metered WASM for a large response than a small one. So each read of a
+/// component's state is charged for each byte and item the state holds, whether or not the template
+/// decodes it.
+#[test]
+fn an_engine_call_response_is_charged_per_byte_and_item() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let (small_data, large_data) = (4, 64 * 1024);
+    let large_items = 10_000u32;
+    let small = component_with_state(&mut test, small_data, 0);
+    let large = component_with_state(&mut test, large_data, large_items);
+    let reads = 10;
+
+    let small_points = native_points_for_extra_reads(&mut test, small, reads);
+    let large_points = native_points_for_extra_reads(&mut test, large, reads);
+
+    let extra_bytes = encoded_len(&Bytes::from(vec![0u8; large_data])) + encoded_len(&vec![0u32; large_items as usize]) -
+        encoded_len(&Bytes::from(vec![0u8; small_data])) -
+        encoded_len(&Vec::<u32>::new());
+    assert_eq!(
+        large_points - small_points,
+        u64::from(reads) * limits::engine_response_points(extra_bytes as u64, u64::from(large_items)),
+        "{reads} reads of a state larger by {extra_bytes} bytes and {large_items} items must cost exactly the \
+         difference in engine response charges"
+    );
+}
+
+/// Every engine call is charged a flat cost for the host work around it, on top of its argument and
+/// its response, whether or not the template reads the response.
+#[test]
+fn an_engine_call_is_charged_a_flat_cost() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let template = test.get_template_address(TEMPLATE_NAME);
+    let mut native_points = |count: u32| {
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(template, "read_epoch_undecoded", args![count])
+                .build_and_seal(test.secret_key()),
+            vec![],
+        )
+        .native_execution_points
+    };
+    let calls = 100u32;
+    let extra_points = native_points(1 + calls) - native_points(1);
+
+    let arg = tari_bor::encode(&ConsensusInvokeArg {
+        action: ConsensusAction::GetCurrentEpoch,
+    })
+    .unwrap();
+    let response = tari_bor::encode(&InvokeResult::encode(&Epoch(0)).unwrap()).unwrap();
+    let per_call = limits::NativeExecutionPoints::PER_ENGINE_CALL +
+        limits::engine_arg_points(arg.len() as u64, tari_bor::count_data_items(&arg).unwrap()) +
+        limits::engine_response_points(response.len() as u64, tari_bor::count_data_items(&response).unwrap());
+    assert_eq!(
+        extra_points,
+        u64::from(calls) * per_call,
+        "{calls} engine calls must each be charged the flat cost, their argument and their response"
+    );
+}
+
+/// Engine call responses are charged against the transaction's compute allowance, so a template
+/// that reads a large state over and over fails out of compute. Run in the fee intent, whose flat
+/// credit is the allowance, with too few reads for their metered WASM alone to exhaust it.
+#[test]
+fn engine_call_responses_are_charged_against_the_fee_intent_credit() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let data_len = 64 * 1024;
+    let component = component_with_state(&mut test, data_len, 0);
+    let mut fee_table = FeeTable::zero_rated();
+    fee_table.per_wasm_point_cost = 1;
+    fee_table.wasm_points_cost_divisor = 1;
+    test.set_fee_table(fee_table);
+    test.enable_fees();
+
+    let reads = limits::FREE_COMPUTE_GRACE_POINTS / limits::engine_response_points(data_len as u64, 1) + 1;
+    let reason = test.execute_expect_failure(
+        Transaction::builder_localnet(Epoch(1))
+            .with_fee_instructions_builder(|builder| {
+                builder.call_method(component, "read_state_undecoded", args![u32::try_from(reads).unwrap()])
+            })
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "exceeds the fee intent's");
 }

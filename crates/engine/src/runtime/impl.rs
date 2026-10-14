@@ -1154,6 +1154,40 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
             .map(|_| ())
             .map_err(|e| RuntimeError::SpendScriptRejected { details: Box::new(e) })
     }
+
+    /// Charges `points(input.len(), 0)` for the bytes of the CBOR in `input`, then counts its items
+    /// and charges `points(0, items)` for them.
+    ///
+    /// Counting the items is itself host work, so the walk reads only as many items as the
+    /// transaction can still pay `per_item` for, and checks their nesting against `max_depth` on the
+    /// way. Input holding more is charged what was read and fails out of compute.
+    fn charge_cbor_read(
+        &self,
+        input: &[u8],
+        max_depth: usize,
+        per_item: u64,
+        points: fn(u64, u64) -> u64,
+    ) -> Result<(), EngineArgChargeError> {
+        self.tracker.charge_native_execution(points(input.len() as u64, 0))?;
+        let affordable = self.tracker.native_execution_headroom() / per_item;
+        let counted = tari_bor::count_data_items_bounded(input, max_depth, affordable)
+            .map_err(|e| EngineArgChargeError::Unreadable(e.into()))?;
+        match counted {
+            Some(items) => self.tracker.charge_native_execution(points(0, items))?,
+            None => {
+                // The items read are paid for before failing, which leaves nothing for a repeat of
+                // the call to read.
+                self.tracker.charge_native_execution(points(0, affordable))?;
+                self.tracker.charge_native_execution(points(0, 1))?;
+                return Err(RuntimeError::InvariantError {
+                    function: "charge_cbor_read",
+                    details: "an item beyond the native execution headroom was affordable".to_string(),
+                }
+                .into());
+            },
+        }
+        Ok(())
+    }
 }
 
 impl<TStore, TTemplateProvider> RuntimeInterface for RuntimeInterfaceImpl<TStore, TTemplateProvider>
@@ -4312,26 +4346,37 @@ where
     fn charge_engine_arg(&self, input: &[u8]) -> Result<(), EngineArgChargeError> {
         use tari_engine_types::limits::{self, NativeExecutionPoints, engine_arg_points};
 
+        self.charge_cbor_read(
+            input,
+            limits::MAX_CBOR_NESTING_DEPTH,
+            NativeExecutionPoints::PER_ENGINE_ARG_ITEM,
+            engine_arg_points,
+        )
+    }
+
+    fn charge_engine_call(&self) -> Result<(), RuntimeError> {
         self.tracker
-            .charge_native_execution(engine_arg_points(input.len() as u64, 0))?;
-        let affordable = self.tracker.native_execution_headroom() / NativeExecutionPoints::PER_ENGINE_ARG_ITEM;
-        let counted = tari_bor::count_data_items_bounded(input, limits::MAX_CBOR_NESTING_DEPTH, affordable)
-            .map_err(|e| EngineArgChargeError::Unreadable(e.into()))?;
-        match counted {
-            Some(items) => self.tracker.charge_native_execution(engine_arg_points(0, items))?,
-            None => {
-                // The items read are paid for before failing, which leaves nothing for a repeat of
-                // the call to read.
-                self.tracker.charge_native_execution(engine_arg_points(0, affordable))?;
-                self.tracker.charge_native_execution(engine_arg_points(0, 1))?;
-                return Err(RuntimeError::InvariantError {
-                    function: "charge_engine_arg",
-                    details: "an item beyond the native execution headroom was affordable".to_string(),
-                }
-                .into());
+            .charge_native_execution(tari_engine_types::limits::NativeExecutionPoints::PER_ENGINE_CALL)
+    }
+
+    fn charge_engine_response(&self, response: &[u8]) -> Result<(), RuntimeError> {
+        use tari_engine_types::limits::{NativeExecutionPoints, engine_response_points};
+
+        // The response is the engine's own encoding of values bounded when they were decoded, wrapped
+        // a few levels deeper, so its depth is left unchecked.
+        self.charge_cbor_read(
+            response,
+            usize::MAX,
+            NativeExecutionPoints::PER_ENGINE_RESPONSE_ITEM,
+            engine_response_points,
+        )
+        .map_err(|e| match e {
+            EngineArgChargeError::Unreadable(e) => RuntimeError::InvariantError {
+                function: "charge_engine_response",
+                details: format!("the engine encoded a response it cannot read back: {e}"),
             },
-        }
-        Ok(())
+            EngineArgChargeError::Runtime(e) => e,
+        })
     }
 
     fn wasm_instances(&self) -> &RefCell<WasmInstanceCache> {
