@@ -131,9 +131,12 @@ fn max_buffered_bytes_per_share(committee_size: usize) -> usize {
     (MAX_BUFFERED_BYTES / committee_size.saturating_add(1)).max(UNBOUNDED_MESSAGE_SIZE)
 }
 
+/// Messages held for views we have not reached yet, each with its sender.
+type FutureMessageBuffer<TAddr> = ViewBuffer<BufferShare<TAddr>, (TAddr, HotstuffMessage)>;
+
 pub struct MessageBuffer<TConsensusSpec: ConsensusSpec> {
     network: Network,
-    buffer: ViewBuffer<BufferShare<TConsensusSpec::Addr>, (TConsensusSpec::Addr, HotstuffMessage)>,
+    buffer: FutureMessageBuffer<TConsensusSpec::Addr>,
     /// The highest justify certificate already reported as [`InboundMessage::ProposalAhead`], so that each
     /// certificate's signatures are checked and reported at most once.
     highest_reported_ahead: Option<View>,
@@ -425,7 +428,7 @@ impl<TConsensusSpec: ConsensusSpec> MessageBuffer<TConsensusSpec> {
 /// for a view of ours consensus can use. A message for the next epoch is bounded by its [`BufferShare`] alone;
 /// it is further than every view of ours, so it never displaces one.
 fn push_to_buffer<TAddr: Eq + Hash + Clone + Display>(
-    buffer: &mut ViewBuffer<BufferShare<TAddr>, (TAddr, HotstuffMessage)>,
+    buffer: &mut FutureMessageBuffer<TAddr>,
     local_committee: &Committee<TAddr>,
     current_view: View,
     view: View,
@@ -485,7 +488,7 @@ fn push_to_buffer<TAddr: Eq + Hash + Clone + Display>(
                 msg,
                 view,
                 from,
-                buffer.sender_size(&share),
+                buffer.share_size(&share),
                 max_share_size,
                 buffer.size(),
                 buffer.max_size(),
@@ -869,7 +872,7 @@ mod tests {
             )
         }
 
-        type Buffer = ViewBuffer<BufferShare<String>, (String, HotstuffMessage)>;
+        type Buffer = FutureMessageBuffer<String>;
 
         fn new_buffer() -> Buffer {
             ViewBuffer::new(MAX_BUFFERED_MESSAGES, MAX_BUFFERED_BYTES)
