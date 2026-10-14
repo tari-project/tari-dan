@@ -91,8 +91,9 @@ pub(crate) fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Pede
         });
     }
 
-    // With no inputs and no confidential outputs the public excess is a multiple of H alone, which no balance proof
-    // can sign for, so revealed-only is the only valid form of this shape.
+    // With no inputs and no confidential outputs the public excess is a multiple of H alone. A non-zero multiple has
+    // no known discrete log, and the signature implementation rejects the identity key, so no balance proof can verify
+    // and revealed-only is the only valid form of this shape.
     if withdraw_proof.inputs.is_empty() && validated_proof.output.is_none() && validated_proof.change_output.is_none() {
         return Err(ResourceError::InvalidBalanceProof {
             details: "A withdraw with no inputs and no confidential outputs must be revealed-only: a zero balance \
