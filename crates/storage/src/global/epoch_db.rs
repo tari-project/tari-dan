@@ -66,6 +66,6 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> EpochDb<'a, 'tx, TGlobalDbAdapt
 pub struct EpochData {
     pub epoch: u64,
     pub epoch_hash: FixedHash,
-    /// `None` until the epoch's committees are assigned.
+    /// `None` until the epoch manager stores the hash, which it does each time it assigns the epoch's committees.
     pub validator_set_hash: Option<ValidatorSetHash>,
 }

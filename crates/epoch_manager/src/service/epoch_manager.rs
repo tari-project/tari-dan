@@ -589,7 +589,7 @@ fn calculate_num_committees(num_vns: u64, committee_size: NonZeroU32) -> u32 {
 mod tests {
     use diesel::{Connection, SqliteConnection};
     use ootle_network::Network;
-    use tari_ootle_common_types::{NumPreshards, VotePower};
+    use tari_ootle_common_types::{NumPreshards, VotePower, optional::IsNotFoundError};
 
     use super::*;
     use crate::epoch_event_oracle::{EpochEvent, EpochEventOracle};
@@ -761,5 +761,17 @@ mod tests {
             manager.get_validator_set_hash(Epoch(3)),
             Err(EpochManagerError::NoEpochFound(epoch)) if epoch == Epoch(3)
         ));
+    }
+
+    #[test]
+    fn a_shard_group_outside_the_epoch_is_not_found() {
+        let mut manager = create_epoch_manager();
+        register(&manager, 1, Epoch(1));
+        manager.advance_to_epoch(Epoch(2), FixedHash::zero()).unwrap();
+
+        let err = manager
+            .get_validator_set_committee_proof(Epoch(2), ShardGroup::new(0u32, 127u32))
+            .unwrap_err();
+        assert!(err.is_not_found_error(), "{err}");
     }
 }

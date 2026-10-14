@@ -1,4 +1,4 @@
--- NULL until the epoch's committees are assigned.
+-- NULL until the epoch manager stores the hash, which it does each time it assigns the epoch's committees.
 ALTER TABLE epochs ADD COLUMN validator_set_hash blob NULL;
 
 -- The committee leaf hash of each shard group in an epoch's validator set tree.

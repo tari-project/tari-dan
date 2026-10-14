@@ -64,7 +64,7 @@ pub enum EpochManagerError {
         epoch: Epoch,
         source: ValidatorSetTreeError,
     },
-    #[error("Epoch {epoch} has no validator set: its committees are not assigned")]
+    #[error("No validator set hash is stored for epoch {epoch}")]
     NoValidatorSet { epoch: Epoch },
     #[error(
         "Stored validator set leaves for epoch {epoch} rebuild to hash {rebuilt}, but the stored validator set hash \
@@ -87,6 +87,10 @@ impl IsNotFoundError for EpochManagerError {
     fn is_not_found_error(&self) -> bool {
         match self {
             Self::ValidatorNodeNotRegistered { .. } | Self::NoEpochFound(_) | Self::NoValidatorSet { .. } => true,
+            Self::ValidatorSetTree {
+                source: ValidatorSetTreeError::ShardGroupNotInSet { .. },
+                ..
+            } => true,
             Self::StorageError(err) => err.is_not_found_error(),
             _ => false,
         }
