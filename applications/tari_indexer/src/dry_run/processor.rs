@@ -36,7 +36,7 @@ use tari_ootle_common_types::{Epoch, SubstateRequirementRef};
 use tari_ootle_p2p::PeerAddress;
 use tari_ootle_template_provider::TemplateConfig;
 use tari_ootle_transaction::Transaction;
-use tari_ootle_transaction_validation::{Validator, create_dry_run_transaction_validator};
+use tari_ootle_transaction_validation::{Validator, create_unsigned_structural_transaction_validator};
 use tari_template_lib_types::constants::TARI_TOKEN;
 use tokio::{runtime::Handle, sync::Semaphore, task};
 
@@ -112,7 +112,7 @@ impl DryRunTransactionProcessor {
 
         info!(target: LOG_TARGET, "process_transaction: {}", transaction.calculate_id());
 
-        create_dry_run_transaction_validator(
+        create_unsigned_structural_transaction_validator(
             self.network,
             self.max_transaction_weight,
             self.max_transaction_size_bytes,

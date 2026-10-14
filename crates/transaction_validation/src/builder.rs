@@ -43,7 +43,7 @@ pub fn create_structural_transaction_validator(
     max_transaction_size_bytes: usize,
 ) -> impl Validator<Transaction, Context = (), Error = TransactionValidationError> {
     TransactionDryRunValidator
-        .and_then(create_dry_run_transaction_validator(
+        .and_then(create_unsigned_structural_transaction_validator(
             network,
             max_transaction_weight,
             max_transaction_size_bytes,
@@ -51,10 +51,10 @@ pub fn create_structural_transaction_validator(
         .and_then(TransactionSignatureValidator)
 }
 
-/// Builds the structural validations for a dry-run: those of
-/// [`create_structural_transaction_validator`] except the dry-run refusal and signature verification,
-/// since a dry-run is accepted with invalid signatures.
-pub fn create_dry_run_transaction_validator(
+/// Builds the structural validations of [`create_structural_transaction_validator`] except the dry-run
+/// refusal and signature verification. This is the admission chain for dry-run transactions, which are
+/// accepted with invalid signatures.
+pub fn create_unsigned_structural_transaction_validator(
     network: Network,
     max_transaction_weight: u64,
     max_transaction_size_bytes: usize,
@@ -196,9 +196,13 @@ mod tests {
     }
 
     #[test]
-    fn the_dry_run_chain_accepts_a_dry_run_transaction() {
-        create_dry_run_transaction_validator(Network::LocalNet, MAX_TRANSACTION_WEIGHT, MAX_TRANSACTION_SIZE_BYTES)
-            .validate(&(), &dry_run_transaction(Epoch(12)))
-            .unwrap();
+    fn the_unsigned_structural_chain_accepts_a_dry_run_transaction() {
+        create_unsigned_structural_transaction_validator(
+            Network::LocalNet,
+            MAX_TRANSACTION_WEIGHT,
+            MAX_TRANSACTION_SIZE_BYTES,
+        )
+        .validate(&(), &dry_run_transaction(Epoch(12)))
+        .unwrap();
     }
 }
