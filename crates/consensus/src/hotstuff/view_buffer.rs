@@ -111,7 +111,7 @@ impl<K: Eq + Hash + Clone, T> ViewBuffer<K, T> {
 
     /// Buffers `item` from `sender` for `view`, charging `size` against the size budget and against the
     /// sender's budget of `max_sender_size`. Returns `Err(item)` if the items held for views at or nearer than
-    /// `view` already fill a budget, or if `size` alone exceeds one.
+    /// `view` already fill a budget, or if `size` alone exceeds one. A refused item evicts nothing.
     pub fn insert(
         &mut self,
         view: View,
@@ -121,6 +121,13 @@ impl<K: Eq + Hash + Clone, T> ViewBuffer<K, T> {
         max_sender_size: usize,
     ) -> Result<Inserted, T> {
         if size > self.max_size || size > max_sender_size {
+            return Err(item);
+        }
+
+        let over_budget = self.sender_size(&sender).saturating_add(size) > max_sender_size ||
+            self.len >= self.max_items ||
+            self.size.saturating_add(size) > self.max_size;
+        if over_budget && !self.fits_without_views_beyond(view, &sender, size, max_sender_size) {
             return Err(item);
         }
 
@@ -189,6 +196,22 @@ impl<K: Eq + Hash + Clone, T> ViewBuffer<K, T> {
         self.sender_sizes.clear();
         self.len = 0;
         self.size = 0;
+    }
+
+    /// Whether an item of `size` from `sender` fits every budget once every item for a view beyond `view` is
+    /// gone, which is as much as an insert for `view` may evict.
+    fn fits_without_views_beyond(&self, view: View, sender: &K, size: usize, max_sender_size: usize) -> bool {
+        let (mut len, mut total_size, mut sender_size) = (0usize, 0usize, 0usize);
+        for held in self.buffer.range(..=view).flat_map(|(_, items)| items) {
+            len += 1;
+            total_size += held.size;
+            if held.sender == *sender {
+                sender_size += held.size;
+            }
+        }
+        len < self.max_items &&
+            total_size.saturating_add(size) <= self.max_size &&
+            sender_size.saturating_add(size) <= max_sender_size
     }
 
     /// Evicts the item `sender` holds for the furthest view beyond `view`, returning false if it holds none.
@@ -390,6 +413,19 @@ mod tests {
         assert_eq!(buffer.pop_front(&view(5)), None);
         assert_eq!(buffer.pop_front(&view(10)), Some(("other", "other")));
         assert_eq!(buffer.pop_front(&view(1)), Some(("sender", "near")));
+    }
+
+    #[test]
+    fn a_refused_item_evicts_nothing() {
+        let mut buffer = Buffer::new(UNLIMITED, 100);
+        buffer.insert(view(1), SENDER, "near", 30, 50).unwrap();
+        buffer.insert(view(10), SENDER, "far", 10, 50).unwrap();
+        buffer.insert(view(1), "other", "other", 60, 100).unwrap();
+
+        assert_eq!(buffer.insert(view(2), SENDER, "refused", 20, 50), Err("refused"));
+        assert_eq!(buffer.len(), 3);
+        assert_eq!(buffer.sender_size(&SENDER), 40);
+        assert_eq!(buffer.pop_front(&view(10)), Some((SENDER, "far")));
     }
 
     #[test]
