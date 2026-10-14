@@ -1,10 +1,7 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::{BTreeMap, BTreeSet, btree_map::Entry},
-    fmt::{self, Display},
-};
+use std::fmt::{self, Display};
 
 use minicbor::{CborLen, Decode, Encode};
 use ootle_network::Network;
@@ -13,159 +10,9 @@ use tari_template_lib_types::{Hash32, crypto::RistrettoPublicKeyBytes};
 
 use crate::{Epoch, NumPreshards, ShardGroup, VotePower, committee::Committee, hashing::tari_consensus_hasher};
 
-/// The committee assignment of one epoch: every shard group and the public key and vote power of each of its members.
-///
-/// Shard groups are ordered by `(start, end_inclusive)` and members by public key, so the order a caller supplies them
-/// in never reaches [`Self::calculate_hash`]. A public key appears at most once in the whole set.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ValidatorSet {
-    network: Network,
-    epoch: Epoch,
-    num_preshards: NumPreshards,
-    committees: BTreeMap<ShardGroup, BTreeMap<RistrettoPublicKeyBytes, VotePower>>,
-}
-
-impl ValidatorSet {
-    /// Builds the set from each shard group's members.
-    ///
-    /// Fails if a shard group is given twice or a public key appears more than once, within one shard group or across
-    /// shard groups.
-    pub fn init<I, M>(
-        network: Network,
-        epoch: Epoch,
-        num_preshards: NumPreshards,
-        committees: I,
-    ) -> Result<Self, ValidatorSetError>
-    where
-        I: IntoIterator<Item = (ShardGroup, M)>,
-        M: IntoIterator<Item = (RistrettoPublicKeyBytes, VotePower)>,
-    {
-        let mut seen_public_keys = BTreeSet::new();
-        let mut assignment = BTreeMap::new();
-        for (shard_group, members) in committees {
-            let Entry::Vacant(entry) = assignment.entry(shard_group) else {
-                return Err(ValidatorSetError::DuplicateShardGroup { shard_group });
-            };
-            let mut committee = BTreeMap::new();
-            for (public_key, vote_power) in members {
-                if !seen_public_keys.insert(public_key) {
-                    return Err(ValidatorSetError::DuplicatePublicKey {
-                        shard_group,
-                        public_key,
-                    });
-                }
-                committee.insert(public_key, vote_power);
-            }
-            entry.insert(committee);
-        }
-
-        Ok(Self {
-            network,
-            epoch,
-            num_preshards,
-            committees: assignment,
-        })
-    }
-
-    /// Builds the set from the epoch manager's committees. Member addresses are not part of the set.
-    pub fn init_from_committees<'a, TAddr: 'a, I>(
-        network: Network,
-        epoch: Epoch,
-        num_preshards: NumPreshards,
-        committees: I,
-    ) -> Result<Self, ValidatorSetError>
-    where
-        I: IntoIterator<Item = (ShardGroup, &'a Committee<TAddr>)>,
-    {
-        Self::init(
-            network,
-            epoch,
-            num_preshards,
-            committees.into_iter().map(|(shard_group, committee)| {
-                (
-                    shard_group,
-                    committee
-                        .into_iter()
-                        .map(|member| (member.public_key, member.vote_power)),
-                )
-            }),
-        )
-    }
-
-    pub fn network(&self) -> Network {
-        self.network
-    }
-
-    pub fn epoch(&self) -> Epoch {
-        self.epoch
-    }
-
-    pub fn num_preshards(&self) -> NumPreshards {
-        self.num_preshards
-    }
-
-    pub fn num_shard_groups(&self) -> usize {
-        self.committees.len()
-    }
-
-    /// Returns the members of `shard_group` ordered by public key, or `None` if the set has no such shard group.
-    pub fn committee(
-        &self,
-        shard_group: &ShardGroup,
-    ) -> Option<impl Iterator<Item = (&RistrettoPublicKeyBytes, VotePower)> + '_> {
-        self.committees
-            .get(shard_group)
-            .map(|committee| committee.iter().map(|(pk, power)| (pk, *power)))
-    }
-
-    /// Returns the shard groups in ascending order.
-    pub fn shard_groups(&self) -> impl Iterator<Item = &ShardGroup> + '_ {
-        self.committees.keys()
-    }
-
-    /// Hashes the set with the Blake2b-256 consensus hasher, labelled `ValidatorSet`.
-    ///
-    /// The preimage is the domain tag followed by fixed-width little-endian integers, so a client in any language can
-    /// reproduce it:
-    ///
-    /// ```text
-    /// u64(34) || "com.tari.consensus.v0.ValidatorSet"
-    /// u8  network
-    /// u64 epoch
-    /// u32 num_preshards
-    /// u32 number of shard groups
-    /// for each shard group, ascending by (start, end_inclusive):
-    ///     u32 start
-    ///     u32 end_inclusive
-    ///     u32 number of members
-    ///     for each member, ascending by public key bytes:
-    ///         [u8; 32] public key
-    ///         u64      vote power
-    /// ```
-    pub fn calculate_hash(&self) -> ValidatorSetHash {
-        let mut hasher = tari_consensus_hasher("ValidatorSet")
-            .chain(&self.network.as_byte())
-            .chain(&self.epoch.as_u64())
-            .chain(&self.num_preshards.as_u32())
-            .chain(&len_as_u32(self.committees.len()));
-        for (shard_group, committee) in &self.committees {
-            hasher = hasher
-                .chain(&shard_group.start().as_u32())
-                .chain(&shard_group.end().as_u32())
-                .chain(&len_as_u32(committee.len()));
-            for (public_key, vote_power) in committee {
-                hasher = hasher.chain(&public_key.into_array()).chain(&vote_power.value());
-            }
-        }
-        ValidatorSetHash(hasher.finalize_into_array().into())
-    }
-}
-
-fn len_as_u32(len: usize) -> u32 {
-    u32::try_from(len).expect("INVARIANT: a validator set has fewer than 2^32 shard groups and members")
-}
-
-/// Commits to an epoch's [`ValidatorSet`].
+/// Commits to an epoch's committee assignment: a Merkle tree with one leaf per shard group, at
+/// [`validator_set_committee_key`] with value [`hash_validator_set_committee`], bound to the network, epoch and number
+/// of preshards. One committee can be proved against the hash without the rest of the set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Encode, Decode, CborLen)]
 #[serde(transparent)]
 #[cbor(transparent)]
@@ -173,6 +20,28 @@ fn len_as_u32(len: usize) -> u32 {
 pub struct ValidatorSetHash(#[n(0)] Hash32);
 
 impl ValidatorSetHash {
+    /// Hashes the committee tree root, labelled `ValidatorSet`. The preimage is the domain tag followed by
+    /// fixed-width little-endian integers:
+    ///
+    /// ```text
+    /// u64(34) || "com.tari.consensus.v0.ValidatorSet"
+    /// u8       network
+    /// u64      epoch
+    /// u32      num_preshards
+    /// [u8; 32] committee_root
+    /// ```
+    pub fn calculate(network: Network, epoch: Epoch, num_preshards: NumPreshards, committee_root: &Hash32) -> Self {
+        Self(
+            tari_consensus_hasher("ValidatorSet")
+                .chain(&network.as_byte())
+                .chain(&epoch.as_u64())
+                .chain(&num_preshards.as_u32())
+                .chain(&committee_root.into_array())
+                .finalize_into_array()
+                .into(),
+        )
+    }
+
     pub const fn from_array(bytes: [u8; Hash32::LENGTH]) -> Self {
         Self(Hash32::from_array(bytes))
     }
@@ -208,14 +77,100 @@ impl Display for ValidatorSetHash {
     }
 }
 
+/// The key of `shard_group`'s leaf in the validator set tree, labelled `ValidatorSetCommitteeKey`:
+///
+/// ```text
+/// u64(46) || "com.tari.consensus.v0.ValidatorSetCommitteeKey"
+/// u32 shard group start
+/// u32 shard group end_inclusive
+/// ```
+pub fn validator_set_committee_key(shard_group: &ShardGroup) -> Hash32 {
+    tari_consensus_hasher("ValidatorSetCommitteeKey")
+        .chain(&shard_group.start().as_u32())
+        .chain(&shard_group.end().as_u32())
+        .finalize_into_array()
+        .into()
+}
+
+/// Hashes `shard_group`'s committee into its leaf of the validator set tree, labelled `ValidatorSetCommittee`.
+///
+/// Members must be in strictly ascending public key order, which also makes each public key unique; any other order
+/// is an error. The preimage is the domain tag followed by fixed-width little-endian
+/// integers:
+///
+/// ```text
+/// u64(43) || "com.tari.consensus.v0.ValidatorSetCommittee"
+/// u32 shard group start
+/// u32 shard group end_inclusive
+/// u32 number of members
+/// for each member:
+///     [u8; 32] public key
+///     u64      vote power
+/// ```
+pub fn hash_validator_set_committee<'a, I>(shard_group: &ShardGroup, members: I) -> Result<Hash32, ValidatorSetError>
+where
+    I: IntoIterator<Item = (&'a RistrettoPublicKeyBytes, VotePower)>,
+    I::IntoIter: ExactSizeIterator,
+{
+    let members = members.into_iter();
+    let num_members = u32::try_from(members.len()).map_err(|_| ValidatorSetError::TooManyMembers {
+        shard_group: *shard_group,
+        num_members: members.len(),
+    })?;
+    let mut hasher = tari_consensus_hasher("ValidatorSetCommittee")
+        .chain(&shard_group.start().as_u32())
+        .chain(&shard_group.end().as_u32())
+        .chain(&num_members);
+    let mut previous: Option<&RistrettoPublicKeyBytes> = None;
+    for (public_key, vote_power) in members {
+        if let Some(previous) = previous.filter(|previous| *previous >= public_key) {
+            return Err(ValidatorSetError::CommitteeNotSorted {
+                shard_group: *shard_group,
+                previous: *previous,
+                public_key: *public_key,
+            });
+        }
+        previous = Some(public_key);
+        hasher = hasher.chain(&public_key.into_array()).chain(&vote_power.value());
+    }
+    Ok(hasher.finalize_into_array().into())
+}
+
+impl<TAddr> Committee<TAddr> {
+    /// Hashes the committee into `shard_group`'s leaf of the validator set tree with [`hash_validator_set_committee`].
+    /// The leaf commits to each member's public key and vote power.
+    pub fn calculate_validator_set_leaf_hash(&self, shard_group: &ShardGroup) -> Result<Hash32, ValidatorSetError> {
+        hash_validator_set_committee(
+            shard_group,
+            self.into_iter().map(|member| (&member.public_key, member.vote_power)),
+        )
+    }
+}
+
+/// A committee member as the validator set commits to it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ValidatorSetMember {
+    pub public_key: RistrettoPublicKeyBytes,
+    pub vote_power: VotePower,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ValidatorSetError {
-    #[error("Validator set lists shard group {shard_group} more than once")]
-    DuplicateShardGroup { shard_group: ShardGroup },
-    #[error("Validator set lists public key {public_key} more than once (again in shard group {shard_group})")]
-    DuplicatePublicKey {
+    #[error(
+        "Committee of shard group {shard_group} lists public key {public_key} after {previous}, but a validator set \
+         committee lists each public key once in ascending order"
+    )]
+    CommitteeNotSorted {
         shard_group: ShardGroup,
+        previous: RistrettoPublicKeyBytes,
         public_key: RistrettoPublicKeyBytes,
+    },
+    #[error(
+        "Committee of shard group {shard_group} has {num_members} members, more than a validator set can commit to"
+    )]
+    TooManyMembers {
+        shard_group: ShardGroup,
+        num_members: usize,
     },
 }
 
@@ -234,180 +189,159 @@ mod tests {
         NumPreshards::try_from(4u32).unwrap()
     }
 
-    fn one() -> VotePower {
-        VotePower::of(1)
+    fn committee(members: &[(&'static str, u8, u64)]) -> Committee<&'static str> {
+        Committee::new(
+            members
+                .iter()
+                .map(|(address, key_byte, power)| CommitteeMember {
+                    address: *address,
+                    public_key: pk(*key_byte),
+                    vote_power: VotePower::of(*power),
+                })
+                .collect(),
+        )
     }
 
-    fn golden_set() -> ValidatorSet {
-        ValidatorSet::init(Network::LocalNet, Epoch(7), num_preshards(), [
-            (ShardGroup::new(2u32, 3u32), vec![
-                (pk(4), one()),
-                (pk(3), VotePower::of(2)),
-            ]),
-            (ShardGroup::new(0u32, 1u32), vec![(pk(2), one()), (pk(1), one())]),
-        ])
-        .unwrap()
+    fn blake2b_256(label: &str, body: &[u8]) -> Hash32 {
+        let tag = format!("com.tari.consensus.v0.{label}");
+        let mut preimage = (tag.len() as u64).to_le_bytes().to_vec();
+        preimage.extend_from_slice(tag.as_bytes());
+        preimage.extend_from_slice(body);
+        let digest: [u8; 32] = Blake2b::<U32>::digest(&preimage).into();
+        digest.into()
     }
 
     #[test]
-    fn it_hashes_to_the_golden_vector() {
-        assert_eq!(
-            golden_set().calculate_hash().to_string(),
-            "ba186f52df7236687b23f7311e263ebcee8f40ea7bcf6d9b9dc2860cf0a26391"
-        );
-    }
-
-    #[test]
-    fn it_hashes_the_documented_preimage() {
-        let label = b"com.tari.consensus.v0.ValidatorSet";
-        let mut preimage = Vec::new();
-        preimage.extend_from_slice(&(label.len() as u64).to_le_bytes());
-        preimage.extend_from_slice(label);
-        preimage.push(Network::LocalNet.as_byte());
-        preimage.extend_from_slice(&7u64.to_le_bytes());
-        preimage.extend_from_slice(&4u32.to_le_bytes());
-        preimage.extend_from_slice(&2u32.to_le_bytes());
-        for (start, end, members) in [(0u32, 1u32, [(1u8, 1u64), (2, 1)]), (2, 3, [(3, 2), (4, 1)])] {
-            preimage.extend_from_slice(&start.to_le_bytes());
-            preimage.extend_from_slice(&end.to_le_bytes());
-            preimage.extend_from_slice(&2u32.to_le_bytes());
-            for (key_byte, power) in members {
-                preimage.extend_from_slice(&[key_byte; 32]);
-                preimage.extend_from_slice(&power.to_le_bytes());
-            }
+    fn the_leaf_hash_is_the_documented_preimage() {
+        let mut body = Vec::new();
+        body.extend_from_slice(&2u32.to_le_bytes());
+        body.extend_from_slice(&3u32.to_le_bytes());
+        body.extend_from_slice(&2u32.to_le_bytes());
+        for (key_byte, power) in [(3u8, 2u64), (4, 1)] {
+            body.extend_from_slice(&[key_byte; 32]);
+            body.extend_from_slice(&power.to_le_bytes());
         }
-        let expected: [u8; 32] = Blake2b::<U32>::digest(&preimage).into();
 
-        assert_eq!(golden_set().calculate_hash().into_array(), expected);
+        let leaf = committee(&[("c", 3, 2), ("d", 4, 1)])
+            .calculate_validator_set_leaf_hash(&ShardGroup::new(2u32, 3u32))
+            .unwrap();
+        assert_eq!(leaf, blake2b_256("ValidatorSetCommittee", &body));
     }
 
     #[test]
-    fn input_order_does_not_change_the_hash() {
-        let reordered = ValidatorSet::init(Network::LocalNet, Epoch(7), num_preshards(), [
-            (ShardGroup::new(0u32, 1u32), vec![(pk(1), one()), (pk(2), one())]),
-            (ShardGroup::new(2u32, 3u32), vec![
-                (pk(3), VotePower::of(2)),
-                (pk(4), one()),
-            ]),
-        ])
-        .unwrap();
+    fn the_leaf_key_is_the_documented_preimage() {
+        let mut body = Vec::new();
+        body.extend_from_slice(&2u32.to_le_bytes());
+        body.extend_from_slice(&3u32.to_le_bytes());
 
-        assert_eq!(reordered, golden_set());
-        assert_eq!(reordered.calculate_hash(), golden_set().calculate_hash());
+        assert_eq!(
+            validator_set_committee_key(&ShardGroup::new(2u32, 3u32)),
+            blake2b_256("ValidatorSetCommitteeKey", &body)
+        );
     }
 
     #[test]
-    fn every_committed_field_changes_the_hash() {
-        let golden = golden_set().calculate_hash();
-        let groups = || {
-            [
-                (ShardGroup::new(0u32, 1u32), vec![(pk(1), one()), (pk(2), one())]),
-                (ShardGroup::new(2u32, 3u32), vec![
-                    (pk(3), VotePower::of(2)),
-                    (pk(4), one()),
-                ]),
-            ]
-        };
-        let hash_of = |network, epoch, num_preshards, committees| {
-            ValidatorSet::init(network, epoch, num_preshards, committees)
+    fn the_set_hash_is_the_documented_preimage() {
+        let root = Hash32::from_array([0x5a; 32]);
+        let mut body = vec![Network::LocalNet.as_byte()];
+        body.extend_from_slice(&7u64.to_le_bytes());
+        body.extend_from_slice(&4u32.to_le_bytes());
+        body.extend_from_slice(&[0x5a; 32]);
+
+        assert_eq!(
+            *ValidatorSetHash::calculate(Network::LocalNet, Epoch(7), num_preshards(), &root).as_hash(),
+            blake2b_256("ValidatorSet", &body)
+        );
+    }
+
+    #[test]
+    fn the_leaf_key_and_leaf_hash_of_a_shard_group_differ() {
+        let shard_group = ShardGroup::new(0u32, 3u32);
+        assert_ne!(
+            validator_set_committee_key(&shard_group),
+            committee(&[]).calculate_validator_set_leaf_hash(&shard_group).unwrap()
+        );
+    }
+
+    #[test]
+    fn the_leaf_ignores_member_addresses() {
+        let shard_group = ShardGroup::new(2u32, 3u32);
+        assert_eq!(
+            committee(&[("c", 3, 2), ("d", 4, 1)])
+                .calculate_validator_set_leaf_hash(&shard_group)
+                .unwrap(),
+            committee(&[("x", 3, 2), ("y", 4, 1)])
+                .calculate_validator_set_leaf_hash(&shard_group)
                 .unwrap()
-                .calculate_hash()
-        };
+        );
+    }
 
-        assert_ne!(hash_of(Network::Esmeralda, Epoch(7), num_preshards(), groups()), golden);
-        assert_ne!(hash_of(Network::LocalNet, Epoch(8), num_preshards(), groups()), golden);
+    #[test]
+    fn every_committed_field_changes_the_leaf_hash() {
+        let shard_group = ShardGroup::new(2u32, 3u32);
+        let leaf = |members: &[(&'static str, u8, u64)], shard_group| {
+            committee(members)
+                .calculate_validator_set_leaf_hash(&shard_group)
+                .unwrap()
+        };
+        let sample = leaf(&[("c", 3, 2), ("d", 4, 1)], shard_group);
+
+        assert_ne!(leaf(&[("c", 3, 2), ("d", 4, 1)], ShardGroup::new(1u32, 3u32)), sample);
+        assert_ne!(leaf(&[("c", 3, 1), ("d", 4, 1)], shard_group), sample);
+        assert_ne!(leaf(&[("c", 3, 2), ("d", 5, 1)], shard_group), sample);
+        assert_ne!(leaf(&[("c", 3, 2)], shard_group), sample);
+    }
+
+    #[test]
+    fn every_outer_field_changes_the_set_hash() {
+        let root = Hash32::from_array([0x5a; 32]);
+        let sample = ValidatorSetHash::calculate(Network::LocalNet, Epoch(7), num_preshards(), &root);
         let eight = NumPreshards::try_from(8u32).unwrap();
-        assert_ne!(hash_of(Network::LocalNet, Epoch(7), eight, groups()), golden);
 
-        let mut moved_boundary = groups();
-        moved_boundary[0].0 = ShardGroup::new(0u32, 0u32);
-        moved_boundary[1].0 = ShardGroup::new(1u32, 3u32);
         assert_ne!(
-            hash_of(Network::LocalNet, Epoch(7), num_preshards(), moved_boundary),
-            golden
+            ValidatorSetHash::calculate(Network::Esmeralda, Epoch(7), num_preshards(), &root),
+            sample
         );
-
-        let mut reweighted = groups();
-        reweighted[1].1[0].1 = one();
         assert_ne!(
-            hash_of(Network::LocalNet, Epoch(7), num_preshards(), reweighted),
-            golden
+            ValidatorSetHash::calculate(Network::LocalNet, Epoch(8), num_preshards(), &root),
+            sample
         );
-
-        let mut swapped_member = groups();
-        swapped_member[0].1[0].0 = pk(5);
         assert_ne!(
-            hash_of(Network::LocalNet, Epoch(7), num_preshards(), swapped_member),
-            golden
+            ValidatorSetHash::calculate(Network::LocalNet, Epoch(7), eight, &root),
+            sample
         );
-
-        let mut moved_member = groups();
-        let member = moved_member[0].1.pop().unwrap();
-        moved_member[1].1.push(member);
         assert_ne!(
-            hash_of(Network::LocalNet, Epoch(7), num_preshards(), moved_member),
-            golden
+            ValidatorSetHash::calculate(Network::LocalNet, Epoch(7), num_preshards(), &Hash32::zero()),
+            sample
         );
     }
 
     #[test]
-    fn it_rejects_a_repeated_shard_group() {
-        let err = ValidatorSet::init(Network::LocalNet, Epoch(7), num_preshards(), [
-            (ShardGroup::new(0u32, 1u32), vec![(pk(1), one())]),
-            (ShardGroup::new(0u32, 1u32), vec![(pk(2), one())]),
-        ])
-        .unwrap_err();
+    fn it_rejects_members_out_of_public_key_order() {
+        let shard_group = ShardGroup::new(0u32, 3u32);
+        let err = committee(&[("a", 2, 1), ("b", 1, 1)])
+            .calculate_validator_set_leaf_hash(&shard_group)
+            .unwrap_err();
 
-        assert_eq!(err, ValidatorSetError::DuplicateShardGroup {
-            shard_group: ShardGroup::new(0u32, 1u32)
-        });
-    }
-
-    #[test]
-    fn it_rejects_a_public_key_repeated_within_a_shard_group() {
-        let err = ValidatorSet::init(Network::LocalNet, Epoch(7), num_preshards(), [(
-            ShardGroup::new(0u32, 3u32),
-            vec![(pk(1), one()), (pk(1), VotePower::of(2))],
-        )])
-        .unwrap_err();
-
-        assert_eq!(err, ValidatorSetError::DuplicatePublicKey {
-            shard_group: ShardGroup::new(0u32, 3u32),
+        assert_eq!(err, ValidatorSetError::CommitteeNotSorted {
+            shard_group,
+            previous: pk(2),
             public_key: pk(1),
         });
     }
 
     #[test]
-    fn it_rejects_a_public_key_in_two_shard_groups() {
-        let err = ValidatorSet::init(Network::LocalNet, Epoch(7), num_preshards(), [
-            (ShardGroup::new(0u32, 1u32), vec![(pk(1), one())]),
-            (ShardGroup::new(2u32, 3u32), vec![(pk(1), one())]),
-        ])
-        .unwrap_err();
+    fn it_rejects_a_repeated_public_key() {
+        let shard_group = ShardGroup::new(0u32, 3u32);
+        let err = committee(&[("a", 1, 1), ("b", 1, 2)])
+            .calculate_validator_set_leaf_hash(&shard_group)
+            .unwrap_err();
 
-        assert_eq!(err, ValidatorSetError::DuplicatePublicKey {
-            shard_group: ShardGroup::new(2u32, 3u32),
+        assert_eq!(err, ValidatorSetError::CommitteeNotSorted {
+            shard_group,
+            previous: pk(1),
             public_key: pk(1),
         });
-    }
-
-    #[test]
-    fn it_builds_the_same_set_from_committees_without_addresses() {
-        let member = |address: &'static str, key_byte, power| CommitteeMember {
-            address,
-            public_key: pk(key_byte),
-            vote_power: power,
-        };
-        let low = Committee::new(vec![member("b", 2, one()), member("a", 1, one())]);
-        let high = Committee::new(vec![member("c", 3, VotePower::of(2)), member("d", 4, one())]);
-
-        let set = ValidatorSet::init_from_committees(Network::LocalNet, Epoch(7), num_preshards(), [
-            (ShardGroup::new(2u32, 3u32), &high),
-            (ShardGroup::new(0u32, 1u32), &low),
-        ])
-        .unwrap();
-
-        assert_eq!(set, golden_set());
     }
 
     #[test]

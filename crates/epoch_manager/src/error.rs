@@ -1,8 +1,16 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_ootle_common_types::{Epoch, SubstateAddress, optional::IsNotFoundError};
+use tari_ootle_common_types::{
+    Epoch,
+    ShardGroup,
+    SubstateAddress,
+    ValidatorSetError,
+    ValidatorSetHash,
+    optional::IsNotFoundError,
+};
 use tari_ootle_storage::StorageError;
+use tari_state_tree::ValidatorSetTreeError;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 #[derive(thiserror::Error, Debug)]
@@ -45,6 +53,28 @@ pub enum EpochManagerError {
     FailedToSubmitLayerOneTransaction { details: String },
     #[error("Epoch event oracle error: {details}")]
     EpochEventOracleError { details: String },
+    #[error("Committee of shard group {shard_group} in epoch {epoch} cannot be committed to a validator set: {source}")]
+    InvalidValidatorSetCommittee {
+        epoch: Epoch,
+        shard_group: ShardGroup,
+        source: ValidatorSetError,
+    },
+    #[error("Validator set tree for epoch {epoch}: {source}")]
+    ValidatorSetTree {
+        epoch: Epoch,
+        source: ValidatorSetTreeError,
+    },
+    #[error("Epoch {epoch} has no validator set: its committees are not assigned")]
+    NoValidatorSet { epoch: Epoch },
+    #[error(
+        "Stored validator set leaves for epoch {epoch} rebuild to hash {rebuilt}, but the stored validator set hash \
+         is {stored}"
+    )]
+    ValidatorSetLeavesMismatch {
+        epoch: Epoch,
+        stored: ValidatorSetHash,
+        rebuilt: ValidatorSetHash,
+    },
 }
 
 impl EpochManagerError {
@@ -56,7 +86,7 @@ impl EpochManagerError {
 impl IsNotFoundError for EpochManagerError {
     fn is_not_found_error(&self) -> bool {
         match self {
-            Self::ValidatorNodeNotRegistered { .. } | Self::NoEpochFound(_) => true,
+            Self::ValidatorNodeNotRegistered { .. } | Self::NoEpochFound(_) | Self::NoValidatorSet { .. } => true,
             Self::StorageError(err) => err.is_not_found_error(),
             _ => false,
         }

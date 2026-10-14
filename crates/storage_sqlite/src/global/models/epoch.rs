@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_ootle_common_types::ValidatorSetHash;
 use tari_ootle_storage::global::EpochData;
 
 use crate::error::SqliteStorageError;
@@ -29,6 +30,7 @@ use crate::error::SqliteStorageError;
 pub struct DbEpochData {
     pub epoch: i64,
     pub epoch_hash: Vec<u8>,
+    pub validator_set_hash: Option<Vec<u8>>,
 }
 
 impl TryFrom<DbEpochData> for EpochData {
@@ -42,6 +44,18 @@ impl TryFrom<DbEpochData> for EpochData {
                 item: "Epoch",
                 details: format!("epoch_hash incorrect length: {e}"),
             })?,
+            validator_set_hash: e
+                .validator_set_hash
+                .map(|hash| {
+                    <[u8; 32]>::try_from(hash.as_slice())
+                        .map(ValidatorSetHash::from_array)
+                        .map_err(|_| SqliteStorageError::DecodingError {
+                            operation: "TryFrom<DbEpochData> for EpochData",
+                            item: "Epoch",
+                            details: format!("validator_set_hash has {} bytes, expected 32", hash.len()),
+                        })
+                })
+                .transpose()?,
         })
     }
 }

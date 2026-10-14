@@ -48,6 +48,7 @@ use tari_ootle_common_types::{
     NodeAddressable,
     ShardGroup,
     SubstateAddress,
+    ValidatorSetHash,
     VotePower,
     committee::{Committee, CommitteeMember},
 };
@@ -447,6 +448,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             .filter(committees::epoch.eq(epoch.as_u64() as i64))
             .filter(committees::shard_start.eq(shard_group.start().as_u32() as i32))
             .filter(committees::shard_end.eq(shard_group.end().as_u32() as i32))
+            .order_by(validator_nodes::public_key.asc())
             .limit(i64::try_from(limit).unwrap_or(i64::MAX))
             .get_results::<DbValidatorNode>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
@@ -655,6 +657,102 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
             })?;
 
         query_res.map(EpochData::try_from).transpose()
+    }
+
+    fn set_validator_set(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        epoch: Epoch,
+        validator_set_hash: &ValidatorSetHash,
+        leaves: &[(ShardGroup, Hash32)],
+    ) -> Result<(), Self::Error> {
+        use crate::global::schema::{epochs, validator_set_leaves};
+
+        let epoch = epoch.as_u64() as i64;
+        let num_updated = diesel::update(epochs::table.find(epoch))
+            .set(epochs::validator_set_hash.eq(validator_set_hash.as_bytes()))
+            .execute(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "set_validator_set::epoch",
+            })?;
+        if num_updated == 0 {
+            return Err(SqliteStorageError::NotFound {
+                item: "epoch",
+                key: format!("{epoch} (to set its validator set)"),
+            });
+        }
+
+        diesel::delete(validator_set_leaves::table.filter(validator_set_leaves::epoch.eq(epoch)))
+            .execute(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "set_validator_set::clear_leaves",
+            })?;
+        let rows = leaves
+            .iter()
+            .map(|(shard_group, leaf_hash)| {
+                (
+                    validator_set_leaves::epoch.eq(epoch),
+                    validator_set_leaves::shard_start.eq(shard_group.start().as_u32() as i32),
+                    validator_set_leaves::shard_end.eq(shard_group.end().as_u32() as i32),
+                    validator_set_leaves::leaf_hash.eq(leaf_hash.as_slice()),
+                )
+            })
+            .collect::<Vec<_>>();
+        if !rows.is_empty() {
+            diesel::insert_into(validator_set_leaves::table)
+                .values(&rows)
+                .execute(tx.connection())
+                .map_err(|source| SqliteStorageError::DieselError {
+                    source,
+                    operation: "set_validator_set::insert_leaves",
+                })?;
+        }
+        Ok(())
+    }
+
+    fn get_validator_set_leaves(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        epoch: Epoch,
+    ) -> Result<Vec<(ShardGroup, Hash32)>, Self::Error> {
+        use crate::global::schema::validator_set_leaves;
+
+        let rows = validator_set_leaves::table
+            .select((
+                validator_set_leaves::shard_start,
+                validator_set_leaves::shard_end,
+                validator_set_leaves::leaf_hash,
+            ))
+            .filter(validator_set_leaves::epoch.eq(epoch.as_u64() as i64))
+            .order_by((
+                validator_set_leaves::shard_start.asc(),
+                validator_set_leaves::shard_end.asc(),
+            ))
+            .load::<(i32, i32, Vec<u8>)>(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "get_validator_set_leaves",
+            })?;
+
+        rows.into_iter()
+            .map(|(shard_start, shard_end, leaf_hash)| {
+                let shard_group = ShardGroup::new_checked(shard_start as u32, shard_end as u32).ok_or_else(|| {
+                    SqliteStorageError::MalformedDbData(format!(
+                        "get_validator_set_leaves: invalid shard group {shard_start}-{shard_end} for epoch {epoch}"
+                    ))
+                })?;
+                let leaf_hash = Hash32::try_from_slice(&leaf_hash).map_err(|_| {
+                    SqliteStorageError::MalformedDbData(format!(
+                        "get_validator_set_leaves: leaf hash of shard group {shard_group} in epoch {epoch} has {} \
+                         bytes, expected 32",
+                        leaf_hash.len()
+                    ))
+                })?;
+                Ok((shard_group, leaf_hash))
+            })
+            .collect()
     }
 
     fn insert_block_header(

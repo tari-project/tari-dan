@@ -33,6 +33,7 @@ diesel::table! {
     epochs (epoch) {
         epoch -> BigInt,
         epoch_hash -> Binary,
+        validator_set_hash -> Nullable<Binary>,
     }
 }
 
@@ -55,6 +56,15 @@ diesel::table! {
 }
 
 diesel::table! {
+    validator_set_leaves (epoch, shard_start, shard_end) {
+        epoch -> BigInt,
+        shard_start -> Integer,
+        shard_end -> Integer,
+        leaf_hash -> Binary,
+    }
+}
+
+diesel::table! {
     validator_nodes (id) {
         id -> Integer,
         public_key -> Binary,
@@ -68,6 +78,7 @@ diesel::table! {
 }
 
 diesel::joinable!(committees -> validator_nodes (validator_node_id));
+diesel::joinable!(validator_set_leaves -> epochs (epoch));
 
 diesel::allow_tables_to_appear_in_same_query!(
     block_headers,
@@ -77,4 +88,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     layer_one_transactions,
     metadata,
     validator_nodes,
+    validator_set_leaves,
 );
