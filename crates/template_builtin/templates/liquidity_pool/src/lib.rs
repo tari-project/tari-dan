@@ -110,9 +110,10 @@ mod template {
 
         /// Contributes liquidity to the pool, minting LP tokens in return.
         ///
-        /// To preserve the reserve ratio the pool only takes the matching portion of one of the input buckets, so the
-        /// remainder of the other is returned to the caller as change. Returns `(lp_tokens, change_a, change_b)` where
-        /// `change_a`/`change_b` correspond to `bucket_a`/`bucket_b` and may be empty.
+        /// The pool mints the most LP both buckets can pay for and takes from each bucket the share of its reserve
+        /// that LP is worth, rounded up in favour of the pool. The rest of both buckets is returned to the caller as
+        /// change. Returns `(lp_tokens, change_a, change_b)` where `change_a`/`change_b` correspond to
+        /// `bucket_a`/`bucket_b`; either or both may be empty.
         pub fn contribute(&mut self, mut bucket_a: Bucket, mut bucket_b: Bucket) -> (Bucket, Bucket, Bucket) {
             // Potentially saves binary space
             const OVERFLOW_MSG: &str = "Overflow when calculating LP token mint amount";
@@ -223,7 +224,7 @@ mod template {
             ]);
 
             // Return the LP tokens plus the unused remainder of each input bucket as change. `bucket_a`/`bucket_b`
-            // now hold only what was not contributed; one is usually empty, which is harmless to return.
+            // now hold only what was not contributed; returning an empty bucket is harmless.
             (mint_lp_tokens, bucket_a, bucket_b)
         }
 
