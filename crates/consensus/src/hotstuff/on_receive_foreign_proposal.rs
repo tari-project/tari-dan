@@ -142,10 +142,10 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     pub async fn handle_notification_received(
         &mut self,
         from: TConsensusSpec::Addr,
-        current_epoch: Epoch,
         message: ForeignProposalNotificationMessage,
         local_committee_info: &CommitteeInfo,
     ) -> Result<(), HotStuffError> {
@@ -215,14 +215,28 @@ where TConsensusSpec: ConsensusSpec
             return Ok(());
         }
 
-        let selected = self
+        // The shard group is from the notification's epoch, whose committee layout may differ from the current one
+        let Some(selected) = self
             .epoch_manager
             .get_random_committee_member(
-                current_epoch,
+                foreign_committee_info.epoch(),
                 Some(foreign_committee_info.shard_group()),
                 Default::default(),
             )
-            .await?;
+            .await
+            .optional()?
+        else {
+            warn!(
+                target: LOG_TARGET,
+                "❌ FOREIGN PROPOSAL: notification for block {} from {}: no committee for shard group {} in epoch {}. \
+                 Ignoring.",
+                message.block_id,
+                from,
+                foreign_committee_info.shard_group(),
+                foreign_committee_info.epoch(),
+            );
+            return Ok(());
+        };
 
         info!(
             target: LOG_TARGET,
@@ -402,10 +416,22 @@ where TConsensusSpec: ConsensusSpec
             let shard_group = requests.shard_group();
             let epoch = requests.epoch();
 
-            let selected = self
+            let Some(selected) = self
                 .epoch_manager
-                .get_random_committee_member(requests.epoch(), Some(requests.shard_group()), requests.peers.clone())
-                .await?;
+                .get_random_committee_member(epoch, Some(shard_group), requests.peers.clone())
+                .await
+                .optional()?
+            else {
+                warn!(
+                    target: LOG_TARGET,
+                    "🌐 FOREIGN PROPOSAL: No unrequested member of shard group {} in epoch {} for block {}. Aborting \
+                     further requests.",
+                    shard_group,
+                    epoch,
+                    block_id,
+                );
+                continue;
+            };
 
             info!(
                 target: LOG_TARGET,
