@@ -13,7 +13,12 @@ use tari_engine_types::{
     substate::{Substate, SubstateId, SubstateValue},
     vault::Vault,
 };
-use tari_ootle_transaction::{Epoch, Transaction, args, builder::named_args::NamedArg};
+use tari_ootle_transaction::{
+    Epoch,
+    Transaction,
+    args,
+    builder::{FeeIntent, TransactionBuilder, named_args::NamedArg},
+};
 use tari_template_abi::CallInfo;
 use tari_template_lib::types::{
     ComponentAddress,
@@ -267,6 +272,46 @@ fn max_transaction_output_bytes_limit() {
             limits::ENGINE_LIMITS.max_transaction_output_bytes
         ),
     );
+}
+
+/// The fee checkpoint is what commits when the main intent fails, so it is held to the same output cap
+/// as a full commit, whether the main intent fails for its own reason or by tripping the cap itself.
+#[test]
+fn max_transaction_output_bytes_limit_applies_to_the_fee_intent() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let template = test.get_template_address(TEMPLATE_NAME);
+    let per_component = 64 * 1024;
+    let over_cap = limits::ENGINE_LIMITS.max_transaction_output_bytes / per_component + 4;
+    let fee_intent = |builder: TransactionBuilder<FeeIntent>| {
+        (0..over_cap).fold(builder, |builder, _| {
+            builder.call_function(template, "new", args!(Bytes::from(vec![7u8; per_component])))
+        })
+    };
+    let expected_reason = format!(
+        "exceeding the maximum of {} bytes per transaction",
+        limits::ENGINE_LIMITS.max_transaction_output_bytes
+    );
+
+    let failing_main_intent = Transaction::builder_localnet(Epoch(1))
+        .with_fee_instructions_builder(fee_intent)
+        .call_function(template, "this_function_does_not_exist", vec![])
+        .build_and_seal(test.secret_key());
+    let result = test.try_execute(failing_main_intent, vec![]).unwrap();
+    assert!(
+        result.finalize.result.is_reject(),
+        "an over-cap fee intent must commit nothing"
+    );
+    assert_reject_reason(result.expect_failure(), &expected_reason);
+
+    let empty_main_intent = Transaction::builder_localnet(Epoch(1))
+        .with_fee_instructions_builder(fee_intent)
+        .build_and_seal(test.secret_key());
+    let result = test.try_execute(empty_main_intent, vec![]).unwrap();
+    assert!(
+        result.finalize.result.is_reject(),
+        "an over-cap fee intent must commit nothing"
+    );
+    assert_reject_reason(result.expect_failure(), &expected_reason);
 }
 
 /// The bytes `PushItToTheLimit::return_items` returns for `len`, and the CBOR items they hold.
