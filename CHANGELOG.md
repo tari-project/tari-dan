@@ -3,6 +3,33 @@
 All notable changes to this project will be documented in this file.
 See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.46.1](https://github.com/tari-project/tari-ootle/compare/v0.46.0...v0.46.1) (2026-10-14)
+
+Fixes cross-shard transactions stuck past their expiry, tightens state sync and RPC streams, and
+removes the indexer's non-fungibles route.
+
+### ⚠️ Upgrade notes
+
+- **Validators upgrade together**: cross-shard transactions left prepared past their max epoch now
+  abort. (#2905)
+- **The indexer's `GET /non-fungibles` route is removed**, along with `get_non_fungibles` in the
+  Rust and JS indexer clients. (#2904)
+
+### Features
+
+- **Transaction execution time histogram** in validator metrics. (#2909)
+
+### Bug fixes
+
+- **consensus:** cross-shard transactions left in LocalPrepared after their max epoch abort. (#2905)
+- **state sync:** every batch of a state version must carry one epoch. (#2910)
+- **rpc:** abandoned streams end, and the indexer follows state on a dedicated session. (#2917)
+- **indexer:** indexed receipts and templates survive conflicting sync updates. (#2901)
+
+### Dependencies
+
+- **ruzstd 0.9.1** for RUSTSEC-2026-0344. (#2906)
+
 ## [0.46.0](https://github.com/tari-project/tari-ootle/compare/v0.45.0...v0.46.0) (2026-10-13)
 
 Introduces protocol version V2: block headers commit to a transaction merkle root, substate proofs
