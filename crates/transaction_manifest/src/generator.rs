@@ -29,13 +29,28 @@ const MAX_CALL_DEPTH: usize = 16;
 /// the call depth alone bounds only nesting, not fan-out.
 const MAX_GENERATED_INSTRUCTIONS: usize = 10_000;
 
+/// A name the manifest itself binds with `let`.
+enum Binding {
+    /// `let x = var!["name"]`: the caller-supplied input value.
+    Input(ManifestValue),
+    /// A value the transaction places on the workspace when it runs.
+    Workspace(WorkspaceOffsetId),
+}
+
+/// What a bare identifier refers to.
+enum Resolved<'a> {
+    Value(&'a ManifestValue),
+    Workspace(WorkspaceOffsetId),
+}
+
 pub struct ManifestInstructionGenerator {
     imported_templates: HashMap<Ident, TemplateAddress>,
-    global_aliases: HashMap<String, ManifestValue>,
+    /// Names bound by the manifest. A later `let` replaces an earlier binding of the same name.
+    bindings: HashMap<String, Binding>,
+    /// Caller-supplied inputs. A bare identifier resolves to one only when the manifest does not bind that name.
     globals: HashMap<String, ManifestValue>,
     current_workspace_id: WorkspaceId,
     generated_instructions: usize,
-    workspace_ids: HashMap<String, WorkspaceOffsetId>,
     templates: HashMap<String, TemplateAddress>,
     /// Caller-supplied blob payloads keyed by name. Used to resolve `blob!(name)` references.
     blob_inputs: HashMap<String, Blob>,
@@ -58,11 +73,10 @@ impl ManifestInstructionGenerator {
     ) -> Self {
         Self {
             imported_templates: HashMap::new(),
-            global_aliases: HashMap::new(),
+            bindings: HashMap::new(),
             globals,
             current_workspace_id: WorkspaceId::default(),
             generated_instructions: 0,
-            workspace_ids: HashMap::new(),
             templates,
             blob_inputs,
             blob_vars: HashMap::new(),
@@ -74,22 +88,29 @@ impl ManifestInstructionGenerator {
     }
 
     pub fn generate_instructions(&mut self, ast: ManifestAst) -> Result<ManifestInstructions, ManifestError> {
-        self.imported_templates = ast
-            .parsed
-            .defines
-            .into_iter()
-            .map(|import| match import.template_address {
-                Some(addr) => Ok((import.alias, addr)),
+        for import in ast.parsed.defines {
+            let address = match import.template_address {
+                Some(addr) => addr,
                 None => {
-                    let alias_str = import.alias.to_string();
+                    let alias = import.alias.to_string();
                     self.templates
-                        .get(&alias_str)
+                        .get(&alias)
                         .copied()
-                        .map(|addr| (import.alias, addr))
-                        .ok_or(ManifestError::TemplateAliasNotDefined { alias: alias_str })
+                        .ok_or(ManifestError::TemplateAliasNotDefined { alias })?
                 },
-            })
-            .collect::<Result<_, _>>()?;
+            };
+            match self.imported_templates.get(&import.alias) {
+                Some(existing) if *existing != address => {
+                    return Err(ManifestError::TemplateAliasRedefined {
+                        alias: import.alias.to_string(),
+                    });
+                },
+                Some(_) => {},
+                None => {
+                    self.imported_templates.insert(import.alias, address);
+                },
+            }
+        }
 
         self.functions = ast.parsed.functions;
 
@@ -151,22 +172,19 @@ impl ManifestInstructionGenerator {
                     .as_ref()
                     .expect("AST parse should have failed: no component ident for ComponentInvoke statement")
                     .to_string();
-                let call = if let Some(value) = self.global_aliases.get(&component_ident) {
-                    ComponentReference::Address(Self::extract_component_address(value)?)
-                } else if let Some(workspace_offset) = self.workspace_ids.get(&component_ident) {
-                    if workspace_offset.offset().is_some() {
-                        return Err(ManifestError::InvalidInstruction {
-                            reason: format!(
-                                "Tuple-destructured variable '{component_ident}' cannot be used as a component \
-                                 reference. Use a single variable binding instead."
-                            ),
-                        });
-                    }
-                    ComponentReference::Workspace(workspace_offset.id())
-                } else if let Some(value) = self.globals.get(&component_ident) {
-                    ComponentReference::Address(Self::extract_component_address(value)?)
-                } else {
-                    return Err(ManifestError::UndefinedVariable { name: component_ident });
+                let call = match self.resolve(&component_ident)? {
+                    Resolved::Value(value) => ComponentReference::Address(Self::extract_component_address(value)?),
+                    Resolved::Workspace(workspace_offset) => {
+                        if workspace_offset.offset().is_some() {
+                            return Err(ManifestError::InvalidInstruction {
+                                reason: format!(
+                                    "Tuple-destructured variable '{component_ident}' cannot be used as a component \
+                                     reference. Use a single variable binding instead."
+                                ),
+                            });
+                        }
+                        ComponentReference::Workspace(workspace_offset.id())
+                    },
                 };
                 let mut instructions = vec![Instruction::CallMethod {
                     call,
@@ -207,13 +225,7 @@ impl ManifestInstructionGenerator {
 
                 let bucket_workspace_id = create_account
                     .bucket
-                    .map(|ident| {
-                        let name = ident.to_string();
-                        self.workspace_ids
-                            .get(&name)
-                            .copied()
-                            .ok_or(ManifestError::UndefinedVariable { name })
-                    })
+                    .map(|ident| self.get_workspace_id(&ident.to_string()))
                     .transpose()?;
 
                 let mut instructions = vec![Instruction::CreateAccount {
@@ -229,10 +241,9 @@ impl ManifestInstructionGenerator {
                 Ok(instructions)
             },
             ManifestIntent::AssignInput(assign) => {
-                self.global_aliases.insert(
-                    assign.variable_name.to_string(),
-                    self.get_global(&assign.global_variable_name.value())?.clone(),
-                );
+                let value = self.get_global(&assign.global_variable_name.value())?.clone();
+                self.bindings
+                    .insert(assign.variable_name.to_string(), Binding::Input(value));
                 Ok(vec![])
             },
             ManifestIntent::AssignBlob(assign) => {
@@ -242,15 +253,8 @@ impl ManifestInstructionGenerator {
             },
             ManifestIntent::DropAllProofs => Ok(vec![Instruction::DropAllProofsInWorkspace]),
             ManifestIntent::PutIntoBucket(p) => {
-                let resolve = |name: &Ident| {
-                    let name_str = name.to_string();
-                    self.workspace_ids
-                        .get(&name_str)
-                        .copied()
-                        .ok_or(ManifestError::UndefinedVariable { name: name_str })
-                };
-                let src = resolve(&p.src)?;
-                let dest = resolve(&p.dest)?;
+                let src = self.get_workspace_id(&p.src.to_string())?;
+                let dest = self.get_workspace_id(&p.dest.to_string())?;
                 Ok(vec![Instruction::PutIntoBucket { src, dest }])
             },
             ManifestIntent::PublishTemplate(pt) => {
@@ -312,20 +316,25 @@ impl ManifestInstructionGenerator {
 
     fn next_workspace_id(&mut self, name: String) -> Result<WorkspaceId, ManifestError> {
         let id = self.next_workspace_id_raw()?;
-        self.workspace_ids.insert(name, WorkspaceOffsetId::new(id));
+        self.bindings
+            .insert(name, Binding::Workspace(WorkspaceOffsetId::new(id)));
         Ok(id)
     }
 
     fn register_output_binding(&mut self, binding: OutputBinding, workspace_id: WorkspaceId) {
         match binding {
             OutputBinding::Single(ident) => {
-                self.workspace_ids
-                    .insert(ident.to_string(), WorkspaceOffsetId::new(workspace_id));
+                self.bindings.insert(
+                    ident.to_string(),
+                    Binding::Workspace(WorkspaceOffsetId::new(workspace_id)),
+                );
             },
             OutputBinding::Tuple(idents) => {
                 for (i, ident) in idents.into_iter().enumerate() {
-                    self.workspace_ids
-                        .insert(ident.to_string(), WorkspaceOffsetId::new(workspace_id).with_offset(i));
+                    self.bindings.insert(
+                        ident.to_string(),
+                        Binding::Workspace(WorkspaceOffsetId::new(workspace_id).with_offset(i)),
+                    );
                 }
             },
         }
@@ -382,10 +391,7 @@ impl ManifestInstructionGenerator {
                 SpecialLiteral::SubstateId(OrVar::Var(ident)) | SpecialLiteral::Address(OrVar::Var(ident)),
             ) => {
                 let name = ident.to_string();
-                if !self.globals.contains_key(&name) &&
-                    !self.global_aliases.contains_key(&name) &&
-                    self.workspace_ids.contains_key(&name)
-                {
+                if let Ok(Resolved::Workspace(_)) = self.resolve(&name) {
                     return Err(ManifestError::InvalidInstruction {
                         reason: format!(
                             "'{name}' is a workspace value, which is only known when the transaction runs, so it \
@@ -448,11 +454,7 @@ impl ManifestInstructionGenerator {
     }
 
     fn extract_public_key(&self, name: &str) -> Result<RistrettoPublicKeyBytes, ManifestError> {
-        let value = self
-            .global_aliases
-            .get(name)
-            .or_else(|| self.globals.get(name))
-            .ok_or_else(|| ManifestError::UndefinedVariable { name: name.to_string() })?;
+        let value = self.resolve_value(name)?;
 
         match value {
             ManifestValue::Value(tari_bor::Value::Bytes(bytes)) => RistrettoPublicKeyBytes::from_bytes(bytes)
@@ -465,11 +467,7 @@ impl ManifestInstructionGenerator {
 
     fn extract_from_global<T>(&self, name: &str) -> Result<T, ManifestError>
     where T: tari_bor::DeserializeOwned + for<'b> tari_bor::Decode<'b, ()> {
-        let value = self
-            .global_aliases
-            .get(name)
-            .or_else(|| self.globals.get(name))
-            .ok_or_else(|| ManifestError::UndefinedVariable { name: name.to_string() })?;
+        let value = self.resolve_value(name)?;
 
         match value {
             ManifestValue::Value(v) => tari_bor::from_value(v).map_err(|e| {
@@ -481,20 +479,44 @@ impl ManifestInstructionGenerator {
         }
     }
 
+    /// Resolves a bare identifier. Every position an identifier can appear in resolves it here, so a name means the
+    /// same thing throughout a manifest.
+    fn resolve(&self, name: &str) -> Result<Resolved<'_>, ManifestError> {
+        match self.bindings.get(name) {
+            Some(Binding::Input(value)) => Ok(Resolved::Value(value)),
+            Some(Binding::Workspace(id)) => Ok(Resolved::Workspace(*id)),
+            None => self
+                .globals
+                .get(name)
+                .map(Resolved::Value)
+                .ok_or_else(|| ManifestError::UndefinedVariable { name: name.to_string() }),
+        }
+    }
+
+    fn resolve_value(&self, name: &str) -> Result<&ManifestValue, ManifestError> {
+        match self.resolve(name)? {
+            Resolved::Value(value) => Ok(value),
+            Resolved::Workspace(_) => Err(ManifestError::InvalidVariableType(format!(
+                "'{name}' is a workspace value, which is only known when the transaction runs, but this position \
+                 requires a value known when the manifest is built"
+            ))),
+        }
+    }
+
+    fn get_workspace_id(&self, name: &str) -> Result<WorkspaceOffsetId, ManifestError> {
+        match self.bindings.get(name) {
+            Some(Binding::Workspace(id)) => Ok(*id),
+            Some(Binding::Input(_)) => Err(ManifestError::InvalidVariableType(format!(
+                "'{name}' is an input value, but this position requires a workspace value"
+            ))),
+            None => Err(ManifestError::UndefinedVariable { name: name.to_string() }),
+        }
+    }
+
     fn get_ident(&self, name: &str) -> Result<InstructionArg, ManifestError> {
-        self.globals
-            .get(name)
-            .or_else(|| self.global_aliases.get(name))
-            .map(|v| v.to_arg())
-            .or_else(|| {
-                // Or is it a variable on the worktop?
-                self.workspace_ids
-                    .get(name)
-                    .map(|id| Ok(InstructionArg::Workspace(*id)))
-            })
-            .ok_or_else(|| {
-                // Or undefined
-                ManifestError::UndefinedVariable { name: name.to_string() }
-            })?
+        match self.resolve(name)? {
+            Resolved::Value(value) => value.to_arg(),
+            Resolved::Workspace(id) => Ok(InstructionArg::Workspace(id)),
+        }
     }
 }
