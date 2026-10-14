@@ -5,6 +5,7 @@ use tari_template_abi::{EngineOp, OwnedData, tari_engine};
 use tari_template_lib::{
     args::{ComponentAction, ComponentInvokeArg, ComponentRef, ConsensusAction, ConsensusInvokeArg},
     prelude::*,
+    types::SubstateOwnerRule,
 };
 
 /// Calls the engine with an argument encoded beforehand, and frees the response without decoding it.
@@ -24,11 +25,28 @@ mod template {
     pub struct PushItToTheLimit {
         data: Bytes,
         items: Vec<u32>,
+        /// Null as the template sets it. A test may write any value here directly into the store.
+        extra: tari_bor::Value,
     }
 
     impl PushItToTheLimit {
         pub fn new(data: Bytes) -> Self {
-            Self { data, items: Vec::new() }
+            Self {
+                data,
+                items: Vec::new(),
+                extra: tari_bor::Value::Null,
+            }
+        }
+
+        /// Opens every method of this component to any caller.
+        pub fn allow_all_methods(&mut self) {
+            ComponentManager::get(CallerContext::current_component_address())
+                .set_access_rules(AccessRules::new().default(AccessRule::AllowAll));
+        }
+
+        /// Leaves this component with no owner.
+        pub fn disown(&mut self) {
+            ComponentManager::get(CallerContext::current_component_address()).set_owner_rule(SubstateOwnerRule::None);
         }
 
         pub fn set_data(&mut self, data: Bytes) {

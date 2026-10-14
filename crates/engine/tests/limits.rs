@@ -19,6 +19,7 @@ use tari_template_abi::CallInfo;
 use tari_template_lib::{
     args::{ConsensusAction, ConsensusInvokeArg, InvokeResult},
     types::{
+        BinaryTag,
         ComponentAddress,
         Metadata,
         NonFungibleId,
@@ -677,4 +678,41 @@ fn engine_call_responses_are_charged_against_the_fee_intent_credit() {
     );
 
     assert_reject_reason(reason, "exceeds the fee intent's");
+}
+
+/// Writes a bucket id into `component`'s state directly in the store, keeping its substate
+/// version. No template can set such a state: validating it as a component state fails.
+fn seed_state_failing_validation(test: &mut TemplateTest, component: ComponentAddress) {
+    let id = SubstateId::Component(component);
+    let substate = test.read_only_state_store().get_substate(&id).unwrap();
+    let version = substate.version();
+    let mut value = substate.into_substate_value();
+    let tari_bor::Value::Array(fields) = &mut value.component_mut().unwrap().body.state else {
+        panic!("the component state is an array of its fields");
+    };
+    // `extra`, the last field.
+    *fields.last_mut().unwrap() =
+        tari_bor::Value::Tag(BinaryTag::BucketId as u64, Box::new(tari_bor::Value::Integer(0)));
+    test.get_state_store_mut()
+        .set_state(id, Substate::new(version, value))
+        .unwrap();
+}
+
+/// Access rules and the owner rule live outside a component's state, so changing them leaves the
+/// state as it is: it is neither indexed nor validated again, however large it is. Shown on a state
+/// that would fail validation.
+#[test]
+fn changing_access_or_owner_rules_leaves_the_state_alone() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let component = component_with_state(&mut test, 4, 0);
+    seed_state_failing_validation(&mut test, component);
+
+    for method in ["allow_all_methods", "disown"] {
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(component, method, args![])
+                .build_and_seal(test.secret_key()),
+            vec![],
+        );
+    }
 }

@@ -1511,13 +1511,9 @@ where
                         .authorization()
                         .require_ownership(ComponentAction::SetAccessRules, component.as_ownership())?;
 
-                    state.modify_component_with(&component_lock, |component| {
-                        if access_rules == *component.access_rules() {
-                            return false;
-                        }
-                        component.set_access_rules(access_rules);
-                        true
-                    })?;
+                    if access_rules != *component.access_rules() {
+                        state.update_component_header(&component_lock, |header| header.access_rules = access_rules)?;
+                    }
 
                     Ok::<_, RuntimeError>(())
                 })?;
@@ -1571,13 +1567,9 @@ where
                         .authorization()
                         .require_ownership(ComponentAction::SetOwnerRule, component.as_ownership())?;
 
-                    state.modify_component_with(&component_lock, |component| {
-                        if owner_rule == *component.owner_rule() {
-                            return false;
-                        }
-                        component.set_owner_rule(owner_rule);
-                        true
-                    })?;
+                    if owner_rule != *component.owner_rule() {
+                        state.update_component_header(&component_lock, |header| header.owner_rule = owner_rule)?;
+                    }
 
                     Ok::<_, RuntimeError>(())
                 })?;
