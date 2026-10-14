@@ -463,9 +463,10 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         // proved it. No later version can lie below it.
         let mut epoch_floor = self.latest_local_epoch(maybe_persisted_state_version)?;
         // Substates the stream created as their value hash alone and has not yet destroyed. The sync requests every
-        // value, so a peer may only withhold one it no longer holds: that of a substate since destroyed, whose value
-        // epoch GC has pruned. Each must therefore be destroyed before the stream completes, and none may be settled
-        // by a proof while it is still up.
+        // value, so an honest peer withholds only a value its epoch GC has pruned: that of a substate destroyed
+        // before the peer's GC horizon. The peer serves a bounded stream only while that horizon is no later than
+        // the checkpoint epoch, so the destruction lies within the stream. Each such substate must therefore be
+        // destroyed before the stream completes, and none may be settled by a proof while it is still up.
         let mut created_without_value = HashSet::new();
 
         // syncing states
@@ -932,7 +933,6 @@ impl VersionBuffer {
 mod tests {
     use futures::{FutureExt, stream};
     use tari_engine_types::{
-        ValidatorFeePool,
         confidential::ClaimedOutputTombstone,
         substate::{SubstateId, SubstateValue},
     };
@@ -942,7 +942,7 @@ mod tests {
     use tari_rpc_framework::RpcStatus;
     use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
     use tari_state_tree::memory_store::MemoryTreeStore;
-    use tari_template_lib_types::{ComponentAddress, ObjectKey};
+    use tari_template_lib_types::{ClaimedOutputTombstoneAddress, ObjectKey};
     use tempfile::TempDir;
 
     use super::*;
@@ -988,7 +988,7 @@ mod tests {
     fn substate_id_in(shard: Shard, seed: u8) -> SubstateId {
         let mut bytes = [seed; ObjectKey::LENGTH];
         bytes[0] = u8::try_from(shard.as_u32() - 1).unwrap();
-        SubstateId::Component(ComponentAddress::from_array(bytes))
+        SubstateId::ClaimedOutputTombstone(ClaimedOutputTombstoneAddress::new(ObjectKey::from_array(bytes)))
     }
 
     fn address_in(shard: Shard, seed: u8) -> SubstateAddress {
@@ -1008,7 +1008,9 @@ mod tests {
     }
 
     fn create_in(shard: Shard, seed: u8, value: u8) -> SubstateUpdateProof {
-        let value = SubstateValue::ValidatorFeePool(ValidatorFeePool::new([value; 32].into(), u64::from(value)));
+        let value = SubstateValue::ClaimedOutputTombstone(ClaimedOutputTombstone {
+            value: u64::from(value),
+        });
         SubstateUpdateProof::Create(Box::new(SubstateCreate {
             substate: SubstateData {
                 substate_id: substate_id_in(shard, seed),

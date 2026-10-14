@@ -97,7 +97,14 @@ use crate::{
         rpc::{
             CONSENSUS_NOT_RUNNING,
             block_sync_task::BlockSyncTask,
-            state_sync_task::{HeldHistory, ShardCursor, StateSyncTask, TipAuthority, ensure_epoch_reached},
+            state_sync_task::{
+                HeldHistory,
+                ShardCursor,
+                StateSyncTask,
+                TipAuthority,
+                ensure_epoch_reached,
+                ensure_history_values_held,
+            },
         },
         services::mempool::MempoolHandle,
     },
@@ -111,6 +118,8 @@ pub struct ValidatorNodeRpcServiceImpl<TStateStore> {
     mempool: MempoolHandle,
     consensus: ConsensusHandle,
     max_transaction_size_bytes: usize,
+    /// The epochs of history the state store keeps before epoch GC prunes it, destroyed substates' values included.
+    epoch_history_length: u64,
 }
 
 impl<TStateStore: StateStore> ValidatorNodeRpcServiceImpl<TStateStore> {
@@ -120,6 +129,7 @@ impl<TStateStore: StateStore> ValidatorNodeRpcServiceImpl<TStateStore> {
         mempool: MempoolHandle,
         consensus: ConsensusHandle,
         max_transaction_size_bytes: usize,
+        epoch_history_length: u64,
     ) -> Self {
         Self {
             epoch_manager,
@@ -127,6 +137,7 @@ impl<TStateStore: StateStore> ValidatorNodeRpcServiceImpl<TStateStore> {
             mempool,
             consensus,
             max_transaction_size_bytes,
+            epoch_history_length,
         }
     }
 
@@ -756,6 +767,12 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
                 .await
                 .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
             ensure_epoch_reached(end_epoch, current_epoch)?;
+            // Epoch GC prunes by the epoch the store records, which can differ from the epoch manager's.
+            let store_epoch = self
+                .state_store
+                .with_read_tx(|tx| tx.current_epoch())
+                .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+            ensure_history_values_held(end_epoch, store_epoch, self.epoch_history_length)?;
             self.held_history(end_epoch)
                 .await?
                 .ensure_holds_all(&cursors, end_epoch)?;
