@@ -327,8 +327,9 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         let mut last_state_version = start_state_version;
         let mut tree_changes = vec![];
         let mut updates = vec![];
-        // The version being buffered across `has_more` batches, with the epoch its first batch carried.
-        let mut pending_version: Option<(Version, Epoch)> = None;
+        let mut expected_state_version = None;
+        // The epoch of the version being buffered across `has_more` batches, as its first batch carried it.
+        let mut expected_epoch = None;
         let mut buffered = VersionBuffer::default();
         let mut proof_schedule = self.proof_schedule(start_state_version);
 
@@ -343,7 +344,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                             "Peer sent a state version proof that was not requested"
                         )));
                     };
-                    if let Some((version, _)) = pending_version {
+                    if let Some(version) = expected_state_version {
                         return Err(RpcStateSyncError::InvalidResponse(anyhow!(
                             "Peer sent a state version proof in the middle of v{version}"
                         )));
@@ -437,23 +438,12 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                 )));
             }
 
-            let msg_epoch = batch.epoch.map(Epoch::from).ok_or_else(|| {
-                RpcStateSyncError::InvalidResponse(anyhow!("Received state transition with no epoch"))
-            })?;
-
-            // A version is committed with one epoch, which every tree leaf and substate record of it must share.
-            if let Some((pending, pending_epoch)) = pending_version {
-                if pending != batch.state_version {
-                    return Err(RpcStateSyncError::InvalidResponse(anyhow!(
-                        "Received state version {} that is not the expected state version {pending}.",
-                        batch.state_version,
-                    )));
-                }
-                if pending_epoch != msg_epoch {
-                    return Err(RpcStateSyncError::InvalidResponse(anyhow!(
-                        "Peer streamed v{pending} across epochs {pending_epoch} and {msg_epoch}"
-                    )));
-                }
+            if expected_state_version.is_some_and(|v| v != batch.state_version) {
+                return Err(RpcStateSyncError::InvalidResponse(anyhow!(
+                    "Received state version {} that is not the expected state version {}.",
+                    batch.state_version,
+                    expected_state_version.unwrap()
+                )));
             }
 
             let state_version = batch.state_version;
@@ -480,6 +470,17 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                 .updates
                 .into_iter()
                 .map(|t| SubstateUpdateProof::try_from(t).map_err(RpcStateSyncError::InvalidResponse));
+            let msg_epoch = batch.epoch.map(Epoch::from).ok_or_else(|| {
+                RpcStateSyncError::InvalidResponse(anyhow!("Received state transition with no epoch"))
+            })?;
+            // A version is committed with one epoch, which every tree leaf and substate record of it must share.
+            if let Some(epoch) = expected_epoch &&
+                epoch != msg_epoch
+            {
+                return Err(RpcStateSyncError::InvalidResponse(anyhow!(
+                    "Peer streamed v{state_version} across epochs {epoch} and {msg_epoch}"
+                )));
+            }
 
             info!(target: LOG_TARGET, "🛜 Buffering {} state update(s) (state version: v{})", updates_for_state_version.len(), state_version);
             for result in updates_for_state_version {
@@ -506,11 +507,13 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                     "🛜 Received more state updates for v{}. Continuing to buffer...",
                     state_version
                 );
-                pending_version = Some((state_version, msg_epoch));
+                expected_state_version = Some(state_version);
+                expected_epoch = Some(msg_epoch);
                 continue;
             }
 
-            pending_version = None;
+            expected_state_version = None;
+            expected_epoch = None;
             buffered = VersionBuffer::default();
 
             // Commit the buffered changes for this state version. The shard root is verified once, on
