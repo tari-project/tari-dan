@@ -205,7 +205,8 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
 
     /// Verifies that `proof` proves the shard at `proof.state_version` with the root of `written_version`, the last
     /// version the stream wrote, and keeps it to re-serve to peers that sync from this node. Returns the proven version
-    /// and the epoch of the block that proves it.
+    /// and the epoch of the block that proves it. If `settle`, the state through `written_version` is kept even if the
+    /// stream later fails.
     ///
     /// Every version at or below the proven one was committed no later than that block, so `written_epoch`, the epoch
     /// of the last version written, must not lie after the block's epoch.
@@ -215,6 +216,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         proof: proto::StateVersionProof,
         written_version: Option<Version>,
         written_epoch: Epoch,
+        settle: bool,
     ) -> Result<(Version, Epoch), RpcStateSyncError> {
         let shard = self.shard;
         if proof.shard != shard.as_u32() {
@@ -272,8 +274,11 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                 },
                 shard_root_proof,
             })?;
-            // The state through the written version is now proven, so a later failure rewinds no further back.
-            tx.state_sync_rewind_point_remove(shard)
+            if settle {
+                // The state through the written version is now proven, so a later failure rewinds no further back.
+                tx.state_sync_rewind_point_remove(shard)?;
+            }
+            Ok::<_, StorageError>(())
         })?;
         debug!(target: LOG_TARGET, "🛜 ✅ {shard} proven at v{state_version}");
         Ok((state_version, proof_epoch))
@@ -457,6 +462,11 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         // The latest epoch the shard is known to have reached, from the last version committed or the block that
         // proved it. No later version can lie below it.
         let mut epoch_floor = self.latest_local_epoch(maybe_persisted_state_version)?;
+        // Substates the stream created as their value hash alone and has not yet destroyed. The sync requests every
+        // value, so a peer may only withhold one it no longer holds: that of a substate since destroyed, whose value
+        // epoch GC has pruned. Each must therefore be destroyed before the stream completes, and none may be settled
+        // by a proof while it is still up.
+        let mut created_without_value = HashSet::new();
 
         // syncing states
         loop {
@@ -502,8 +512,9 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                             proof.state_version
                         )));
                     }
+                    let settle = created_without_value.is_empty();
                     let (proven, proof_epoch) = self
-                        .apply_version_proof(validator, proof, maybe_persisted_state_version, epoch_floor)
+                        .apply_version_proof(validator, proof, maybe_persisted_state_version, epoch_floor, settle)
                         .await?;
                     // Every later version is committed after the proving block, so no earlier than its epoch.
                     epoch_floor = proof_epoch;
@@ -512,9 +523,11 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                     last_committed_version = Some(proven);
                     version_started = tokio::time::Instant::now();
                     version_bytes = 0;
-                    has_unverified_state = false;
-                    rewind_point = maybe_persisted_state_version.unwrap_or(0);
-                    // Every version up to the proven one is settled, so the stream must continue above it.
+                    if settle {
+                        has_unverified_state = false;
+                        rewind_point = maybe_persisted_state_version.unwrap_or(0);
+                    }
+                    // Every version up to the proven one is proven, so the stream must continue above it.
                     last_state_version = last_state_version.max(proven.saturating_add(1));
                     continue;
                 },
@@ -540,6 +553,11 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                         complete.synced_to_version,
                         maybe_persisted_state_version.unwrap_or(0),
                     );
+                    if let Some(id) = created_without_value.iter().next() {
+                        return Err(RpcStateSyncError::InvalidResponse(anyhow!(
+                            "Peer streamed {id} without its value and completed the stream without destroying it"
+                        )));
+                    }
                     let local_state_root = self.local_state_root(maybe_persisted_state_version)?;
                     if local_state_root != self.checkpoint_shard_root {
                         error!(
@@ -672,6 +690,15 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                     )));
                 }
                 let tree_change = extract_tree_change(self.network, &update, msg_epoch);
+                match &update {
+                    SubstateUpdateProof::Create(create) if create.substate.value.value().is_none() => {
+                        created_without_value.insert(id);
+                    },
+                    SubstateUpdateProof::Create(_) => {},
+                    SubstateUpdateProof::Destroy(_) => {
+                        created_without_value.remove(&id);
+                    },
+                }
 
                 debug!(target: LOG_TARGET, "🛜 -> state update (v{}) {}", state_version, update);
                 tree_changes.push(tree_change);
@@ -905,6 +932,7 @@ impl VersionBuffer {
 mod tests {
     use futures::{FutureExt, stream};
     use tari_engine_types::{
+        ValidatorFeePool,
         confidential::ClaimedOutputTombstone,
         substate::{SubstateId, SubstateValue},
     };
@@ -914,7 +942,7 @@ mod tests {
     use tari_rpc_framework::RpcStatus;
     use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
     use tari_state_tree::memory_store::MemoryTreeStore;
-    use tari_template_lib_types::{ComponentAddress, Hash32, ObjectKey};
+    use tari_template_lib_types::{ComponentAddress, ObjectKey};
     use tempfile::TempDir;
 
     use super::*;
@@ -980,11 +1008,12 @@ mod tests {
     }
 
     fn create_in(shard: Shard, seed: u8, value: u8) -> SubstateUpdateProof {
+        let value = SubstateValue::ValidatorFeePool(ValidatorFeePool::new([value; 32].into(), u64::from(value)));
         SubstateUpdateProof::Create(Box::new(SubstateCreate {
             substate: SubstateData {
                 substate_id: substate_id_in(shard, seed),
                 version: SubstateVersion::ZERO,
-                value: SubstateValueOrHash::Hash(Hash32::from_array([value; 32])),
+                value: value.into(),
                 template_metadata: None,
             },
         }))
@@ -1004,6 +1033,15 @@ mod tests {
         SubstateUpdateProof::Create(Box::new(SubstateCreate {
             substate: full_substate(seed),
         }))
+    }
+
+    /// `create(seed)` as an honest peer streams it once the substate's value is pruned: its genuine value hash alone.
+    fn hash_only_create(seed: u8) -> SubstateUpdateProof {
+        let SubstateUpdateProof::Create(mut create) = create(seed) else {
+            unreachable!()
+        };
+        create.substate.value = SubstateValueOrHash::Hash(create.substate.to_value_hash(NETWORK, EPOCH));
+        SubstateUpdateProof::Create(create)
     }
 
     fn destroy(seed: u8) -> SubstateUpdateProof {
@@ -1307,7 +1345,10 @@ mod tests {
 
         let record = substate(&store, HONEST).unwrap();
         assert!(record.is_up());
-        assert_eq!(*record.state_hash(), Hash32::from_array([HONEST; 32]));
+        let SubstateUpdateProof::Create(honest) = create(HONEST) else {
+            unreachable!()
+        };
+        assert_eq!(*record.state_hash(), honest.substate.to_value_hash(NETWORK, EPOCH));
         assert_eq!(local_version(&store), Some(1));
     }
 
@@ -2311,5 +2352,100 @@ mod tests {
             .unwrap();
 
         assert_eq!(local_version(&store), Some(3));
+    }
+
+    #[tokio::test]
+    async fn a_live_substate_streamed_without_its_value_is_rejected() {
+        let (store, _tmp) = create_store();
+        let honest = vec![(1, vec![create(HONEST)])];
+
+        let err = sync(&store, &honest, vec![
+            batch(1, vec![hash_only_create(HONEST)]),
+            complete(1),
+        ])
+        .await
+        .unwrap_err();
+
+        assert!(matches!(err, RpcStateSyncError::InvalidResponse(_)), "{err}");
+        assert_eq!(local_version(&store), None);
+        assert!(substate(&store, HONEST).is_none());
+        assert_eq!(rewind_point(&store), None);
+    }
+
+    #[tokio::test]
+    async fn a_substate_streamed_without_its_value_is_kept_once_the_stream_destroys_it() {
+        let (store, _tmp) = create_store();
+        let honest = vec![(1, vec![create(HONEST)]), (2, vec![destroy(HONEST)])];
+
+        let synced = sync(&store, &honest, vec![
+            batch(1, vec![hash_only_create(HONEST)]),
+            batch(2, vec![destroy(HONEST)]),
+            complete(2),
+        ])
+        .await
+        .unwrap();
+
+        assert_eq!(synced, Some(2));
+        assert!(substate(&store, HONEST).is_some_and(|s| s.is_destroyed()));
+        assert_eq!(rewind_point(&store), None);
+    }
+
+    /// The versions up to the first proof point and its proof, with the substate created at v1 streamed without its
+    /// value.
+    fn stream_to_proof_point_without_first_value() -> Vec<Result<SyncStateResponse, RpcStatus>> {
+        let checkpoint = versions_to_proof_point();
+        let mut responses = vec![batch(1, vec![hash_only_create(1)])];
+        responses.extend(stream_of(&checkpoint).into_iter().skip(1));
+        responses.push(version_proof(N, root_after(&checkpoint)));
+        responses
+    }
+
+    #[tokio::test]
+    async fn a_proven_stream_that_leaves_a_substate_without_its_value_is_rejected() {
+        let (store, _tmp) = create_store();
+        let checkpoint = versions_to_proof_point();
+        let mut responses = stream_to_proof_point_without_first_value();
+        responses.push(complete(N));
+
+        let err = sync_with_proofs(&store, &checkpoint, responses).await.unwrap_err();
+
+        assert!(matches!(err, RpcStateSyncError::InvalidResponse(_)), "{err}");
+        assert_eq!(local_version(&store), None);
+        assert!(substate(&store, 1).is_none());
+        assert_eq!(rewind_point(&store), None);
+    }
+
+    #[tokio::test]
+    async fn a_failure_after_a_proof_discards_a_substate_still_missing_its_value() {
+        let (store, _tmp) = create_store();
+        let mut checkpoint = versions_to_proof_point();
+        checkpoint.push((N + 1, vec![destroy(1)]));
+        let mut responses = stream_to_proof_point_without_first_value();
+        // The peer closes the stream before destroying the substate it streamed without a value.
+        responses.push(batch(N + 1, vec![create(POISON)]));
+
+        let err = sync_with_proofs(&store, &checkpoint, responses).await.unwrap_err();
+
+        assert!(matches!(err, RpcStateSyncError::InvalidResponse(_)), "{err}");
+        assert_eq!(local_version(&store), None);
+        assert!(substate(&store, 1).is_none());
+        assert_eq!(rewind_point(&store), None);
+    }
+
+    #[tokio::test]
+    async fn a_substate_streamed_without_its_value_may_be_destroyed_after_a_proof() {
+        let (store, _tmp) = create_store();
+        let mut checkpoint = versions_to_proof_point();
+        checkpoint.push((N + 1, vec![destroy(1)]));
+        let mut responses = stream_to_proof_point_without_first_value();
+        responses.push(batch(N + 1, vec![destroy(1)]));
+        responses.push(complete(N + 1));
+
+        let synced = sync_with_proofs(&store, &checkpoint, responses).await.unwrap();
+
+        assert_eq!(synced, Some(N + 1));
+        assert!(substate(&store, 1).is_some_and(|s| s.is_destroyed()));
+        assert_eq!(held_proofs(&store), vec![N]);
+        assert_eq!(rewind_point(&store), None);
     }
 }
