@@ -23,14 +23,11 @@ impl ProcessDefinition for Indexer {
     async fn get_command(&self, mut context: ProcessContext<'_>) -> anyhow::Result<Command> {
         let mut command = Command::new(context.bin());
         let api_port = context.get_free_port("api").await?;
-        let graphql_port = context.get_free_port("graphql").await?;
         let web_ui_port = context.get_free_port("web").await?;
         let listen_ip = context.listen_ip();
 
         let api_public_url = context.get_public_api_url();
-        let graphql_public_url = context.get_public_graphql_url();
         let api_listener_address = format!("{listen_ip}:{api_port}");
-        let graphql_listener_address = format!("{listen_ip}:{graphql_port}");
         let web_ui_listener_address = format!("{listen_ip}:{web_ui_port}");
 
         let rate_limit = context
@@ -60,10 +57,8 @@ impl ProcessDefinition for Indexer {
                 "-pepoch_oracle.base_layer.base_node_grpc_url={base_node_grpc_url}"
             ))
             .arg(format!("-pindexer.api_listen_address={api_listener_address}"))
-            .arg(format!("-pindexer.graphql_address={graphql_listener_address}"))
             .arg(format!("-pindexer.web_ui_address={web_ui_listener_address}"))
             .arg(format!("-pindexer.web_ui_public_api_url={api_public_url}"))
-            .arg(format!("-pindexer.web_ui_public_graphql_url={graphql_public_url}"))
             .arg("-pepoch_oracle.base_layer.scanning_interval=1")
             .arg(format!("-pindexer.rate_limits.enabled={rate_limit}"))
             .arg(format!(

@@ -73,13 +73,6 @@ applications requiring centralized data access.
 - Handles state reconciliation when inconsistencies are detected
 - Supports event filtering to focus on relevant data
 
-**Event Manager**
-
-- Processes and categorizes all network events
-- Maintains event ordering and relationships
-- Supports real-time event streaming to connected clients
-- Implements configurable event filtering and routing
-
 **Substate Manager**
 
 - Manages the lifecycle of substates (blockchain state objects)
@@ -141,14 +134,6 @@ Tables include:
 - Built-in rate limiting and request validation
 - Swagger/OpenAPI documentation generation
 - WebSocket support for real-time UTXO streaming
-
-**GraphQL API Server**
-
-- Flexible query interface for complex data relationships
-- Schema-driven API with strong typing
-- Supports nested queries and data aggregation
-- Optimized query execution with caching
-- Real-time subscriptions for live data
 
 **Web UI Server**
 

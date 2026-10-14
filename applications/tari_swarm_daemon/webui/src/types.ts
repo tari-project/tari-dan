@@ -43,7 +43,6 @@ export interface Indexer {
   name: string;
   web: string;
   api_url: string;
-  graphql: string;
   is_running: boolean;
 }
 

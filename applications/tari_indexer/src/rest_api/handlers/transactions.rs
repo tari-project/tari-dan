@@ -32,7 +32,7 @@ use tari_rpc_framework::RpcStatusCode;
 
 use crate::{
     dry_run::error::DryRunTransactionProcessorError,
-    event_manager::{MAX_EVENT_QUERY_OFFSET, WILDCARD_TOPIC_SCAN_LIMIT},
+    event_query_limits::{MAX_EVENT_QUERY_OFFSET, WILDCARD_TOPIC_SCAN_LIMIT},
     network_client::NetworkClientError,
     rest_api::{
         context::HandlerContext,

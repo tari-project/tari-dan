@@ -75,9 +75,6 @@ pub struct Cli {
     /// Public address of the API
     #[clap(long, env = "TARI_INDEXER_WEB_UI_PUBLIC_API_URL")]
     pub web_ui_public_api_url: Option<String>,
-    /// Public address of the GraphQL API
-    #[clap(long, env = "TARI_INDEXER_WEB_UI_PUBLIC_GRAPHQL_URL")]
-    pub web_ui_public_graphql_url: Option<String>,
 }
 
 impl Cli {
@@ -124,9 +121,6 @@ impl ConfigOverrideProvider for Cli {
         }
         if let Some(ref api_url) = self.web_ui_public_api_url {
             overrides.push(("indexer.web_ui_public_api_url".to_string(), api_url.to_string()));
-        }
-        if let Some(ref graphql_url) = self.web_ui_public_graphql_url {
-            overrides.push(("indexer.web_ui_public_graphql_url".to_string(), graphql_url.to_string()));
         }
         if let Some(reachability) = self.reachability {
             overrides.push(("indexer.p2p.reachability_mode".to_string(), reachability.to_string()));

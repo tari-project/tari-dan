@@ -163,28 +163,6 @@ impl InstanceInfo {
             },
         }
     }
-
-    pub fn get_public_graphql_url(&self) -> Url {
-        match self.settings.get("public_graphql_url") {
-            Some(url) => url
-                .parse()
-                .expect("Invalid GraphQL URL. Please check `public_graphql_url` in your config."),
-            None => {
-                let public_ip = self
-                    .settings
-                    .get("public_ip")
-                    .map(|s| s.as_str())
-                    .unwrap_or("127.0.0.1");
-                let port = self
-                    .ports
-                    .get("graphql")
-                    .expect("Graphql port must be allocated before calling get_graphql_url");
-                format!("http://{public_ip}:{port}")
-                    .parse()
-                    .expect("Invalid GraphQL URL")
-            },
-        }
-    }
 }
 
 impl From<&Instance> for InstanceInfo {

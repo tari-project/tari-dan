@@ -1,6 +1,6 @@
 # Tari Indexer
 
-The Tari Indexer is a service that indexes and tracks substates, transactions, and events on the Tari DAN (Digital Assets Network). It provides REST and GraphQL APIs for querying blockchain data and includes a web-based user interface for exploring the network.
+The Tari Indexer is a service that indexes and tracks substates, transactions, and events on the Tari DAN (Digital Assets Network). It provides a REST API for querying blockchain data and includes a web-based user interface for exploring the network.
 
 ## Documentation
 
@@ -16,14 +16,13 @@ Comprehensive documentation is available in the [`docs/`](docs/) directory:
 The indexer continuously scans the DAN layer for new blocks, transactions, and substates, storing this information in a local SQLite database. It provides multiple interfaces for accessing this data:
 
 - **REST API**: RESTful endpoints for programmatic access
-- **GraphQL API**: Flexible query interface for complex data retrieval  
 - **Web UI**: Browser-based interface for exploring network data
 - **UTXO Streaming**: Real-time streaming of UTXO updates
 
 ## Features
 
 - Real-time blockchain data indexing
-- REST and GraphQL APIs
+- REST API
 - Web-based user interface
 - UTXO streaming capabilities
 - P2P networking for validator node communication
@@ -46,7 +45,7 @@ cargo build --release
 
 The indexer uses configuration files and environment variables. Key configuration sections:
 
-- **API Endpoints**: Configure REST and GraphQL server addresses
+- **API Endpoints**: Configure the REST server address
 - **P2P Networking**: Set peer seeds, ports, and reachability modes
 - **Database**: SQLite storage configuration
 - **Scanning**: Block scanning intervals and filters
@@ -81,7 +80,6 @@ The following options are available (use `tari_indexer --help` for the most up-t
 #### API Server
 - `-r, --api-listen-address <API_LISTEN_ADDRESS>`: Bind address for REST API server
 - `--web-ui-public-api-url <WEB_UI_PUBLIC_API_URL>`: Public API URL for web UI [env: `TARI_INDEXER_WEB_UI_PUBLIC_API_URL`]
-- `--web-ui-public-graphql-url <WEB_UI_PUBLIC_GRAPHQL_URL>`: Public GraphQL URL for web UI [env: `TARI_INDEXER_WEB_UI_PUBLIC_GRAPHQL_URL`]
 
 #### Blockchain Scanning
 - `-a, --address <ADDRESS>...`: Substate addresses to track (can be specified multiple times)
@@ -132,14 +130,6 @@ When running, the REST API is available at the configured address (default: `htt
 
 Swagger documentation is available at `/swagger-ui/` when the server is running.
 
-### GraphQL API
-
-The GraphQL endpoint provides flexible querying capabilities for:
-- Transactions and their details
-- Substates and their changes
-- Events and logs
-- Template information
-
 ### Web UI
 
 The web interface (when enabled) provides:
@@ -181,9 +171,7 @@ The indexer consists of several key components:
 - **Block Scanner**: Continuously scans for new blocks and events
 - **Storage Layer**: SQLite-based data persistence
 - **REST Server**: HTTP API endpoints
-- **GraphQL Server**: Flexible query interface
 - **P2P Networking**: Communication with validator nodes
-- **Event Manager**: Real-time event processing
 - **Web UI Server**: Static file serving for the web interface
 
 ## License

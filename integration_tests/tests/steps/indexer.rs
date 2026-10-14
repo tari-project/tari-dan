@@ -17,6 +17,7 @@ use integration_tests::{
     not_found,
     wait::{TimedOut, wait_until},
 };
+use tari_indexer_client::types::QueryTransactionEventsRequest;
 use tari_ootle_common_types::{
     Epoch,
     StateVersion,
@@ -151,18 +152,6 @@ async fn start_indexer_connected_to_a_base_node(world: &mut TariWorld, indexer_n
     spawn_indexer(world, indexer_name, bn_name).await;
 }
 
-#[then(expr = "{word} indexer GraphQL request works")]
-async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
-    let indexer = world.get_indexer(&indexer_name);
-    let mut graphql_client = indexer.get_graphql_indexer_client().await;
-    let query = r#"{ getEvents { substateId, templateAddress, txHash, topic, payload } }"#.to_string();
-    let res = graphql_client
-        .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)
-        .await
-        .expect("Failed to obtain getEventsForTransaction query result");
-    res.get("getEvents").unwrap();
-}
-
 #[when(expr = "indexer {word} scans the network events for account {word} with topics {word}")]
 async fn indexer_scans_network_events(
     world: &mut TariWorld,
@@ -175,23 +164,25 @@ async fn indexer_scans_network_events(
         .wallet_accounts
         .get(&account_name)
         .unwrap_or_else(|| not_found("Wallet account", &account_name, world.wallet_accounts.keys()));
-    let account_addr = account.component_address().to_string();
+    let account_addr = *account.component_address();
     let expected_topics = topics_str.split(',').map(|s| s.to_string()).collect::<Vec<_>>();
 
-    let mut graphql_client = indexer.get_graphql_indexer_client().await;
-    let query = format!(
-        r#"{{ getEvents(substateId: "{}") {{ substateId, templateAddress, txHash, topic, payload }} }}"#,
-        account_addr
-    );
-
+    let client = indexer.get_indexer_client();
     wait_until(Duration::from_secs(10), async || {
-        let mut res = graphql_client
-            .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)
+        let events = client
+            .query_transaction_events(QueryTransactionEventsRequest {
+                topic: None,
+                substate_id: Some(account_addr.into()),
+                resource_address: None,
+                limit: None,
+                offset: None,
+                before_id: None,
+            })
             .await
-            .expect("Failed to obtain getEvents query result");
+            .expect("Failed to query transaction events")
+            .events;
 
-        let events = res.remove("getEvents").unwrap();
-        let topics_for_component = events.iter().map(|e| e.topic.as_str()).collect::<HashSet<_>>();
+        let topics_for_component = events.iter().map(|(_, e)| e.topic()).collect::<HashSet<_>>();
 
         let is_all_topics_found = expected_topics
             .iter()
@@ -240,17 +231,19 @@ async fn indexer_scans_network_events_for_resource(world: &mut TariWorld, indexe
         .as_resource_address()
         .unwrap_or_else(|| panic!("The output is not a resource {}", index));
 
-    let mut graphql_client = indexer.get_graphql_indexer_client().await;
-    let query = format!(
-        r#"{{ getEvents(substateId:"{}", offset:0, limit:10) {{ substateId, templateAddress, txHash, topic, payload }} }}"#,
-        resource_address
-    );
-    let res = graphql_client
-        .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)
+    let events = indexer
+        .get_indexer_client()
+        .query_transaction_events(QueryTransactionEventsRequest {
+            topic: None,
+            substate_id: Some(resource_address.into()),
+            resource_address: None,
+            limit: Some(10),
+            offset: Some(0),
+            before_id: None,
+        })
         .await
-        .expect("Failed to obtain getEvents query result");
-
-    let events = res.get("getEvents").unwrap();
+        .expect("Failed to query transaction events")
+        .events;
 
     // TODO: assert the results
     cucumber_log!("{:?}", events);

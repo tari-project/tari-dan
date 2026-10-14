@@ -13,7 +13,7 @@ export default function Indexers() {
       <div className="page-head">
         <div>
           <h1>Indexers</h1>
-          <p>Indexers follow the network and serve substate queries over REST and GraphQL.</p>
+          <p>Indexers follow the network and serve substate queries over REST.</p>
         </div>
       </div>
 
@@ -32,9 +32,6 @@ export default function Indexers() {
                   </a>
                   <a href={indexer.api_url} target="_blank" rel="noreferrer">
                     REST
-                  </a>
-                  <a href={indexer.graphql} target="_blank" rel="noreferrer">
-                    GraphQL
                   </a>
                 </>
               }
