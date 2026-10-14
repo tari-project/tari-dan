@@ -389,6 +389,8 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         let mut tree_changes = vec![];
         let mut updates = vec![];
         let mut expected_state_version = None;
+        // The epoch of the version being buffered across `has_more` batches, as its first batch carried it.
+        let mut expected_epoch = None;
         let mut buffered = VersionBuffer::default();
         let mut proof_schedule = self.proof_schedule(start_state_version);
         // The last version this stream committed or proved. A new version must lie above it: re-committing a version
@@ -589,6 +591,14 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
             let msg_epoch = batch.epoch.map(Epoch::from).ok_or_else(|| {
                 RpcStateSyncError::InvalidResponse(anyhow!("Received state transition with no epoch"))
             })?;
+            // A version is committed with one epoch, which every tree leaf and substate record of it must share.
+            if let Some(epoch) = expected_epoch &&
+                epoch != msg_epoch
+            {
+                return Err(RpcStateSyncError::InvalidResponse(anyhow!(
+                    "Peer streamed v{state_version} across epochs {epoch} and {msg_epoch}"
+                )));
+            }
 
             info!(target: LOG_TARGET, "🛜 Buffering {} state update(s) (state version: v{})", updates_for_state_version.len(), state_version);
             for result in updates_for_state_version {
@@ -616,10 +626,12 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                     state_version
                 );
                 expected_state_version = Some(state_version);
+                expected_epoch = Some(msg_epoch);
                 continue;
             }
 
             expected_state_version = None;
+            expected_epoch = None;
             buffered = VersionBuffer::default();
 
             // Commit the buffered changes for this state version. The shard root is verified once, on
@@ -830,7 +842,10 @@ impl VersionBuffer {
 #[cfg(test)]
 mod tests {
     use futures::{FutureExt, stream};
-    use tari_engine_types::substate::SubstateId;
+    use tari_engine_types::{
+        confidential::ClaimedOutputTombstone,
+        substate::{SubstateId, SubstateValue},
+    };
     use tari_ootle_common_types::{SubstateAddress, SubstateVersion, optional::Optional};
     use tari_ootle_p2p::proto::rpc::{SubstateBatch, SyncComplete};
     use tari_ootle_storage::consensus_models::{SubstateCreate, SubstateData, SubstateDestroy, SubstateValueOrHash};
@@ -913,6 +928,22 @@ mod tests {
         }))
     }
 
+    /// A substate carrying its full value, whose value hash binds the epoch it is created in.
+    fn full_substate(seed: u8) -> SubstateData {
+        SubstateData {
+            substate_id: substate_id_in(shard(), seed),
+            version: SubstateVersion::ZERO,
+            value: SubstateValue::ClaimedOutputTombstone(ClaimedOutputTombstone { value: u64::from(seed) }).into(),
+            template_metadata: None,
+        }
+    }
+
+    fn create_full(seed: u8) -> SubstateUpdateProof {
+        SubstateUpdateProof::Create(Box::new(SubstateCreate {
+            substate: full_substate(seed),
+        }))
+    }
+
     fn destroy(seed: u8) -> SubstateUpdateProof {
         destroy_in(shard(), seed)
     }
@@ -933,12 +964,32 @@ mod tests {
         state_version: Version,
         updates: Vec<SubstateUpdateProof>,
     ) -> Result<SyncStateResponse, RpcStatus> {
+        chunk_in(shard, state_version, EPOCH, false, updates)
+    }
+
+    /// A batch of `state_version` stamped with `epoch`, followed by more batches of it if `has_more`.
+    fn chunk(
+        state_version: Version,
+        epoch: Epoch,
+        has_more: bool,
+        updates: Vec<SubstateUpdateProof>,
+    ) -> Result<SyncStateResponse, RpcStatus> {
+        chunk_in(shard(), state_version, epoch, has_more, updates)
+    }
+
+    fn chunk_in(
+        shard: Shard,
+        state_version: Version,
+        epoch: Epoch,
+        has_more: bool,
+        updates: Vec<SubstateUpdateProof>,
+    ) -> Result<SyncStateResponse, RpcStatus> {
         Ok(SyncStateResponse {
             response: Some(sync_state_response::Response::Batch(SubstateBatch {
                 state_version,
                 updates: updates.into_iter().map(Into::into).collect(),
-                has_more: false,
-                epoch: Some(EPOCH.into()),
+                has_more,
+                epoch: Some(epoch.into()),
                 shard: shard.as_u32(),
             })),
         })
@@ -1184,6 +1235,47 @@ mod tests {
         assert!(record.is_up());
         assert_eq!(*record.state_hash(), Hash32::from_array([HONEST; 32]));
         assert_eq!(local_version(&store), Some(1));
+    }
+
+    #[tokio::test]
+    async fn a_version_split_across_batches_of_one_epoch_is_kept() {
+        let (store, _tmp) = create_store();
+        let checkpoint = vec![(1, vec![create(HONEST)]), (2, vec![create_full(2), destroy(HONEST)])];
+
+        sync(&store, &checkpoint, vec![
+            batch(1, vec![create(HONEST)]),
+            chunk(2, EPOCH, true, vec![create_full(2)]),
+            chunk(2, EPOCH, false, vec![destroy(HONEST)]),
+            complete(2),
+        ])
+        .await
+        .unwrap();
+
+        let record = substate(&store, 2).unwrap();
+        assert_eq!(record.created().at_epoch, EPOCH);
+        assert_eq!(*record.state_hash(), full_substate(2).to_value_hash(NETWORK, EPOCH));
+        assert!(substate(&store, HONEST).is_some_and(|s| s.is_destroyed()));
+    }
+
+    #[tokio::test]
+    async fn a_version_split_across_batches_of_different_epochs_is_rejected() {
+        let (store, _tmp) = create_store();
+        let checkpoint = vec![(1, vec![create(HONEST)]), (2, vec![create_full(2), destroy(HONEST)])];
+
+        let err = sync(&store, &checkpoint, vec![
+            batch(1, vec![create(HONEST)]),
+            chunk(2, EPOCH, true, vec![create_full(2)]),
+            chunk(2, Epoch(EPOCH.as_u64() + 1), false, vec![destroy(HONEST)]),
+            complete(2),
+        ])
+        .await
+        .unwrap_err();
+
+        assert!(matches!(err, RpcStateSyncError::InvalidResponse(_)), "{err}");
+        assert_eq!(local_version(&store), None);
+        assert!(substate(&store, 2).is_none());
+        assert!(substate(&store, HONEST).is_none());
+        assert_eq!(rewind_point(&store), None);
     }
 
     #[test]
