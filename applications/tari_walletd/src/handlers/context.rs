@@ -9,7 +9,10 @@ use std::{
 use axum_extra::headers::authorization::Bearer;
 use dashmap::DashMap;
 use tari_ootle_transaction::{Epoch, Transaction, TransactionBuilder, UnsignedTransaction};
-use tari_ootle_wallet_sdk::{models::WalletEvent, network::WalletNetworkInterface};
+use tari_ootle_wallet_sdk::{
+    models::{LockOwner, WalletEvent},
+    network::WalletNetworkInterface,
+};
 use tari_ootle_wallet_sdk_services::{
     account_monitor::AccountMonitorHandle,
     notify::Notify,
@@ -43,8 +46,20 @@ use crate::{
 pub struct AuthIdentity {
     pub permissions: Permissions,
     pub api_key_name: Option<String>,
+    pub api_key_id: Option<i32>,
     /// The caller presented a token `webrtc.start` minted for a connected app.
     pub delegated: bool,
+}
+
+impl AuthIdentity {
+    /// Who a lock handed back to this caller belongs to.
+    pub fn lock_owner(&self) -> LockOwner {
+        match self.api_key_id {
+            Some(id) => LockOwner::ApiKey(id),
+            None if self.delegated => LockOwner::Delegated,
+            None => LockOwner::Wallet,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -180,6 +195,14 @@ impl HandlerContext {
         token: Option<&Bearer>,
         required: &[Permission],
     ) -> Result<AuthIdentity, AuthError> {
+        let identity = self.check_auth_with_identity(token)?;
+        enforce_scopes(&identity.permissions, required)?;
+        Ok(identity)
+    }
+
+    /// Like [`check_auth`], but returns the caller's identity alongside its
+    /// permissions. See [`authorize_with_identity`].
+    pub fn check_auth_with_identity(&self, token: Option<&Bearer>) -> Result<AuthIdentity, AuthError> {
         let bearer = token.ok_or(AuthError::AccessDeniedNoBearerToken)?;
         let identity = if bearer.token().starts_with(api_keys::API_KEY_PREFIX) {
             let row = api_keys::find_active_by_raw(self.wallet_sdk.store(), bearer.token())
@@ -197,6 +220,7 @@ impl HandlerContext {
             AuthIdentity {
                 permissions: granted,
                 api_key_name: Some(row.name),
+                api_key_id: Some(row.id),
                 delegated: false,
             }
         } else {
@@ -204,11 +228,11 @@ impl HandlerContext {
             AuthIdentity {
                 permissions,
                 api_key_name: None,
+                api_key_id: None,
                 delegated,
             }
         };
 
-        enforce_scopes(&identity.permissions, required)?;
         Ok(identity)
     }
 

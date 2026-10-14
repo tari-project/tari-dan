@@ -12,7 +12,7 @@
 //! supplies complete inputs and any out-of-band signatures). The approver views
 //! exactly what will be sealed, and submit seals it unchanged.
 
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
 use axum_extra::headers::authorization::Bearer;
 use log::*;
@@ -101,11 +101,43 @@ pub async fn handle_create(
     let model = {
         let mut tx = sdk.store().create_write_tx()?;
 
-        // Hold the inputs across the approval window. The transfer-selection
-        // handlers lock for five minutes, which is a selection deadline, not a
-        // deadline a person can meet.
+        // A request may hold only locks its own caller created, that no
+        // transaction or other live request already holds. Rejecting the
+        // request releases its locks, so a lock held by two requests would be
+        // released under the other one.
+        let mut held = if req.lock_ids.is_empty() {
+            HashSet::new()
+        } else {
+            tx.transaction_requests_list()?
+                .into_iter()
+                .filter(|r| {
+                    matches!(
+                        r.effective_status_now(),
+                        EffectiveStatus::Pending | EffectiveStatus::Approved | EffectiveStatus::Submitting
+                    )
+                })
+                .flat_map(|r| r.lock_ids)
+                .collect::<HashSet<_>>()
+        };
+        let caller = auth.lock_owner();
         for lock_id in &req.lock_ids {
-            tx.locks_set_timeout(*lock_id, Some(ttl + LOCK_GRACE))?;
+            let lock = tx.locks_get(*lock_id).optional()?;
+            let available = lock.is_some_and(|l| l.owner == caller && l.transaction_id.is_none());
+            // One error for every case, so the call does not reveal which lock
+            // ids exist.
+            if !available || !held.insert(*lock_id) {
+                return Err(invalid_params(
+                    "lock_ids",
+                    Some(format!(
+                        "lock {lock_id} does not exist, was created by another caller, or is already in use"
+                    )),
+                ));
+            }
+
+            // Hold the inputs across the approval window. The transfer-selection
+            // handlers lock for five minutes, which is a selection deadline, not
+            // a deadline a person can meet.
+            tx.locks_extend_timeout(*lock_id, ttl + LOCK_GRACE)?;
         }
 
         let model = tx.transaction_request_insert(
@@ -414,9 +446,9 @@ fn value_summary(
 #[cfg(test)]
 mod tests {
     use tari_ootle_address::Network;
-    use tari_ootle_common_types::Epoch;
+    use tari_ootle_common_types::{Epoch, optional::IsNotFoundError};
     use tari_ootle_transaction::UnsignedTransaction;
-    use tari_ootle_wallet_sdk::models::{KeyBranch, KeyId};
+    use tari_ootle_wallet_sdk::models::{KeyBranch, KeyId, LockOwner, WalletLock};
 
     use super::*;
     use crate::handlers::test_support::TestDaemon;
@@ -478,5 +510,156 @@ mod tests {
 
         approve(&daemon.session).await.unwrap();
         assert_eq!(status_of(&daemon, request_id), TransactionRequestStatus::Approved);
+    }
+
+    fn create_request(lock_ids: Vec<WalletLockId>, ttl_secs: u64) -> TransactionRequestCreateRequest {
+        TransactionRequestCreateRequest {
+            transaction: UnsignedTransaction::new(Network::LocalNet.as_byte(), Epoch(100)),
+            seal_signer: KeyId::derived(KeyBranch::Account, 0),
+            other_signers: vec![],
+            signatures: vec![],
+            lock_ids,
+            ttl_secs: Some(ttl_secs),
+        }
+    }
+
+    fn lock_for(daemon: &TestDaemon, owner: LockOwner) -> WalletLockId {
+        daemon
+            .context
+            .wallet_sdk()
+            .locks_api()
+            .create_owned_lock_with_timeout(Duration::from_secs(5 * 60), owner)
+            .unwrap()
+            .keep_locked()
+    }
+
+    fn get_lock(daemon: &TestDaemon, lock_id: WalletLockId) -> WalletLock {
+        daemon
+            .context
+            .wallet_sdk()
+            .store()
+            .with_read_tx(|tx| tx.locks_get(lock_id))
+            .unwrap()
+    }
+
+    fn owner_of(daemon: &TestDaemon, bearer: &Bearer) -> LockOwner {
+        daemon
+            .context
+            .check_auth_with_identity(Some(bearer))
+            .unwrap()
+            .lock_owner()
+    }
+
+    #[tokio::test]
+    async fn a_request_cannot_hold_a_lock_another_caller_created() {
+        let daemon = TestDaemon::start().await;
+        let tool = daemon.api_key("htlc-swap-tool", "transaction_requests:create");
+        let other_tool = daemon.api_key("other-tool", "transaction_requests:create");
+        let app = daemon.delegated_session("transaction_requests:create");
+        let foreign = [
+            lock_for(&daemon, LockOwner::Wallet),
+            lock_for(&daemon, owner_of(&daemon, &other_tool)),
+            lock_for(&daemon, owner_of(&daemon, &app)),
+        ];
+
+        for lock_id in foreign {
+            let deadline = get_lock(&daemon, lock_id).timeout_at;
+            let err = handle_create(&daemon.context, Some(&tool), create_request(vec![lock_id], 60 * 60))
+                .await
+                .unwrap_err();
+            assert!(err.to_string().contains("lock_ids"), "{err}");
+            assert_eq!(
+                get_lock(&daemon, lock_id).timeout_at,
+                deadline,
+                "lock {lock_id} was moved"
+            );
+        }
+
+        // A missing id is refused the same way as a foreign one.
+        let missing = handle_create(&daemon.context, Some(&tool), create_request(vec![9999], 60 * 60))
+            .await
+            .unwrap_err();
+        let foreign_err = handle_create(&daemon.context, Some(&tool), create_request(vec![foreign[0]], 60 * 60))
+            .await
+            .unwrap_err();
+        assert_eq!(
+            missing.to_string().replace("9999", "N"),
+            foreign_err.to_string().replace(&foreign[0].to_string(), "N")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_request_holds_its_own_callers_lock_across_the_approval_window() {
+        let daemon = TestDaemon::start().await;
+        let tool = daemon.api_key("htlc-swap-tool", "transaction_requests:create");
+        let lock_id = lock_for(&daemon, owner_of(&daemon, &tool));
+        let deadline = get_lock(&daemon, lock_id).timeout_at.unwrap();
+
+        handle_create(&daemon.context, Some(&tool), create_request(vec![lock_id], 60 * 60))
+            .await
+            .unwrap();
+
+        let extended = get_lock(&daemon, lock_id).timeout_at.unwrap();
+        assert!(
+            extended - deadline >= time::Duration::minutes(55),
+            "{deadline} -> {extended}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_lock_is_held_by_at_most_one_live_request() {
+        let daemon = TestDaemon::start().await;
+        let tool = daemon.api_key("htlc-swap-tool", "transaction_requests:create");
+        let lock_id = lock_for(&daemon, owner_of(&daemon, &tool));
+
+        let first = handle_create(&daemon.context, Some(&tool), create_request(vec![lock_id], 60 * 60))
+            .await
+            .unwrap();
+        handle_create(&daemon.context, Some(&tool), create_request(vec![lock_id], 60 * 60))
+            .await
+            .unwrap_err();
+        handle_create(
+            &daemon.context,
+            Some(&tool),
+            create_request(vec![lock_for(&daemon, owner_of(&daemon, &tool)); 2], 60 * 60),
+        )
+        .await
+        .unwrap_err();
+
+        // The first request's rejection releases the lock, so nothing holds it.
+        handle_reject(
+            &daemon.context,
+            Some(&daemon.session),
+            TransactionRequestDecisionRequest {
+                request_id: first.request_id,
+            },
+        )
+        .await
+        .unwrap();
+        let released = daemon
+            .context
+            .wallet_sdk()
+            .store()
+            .with_read_tx(|tx| tx.locks_get(lock_id))
+            .unwrap_err();
+        assert!(released.is_not_found_error(), "{released}");
+    }
+
+    #[tokio::test]
+    async fn a_request_never_brings_a_lock_deadline_forward() {
+        let daemon = TestDaemon::start().await;
+        let lock_id = daemon
+            .context
+            .wallet_sdk()
+            .locks_api()
+            .create_lock()
+            .unwrap()
+            .keep_locked();
+
+        handle_create(&daemon.context, Some(&daemon.session), create_request(vec![lock_id], 0))
+            .await
+            .unwrap();
+
+        assert_eq!(get_lock(&daemon, lock_id).timeout_at, None);
     }
 }

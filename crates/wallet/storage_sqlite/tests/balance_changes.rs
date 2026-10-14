@@ -30,6 +30,7 @@ use tari_ootle_wallet_sdk::{
         BalanceChangeSourceType,
         KeyBranch,
         KeyId,
+        LockOwner,
         OutputStatus,
         StealthOutputModel,
         VaultModel,
@@ -847,7 +848,7 @@ fn lock_finalize_records_confidential_spend_for_vaultless_account() {
 
     let spent = stealth_output(account, stealth_resource, 1_000_000, 7, OutputStatus::Unspent, None);
     tx.stealth_outputs_insert(&spent).unwrap();
-    let lock_id = tx.locks_create(None).unwrap();
+    let lock_id = tx.locks_create(None, LockOwner::Wallet).unwrap();
     tx.locks_link_transaction(lock_id, transaction_id).unwrap();
     tx.stealth_outputs_lock_many(&stealth_resource, &[&spent.commitment], lock_id)
         .unwrap();
@@ -942,7 +943,7 @@ fn lock_finalize_records_confidential_spend_for_vault_backed_resource() {
 
     let spent = stealth_output(account, stealth_resource, 1_000_000, 9, OutputStatus::Unspent, None);
     tx.stealth_outputs_insert(&spent).unwrap();
-    let lock_id = tx.locks_create(None).unwrap();
+    let lock_id = tx.locks_create(None, LockOwner::Wallet).unwrap();
     tx.locks_link_transaction(lock_id, transaction_id).unwrap();
     tx.stealth_outputs_lock_many(&stealth_resource, &[&spent.commitment], lock_id)
         .unwrap();
@@ -1024,7 +1025,7 @@ fn lock_finalize_records_on_vault_created_by_transaction() {
 
     let spent = stealth_output(account, stealth_resource, 1_000_000, 11, OutputStatus::Unspent, None);
     tx.stealth_outputs_insert(&spent).unwrap();
-    let lock_id = tx.locks_create(None).unwrap();
+    let lock_id = tx.locks_create(None, LockOwner::Wallet).unwrap();
     tx.locks_link_transaction(lock_id, transaction_id).unwrap();
     tx.stealth_outputs_lock_many(&stealth_resource, &[&spent.commitment], lock_id)
         .unwrap();
@@ -1140,7 +1141,7 @@ fn lock_finalize_records_revealed_movement_from_diff_not_lock_amount() {
     .unwrap();
     tx.transactions_insert(&transaction, None, &[account], false).unwrap();
 
-    let lock_id = tx.locks_create(None).unwrap();
+    let lock_id = tx.locks_create(None, LockOwner::Wallet).unwrap();
     tx.locks_link_transaction(lock_id, transaction_id).unwrap();
     tx.vaults_lock_revealed_funds(lock_id, &stealth_vault, Amount::from(1_000_255u64))
         .unwrap();

@@ -59,7 +59,8 @@ pub async fn handle_create_transfer_proof(
     token: Option<&Bearer>,
     req: ProofsGenerateRequest,
 ) -> Result<ProofsGenerateResponse, anyhow::Error> {
-    let granted = context.check_auth(token)?;
+    let auth = context.check_auth_with_identity(token)?;
+    let granted = &auth.permissions;
     let sdk = context.wallet_sdk();
 
     if req.reveal_amount.is_negative() {
@@ -70,7 +71,7 @@ pub async fn handle_create_transfer_proof(
     }
 
     let account = get_account_or_default(req.account.as_ref(), &sdk.accounts_api())?;
-    enforce_scopes(&granted, &[Permission::Confidential(
+    enforce_scopes(granted, &[Permission::Confidential(
         Crud::Create,
         Some(*account.component_address()),
     )])?;
@@ -80,7 +81,9 @@ pub async fn handle_create_transfer_proof(
     let vault = sdk
         .accounts_api()
         .get_vault_by_resource(account.component_address(), &req.resource_address)?;
-    let lock = sdk.locks_api().create_lock_with_timeout(Duration::from_secs(5 * 60))?;
+    let lock = sdk
+        .locks_api()
+        .create_owned_lock_with_timeout(Duration::from_secs(5 * 60), auth.lock_owner())?;
 
     let amount_to_transfer = req.confidential_amount.checked_add(req.reveal_amount).ok_or_else(|| {
         invalid_request(format!(

@@ -1700,7 +1700,8 @@ pub async fn handle_create_stealth_transfer_statement(
     token: Option<&Bearer>,
     req: AccountsCreateStealthTransferStatementRequest,
 ) -> Result<AccountsCreateStealthTransferStatementResponse, anyhow::Error> {
-    let granted = context.check_auth(token)?;
+    let auth = context.check_auth_with_identity(token)?;
+    let granted = &auth.permissions;
     let sdk = context.wallet_sdk().clone();
     if req.requests.is_empty() {
         return Err(invalid_params(
@@ -1718,11 +1719,13 @@ pub async fn handle_create_stealth_transfer_statement(
 
     let mut required_signers = HashSet::new();
     let mut utxo_signers = IndexSet::new();
-    let lock = sdk.locks_api().create_lock_with_timeout(Duration::from_secs(5 * 60))?;
+    let lock = sdk
+        .locks_api()
+        .create_owned_lock_with_timeout(Duration::from_secs(5 * 60), auth.lock_owner())?;
     let mut statements = Vec::with_capacity(req.requests.len());
     for req in req.requests {
         let sender_account = get_account(&req.sender_account, &sdk.accounts_api())?;
-        enforce_scopes(&granted, &[Permission::Transfer(
+        enforce_scopes(granted, &[Permission::Transfer(
             Crud::Create,
             Some(*sender_account.component_address()),
         )])?;
@@ -1760,7 +1763,7 @@ pub async fn handle_create_stealth_transfer_statement(
             // preserving the requested order. They contribute no revealed amount. Naming exact UTXOs (and thus
             // learning their decrypted totals through the balance check) requires scoped stealth-UTXO read
             // authority in addition to the transfer-create scope enforced above.
-            enforce_scopes(&granted, &[Permission::StealthUtxos(
+            enforce_scopes(granted, &[Permission::StealthUtxos(
                 Crud::Read,
                 Some(*sender_account.component_address()),
             )])?;
