@@ -412,6 +412,24 @@ fn generic_build_bad_intent_json_is_a_parse_error() {
     unsafe { ootle_result_free(result) };
 }
 
+/// A fee payer label that names no component slot (unbound, or carrying a `.offset` suffix) ⇒
+/// `VALIDATION`, no handle.
+#[test]
+fn generic_build_bad_workspace_fee_label_is_a_validation_error() {
+    let fx = load_fixture("generic_build/self_funding_faucet.json");
+    let network = network_byte(&fx["input"]["network"]);
+    for label in ["never_bound", "faucet_account.0"] {
+        let mut intent = fx["input"]["generic_intent"].clone();
+        intent["fee_payment"] = serde_json::json!({ "FromWorkspaceComponent": { "label": label } });
+        let intent = CArg::new(&serde_json::to_string(&intent).unwrap());
+        let result = unsafe { ootle_build_unsigned_instructions(network, intent.ptr()) };
+        assert!(!ok(&result), "fee label '{label}' must not succeed");
+        assert_eq!(error_code(&result), "VALIDATION", "fee label '{label}'");
+        assert!(result.handle.is_null(), "error envelope carries no handle");
+        unsafe { ootle_result_free(result) };
+    }
+}
+
 /// A NULL intent arg ⇒ `INVALID`, never UB.
 #[test]
 fn generic_build_null_intent_is_invalid_not_ub() {
