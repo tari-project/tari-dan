@@ -1276,3 +1276,57 @@ fn template_alias_cannot_be_redefined() {
         .expect("the built-in Account alias cannot be redefined");
     assert!(err.to_string().contains("Account"), "{err}");
 }
+
+#[test]
+fn blob_binding_shadows_earlier_binding() {
+    let manifest = r#"
+        fn main() {
+            let acc = var!["acc"];
+            let acc = blob!("wasm");
+            acc.withdraw(TARI, 10);
+        }
+    "#;
+    let globals = HashMap::from([("acc".to_string(), caller_component())]);
+    let blob_inputs = HashMap::from([("wasm".to_string(), tari_ootle_transaction::Blob::from(vec![1u8]))]);
+
+    let err = parse_manifest(manifest, globals, Default::default(), blob_inputs)
+        .err()
+        .expect("the later blob binding replaces the input alias");
+    assert!(err.to_string().contains("blob"), "{err}");
+}
+
+#[test]
+fn later_binding_shadows_blob_binding() {
+    let manifest = r#"
+        fn main() {
+            let template = blob!("wasm");
+            let template = var!["template"];
+            publish_template!(template);
+        }
+    "#;
+    let globals = HashMap::from([("template".to_string(), caller_component())]);
+    let blob_inputs = HashMap::from([("wasm".to_string(), tari_ootle_transaction::Blob::from(vec![1u8]))]);
+
+    let err = parse_manifest(manifest, globals, Default::default(), blob_inputs)
+        .err()
+        .expect("the later input binding replaces the blob binding");
+    assert!(err.to_string().contains("publish_template!"), "{err}");
+}
+
+#[test]
+fn local_function_call_cannot_be_bound() {
+    let manifest = r#"
+        fn helper() {
+            drop_all_proofs!();
+        }
+
+        fn main() {
+            let x = helper();
+        }
+    "#;
+
+    let err = parse_manifest(manifest, HashMap::new(), Default::default(), Default::default())
+        .err()
+        .expect("a local function call has no value to bind");
+    assert!(err.to_string().contains("local function"), "{err}");
+}

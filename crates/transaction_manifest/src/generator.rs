@@ -35,12 +35,15 @@ enum Binding {
     Input(ManifestValue),
     /// A value the transaction places on the workspace when it runs.
     Workspace(WorkspaceOffsetId),
+    /// `let x = blob!("name")`: the name of a caller-supplied blob.
+    Blob(String),
 }
 
 /// What a bare identifier refers to.
 enum Resolved<'a> {
     Value(&'a ManifestValue),
     Workspace(WorkspaceOffsetId),
+    Blob,
 }
 
 pub struct ManifestInstructionGenerator {
@@ -54,9 +57,6 @@ pub struct ManifestInstructionGenerator {
     templates: HashMap<String, TemplateAddress>,
     /// Caller-supplied blob payloads keyed by name. Used to resolve `blob!(name)` references.
     blob_inputs: HashMap<String, Blob>,
-    /// Variables bound to a blob with `let x = blob!("name")`, mapping the variable name to the
-    /// blob name it references. Lets `publish_template!(x)` resolve `x` back to its blob.
-    blob_vars: HashMap<String, String>,
     /// Output blob list — populated lazily as `blob!(name)` is encountered. The order matches
     /// the order of first reference, so emitted `BlobIndex`es match the returned `Blobs`.
     blob_indices: HashMap<String, BlobIndex>,
@@ -79,7 +79,6 @@ impl ManifestInstructionGenerator {
             generated_instructions: 0,
             templates,
             blob_inputs,
-            blob_vars: HashMap::new(),
             blob_indices: HashMap::new(),
             output_blobs: Blobs::empty(),
             functions: HashMap::new(),
@@ -185,6 +184,7 @@ impl ManifestInstructionGenerator {
                         }
                         ComponentReference::Workspace(workspace_offset.id())
                     },
+                    Resolved::Blob => return Err(Self::misplaced_blob(&component_ident)),
                 };
                 let mut instructions = vec![Instruction::CallMethod {
                     call,
@@ -247,8 +247,10 @@ impl ManifestInstructionGenerator {
                 Ok(vec![])
             },
             ManifestIntent::AssignBlob(assign) => {
-                self.blob_vars
-                    .insert(assign.variable_name.to_string(), assign.blob_name.to_string());
+                self.bindings.insert(
+                    assign.variable_name.to_string(),
+                    Binding::Blob(assign.blob_name.to_string()),
+                );
                 Ok(vec![])
             },
             ManifestIntent::DropAllProofs => Ok(vec![Instruction::DropAllProofsInWorkspace]),
@@ -263,7 +265,16 @@ impl ManifestInstructionGenerator {
                 // blob-resolution path as `blob!(name)` — the binary is registered in the output
                 // Blobs on first reference and assigned the next BlobIndex.
                 let ident = pt.blob_name.to_string();
-                let blob_name = self.blob_vars.get(&ident).cloned().unwrap_or(ident);
+                let blob_name = match self.bindings.get(&ident) {
+                    Some(Binding::Blob(blob_name)) => blob_name.clone(),
+                    Some(_) => {
+                        return Err(ManifestError::InvalidVariableType(format!(
+                            "publish_template!({ident}) requires a blob, but '{ident}' is bound to a value that is \
+                             not a blob"
+                        )));
+                    },
+                    None => ident,
+                };
                 let arg = self.resolve_blob_arg(&blob_name)?;
                 let binary = arg.as_blob_index().ok_or_else(|| ManifestError::InvalidInstruction {
                     reason: "publish_template! resolved to a non-Blob arg".to_string(),
@@ -485,6 +496,7 @@ impl ManifestInstructionGenerator {
         match self.bindings.get(name) {
             Some(Binding::Input(value)) => Ok(Resolved::Value(value)),
             Some(Binding::Workspace(id)) => Ok(Resolved::Workspace(*id)),
+            Some(Binding::Blob(_)) => Ok(Resolved::Blob),
             None => self
                 .globals
                 .get(name)
@@ -500,6 +512,7 @@ impl ManifestInstructionGenerator {
                 "'{name}' is a workspace value, which is only known when the transaction runs, but this position \
                  requires a value known when the manifest is built"
             ))),
+            Resolved::Blob => Err(Self::misplaced_blob(name)),
         }
     }
 
@@ -509,6 +522,7 @@ impl ManifestInstructionGenerator {
             Some(Binding::Input(_)) => Err(ManifestError::InvalidVariableType(format!(
                 "'{name}' is an input value, but this position requires a workspace value"
             ))),
+            Some(Binding::Blob(_)) => Err(Self::misplaced_blob(name)),
             None => Err(ManifestError::UndefinedVariable { name: name.to_string() }),
         }
     }
@@ -517,6 +531,14 @@ impl ManifestInstructionGenerator {
         match self.resolve(name)? {
             Resolved::Value(value) => value.to_arg(),
             Resolved::Workspace(id) => Ok(InstructionArg::Workspace(id)),
+            Resolved::Blob => Err(Self::misplaced_blob(name)),
         }
+    }
+
+    fn misplaced_blob(name: &str) -> ManifestError {
+        ManifestError::InvalidVariableType(format!(
+            "'{name}' is bound to a blob, which only publish_template!({name}) accepts; pass blob!(..) directly to \
+             use a blob as an argument"
+        ))
     }
 }
