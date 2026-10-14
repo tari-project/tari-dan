@@ -91,7 +91,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         from: TConsensusSpec::Addr,
         msg: HotstuffMessage,
         new_transactions: &OnReceiveNewTransaction<TConsensusSpec>,
-        foreign_proposals: &OnReceiveForeignProposalHandler<TConsensusSpec>,
+        foreign_proposals: &mut OnReceiveForeignProposalHandler<TConsensusSpec>,
     ) -> Result<MessageValidationResult<TConsensusSpec::Addr>, HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "on_message_validate");
         match msg {
@@ -122,8 +122,8 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             HotstuffMessage::ForeignProposal(msg) => {
                 // Honest late replies to a request another peer already answered also land here, so this logs at debug.
                 let block_id = msg.proposal.calculate_block_id();
-                if !foreign_proposals.is_awaiting_reply(&block_id, &from) {
-                    debug!(target: LOG_TARGET, "❓Received foreign proposal {block_id} from {from} that we did not request from them. Discarding message");
+                if !foreign_proposals.take_reply(&block_id, &from) {
+                    debug!(target: LOG_TARGET, "❓Received foreign proposal {block_id} from {from}, who has no open request for it. Discarding message");
                     return Ok(MessageValidationResult::Discard);
                 }
                 self.process_foreign_proposal(epoch_state, from, msg).await

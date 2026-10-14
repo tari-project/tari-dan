@@ -382,17 +382,19 @@ async fn a_foreign_proposal_is_not_stored_with_pledge_values_its_evidence_does_n
     let output_member = TestAddress::new("2");
     let captured = Arc::new(Mutex::new(None::<(TestAddress, ForeignProposal)>));
     let mut test = Test::builder()
-        .add_committee(0, vec!["1"])
+        .add_committee(0, vec!["1", "4"])
         .add_committee(1, vec!["2"])
         .with_message_filter(Box::new({
             let output_member = output_member.clone();
             let captured = captured.clone();
+            // Only the first reply is withheld, so the retry to the other member of committee 0 is delivered
             move |from, to, msg| match msg {
                 HotstuffMessage::ForeignProposal(msg) if *to == output_member => {
-                    captured
-                        .lock()
-                        .unwrap()
-                        .get_or_insert_with(|| (from.clone(), (*msg.proposal).clone()));
+                    let mut captured = captured.lock().unwrap();
+                    if captured.is_some() {
+                        return true;
+                    }
+                    *captured = Some((from.clone(), (*msg.proposal).clone()));
                     false
                 },
                 _ => true,
@@ -453,15 +455,28 @@ async fn a_foreign_proposal_is_not_stored_with_pledge_values_its_evidence_does_n
     sleep(Duration::from_secs(2)).await;
     assert!(!is_stored(), "stored a foreign proposal with substituted pledge values");
 
-    // The substituted copy leaves nothing behind that stops the genuine proposal from being accepted
+    // The substituted copy was the asked peer's one reply, so a second copy from it is not processed
     tx_inbound
         .send((sender, HotstuffMessage::ForeignProposal(genuine.into())))
         .await
         .unwrap();
     sleep(Duration::from_secs(2)).await;
-    assert!(is_stored());
+    assert!(!is_stored(), "processed a second reply to one request");
 
+    // The substituted copy leaves nothing behind that stops the genuine proposal from being accepted once the request
+    // is retried with the other member of committee 0
+    let stored = timeout(Duration::from_secs(60), async {
+        while !is_stored() {
+            sleep(Duration::from_millis(250)).await;
+        }
+    })
+    .await
+    .is_ok();
     test.stop();
+    assert!(
+        stored,
+        "the retried request did not deliver the genuine foreign proposal"
+    );
 }
 
 #[tokio::test]

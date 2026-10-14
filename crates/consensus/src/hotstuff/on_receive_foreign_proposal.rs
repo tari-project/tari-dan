@@ -90,9 +90,10 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
-    /// Whether this node asked `from` for the foreign proposal of `block_id` and is still waiting for it.
-    pub fn is_awaiting_reply(&self, block_id: &BlockId, from: &TConsensusSpec::Addr) -> bool {
-        self.pending_requests.is_awaiting_reply(block_id, from)
+    /// Whether this node asked `from` for the foreign proposal of `block_id` and was still waiting for it. The request
+    /// is closed, so only the first reply to it is processed.
+    pub fn take_reply(&mut self, block_id: &BlockId, from: &TConsensusSpec::Addr) -> bool {
+        self.pending_requests.take_reply(block_id, from)
     }
 
     pub async fn handle_received(
@@ -674,11 +675,22 @@ impl<TAddr: NodeAddressable> PendingRequests<TAddr> {
         self.pending.contains_key(block_id)
     }
 
-    /// Whether `peer` was asked for the foreign proposal of `block_id` and that request is still open.
-    pub(self) fn is_awaiting_reply(&self, block_id: &BlockId, peer: &TAddr) -> bool {
+    /// Closes the open request that asked `peer` for the foreign proposal of `block_id`, returning whether there was
+    /// one. Each request admits a single reply, whether or not that reply turns out to be valid.
+    pub(self) fn take_reply(&mut self, block_id: &BlockId, peer: &TAddr) -> bool {
+        let was_pending = self
+            .pending
+            .get_mut(block_id)
+            .is_some_and(|requests| requests.awaiting.remove(peer));
+        let was_unretried = self.unretried.take(block_id, peer);
+        was_pending || was_unretried
+    }
+
+    #[cfg(test)]
+    fn is_awaiting_reply(&self, block_id: &BlockId, peer: &TAddr) -> bool {
         self.pending
             .get(block_id)
-            .is_some_and(|requests| requests.peers.contains(peer)) ||
+            .is_some_and(|requests| requests.awaiting.contains(peer)) ||
             self.unretried.contains(block_id, peer)
     }
 
@@ -698,6 +710,7 @@ impl<TAddr: NodeAddressable> PendingRequests<TAddr> {
         committee_info: CommitteeInfo,
     ) -> bool {
         if let Some(entry) = self.pending.get_mut(&block_id) {
+            entry.awaiting.insert(requested_from.clone());
             entry.peers.insert(requested_from);
             entry.at = Instant::now();
             return true;
@@ -710,6 +723,7 @@ impl<TAddr: NodeAddressable> PendingRequests<TAddr> {
 
         *self.num_pending_by_notifier.entry(notified_by.clone()).or_default() += 1;
         self.pending.insert(block_id, ForeignRequests {
+            awaiting: HashSet::from([requested_from.clone()]),
             peers: HashSet::from([requested_from]),
             charged_to: Some(notified_by),
             committee_info,
@@ -728,6 +742,7 @@ impl<TAddr: NodeAddressable> PendingRequests<TAddr> {
         mut requests: ForeignRequests<TAddr>,
         requested_from: TAddr,
     ) {
+        requests.awaiting.insert(requested_from.clone());
         requests.peers.insert(requested_from);
         requests.charged_to = None;
         requests.at = Instant::now();
@@ -784,8 +799,21 @@ impl<TAddr: NodeAddressable> UnretriedRequests<TAddr> {
         }
     }
 
+    #[cfg(test)]
     fn contains(&self, block_id: &BlockId, peer: &TAddr) -> bool {
         self.num_by_request.contains_key(&(*block_id, peer.clone()))
+    }
+
+    /// Closes every held request that asked `peer` for `block_id`, returning whether there was one.
+    fn take(&mut self, block_id: &BlockId, peer: &TAddr) -> bool {
+        if self.num_by_request.remove(&(*block_id, peer.clone())).is_none() {
+            return false;
+        }
+        self.by_notifier.retain(|_, requests| {
+            requests.retain(|(id, to)| id != block_id || to != peer);
+            !requests.is_empty()
+        });
+        true
     }
 
     fn insert(&mut self, notified_by: TAddr, block_id: BlockId, requested_from: TAddr) {
@@ -813,7 +841,10 @@ impl<TAddr: NodeAddressable> UnretriedRequests<TAddr> {
 }
 
 struct ForeignRequests<TAddr> {
+    /// Every peer asked for this block, which a retry does not ask again.
     pub peers: HashSet<TAddr>,
+    /// The peers asked that have not yet replied.
+    pub awaiting: HashSet<TAddr>,
     /// The notifier whose allowance this request counts against, until it first times out.
     pub charged_to: Option<TAddr>,
     pub committee_info: CommitteeInfo,
@@ -950,6 +981,39 @@ mod tests {
         pending.remove(&block_id(0));
         assert!(!pending.is_awaiting_reply(&block_id(0), &asked));
         assert!(!pending.is_awaiting_reply(&block_id(0), &retried));
+    }
+
+    #[test]
+    fn a_request_admits_one_reply_and_a_retry_does_not_reopen_it() {
+        let mut pending = PendingRequests::<String>::new();
+        let (asked, retried) = ("foreign1".to_string(), "foreign2".to_string());
+        pending.insert("notifier".to_string(), asked.clone(), block_id(0), committee_info());
+
+        assert!(pending.take_reply(&block_id(0), &asked));
+        assert!(!pending.take_reply(&block_id(0), &asked));
+
+        let (id, requests) = pending.drain_timed_out(Duration::ZERO).pop().unwrap();
+        pending.insert_retry(id, requests, retried.clone());
+        assert!(!pending.take_reply(&block_id(0), &asked));
+        assert!(pending.take_reply(&block_id(0), &retried));
+        assert!(!pending.take_reply(&block_id(0), &retried));
+        assert_eq!(pending.pending[&block_id(0)].num_unique_peers(), 2);
+    }
+
+    #[test]
+    fn an_unretried_request_admits_one_reply() {
+        let mut pending = PendingRequests::<String>::new();
+        let notifier = "notifier".to_string();
+        let foreign = "foreign".to_string();
+        for seed in 0..MAX_PENDING_REQUESTS_PER_NOTIFIER {
+            pending.insert(notifier.clone(), foreign.clone(), block_id(seed), committee_info());
+        }
+        let over_cap = block_id(MAX_PENDING_REQUESTS_PER_NOTIFIER);
+        assert!(!pending.insert(notifier.clone(), foreign.clone(), over_cap, committee_info()));
+
+        assert!(pending.take_reply(&over_cap, &foreign));
+        assert!(!pending.take_reply(&over_cap, &foreign));
+        assert!(!pending.unretried.by_notifier.contains_key(&notifier));
     }
 
     #[test]
