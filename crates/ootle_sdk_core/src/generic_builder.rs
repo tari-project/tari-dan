@@ -31,7 +31,6 @@ use tari_ootle_transaction::{
     ComponentReference,
     Instruction,
     TransactionBuilder,
-    args,
     args::InstructionArg,
     builder::named_args::parse_workspace_key,
 };
@@ -160,26 +159,22 @@ fn lower_fee_payment(
     intent: &GenericTransactionIntent,
     bound_labels: &HashSet<String>,
 ) -> Result<TransactionBuilder, OotleSdkError> {
-    let fee = intent.fee.to_internal();
-    match &intent.fee_payment {
-        FeeSource::FromAccount(account) => {
-            let account = account.to_internal()?;
-            Ok(builder.call_method(account, "pay_fee", args![fee]))
-        },
+    let call = match &intent.fee_payment {
+        FeeSource::FromAccount(account) => ComponentReference::from(account.to_internal()?),
         FeeSource::FromWorkspaceComponent { label } => {
-            let call = resolve_component_ref(&builder, &ComponentRef::Workspace(label.clone()), bound_labels)?;
-            Ok(builder.add_instruction(Instruction::CallMethod {
-                call,
-                method: parse_function_name("pay_fee")?,
-                args: vec![encode_arg(&ArgValue::Amount(intent.fee.as_u64()))?],
-            }))
+            resolve_component_ref(&builder, &ComponentRef::Workspace(label.clone()), bound_labels)?
         },
         FeeSource::FromBucket { label } => {
             ensure_label_bound(label, bound_labels)?;
             let bucket = builder.get_workspace_offset_id_from_named_arg(label.clone());
-            Ok(builder.add_instruction(Instruction::PayFeeFromBucket { bucket }))
+            return Ok(builder.add_instruction(Instruction::PayFeeFromBucket { bucket }));
         },
-    }
+    };
+    Ok(builder.add_instruction(Instruction::CallMethod {
+        call,
+        method: parse_function_name("pay_fee")?,
+        args: vec![encode_arg(&ArgValue::Amount(intent.fee.as_u64()))?],
+    }))
 }
 
 /// Validates a workspace label is bound by a prior `PutLastInstructionOutputOnWorkspace` in the same
