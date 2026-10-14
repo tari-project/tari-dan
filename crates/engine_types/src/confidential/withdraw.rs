@@ -38,7 +38,11 @@ pub fn withdraw_native_points(proof: &ConfidentialWithdrawProof, has_view_key: b
     }
     let num_outputs =
         u64::from(proof.output_proof.output.is_some()) + u64::from(proof.output_proof.change_statement.is_some());
-    let surcharge = has_view_key.then(P::PER_OUTPUT_VIEWABLE_SURCHARGE).unwrap_or_default();
+    let surcharge = if has_view_key {
+        P::PER_OUTPUT_VIEWABLE_SURCHARGE
+    } else {
+        0
+    };
     let per_output = P::PER_OUTPUT.saturating_add(surcharge);
     P::PER_STATEMENT
         .saturating_add(per_output.saturating_mul(num_outputs))
