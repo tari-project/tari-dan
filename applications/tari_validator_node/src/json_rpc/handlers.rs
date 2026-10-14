@@ -130,6 +130,9 @@ const LOG_TARGET: &str = "tari::validator_node::json_rpc::handlers";
 
 const DEFAULT_DIAGNOSTIC_EVENT_LIMIT: usize = 100;
 const MAX_DIAGNOSTIC_EVENT_LIMIT: usize = 1000;
+/// Every block in a page is loaded from storage and serialized into a single response, so the page size is capped
+/// whatever limit the caller requests.
+const MAX_BLOCKS_PAGE_LIMIT: usize = 100;
 
 pub struct JsonRpcHandlers {
     config: ApplicationConfig,
@@ -252,7 +255,10 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let request: GetStateRequest = value.parse_params()?;
 
-        let tx = self.state_store.create_read_tx().unwrap();
+        let tx = self
+            .state_store
+            .create_read_tx()
+            .map_err(internal_error(answer_id.clone()))?;
         let state = SubstateRecord::get(&tx, &request.address)
             .optional()
             .map_err(internal_error(answer_id.clone()))?
@@ -302,7 +308,7 @@ impl JsonRpcHandlers {
             },
         };
         let blocks = tx
-            .blocks_get_parent_chain(start_block.id(), req.limit)
+            .blocks_get_parent_chain(start_block.id(), blocks_page_limit(req.limit))
             .map_err(internal_error(answer_id.clone()))?;
 
         let res = ListBlocksResponse { blocks };
@@ -457,7 +463,7 @@ impl JsonRpcHandlers {
             .state_store
             .with_read_tx(|tx| {
                 tx.blocks_get_paginated(
-                    req.limit.into(),
+                    blocks_page_limit(req.limit as usize) as u64,
                     req.offset.into(),
                     req.filter_index,
                     req.filter,
@@ -1017,4 +1023,27 @@ fn sum_block_execution_weight<TTx: StateStoreReadTransaction>(tx: &TTx, block: &
         total = total.saturating_add(weight.saturating_mul(cmd.execution_weight_percent()) / 100);
     }
     Ok(total)
+}
+
+fn blocks_page_limit(requested: usize) -> usize {
+    requested.min(MAX_BLOCKS_PAGE_LIMIT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blocks_page_limit_caps_oversized_requests() {
+        assert_eq!(blocks_page_limit(usize::MAX), MAX_BLOCKS_PAGE_LIMIT);
+        assert_eq!(blocks_page_limit(u32::MAX as usize), MAX_BLOCKS_PAGE_LIMIT);
+        assert_eq!(blocks_page_limit(MAX_BLOCKS_PAGE_LIMIT + 1), MAX_BLOCKS_PAGE_LIMIT);
+    }
+
+    #[test]
+    fn blocks_page_limit_keeps_requests_within_the_cap() {
+        assert_eq!(blocks_page_limit(0), 0);
+        assert_eq!(blocks_page_limit(10), 10);
+        assert_eq!(blocks_page_limit(MAX_BLOCKS_PAGE_LIMIT), MAX_BLOCKS_PAGE_LIMIT);
+    }
 }
