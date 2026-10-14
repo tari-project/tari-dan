@@ -1,5 +1,5 @@
 [workspace.package]
-version = "0.46.0"
+version = "0.46.1"
 edition = "2024"
 authors = ["The Tari Development Community"]
 repository = "https://github.com/tari-project/tari-ootle"
@@ -107,9 +107,9 @@ tari_ootle_p2p = { path = "crates/p2p" }
 tari_ootle_storage = { path = "crates/storage" }
 tari_ootle_storage_sqlite = { path = "crates/storage_sqlite" }
 tari_ootle_wallet_crypto = { path = "crates/wallet/crypto", version = "0.47" }
-tari_ootle_wallet_sdk = { path = "crates/wallet/sdk", version = "0.47.0" }
+tari_ootle_wallet_sdk = { path = "crates/wallet/sdk", version = "0.48.0" }
 tari_ootle_wallet_sdk_services = { path = "crates/wallet/sdk_services" }
-tari_ootle_wallet_storage_sqlite = { path = "crates/wallet/storage_sqlite", version = "0.47.0" }
+tari_ootle_wallet_storage_sqlite = { path = "crates/wallet/storage_sqlite", version = "0.48.0" }
 tari_epoch_manager = { path = "crates/epoch_manager" }
 tari_epoch_oracles = { path = "crates/epoch_oracles" }
 tari_indexer_lib = { path = "crates/indexer_lib" }
@@ -121,14 +121,14 @@ tari_transaction_manifest = { path = "crates/transaction_manifest", version = "0
 tari_validator_node_rpc = { path = "crates/validator_node_rpc" }
 sqlite_message_logger = { path = "networking/sqlite_message_logger" }
 tari_base_node_client = { path = "clients/base_node_client" }
-tari_indexer_client = { path = "clients/tari_indexer_client", default-features = false, version = "0.46" }
+tari_indexer_client = { path = "clients/tari_indexer_client", default-features = false, version = "0.47" }
 tari_networking = { path = "networking/core" }
 tari_rpc_framework = { path = "networking/rpc_framework" }
 tari_rpc_macros = { path = "networking/rpc_macros" }
 tari_swarm = { path = "networking/swarm" }
 tari_validator_node_client = { path = "clients/validator_node_client" }
 tari_validator_rollback = { path = "utilities/validator_rollback", version = "0.46" }
-tari_ootle_walletd_client = { path = "clients/wallet_daemon_client", version = "0.47.0" }
+tari_ootle_walletd_client = { path = "clients/wallet_daemon_client", version = "0.48.0" }
 transaction_generator = { path = "utilities/transaction_generator" }
 
 # Dependency crates on crates.io (update versions here as well when updating the workspace version)
