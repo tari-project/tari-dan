@@ -18,7 +18,7 @@ use tari_template_lib_types::{Metadata, TemplateAddress};
 use tokio_stream::StreamExt;
 
 use crate::{
-    event_manager::WILDCARD_TOPIC_SCAN_LIMIT,
+    event_query_limits::WILDCARD_TOPIC_SCAN_LIMIT,
     network_state_sync::EventFilter,
     rest_api::{context::HandlerContext, handlers::HandlerResult, streaming::disable_proxy_buffering},
     storage_sqlite::SqliteIndexerStore,
