@@ -1025,8 +1025,10 @@ fn sum_block_execution_weight<TTx: StateStoreReadTransaction>(tx: &TTx, block: &
     Ok(total)
 }
 
+/// The floor of one block matters: `blocks_get_parent_chain` stops only once it holds exactly `limit` blocks, so a
+/// zero limit would never stop it.
 fn blocks_page_limit(requested: usize) -> usize {
-    requested.min(MAX_BLOCKS_PAGE_LIMIT)
+    requested.clamp(1, MAX_BLOCKS_PAGE_LIMIT)
 }
 
 #[cfg(test)]
@@ -1041,8 +1043,13 @@ mod tests {
     }
 
     #[test]
+    fn blocks_page_limit_raises_a_zero_limit_to_one() {
+        assert_eq!(blocks_page_limit(0), 1);
+    }
+
+    #[test]
     fn blocks_page_limit_keeps_requests_within_the_cap() {
-        assert_eq!(blocks_page_limit(0), 0);
+        assert_eq!(blocks_page_limit(1), 1);
         assert_eq!(blocks_page_limit(10), 10);
         assert_eq!(blocks_page_limit(MAX_BLOCKS_PAGE_LIMIT), MAX_BLOCKS_PAGE_LIMIT);
     }
