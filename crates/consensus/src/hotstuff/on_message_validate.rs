@@ -29,7 +29,7 @@ use crate::{
         ProposalValidationError,
         epoch_state::EpochState,
         error::HotStuffError,
-        on_receive_foreign_proposal::validate_evidence_and_pledges_match,
+        on_receive_foreign_proposal::{OnReceiveForeignProposalHandler, validate_evidence_and_pledges_match},
         on_receive_new_transaction::OnReceiveNewTransaction,
     },
     messages::{
@@ -91,6 +91,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         from: TConsensusSpec::Addr,
         msg: HotstuffMessage,
         new_transactions: &OnReceiveNewTransaction<TConsensusSpec>,
+        foreign_proposals: &mut OnReceiveForeignProposalHandler<TConsensusSpec>,
     ) -> Result<MessageValidationResult<TConsensusSpec::Addr>, HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "on_message_validate");
         match msg {
@@ -118,8 +119,14 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
                 self.process_catch_up_response(from, epoch_state, *msg, new_transactions)
                     .await
             },
-            HotstuffMessage::ForeignProposal(proposal) => {
-                self.process_foreign_proposal(epoch_state, from, proposal).await
+            HotstuffMessage::ForeignProposal(msg) => {
+                // Honest late replies to a request another peer already answered also land here, so this logs at debug.
+                let block_id = msg.proposal.calculate_block_id();
+                if !foreign_proposals.take_reply(&block_id, &from) {
+                    debug!(target: LOG_TARGET, "❓Received foreign proposal {block_id} from {from}, who has no open request for it. Discarding message");
+                    return Ok(MessageValidationResult::Discard);
+                }
+                self.process_foreign_proposal(epoch_state, from, msg).await
             },
             HotstuffMessage::MissingTransactionsResponse(msg) => {
                 let Some(request) = self.active_missing_transaction_requests.take(msg.request_id, &from) else {

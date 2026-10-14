@@ -577,6 +577,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 from.clone(),
                 msg,
                 &self.on_receive_new_transaction,
+                &mut self.on_receive_foreign_proposal,
             )
             .await?
         {
