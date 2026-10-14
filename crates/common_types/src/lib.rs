@@ -32,6 +32,7 @@ mod substate_address;
 pub mod substate_type;
 pub mod uint;
 mod validator_metadata;
+mod validator_set;
 mod versioned_substate_id;
 mod vote_power;
 
@@ -54,5 +55,6 @@ pub use tari_engine_types as engine_types;
 // Exported here for backwards compatibility
 pub use tari_engine_types::{Epoch, ProtocolVersion, SubstateVersion};
 pub use validator_metadata::*;
+pub use validator_set::*;
 pub use versioned_substate_id::*;
 pub use vote_power::*;
