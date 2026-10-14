@@ -14,6 +14,7 @@ use crate::{
     PublishTemplateLimitValidator,
     SignatureLimitValidator,
     StealthTransactionLimitsValidator,
+    TransactionDryRunValidator,
     TransactionNetworkValidator,
     TransactionSignatureValidator,
     TransactionSizeValidator,
@@ -25,8 +26,8 @@ use crate::{
 };
 
 /// Builds the structural (context-free) mempool validations suitable for any transaction entry
-/// point: network match, basic well-formedness, the per-transaction byte and weight caps, blob references,
-/// input addressability, and signature verification.
+/// point: refusal of dry-run transactions, network match, basic well-formedness, the per-transaction byte
+/// and weight caps, blob references, input addressability, and signature verification.
 ///
 /// These never depend on lagging runtime state (epoch, template existence), so they cannot
 /// false-reject and are safe to run at the indexer before forwarding to validator committees.
@@ -34,20 +35,26 @@ use crate::{
 /// The validator node does not compose this chain. It assembles an equivalent one in
 /// `create_node_transaction_validator` so that it can split the checks that back block validation from the
 /// ingress-only ones — a rejection rule in block validation is a consensus rule. The two must be kept in step
-/// by hand.
+/// by hand: every state-independent sender-fault rejection there must also be made here, or a peer relaying
+/// what this chain accepts has the validators' rejection counted against its gossipsub score.
 pub fn create_structural_transaction_validator(
     network: Network,
     max_transaction_weight: u64,
     max_transaction_size_bytes: usize,
 ) -> impl Validator<Transaction, Context = (), Error = TransactionValidationError> {
-    create_dry_run_transaction_validator(network, max_transaction_weight, max_transaction_size_bytes)
+    TransactionDryRunValidator
+        .and_then(create_unsigned_structural_transaction_validator(
+            network,
+            max_transaction_weight,
+            max_transaction_size_bytes,
+        ))
         .and_then(TransactionSignatureValidator)
 }
 
-/// Builds the structural validations for a dry-run: those of
-/// [`create_structural_transaction_validator`] except signature verification, since a dry-run is
+/// Builds the structural validations of [`create_structural_transaction_validator`] except the dry-run
+/// refusal and signature verification. This is the admission chain for dry-run transactions, which are
 /// accepted with invalid signatures.
-pub fn create_dry_run_transaction_validator(
+pub fn create_unsigned_structural_transaction_validator(
     network: Network,
     max_transaction_weight: u64,
     max_transaction_size_bytes: usize,
@@ -114,6 +121,13 @@ mod tests {
             .build_and_seal(&PrivateKey::from(1u64))
     }
 
+    fn dry_run_transaction(max_epoch: Epoch) -> Transaction {
+        Transaction::builder_localnet(max_epoch)
+            .pay_fee_from_component(ComponentAddress::from_array([1u8; 32]), Amount::new(1000))
+            .with_dry_run(true)
+            .build_and_seal(&PrivateKey::from(1u64))
+    }
+
     fn validate(current_epoch: Epoch, transaction: &Transaction) -> Result<(), TransactionValidationError> {
         create_gossip_transaction_validator(
             Network::LocalNet,
@@ -158,5 +172,37 @@ mod tests {
     fn an_unbounded_window_is_the_senders_fault() {
         let err = validate(Epoch(1), &transaction(Epoch(u64::MAX))).unwrap_err();
         assert!(err.is_sender_fault());
+    }
+
+    /// Validators refuse a dry-run transaction as the sender's fault, so a relay that forwarded one
+    /// would have the refusal counted against its own gossipsub score.
+    #[test]
+    fn it_refuses_a_dry_run_transaction_as_the_senders_fault() {
+        let err = validate(Epoch(5), &dry_run_transaction(Epoch(12))).unwrap_err();
+        assert!(matches!(err, TransactionValidationError::DryRunNotAllowed));
+        assert!(err.is_sender_fault());
+    }
+
+    #[test]
+    fn the_structural_chain_refuses_a_dry_run_transaction() {
+        let err = create_structural_transaction_validator(
+            Network::LocalNet,
+            MAX_TRANSACTION_WEIGHT,
+            MAX_TRANSACTION_SIZE_BYTES,
+        )
+        .validate(&(), &dry_run_transaction(Epoch(12)))
+        .unwrap_err();
+        assert!(matches!(err, TransactionValidationError::DryRunNotAllowed));
+    }
+
+    #[test]
+    fn the_unsigned_structural_chain_accepts_a_dry_run_transaction() {
+        create_unsigned_structural_transaction_validator(
+            Network::LocalNet,
+            MAX_TRANSACTION_WEIGHT,
+            MAX_TRANSACTION_SIZE_BYTES,
+        )
+        .validate(&(), &dry_run_transaction(Epoch(12)))
+        .unwrap();
     }
 }
