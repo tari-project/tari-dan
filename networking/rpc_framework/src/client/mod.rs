@@ -677,7 +677,16 @@ where TSubstream: AsyncRead + AsyncWrite + Unpin + Send
         );
     }
 
+    /// Takes a frame that arrives while no request is outstanding. The server refuses a session only in place of
+    /// its first response, so once one has been read the frame is left over from a request this client abandoned.
     fn handle_interrupt_server_message(&self, msg: BytesMut) -> Result<(), RpcError> {
+        if self.has_read_a_response {
+            trace!(
+                target: LOG_TARGET,
+                "(peer={}) Discarding a frame left over from an abandoned request", self.peer_id
+            );
+            return Ok(());
+        }
         let msg = proto::RpcSessionReply::decode(&mut msg.freeze())?;
         let version = msg
             .result()
@@ -1506,6 +1515,74 @@ mod keepalive_tests {
 
         assert_eq!(received.len(), 1);
         assert_eq!(received[0].as_ref().unwrap().supported_versions, vec![7]);
+
+        let second = rpc_client
+            .server_streaming::<_, _, proto::RpcSession>(proto::RpcSession::default(), 1u32)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+
+        server.await.unwrap();
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].as_ref().unwrap().supported_versions, vec![7]);
+    }
+
+    #[tokio::test]
+    async fn an_error_left_over_from_an_abandoned_request_does_not_end_the_session() {
+        let (server, client) = tokio::io::duplex(RPC_MAX_FRAME_SIZE);
+        let reply = proto::RpcSession {
+            supported_versions: vec![7],
+        };
+        let message: Bytes = reply.encode_to_vec().into();
+        let (stale_sent_tx, stale_sent_rx) = oneshot::channel();
+        let server = tokio::spawn(async move {
+            let mut framed = framing::canonical(server.compat(), RPC_MAX_FRAME_SIZE);
+            let first = read_request(&mut framed).await;
+            send_response(&mut framed, RpcResponse {
+                request_id: first.request_id,
+                status: RpcStatusCode::Ok,
+                flags: RpcMessageFlags::empty(),
+                payload: message.clone(),
+            })
+            .await;
+
+            // The client abandons the stream, and an error the server had already produced for it
+            // arrives once the client is no longer waiting on any request.
+            let fin = proto::RpcRequest::decode(framed.next().await.unwrap().unwrap().freeze()).unwrap();
+            assert_eq!(fin.request_id, first.request_id);
+            send_response(&mut framed, RpcResponse {
+                request_id: first.request_id,
+                status: RpcStatusCode::BadRequest,
+                flags: RpcMessageFlags::FIN,
+                payload: Bytes::new(),
+            })
+            .await;
+            stale_sent_tx.send(()).unwrap();
+
+            let frame = framed.next().await.unwrap().unwrap();
+            let second = proto::RpcRequest::decode(frame.freeze()).unwrap();
+            send_message(&mut framed, second.request_id, message).await;
+        });
+
+        let mut rpc_client = RpcClient::connect(
+            RpcClientConfig::default(),
+            PeerId::random(),
+            framing::canonical(client.compat(), RPC_MAX_FRAME_SIZE),
+            StreamProtocol::new(PROTOCOL),
+        )
+        .await
+        .unwrap();
+
+        let mut stream = rpc_client
+            .server_streaming::<_, _, proto::RpcSession>(proto::RpcSession::default(), 1u32)
+            .await
+            .unwrap();
+        stream.next().await.unwrap().unwrap();
+        drop(stream);
+        stale_sent_rx.await.unwrap();
+        // Gives the idle worker the stale frame before the next request goes out.
+        time::sleep(Duration::from_millis(50)).await;
 
         let second = rpc_client
             .server_streaming::<_, _, proto::RpcSession>(proto::RpcSession::default(), 1u32)

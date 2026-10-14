@@ -35,6 +35,7 @@ use crate::{
     framing::CanonicalFraming,
     handshake::decode_session_rejection,
     max_response_payload_size,
+    message::RpcMessageFlags,
     proto,
     test::greeting_service::{
         GreetingClient,
@@ -528,6 +529,26 @@ async fn a_request_sent_while_the_server_is_held_up_writing_a_stream_is_answered
 
     assert_greeted(&raw_response(&mut framed, 2).await);
     until_no_stream_is_live(&service_impl).await;
+}
+
+#[tokio::test]
+async fn a_stream_abandoned_while_the_server_is_held_up_writing_it_ends_and_the_session_goes_on() {
+    let service_impl = GreetingService::default();
+    let server = TestRpcServer::with_sessions(service_impl.clone(), 1);
+    let mut framed = raw_session_streaming(&server, 4).await;
+    time::sleep(Duration::from_millis(100)).await;
+
+    let fin = proto::RpcRequest {
+        request_id: 1,
+        flags: u32::from(RpcMessageFlags::FIN.bits()),
+        deadline: 5,
+        ..Default::default()
+    };
+    framed.send(fin.encode_to_vec().into()).await.unwrap();
+    until_no_stream_is_live(&service_impl).await;
+
+    framed.send(raw_request(2, SAY_HELLO_METHOD, hello())).await.unwrap();
+    assert_greeted(&raw_response(&mut framed, 2).await);
 }
 
 #[tokio::test]

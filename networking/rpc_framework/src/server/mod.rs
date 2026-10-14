@@ -937,11 +937,15 @@ where
 
     /// Sends one frame of the response to `request_id`, returning whether the response goes on. A send held up by a
     /// client that has stopped reading is cut short by the first frame the client sends, which is taken as it would
-    /// be between frames.
+    /// be between frames. The response ends there whatever that frame is: the one being sent may never have been
+    /// queued, and the response cannot go on with a gap in it.
     async fn send_stream_frame(&mut self, request_id: u32, frame: Bytes) -> Result<bool, RpcServerError> {
         match self.framed.send(frame).await {
             Ok(()) => Ok(true),
-            Err(EarlyCloseError::UnexpectedMessage(inbound)) => Ok(self.stream_continues_after(request_id, inbound)),
+            Err(EarlyCloseError::UnexpectedMessage(inbound)) => {
+                self.stream_continues_after(request_id, inbound);
+                Ok(false)
+            },
             Err(err) => Err(err.into()),
         }
     }
