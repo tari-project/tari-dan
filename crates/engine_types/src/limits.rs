@@ -456,6 +456,18 @@ pub const fn engine_response_points(bytes: u64, items: u64) -> u64 {
         .saturating_add(NativeExecutionPoints::PER_ENGINE_RESPONSE_BYTE.saturating_mul(bytes))
 }
 
+/// Points charged for moving `ids` non-fungible ids from one container to another: taking them from
+/// a bucket or vault, joining or depositing them, or locking them into a proof and unlocking them.
+///
+/// The engine moves each id on its own, outside the Wasmer meter, while the call asking for the
+/// move names only an amount or a bucket, and is answered with an id, whatever it carries. So the
+/// move is priced by the ids it carries.
+///
+/// Measured with `cargo run -p tari_engine --release --example non_fungible_move_points_calibrate`.
+pub const fn non_fungible_move_points(ids: u64) -> u64 {
+    NativeExecutionPoints::PER_NON_FUNGIBLE_ID_MOVED.saturating_mul(ids)
+}
+
 /// Metering-point prices for native (non-WASM) verification work, charged against the same
 /// payment-funded allowance as WASM execution ([`FREE_COMPUTE_GRACE_POINTS`] of credit, then
 /// payments fund the rest). Native crypto runs outside the Wasmer meter, so these price it by
@@ -508,6 +520,11 @@ impl NativeExecutionPoints {
     /// One stealth/confidential input commitment: decompress + point aggregation (~4.8µs measured).
     /// Substate access is charged separately by the fee module.
     pub const PER_INPUT: u64 = 42_000;
+    /// Each non-fungible id moved from one container to another. Integer ids measure at ~600-900
+    /// points a move; the costliest, the longest string ids, which every comparison reads nearly to
+    /// the end, at ~1,100 taken or joined and ~2,100 locked or unlocked, since a lock copies each id.
+    /// Set above that. Charged by [`non_fungible_move_points`].
+    pub const PER_NON_FUNGIBLE_ID_MOVED: u64 = 4_000;
     /// One stealth/confidential output: its share of the aggregated bulletproof range proof
     /// (~0.68ms measured marginal, no view key). Outputs on a resource with a view key add
     /// [`Self::PER_OUTPUT_VIEWABLE_SURCHARGE`] each.

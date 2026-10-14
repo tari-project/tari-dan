@@ -19,6 +19,7 @@ use tari_template_abi::CallInfo;
 use tari_template_lib::{
     args::{ConsensusAction, ConsensusInvokeArg, InvokeResult},
     types::{
+        Amount,
         BinaryTag,
         ComponentAddress,
         Metadata,
@@ -715,4 +716,60 @@ fn changing_access_or_owner_rules_leaves_the_state_alone() {
             vec![],
         );
     }
+}
+
+/// Withdraws all `count` NFT faucet tokens `account` holds and deposits them back.
+fn withdraw_and_deposit_nfts(account: ComponentAddress, key: &RistrettoSecretKey, count: u64) -> Transaction {
+    Transaction::builder_localnet(Epoch(1))
+        .call_method(account, "withdraw", args![
+            NFT_FAUCET_RESOURCE_ADDRESS,
+            Amount::from(count)
+        ])
+        .put_last_instruction_output_on_workspace("nfts")
+        .call_method(account, "deposit", args![Workspace("nfts")])
+        .build_and_seal(key)
+}
+
+/// Creates a proof of every NFT faucet token `account` holds, then drops it.
+fn prove_nfts(account: ComponentAddress, key: &RistrettoSecretKey) -> Transaction {
+    Transaction::builder_localnet(Epoch(1))
+        .call_method(account, "create_proof_for_resource", args![NFT_FAUCET_RESOURCE_ADDRESS])
+        .put_last_instruction_output_on_workspace("proof")
+        .drop_all_proofs_in_workspace()
+        .build_and_seal(key)
+}
+
+/// Moving non-fungible ids between containers runs on the host for every id moved, while the
+/// engine calls asking for it name an amount or a bucket and are answered with an id. So each id a
+/// withdraw, a deposit or a proof moves is charged: twice for a proof, whose ids return to the vault
+/// when it is dropped.
+#[test]
+fn moving_non_fungible_ids_is_charged_per_id() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let (account, owner_proof, key) = test.create_funded_account();
+    test.execute_expect_success(deposit_nfts(account, &key, 1), vec![owner_proof.clone()]);
+    // Both amounts encode at the same width, so the withdraw's argument costs the same either way.
+    let (small, large) = (1_000u64, 10_000u64);
+
+    let mut native_points = |count: u64, transaction: Transaction| {
+        seed_nft_vault(&mut test, account, count);
+        test.execute_expect_success(transaction, vec![owner_proof.clone()])
+            .native_execution_points
+    };
+    let small_round_trip = native_points(small, withdraw_and_deposit_nfts(account, &key, small));
+    let large_round_trip = native_points(large, withdraw_and_deposit_nfts(account, &key, large));
+    let small_proof = native_points(small, prove_nfts(account, &key));
+    let large_proof = native_points(large, prove_nfts(account, &key));
+
+    let extra_moves = 2 * (large - small);
+    assert_eq!(
+        large_round_trip - small_round_trip,
+        limits::non_fungible_move_points(extra_moves),
+        "withdrawing and depositing {large} ids rather than {small} must cost exactly the difference in moves"
+    );
+    assert_eq!(
+        large_proof - small_proof,
+        limits::non_fungible_move_points(extra_moves),
+        "proving {large} ids rather than {small} must cost exactly the difference in moves"
+    );
 }

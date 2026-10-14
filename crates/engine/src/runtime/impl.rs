@@ -1155,6 +1155,21 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
             .map_err(|e| RuntimeError::SpendScriptRejected { details: Box::new(e) })
     }
 
+    /// Charges for `ids` non-fungible ids an engine call moved from one container to another. The
+    /// count is read off the container that moved, so the charge follows the move it pays for, and
+    /// a transaction that cannot cover it fails out of compute having made that one move.
+    fn charge_non_fungible_ids_moved(&self, ids: usize) -> Result<(), RuntimeError> {
+        self.tracker
+            .charge_native_execution(tari_engine_types::limits::non_fungible_move_points(ids as u64))
+    }
+
+    /// Charges for `ids` non-fungible ids an engine call locked into a new proof. They move twice:
+    /// into the proof now, and back when the proof is dropped, explicitly or with its frame. Both
+    /// moves are charged here, since a frame's proofs can be dropped where no engine call is made.
+    fn charge_non_fungible_ids_locked(&self, ids: usize) -> Result<(), RuntimeError> {
+        self.charge_non_fungible_ids_moved(ids.saturating_mul(2))
+    }
+
     /// Charges `points(input.len(), 0)` for the bytes of the CBOR in `input`, then counts its items
     /// and charges `points(0, items)` for them.
     ///
@@ -1923,7 +1938,7 @@ where
                     self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Recall)?;
                 }
 
-                self.tracker.write_with(|state_mut| {
+                let (result, moved) = self.tracker.write_with(|state_mut| {
                     let vault_lock = state_mut.write_lock_substate(arg.vault_id.into())?;
 
                     // The recall rule that authorized this action belongs to `resource_address`, so it may only
@@ -1945,15 +1960,18 @@ where
                     )?;
                     Self::emit_std_event("resource", "recall", resource_address, payload, state_mut)?;
 
+                    let moved = resource.non_fungible_token_ids().len();
                     let bucket_id = state_mut.id_provider()?.new_bucket_id()?;
                     state_mut.new_bucket(bucket_id, resource)?;
 
                     state_mut.unlock_substate(vault_lock)?;
 
-                    Ok(InvokeResult::encode(&tari_template_lib::models::Bucket::from_id(
-                        bucket_id,
-                    ))?)
-                })
+                    let bucket = tari_template_lib::models::Bucket::from_id(bucket_id);
+                    Ok::<_, RuntimeError>((InvokeResult::encode(&bucket)?, moved))
+                })?;
+                self.charge_non_fungible_ids_moved(moved)?;
+
+                Ok(result)
             },
             ResourceAction::GetNonFungible => {
                 let resource_address =
@@ -2608,7 +2626,7 @@ where
                     self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Deposit)?;
                 }
 
-                self.tracker.write_with(move |state_mut| {
+                let moved = self.tracker.write_with(move |state_mut| {
                     let bucket = state_mut.take_bucket(bucket_id)?;
                     Self::check_bucket_is_unlocked("deposit", bucket_id, &bucket)?;
 
@@ -2619,13 +2637,17 @@ where
 
                     let vault_mut = state_mut.get_vault_mut(&vault_lock)?;
 
+                    let moved = bucket.non_fungible_ids().len();
                     vault_mut.deposit(bucket)?;
 
                     state_mut.unlock_substate(resource_lock)?;
                     state_mut.unlock_substate(vault_lock)?;
 
-                    Ok(InvokeResult::unit())
-                })
+                    Ok::<_, RuntimeError>(moved)
+                })?;
+                self.charge_non_fungible_ids_moved(moved)?;
+
+                Ok(InvokeResult::unit())
             },
             VaultAction::Withdraw => {
                 let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
@@ -2682,7 +2704,7 @@ where
                         ))?;
                 }
 
-                self.tracker.write_with(|state| {
+                let (result, moved) = self.tracker.write_with(|state| {
                     let resource = state.get_resource(&resource_lock)?;
                     let maybe_view_key =
                         resource
@@ -2731,6 +2753,7 @@ where
 
                     Self::emit_std_event("vault", "withdraw", vault_id, payload, state)?;
 
+                    let moved = resource_container.non_fungible_token_ids().len();
                     let bucket_id = state.id_provider()?.new_bucket_id()?;
                     state.new_bucket(bucket_id, resource_container)?;
 
@@ -2738,8 +2761,11 @@ where
                     state.unlock_substate(resource_lock)?;
 
                     let bucket = tari_template_lib::models::Bucket::from_id(bucket_id);
-                    Ok(InvokeResult::encode(&bucket)?)
-                })
+                    Ok::<_, RuntimeError>((InvokeResult::encode(&bucket)?, moved))
+                })?;
+                self.charge_non_fungible_ids_moved(moved)?;
+
+                Ok(result)
             },
             VaultAction::GetBalance => {
                 let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
@@ -2948,17 +2974,21 @@ where
                     self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Withdraw)?;
                 }
 
-                self.tracker.write_with(|state| {
+                let (result, locked) = self.tracker.write_with(|state| {
                     let proof_id = state.id_provider()?.new_proof_id()?;
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
                     let locked_funds = vault_mut.lock_all(vault_id)?;
+                    let locked = locked_funds.non_fungible_token_ids().len();
                     state.new_proof(proof_id, locked_funds)?;
 
                     state.unlock_substate(vault_lock)?;
                     state.unlock_substate(resource_lock)?;
 
-                    Ok(InvokeResult::encode(&proof_id)?)
-                })
+                    Ok::<_, RuntimeError>((InvokeResult::encode(&proof_id)?, locked))
+                })?;
+                self.charge_non_fungible_ids_locked(locked)?;
+
+                Ok(result)
             },
             VaultAction::CreateProofByFungibleAmount => {
                 let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
@@ -2998,17 +3028,21 @@ where
                     self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Withdraw)?;
                 }
 
-                self.tracker.write_with(|state| {
+                let (result, locked) = self.tracker.write_with(|state| {
                     let proof_id = state.id_provider()?.new_proof_id()?;
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
                     let locked_funds = vault_mut.lock_by_amount(vault_id, arg.amount)?;
+                    let locked = locked_funds.non_fungible_token_ids().len();
                     state.new_proof(proof_id, locked_funds)?;
 
                     state.unlock_substate(vault_lock)?;
                     state.unlock_substate(resource_lock)?;
 
-                    Ok(InvokeResult::encode(&proof_id)?)
-                })
+                    Ok::<_, RuntimeError>((InvokeResult::encode(&proof_id)?, locked))
+                })?;
+                self.charge_non_fungible_ids_locked(locked)?;
+
+                Ok(result)
             },
             VaultAction::CreateProofByNonFungibles => {
                 let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
@@ -3048,17 +3082,21 @@ where
                     self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Withdraw)?;
                 }
 
-                self.tracker.write_with(|state| {
+                let (result, locked) = self.tracker.write_with(|state| {
                     let proof_id = state.id_provider()?.new_proof_id()?;
                     let vault_mut = state.get_vault_mut(&vault_lock)?;
                     let locked_funds = vault_mut.lock_by_non_fungible_ids(vault_id, arg.ids)?;
+                    let locked = locked_funds.non_fungible_token_ids().len();
                     state.new_proof(proof_id, locked_funds)?;
 
                     state.unlock_substate(vault_lock)?;
                     state.unlock_substate(resource_lock)?;
 
-                    Ok(InvokeResult::encode(&proof_id)?)
-                })
+                    Ok::<_, RuntimeError>((InvokeResult::encode(&proof_id)?, locked))
+                })?;
+                self.charge_non_fungible_ids_locked(locked)?;
+
+                Ok(result)
             },
             VaultAction::CreateProofByConfidentialResource => Err(RuntimeError::NotSupported {
                 details: "CreateProofByConfidentialResource not implemented".to_string(),
@@ -3169,13 +3207,17 @@ where
                 })?;
                 let amount = args.assert_one_arg()?;
 
-                self.tracker.write_with(|state| {
+                let (result, moved) = self.tracker.write_with(|state| {
                     let bucket = state.get_bucket_mut(bucket_id)?;
                     let resource = bucket.take(amount)?;
+                    let moved = resource.non_fungible_token_ids().len();
                     let bucket_id = state.new_bucket_id()?;
                     state.new_bucket(bucket_id, resource)?;
-                    Ok(InvokeResult::encode(&bucket_id)?)
-                })
+                    Ok::<_, RuntimeError>((InvokeResult::encode(&bucket_id)?, moved))
+                })?;
+                self.charge_non_fungible_ids_moved(moved)?;
+
+                Ok(result)
             },
             BucketAction::TakeConfidential => {
                 let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
@@ -3232,13 +3274,17 @@ where
                 })?;
                 let other_bucket_id = args.assert_one_arg()?;
 
-                self.tracker.write_with(|state| {
+                let (result, moved) = self.tracker.write_with(|state| {
                     let other_bucket = state.take_bucket(other_bucket_id)?;
                     Self::check_bucket_is_unlocked("join", other_bucket_id, &other_bucket)?;
+                    let moved = other_bucket.non_fungible_ids().len();
                     let bucket = state.get_bucket_mut(bucket_id)?;
                     bucket.join(other_bucket)?;
-                    Ok(InvokeResult::encode(&bucket_id)?)
-                })
+                    Ok::<_, RuntimeError>((InvokeResult::encode(&bucket_id)?, moved))
+                })?;
+                self.charge_non_fungible_ids_moved(moved)?;
+
+                Ok(result)
             },
             BucketAction::Burn => {
                 let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
@@ -3350,14 +3396,18 @@ where
                     self.invoke_resource_access_hook(auth_hook, auth_caller, ResourceAuthAction::Withdraw)?;
                 }
 
-                self.tracker.write_with(|state| {
+                let (result, locked) = self.tracker.write_with(|state| {
                     let locked_funds = state.get_bucket_mut(bucket_id)?.lock_all()?;
+                    let locked = locked_funds.non_fungible_token_ids().len();
 
                     let proof_id = state.id_provider()?.new_proof_id()?;
                     state.new_proof(proof_id, locked_funds)?;
 
-                    Ok(InvokeResult::encode(&proof_id)?)
-                })
+                    Ok::<_, RuntimeError>((InvokeResult::encode(&proof_id)?, locked))
+                })?;
+                self.charge_non_fungible_ids_locked(locked)?;
+
+                Ok(result)
             },
             BucketAction::GetNonFungibleIds => {
                 let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
