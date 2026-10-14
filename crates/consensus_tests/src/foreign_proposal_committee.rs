@@ -336,6 +336,30 @@ async fn a_block_with_an_unauthenticated_embedded_foreign_proposal_does_not_take
     );
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_foreign_proposal_from_a_peer_that_was_not_asked_for_it_is_discarded() {
+    setup_logger();
+    let (mut test, replica, leader, proposal) = withheld_embedding_proposal(true).await;
+
+    // The replica only ever asks members of the foreign committee, so a copy from a local member is unsolicited
+    let foreign_proposal = proposal
+        .foreign_proposals
+        .first()
+        .expect("the captured proposal embeds a foreign proposal")
+        .clone();
+    let block_id = foreign_proposal.calculate_block_id();
+    test.get_validator(&replica)
+        .tx_inbound_message
+        .send((leader, HotstuffMessage::ForeignProposal(foreign_proposal.into())))
+        .await
+        .unwrap();
+    sleep(Duration::from_secs(3)).await;
+
+    let stored = is_foreign_proposal_stored(&test, &replica, &[block_id]);
+    test.stop();
+    assert!(!stored, "replica processed a foreign proposal it did not request");
+}
+
 /// The same proposal, with every pledged component's state replaced.
 fn with_substituted_pledge_values(proposal: &ForeignProposal) -> ForeignProposal {
     let mut pledge = serde_json::to_value(proposal.block_pledge()).unwrap();

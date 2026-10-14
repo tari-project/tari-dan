@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    collections::{HashMap, HashSet, hash_map::Entry},
+    collections::{HashMap, HashSet, VecDeque, hash_map::Entry},
     time::{Duration, Instant},
 };
 
@@ -53,6 +53,8 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// Notifications a peer may have awaiting a foreign proposal at once. An honest notifier has one outstanding per
 /// recently committed foreign block that involves us, each normally answered well within [`REQUEST_TIMEOUT`].
 pub const MAX_PENDING_REQUESTS_PER_NOTIFIER: usize = 32;
+/// Requests beyond a notifier's allowance whose replies are still accepted, across all notifiers.
+const MAX_UNRETRIED_REQUESTS: usize = 256;
 /// The same deadline the requester applies, so a permit is never held for a response its asker has given up on.
 const PROPOSAL_RESPONSE_TIMEOUT: Duration = REQUEST_TIMEOUT;
 
@@ -86,6 +88,11 @@ where TConsensusSpec: ConsensusSpec
                 PROPOSAL_RESPONSE_TIMEOUT,
             ),
         }
+    }
+
+    /// Whether this node asked `from` for the foreign proposal of `block_id` and is still waiting for it.
+    pub fn is_awaiting_reply(&self, block_id: &BlockId, from: &TConsensusSpec::Addr) -> bool {
+        self.pending_requests.is_awaiting_reply(block_id, from)
     }
 
     pub async fn handle_received(
@@ -645,9 +652,15 @@ fn generate_transaction_commands_commit_proof_for_shard_group<TTx: StateStoreRea
 /// Requests for foreign proposals we were notified of and have not yet received. Each entry is charged to the peer
 /// whose notification created it, so that no single peer can grow the set beyond
 /// [`MAX_PENDING_REQUESTS_PER_NOTIFIER`].
+///
+/// A foreign proposal is only ever sent in reply to a request, so this is also the record of which peers may send us
+/// which foreign proposals.
 struct PendingRequests<TAddr> {
     pending: HashMap<BlockId, ForeignRequests<TAddr>>,
     num_pending_by_notifier: HashMap<TAddr, usize>,
+    /// Requests made once beyond a notifier's allowance, which are never retried. The oldest is forgotten once
+    /// [`MAX_UNRETRIED_REQUESTS`] are held, after which its reply is no longer accepted.
+    unretried: VecDeque<(BlockId, TAddr)>,
 }
 
 impl<TAddr: NodeAddressable> PendingRequests<TAddr> {
@@ -655,6 +668,7 @@ impl<TAddr: NodeAddressable> PendingRequests<TAddr> {
         Self {
             pending: HashMap::new(),
             num_pending_by_notifier: HashMap::new(),
+            unretried: VecDeque::new(),
         }
     }
 
@@ -662,14 +676,22 @@ impl<TAddr: NodeAddressable> PendingRequests<TAddr> {
         self.pending.contains_key(block_id)
     }
 
+    /// Whether `peer` was asked for the foreign proposal of `block_id` and that request is still open.
+    pub(self) fn is_awaiting_reply(&self, block_id: &BlockId, peer: &TAddr) -> bool {
+        self.pending
+            .get(block_id)
+            .is_some_and(|requests| requests.peers.contains(peer)) ||
+            self.unretried.iter().any(|(id, to)| id == block_id && to == peer)
+    }
+
     pub(self) fn num_notified_by(&self, notifier: &TAddr) -> usize {
         self.num_pending_by_notifier.get(notifier).copied().unwrap_or(0)
     }
 
     /// Records a request made in response to a notification from `notified_by` and charges it to that notifier.
-    /// Returns `false`, recording nothing, when the notifier already has [`MAX_PENDING_REQUESTS_PER_NOTIFIER`] charged
-    /// requests. Charged requests are never evicted: gossip delivers a single copy of each notification, so a
-    /// request dropped here is never made again.
+    /// Returns `false` when the notifier already has [`MAX_PENDING_REQUESTS_PER_NOTIFIER`] charged requests, in which
+    /// case the request is recorded as one that is never retried. Charged requests are never evicted: gossip delivers a
+    /// single copy of each notification, so a request dropped here is never made again.
     pub(self) fn insert(
         &mut self,
         notified_by: TAddr,
@@ -684,6 +706,10 @@ impl<TAddr: NodeAddressable> PendingRequests<TAddr> {
         }
 
         if self.num_notified_by(&notified_by) >= MAX_PENDING_REQUESTS_PER_NOTIFIER {
+            if self.unretried.len() == MAX_UNRETRIED_REQUESTS {
+                self.unretried.pop_front();
+            }
+            self.unretried.push_back((block_id, requested_from));
             return false;
         }
 
@@ -718,6 +744,7 @@ impl<TAddr: NodeAddressable> PendingRequests<TAddr> {
         if let Some(notifier) = item.as_ref().and_then(|requests| requests.charged_to.as_ref()) {
             self.release_notifier(notifier);
         }
+        self.unretried.retain(|(id, _)| id != block_id);
         if self.pending.capacity() >= 1000 {
             self.pending.shrink_to_fit();
         }
@@ -863,5 +890,65 @@ mod tests {
 
         pending.remove(&block_id(0));
         assert_eq!(pending.num_notified_by(&notifier), 1);
+    }
+
+    #[test]
+    fn only_a_peer_that_was_asked_is_awaited_until_the_proposal_arrives() {
+        let mut pending = PendingRequests::<String>::new();
+        let (asked, retried, other) = ("foreign1".to_string(), "foreign2".to_string(), "foreign3".to_string());
+        pending.insert("notifier".to_string(), asked.clone(), block_id(0), committee_info());
+
+        assert!(pending.is_awaiting_reply(&block_id(0), &asked));
+        assert!(!pending.is_awaiting_reply(&block_id(0), &other));
+        assert!(!pending.is_awaiting_reply(&block_id(1), &asked));
+
+        let (id, requests) = pending.drain_timed_out(Duration::ZERO).pop().unwrap();
+        pending.insert_retry(id, requests, retried.clone());
+        assert!(pending.is_awaiting_reply(&block_id(0), &asked));
+        assert!(pending.is_awaiting_reply(&block_id(0), &retried));
+
+        pending.remove(&block_id(0));
+        assert!(!pending.is_awaiting_reply(&block_id(0), &asked));
+        assert!(!pending.is_awaiting_reply(&block_id(0), &retried));
+    }
+
+    #[test]
+    fn a_request_beyond_the_notifiers_allowance_is_awaited_but_not_retried() {
+        let mut pending = PendingRequests::<String>::new();
+        let notifier = "notifier".to_string();
+        let foreign = "foreign".to_string();
+        for seed in 0..MAX_PENDING_REQUESTS_PER_NOTIFIER {
+            pending.insert(notifier.clone(), foreign.clone(), block_id(seed), committee_info());
+        }
+        let over_cap = block_id(MAX_PENDING_REQUESTS_PER_NOTIFIER);
+        assert!(!pending.insert(notifier.clone(), foreign.clone(), over_cap, committee_info()));
+
+        assert!(pending.is_awaiting_reply(&over_cap, &foreign));
+        assert!(!pending.is_awaiting_reply(&over_cap, &notifier));
+        assert!(
+            pending
+                .drain_timed_out(Duration::ZERO)
+                .iter()
+                .all(|(id, _)| *id != over_cap)
+        );
+
+        pending.remove(&over_cap);
+        assert!(!pending.is_awaiting_reply(&over_cap, &foreign));
+    }
+
+    #[test]
+    fn the_oldest_unretried_request_is_forgotten_once_the_limit_is_reached() {
+        let mut pending = PendingRequests::<String>::new();
+        let notifier = "notifier".to_string();
+        let foreign = "foreign".to_string();
+        let num_requests = MAX_PENDING_REQUESTS_PER_NOTIFIER + MAX_UNRETRIED_REQUESTS + 1;
+        for seed in 0..num_requests {
+            pending.insert(notifier.clone(), foreign.clone(), block_id(seed), committee_info());
+        }
+
+        assert!(!pending.is_awaiting_reply(&block_id(MAX_PENDING_REQUESTS_PER_NOTIFIER), &foreign));
+        assert!(pending.is_awaiting_reply(&block_id(MAX_PENDING_REQUESTS_PER_NOTIFIER + 1), &foreign));
+        assert!(pending.is_awaiting_reply(&block_id(num_requests - 1), &foreign));
+        assert_eq!(pending.unretried.len(), MAX_UNRETRIED_REQUESTS);
     }
 }
