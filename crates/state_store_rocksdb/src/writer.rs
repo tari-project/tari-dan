@@ -1134,7 +1134,6 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
 
     fn parked_block_remove_missing_transaction(
         &mut self,
-        _current_height: NodeHeight,
         transaction_id: &TransactionId,
     ) -> Result<Option<(Block, Vec<ForeignProposal>)>, StorageError> {
         const OPERATION: &str = "missing_transactions_insert";

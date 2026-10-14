@@ -398,7 +398,6 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
 
     pub fn update_parked_blocks<'a, I: IntoIterator<Item = &'a TransactionId> + ExactSizeIterator>(
         &self,
-        current_height: NodeHeight,
         transaction_ids: I,
     ) -> Result<(Vec<ProposalMessage>, Vec<ForeignProposalMessage>), HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "update_local_parked_blocks").with_iterations(transaction_ids.len());
@@ -409,7 +408,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             for transaction_id in transaction_ids {
                 debug!(target: LOG_TARGET, "🔍 Checking if transaction {} unparks any blocks", transaction_id);
                 if let Some((unparked_block, foreign_proposals)) =
-                    tx.parked_block_remove_missing_transaction(current_height + NodeHeight(1), transaction_id)?
+                    tx.parked_block_remove_missing_transaction(transaction_id)?
                 {
                     info!(target: LOG_TARGET, "♻️ all transactions for local block {unparked_block} are ready for consensus");
 

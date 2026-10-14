@@ -664,7 +664,6 @@ pub trait StateStoreWriteTransaction {
 
     fn parked_block_remove_missing_transaction(
         &mut self,
-        height: NodeHeight,
         transaction_id: &TransactionId,
     ) -> Result<Option<(Block, Vec<ForeignProposal>)>, StorageError>;
 

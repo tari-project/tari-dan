@@ -62,14 +62,12 @@ fn missing_transactions_operations(db: impl StateStore) {
     tx.parked_block_insert(&block1, &[], missing_transaction_ids).unwrap();
 
     // The block stays parked while it is still waiting on atom2
-    let unparked = tx
-        .parked_block_remove_missing_transaction(block1.height(), atom1.id())
-        .unwrap();
+    let unparked = tx.parked_block_remove_missing_transaction(atom1.id()).unwrap();
     assert!(unparked.is_none());
 
     // The last missing transaction unparks the block
     let (unparked, foreign_proposals) = tx
-        .parked_block_remove_missing_transaction(block1.height(), atom2.id())
+        .parked_block_remove_missing_transaction(atom2.id())
         .unwrap()
         .expect("block should be unparked once no transactions are missing");
     assert_eq!(unparked.id(), block1.id());
@@ -89,7 +87,7 @@ fn parked_block_at(parent: &Block, epoch: Epoch, height: NodeHeight, command: Co
         epoch,
         parent.shard_group(),
         Default::default(),
-        [command].into_iter().collect(),
+        BlockCommands::init([command]).unwrap(),
         Default::default(),
         Default::default(),
         SchnorrSignatureBytes::zero(),
@@ -142,16 +140,12 @@ fn parked_blocks_are_removed_up_to_a_height() {
     }
     // Their missing-transaction records went with them, so the transactions arriving unpark nothing
     for atom in &atoms[..2] {
-        assert!(
-            tx.parked_block_remove_missing_transaction(NodeHeight(0), atom.id())
-                .unwrap()
-                .is_none()
-        );
+        assert!(tx.parked_block_remove_missing_transaction(atom.id()).unwrap().is_none());
     }
 
     // Unparking a block releases its proposer's slot at that height
     let (unparked, _) = tx
-        .parked_block_remove_missing_transaction(NodeHeight(0), atoms[2].id())
+        .parked_block_remove_missing_transaction(atoms[2].id())
         .unwrap()
         .expect("block should be unparked once no transactions are missing");
     assert_eq!(unparked.id(), blocks[2].id());
