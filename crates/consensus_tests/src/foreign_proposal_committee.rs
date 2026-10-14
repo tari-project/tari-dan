@@ -21,6 +21,7 @@ use tari_consensus_types::{BlockId, Decision};
 use tari_engine_types::substate::{Substate, SubstateValue};
 use tari_ootle_common_types::{
     Epoch,
+    ProtocolVersion,
     ShardGroup,
     SubstateLockType,
     VotePower,
@@ -422,6 +423,8 @@ fn with_substituted_pledge_values(proposal: &ForeignProposal) -> ForeignProposal
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_foreign_proposal_is_not_stored_with_pledge_values_its_evidence_does_not_commit_to() {
+    // Pledge values are bound by a block's command hash from V2.
+    const V2_EPOCH: Epoch = ProtocolVersion::activation_epoch(Network::LocalNet, ProtocolVersion::V2).unwrap();
     setup_logger();
     let output_member = TestAddress::new("2");
     let captured = Arc::new(Mutex::new(None::<(TestAddress, ForeignProposal)>));
@@ -450,7 +453,7 @@ async fn a_foreign_proposal_is_not_stored_with_pledge_values_its_evidence_does_n
     let inputs = test.create_substates_on_vns(TestVnDestination::Committee(0), 1);
     let outputs = test.build_outputs_for_committee(1, 1);
     let tx = build_transaction_from(
-        Transaction::builder_localnet(Epoch(1))
+        Transaction::builder_localnet(V2_EPOCH)
             .with_inputs(inputs.iter().cloned().map(|i| i.into()))
             .build_and_seal(&PrivateKey::default()),
     );
@@ -467,7 +470,7 @@ async fn a_foreign_proposal_is_not_stored_with_pledge_values_its_evidence_does_n
     );
     test.send_transaction_to_destination(TestVnDestination::All, tx.clone())
         .await;
-    test.start_epoch(Epoch(1)).await;
+    test.start_epoch(V2_EPOCH).await;
 
     let (sender, genuine) = timeout(Duration::from_secs(60), async {
         loop {

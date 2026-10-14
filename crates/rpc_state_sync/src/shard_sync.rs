@@ -871,7 +871,8 @@ mod tests {
         ));
     }
 
-    const NETWORK: Network = Network::LocalNet;
+    /// Launched at V2, so a stream is held to the proof schedule from genesis.
+    const NETWORK: Network = Network::Igor;
     const NUM_PRESHARDS: NumPreshards = NumPreshards::P256;
     const EPOCH: Epoch = Epoch(1);
     const UP_VERSION_LOOKBACK: Version = 100;

@@ -71,6 +71,20 @@ impl ProtocolVersion {
             .expect("activation schedule is never empty")
     }
 
+    /// The epoch at which `version` activates on `network`, or `None` if `network` never runs under it.
+    pub const fn activation_epoch(network: Network, version: Self) -> Option<Epoch> {
+        let activations = Self::activations(network);
+        let mut i = 0;
+        while i < activations.len() {
+            let (at, v) = activations[i];
+            if v as u32 == version as u32 {
+                return Some(at);
+            }
+            i += 1;
+        }
+        None
+    }
+
     pub const fn as_u32(self) -> u32 {
         self as u32
     }
@@ -281,15 +295,28 @@ mod tests {
     }
 
     #[test]
-    fn every_network_but_esmeralda_starts_at_v2() {
-        for network in all_networks() {
-            let expected = if network == Network::Esmeralda {
-                ProtocolVersion::V0
-            } else {
-                ProtocolVersion::V2
-            };
-            assert_eq!(ProtocolVersion::genesis(network), expected, "{network}");
+    fn mainnet_stagenet_nextnet_and_igor_start_at_v2() {
+        for network in [Network::MainNet, Network::StageNet, Network::NextNet, Network::Igor] {
+            assert_eq!(ProtocolVersion::genesis(network), ProtocolVersion::V2, "{network}");
         }
+    }
+
+    #[test]
+    fn a_version_activates_at_its_scheduled_epoch() {
+        for network in all_networks() {
+            for (at, version) in ProtocolVersion::activations(network) {
+                assert_eq!(
+                    ProtocolVersion::activation_epoch(network, *version),
+                    Some(*at),
+                    "{network}"
+                );
+                assert_eq!(ProtocolVersion::at(network, *at), *version, "{network}");
+            }
+        }
+        assert_eq!(
+            ProtocolVersion::activation_epoch(Network::MainNet, ProtocolVersion::V0),
+            None
+        );
     }
 
     #[test]

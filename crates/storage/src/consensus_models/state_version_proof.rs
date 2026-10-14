@@ -235,8 +235,8 @@ mod tests {
 
     use super::*;
 
-    /// A commit proof for a block of `network` at epoch 1 under `protocol_version` whose state root holds the leaf of
-    /// `shard` at `shard_root` and `state_version`, with the proof of that leaf.
+    /// A commit proof for a block of `network` at the epoch `protocol_version` activates whose state root holds the
+    /// leaf of `shard` at `shard_root` and `state_version`, with the proof of that leaf.
     fn proof_of_leaf(
         network: Network,
         protocol_version: ProtocolVersion,
@@ -257,7 +257,9 @@ mod tests {
             parent_id: FixedHash::zero(),
             justify_id: FixedHash::zero(),
             height: 1,
-            epoch: 1,
+            epoch: ProtocolVersion::activation_epoch(network, protocol_version)
+                .unwrap()
+                .as_u64(),
             epoch_hash: FixedHash::zero(),
             shard_group: tari_sidechain::ShardGroup {
                 start: 1,
@@ -283,8 +285,7 @@ mod tests {
         let root = TreeHash::new([7; 32]);
         let shard = Shard::from(3u32);
         let network = Network::LocalNet;
-        let protocol_version = ProtocolVersion::genesis(network);
-        let (commit_proof, leaf_proof) = proof_of_leaf(network, protocol_version, shard, root, 64);
+        let (commit_proof, leaf_proof) = proof_of_leaf(network, ProtocolVersion::V2, shard, root, 64);
         verify_state_version_leaf(network, &commit_proof, shard, 64, &root, &leaf_proof).unwrap();
         assert!(matches!(
             verify_state_version_leaf(network, &commit_proof, shard, 96, &root, &leaf_proof),
@@ -297,7 +298,6 @@ mod tests {
     fn a_v2_leaf_proves_its_own_shard_only() {
         let root = TreeHash::new([7; 32]);
         let network = Network::LocalNet;
-        assert_eq!(ProtocolVersion::genesis(network), ProtocolVersion::V2);
         let (commit_proof, leaf_proof) = proof_of_leaf(network, ProtocolVersion::V2, Shard::from(3u32), root, 64);
         assert!(matches!(
             verify_state_version_leaf(network, &commit_proof, Shard::from(4u32), 64, &root, &leaf_proof),

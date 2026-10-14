@@ -58,7 +58,8 @@ use tari_state_tree::{
     Version,
 };
 
-const EPOCH: Epoch = Epoch(1);
+/// The first V2 epoch, so that every epoch from it on runs V2.
+const EPOCH: Epoch = ProtocolVersion::activation_epoch(NETWORK, ProtocolVersion::V2).unwrap();
 
 /// The tip `commit_proof`'s header describes, taken at its word: these commit proofs are not signed.
 fn unvalidated_tip(commit_proof: &CommittedBlockProof) -> VerifiedBlockTip {

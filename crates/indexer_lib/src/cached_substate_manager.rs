@@ -1617,7 +1617,7 @@ mod tests {
         let manager = CachedSubstateManager::new(
             Network::LocalNet,
             NumPreshards::P256,
-            FakeEpochManager(Arc::new(committee), None, Arc::default(), Epoch(1)),
+            FakeEpochManager(Arc::new(committee), None, Arc::default(), PROOF_EPOCH),
             FakeClient(network.clone(), None),
             FakeCache::default(),
         );
@@ -1820,11 +1820,11 @@ mod tests {
     ) -> tari_sidechain::SidechainBlockHeader {
         tari_sidechain::SidechainBlockHeader {
             network: Network::LocalNet.as_byte(),
-            protocol_version: tari_engine_types::ProtocolVersion::at(Network::LocalNet, Epoch(1)).as_u32(),
+            protocol_version: tari_engine_types::ProtocolVersion::at(Network::LocalNet, PROOF_EPOCH).as_u32(),
             parent_id: FixedHash::zero(),
             justify_id: FixedHash::zero(),
             height,
-            epoch: 1,
+            epoch: PROOF_EPOCH.as_u64(),
             epoch_hash: FixedHash::zero(),
             shard_group: tari_sidechain::ShardGroup {
                 start: shard_group.start().as_u32(),
@@ -1859,7 +1859,7 @@ mod tests {
         };
 
         let num_preshards = NumPreshards::P256;
-        let protocol_version = tari_engine_types::ProtocolVersion::at(Network::LocalNet, Epoch(1));
+        let protocol_version = tari_engine_types::ProtocolVersion::at(Network::LocalNet, PROOF_EPOCH);
         let id = component_id(1);
         let live = VersionedSubstateId::new(id.clone(), SubstateVersion::ZERO);
         let shard = live.to_substate_address().to_shard(num_preshards);
@@ -1968,7 +1968,7 @@ mod tests {
             memory_store::MemoryTreeStore,
         };
 
-        let protocol_version = tari_engine_types::ProtocolVersion::at(Network::LocalNet, Epoch(1));
+        let protocol_version = tari_engine_types::ProtocolVersion::at(Network::LocalNet, PROOF_EPOCH);
         let id = SubstateId::Template(PublishedTemplateAddress::from_hash(
             tari_template_lib_types::Hash32::from_array([4; 32]),
         ));
@@ -2236,7 +2236,9 @@ mod tests {
     }
 
     /// The epoch every test commit proof is of.
-    const PROOF_EPOCH: Epoch = Epoch(1);
+    const PROOF_EPOCH: Epoch =
+        tari_engine_types::ProtocolVersion::activation_epoch(Network::LocalNet, tari_engine_types::ProtocolVersion::V2)
+            .unwrap();
 
     #[tokio::test]
     async fn a_down_whose_earlier_root_has_no_known_committee_is_unproven() {

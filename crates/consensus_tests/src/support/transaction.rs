@@ -7,6 +7,7 @@ use tari_common_types::types::PrivateKey;
 use tari_consensus_types::Decision;
 use tari_engine_types::{
     Epoch,
+    ProtocolVersion,
     ValidatorFeeWithdrawal,
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     component::{Component, ComponentBody, ComponentHeader},
@@ -17,7 +18,7 @@ use tari_engine_types::{
 };
 use tari_ootle_common_types::{InputDeclaration, LockIntent, SubstateVersion};
 use tari_ootle_storage::consensus_models::{TransactionRecord, VersionedSubstateIdLockIntent};
-use tari_ootle_transaction::{Transaction, TransactionIntent, args};
+use tari_ootle_transaction::{Network, Transaction, TransactionIntent, args};
 use tari_template_lib_types::{SubstateOwnerRule, TransactionReceiptAddress};
 
 use crate::support::{TEST_NUM_PRESHARDS, committee_number_to_shard_group, helpers::random_substate_in_shard_group};
@@ -179,9 +180,12 @@ pub fn random_substates_ids_for_committee_generator(
     })
 }
 
+/// Transactions stay valid through the first V2 epoch, so a test can commit them under every protocol version.
+const MAX_EPOCH: Epoch = ProtocolVersion::activation_epoch(Network::LocalNet, ProtocolVersion::V2).unwrap();
+
 pub fn build_transaction(inputs: Vec<InputDeclaration>) -> TransactionRecord {
     let k = PrivateKey::default();
-    let tx = Transaction::builder_localnet(Epoch(1))
+    let tx = Transaction::builder_localnet(MAX_EPOCH)
         .call_function(Default::default(), "foo", args![])
         .with_inputs(inputs)
         .build_and_seal(&k);

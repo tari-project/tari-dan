@@ -12,6 +12,7 @@ use tari_ootle_common_types::{
     Epoch,
     InputDeclaration,
     NodeHeight,
+    ProtocolVersion,
     SubstateLockType,
     SubstateVersion,
     optional::Optional,
@@ -167,10 +168,13 @@ async fn check_state_transitions() {
     test.assert_clean_shutdown().await;
 }
 
-/// Commits a few transactions on a single validator in epoch 1, keeping `state_history_length` versions of each
-/// shard's history, then stops it. With `consume_outputs`, a later transaction takes down the first one's outputs, so
-/// their shards move again.
-async fn commit_state_in_epoch_one(state_history_length: Option<u64>, consume_outputs: bool) -> Test {
+/// The first V2 epoch.
+const V2_EPOCH: Epoch = ProtocolVersion::activation_epoch(Network::LocalNet, ProtocolVersion::V2).unwrap();
+
+/// Commits a few transactions on a single validator in the first V2 epoch, keeping `state_history_length` versions of
+/// each shard's history, then stops it. With `consume_outputs`, a later transaction takes down the first one's outputs,
+/// so their shards move again.
+async fn commit_state_in_a_v2_epoch(state_history_length: Option<u64>, consume_outputs: bool) -> Test {
     setup_logger();
     let mut test = Test::builder()
         .modify_config(|config_mut| {
@@ -187,7 +191,7 @@ async fn commit_state_in_epoch_one(state_history_length: Option<u64>, consume_ou
         .await;
     let (create, _, outputs) = test.send_transaction_to_all(Decision::Commit, 100, 1, 10).await;
     let (other, _, _) = test.send_transaction_to_all(Decision::Commit, 200, 1, 1).await;
-    test.start_epoch(Epoch(1)).await;
+    test.start_epoch(V2_EPOCH).await;
     commit_transactions(&mut test, &[*create.id(), *other.id()]).await;
 
     if consume_outputs {
@@ -196,7 +200,7 @@ async fn commit_state_in_epoch_one(state_history_length: Option<u64>, consume_ou
             .map(|output| InputDeclaration::write_versioned(output, SubstateVersion::ZERO))
             .collect::<Vec<_>>();
         let transaction = build_transaction_from(
-            Transaction::builder_localnet(Epoch(1))
+            Transaction::builder_localnet(V2_EPOCH)
                 .with_inputs(inputs.clone())
                 .build_and_seal(&Default::default()),
         );
@@ -300,7 +304,7 @@ fn proof_blocks<TTx: StateStoreReadTransaction>(tx: &TTx) -> HashMap<(Shard, Ver
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn every_committed_state_version_is_provable_against_its_block() {
-    let test = commit_state_in_epoch_one(None, false).await;
+    let test = commit_state_in_a_v2_epoch(None, false).await;
     test.get_validator(&TestAddress::new("1"))
         .state_store
         .with_read_tx(|tx| {
@@ -317,14 +321,16 @@ async fn every_committed_state_version_is_provable_against_its_block() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn committed_state_versions_stay_provable_after_their_blocks_are_pruned() {
     const STATE_HISTORY: u64 = 0;
-    let test = commit_state_in_epoch_one(Some(STATE_HISTORY), true).await;
+    let test = commit_state_in_a_v2_epoch(Some(STATE_HISTORY), true).await;
     let store = &test.get_validator(&TestAddress::new("1")).state_store;
     let committed = store
         .with_read_tx(|tx| Ok::<_, StorageError>(proof_blocks(tx)))
         .unwrap();
 
-    // Far enough past epoch 1 that every retention window has passed.
-    store.with_write_tx(|tx| tx.epoch_cleanup(Epoch(100))).unwrap();
+    // Far enough past the committed epoch that every retention window has passed.
+    store
+        .with_write_tx(|tx| tx.epoch_cleanup(V2_EPOCH + Epoch(100)))
+        .unwrap();
     store
         .with_write_tx(|tx| tx.state_tree_nodes_clear_stale(TEST_NUM_PRESHARDS, usize::MAX))
         .unwrap();
