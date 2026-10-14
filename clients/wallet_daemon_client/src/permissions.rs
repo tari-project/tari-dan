@@ -425,7 +425,6 @@ pub struct Claims {
     /// Random per `webrtc.start` call, so two connected peers are told apart:
     /// each may act only on the wallet locks its own session created.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub delegation_id: Option<u64>,
 }
 

@@ -14,5 +14,5 @@ export type Claims = {
    * Random per `webrtc.start` call, so two connected peers are told apart:
    * each may act only on the wallet locks its own session created.
    */
-  delegation_id: number | null;
+  delegation_id?: bigint | null;
 };
