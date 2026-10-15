@@ -58,9 +58,9 @@ mod template {
                  {current_epoch} may activate at is {earliest}"
             );
 
-            // A node that joined by state sync after the previous epoch opened has no record of its
-            // rate, and resolves a foreign proposal from it from this schedule, so the entry in force
-            // there stays.
+            // Consensus reads this schedule only to open an epoch: the end-of-epoch block resolves the
+            // next one, and a node starting consensus resolves the epoch it starts in. Neither opens an
+            // epoch before the one this call executes in, so every entry they can still ask for survives.
             prune_before(&mut self.schedule, current_epoch.saturating_sub(1));
             schedule_change(&mut self.schedule, BurnRateChange {
                 activation_epoch,
