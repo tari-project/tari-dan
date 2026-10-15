@@ -461,13 +461,16 @@ pub const fn engine_response_points(bytes: u64, items: u64) -> u64 {
 /// of them tags of substate addresses and the other well-known types the engine indexes, before
 /// the state is read.
 ///
-/// Every call on a component — a method call, from a transaction or a template, a template upgrade,
-/// a resource auth hook acting on the caller's state — has the engine walk the component's state
-/// outside the Wasmer meter: to count its items, to index the substates it holds and to bring them
-/// into the new frame's scope. The call names only the component, and the method need not read the
-/// state at all, so the load is priced by what the state holds. Indexing decodes each reference
-/// and inserts it into the scope, at many times the cost of walking an item, so references are
-/// priced on their own.
+/// Every call on a component — a method call, from a transaction or a template, or a template
+/// upgrade — has the engine walk the component's state outside the Wasmer meter: to count its
+/// items, to index the substates it holds and to bring them into the new frame's scope. The call
+/// names only the component, and the method need not read the state at all, so the load is priced
+/// by what the state holds. Indexing decodes each reference and inserts it into the scope, at many
+/// times the cost of walking an item, so references are priced on their own.
+///
+/// A resource auth hook acting on the caller's state is charged the same for counting and copying
+/// that state into the hook's arguments. The hook's call then pays for decoding and indexing them
+/// as a cross-template call's arguments, at [`engine_arg_points`].
 ///
 /// Measured with `cargo run -p tari_engine --release --example component_load_points_calibrate`,
 /// which times method calls on components whose states fill `max_internal_call_size` in each item
@@ -510,8 +513,9 @@ impl NativeExecutionPoints {
     pub const PER_COMPONENT_STATE_ITEM: u64 = 150;
     /// Each substate address, or other type the engine indexes, in the state of a component a call
     /// loads, on top of [`Self::PER_COMPONENT_STATE_ITEM`] for its items. Distinct component,
-    /// resource and vault addresses measure at ~1,100-1,210 points each, and non-fungible addresses
-    /// at ~500. Set above those. Charged by [`component_load_points`].
+    /// resource and vault addresses measure at ~1,400-1,510 points each, the two items making each
+    /// up included, and non-fungible addresses at ~1,100. Set so an address and its items are
+    /// charged above twice that. Charged by [`component_load_points`].
     pub const PER_COMPONENT_STATE_REFERENCE: u64 = 2_800;
     /// One ElGamal (DLEQ) value proof. It verifies two Schnorr-style equations over four decompressed
     /// points rather than one, so it is priced at double the mask-knowledge variant.

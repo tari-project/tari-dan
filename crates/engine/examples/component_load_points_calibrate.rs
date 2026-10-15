@@ -251,11 +251,11 @@ fn main() {
         let points = ms * rate;
         let charged = native - empty_native;
         assert_eq!(charged as u64, limits::component_load_points(items, references));
-        // A shape of references is shown per reference, net of its items' charge.
+        // A shape of references is shown per reference, the items making it up included.
         let per_each = if references == 0 {
             points / items.max(1) as f64
         } else {
-            (points - limits::component_load_points(items, 0) as f64) / references as f64
+            points / references as f64
         };
         println!(
             "{label:<24} {items:>8} {references:>8} {ms:>10.3} {per_each:>12.1} {:>9.2}x",
