@@ -15,6 +15,8 @@ mod dummy_fill_anchor;
 #[cfg(test)]
 mod epoch_change;
 #[cfg(test)]
+mod epoch_end_drain;
+#[cfg(test)]
 mod extends_justify;
 #[cfg(test)]
 mod foreign_prepare_timeout;

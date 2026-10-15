@@ -338,10 +338,12 @@ pub trait StateStoreReadTransaction: Sized {
     /// applied. Records are read in transaction id order from the first id at or after `start_id`, wrapping around
     /// to the lowest id, until `max_records` have been offered, `max_reads` records have been read (ready or not), or
     /// every record has been read once.
+    #[expect(clippy::too_many_arguments)]
     fn transaction_pool_for_each_ready<F>(
         &self,
         block_id: &BlockId,
         epoch: Epoch,
+        abort_waiting_prepared: bool,
         start_id: &TransactionId,
         max_records: usize,
         max_reads: usize,
@@ -360,6 +362,10 @@ pub trait StateStoreReadTransaction: Sized {
     /// Returns true as soon as one pool record satisfies `predicate`. Records with a lock conflict are never offered to
     /// `predicate` when `skip_lock_conflicted` is set.
     fn transaction_pool_any<F>(&self, skip_lock_conflicted: bool, predicate: F) -> Result<bool, StorageError>
+    where F: FnMut(&TransactionPoolRecord) -> bool;
+    /// Returns true as soon as one pool record, with the pending updates in the chain ending at `block_id` applied,
+    /// satisfies `predicate`.
+    fn transaction_pool_any_in_chain<F>(&self, block_id: &BlockId, predicate: F) -> Result<bool, StorageError>
     where F: FnMut(&TransactionPoolRecord) -> bool;
 
     //---------------------------------- Substates --------------------------------------------//

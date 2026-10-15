@@ -50,6 +50,7 @@ use crate::{
         HotstuffConfig,
         ProposalValidationError,
         abort_if_local_prepared_expired,
+        abort_local_prepared_for_epoch_end,
         apply_leader_fee_to_substate_store,
         block_change_set::{BlockDecision, ProposedBlockChangeSet},
         calculate_state_merkle_root,
@@ -128,6 +129,9 @@ where TConsensusSpec: ConsensusSpec
         // Used to ratify what an end-of-epoch block commits the next epoch to before voting. Where this node does
         // not know a value, it cannot ratify it and abstains.
         local_next_epoch: LocalNextEpochView,
+        // True if the local oracle reports a next epoch with a different number of committees, which permits
+        // aborting a transaction from LocalPrepared (see `abort_local_prepared_for_epoch_end`).
+        next_epoch_changes_layout: bool,
         change_set: &mut ProposedBlockChangeSet,
     ) -> Result<BlockDecision, HotStuffError> {
         let _timer =
@@ -188,6 +192,7 @@ where TConsensusSpec: ConsensusSpec
                 proposer_claim_public_key_bytes,
                 can_propose_epoch_end,
                 local_next_epoch,
+                next_epoch_changes_layout,
                 change_set,
             )?;
         } else {
@@ -258,6 +263,7 @@ where TConsensusSpec: ConsensusSpec
         proposer_claim_public_key_bytes: &RistrettoPublicKeyBytes,
         can_propose_epoch_end: bool,
         local_next_epoch: LocalNextEpochView,
+        next_epoch_changes_layout: bool,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
     ) -> Result<(), HotStuffError> {
         if let Some(reason) = check_no_commands_after_epoch_end(tx, parent, block)? {
@@ -345,6 +351,7 @@ where TConsensusSpec: ConsensusSpec
                         block,
                         atom,
                         local_committee_info,
+                        next_epoch_changes_layout,
                         &mut substate_store,
                         proposed_block_change_set,
                     )? {
@@ -1131,6 +1138,7 @@ where TConsensusSpec: ConsensusSpec
         block: &Block,
         atom: &MultiShardAtom,
         local_committee_info: &CommitteeInfo,
+        next_epoch_changes_layout: bool,
         substate_store: &mut PendingSubstateStore<TTx>,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
     ) -> Result<Option<NoVoteReason>, HotStuffError> {
@@ -1147,7 +1155,12 @@ where TConsensusSpec: ConsensusSpec
             return Ok(Some(NoVoteReason::TransactionNotInPool));
         };
 
-        if let Some(execution) = abort_if_local_prepared_expired(&mut tx_rec, block.epoch()) {
+        let forced_abort = abort_if_local_prepared_expired(&mut tx_rec, block.epoch()).or_else(|| {
+            (atom.decision.is_abort() && next_epoch_changes_layout)
+                .then(|| abort_local_prepared_for_epoch_end(&mut tx_rec))
+                .flatten()
+        });
+        if let Some(execution) = forced_abort {
             proposed_block_change_set.add_transaction_execution(*tx_rec.id(), execution)?;
         }
 

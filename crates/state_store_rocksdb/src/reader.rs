@@ -1341,6 +1341,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         &self,
         block_id: &BlockId,
         epoch: Epoch,
+        abort_waiting_prepared: bool,
         start_id: &TransactionId,
         max_records: usize,
         max_reads: usize,
@@ -1392,7 +1393,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
             if let Some(update) = updates.remove(tx.id()) {
                 update.merge_into(&mut tx);
             }
-            if tx.is_ready_to_propose_in(epoch) {
+            if tx.is_ready_to_propose_in(epoch, abort_waiting_prepared) {
                 f(tx);
                 num_offered += 1;
                 if num_offered == max_records {
@@ -1462,6 +1463,33 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         for result in cf.value_iterator(Ordering::default(), OPERATION) {
             let rec = result?;
             if !lock_conflicted.contains(rec.id()) && predicate(&rec) {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
+    }
+
+    fn transaction_pool_any_in_chain<F>(&self, block_id: &BlockId, mut predicate: F) -> Result<bool, StorageError>
+    where F: FnMut(&TransactionPoolRecord) -> bool {
+        const OPERATION: &str = "transaction_pool_any_in_chain";
+
+        let query = self.db().cf(transaction_pool_state_update::ByBlockIdQuery)?;
+        let mut updates = HashMap::new();
+        for block_id in self.get_pending_chain_ordered(block_id)?.into_iter().rev() {
+            for result in query.query_prefix_range_iterator(Ordering::default(), &block_id) {
+                let ((_, tx_id), update) = result?;
+                updates.insert(tx_id, update);
+            }
+        }
+
+        let cf = self.db().cf(TransactionPoolCf)?;
+        for result in cf.value_iterator(Ordering::default(), OPERATION) {
+            let mut rec = result?;
+            if let Some(update) = updates.remove(rec.id()) {
+                update.merge_into(&mut rec);
+            }
+            if predicate(&rec) {
                 return Ok(true);
             }
         }

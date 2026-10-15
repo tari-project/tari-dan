@@ -146,6 +146,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         heavy_turn: bool,
         block_id: &BlockId,
         epoch: Epoch,
+        abort_waiting_prepared: bool,
     ) -> Result<Vec<TransactionPoolRecord>, TransactionPoolError> {
         if weight_budget == 0 || max_count == 0 || max_candidates == 0 || max_reads == 0 {
             return Ok(Vec::new());
@@ -153,10 +154,31 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         let mut rng = rand::rng();
         let start_id = TransactionId::new(rng.random());
         let mut sample = ProposalSample::new(weight_budget, max_count, heavy_turn);
-        tx.transaction_pool_for_each_ready(block_id, epoch, &start_id, max_candidates, max_reads, |rec| {
-            sample.offer(rec, &mut rng)
-        })?;
+        tx.transaction_pool_for_each_ready(
+            block_id,
+            epoch,
+            abort_waiting_prepared,
+            &start_id,
+            max_candidates,
+            max_reads,
+            |rec| sample.offer(rec, &mut rng),
+        )?;
         Ok(sample.into_batch(&mut rng))
+    }
+
+    /// True if any pool record, with the pending updates in the chain ending at `block_id` applied, satisfies
+    /// `predicate`.
+    pub fn any_in_chain<F>(
+        &self,
+        tx: &impl StateStoreReadTransaction,
+        block_id: &BlockId,
+        predicate: F,
+    ) -> Result<bool, TransactionPoolError>
+    where
+        F: FnMut(&TransactionPoolRecord) -> bool,
+    {
+        let found = tx.transaction_pool_any_in_chain(block_id, predicate)?;
+        Ok(found)
     }
 
     pub fn has_ready_or_pending_transaction_updates(
@@ -164,6 +186,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         tx: &impl StateStoreReadTransaction,
         block_id: &BlockId,
         epoch: Epoch,
+        abort_waiting_prepared: bool,
     ) -> Result<bool, TransactionPoolError> {
         // Check if any pending transactions have state updates that need to be applied
         if tx.transaction_pool_has_pending_state_updates(block_id)? {
@@ -182,7 +205,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         // needs further proposals until it is.
         let mut reason = None;
         let found = tx.transaction_pool_any(true, |rec| {
-            if rec.is_ready_to_propose_in(epoch) {
+            if rec.is_ready_to_propose_in(epoch, abort_waiting_prepared) {
                 reason = Some("ready to propose");
                 return true;
             }
@@ -674,9 +697,19 @@ impl TransactionPoolRecord {
             epoch.as_u64() > self.max_epoch.as_u64().saturating_add(LOCAL_PREPARED_GRACE_EPOCHS)
     }
 
-    /// True if a block in `epoch` may propose this transaction's next command.
-    pub fn is_ready_to_propose_in(&self, epoch: Epoch) -> bool {
-        self.is_ready || self.is_local_prepared_expired_at(epoch)
+    /// True if this transaction is in `LocalPrepared` with a COMMIT decision and is not ready to send its LocalAccept,
+    /// i.e. it is waiting on other shard groups.
+    pub fn is_waiting_in_local_prepared(&self) -> bool {
+        self.current_stage().is_local_prepared() && self.current_decision().is_commit() && !self.is_ready
+    }
+
+    /// True if a block in `epoch` may propose this transaction's next command. With `abort_waiting_prepared` set, a
+    /// transaction [waiting in `LocalPrepared`](Self::is_waiting_in_local_prepared) may also be proposed, for the
+    /// proposer to abort it.
+    pub fn is_ready_to_propose_in(&self, epoch: Epoch, abort_waiting_prepared: bool) -> bool {
+        self.is_ready ||
+            self.is_local_prepared_expired_at(epoch) ||
+            (abort_waiting_prepared && self.is_waiting_in_local_prepared())
     }
 
     pub fn current_local_decision(&self) -> Decision {
@@ -1298,9 +1331,25 @@ mod tests {
 
             assert!(!rec.is_local_prepared_expired_at(Epoch(1)));
             assert!(!rec.is_local_prepared_expired_at(Epoch(2)));
-            assert!(!rec.is_ready_to_propose_in(Epoch(2)));
+            assert!(!rec.is_ready_to_propose_in(Epoch(2), false));
             assert!(rec.is_local_prepared_expired_at(Epoch(3)));
-            assert!(rec.is_ready_to_propose_in(Epoch(3)));
+            assert!(rec.is_ready_to_propose_in(Epoch(3), false));
+        }
+
+        #[test]
+        fn a_waiting_prepared_transaction_is_proposable_for_abort_on_request() {
+            let mut rec = record_with_weight_and_stage(1, TransactionPoolStage::LocalPrepared);
+            rec.is_ready = false;
+            assert!(rec.is_waiting_in_local_prepared());
+            assert!(!rec.is_ready_to_propose_in(Epoch(1), false));
+            assert!(rec.is_ready_to_propose_in(Epoch(1), true));
+
+            rec.set_local_decision(Decision::Abort(AbortReason::ExecutionFailure));
+            assert!(!rec.is_waiting_in_local_prepared());
+
+            let mut rec = record_with_weight_and_stage(1, TransactionPoolStage::New);
+            rec.is_ready = false;
+            assert!(!rec.is_ready_to_propose_in(Epoch(1), true));
         }
 
         #[test]

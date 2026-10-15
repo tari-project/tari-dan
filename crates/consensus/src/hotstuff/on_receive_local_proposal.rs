@@ -396,6 +396,18 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         // instead, which names the value it is missing.
         let can_propose_epoch_end = em_epoch > current_epoch || local_next_epoch.epoch_hash.is_some();
 
+        // A leader draining cross-shard transactions before an end of epoch that changes the number of committees
+        // aborts those still waiting in LocalPrepared. Only looked up for a block that carries such an abort.
+        let has_local_accept_abort = valid_block
+            .block()
+            .commands()
+            .iter()
+            .any(|cmd| cmd.local_accept().is_some_and(|atom| atom.decision.is_abort()));
+        let next_epoch_changes_layout = has_local_accept_abort &&
+            em_epoch > current_epoch &&
+            self.epoch_manager.get_num_committees(current_epoch + Epoch(1)).await? !=
+                local_committee_info.num_committees();
+
         let mut on_ready_to_vote_on_local_block = self.on_ready_to_vote_on_local_block.clone();
 
         // Reusing the change set allocated memory (pointers in the Vec types are passed onto the thread stack).
@@ -419,6 +431,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     &proposer_claim_public_key_bytes,
                     can_propose_epoch_end,
                     local_next_epoch,
+                    next_epoch_changes_layout,
                     &mut change_set,
                 )?;
 
