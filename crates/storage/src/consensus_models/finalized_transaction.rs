@@ -205,6 +205,29 @@ mod tests {
     }
 
     #[test]
+    fn a_header_whose_root_disagrees_with_the_commands_proves_nothing() {
+        let honest = block(ProtocolVersion::V2, commands()).unwrap();
+        let other = block(
+            ProtocolVersion::V2,
+            BlockCommands::init([local_only(99, Decision::Commit)]).unwrap(),
+        )
+        .unwrap();
+        let mismatched = Block::new(
+            other.header().clone(),
+            honest.justify().clone(),
+            honest.commands().clone(),
+            None,
+        );
+
+        for seed in [2, 99] {
+            assert!(matches!(
+                mismatched.compute_transaction_proof(&tx(seed)),
+                Err(BlockError::TransactionMerkleRootMismatch { .. })
+            ));
+        }
+    }
+
+    #[test]
     fn an_empty_block_commits_to_the_empty_tree() {
         let block = block(ProtocolVersion::V2, BlockCommands::empty()).unwrap();
         assert_eq!(root_of(&block), tari_state_tree::SPARSE_MERKLE_PLACEHOLDER_HASH);

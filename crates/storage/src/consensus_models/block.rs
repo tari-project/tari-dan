@@ -99,6 +99,15 @@ pub enum BlockError {
         block_id: BlockId,
         protocol_version: ProtocolVersion,
     },
+    #[error(
+        "Block {block_id} header commits to transaction merkle root {header_root}, but its commands build \
+         {computed_root}"
+    )]
+    TransactionMerkleRootMismatch {
+        block_id: BlockId,
+        header_root: FixedHash,
+        computed_root: FixedHash,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, CborLen)]
@@ -514,14 +523,26 @@ impl Block {
 
     /// Proves against [`BlockHeader::transaction_merkle_root`] the decision this block reached for `transaction_id`,
     /// or that this block did not finalize it. Returns the leaf, if the block finalized the transaction, and the proof.
+    ///
+    /// Fails if the header's root is not the root of the tree this block's commands build, so a proof is only ever
+    /// issued against a root that matches what the block finalized.
     pub fn compute_transaction_proof(
         &self,
         transaction_id: &TransactionId,
     ) -> Result<(Option<FinalizedTransactionLeaf<'_>>, SparseMerkleProofExt), BlockError> {
-        if self.header.transaction_merkle_root().is_none() {
+        let Some(header_root) = self.header.transaction_merkle_root() else {
             return Err(BlockError::NoTransactionMerkleRoot {
                 block_id: *self.id(),
                 protocol_version: self.header.protocol_version(),
+            });
+        };
+        let tree = build_finalized_transaction_tree(&self.commands)?;
+        let computed_root = FixedHash::from(tree.root().into_array());
+        if computed_root != *header_root {
+            return Err(BlockError::TransactionMerkleRootMismatch {
+                block_id: *self.id(),
+                header_root: *header_root,
+                computed_root,
             });
         }
         let leaf = self
@@ -533,7 +554,6 @@ impl Block {
                 transaction_id: atom.id(),
                 decision: atom.decision(),
             });
-        let tree = build_finalized_transaction_tree(&self.commands)?;
         let (_, proof) = tree.get_proof(&transaction_leaf_key(transaction_id))?;
         Ok((leaf, proof))
     }

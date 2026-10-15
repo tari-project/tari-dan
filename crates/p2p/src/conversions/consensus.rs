@@ -1293,9 +1293,18 @@ mod tests {
             Command::LocalAccept(atom)
         }
 
-        fn proto_block() -> proto::consensus::Block {
+        fn local_only(seed: u8) -> Command {
+            Command::LocalOnly(LocalOnlyAtom {
+                id: TransactionId::new([seed; 32]),
+                decision: Decision::Commit,
+                transaction_fee: 0,
+                leader_fee: None,
+            })
+        }
+
+        fn block_with(commands: BlockCommands) -> consensus_models::Block {
             let shard_group = ShardGroup::all_shards(NumPreshards::P64);
-            let block = consensus_models::Block::create(
+            consensus_models::Block::create(
                 Network::LocalNet,
                 ProtocolVersion::V2,
                 BlockId::zero(),
@@ -1305,7 +1314,7 @@ mod tests {
                 Epoch(1),
                 shard_group,
                 Default::default(),
-                BlockCommands::init([local_prepare(1), local_prepare(2)]).unwrap(),
+                commands,
                 Default::default(),
                 0,
                 SchnorrSignatureBytes::zero(),
@@ -1314,8 +1323,31 @@ mod tests {
                 ShardGroupAccumulatedData::default(),
                 ExtraData::new(),
             )
-            .unwrap();
-            proto::consensus::Block::from(&block)
+            .unwrap()
+        }
+
+        fn proto_block() -> proto::consensus::Block {
+            proto::consensus::Block::from(&block_with(
+                BlockCommands::init([local_prepare(1), local_prepare(2)]).unwrap(),
+            ))
+        }
+
+        #[test]
+        fn a_decoded_header_takes_its_transaction_merkle_root_from_the_commands() {
+            let commands = BlockCommands::init([local_only(1), local_only(2)]).unwrap();
+            let honest = block_with(commands.clone());
+            let other = block_with(BlockCommands::init([local_only(99)]).unwrap());
+            let mismatched =
+                consensus_models::Block::new(other.header().clone(), honest.justify().clone(), commands, None);
+
+            let decoded = consensus_models::Block::try_from(proto::consensus::Block::from(&mismatched)).unwrap();
+
+            assert_eq!(
+                decoded.header().transaction_merkle_root(),
+                honest.header().transaction_merkle_root()
+            );
+            assert_eq!(decoded.id(), honest.id());
+            assert_ne!(decoded.id(), other.id());
         }
 
         #[test]
