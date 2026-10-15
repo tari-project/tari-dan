@@ -226,63 +226,6 @@ async fn epoch_change_unobserved_next_hash_is_not_voted() {
     test.assert_clean_shutdown().await;
 }
 
-/// A validator whose oracle has scanned the next epoch's boundary block, but has not yet applied the
-/// `EpochChanged` event that activates it, votes for the `EndEpoch`.
-///
-/// This is the counterpart to `epoch_change_unobserved_next_hash_is_not_voted`: there the validator
-/// cannot see the boundary and must abstain; here it can, and abstaining would be a self-inflicted
-/// stall. The two gates are deliberately different questions — "has the epoch ended?" and "can I
-/// verify the hash this block proposes?" — and the boundary block answers both.
-///
-/// The window is real on a lagging node: the scanner writes headers as it crosses them, while the
-/// `EpochChanged` those scans produce queue behind epoch activations that each reassign committees.
-///
-/// The test caps only `current_epoch()` for validator "1", leaving `get_epoch_hash(Epoch(2))`
-/// answering, and asserts every validator — including the capped one — reaches `Epoch(2)`.
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn epoch_change_observed_boundary_is_voted_before_activation() {
-    setup_logger();
-    let mut test = Test::builder()
-        .modify_config(|cfg| {
-            cfg.epoch_end_grace_period = Duration::from_millis(10);
-        })
-        .modify_consensus_constants(|c| {
-            c.pacemaker_block_time = Duration::from_secs(2);
-        })
-        .with_test_timeout(Duration::from_secs(60))
-        .add_committee(0, vec!["1", "2", "3", "4"])
-        .start()
-        .await;
-
-    let unactivated_addr = TestAddress::new("1");
-
-    test.start_epoch(Epoch(1)).await;
-
-    for _ in 0..3 {
-        test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
-    }
-
-    // Cap only `current_epoch()`. Validator "1"'s oracle still answers `get_epoch_hash(Epoch(2))` —
-    // it has the boundary block — but `em_epoch > current_epoch` is false, so its vote can only come
-    // from that observation.
-    test.get_validator(&unactivated_addr)
-        .epoch_manager
-        .set_oracle_current_epoch_cap(Epoch(1));
-
-    test.start_epoch(Epoch(2)).await;
-
-    for _ in 0..3 {
-        test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
-    }
-
-    wait_for_all_validators_at_epoch(&mut test, Epoch(2), Duration::from_secs(30)).await;
-
-    log::info!("✅ validator with an observed but unactivated boundary voted the EOE and advanced with the committee");
-
-    test.stop();
-    test.assert_clean_shutdown().await;
-}
-
 /// A validator that deferred its end-of-epoch processing must resume as soon as its oracle has the
 /// epoch row — not when the whole base-layer catch-up finishes.
 ///

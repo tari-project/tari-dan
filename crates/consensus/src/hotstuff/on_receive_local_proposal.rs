@@ -7,6 +7,7 @@ use log::*;
 use ootle_byte_type::ToByteType;
 use tari_common_types::types::FixedHash;
 use tari_consensus_types::{
+    BlockId,
     Decision,
     HighPc,
     LastSentVote,
@@ -19,6 +20,7 @@ use tari_epoch_manager::EpochManagerReader;
 use tari_ootle_common_types::{
     Epoch,
     ProtocolVersion,
+    ValidatorSetHash,
     committee::{Committee, CommitteeInfo},
     optional::Optional,
 };
@@ -81,12 +83,31 @@ pub struct OnReceiveLocalProposalHandler<TConsensusSpec: ConsensusSpec> {
     /// We commit the EOE on disk (peers attest with 2f+1) but defer next-genesis creation
     /// until the local oracle observes the new epoch.
     pending_end_of_epoch: Option<PendingEndOfEpoch>,
+    reported_divergence: ReportedDivergence,
 }
 
 #[derive(Debug, Clone)]
 struct PendingEndOfEpoch {
     eoe_block: Block,
     commit_qc: ProposalCertificate,
+}
+
+/// The validator set divergence last logged at error level. A diverged node retries its pending end-of-epoch on a
+/// periodic tick, so each divergence is reported once and its retries log at debug.
+#[derive(Debug, Default)]
+struct ReportedDivergence(Option<(BlockId, ValidatorSetHash)>);
+
+impl ReportedDivergence {
+    /// Records that EOE block `eoe_block` committed a set other than `local`. True unless this is the divergence
+    /// last recorded.
+    fn record(&mut self, eoe_block: BlockId, local: ValidatorSetHash) -> bool {
+        let divergence = Some((eoe_block, local));
+        if self.0 == divergence {
+            return false;
+        }
+        self.0 = divergence;
+        true
+    }
 }
 
 impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec> {
@@ -133,6 +154,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             ),
             change_set: None,
             pending_end_of_epoch: None,
+            reported_divergence: ReportedDivergence::default(),
         }
     }
 
@@ -354,10 +376,11 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         // Our own view of the next epoch, used by the voter to ratify what an EndEpoch block commits it to. The
         // boundary hash is `None` if we have not observed that boundary, and the validator set hash is `None` until
         // we have assigned the next epoch's committees; in either case the voter abstains rather than lending
-        // quorum to a value it cannot check. Having observed the boundary is what qualifies a node to ratify the
-        // boundary hash, not having activated the epoch: the scanner stores headers before the resulting
-        // `EpochChanged` event is applied, and during a catch-up that event can sit behind several epoch
-        // activations.
+        // quorum to a value it cannot check. Committees are assigned when the epoch activates, so a node votes for
+        // an EndEpoch only once it has activated the next epoch. The scanner stores the boundary header before the
+        // resulting `EpochChanged` is applied, and during a catch-up that event can sit behind several epoch
+        // activations: a node in that window has observed the boundary but abstains with
+        // `EndOfEpochValidatorSetNotKnown`, and the EndEpoch commits once a quorum has activated the epoch.
         let local_next_epoch = if is_epoch_end {
             let next_epoch = current_epoch + Epoch(1);
             LocalNextEpochView {
@@ -368,10 +391,9 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             LocalNextEpochView::default()
         };
 
-        // Accept an EndEpoch proposal when our oracle has advanced past `current_epoch`, or when we
-        // have scanned the boundary block that ends it. The second branch rescues the case where a
-        // short base-layer reorg near the lag horizon leaves our scanner behind the leader's — without
-        // it, such splits can wedge consensus because every node requires the strict inequality.
+        // The epoch has ended once our oracle has advanced past `current_epoch` or we have scanned the boundary block
+        // that ends it. A node that has only scanned the boundary passes this gate and abstains on the validator set
+        // instead, which names the value it is missing.
         let can_propose_epoch_end = em_epoch > current_epoch || local_next_epoch.epoch_hash.is_some();
 
         let mut on_ready_to_vote_on_local_block = self.on_ready_to_vote_on_local_block.clone();
@@ -593,12 +615,18 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             let local = self.epoch_manager.get_validator_set_hash(next_epoch).await.optional()?;
             if local != Some(committed) {
                 match local {
-                    Some(local) => error!(
+                    Some(local) if self.reported_divergence.record(*eoe_block.id(), local) => error!(
                         target: LOG_TARGET,
                         "🚨 Validator set divergence at {next_epoch}: the committee committed validator set {committed} \
                          in EOE block {} but this node assigned {local}. This node will not take part in \
                          {next_epoch}. It disagrees with the network on the validators registered for {next_epoch} \
                          or on how they form committees; check its epoch oracle and committee configuration.",
+                        eoe_block.id()
+                    ),
+                    Some(local) => debug!(
+                        target: LOG_TARGET,
+                        "🚨 Validator set still diverges at {next_epoch}: EOE block {} committed {committed}, this node \
+                         assigned {local}",
                         eoe_block.id()
                     ),
                     None => warn!(
@@ -1147,4 +1175,22 @@ async fn broadcast_foreign_proposal_if_required<TConsensusSpec: ConsensusSpec>(
 struct ProcessBlockResult {
     pub block_decision: BlockDecision,
     pub valid_block: ValidBlock,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_divergence_is_reported_once_until_it_changes() {
+        let eoe_block = BlockId::from([1; 32]);
+        let local = ValidatorSetHash::from_array([2; 32]);
+        let corrected = ValidatorSetHash::from_array([3; 32]);
+        let mut reported = ReportedDivergence::default();
+
+        assert!(reported.record(eoe_block, local));
+        assert!(!reported.record(eoe_block, local));
+        assert!(reported.record(eoe_block, corrected));
+        assert!(reported.record(BlockId::from([4; 32]), corrected));
+    }
 }

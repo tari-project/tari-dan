@@ -69,6 +69,10 @@ impl EpochCheckpoint {
 
     /// The [`ValidatorSetHash`] the end-of-epoch block ratifies for the next epoch, read from
     /// [`Self::header_metadata`]. It is the committed value only once the checkpoint validates.
+    ///
+    /// `None` proves nothing: the quorum certificate does not cover the preimage, so whoever serves the checkpoint can
+    /// strip it. A consumer that needs the set to trust anything, such as a wallet walking the validator set handover,
+    /// must treat `None` as a failure.
     pub fn next_epoch_validator_set_hash(&self) -> Option<ValidatorSetHash> {
         self.header_metadata.as_ref()?.next_epoch_validator_set_hash()
     }

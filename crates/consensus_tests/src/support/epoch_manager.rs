@@ -65,8 +65,8 @@ pub struct TestEpochManager {
     ///
     /// Production keeps the two apart: the activated row wins, and the oracle's scanned boundary is
     /// the fallback. Separating them here is what lets a test hold a validator in the state where it
-    /// can ratify an `EndEpoch` but cannot yet open the next epoch. Like the lag fields, a fresh
-    /// `Arc` is allocated per validator by `clone_for`.
+    /// can ratify an `EndEpoch`'s boundary hash but has no validator set for the next epoch. Like the lag fields, a
+    /// fresh `Arc` is allocated per validator by `clone_for`.
     oracle_observed_boundaries: Arc<StdMutex<HashSet<Epoch>>>,
     /// Overrides the validator set hash this validator reports from `get_validator_set_hash`. When `Some(hash)`,
     /// simulates a node whose epoch oracle assigned different committees than its peers. `None` = derive the hash
@@ -144,9 +144,9 @@ impl TestEpochManager {
 
     /// Mark `epoch`'s boundary block as scanned by this validator's oracle without activating the
     /// epoch. `get_observed_epoch_hash(epoch)` then reports the boundary hash — enough to ratify an
-    /// `EndEpoch` — while a `set_oracle_visible_epoch` cap keeps `get_epoch_hash(epoch)` answering
-    /// `NoEpochFound`, so the node still cannot open the epoch. That pair is the real state of a node
-    /// mid-catch-up, and the two must be settable independently.
+    /// `EndEpoch`'s boundary hash but not its validator set — while a `set_oracle_visible_epoch` cap
+    /// keeps `get_epoch_hash(epoch)` answering `NoEpochFound`, so the node still cannot open the epoch. That pair is
+    /// the real state of a node mid-catch-up, and the two must be settable independently.
     pub fn set_oracle_observed_boundary(&self, epoch: Epoch) {
         self.oracle_observed_boundaries.lock().unwrap().insert(epoch);
     }
@@ -390,6 +390,9 @@ impl EpochManagerReader for TestEpochManager {
 
     async fn get_validator_set_hash(&self, epoch: Epoch) -> Result<ValidatorSetHash, EpochManagerError> {
         // Committees are assigned when an epoch activates, so the set is unknown until the epoch is.
+        if epoch > self.current_epoch().await? {
+            return Err(EpochManagerError::NoValidatorSet { epoch });
+        }
         let Some(epoch_hash) = self.get_epoch_hash(epoch).await.optional()? else {
             return Err(EpochManagerError::NoValidatorSet { epoch });
         };
