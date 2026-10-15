@@ -192,6 +192,12 @@ impl IndexedWellKnownTypes {
         Self::from_value_with_max_depth(value, MAX_VISITOR_DEPTH)
     }
 
+    /// Whether [`Self::from_value`] decodes the value under `tag` as a well-known type of its own,
+    /// which costs far more than walking an item.
+    pub fn indexes_tag(tag: u64) -> bool {
+        BinaryTag::from_u64(tag).is_some_and(|tag| !matches!(tag, BinaryTag::Metadata))
+    }
+
     fn from_value_with_max_depth(value: &tari_bor::Value, max_depth: usize) -> Result<Self, IndexedValueError> {
         let mut visitor = IndexedValueVisitor::new();
         tari_bor::walk_all(value, &mut visitor, max_depth)?;

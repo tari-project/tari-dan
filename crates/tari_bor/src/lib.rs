@@ -34,7 +34,7 @@ pub use raw::RawCbor;
 #[cfg(feature = "serde")]
 pub use serde::{self, Deserialize, Serialize, de::DeserializeOwned};
 pub use tag::*;
-pub use value::{INTEGER_RANGE, MAX_DECODE_DEPTH, Value};
+pub use value::{INTEGER_RANGE, ItemCount, MAX_DECODE_DEPTH, Value};
 pub use value_form::check_value_form;
 pub use walker::*;
 

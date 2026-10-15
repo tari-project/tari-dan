@@ -107,6 +107,18 @@ mod template {
             }
         }
 
+        /// Does nothing. Its one argument is the component address the engine passes a method, so it
+        /// can be called as a method on any of this template's components without reading the state.
+        pub fn touch(_component: ComponentAddress) {}
+
+        /// Calls `touch` as a method on `target` `calls` times.
+        pub fn touch_component(target: ComponentAddress, calls: u32) {
+            let component = ComponentManager::get(target);
+            for _ in 0..calls {
+                component.invoke("touch", args![]);
+            }
+        }
+
         /// Reads the current epoch `count` times, leaving each response undecoded.
         pub fn read_epoch_undecoded(count: u32) {
             let arg = tari_bor::encode(&ConsensusInvokeArg {

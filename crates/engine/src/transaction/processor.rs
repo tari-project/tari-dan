@@ -26,7 +26,7 @@ use log::*;
 use ootle_network::Network;
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult},
-    component::{Component, derive_component_address_from_public_key},
+    component::derive_component_address_from_public_key,
     entity_id_provider::EntityIdProvider,
     fees::ExhaustBurnRate,
     indexed_value::{IndexedValue, IndexedWellKnownTypes},
@@ -55,7 +55,6 @@ use tari_template_lib::{
     models::{Bucket, BucketId},
     types::{
         Amount,
-        ComponentAddress,
         NonFungibleAddress,
         OwnerRule,
         TemplateAddress,
@@ -72,6 +71,7 @@ use crate::{
     runtime::{
         AuthParams,
         AuthorizationScope,
+        LoadedComponent,
         NativeAction,
         PayFee,
         Runtime,
@@ -456,7 +456,8 @@ where
         new_template_addr: TemplateAddress,
         migrate: Option<MigrateFunction>,
     ) -> Result<Option<IndexedValue>, TransactionErrorKind> {
-        let (component_address, component) = runtime.interface().load_component(component)?;
+        let component = runtime.interface().load_component(component)?;
+        let component_address = component.address;
 
         let template = template_provider
             .get_template(&new_template_addr)
@@ -494,7 +495,7 @@ where
             })
             .transpose()?;
 
-        let component_scope = IndexedWellKnownTypes::from_value(component.state())?;
+        let component_scope = component.state_scope;
 
         let (call_frame, final_args) = if migration_function.is_some() {
             let resolved_args = migrate
@@ -523,7 +524,7 @@ where
                 component_scope,
                 component_lock,
                 arg_scope: Box::new(arg_scope),
-                entity_id: *component.entity_id(),
+                entity_id: component.entity_id,
             };
             (frame, resolved_args)
         } else {
@@ -533,7 +534,7 @@ where
                 component_scope,
                 component_lock,
                 arg_scope: Box::new(IndexedWellKnownTypes::new()),
-                entity_id: *component.entity_id(),
+                entity_id: component.entity_id,
             };
             (frame, vec![])
         };
@@ -697,18 +698,17 @@ where
             .optional()?;
 
         match maybe_existing_account {
-            Some((_, component)) => {
+            Some(component) => {
                 // Component exists, we'll attempt deposit funds into it as necessary
 
                 // Ensure that the existing component is indeed an Account
-                if *component.template_address() != ACCOUNT_TEMPLATE_ADDRESS {
+                if component.template_address != ACCOUNT_TEMPLATE_ADDRESS {
                     return Err(TransactionErrorKind::InvalidCreateAccount {
                         component_address: account_address,
                         details: format!(
                             "A component already exists at the derived account address {}, but it is not an Account \
                              (template address: {})",
-                            account_address,
-                            component.template_address()
+                            account_address, component.template_address
                         ),
                     });
                 }
@@ -724,15 +724,7 @@ where
 
                 if let Some(workspace_id) = workspace_id {
                     let args = call_args![WorkspaceOffset(workspace_id)];
-                    Self::invoke_component(
-                        template,
-                        runtime,
-                        account_address,
-                        &component,
-                        ACCOUNT_DEPOSIT_METHOD,
-                        args,
-                        None,
-                    )?;
+                    Self::invoke_component(template, runtime, component, ACCOUNT_DEPOSIT_METHOD, args, None)?;
                 }
 
                 // The instruction output is always the ComponentAddress
@@ -872,8 +864,8 @@ where
         args: Vec<InstructionArg>,
         restrict_frame_to: Option<FrameWriteMode>,
     ) -> Result<IndexedValue, TransactionErrorKind> {
-        let (component_address, component) = runtime.interface().load_component(call)?;
-        let template_address = *component.template_address();
+        let component = runtime.interface().load_component(call)?;
+        let template_address = component.template_address;
 
         let template = template_provider
             .get_template(&template_address)
@@ -889,23 +881,13 @@ where
             .interface()
             .track_template_loaded(&template_address, template.code_size())?;
 
-        Self::invoke_component(
-            template,
-            runtime,
-            component_address,
-            &component,
-            method,
-            args,
-            restrict_frame_to,
-        )
+        Self::invoke_component(template, runtime, component, method, args, restrict_frame_to)
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn invoke_component(
         template: LoadedTemplate,
         runtime: &Runtime,
-        component_address: ComponentAddress,
-        component: &Component,
+        component: LoadedComponent,
         method: &str,
         args: Vec<InstructionArg>,
         restrict_frame_to: Option<FrameWriteMode>,
@@ -928,27 +910,25 @@ where
             LockFlag::Read
         };
 
-        let component_lock = runtime.interface().lock_component(component_address, lock_flag)?;
+        let component_lock = runtime.interface().lock_component(component.address, lock_flag)?;
 
         let resolved_args = runtime
             .interface()
-            .resolve_args(Some(InstructionArg::from_type(&component_address)?), &args)?;
+            .resolve_args(Some(InstructionArg::from_type(&component.address)?), &args)?;
         let arg_scope = resolved_args
             .iter()
             .skip(1)
             .map(IndexedWellKnownTypes::from_value)
             .collect::<Result<_, _>>()?;
 
-        let component_scope = IndexedWellKnownTypes::from_value(component.state())?;
-
         runtime.interface().push_call_frame(
             PushCallFrame::ForComponent {
-                template_address: component.header.template_address,
+                template_address: component.template_address,
                 module_name: template.template_name().to_string(),
-                component_scope,
+                component_scope: component.state_scope,
                 component_lock,
                 arg_scope: Box::new(arg_scope),
-                entity_id: component.header.entity_id,
+                entity_id: component.entity_id,
             },
             restrict_frame_to,
         )?;
@@ -957,7 +937,7 @@ where
         runtime.interface().check_component_access_rules(method)?;
 
         let result = Self::invoke_template(
-            component.header.template_address,
+            component.template_address,
             template,
             runtime.clone(),
             &function_def,

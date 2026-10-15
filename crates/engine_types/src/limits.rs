@@ -137,11 +137,12 @@ pub const MIN_MAX_COMPUTE_TRANSACTIONS_PER_BLOCK: u64 = 18;
 /// [`template_compile_points`] for a binary at [`EngineLimits::max_template_binary_size_bytes`] comes to ~2.34e9,
 /// and that limit is chosen so the remainder still covers a fee intent (see
 /// `the_largest_publishable_binary_leaves_room_to_source_a_fee`). So a max-size publish *can* reach this cap, by
-/// construction — it is what makes the publish limit binding. Template return values, engine call arguments and
-/// engine call responses are the other flows this cap bounds: [`return_value_points`], [`engine_arg_points`] and
-/// [`engine_response_points`] are bounded per call, not per transaction, and about 18 maximal item-heavy returns, 3
-/// maximal item-heavy engine call arguments or 8 maximal item-heavy engine call responses reach the cap, failing the
-/// transaction out of compute. Every remaining flow stays under it on the structural caps alone.
+/// construction — it is what makes the publish limit binding. Template return values, engine call arguments, engine
+/// call responses and component loads are the other flows this cap bounds: [`return_value_points`],
+/// [`engine_arg_points`], [`engine_response_points`] and [`component_load_points`] are bounded per call, not per
+/// transaction, and about 18 maximal item-heavy returns, 3 maximal item-heavy engine call arguments, 8 maximal
+/// item-heavy engine call responses or 30 calls on a component holding a maximal item-heavy state reach the cap,
+/// failing the transaction out of compute. Every remaining flow stays under it on the structural caps alone.
 pub const MAX_NATIVE_POINTS_PER_TRANSACTION: u64 = 2_400_000_000;
 
 /// Execution metering points the fee intent may consume, whatever it has paid. A transaction sources
@@ -456,6 +457,30 @@ pub const fn engine_response_points(bytes: u64, items: u64) -> u64 {
         .saturating_add(NativeExecutionPoints::PER_ENGINE_RESPONSE_BYTE.saturating_mul(bytes))
 }
 
+/// Points charged for loading a component whose state holds `items` CBOR data items, `references`
+/// of them tags of substate addresses and the other well-known types the engine indexes, before
+/// the state is read.
+///
+/// Every call on a component — a method call, from a transaction or a template, or a template
+/// upgrade — has the engine walk the component's state outside the Wasmer meter: to count its
+/// items, to index the substates it holds and to bring them into the new frame's scope. The call
+/// names only the component, and the method need not read the state at all, so the load is priced
+/// by what the state holds. Indexing decodes each reference and inserts it into the scope, at many
+/// times the cost of walking an item, so references are priced on their own.
+///
+/// A resource auth hook acting on the caller's state is charged the same for counting and copying
+/// that state into the hook's arguments. The hook's call then pays for decoding and indexing them
+/// as a cross-template call's arguments, at [`engine_arg_points`].
+///
+/// Measured with `cargo run -p tari_engine --release --example component_load_points_calibrate`,
+/// which times method calls on components whose states fill `max_internal_call_size` in each item
+/// shape.
+pub const fn component_load_points(items: u64, references: u64) -> u64 {
+    NativeExecutionPoints::PER_COMPONENT_STATE_ITEM
+        .saturating_mul(items)
+        .saturating_add(NativeExecutionPoints::PER_COMPONENT_STATE_REFERENCE.saturating_mul(references))
+}
+
 /// Points charged for moving `ids` non-fungible ids from one container to another: taking them from
 /// a bucket or vault, joining or depositing them, or locking them into a proof and unlocking them.
 ///
@@ -482,6 +507,16 @@ impl NativeExecutionPoints {
     /// same primitives as [`Self::PER_STATEMENT`]) and a bounded kernel-MMR inclusion proof
     /// (Blake2b hashes, microseconds). Priced as the statement cost with headroom.
     pub const PER_CLAIM_BURN: u64 = 3_200_000;
+    /// Each CBOR data item in the state of a component a call loads. Arrays of integers, nulls,
+    /// unknown tags or empty containers, and maps of integers, measure at ~6-52 points an item. Set
+    /// above those. Charged by [`component_load_points`].
+    pub const PER_COMPONENT_STATE_ITEM: u64 = 150;
+    /// Each substate address, or other type the engine indexes, in the state of a component a call
+    /// loads, on top of [`Self::PER_COMPONENT_STATE_ITEM`] for its items. Distinct component,
+    /// resource and vault addresses measure at ~1,400-1,510 points each, the two items making each
+    /// up included, and non-fungible addresses at ~1,100. Set so an address and its items are
+    /// charged above twice that. Charged by [`component_load_points`].
+    pub const PER_COMPONENT_STATE_REFERENCE: u64 = 2_800;
     /// One ElGamal (DLEQ) value proof. It verifies two Schnorr-style equations over four decompressed
     /// points rather than one, so it is priced at double the mask-knowledge variant.
     pub const PER_ELGAMAL_VALUE_PROOF: u64 = 1_200_000;

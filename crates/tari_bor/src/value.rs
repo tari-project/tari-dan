@@ -106,6 +106,75 @@ impl Value {
     pub fn decoded<T: for<'b> minicbor::Decode<'b, ()>>(&self) -> Result<T, crate::BorError> {
         crate::from_value(self)
     }
+
+    /// Counts the data items making up this value, as [`crate::count_data_items`] counts those of its
+    /// encoding, visiting no more than `max_items` of them, and among them the tags `is_counted_tag`
+    /// accepts. Returns `None` once the value holds more than `max_items` items.
+    ///
+    /// The walk is iterative and allocates one frame per level of nesting, so its cost is bounded
+    /// by `max_items` however the value is shaped.
+    pub fn count_items_bounded(&self, max_items: u64, is_counted_tag: impl Fn(u64) -> bool) -> Option<ItemCount> {
+        /// A container whose children are still to be visited.
+        enum Open<'a> {
+            Array(core::slice::Iter<'a, Value>),
+            /// A map's entries, and the value of the entry whose key was visited last.
+            Map(core::slice::Iter<'a, (Value, Value)>, Option<&'a Value>),
+        }
+
+        let mut open = Vec::new();
+        let mut next = Some(self);
+        let mut count = ItemCount::default();
+        loop {
+            let Some(value) = next.take() else {
+                let Some(container) = open.last_mut() else {
+                    return Some(count);
+                };
+                next = match container {
+                    Open::Array(values) => values.next(),
+                    Open::Map(entries, pending) => pending.take().or_else(|| {
+                        entries.next().map(|(key, value)| {
+                            *pending = Some(value);
+                            key
+                        })
+                    }),
+                };
+                if next.is_none() {
+                    open.pop();
+                }
+                continue;
+            };
+
+            count.items = count.items.saturating_add(1);
+            if count.items > max_items {
+                return None;
+            }
+            match value {
+                Value::Array(values) => open.push(Open::Array(values.iter())),
+                Value::Map(entries) => open.push(Open::Map(entries.iter(), None)),
+                Value::Tag(tag, inner) => {
+                    if is_counted_tag(*tag) {
+                        count.counted_tags = count.counted_tags.saturating_add(1);
+                    }
+                    next = Some(inner);
+                },
+                Value::Null |
+                Value::Bool(_) |
+                Value::Integer(_) |
+                Value::Float(_) |
+                Value::Bytes(_) |
+                Value::Text(_) => {},
+            }
+        }
+    }
+}
+
+/// What [`Value::count_items_bounded`] counted.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ItemCount {
+    /// Every data item, the counted tags among them.
+    pub items: u64,
+    /// The tags the caller asked to have counted.
+    pub counted_tags: u64,
 }
 
 // `From` impls for common literal types — these power the `cbor!` macro.
@@ -441,6 +510,63 @@ mod tests {
         let bytes = minicbor::to_vec(v).unwrap();
         assert_eq!(bytes.len(), minicbor::len(v), "CborLen mismatch");
         minicbor::decode::<Value>(&bytes).unwrap()
+    }
+
+    #[test]
+    fn count_items_bounded_counts_the_items_of_the_encoding() {
+        let values = [
+            Value::Null,
+            Value::Bytes(vec![0; 64]),
+            Value::Array(vec![]),
+            Value::Array(vec![Value::Integer(0); 10]),
+            Value::Map(vec![
+                (
+                    Value::Text("a".into()),
+                    Value::Array(vec![Value::Null, Value::Bool(true)]),
+                ),
+                (Value::Integer(1), Value::Map(vec![])),
+            ]),
+            Value::Tag(
+                5,
+                Box::new(Value::Tag(
+                    6,
+                    Box::new(Value::Array(vec![Value::Tag(7, Box::new(Value::Null))])),
+                )),
+            ),
+            Value::Array(vec![
+                Value::Array(vec![Value::Array(vec![Value::Integer(0)])]),
+                Value::Null,
+            ]),
+        ];
+        for value in values {
+            let encoded_items = crate::count_data_items(&minicbor::to_vec(&value).unwrap()).unwrap();
+            let count = |max_items| value.count_items_bounded(max_items, |_| false).map(|c| c.items);
+            assert_eq!(count(u64::MAX), Some(encoded_items), "{value:?}");
+            assert_eq!(count(encoded_items), Some(encoded_items), "{value:?}");
+            assert_eq!(count(encoded_items - 1), None, "{value:?}");
+        }
+    }
+
+    #[test]
+    fn count_items_bounded_counts_the_tags_asked_for() {
+        let value = Value::Map(vec![
+            (
+                Value::Tag(7, Box::new(Value::Null)),
+                Value::Tag(8, Box::new(Value::Null)),
+            ),
+            (
+                Value::Integer(0),
+                Value::Array(vec![Value::Tag(7, Box::new(Value::Tag(7, Box::new(Value::Null))))]),
+            ),
+        ]);
+
+        assert_eq!(
+            value.count_items_bounded(u64::MAX, |tag| tag == 7),
+            Some(ItemCount {
+                items: 10,
+                counted_tags: 3
+            })
+        );
     }
 
     #[test]

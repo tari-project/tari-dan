@@ -58,7 +58,6 @@ use std::{cell::RefCell, fmt::Debug, rc::Rc};
 pub use pay_fee::PayFee;
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
-    component::Component,
     confidential::{ClaimBurnOutputData, MinotariBurnClaimProof},
     fees::FeeReceipt,
     indexed_value::{IndexedValue, IndexedWellKnownTypes},
@@ -123,13 +122,26 @@ use crate::{
     wasm::WasmInstanceCache,
 };
 
+/// What a call on a component needs of it: the header fields its frame runs under, and the
+/// substates its state holds.
+#[derive(Debug, Clone)]
+pub struct LoadedComponent {
+    pub address: ComponentAddress,
+    pub template_address: TemplateAddress,
+    pub entity_id: EntityId,
+    pub state_scope: IndexedWellKnownTypes,
+}
+
 pub trait RuntimeInterface {
     fn next_entity_id(&self) -> Result<EntityId, RuntimeError>;
     fn emit_event(&self, topic: String, payload: Metadata) -> Result<(), RuntimeError>;
 
     fn emit_log(&self, level: LogLevel, message: String) -> Result<(), RuntimeError>;
 
-    fn load_component(&self, call: ComponentReference) -> Result<(ComponentAddress, Component), RuntimeError>;
+    /// Loads a component and indexes its state, charging
+    /// [`tari_engine_types::limits::component_load_points`] for what the state holds before
+    /// indexing it. The state itself stays in the store.
+    fn load_component(&self, call: ComponentReference) -> Result<LoadedComponent, RuntimeError>;
 
     fn lock_component(&self, address: ComponentAddress, lock_flag: LockFlag) -> Result<LockedSubstate, RuntimeError>;
 
