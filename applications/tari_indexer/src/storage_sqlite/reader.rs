@@ -138,7 +138,7 @@ impl SqliteStoreReadTransaction<'_> {
                 .load::<EventRecord>(self.connection())
                 .map_err(query_err)?;
             let next_cursor = rows.last().filter(|_| rows.len() == limit).map(|row| row.id);
-            let events = rows.into_iter().map(decode_event_row).collect::<Result<_, _>>()?;
+            let events = rows.into_iter().map(decode_event_row).collect::<Result<Vec<_>, _>>()?;
             return Ok(EventsPage { events, next_cursor });
         };
 
@@ -169,10 +169,9 @@ impl SqliteStoreReadTransaction<'_> {
             EventRange::After(_) => rows.order(events::id.asc()),
         };
         let events = rows
-            .load::<EventRecord>(self.connection())
+            .load_iter::<EventRecord, _>(self.connection())
             .map_err(query_err)?
-            .into_iter()
-            .map(decode_event_row)
+            .map(|r| r.map_err(query_err).and_then(decode_event_row))
             .collect::<Result<_, _>>()?;
         Ok(EventsPage { events, next_cursor })
     }
@@ -642,15 +641,22 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
                 .filter(epoch_checkpoints::shard_start.le(shard))
                 .filter(epoch_checkpoints::shard_end.ge(shard));
         }
-        let rows: Vec<String> = query
+        let rows = query
             .order_by(epoch_checkpoints::epoch.asc())
             .limit(limit as i64)
-            .load(self.connection())
+            .load_iter::<String, _>(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("{OPERATION}: {}", e),
             })?;
 
-        rows.into_iter().map(|json_data| deserialize_json(&json_data)).collect()
+        rows.map(|data| {
+            data.as_ref()
+                .map_err(|e| StorageError::QueryError {
+                    reason: format!("{OPERATION}: {e}"),
+                })
+                .and_then(deserialize_json)
+        })
+        .collect()
     }
 
     fn epoch_checkpoint_get_latest(&mut self, shard: Option<Shard>) -> Result<EpochCheckpoint, StorageError> {
@@ -819,13 +825,16 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
                         .filter(utxos::is_burnt.eq(false));
                 }
                 let rows = whole_version
-                    .load::<models::UtxoRecord>(self.connection())
+                    .load_iter::<models::UtxoRecord, _>(self.connection())
                     .map_err(|e| StorageError::QueryError {
                         reason: format!("{OPERATION}: {}", e),
                     })?;
 
                 converted.clear();
-                for row in rows {
+                for r in rows {
+                    let row = r.map_err(|e| StorageError::QueryError {
+                        reason: format!("{OPERATION}: {e}"),
+                    })?;
                     let epoch = Epoch(row.epoch as u64);
                     let (state_version, update) = row.try_convert_to_update()?;
                     max_epoch = max_epoch.max(epoch);
@@ -982,20 +991,24 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
 
         let rows = query
             .limit(limit as i64)
-            .load::<TemplateCatalogueRow>(self.connection())
+            .load_iter::<TemplateCatalogueRow, _>(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("{OPERATION}: {e}"),
             })?;
 
-        rows.into_iter()
-            .map(|row| {
+        rows.map(|r| {
+            r.map_err(|e| StorageError::QueryError {
+                reason: format!("{OPERATION}: {e}"),
+            })
+            .and_then(|row| {
                 TemplateCatalogueEntry::try_from(row).map_err(|e| StorageError::DecodingError {
                     operation: OPERATION,
                     item: "TemplateCatalogueEntry",
                     details: e.to_string(),
                 })
             })
-            .collect()
+        })
+        .collect()
     }
 
     fn get_template_catalogue_entry(
@@ -1043,27 +1056,29 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         let rows = query
             .limit(limit as i64)
             .offset(offset as i64)
-            .load::<WatchedSubstateRow>(self.connection())
+            .load_iter::<WatchedSubstateRow, _>(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("{OPERATION}: {e}"),
             })?;
 
-        rows.into_iter()
-            .map(|row| {
-                let component_address =
-                    SubstateId::from_str(&row.component_address).map_err(|e| StorageError::DataInconsistency {
-                        details: format!("{OPERATION}: Invalid component address {}: {e}", row.component_address),
-                    })?;
-                let template_address =
-                    TemplateAddress::from_hex(&row.template_address).map_err(|e| StorageError::DataInconsistency {
-                        details: format!("{OPERATION}: Invalid template address {}: {e}", row.template_address),
-                    })?;
-                Ok(WatchedSubstateEntry {
-                    component_address,
-                    template_address,
-                })
+        rows.map(|r| {
+            let row = r.map_err(|e| StorageError::QueryError {
+                reason: format!("{OPERATION}: {e}"),
+            })?;
+            let component_address =
+                SubstateId::from_str(&row.component_address).map_err(|e| StorageError::DataInconsistency {
+                    details: format!("{OPERATION}: Invalid component address {}: {e}", row.component_address),
+                })?;
+            let template_address =
+                TemplateAddress::from_hex(&row.template_address).map_err(|e| StorageError::DataInconsistency {
+                    details: format!("{OPERATION}: Invalid template address {}: {e}", row.template_address),
+                })?;
+            Ok::<_, StorageError>(WatchedSubstateEntry {
+                component_address,
+                template_address,
             })
-            .collect()
+        })
+        .collect()
     }
 
     fn get_verified_state_root_height(
@@ -1094,20 +1109,23 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
     ) -> Result<Option<NodeHeight>, StorageError> {
         const OPERATION: &str = "get_latest_verified_height_overlapping";
         use crate::storage_sqlite::schema::verified_state_roots;
-        let latest_by_group: Vec<(String, Option<i64>)> = verified_state_roots::table
+        let latest_by_group = verified_state_roots::table
             .filter(verified_state_roots::epoch.eq(epoch.as_u64() as i64))
             .group_by(verified_state_roots::shard_group)
             .select((
                 verified_state_roots::shard_group,
                 diesel::dsl::max(verified_state_roots::block_height),
             ))
-            .load(self.connection())
+            .load_iter::<(String, Option<i64>), _>(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("{OPERATION}: {e}"),
             })?;
 
         let mut latest = None;
-        for (group, height) in latest_by_group {
+        for r in latest_by_group {
+            let (group, height) = r.map_err(|e| StorageError::QueryError {
+                reason: format!("{OPERATION}: {e}"),
+            })?;
             let group = ShardGroup::from_str(&group).map_err(|e| StorageError::DataInconsistency {
                 details: format!("{OPERATION}: {e}"),
             })?;
