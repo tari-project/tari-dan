@@ -565,7 +565,7 @@ impl<'a, TSpec: WalletSdkSpec> StealthTransferApi<'a, TSpec> {
                 lock.id(),
                 owner_account.account().component_address(),
                 params.resource_address,
-                params.total_output_amount() + merged_fee_amount,
+                params.total_output_amount_with_fee(merged_fee_amount)?,
                 params.input_selection,
             )?;
 
@@ -575,7 +575,8 @@ impl<'a, TSpec: WalletSdkSpec> StealthTransferApi<'a, TSpec> {
             // funded by the credit and the transfer's move to the payment-funded main intent.
             if merge_candidate {
                 let num_blinded_outputs = params.outputs.iter().filter(|o| o.blinded_amount > 0).count();
-                let has_change = inputs_to_spend.total_amount() > params.total_output_amount() + merged_fee_amount;
+                let has_change =
+                    inputs_to_spend.total_amount() > params.total_output_amount_with_fee(merged_fee_amount)?;
                 let num_outputs = num_blinded_outputs + usize::from(has_change);
                 if !merged_statement_fits_credit(inputs_to_spend.inputs.len(), num_outputs, resource_view_key.is_some())
                 {
@@ -665,14 +666,15 @@ impl<'a, TSpec: WalletSdkSpec> StealthTransferApi<'a, TSpec> {
 
             // Any change outputs? When merged, the fee is revealed by this statement too, so it comes out
             // of the inputs before any change is left over.
+            let amount_to_spend = params.total_output_amount_with_fee(merged_fee_amount)?;
             let change_amount = inputs_to_spend
                 .total_amount()
-                .checked_sub(params.total_output_amount() + merged_fee_amount)
+                .checked_sub(amount_to_spend)
                 .ok_or_else(|| StealthTransferApiError::InvariantViolation {
                     details: format!(
                         "Total input amount {} is less than total output amount {}",
                         inputs_to_spend.total_amount(),
-                        params.total_output_amount() + merged_fee_amount
+                        amount_to_spend
                     ),
                 })?;
 
@@ -691,7 +693,12 @@ impl<'a, TSpec: WalletSdkSpec> StealthTransferApi<'a, TSpec> {
 
             // Merged, the fee is drawn from this statement's revealed remainder alongside any revealed
             // amounts owed to recipients.
-            let output_revealed_amount = params.total_revealed_output_amount() + merged_fee_amount;
+            let output_revealed_amount = params
+                .total_revealed_output_amount()
+                .and_then(|revealed| revealed.checked_add(merged_fee_amount))
+                .ok_or_else(|| StealthTransferApiError::InvariantViolation {
+                    details: "Total revealed output amount plus the fee exceeds the maximum amount".to_string(),
+                })?;
             let outputs_to_create = params
                 .outputs
                 .iter()
@@ -804,7 +811,7 @@ impl<'a, TSpec: WalletSdkSpec> StealthTransferApi<'a, TSpec> {
             let statically_priced_shape = (is_merged &&
                 params.badge_usage.is_none() &&
                 inputs_to_spend.revealed.is_zero() &&
-                params.total_revealed_output_amount().is_zero() &&
+                !params.has_revealed_outputs() &&
                 !transfer_statement.outputs_statement.outputs.is_empty())
             .then(|| {
                 StaticallyPricedShape::new(
@@ -1106,7 +1113,7 @@ impl<'a, TSpec: WalletSdkSpec> StealthTransferApi<'a, TSpec> {
         transfer_statement: StealthTransferStatement,
     ) -> Result<UnsignedTransaction, StealthTransferApiError> {
         let revealed_input_amount = transfer_statement.inputs_statement.revealed_amount;
-        let revealed_to_recipients = params.total_revealed_output_amount();
+        let pays_revealed_to_recipients = params.has_revealed_outputs();
         let account_address = *owner_account.component_address();
 
         let transaction = Transaction::builder(network.as_byte(), params.max_epoch)
@@ -1165,15 +1172,15 @@ impl<'a, TSpec: WalletSdkSpec> StealthTransferApi<'a, TSpec> {
                     .then(|b| {
                         // The revealed remainder covers the fee plus anything owed to recipients as
                         // revealed funds. With nothing owed, the whole bucket is the fee.
-                        if revealed_to_recipients.is_zero() {
-                            b.pay_fee_from_bucket("revealed_bucket")
-                        } else {
+                        if pays_revealed_to_recipients {
                             b.take_from_bucket("revealed_bucket", params.max_fee, "fee_input_bucket")
                                 .pay_fee_from_bucket("fee_input_bucket")
+                        } else {
+                            b.pay_fee_from_bucket("revealed_bucket")
                         }
                     })
                     .then(|b| {
-                        if revealed_to_recipients.is_zero() {
+                        if !pays_revealed_to_recipients {
                             return b;
                         }
                         params.outputs.iter().enumerate().fold(b, |b, (i, output)| {

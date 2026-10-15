@@ -1756,7 +1756,9 @@ pub async fn handle_create_stealth_transfer_statement(
                 .map_err(|reason| invalid_params("pay_to", Some(reason)))?;
         }
 
-        let amount_to_spend = req.total_output_amount();
+        let amount_to_spend = req
+            .total_output_amount()
+            .ok_or_else(|| invalid_params("outputs", Some("total output amount exceeds the maximum amount")))?;
 
         let inputs = if let Some(utxo_addresses) = req.input_selection.as_specific() {
             // Exact stealth inputs named by the caller: resolve, validate and lock precisely these UTXOs,
@@ -1805,7 +1807,13 @@ pub async fn handle_create_stealth_transfer_statement(
         // The signing key is what the engine sees as a badge, so it is the key a revealed output must name.
         let signing_public_key = sdk.key_manager_api().get_public_key(signing_key_id)?;
 
-        let output_revealed_amount: Amount = req.outputs.iter().map(|o| o.revealed_amount).sum();
+        let output_revealed_amount = Amount::sum_from_positive(req.outputs.iter().map(|o| o.revealed_amount))
+            .ok_or_else(|| {
+                invalid_params(
+                    "outputs",
+                    Some("total revealed output amount exceeds the maximum amount"),
+                )
+            })?;
         let outputs = req
             .outputs
             .iter()
@@ -2275,6 +2283,7 @@ mod create_stealth_transfer_statement_handler_tests {
     use tari_ootle_wallet_crypto::pay_to::PayTo;
     use tari_ootle_wallet_sdk::{
         WalletSdkConfig,
+        apis::confidential_transfer::UtxoInputSelection,
         cipher_seed::CipherSeedRestore,
         models::{EpochBirthday, KeyBranch, KeyId, OutputStatus, StealthOutputModel},
     };
@@ -2676,6 +2685,43 @@ mod create_stealth_transfer_statement_handler_tests {
         assert!(
             matches!(stored.status, OutputStatus::Unspent),
             "expected Unspent after release, got {:?}",
+            stored.status
+        );
+        assert_eq!(stored.lock_id, None);
+    }
+
+    #[tokio::test]
+    async fn rejects_outputs_whose_total_exceeds_the_maximum_amount_before_locking() {
+        let test = setup().await;
+        let bearer = test.bearer(&format!("transfer:create:{}", test.account));
+        let output = insert_valid_output(&test, 100);
+
+        let transfer_output = |revealed_amount| TransferOutput {
+            address: account_ootle_address(&test),
+            revealed_amount,
+            blinded_amount: 0,
+            memo: None,
+            pay_to: PayTo::StealthPublicKey,
+        };
+        let request = AccountsCreateStealthTransferStatementRequest {
+            requests: vec![TransferStatementRequest {
+                sender_account: test.account.into(),
+                resource_address: test.stealth_resource,
+                input_selection: InputSelection::Selection(UtxoInputSelection::PreferConfidential),
+                outputs: vec![transfer_output(Amount::MAX), transfer_output(Amount::ONE)],
+            }],
+        };
+
+        let err = handle_create_stealth_transfer_statement(&test.context, Some(&bearer), request)
+            .await
+            .expect_err("outputs whose total exceeds the maximum amount must be rejected");
+        let message = assert_invalid_params(&err).to_string();
+        assert!(message.contains("'outputs'"), "expected the outputs param: {message}");
+
+        let stored = stored_output(&test, &output.commitment);
+        assert!(
+            matches!(stored.status, OutputStatus::Unspent),
+            "expected Unspent, got {:?}",
             stored.status
         );
         assert_eq!(stored.lock_id, None);

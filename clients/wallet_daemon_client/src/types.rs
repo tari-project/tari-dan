@@ -1762,11 +1762,11 @@ pub struct TransferStatementRequest {
 }
 
 impl TransferStatementRequest {
-    pub fn total_output_amount(&self) -> Amount {
+    /// The sum of every output's revealed and blinded amounts, or `None` if it exceeds [`Amount::MAX`].
+    pub fn total_output_amount(&self) -> Option<Amount> {
         self.outputs
             .iter()
-            .map(|o| Amount::from(o.blinded_amount) + o.revealed_amount)
-            .sum()
+            .try_fold(Amount::zero(), |sum, o| sum.checked_add(o.total_output_amount()?))
     }
 }
 
@@ -2288,6 +2288,37 @@ mod tests {
         let parsed: InputSelection = serde_json::from_value(json).unwrap();
         assert_eq!(parsed.as_from_bucket(), Some(amount));
         assert!(parsed.as_specific().is_none());
+    }
+
+    fn transfer_statement_request(outputs: &[(Amount, u64)]) -> TransferStatementRequest {
+        let address = OotleAddress::new(
+            tari_ootle_address::Network::LocalNet,
+            Default::default(),
+            Default::default(),
+        );
+        serde_json::from_value(serde_json::json!({
+            "sender_account": { "Name": "sender" },
+            "resource_address": tari_template_lib_types::constants::STEALTH_TARI_RESOURCE_ADDRESS,
+            "input_selection": { "FromBucket": { "revealed_amount": "0" } },
+            "outputs": outputs.iter().map(|(revealed_amount, blinded_amount)| serde_json::json!({
+                "address": address.to_string(),
+                "revealed_amount": revealed_amount.to_string(),
+                "blinded_amount": blinded_amount.to_string(),
+                "memo": null,
+                "pay_to": "StealthPublicKey",
+            })).collect::<Vec<_>>(),
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn transfer_statement_total_output_amount_rejects_overflow() {
+        let req = transfer_statement_request(&[(Amount::MAX, 0), (Amount::ONE, 0)]);
+        assert_eq!(req.total_output_amount(), None);
+        let req = transfer_statement_request(&[(Amount::MAX, 1)]);
+        assert_eq!(req.total_output_amount(), None);
+        let req = transfer_statement_request(&[(Amount::MAX - Amount::from(2u64), 1), (Amount::ONE, 0)]);
+        assert_eq!(req.total_output_amount(), Some(Amount::MAX));
     }
 
     #[test]
