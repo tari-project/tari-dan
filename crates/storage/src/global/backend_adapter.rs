@@ -24,7 +24,15 @@ use std::collections::{HashMap, HashSet};
 
 use serde::{Serialize, de::DeserializeOwned};
 use tari_common_types::types::FixedHash;
-use tari_ootle_common_types::{Epoch, NodeAddressable, ShardGroup, SubstateAddress, VotePower, committee::Committee};
+use tari_ootle_common_types::{
+    Epoch,
+    NodeAddressable,
+    ShardGroup,
+    SubstateAddress,
+    ValidatorSetHash,
+    VotePower,
+    committee::Committee,
+};
 use tari_template_lib_types::{Hash32, crypto::RistrettoPublicKeyBytes};
 
 use super::{BlockHeaderModel, EpochData};
@@ -110,6 +118,7 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         epoch: Epoch,
     ) -> Result<(), Self::Error>;
 
+    /// Returns the committee of `shard_group` in `epoch`, ascending by public key.
     fn validator_nodes_get_for_shard_group(
         &self,
         tx: &mut Self::DbTransaction<'_>,
@@ -149,6 +158,23 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         epoch_hash: FixedHash,
     ) -> Result<(), Self::Error>;
     fn get_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: Epoch) -> Result<Option<EpochData>, Self::Error>;
+
+    /// Stores `epoch`'s validator set hash and the committee leaf hash of each of its shard groups, replacing any the
+    /// epoch already holds. The epoch row must exist.
+    fn set_validator_set(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        epoch: Epoch,
+        validator_set_hash: &ValidatorSetHash,
+        leaves: &[(ShardGroup, Hash32)],
+    ) -> Result<(), Self::Error>;
+
+    /// Returns the committee leaf hash of each of `epoch`'s shard groups, ascending by shard group.
+    fn get_validator_set_leaves(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        epoch: Epoch,
+    ) -> Result<Vec<(ShardGroup, Hash32)>, Self::Error>;
 
     fn insert_block_header(
         &self,

@@ -21,7 +21,8 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_common_types::types::FixedHash;
-use tari_ootle_common_types::Epoch;
+use tari_ootle_common_types::{Epoch, ShardGroup, ValidatorSetHash};
+use tari_template_lib_types::Hash32;
 
 use crate::global::GlobalDbAdapter;
 
@@ -42,10 +43,29 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> EpochDb<'a, 'tx, TGlobalDbAdapt
     pub fn get_epoch_data(&mut self, epoch: Epoch) -> Result<Option<EpochData>, TGlobalDbAdapter::Error> {
         self.backend.get_epoch(self.tx, epoch)
     }
+
+    pub fn set_validator_set(
+        &mut self,
+        epoch: Epoch,
+        validator_set_hash: &ValidatorSetHash,
+        leaves: &[(ShardGroup, Hash32)],
+    ) -> Result<(), TGlobalDbAdapter::Error> {
+        self.backend
+            .set_validator_set(self.tx, epoch, validator_set_hash, leaves)
+    }
+
+    pub fn get_validator_set_leaves(
+        &mut self,
+        epoch: Epoch,
+    ) -> Result<Vec<(ShardGroup, Hash32)>, TGlobalDbAdapter::Error> {
+        self.backend.get_validator_set_leaves(self.tx, epoch)
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct EpochData {
     pub epoch: u64,
     pub epoch_hash: FixedHash,
+    /// `None` until the epoch manager stores the hash, which it does each time it assigns the epoch's committees.
+    pub validator_set_hash: Option<ValidatorSetHash>,
 }

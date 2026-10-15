@@ -13,6 +13,7 @@ tari_ootle_common_types = { workspace = true }
 tari_engine_types = { workspace = true }
 tari_jellyfish = { workspace = true, features = ["minicbor"] }
 tari_template_lib_types = { workspace = true }
+ootle-network = { workspace = true, features = ["serde"] }
 
 thiserror = { workspace = true }
 minicbor = { workspace = true, features = ["std", "derive"] }
@@ -21,3 +22,4 @@ log = { workspace = true }
 
 [dev-dependencies]
 tari_template_lib_types = { workspace = true }
+serde_json = { workspace = true }

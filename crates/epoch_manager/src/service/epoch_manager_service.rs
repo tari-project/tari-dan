@@ -630,6 +630,7 @@ mod tests {
 
     fn create_service(global_db: TestGlobalDb, shutdown: &Shutdown) -> EpochManagerService<TestSpec> {
         let config = EpochManagerConfig {
+            network: ootle_network::Network::LocalNet,
             base_layer_confirmations: 0,
             committee_size: NonZeroU32::new(10).unwrap(),
             validator_node_sidechain_id: None,

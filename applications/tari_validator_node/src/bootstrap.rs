@@ -300,6 +300,7 @@ pub async fn spawn_services(
 
     info!(target: LOG_TARGET, "Epoch manager initializing");
     let epoch_manager_config = EpochManagerConfig {
+        network: config.network,
         base_layer_confirmations: consensus_constants.base_layer_confirmations,
         committee_size: consensus_constants
             .committee_size_per_shard_group

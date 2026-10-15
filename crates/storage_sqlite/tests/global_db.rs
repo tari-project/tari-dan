@@ -6,7 +6,7 @@ use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use ootle_byte_type::ToByteType;
 use tari_common_types::types::FixedHash;
 use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey};
-use tari_ootle_common_types::{Epoch, NumPreshards, ShardGroup, SubstateAddress, VotePower};
+use tari_ootle_common_types::{Epoch, NumPreshards, ShardGroup, SubstateAddress, ValidatorSetHash, VotePower};
 use tari_ootle_p2p::PeerAddress;
 use tari_ootle_storage::global::{BlockHeaderModel, GlobalDb, ValidatorNodeDb};
 use tari_ootle_storage_sqlite::global::SqliteGlobalDbAdapter;
@@ -333,4 +333,91 @@ fn migration_keeps_the_latest_of_duplicate_committee_assignments() {
         duplicate.is_err(),
         "a second assignment for the same validator and epoch must be rejected"
     );
+}
+
+/// Leader rotation and the validator set leaf both index a committee by position, so every node must read the members
+/// in the same order.
+#[test]
+fn a_shard_group_committee_is_read_in_public_key_order() {
+    let db = create_db();
+    let mut tx = db.create_transaction().unwrap();
+    let mut validator_nodes = db.validator_nodes(&mut tx);
+    insert_vns(&mut validator_nodes, 20, Epoch(1));
+
+    let committee = validator_nodes
+        .get_committee_for_shard_group(Epoch(1), ShardGroup::all_shards(NumPreshards::P256), 100)
+        .unwrap();
+    let public_keys = committee.public_keys().copied().collect::<Vec<_>>();
+    let mut sorted = public_keys.clone();
+    sorted.sort();
+    assert_eq!(public_keys.len(), 20);
+    assert_eq!(public_keys, sorted);
+}
+
+#[test]
+fn an_epoch_has_no_validator_set_until_one_is_stored() {
+    let db = create_db();
+    let mut tx = db.create_transaction().unwrap();
+    let mut epochs = db.epochs(&mut tx);
+    epochs.insert_epoch(Epoch(1), FixedHash::zero()).unwrap();
+
+    assert_eq!(
+        epochs.get_epoch_data(Epoch(1)).unwrap().unwrap().validator_set_hash,
+        None
+    );
+    assert!(epochs.get_validator_set_leaves(Epoch(1)).unwrap().is_empty());
+}
+
+#[test]
+fn storing_a_validator_set_replaces_the_previous_one() {
+    let db = create_db();
+    let mut tx = db.create_transaction().unwrap();
+    let mut epochs = db.epochs(&mut tx);
+    epochs.insert_epoch(Epoch(1), FixedHash::zero()).unwrap();
+    epochs.insert_epoch(Epoch(2), FixedHash::zero()).unwrap();
+
+    let low = ShardGroup::new(0, 127);
+    let high = ShardGroup::new(128, 255);
+    epochs
+        .set_validator_set(Epoch(1), &ValidatorSetHash::from_array([1; 32]), &[(
+            ShardGroup::all_shards(NumPreshards::P256),
+            Hash32::from_array([9; 32]),
+        )])
+        .unwrap();
+    epochs
+        .set_validator_set(Epoch(2), &ValidatorSetHash::from_array([5; 32]), &[(
+            low,
+            Hash32::from_array([5; 32]),
+        )])
+        .unwrap();
+    epochs
+        .set_validator_set(Epoch(1), &ValidatorSetHash::from_array([2; 32]), &[
+            (high, Hash32::from_array([4; 32])),
+            (low, Hash32::from_array([3; 32])),
+        ])
+        .unwrap();
+
+    assert_eq!(
+        epochs.get_epoch_data(Epoch(1)).unwrap().unwrap().validator_set_hash,
+        Some(ValidatorSetHash::from_array([2; 32]))
+    );
+    assert_eq!(epochs.get_validator_set_leaves(Epoch(1)).unwrap(), vec![
+        (low, Hash32::from_array([3; 32])),
+        (high, Hash32::from_array([4; 32])),
+    ]);
+    assert_eq!(epochs.get_validator_set_leaves(Epoch(2)).unwrap(), vec![(
+        low,
+        Hash32::from_array([5; 32])
+    )]);
+}
+
+#[test]
+fn a_validator_set_needs_its_epoch() {
+    let db = create_db();
+    let mut tx = db.create_transaction().unwrap();
+    let mut epochs = db.epochs(&mut tx);
+
+    epochs
+        .set_validator_set(Epoch(1), &ValidatorSetHash::from_array([1; 32]), &[])
+        .unwrap_err();
 }
