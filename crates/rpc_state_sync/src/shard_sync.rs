@@ -105,6 +105,8 @@ pub(crate) struct ShardSync<'a, TStore, TValidator = NoVersionProofs> {
     shard: Shard,
     checkpoint_shard_root: TreeHash,
     checkpoint_state_version: Version,
+    /// The epoch of the checkpoint, which no streamed version can have been committed after.
+    checkpoint_epoch: Epoch,
     /// Whether `checkpoint_state_version` is trusted as this shard's version. Only then is a batch above it rejected:
     /// an untrusted version may be lower than the versions an honest peer streams.
     checkpoint_state_version_is_trusted: bool,
@@ -128,6 +130,7 @@ impl<'a, TStore: StateStore> ShardSync<'a, TStore> {
         shard: Shard,
         checkpoint_shard_root: TreeHash,
         checkpoint_state_version: Version,
+        checkpoint_epoch: Epoch,
         up_version_lookback: Version,
     ) -> Self {
         Self {
@@ -137,6 +140,7 @@ impl<'a, TStore: StateStore> ShardSync<'a, TStore> {
             shard,
             checkpoint_shard_root,
             checkpoint_state_version,
+            checkpoint_epoch,
             checkpoint_state_version_is_trusted: false,
             progress_timeout: None,
             min_throughput_bytes_per_sec: 0,
@@ -156,6 +160,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
             shard: self.shard,
             checkpoint_shard_root: self.checkpoint_shard_root,
             checkpoint_state_version: self.checkpoint_state_version,
+            checkpoint_epoch: self.checkpoint_epoch,
             checkpoint_state_version_is_trusted: self.checkpoint_state_version_is_trusted,
             progress_timeout: self.progress_timeout,
             min_throughput_bytes_per_sec: self.min_throughput_bytes_per_sec,
@@ -331,6 +336,43 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         })
     }
 
+    /// The epoch of the shard's last transition at or below `persisted_version`.
+    fn latest_local_epoch(&self, persisted_version: Option<Version>) -> Result<Epoch, RpcStateSyncError> {
+        let Some(version) = persisted_version else {
+            return Ok(Epoch::zero());
+        };
+        let epoch = self
+            .store
+            .with_read_tx(|tx| tx.state_transitions_get_latest_epoch(self.shard, version))?;
+        Ok(epoch.unwrap_or(Epoch::zero()))
+    }
+
+    /// Rejects a batch whose epoch cannot be the one its version was committed at. Blocks commit in epoch order, so a
+    /// version lies at or above `epoch_floor`, the epoch the shard is known to have reached below it, and at or below
+    /// the checkpoint's. The shard root does not cover the epoch of a destroy, and the epoch decides when this node
+    /// prunes the destroyed value and what it serves to its own peers.
+    fn check_version_epoch(
+        &self,
+        state_version: Version,
+        epoch: Epoch,
+        epoch_floor: Epoch,
+    ) -> Result<(), RpcStateSyncError> {
+        let shard = self.shard;
+        if epoch > self.checkpoint_epoch {
+            return Err(RpcStateSyncError::ConflictsWithCheckpoint(anyhow!(
+                "Peer streamed v{state_version} of {shard} at epoch {epoch}, after the checkpoint's epoch {}",
+                self.checkpoint_epoch
+            )));
+        }
+        if epoch < epoch_floor {
+            return Err(RpcStateSyncError::InvalidResponse(anyhow!(
+                "Peer streamed v{state_version} of {shard} at epoch {epoch}, before epoch {epoch_floor}, which \
+                 {shard} had already reached below v{state_version}"
+            )));
+        }
+        Ok(())
+    }
+
     /// Syncs the shard from `state_stream` on top of `verified_version`, its latest verified version. Versions are
     /// committed as they arrive and discarded again unless the stream completes with the shard matching the
     /// checkpoint root, so only verified state outlives a sync.
@@ -399,6 +441,8 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         let mut last_proven_version = None;
         let mut version_started = tokio::time::Instant::now();
         let mut version_bytes = 0u64;
+        // The epoch of the last version committed, below which no later version can lie.
+        let mut epoch_floor = self.latest_local_epoch(maybe_persisted_state_version)?;
 
         // syncing states
         loop {
@@ -599,6 +643,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                     "Peer streamed v{state_version} across epochs {epoch} and {msg_epoch}"
                 )));
             }
+            self.check_version_epoch(state_version, msg_epoch, epoch_floor)?;
 
             info!(target: LOG_TARGET, "🛜 Buffering {} state update(s) (state version: v{})", updates_for_state_version.len(), state_version);
             for result in updates_for_state_version {
@@ -676,6 +721,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
             })?;
             has_unverified_state = true;
             last_committed_version = Some(state_version);
+            epoch_floor = msg_epoch;
             version_started = tokio::time::Instant::now();
             version_bytes = 0;
         }
@@ -1082,6 +1128,7 @@ mod tests {
             shard(),
             root_after(checkpoint),
             version_after(checkpoint),
+            EPOCH,
             UP_VERSION_LOOKBACK,
         );
         let verified_version = sync.discard_unverified_state()?;
@@ -1136,6 +1183,7 @@ mod tests {
             shard(),
             root_after(&checkpoint),
             version_after(&checkpoint),
+            EPOCH,
             UP_VERSION_LOOKBACK,
         );
         assert_eq!(sync.local_state_root(Some(3)).unwrap(), root_after(&checkpoint));
@@ -1198,6 +1246,7 @@ mod tests {
             shard(),
             root_after(&verified),
             version_after(&verified),
+            EPOCH,
             UP_VERSION_LOOKBACK,
         );
         assert_eq!(shard_sync.local_state_root(Some(1)).unwrap(), root_after(&verified));
@@ -1278,6 +1327,87 @@ mod tests {
         assert_eq!(rewind_point(&store), None);
     }
 
+    #[tokio::test]
+    async fn a_version_stamped_past_the_checkpoint_epoch_is_rejected() {
+        let (store, _tmp) = create_store();
+        // A destroy contributes no epoch to the tree, so the checkpoint root matches whatever epoch v2 carries.
+        let checkpoint = vec![(1, vec![create(HONEST)]), (2, vec![destroy(HONEST)])];
+
+        let err = sync(&store, &checkpoint, vec![
+            batch(1, vec![create(HONEST)]),
+            chunk(2, Epoch::max(), false, vec![destroy(HONEST)]),
+            complete(2),
+        ])
+        .await
+        .unwrap_err();
+
+        assert!(matches!(err, RpcStateSyncError::ConflictsWithCheckpoint(_)), "{err}");
+        assert_eq!(local_version(&store), None);
+        assert!(substate(&store, HONEST).is_none());
+        assert_eq!(rewind_point(&store), None);
+    }
+
+    #[tokio::test]
+    async fn a_version_stamped_before_the_previous_version_is_rejected() {
+        let (store, _tmp) = create_store();
+        let checkpoint = vec![(1, vec![create(HONEST)]), (2, vec![destroy(HONEST)])];
+
+        let err = sync(&store, &checkpoint, vec![
+            batch(1, vec![create(HONEST)]),
+            chunk(2, Epoch::zero(), false, vec![destroy(HONEST)]),
+            complete(2),
+        ])
+        .await
+        .unwrap_err();
+
+        assert!(matches!(err, RpcStateSyncError::InvalidResponse(_)), "{err}");
+        assert_eq!(local_version(&store), None);
+        assert_eq!(rewind_point(&store), None);
+    }
+
+    #[tokio::test]
+    async fn a_version_stamped_before_the_verified_state_is_rejected() {
+        let (store, _tmp) = create_store();
+        let verified = vec![(1, vec![create(HONEST)])];
+        sync_honestly(&store, &verified).await;
+        let mut checkpoint = verified.clone();
+        checkpoint.push((2, vec![destroy(HONEST)]));
+
+        let err = sync(&store, &checkpoint, vec![
+            chunk(2, Epoch::zero(), false, vec![destroy(HONEST)]),
+            complete(2),
+        ])
+        .await
+        .unwrap_err();
+
+        assert!(matches!(err, RpcStateSyncError::InvalidResponse(_)), "{err}");
+        assert_eq!(local_version(&store), Some(1));
+        assert!(substate(&store, HONEST).is_some_and(|s| s.is_up()));
+    }
+
+    #[tokio::test]
+    async fn a_version_stamped_before_verified_state_that_ends_in_tree_only_versions_is_rejected() {
+        let (store, _tmp) = create_store();
+        let verified = vec![(1, vec![create(HONEST)]), (2, vec![])];
+        sync(&store, &verified, vec![batch(1, vec![create(HONEST)]), complete(2)])
+            .await
+            .unwrap();
+        assert_eq!(local_version(&store), Some(2));
+        let mut checkpoint = verified.clone();
+        checkpoint.push((3, vec![destroy(HONEST)]));
+
+        let err = sync(&store, &checkpoint, vec![
+            chunk(3, Epoch::zero(), false, vec![destroy(HONEST)]),
+            complete(3),
+        ])
+        .await
+        .unwrap_err();
+
+        assert!(matches!(err, RpcStateSyncError::InvalidResponse(_)), "{err}");
+        assert_eq!(local_version(&store), Some(2));
+        assert!(substate(&store, HONEST).is_some_and(|s| s.is_up()));
+    }
+
     #[test]
     fn the_last_representable_version_has_no_successor() {
         let (store, _tmp) = create_store();
@@ -1288,6 +1418,7 @@ mod tests {
             shard(),
             SPARSE_MERKLE_PLACEHOLDER_HASH,
             0,
+            EPOCH,
             UP_VERSION_LOOKBACK,
         );
         assert_eq!(sync.start_state_version(None).unwrap(), 1);
@@ -1309,6 +1440,7 @@ mod tests {
             shard(),
             root_after(&honest),
             version_after(&honest),
+            EPOCH,
             UP_VERSION_LOOKBACK,
         );
 
@@ -1340,6 +1472,7 @@ mod tests {
             shard,
             SPARSE_MERKLE_PLACEHOLDER_HASH,
             1,
+            EPOCH,
             UP_VERSION_LOOKBACK,
         );
         let stalled = stream::iter(vec![batch_in(shard, 1, updates)]).chain(stream::pending());
@@ -1358,6 +1491,7 @@ mod tests {
             other_shard(),
             root_after(&other_verified),
             version_after(&other_verified),
+            EPOCH,
             UP_VERSION_LOOKBACK,
         )
         .sync_from_stream(
@@ -1492,6 +1626,7 @@ mod tests {
             shard(),
             root_after(checkpoint),
             version_after(checkpoint),
+            EPOCH,
             UP_VERSION_LOOKBACK,
         )
         .with_version_proofs(&validator);
@@ -1627,6 +1762,7 @@ mod tests {
             shard(),
             root_after(&checkpoint),
             version_after(&checkpoint),
+            EPOCH,
             UP_VERSION_LOOKBACK,
         );
         let mut stats = StateSyncStats::default();
@@ -1692,6 +1828,7 @@ mod tests {
             shard(),
             root_after(&checkpoint),
             version_after(&checkpoint),
+            EPOCH,
             UP_VERSION_LOOKBACK,
         )
         .with_trusted_checkpoint_version(true);
@@ -1730,6 +1867,7 @@ mod tests {
             shard(),
             root_after(&checkpoint),
             version_after(&checkpoint),
+            EPOCH,
             UP_VERSION_LOOKBACK,
         );
         let mut stats = StateSyncStats::default();
@@ -1781,6 +1919,7 @@ mod tests {
             shard(),
             root_after(checkpoint),
             version_after(checkpoint),
+            EPOCH,
             UP_VERSION_LOOKBACK,
         )
         .with_progress_timeout(timeout)
@@ -1910,6 +2049,7 @@ mod tests {
             shard(),
             root_after(&checkpoint),
             version_after(&checkpoint),
+            EPOCH,
             UP_VERSION_LOOKBACK,
         )
         .with_version_proofs(&validator)

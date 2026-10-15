@@ -1844,6 +1844,25 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         })
     }
 
+    fn state_transitions_get_latest_epoch(
+        &self,
+        shard: Shard,
+        state_version: Version,
+    ) -> Result<Option<Epoch>, StorageError> {
+        const OPERATION: &str = "state_transitions_get_latest_epoch";
+
+        let transitions_cf = self.db().cf(state_transition::StateTransitionCf)?;
+        if let Some(data) = transitions_cf.get(&(shard, state_version), OPERATION).optional()? {
+            return Ok(Some(data.epoch));
+        }
+        let query = self.db().cf(state_transition::ByShardAndStateVersionQuery)?;
+        let latest = query
+            .query_range_iterator(Ordering::Descending, (shard, 0)..(shard, state_version))
+            .next()
+            .transpose()?;
+        Ok(latest.map(|(_, data)| data.epoch))
+    }
+
     fn state_tree_nodes_get(&self, shard: Shard, key: &NodeKey) -> Result<Node<StateTreePayload>, StorageError> {
         const OPERATION: &str = "state_tree_nodes_get";
         let cf = self.db().cf(StateTreeCf)?;

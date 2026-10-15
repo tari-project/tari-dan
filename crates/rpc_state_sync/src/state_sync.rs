@@ -225,6 +225,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             shard,
             checkpoint_shard_root,
             checkpoint.get_shard_state_version(shard),
+            checkpoint.epoch(),
             self.state_history_length,
         );
         // A V0 checkpoint commits no state versions, so only from V1 does its version bound the stream.

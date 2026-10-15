@@ -429,6 +429,12 @@ pub trait StateStoreReadTransaction: Sized {
         state_version: Version,
         value_filters: SubstateValueFilterFlags,
     ) -> Result<StateVersionTransitions, StorageError>;
+    /// The epoch of the shard's last state transition at or below `state_version`, if it has one.
+    fn state_transitions_get_latest_epoch(
+        &self,
+        shard: Shard,
+        state_version: Version,
+    ) -> Result<Option<Epoch>, StorageError>;
 
     // -------------------------------- State Tree -------------------------------- //
 
