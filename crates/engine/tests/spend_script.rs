@@ -21,7 +21,7 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_transaction::{Epoch, Transaction, args};
 use tari_template_lib::{
-    args::{SpendContextAction, SpendContextInvokeArg},
+    args::{InvokeResult, SpendContextAction, SpendContextInvokeArg},
     types::{
         AccessRule,
         Amount,
@@ -1525,14 +1525,17 @@ fn repeated_covenant_balance_atoms_are_charged_once() {
     assert_eq!(repeated, once);
 }
 
-/// The engine argument charge for the `AssertCovenantBalanced` call the `preserve_balance` script
-/// makes and `always_ok` does not.
+/// The engine call charges for the `AssertCovenantBalanced` call the `preserve_balance` script makes
+/// and `always_ok` does not: the flat cost, the argument and the response.
 fn covenant_balanced_call_native_points() -> u64 {
     let arg = tari_bor::encode(&SpendContextInvokeArg {
         action: SpendContextAction::AssertCovenantBalanced { max_revealed: 0 },
     })
     .unwrap();
-    limits::engine_arg_points(arg.len() as u64, tari_bor::count_data_items(&arg).unwrap())
+    let response = tari_bor::encode(&InvokeResult::encode(&true).unwrap()).unwrap();
+    limits::NativeExecutionPoints::PER_ENGINE_CALL +
+        limits::engine_arg_points(arg.len() as u64, tari_bor::count_data_items(&arg).unwrap()) +
+        limits::engine_response_points(response.len() as u64, tari_bor::count_data_items(&response).unwrap())
 }
 
 #[test]

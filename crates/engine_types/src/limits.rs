@@ -137,10 +137,11 @@ pub const MIN_MAX_COMPUTE_TRANSACTIONS_PER_BLOCK: u64 = 18;
 /// [`template_compile_points`] for a binary at [`EngineLimits::max_template_binary_size_bytes`] comes to ~2.34e9,
 /// and that limit is chosen so the remainder still covers a fee intent (see
 /// `the_largest_publishable_binary_leaves_room_to_source_a_fee`). So a max-size publish *can* reach this cap, by
-/// construction — it is what makes the publish limit binding. Template return values and engine call arguments are
-/// the other flows this cap bounds: [`return_value_points`] and [`engine_arg_points`] are bounded per call, not
-/// per transaction, and about 18 maximal item-heavy returns, or 3 maximal item-heavy engine call arguments, reach the
-/// cap, failing the transaction out of compute. Every remaining flow stays under it on the structural caps alone.
+/// construction — it is what makes the publish limit binding. Template return values, engine call arguments and
+/// engine call responses are the other flows this cap bounds: [`return_value_points`], [`engine_arg_points`] and
+/// [`engine_response_points`] are bounded per call, not per transaction, and about 18 maximal item-heavy returns, 3
+/// maximal item-heavy engine call arguments or 8 maximal item-heavy engine call responses reach the cap, failing the
+/// transaction out of compute. Every remaining flow stays under it on the structural caps alone.
 pub const MAX_NATIVE_POINTS_PER_TRANSACTION: u64 = 2_400_000_000;
 
 /// Execution metering points the fee intent may consume, whatever it has paid. A transaction sources
@@ -436,6 +437,37 @@ pub const fn engine_arg_points(bytes: u64, items: u64) -> u64 {
         .saturating_add(NativeExecutionPoints::PER_ENGINE_ARG_BYTE.saturating_mul(bytes))
 }
 
+/// Points charged for an engine call's response, `bytes` long and holding `items` CBOR data items,
+/// before it is written into the template's memory.
+///
+/// A handler builds its response outside the Wasmer meter, and most build it by encoding a value
+/// the engine holds — a component's state, a non-fungible's data, the statement a spend runs under
+/// — so that the work follows the value's CBOR items far more than its bytes. The engine then walks
+/// the response for its item count and copies it into the template's linear memory. A template pays
+/// the same few metered instructions for a call whatever it is answered with, and may repeat the
+/// call and drop each response unread, so the response is priced by what it holds.
+///
+/// Measured with `cargo run -p tari_engine --release --example engine_response_points_calibrate`,
+/// which times the encode, walk and copy of responses filling `max_internal_call_size` in each item
+/// shape.
+pub const fn engine_response_points(bytes: u64, items: u64) -> u64 {
+    NativeExecutionPoints::PER_ENGINE_RESPONSE_ITEM
+        .saturating_mul(items)
+        .saturating_add(NativeExecutionPoints::PER_ENGINE_RESPONSE_BYTE.saturating_mul(bytes))
+}
+
+/// Points charged for moving `ids` non-fungible ids from one container to another: taking them from
+/// a bucket or vault, joining or depositing them, or locking them into a proof and unlocking them.
+///
+/// The engine moves each id on its own, outside the Wasmer meter, while the call asking for the
+/// move names only an amount or a bucket, and is answered with an id, whatever it carries. So the
+/// move is priced by the ids it carries.
+///
+/// Measured with `cargo run -p tari_engine --release --example non_fungible_move_points_calibrate`.
+pub const fn non_fungible_move_points(ids: u64) -> u64 {
+    NativeExecutionPoints::PER_NON_FUNGIBLE_ID_MOVED.saturating_mul(ids)
+}
+
 /// Metering-point prices for native (non-WASM) verification work, charged against the same
 /// payment-funded allowance as WASM execution ([`FREE_COMPUTE_GRACE_POINTS`] of credit, then
 /// payments fund the rest). Native crypto runs outside the Wasmer meter, so these price it by
@@ -465,6 +497,22 @@ impl NativeExecutionPoints {
     /// event payload of short distinct keys, where every entry allocates a key and a value and is
     /// inserted into a map, at ~1,400. Set above that. Charged by [`engine_arg_points`].
     pub const PER_ENGINE_ARG_ITEM: u64 = 1_600;
+    /// Fixed cost of an engine call, whatever its op: dispatching it, the handler's bookkeeping and
+    /// the round trip into the template's allocator for the response. A call whose handler does next
+    /// to nothing, answered with a few items, measures at ~6,000 points beyond its metered WASM. Set
+    /// above that, with the call's argument and response charged on top.
+    pub const PER_ENGINE_CALL: u64 = 10_000;
+    /// Each byte of an engine call's response, which the engine copies out of the value it encodes,
+    /// into the response and into the template's memory. A single byte string, which is nothing but
+    /// those copies, measures at ~1-4 points a byte, the spread following whether its allocations
+    /// fault in fresh pages. Charged by [`engine_response_points`].
+    pub const PER_ENGINE_RESPONSE_BYTE: u64 = 4;
+    /// Each CBOR data item in an engine call's response: encoding it from the value the engine holds,
+    /// encoding it again into the response and walking it for the count. Arrays of integers, nulls,
+    /// tags or empty containers measure at ~110-230 points an item; the costliest, strings, at
+    /// ~230-450. The spread is that of the points-per-millisecond rate across runs. Set above those.
+    /// Charged by [`engine_response_points`].
+    pub const PER_ENGINE_RESPONSE_ITEM: u64 = 600;
     /// Fixed cost of a hash invocation, charged on top of [`Self::PER_HASH_BYTE`].
     pub const PER_HASH: u64 = 10_000;
     /// Each byte fed to a hash.
@@ -472,6 +520,11 @@ impl NativeExecutionPoints {
     /// One stealth/confidential input commitment: decompress + point aggregation (~4.8µs measured).
     /// Substate access is charged separately by the fee module.
     pub const PER_INPUT: u64 = 42_000;
+    /// Each non-fungible id moved from one container to another. Integer ids measure at ~600-900
+    /// points a move; the costliest, the longest string ids, which every comparison reads nearly to
+    /// the end, at ~1,100 taken or joined and ~2,100 locked or unlocked, since a lock copies each id.
+    /// Set above that. Charged by [`non_fungible_move_points`].
+    pub const PER_NON_FUNGIBLE_ID_MOVED: u64 = 4_000;
     /// One stealth/confidential output: its share of the aggregated bulletproof range proof
     /// (~0.68ms measured marginal, no view key). Outputs on a resource with a view key add
     /// [`Self::PER_OUTPUT_VIEWABLE_SURCHARGE`] each.

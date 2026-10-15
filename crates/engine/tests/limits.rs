@@ -21,13 +21,18 @@ use tari_ootle_transaction::{
     builder::{FeeIntent, TransactionBuilder, named_args::NamedArg},
 };
 use tari_template_abi::CallInfo;
-use tari_template_lib::types::{
-    ComponentAddress,
-    Metadata,
-    NonFungibleId,
-    TemplateAddress,
-    bytes::Bytes,
-    constants::{NFT_FAUCET_COMPONENT_ADDRESS, NFT_FAUCET_RESOURCE_ADDRESS},
+use tari_template_lib::{
+    args::{ConsensusAction, ConsensusInvokeArg, InvokeResult},
+    types::{
+        Amount,
+        BinaryTag,
+        ComponentAddress,
+        Metadata,
+        NonFungibleId,
+        TemplateAddress,
+        bytes::Bytes,
+        constants::{NFT_FAUCET_COMPONENT_ADDRESS, NFT_FAUCET_RESOURCE_ADDRESS},
+    },
 };
 use tari_template_test_tooling::{TemplateTest, support::assert_error::assert_reject_reason};
 
@@ -368,16 +373,22 @@ fn a_nested_return_value_is_charged_per_item() {
 
     // The outer call passes `len` to the engine and returns the count, and both encodings widen
     // with it. The engine reads `len` three times: in the engine call's argument, in the call's
-    // arguments nested in it, and as the callee's argument nested in those.
+    // arguments nested in it, and as the callee's argument nested in those. The callee's value then
+    // reaches the caller as the engine call's response.
     let width = |len: u32| tari_bor::encode(&len).unwrap().len() as u64;
     let count_charge = |len: u32| limits::return_value_points(width(len), 1);
     let call_arg_charge = |len: u32| 3 * limits::engine_arg_points(width(len), 0);
+    let response_charge = |len: u32| {
+        let (bytes, items) = returned_items(len);
+        limits::engine_response_points(bytes, items)
+    };
     assert_eq!(
         large_points - small_points,
-        return_value_charge(large) + count_charge(large) + call_arg_charge(large) -
+        return_value_charge(large) + count_charge(large) + call_arg_charge(large) + response_charge(large) -
             return_value_charge(small) -
             count_charge(small) -
-            call_arg_charge(small),
+            call_arg_charge(small) -
+            response_charge(small),
         "a nested call returning {large} items rather than {small} must cost exactly the difference in return-value \
          charges"
     );
@@ -595,5 +606,215 @@ fn a_cross_template_call_argument_is_charged_per_item_it_holds() {
         "an argument holding {items} more items must be charged for each: {} < {}",
         large_points - small_points,
         limits::engine_arg_points(0, items)
+    );
+}
+
+/// A `PushItToTheLimit` component whose state holds `data_len` bytes of data and `items` zeros.
+fn component_with_state(test: &mut TemplateTest, data_len: usize, items: u32) -> ComponentAddress {
+    let component: ComponentAddress =
+        test.call_function(TEMPLATE_NAME, "new", args![Bytes::from(vec![0u8; data_len])], vec![]);
+    if items > 0 {
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(component, "set_items", args![items])
+                .build_and_seal(test.secret_key()),
+            vec![],
+        );
+    }
+    component
+}
+
+/// Native points `reads` more reads of `component`'s state, each answered with the state and left
+/// undecoded, are charged than a single read.
+fn native_points_for_extra_reads(test: &mut TemplateTest, component: ComponentAddress, reads: u32) -> u64 {
+    let mut native_points = |reads: u32| {
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(component, "read_state_undecoded", args![reads])
+                .build_and_seal(test.secret_key()),
+            vec![],
+        )
+        .native_execution_points
+    };
+    native_points(1 + reads) - native_points(1)
+}
+
+/// An engine call's response is built and copied on the host, outside the Wasmer meter, and the
+/// template pays no more metered WASM for a large response than a small one. So each read of a
+/// component's state is charged for each byte and item the state holds, whether or not the template
+/// decodes it.
+#[test]
+fn an_engine_call_response_is_charged_per_byte_and_item() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let (small_data, large_data) = (4, 64 * 1024);
+    let large_items = 10_000u32;
+    let small = component_with_state(&mut test, small_data, 0);
+    let large = component_with_state(&mut test, large_data, large_items);
+    let reads = 10;
+
+    let small_points = native_points_for_extra_reads(&mut test, small, reads);
+    let large_points = native_points_for_extra_reads(&mut test, large, reads);
+
+    let extra_bytes = encoded_len(&Bytes::from(vec![0u8; large_data])) + encoded_len(&vec![0u32; large_items as usize]) -
+        encoded_len(&Bytes::from(vec![0u8; small_data])) -
+        encoded_len(&Vec::<u32>::new());
+    assert_eq!(
+        large_points - small_points,
+        u64::from(reads) * limits::engine_response_points(extra_bytes as u64, u64::from(large_items)),
+        "{reads} reads of a state larger by {extra_bytes} bytes and {large_items} items must cost exactly the \
+         difference in engine response charges"
+    );
+}
+
+/// Every engine call is charged a flat cost for the host work around it, on top of its argument and
+/// its response, whether or not the template reads the response.
+#[test]
+fn an_engine_call_is_charged_a_flat_cost() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let template = test.get_template_address(TEMPLATE_NAME);
+    let mut native_points = |count: u32| {
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(template, "read_epoch_undecoded", args![count])
+                .build_and_seal(test.secret_key()),
+            vec![],
+        )
+        .native_execution_points
+    };
+    let calls = 100u32;
+    let extra_points = native_points(1 + calls) - native_points(1);
+
+    let arg = tari_bor::encode(&ConsensusInvokeArg {
+        action: ConsensusAction::GetCurrentEpoch,
+    })
+    .unwrap();
+    let response = tari_bor::encode(&InvokeResult::encode(&Epoch(0)).unwrap()).unwrap();
+    let per_call = limits::NativeExecutionPoints::PER_ENGINE_CALL +
+        limits::engine_arg_points(arg.len() as u64, tari_bor::count_data_items(&arg).unwrap()) +
+        limits::engine_response_points(response.len() as u64, tari_bor::count_data_items(&response).unwrap());
+    assert_eq!(
+        extra_points,
+        u64::from(calls) * per_call,
+        "{calls} engine calls must each be charged the flat cost, their argument and their response"
+    );
+}
+
+/// Engine call responses are charged against the transaction's compute allowance, so a template
+/// that reads a large state over and over fails out of compute. Run in the fee intent, whose flat
+/// credit is the allowance, with too few reads for their metered WASM alone to exhaust it.
+#[test]
+fn engine_call_responses_are_charged_against_the_fee_intent_credit() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let data_len = 64 * 1024;
+    let component = component_with_state(&mut test, data_len, 0);
+    let mut fee_table = FeeTable::zero_rated();
+    fee_table.per_wasm_point_cost = 1;
+    fee_table.wasm_points_cost_divisor = 1;
+    test.set_fee_table(fee_table);
+    test.enable_fees();
+
+    let reads = limits::FREE_COMPUTE_GRACE_POINTS / limits::engine_response_points(data_len as u64, 1) + 1;
+    let reason = test.execute_expect_failure(
+        Transaction::builder_localnet(Epoch(1))
+            .with_fee_instructions_builder(|builder| {
+                builder.call_method(component, "read_state_undecoded", args![u32::try_from(reads).unwrap()])
+            })
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "exceeds the fee intent's");
+}
+
+/// Writes a bucket id into `component`'s state directly in the store, keeping its substate
+/// version. No template can set such a state: validating it as a component state fails.
+fn seed_state_failing_validation(test: &mut TemplateTest, component: ComponentAddress) {
+    let id = SubstateId::Component(component);
+    let substate = test.read_only_state_store().get_substate(&id).unwrap();
+    let version = substate.version();
+    let mut value = substate.into_substate_value();
+    let tari_bor::Value::Array(fields) = &mut value.component_mut().unwrap().body.state else {
+        panic!("the component state is an array of its fields");
+    };
+    // `extra`, the last field.
+    *fields.last_mut().unwrap() =
+        tari_bor::Value::Tag(BinaryTag::BucketId as u64, Box::new(tari_bor::Value::Integer(0)));
+    test.get_state_store_mut()
+        .set_state(id, Substate::new(version, value))
+        .unwrap();
+}
+
+/// Access rules and the owner rule live outside a component's state, so changing them leaves the
+/// state as it is: it is neither indexed nor validated again, however large it is. Shown on a state
+/// that would fail validation.
+#[test]
+fn changing_access_or_owner_rules_leaves_the_state_alone() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let component = component_with_state(&mut test, 4, 0);
+    seed_state_failing_validation(&mut test, component);
+
+    for method in ["allow_all_methods", "disown"] {
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(component, method, args![])
+                .build_and_seal(test.secret_key()),
+            vec![],
+        );
+    }
+}
+
+/// Withdraws all `count` NFT faucet tokens `account` holds and deposits them back.
+fn withdraw_and_deposit_nfts(account: ComponentAddress, key: &RistrettoSecretKey, count: u64) -> Transaction {
+    Transaction::builder_localnet(Epoch(1))
+        .call_method(account, "withdraw", args![
+            NFT_FAUCET_RESOURCE_ADDRESS,
+            Amount::from(count)
+        ])
+        .put_last_instruction_output_on_workspace("nfts")
+        .call_method(account, "deposit", args![Workspace("nfts")])
+        .build_and_seal(key)
+}
+
+/// Creates a proof of every NFT faucet token `account` holds, then drops it.
+fn prove_nfts(account: ComponentAddress, key: &RistrettoSecretKey) -> Transaction {
+    Transaction::builder_localnet(Epoch(1))
+        .call_method(account, "create_proof_for_resource", args![NFT_FAUCET_RESOURCE_ADDRESS])
+        .put_last_instruction_output_on_workspace("proof")
+        .drop_all_proofs_in_workspace()
+        .build_and_seal(key)
+}
+
+/// Moving non-fungible ids between containers runs on the host for every id moved, while the
+/// engine calls asking for it name an amount or a bucket and are answered with an id. So each id a
+/// withdraw, a deposit or a proof moves is charged: twice for a proof, whose ids return to the vault
+/// when it is dropped.
+#[test]
+fn moving_non_fungible_ids_is_charged_per_id() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let (account, owner_proof, key) = test.create_funded_account();
+    test.execute_expect_success(deposit_nfts(account, &key, 1), vec![owner_proof.clone()]);
+    // Both amounts encode at the same width, so the withdraw's argument costs the same either way.
+    let (small, large) = (1_000u64, 10_000u64);
+
+    let mut native_points = |count: u64, transaction: Transaction| {
+        seed_nft_vault(&mut test, account, count);
+        test.execute_expect_success(transaction, vec![owner_proof.clone()])
+            .native_execution_points
+    };
+    let small_round_trip = native_points(small, withdraw_and_deposit_nfts(account, &key, small));
+    let large_round_trip = native_points(large, withdraw_and_deposit_nfts(account, &key, large));
+    let small_proof = native_points(small, prove_nfts(account, &key));
+    let large_proof = native_points(large, prove_nfts(account, &key));
+
+    let extra_moves = 2 * (large - small);
+    assert_eq!(
+        large_round_trip - small_round_trip,
+        limits::non_fungible_move_points(extra_moves),
+        "withdrawing and depositing {large} ids rather than {small} must cost exactly the difference in moves"
+    );
+    assert_eq!(
+        large_proof - small_proof,
+        limits::non_fungible_move_points(extra_moves),
+        "proving {large} ids rather than {small} must cost exactly the difference in moves"
     );
 }

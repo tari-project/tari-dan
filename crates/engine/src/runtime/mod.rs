@@ -297,6 +297,17 @@ pub trait RuntimeInterface {
     /// Input holding more is charged what was read and fails out of compute.
     fn charge_engine_arg(&self, input: &[u8]) -> Result<(), EngineArgChargeError>;
 
+    /// Charges the flat host-side cost of an engine call, before its argument is read.
+    /// Priced by [`tari_engine_types::limits::NativeExecutionPoints::PER_ENGINE_CALL`] and charged
+    /// against the same compute allowance as native verification.
+    fn charge_engine_call(&self) -> Result<(), RuntimeError>;
+
+    /// Charges an engine call's encoded `response` before it is written into the template's memory.
+    /// Priced by [`tari_engine_types::limits::engine_response_points`] and charged against the same
+    /// compute allowance as native verification. Its items are counted as
+    /// [`Self::charge_engine_arg`] counts an argument's.
+    fn charge_engine_response(&self, response: &[u8]) -> Result<(), RuntimeError>;
+
     /// The template instances this transaction has created. A borrow of it must not be held across a
     /// template call, which may reach it again through a nested call.
     fn wasm_instances(&self) -> &RefCell<WasmInstanceCache>;

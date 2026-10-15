@@ -1,7 +1,22 @@
 //  Copyright 2025 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use tari_template_lib::prelude::*;
+use tari_template_abi::{EngineOp, OwnedData, tari_engine};
+use tari_template_lib::{
+    args::{ComponentAction, ComponentInvokeArg, ComponentRef, ConsensusAction, ConsensusInvokeArg},
+    prelude::*,
+    types::SubstateOwnerRule,
+};
+
+/// Calls the engine with an argument encoded beforehand, and frees the response without decoding it.
+fn call_engine_undecoded(op: EngineOp, arg: &[u8]) {
+    unsafe {
+        let response = tari_engine(op.as_i32(), arg.as_ptr(), arg.len());
+        if !response.is_null() {
+            drop(OwnedData::owned_from_ptr(response));
+        }
+    }
+}
 
 #[template]
 mod template {
@@ -10,11 +25,28 @@ mod template {
     pub struct PushItToTheLimit {
         data: Bytes,
         items: Vec<u32>,
+        /// Null as the template sets it. A test may write any value here directly into the store.
+        extra: tari_bor::Value,
     }
 
     impl PushItToTheLimit {
         pub fn new(data: Bytes) -> Self {
-            Self { data, items: Vec::new() }
+            Self {
+                data,
+                items: Vec::new(),
+                extra: tari_bor::Value::Null,
+            }
+        }
+
+        /// Opens every method of this component to any caller.
+        pub fn allow_all_methods(&mut self) {
+            ComponentManager::get(CallerContext::current_component_address())
+                .set_access_rules(AccessRules::new().default(AccessRule::AllowAll));
+        }
+
+        /// Leaves this component with no owner.
+        pub fn disown(&mut self) {
+            ComponentManager::get(CallerContext::current_component_address()).set_owner_rule(SubstateOwnerRule::None);
         }
 
         pub fn set_data(&mut self, data: Bytes) {
@@ -59,6 +91,30 @@ mod template {
                     arg.as_ptr(),
                     arg.len(),
                 );
+            }
+        }
+
+        /// Reads this component's state `reads` times, leaving each response undecoded.
+        pub fn read_state_undecoded(&self, reads: u32) {
+            let arg = tari_bor::encode(&ComponentInvokeArg {
+                component_ref: ComponentRef::Ref(CallerContext::current_component_address()),
+                action: ComponentAction::GetState,
+                args: Vec::new(),
+            })
+            .unwrap();
+            for _ in 0..reads {
+                call_engine_undecoded(EngineOp::ComponentInvoke, &arg);
+            }
+        }
+
+        /// Reads the current epoch `count` times, leaving each response undecoded.
+        pub fn read_epoch_undecoded(count: u32) {
+            let arg = tari_bor::encode(&ConsensusInvokeArg {
+                action: ConsensusAction::GetCurrentEpoch,
+            })
+            .unwrap();
+            for _ in 0..count {
+                call_engine_undecoded(EngineOp::ConsensusInvoke, &arg);
             }
         }
 

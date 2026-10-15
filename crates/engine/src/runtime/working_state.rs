@@ -18,7 +18,7 @@ use tari_engine_types::{
     Utxo,
     ValidatorFeeWithdrawal,
     bucket::Bucket,
-    component::Component,
+    component::{Component, ComponentHeader},
     confidential_output::ConfidentialOutput,
     crypto,
     events::Event,
@@ -373,6 +373,28 @@ impl<TStore: StateReader> WorkingState<TStore> {
         self.validate_component_state(Some(&before), &after)?;
 
         // add event to indicate that there is a change in component
+        let template_address = *self.current_template()?;
+        self.push_event(Event::std(
+            Some(locked.substate_id().clone()),
+            template_address,
+            "component",
+            "updated",
+            metadata!(),
+        ))?;
+
+        Ok(())
+    }
+
+    /// Applies `f` to the locked component's header and records the update. The state is out of
+    /// `f`'s reach, so a header change costs nothing that grows with the state: the state was
+    /// indexed and validated when it was set and is left as it is.
+    pub fn update_component_header<F: FnOnce(&mut ComponentHeader)>(
+        &mut self,
+        locked: &LockedSubstate,
+        f: F,
+    ) -> Result<(), RuntimeError> {
+        f(&mut self.get_component_mut(locked)?.header);
+
         let template_address = *self.current_template()?;
         self.push_event(Event::std(
             Some(locked.substate_id().clone()),
