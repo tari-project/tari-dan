@@ -21,6 +21,8 @@ use tari_consensus_types::{BlockId, Decision};
 use tari_engine_types::substate::{Substate, SubstateValue};
 use tari_ootle_common_types::{
     Epoch,
+    ExtraData,
+    ExtraFieldKey,
     ShardGroup,
     SubstateLockType,
     VotePower,
@@ -28,7 +30,14 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_storage::{
     StateStore,
-    consensus_models::{BlockPledge, CommandOrHash, CommandsCommitProof, ForeignProposal, ForeignProposalRecord},
+    consensus_models::{
+        BlockHeaderMetadata,
+        BlockPledge,
+        CommandOrHash,
+        CommandsCommitProof,
+        ForeignProposal,
+        ForeignProposalRecord,
+    },
 };
 use tari_ootle_transaction::{Network, Transaction};
 use tari_sidechain::{SidechainBlockCommitProof, SidechainBlockHeader};
@@ -71,6 +80,15 @@ fn committee(addresses: &[&'static str]) -> Committee<TestAddress> {
 /// A proposal whose header names `shard_group` and whose proposer is `proposed_by`.
 fn proposal(proposed_by: &'static str, shard_group: tari_sidechain::ShardGroup) -> ForeignProposal {
     let (_, proposer) = helpers::derive_keypair_from_address(&TestAddress::new(proposed_by));
+    let mut extra_data = ExtraData::new();
+    extra_data.insert_bps(ExtraFieldKey::ExhaustBurnRate, 500);
+    let block_metadata = BlockHeaderMetadata {
+        total_leader_fee: 0,
+        timestamp: 0,
+        extra_data,
+        timeout_certificate_id: None,
+        is_dummy: false,
+    };
     let commit_proof = CommandsCommitProof::new_latest(vec![], SidechainBlockCommitProof {
         header: SidechainBlockHeader {
             network: Network::LocalNet.as_byte(),
@@ -87,11 +105,11 @@ fn proposal(proposed_by: &'static str, shard_group: tari_sidechain::ShardGroup) 
             transaction_merkle_root: None,
             signature: Default::default(),
             accumulated_data: Default::default(),
-            metadata_hash: Default::default(),
+            metadata_hash: block_metadata.calculate_hash(),
         },
         proof_elements: vec![],
     });
-    ForeignProposal::new(commit_proof, BlockPledge::default())
+    ForeignProposal::new(commit_proof, BlockPledge::default(), block_metadata)
 }
 
 fn to_header_shard_group(shard_group: ShardGroup) -> tari_sidechain::ShardGroup {
@@ -167,6 +185,7 @@ fn with_commands(proposal: &ForeignProposal, commands: Vec<CommandOrHash>) -> Fo
     ForeignProposal::new(
         CommandsCommitProof::new_latest(commands, proposal.commit_proof().sidechain_block_commit_proof().clone()),
         proposal.block_pledge().clone(),
+        proposal.block_metadata().clone(),
     )
 }
 
@@ -212,6 +231,7 @@ fn without_commit_signatures(proposal: &ForeignProposal) -> ForeignProposal {
             proof_elements: vec![],
         }),
         proposal.block_pledge().clone(),
+        proposal.block_metadata().clone(),
     )
 }
 
@@ -417,7 +437,11 @@ fn with_substituted_pledge_values(proposal: &ForeignProposal) -> ForeignProposal
         }
     }
     assert!(num_substituted > 0, "no component pledged");
-    ForeignProposal::new(proposal.commit_proof().clone(), serde_json::from_value(pledge).unwrap())
+    ForeignProposal::new(
+        proposal.commit_proof().clone(),
+        serde_json::from_value(pledge).unwrap(),
+        proposal.block_metadata().clone(),
+    )
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

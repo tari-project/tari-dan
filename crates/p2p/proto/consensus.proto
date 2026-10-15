@@ -66,6 +66,7 @@ message ForeignProposalRequestByBlockId {
 message ForeignProposal {
   bytes encoded_commit_proof = 1;
   bytes encoded_block_pledge = 2;
+  bytes encoded_block_metadata = 3;
 }
 
 message VoteMessage {

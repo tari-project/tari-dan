@@ -22,6 +22,7 @@ use tari_ootle_storage::{
         Command,
         Evidence,
         ForeignProposal,
+        LockedEpoch,
         LockedSubstateValue,
         MultiShardAtom,
         TransactionExecution,
@@ -30,7 +31,7 @@ use tari_ootle_storage::{
         TransactionRecord,
     },
 };
-use tari_ootle_transaction::{Network, TransactionId};
+use tari_ootle_transaction::TransactionId;
 use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, Scalar32Bytes, SchnorrSignatureBytes};
 
 use crate::{
@@ -38,7 +39,6 @@ use crate::{
         ProposalValidationError,
         block_change_set::ProposedBlockChangeSet,
         error::HotStuffError,
-        exhaust_burn_rate::foreign_proposal_exhaust_burn_rate,
         substate_store::PendingSubstateStore,
     },
     tracing::TraceTimer,
@@ -49,7 +49,6 @@ const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::foreign_proposal_pro
 #[allow(clippy::too_many_lines)]
 pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
     tx: &TTx,
-    network: Network,
     proposal: &ForeignProposal,
     local_committee_info: &CommitteeInfo,
     substate_store: &mut PendingSubstateStore<TTx>,
@@ -58,14 +57,8 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
     let _timer = TraceTimer::info(LOG_TARGET, "process_foreign_block");
     let local_leaf = &substate_store.parent_block();
 
-    // The proposal is proved against the layer-1 shaped header, which carries a metadata hash and not
-    // the extra data the rate lives in, so the rate for its epoch is taken from this node's own view of
-    // that epoch instead. Every shard group opens an epoch at the same rate, which is what keeps groups
-    // that sequence this proposal in different epochs of their own agreeing on what a transaction
-    // pinned to `proposal.epoch()` settles at.
-    let foreign_exhaust_burn_rate = foreign_proposal_exhaust_burn_rate(tx, network, proposal.epoch())?;
-
     let foreign_shard_group = proposal.shard_group_unchecked();
+    let foreign_locked_epoch = foreign_locked_epoch(proposal)?;
     info!(
         target: LOG_TARGET,
         "🧩 Processing FOREIGN PROPOSAL {}",
@@ -142,7 +135,7 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
                     continue;
                 }
 
-                if tx_rec.update_locked_epoch(proposal.to_locked_epoch(foreign_exhaust_burn_rate)) {
+                if tx_rec.update_locked_epoch(foreign_locked_epoch.clone()) {
                     debug!(
                         target: LOG_TARGET,
                         "🔒 Foreign proposal {} updated locked epoch for transaction {} to {}",
@@ -434,7 +427,7 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
 
                 // We update this in the foreign Accept phase because we may be output-only and not yet performed the
                 // prepare phase. (therefore locked_epoch is None)
-                tx_rec.update_locked_epoch(proposal.to_locked_epoch(foreign_exhaust_burn_rate));
+                tx_rec.update_locked_epoch(foreign_locked_epoch.clone());
 
                 let remote_decision = atom.decision;
                 let local_decision = tx_rec.current_decision();
@@ -841,4 +834,97 @@ fn calculate_qc_id_from_sidechain_qc(qc: &tari_sidechain::QuorumCertificate) -> 
         &signatures,
         &qc.decision,
     )
+}
+
+/// What a transaction is pinned to by `proposal`: its epoch, at the exhaust burn rate the proposing block names.
+///
+/// Shard groups can open the same epoch at different rates, so the rate comes from the proposing block. Every shard
+/// group that pins a transaction to this proposal then pins the same value, and `update_locked_epoch` settles pins
+/// that tie on epoch the same way everywhere.
+fn foreign_locked_epoch(proposal: &ForeignProposal) -> Result<LockedEpoch, ProposalValidationError> {
+    let exhaust_burn_rate =
+        proposal
+            .exhaust_burn_rate()
+            .ok_or_else(|| ProposalValidationError::ForeignBlockNamesNoExhaustBurnRate {
+                block_id: proposal.calculate_block_id(),
+                shard_group: proposal.shard_group_unchecked(),
+            })?;
+    Ok(proposal.to_locked_epoch(exhaust_burn_rate))
+}
+
+#[cfg(test)]
+mod tests {
+    use tari_common_types::types::PrivateKey;
+    use tari_ootle_common_types::{Epoch, ExtraData, ExtraFieldKey, NumPreshards};
+    use tari_ootle_storage::consensus_models::{BlockHeaderMetadata, BlockPledge, CommandsCommitProof};
+    use tari_ootle_transaction::Transaction;
+    use tari_sidechain::{SidechainBlockCommitProof, SidechainBlockHeader};
+
+    use super::*;
+
+    /// A proposal from `shard_group`'s block in `epoch` whose proven metadata names `rate_bps`.
+    fn proposal_naming(shard_group: ShardGroup, epoch: u64, rate_bps: u16) -> ForeignProposal {
+        let mut extra_data = ExtraData::new();
+        extra_data.insert_bps(ExtraFieldKey::ExhaustBurnRate, rate_bps);
+        let metadata = BlockHeaderMetadata {
+            total_leader_fee: 0,
+            timestamp: 0,
+            extra_data,
+            timeout_certificate_id: None,
+            is_dummy: false,
+        };
+        let commit_proof = CommandsCommitProof::new_latest(vec![], SidechainBlockCommitProof {
+            header: SidechainBlockHeader {
+                network: 0,
+                protocol_version: 0,
+                parent_id: Default::default(),
+                justify_id: Default::default(),
+                height: 1,
+                epoch,
+                epoch_hash: Default::default(),
+                shard_group: tari_sidechain::ShardGroup {
+                    start: shard_group.start().as_u32(),
+                    end_inclusive: shard_group.end().as_u32(),
+                },
+                proposed_by: Default::default(),
+                state_merkle_root: Default::default(),
+                command_merkle_root: Default::default(),
+                transaction_merkle_root: None,
+                signature: Default::default(),
+                accumulated_data: Default::default(),
+                metadata_hash: metadata.calculate_hash(),
+            },
+            proof_elements: vec![],
+        });
+        ForeignProposal::new(commit_proof, BlockPledge::default(), metadata)
+    }
+
+    fn record() -> TransactionPoolRecord {
+        let transaction = Transaction::builder_localnet(Epoch(100)).build_and_seal(&PrivateKey::from(1u64));
+        TransactionPoolRecord::new_from_transaction(&transaction, Evidence::empty())
+    }
+
+    /// Shard groups A and B opened epoch 5 at different rates, and a transaction spanning both is prepared in each.
+    /// Every shard group processing the two LocalPrepares pins it at one rate named by a proposing block, whichever
+    /// arrives first.
+    #[test]
+    fn groups_that_opened_an_epoch_at_different_rates_pin_one_rate() {
+        let num_preshards = NumPreshards::P256;
+        let group_a = ShardGroup::new(0u32, num_preshards.as_u32() / 2 - 1);
+        let group_b = ShardGroup::new(num_preshards.as_u32() / 2, num_preshards.as_u32() - 1);
+        let from_a = foreign_locked_epoch(&proposal_naming(group_a, 5, 500)).unwrap();
+        let from_b = foreign_locked_epoch(&proposal_naming(group_b, 5, 700)).unwrap();
+        assert_eq!(from_a.exhaust_burn_rate().as_bps(), 500);
+        assert_eq!(from_b.exhaust_burn_rate().as_bps(), 700);
+
+        let mut a_then_b = record();
+        a_then_b.update_locked_epoch(from_a.clone());
+        a_then_b.update_locked_epoch(from_b.clone());
+        let mut b_then_a = record();
+        b_then_a.update_locked_epoch(from_b);
+        b_then_a.update_locked_epoch(from_a.clone());
+
+        assert_eq!(a_then_b.locked_epoch(), Some(&from_a));
+        assert_eq!(b_then_a.locked_epoch(), Some(&from_a));
+    }
 }

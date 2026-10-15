@@ -271,6 +271,7 @@ impl From<&ForeignProposal> for proto::consensus::ForeignProposal {
             // TODO: remove panics
             encoded_commit_proof: encode_to_vec(value.commit_proof()).expect("Failed to encode commit proof"),
             encoded_block_pledge: encode_to_vec(value.block_pledge()).expect("Failed to encode block pledge"),
+            encoded_block_metadata: encode_to_vec(value.block_metadata()).expect("Failed to encode block metadata"),
         }
     }
 }
@@ -282,6 +283,7 @@ impl TryFrom<proto::consensus::ForeignProposal> for ForeignProposal {
         Ok(Self::new(
             decode_from_slice(&value.encoded_commit_proof).context("Failed to decode commit proof")?,
             decode_from_slice(&value.encoded_block_pledge).context("Failed to decode block pledge")?,
+            decode_from_slice(&value.encoded_block_metadata).context("Failed to decode block metadata")?,
         ))
     }
 }

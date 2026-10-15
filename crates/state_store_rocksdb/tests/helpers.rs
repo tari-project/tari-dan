@@ -510,7 +510,11 @@ pub fn create_foreign_proposal(parent_id: BlockId, epoch: Epoch) -> ForeignPropo
         )],
     });
 
-    ForeignProposalRecord::new(ForeignProposal::new(commit_proof, BlockPledge::default()))
+    ForeignProposalRecord::new(ForeignProposal::new(
+        commit_proof,
+        BlockPledge::default(),
+        foreign_block.header().metadata(),
+    ))
 }
 
 /// The state-tree version the substates committed by [`commit_substates`] land at.

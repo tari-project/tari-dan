@@ -45,10 +45,7 @@ use tari_consensus_types::{
     TcId,
     TimeoutCertificate,
 };
-use tari_engine_types::{
-    fees::ExhaustBurnRate,
-    substate::{Substate, SubstateId},
-};
+use tari_engine_types::substate::{Substate, SubstateId};
 use tari_ootle_common_types::{
     Epoch,
     NodeAddressable,
@@ -132,7 +129,6 @@ use crate::{
         chain,
         epoch_checkpoint,
         epoch_checkpoint::EpochCheckpointCf,
-        epoch_exhaust_burn_rate::EpochExhaustBurnRateCf,
         finalized_transaction::FinalizedTransactionLinkCf,
         foreign_parked_blocks::ForeignParkedBlockCf,
         foreign_proposal,
@@ -2067,22 +2063,6 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
             key: "last".to_string(),
         })??;
         Ok(checkpoint)
-    }
-
-    fn epoch_exhaust_burn_rate_get(&self, epoch: Epoch) -> Result<Option<ExhaustBurnRate>, StorageError> {
-        const OPERATION: &str = "epoch_exhaust_burn_rate_get";
-        let Some(bps) = self
-            .db()
-            .cf(EpochExhaustBurnRateCf)?
-            .get(&epoch, OPERATION)
-            .optional()?
-        else {
-            return Ok(None);
-        };
-        let rate = ExhaustBurnRate::try_new(bps).ok_or_else(|| StorageError::DataInconsistency {
-            details: format!("{OPERATION}: {epoch} recorded an out-of-range exhaust burn rate of {bps}bps"),
-        })?;
-        Ok(Some(rate))
     }
 
     fn foreign_substate_pledges_exists_for_transaction_and_address<T: ToSubstateAddress>(

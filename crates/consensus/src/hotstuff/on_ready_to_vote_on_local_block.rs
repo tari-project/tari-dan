@@ -1760,7 +1760,6 @@ where TConsensusSpec: ConsensusSpec
 
         if let Err(err) = process_foreign_block(
             tx,
-            self.config.network,
             fp.proposal(),
             local_committee_info,
             substate_store,

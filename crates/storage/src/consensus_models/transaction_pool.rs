@@ -873,10 +873,18 @@ impl TransactionPoolRecord {
         self
     }
 
-    /// Updates the locked epoch if the new epoch is less than the current locked epoch.
-    /// Returns true if the locked epoch was updated, otherwise false.
+    /// Pins the transaction to `new_epoch` if it precedes the current pin, and returns whether it did.
+    ///
+    /// Each shard group opens an epoch at the exhaust burn rate it resolved, so two pins in the same epoch can name
+    /// different rates. The lower rate wins the tie, which leaves every shard group holding the same pin whatever
+    /// order the proposals carrying them arrive in.
     pub fn update_locked_epoch(&mut self, new_epoch: LockedEpoch) -> bool {
-        if self.locked_epoch.as_ref().is_none_or(|e| e.epoch() > new_epoch.epoch()) {
+        let pin_order = |pin: &LockedEpoch| (pin.epoch(), pin.exhaust_burn_rate().as_bps());
+        if self
+            .locked_epoch
+            .as_ref()
+            .is_none_or(|current| pin_order(&new_epoch) < pin_order(current))
+        {
             self.locked_epoch = Some(new_epoch);
             return true;
         }
@@ -1644,6 +1652,36 @@ mod tests {
                 // Approaches 5% (the burn is 1/20 of the fee plus sub-shard-count dust)
                 (total_burnt as f64 / total_fees as f64) * 100.0
             );
+        }
+    }
+
+    mod update_locked_epoch {
+        use tari_engine_types::fees::ExhaustBurnRate;
+
+        use super::{proposal_weight::record_with_weight_and_stage, *};
+
+        fn pin(epoch: u64, bps: u16) -> LockedEpoch {
+            LockedEpoch::new(Epoch(epoch), Default::default(), ExhaustBurnRate::new(bps))
+        }
+
+        fn pinned_after(pins: &[LockedEpoch]) -> Option<LockedEpoch> {
+            let mut record = record_with_weight_and_stage(0, TransactionPoolStage::New);
+            for pin in pins {
+                record.update_locked_epoch(pin.clone());
+            }
+            record.locked_epoch().cloned()
+        }
+
+        #[test]
+        fn the_earlier_epoch_wins() {
+            assert_eq!(pinned_after(&[pin(6, 100), pin(5, 900)]), Some(pin(5, 900)));
+            assert_eq!(pinned_after(&[pin(5, 900), pin(6, 100)]), Some(pin(5, 900)));
+        }
+
+        #[test]
+        fn pins_in_the_same_epoch_settle_at_one_rate_whatever_the_arrival_order() {
+            assert_eq!(pinned_after(&[pin(5, 700), pin(5, 500)]), Some(pin(5, 500)));
+            assert_eq!(pinned_after(&[pin(5, 500), pin(5, 700)]), Some(pin(5, 500)));
         }
     }
 }

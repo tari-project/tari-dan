@@ -51,9 +51,9 @@ pub async fn resolve_foreign_committee<TEpochManager: EpochManagerReader>(
     Ok(committee)
 }
 
-/// Returns true if a foreign proposal with this proposal's commit proof is stored. Every stored foreign proposal was
-/// authenticated before it was saved, and authentication reads only the commit proof, so this proposal authenticates
-/// too.
+/// Returns true if a foreign proposal with this proposal's commit proof and block metadata is stored. Every stored
+/// foreign proposal was authenticated before it was saved, and authentication reads only those two, so this
+/// proposal authenticates too.
 ///
 /// The whole commit proof is compared because stored foreign proposals are pruned by epoch: a copy that shares only
 /// the block id may be saved once its stored twin is pruned, so it must be authenticated on its own.
@@ -62,9 +62,11 @@ pub fn is_authenticated_commit_proof_stored<TTx: StateStoreReadTransaction>(
     proposal: &ForeignProposal,
 ) -> Result<bool, HotStuffError> {
     let stored = ForeignProposalRecord::get_any(tx, [&proposal.calculate_block_id()])?;
-    Ok(stored
-        .iter()
-        .any(|record| record.proposal().commit_proof() == proposal.commit_proof()))
+    let metadata_hash = proposal.block_metadata().calculate_hash();
+    Ok(stored.iter().any(|record| {
+        record.proposal().commit_proof() == proposal.commit_proof() &&
+            record.proposal().block_metadata().calculate_hash() == metadata_hash
+    }))
 }
 
 /// Checks the proposal against the committee of the shard group its header names, in the proposal's epoch.
@@ -95,7 +97,26 @@ pub fn check_foreign_proposal<TConsensusSpec: ConsensusSpec>(
     check_protocol_version(proposal, config.network)?;
     check_proposer_in_committee(proposal, foreign_committee)?;
     check_header(proposal)?;
+    check_block_metadata(proposal)?;
     check_commit_proof::<TConsensusSpec>(proposal.commit_proof(), foreign_committee)?;
+    Ok(())
+}
+
+/// The block metadata is read for the rate every transaction the proposal pins settles at, so it must be the
+/// preimage of the metadata hash the committee signed, and it must name a rate.
+fn check_block_metadata(proposal: &ForeignProposal) -> Result<(), ProposalValidationError> {
+    if !proposal.is_block_metadata_proven() {
+        return Err(ProposalValidationError::ForeignBlockMetadataNotProven {
+            block_id: proposal.calculate_block_id(),
+            shard_group: proposal.shard_group_unchecked(),
+        });
+    }
+    if proposal.exhaust_burn_rate().is_none() {
+        return Err(ProposalValidationError::ForeignBlockNamesNoExhaustBurnRate {
+            block_id: proposal.calculate_block_id(),
+            shard_group: proposal.shard_group_unchecked(),
+        });
+    }
     Ok(())
 }
 
@@ -175,8 +196,14 @@ pub fn check_commit_proof<TConsensusSpec: ConsensusSpec>(
 mod tests {
     use tari_common_types::types::CompressedPublicKey;
     use tari_crypto::tari_utilities::ByteArray;
-    use tari_ootle_common_types::{ShardGroup, committee::CommitteeMember, crypto::create_key_pair_from_seed};
-    use tari_ootle_storage::consensus_models::BlockPledge;
+    use tari_ootle_common_types::{
+        ExtraData,
+        ExtraFieldKey,
+        ShardGroup,
+        committee::CommitteeMember,
+        crypto::create_key_pair_from_seed,
+    };
+    use tari_ootle_storage::consensus_models::{BlockHeaderMetadata, BlockPledge};
     use tari_sidechain::{SidechainBlockCommitProof, SidechainBlockHeader};
     use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
@@ -200,7 +227,32 @@ mod tests {
         )
     }
 
+    fn metadata_naming(rate_bps: Option<u16>) -> BlockHeaderMetadata {
+        let mut extra_data = ExtraData::new();
+        if let Some(bps) = rate_bps {
+            extra_data.insert_bps(ExtraFieldKey::ExhaustBurnRate, bps);
+        }
+        BlockHeaderMetadata {
+            total_leader_fee: 0,
+            timestamp: 1234,
+            extra_data,
+            timeout_certificate_id: None,
+            is_dummy: false,
+        }
+    }
+
     fn proposal(proposer_seed: u8, shard_group: ShardGroup) -> ForeignProposal {
+        let metadata = metadata_naming(Some(500));
+        proposal_with_metadata(proposer_seed, shard_group, &metadata, metadata.clone())
+    }
+
+    /// A proposal whose proven header commits to `hashed` and which carries `carried` as its block metadata.
+    fn proposal_with_metadata(
+        proposer_seed: u8,
+        shard_group: ShardGroup,
+        hashed: &BlockHeaderMetadata,
+        carried: BlockHeaderMetadata,
+    ) -> ForeignProposal {
         let (_, proposer) = create_key_pair_from_seed(proposer_seed);
         let commit_proof = CommandsCommitProof::new_latest(vec![], SidechainBlockCommitProof {
             header: SidechainBlockHeader {
@@ -221,11 +273,11 @@ mod tests {
                 transaction_merkle_root: None,
                 signature: Default::default(),
                 accumulated_data: Default::default(),
-                metadata_hash: Default::default(),
+                metadata_hash: hashed.calculate_hash(),
             },
             proof_elements: vec![],
         });
-        ForeignProposal::new(commit_proof, BlockPledge::default())
+        ForeignProposal::new(commit_proof, BlockPledge::default(), carried)
     }
 
     fn shard_group_b() -> ShardGroup {
@@ -253,5 +305,41 @@ mod tests {
         let proposal = proposal(12, b);
 
         check_proposer_in_committee(&proposal, &committee_b).unwrap();
+    }
+
+    #[test]
+    fn it_accepts_block_metadata_that_hashes_to_the_proven_header() {
+        let proposal = proposal(1, shard_group_b());
+
+        check_block_metadata(&proposal).unwrap();
+        assert_eq!(proposal.exhaust_burn_rate().map(|rate| rate.as_bps()), Some(500));
+    }
+
+    #[test]
+    fn it_rejects_block_metadata_naming_a_rate_the_header_does_not_commit_to() {
+        let proposal = proposal_with_metadata(
+            1,
+            shard_group_b(),
+            &metadata_naming(Some(500)),
+            metadata_naming(Some(900)),
+        );
+
+        let err = check_block_metadata(&proposal).unwrap_err();
+        assert!(
+            matches!(err, ProposalValidationError::ForeignBlockMetadataNotProven { .. }),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn it_rejects_proven_block_metadata_that_names_no_rate() {
+        let metadata = metadata_naming(None);
+        let proposal = proposal_with_metadata(1, shard_group_b(), &metadata, metadata.clone());
+
+        let err = check_block_metadata(&proposal).unwrap_err();
+        assert!(
+            matches!(err, ProposalValidationError::ForeignBlockNamesNoExhaustBurnRate { .. }),
+            "unexpected error: {err}"
+        );
     }
 }

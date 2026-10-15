@@ -486,14 +486,9 @@ where TConsensusSpec: ConsensusSpec
                 // the justify block under a dummy chain, the extended leaf otherwise. A replica's store is
                 // built on the block it is evaluating, whose parent chain runs back through any dummies to
                 // the justify block.
-                if let Err(err) = process_foreign_block(
-                    tx,
-                    self.config.network,
-                    fp,
-                    local_committee_info,
-                    &mut substate_store,
-                    &mut change_set,
-                ) {
+                if let Err(err) =
+                    process_foreign_block(tx, fp, local_committee_info, &mut substate_store, &mut change_set)
+                {
                     // Dropping the proposals is safe for every error class and is what keeps a block whose
                     // commands no replica can reproduce off the wire. Propagating instead would take the
                     // whole consensus loop down over a remote committee's proposal.

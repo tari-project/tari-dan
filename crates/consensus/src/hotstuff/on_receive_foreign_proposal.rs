@@ -347,7 +347,7 @@ where TConsensusSpec: ConsensusSpec
                         &commit_qc,
                         for_shard_group,
                     )?;
-                    let proposal = ForeignProposal::new(commit_proof, block_pledge);
+                    let proposal = ForeignProposal::new(commit_proof, block_pledge, block.header().metadata());
                     Ok::<_, HotStuffError>(Some(proposal))
                 })?
                 else {

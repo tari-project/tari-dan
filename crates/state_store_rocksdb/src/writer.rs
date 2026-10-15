@@ -46,7 +46,7 @@ use tari_consensus_types::{
     ProposalCertificate,
     TimeoutCertificate,
 };
-use tari_engine_types::{fees::ExhaustBurnRate, substate::SubstateId};
+use tari_engine_types::substate::SubstateId;
 use tari_ootle_common_types::{
     Epoch,
     NodeAddressable,
@@ -133,7 +133,6 @@ use crate::{
         chain::PendingChainIndex,
         diagnostic_no_vote::{DiagnosticsNoVoteCf, DiagnosticsNoVoteData},
         epoch_checkpoint::EpochCheckpointCf,
-        epoch_exhaust_burn_rate::EpochExhaustBurnRateCf,
         finalized_transaction,
         finalized_transaction::{FinalizedTransactionLinkCf, FinalizedTransactionLinkData},
         foreign_parked_blocks,
@@ -1950,18 +1949,6 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
             .cf(EpochCheckpointCf)?
             .put(&(checkpoint.epoch(), shard_group), checkpoint, OPERATION)?;
 
-        Ok(())
-    }
-
-    fn epoch_exhaust_burn_rate_set(
-        &mut self,
-        epoch: Epoch,
-        exhaust_burn_rate: ExhaustBurnRate,
-    ) -> Result<(), StorageError> {
-        const OPERATION: &str = "epoch_exhaust_burn_rate_set";
-        self.db()
-            .cf(EpochExhaustBurnRateCf)?
-            .put(&epoch, &exhaust_burn_rate.as_bps(), OPERATION)?;
         Ok(())
     }
 
