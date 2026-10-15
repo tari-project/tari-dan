@@ -33,6 +33,7 @@ pub struct TestBlockTransactionProcessor {
     address: TestAddress,
     store: TestExecutionSpecStore,
     history: Arc<Mutex<HashMap<TransactionId, TestHistoricalExecution>>>,
+    execute_counts: Arc<Mutex<HashMap<TransactionId, usize>>>,
 }
 
 impl TestBlockTransactionProcessor {
@@ -41,6 +42,7 @@ impl TestBlockTransactionProcessor {
             address,
             store,
             history: Default::default(),
+            execute_counts: Default::default(),
         }
     }
 
@@ -50,6 +52,16 @@ impl TestBlockTransactionProcessor {
 
     pub fn get_history(&self) -> HashMap<TransactionId, TestHistoricalExecution> {
         self.history.lock().unwrap().clone()
+    }
+
+    /// The number of times this validator has executed `transaction_id`.
+    pub fn get_execute_count(&self, transaction_id: &TransactionId) -> usize {
+        self.execute_counts
+            .lock()
+            .unwrap()
+            .get(transaction_id)
+            .copied()
+            .unwrap_or(0)
     }
 
     fn add_substates_to_memory_db<'a, I: IntoIterator<Item = (&'a SubstateRequirement, &'a Substate)>>(
@@ -113,7 +125,7 @@ impl<TStateStore: StateStore> BlockTransactionExecutor<TStateStore> for TestBloc
             // Implicitly add XTR as read lock for all transactions
             .chain(iter::once((SubstateId::from(TARI_TOKEN), SubstateLockType::Read)))
             .map(|(substate_id, lock_type)| {
-                let substate = resolved_inputs.get(&substate_id).unwrap_or_else(|| {
+                let (requirement, substate) = resolved_inputs.get_key_value(&substate_id).unwrap_or_else(|| {
                     panic!(
                         "[{}] Consensus did not provide input substate {} for transaction {}. In spec: {}. Provided: \
                          {}",
@@ -127,7 +139,7 @@ impl<TStateStore: StateStore> BlockTransactionExecutor<TStateStore> for TestBloc
                 VersionedSubstateIdLockIntent::new(
                     VersionedSubstateId::new(substate_id, substate.version()),
                     lock_type,
-                    true,
+                    requirement.version().is_some(),
                 )
                 .with_pledged_value(substate.substate_value())
             })
@@ -183,6 +195,7 @@ impl<TStateStore: StateStore> BlockTransactionExecutor<TStateStore> for TestBloc
             executed.execution_time(),
             executed.result().finalize.result
         );
+        *self.execute_counts.lock().unwrap().entry(id).or_default() += 1;
         self.history.lock().unwrap().insert(id, TestHistoricalExecution {
             execution: executed.clone(),
             execution_epoch,

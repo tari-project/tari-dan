@@ -7,6 +7,8 @@ mod catch_up_rewind;
 #[cfg(test)]
 mod consensus;
 #[cfg(test)]
+mod deferred_lock_conflict;
+#[cfg(test)]
 mod dummy_blocks;
 #[cfg(test)]
 mod dummy_fill_anchor;

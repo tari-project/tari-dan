@@ -16,6 +16,12 @@ pub enum PreparedTransaction {
         total_bytes: usize,
         max_bytes: usize,
     },
+    /// One or more of the transaction's declared local inputs are locked by another transaction in a way that no
+    /// execution of it could lock alongside, and none of those inputs names a version. The lock status is always a
+    /// deferrable conflict. The transaction was not executed and nothing was locked for it.
+    InputsLocked {
+        lock_status: LockStatus,
+    },
 }
 
 impl PreparedTransaction {
@@ -39,6 +45,7 @@ impl PreparedTransaction {
             },
             Self::MultiShard(multishard) => &multishard.lock_status,
             Self::PledgeBudgetReached { .. } => &DEFAULT_LOCK_STATUS,
+            Self::InputsLocked { lock_status } => lock_status,
         }
     }
 
@@ -50,6 +57,7 @@ impl PreparedTransaction {
             },
             Self::MultiShard(multishard) => multishard.lock_status,
             Self::PledgeBudgetReached { .. } => LockStatus::new(),
+            Self::InputsLocked { lock_status } => lock_status,
         }
     }
 
