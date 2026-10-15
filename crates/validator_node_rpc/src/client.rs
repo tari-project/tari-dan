@@ -377,8 +377,9 @@ impl<TAddr: NodeAddressable + ToPeerId, TMsg: MessageSpec> ValidatorNodeRpcClien
 
 /// How long a batch response may take from its first frame to its last. The per-message deadline bounds only the gap
 /// between frames; this bounds the response as a whole. A responder reads the whole batch before it streams any of
-/// it, so this is spent almost entirely on transfer.
-const BATCH_RESPONSE_TIMEOUT: Duration = Duration::from_secs(60);
+/// it, so this is spent almost entirely on transfer. A caller tries several members in turn, so this also bounds how
+/// long each one that stalls can hold up the read.
+const BATCH_RESPONSE_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Collects a batch response stream into a [`SubstateBatch`], bounding the response by the request: every requested
 /// id is answered at most once, and nothing else is accepted.
@@ -394,11 +395,8 @@ where
         collect_substate_batch_frames(stream, substate_ids),
     )
     .await
-    .map_err(|_| {
-        ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
-            "Node did not finish answering for {} substate(s) within {BATCH_RESPONSE_TIMEOUT:.0?}",
-            substate_ids.len()
-        ))
+    .map_err(|_| ValidatorNodeRpcClientError::ResponseTimeout {
+        timeout: BATCH_RESPONSE_TIMEOUT,
     })?
 }
 
@@ -692,48 +690,62 @@ mod tests {
         assert_eq!(batch.missing, vec![b]);
     }
 
+    /// The message a response is rejected with.
+    async fn rejection_of(
+        frames: Vec<Result<proto::rpc::GetSubstatesBatchResponse, RpcStatus>>,
+        requested: &[&SubstateId],
+    ) -> String {
+        collect(frames, requested)
+            .await
+            .expect_err("the response was accepted")
+            .to_string()
+    }
+
     #[tokio::test]
     async fn a_peer_cannot_name_more_missing_ids_than_were_requested() {
         let id = substate_id();
         let frames = (0..100).map(|_| missing_frame(&[&id; 100])).collect();
-        assert!(collect(frames, &[&id]).await.is_err());
+        let rejection = rejection_of(frames, &[&id]).await;
+        assert!(rejection.contains("more than once"), "{rejection}");
     }
 
     #[tokio::test]
     async fn a_peer_cannot_name_an_unrequested_id_as_missing() {
         let (a, b) = (substate_id(), other_substate_id());
-        assert!(collect(vec![missing_frame(&[&a, &b])], &[&a]).await.is_err());
+        let rejection = rejection_of(vec![missing_frame(&[&a, &b])], &[&a]).await;
+        assert!(rejection.contains("which was not requested"), "{rejection}");
     }
 
     #[tokio::test]
     async fn a_peer_cannot_answer_for_an_id_twice() {
         let id = substate_id();
-        assert!(
-            collect(vec![down_substate_frame(&id), missing_frame(&[&id])], &[&id])
-                .await
-                .is_err()
-        );
-        assert!(
-            collect(vec![missing_frame(&[&id]), down_substate_frame(&id)], &[&id])
-                .await
-                .is_err()
-        );
+        let rejection = rejection_of(vec![down_substate_frame(&id), missing_frame(&[&id])], &[&id]).await;
+        assert!(rejection.contains("more than once"), "{rejection}");
+        let rejection = rejection_of(vec![missing_frame(&[&id]), down_substate_frame(&id)], &[&id]).await;
+        assert!(rejection.contains("more than once"), "{rejection}");
+    }
+
+    #[tokio::test]
+    async fn a_peer_cannot_send_more_than_one_commit_proof() {
+        let id = substate_id();
+        let frames = vec![
+            frame(batch_response::Response::CommitProof(vec![1])),
+            frame(batch_response::Response::CommitProof(vec![1])),
+            missing_frame(&[&id]),
+        ];
+        let rejection = rejection_of(frames, &[&id]).await;
+        assert!(rejection.contains("more than one commit proof"), "{rejection}");
     }
 
     #[tokio::test]
     async fn a_peer_cannot_send_more_frames_than_the_request_accounts_for() {
         let id = substate_id();
-        let commit_proofs = (0..10)
-            .map(|_| frame(batch_response::Response::CommitProof(vec![1])))
-            .chain([missing_frame(&[&id])])
-            .collect();
-        assert!(collect(commit_proofs, &[&id]).await.is_err());
-
         let empty_frames = (0..10_000)
             .map(|_| Ok(proto::rpc::GetSubstatesBatchResponse { response: None }))
             .chain([missing_frame(&[&id])])
             .collect();
-        assert!(collect(empty_frames, &[&id]).await.is_err());
+        let rejection = rejection_of(empty_frames, &[&id]).await;
+        assert!(rejection.contains("more than 3 messages"), "{rejection}");
     }
 
     #[tokio::test(start_paused = true)]
@@ -747,7 +759,10 @@ mod tests {
         )
         .await
         .expect("the batch read is not bounded in time");
-        assert!(result.is_err());
+        assert!(
+            matches!(result, Err(ValidatorNodeRpcClientError::ResponseTimeout { .. })),
+            "{result:?}"
+        );
     }
 
     #[test]
