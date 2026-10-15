@@ -183,6 +183,26 @@ pub fn ensure_epoch_reached(until_epoch: Epoch, current_epoch: Epoch) -> Result<
     Ok(())
 }
 
+/// Rejects a bounded request for history through `until_epoch` once this node's epoch GC may have pruned a value the
+/// stream must carry. GC prunes the value of a substate destroyed at epoch `d` once the store reaches epoch
+/// `d + epoch_history_length`. Past `until_epoch + epoch_history_length`, a substate that is live at `until_epoch` and
+/// destroyed after it can therefore be left with only its hash, and the stream ends before the destruction that would
+/// account for the missing value.
+pub fn ensure_history_values_held(
+    until_epoch: Epoch,
+    store_epoch: Epoch,
+    epoch_history_length: u64,
+) -> Result<(), RpcStatus> {
+    let horizon = until_epoch.checked_add(Epoch(epoch_history_length));
+    if horizon.is_some_and(|horizon| store_epoch > horizon) {
+        return Err(RpcStatus::unavailable(format!(
+            "This node has pruned substate values that history through epoch {until_epoch} needs (current epoch is \
+             {store_epoch})"
+        )));
+    }
+    Ok(())
+}
+
 /// Rejects a shard that `committee_info` does not cover. Every committee holds the global shard, so it
 /// is always in range.
 fn ensure_shard_is_stored(shard: Shard, committee_info: &CommitteeInfo) -> Result<(), RpcStatus> {
@@ -951,6 +971,15 @@ mod tests {
         assert!(err.is_unavailable());
         let err = ensure_epoch_reached(Epoch::max(), Epoch(5)).unwrap_err();
         assert!(err.is_unavailable());
+    }
+
+    #[test]
+    fn it_rejects_history_whose_values_epoch_gc_may_have_pruned() {
+        assert!(ensure_history_values_held(Epoch(4), Epoch(5), 1).is_ok());
+        let err = ensure_history_values_held(Epoch(4), Epoch(6), 1).unwrap_err();
+        assert!(err.is_unavailable());
+        assert!(ensure_history_values_held(Epoch(4), Epoch(6), 2).is_ok());
+        assert!(ensure_history_values_held(Epoch::max(), Epoch::max(), 1).is_ok());
     }
 
     #[test]

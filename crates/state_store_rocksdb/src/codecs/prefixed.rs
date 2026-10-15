@@ -77,6 +77,7 @@ pub enum KeyPrefix {
     StateVersionProofEpochIndex = 60,
     BlockCommitProofCitations = 61,
     ParkedBlockEpochHeightIndex = 62,
+    StateSyncMissingValues = 63,
 }
 
 impl KeyPrefix {

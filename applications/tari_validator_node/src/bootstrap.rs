@@ -273,6 +273,7 @@ pub async fn spawn_services(
     ));
 
     let state_history_length = db_options.state_history_length;
+    let epoch_history_length = db_options.epoch_history_length;
     let state_store = ValidatorNodeStateStore::open(&config.validator_node.state_db_path, db_options)?;
 
     #[cfg(feature = "metrics")]
@@ -484,6 +485,7 @@ pub async fn spawn_services(
         mempool.clone(),
         consensus_handle.clone(),
         consensus_constants.max_transaction_size_bytes,
+        epoch_history_length,
     )
     .await?;
     handles.push(join_handle);
@@ -568,6 +570,7 @@ async fn spawn_p2p_rpc<TStateStore: StateStore + Clone + Send + Sync + 'static>(
     mempool: MempoolHandle,
     consensus: ConsensusHandle,
     max_transaction_size_bytes: usize,
+    epoch_history_length: u64,
 ) -> anyhow::Result<JoinHandle<Result<(), anyhow::Error>>> {
     let rpc_server = RpcServer::builder()
         .with_maximum_simultaneous_sessions(config.validator_node.rpc.max_simultaneous_sessions)
@@ -579,6 +582,7 @@ async fn spawn_p2p_rpc<TStateStore: StateStore + Clone + Send + Sync + 'static>(
             mempool,
             consensus,
             max_transaction_size_bytes,
+            epoch_history_length,
         ));
 
     let (notify_tx, notify_rx) = mpsc::unbounded_channel();

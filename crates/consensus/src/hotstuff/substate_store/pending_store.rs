@@ -128,14 +128,15 @@ impl<'a, TTx: StateStoreReadTransaction> PendingSubstateStore<'a, TTx> {
                 shard: substate.shard(),
             });
         }
+        let shard = substate.shard();
+        let version = substate.version();
+        let substate = substate
+            .into_substate()
+            .ok_or_else(|| up_substate_without_value(VersionedSubstateId::new(id.clone(), version)))?;
         Ok(SubstateChange::Up {
             id: id.clone(),
-            shard: substate.shard(),
-            substate: Box::new(
-                substate
-                    .into_substate()
-                    .expect("PendingSubstateStore::get_latest_change: UP substate has no value"),
-            ),
+            shard,
+            substate: Box::new(substate),
         })
     }
 
@@ -264,9 +265,15 @@ impl<'store, TTx: StateStoreReadTransaction> ReadableSubstateStore for PendingSu
         if substate.is_destroyed() {
             return Err(SubstateStoreError::SubstateNotFound { id: id.to_owned() });
         }
-        Ok(substate
+        substate
             .into_substate()
-            .expect("PendingSubstateStore::get UP substate has no value"))
+            .ok_or_else(|| up_substate_without_value(id.to_owned()))
+    }
+}
+
+fn up_substate_without_value(id: VersionedSubstateId) -> SubstateStoreError {
+    SubstateStoreError::InvariantError {
+        details: format!("Substate {id} is UP but its value is missing from the store"),
     }
 }
 

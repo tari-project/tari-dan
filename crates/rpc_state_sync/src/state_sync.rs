@@ -34,6 +34,7 @@ use tari_ootle_p2p::{
 use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
+    StorageError,
     consensus_models::{BookkeepingEpochAgnosticRead, EpochCheckpoint, SubstateValueFilterFlags},
 };
 use tari_rpc_framework::RpcError;
@@ -273,17 +274,34 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             .await
     }
 
+    /// True if a sync whose proofs settled but that never completed left substates of `shard_group` up without their
+    /// value. No transaction can execute against them, so the node must sync again before joining consensus.
+    fn holds_missing_values(&self, shard_group: ShardGroup) -> Result<bool, RpcStateSyncError> {
+        let holds = self
+            .state_store
+            .with_read_tx(|tx| holds_missing_values(tx, shard_group))?;
+        if holds {
+            info!(
+                target: LOG_TARGET,
+                "🛜 An earlier sync left substates in {shard_group} without their values; will state-sync.",
+            );
+        }
+        Ok(holds)
+    }
+
     /// True if this node's committed state already matches `checkpoint` for every shard it is responsible for (its
-    /// local shard group plus the global shard). Distinguishes a rolled-back node (complete state, checkpoint
-    /// retained) from one whose first-time state sync was interrupted after one shard group's checkpoint was stored
-    /// but before the others finished streaming (checkpoint present, state incomplete).
+    /// local shard group plus the global shard), with the value of every up substate. Distinguishes a rolled-back node
+    /// (complete state, checkpoint retained) from one whose first-time state sync was interrupted after one shard
+    /// group's checkpoint was stored but before the others finished streaming (checkpoint present, state incomplete).
     async fn local_state_matches_checkpoint(&self, checkpoint: &EpochCheckpoint) -> Result<bool, RpcStateSyncError> {
         let local_info = self.epoch_manager.get_local_committee_info(checkpoint.epoch()).await?;
         self.state_store.with_read_tx(|tx| {
             for shard in local_info.shard_group().shard_iter_with_global() {
                 let version = tx.state_tree_versions_get_latest(shard)?;
                 let local_root = calculate_state_root_for_shard(tx, shard, version)?;
-                if local_root != checkpoint.get_shard_root(shard) {
+                if local_root != checkpoint.get_shard_root(shard) ||
+                    tx.state_sync_missing_values_get_earliest(shard, 0)?.is_some()
+                {
                     return Ok(false);
                 }
             }
@@ -1002,6 +1020,10 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
             });
         };
 
+        if self.holds_missing_values(leaf.shard_group())? {
+            return Ok(SyncStatus::Behind { target_epoch: None });
+        }
+
         // Fast path: oracle hasn't advanced past our leaf — nothing to do.
         if oracle_epoch <= leaf.epoch() {
             return Ok(SyncStatus::UpToDate);
@@ -1144,6 +1166,19 @@ fn is_checkpoint_temporarily_unavailable(err: &RpcStateSyncError, prev_epoch: Ep
 /// True if the peer rejected the request because it is not yet in a state to serve it.
 fn is_peer_unavailable(err: &RpcStateSyncError) -> bool {
     matches!(err, RpcStateSyncError::RpcError(RpcError::RequestFailed(status)) if status.is_unavailable())
+}
+
+/// True if a sync left an up substate without its value in a shard of `shard_group` or in the global shard.
+fn holds_missing_values<TTx: StateStoreReadTransaction>(
+    tx: &TTx,
+    shard_group: ShardGroup,
+) -> Result<bool, StorageError> {
+    for shard in shard_group.shard_iter_with_global() {
+        if tx.state_sync_missing_values_get_earliest(shard, 0)?.is_some() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 #[cfg(test)]
