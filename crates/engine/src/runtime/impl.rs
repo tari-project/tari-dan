@@ -30,7 +30,6 @@ use tari_engine_types::{
     UtxoOutput,
     bucket::Bucket,
     commit_result::{FinalizeResult, RejectReason},
-    component::Component,
     confidential::{ClaimBurnOutputData, ClaimedOutputTombstone, MinotariBurnClaimProof},
     crypto,
     crypto::OutputBody,
@@ -165,6 +164,7 @@ use super::{
 use crate::{
     intrinsics,
     runtime::{
+        LoadedComponent,
         RuntimeError,
         RuntimeInterface,
         engine_args::{EngineArgChargeError, EngineArgs},
@@ -488,19 +488,25 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
             return Ok(());
         }
 
-        let caller = auth_caller
-            .component()
-            .map(|component| self.load_component((*component).into()))
-            .transpose()?;
-
-        if let Some((_, caller)) = caller {
-            auth_caller.with_component_state(caller.into_component().state);
+        if let Some(component) = auth_caller.component().copied() {
+            self.invoke_modules_on_runtime_call("load_component")?;
+            self.charge_component_load(component)?;
+            let state = self.tracker.write_with(|state_mut| {
+                Ok::<_, RuntimeError>(state_mut.load_and_cache_component(component)?.state().clone())
+            })?;
+            auth_caller.with_component_state(state);
         }
+
+        let resource_id: SubstateId = (*auth_caller.resource()).into();
+        // The signature of a call back is (action: ResourceAuthAction, auth_caller: AuthHookCaller). The hook's
+        // call decodes the acting component's state from these arguments, so they are charged as a cross-template
+        // call's are.
+        let args = invoke_args![action, auth_caller];
+        self.charge_call_args(&args)?;
 
         // The hook frame only accepts the `AuthHookCaller` argument if the resource it names is in the acting
         // frame's scope. The reference is scoped to the hook call: the acting frame's scope must be the same after
         // the hook as before it, whether or not the resource has a hook.
-        let resource_id: SubstateId = (*auth_caller.resource()).into();
         let resource_was_in_scope = self.tracker.write_with(|state_mut| {
             let scope = state_mut.current_call_scope_mut()?;
             let was_in_scope = scope.is_substate_in_scope(&resource_id);
@@ -510,13 +516,12 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
             Ok::<_, RuntimeError>(was_in_scope)
         })?;
 
-        // The signature of a call back is (action: ResourceAuthAction, auth_caller: AuthHookCaller).
         // The acting component never chose the hook code, so the hook's frame is confined to its own component
         // state: it cannot act on any vault or resource it was handed, nor call out to a frame that could.
         let ret = self.invoke_component_method(
             auth_hook.component_address,
             &auth_hook.method,
-            invoke_args![action, auth_caller],
+            args,
             Some(FrameWriteMode::OwnComponent),
         );
         let ret = ret.map_err(|e| match e {
@@ -1203,6 +1208,43 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
         }
         Ok(())
     }
+
+    /// Charges [`tari_engine_types::limits::component_load_points`] for what `address`'s state holds,
+    /// counting no more of its items than the native execution headroom can pay for.
+    fn charge_component_load(&self, address: ComponentAddress) -> Result<(), RuntimeError> {
+        use tari_engine_types::limits::{NativeExecutionPoints, component_load_points};
+
+        let affordable = self.tracker.native_execution_headroom() / NativeExecutionPoints::PER_COMPONENT_STATE_ITEM;
+        let counted = self.tracker.write_with(|state_mut| {
+            let component = state_mut.load_and_cache_component(address)?;
+            Ok::<_, RuntimeError>(
+                component
+                    .state()
+                    .count_items_bounded(affordable, IndexedWellKnownTypes::indexes_tag),
+            )
+        })?;
+        match counted {
+            // The items, which pay for the count, are charged first, so a state whose references are
+            // unaffordable fails having paid for what was counted.
+            Some(count) => {
+                self.tracker
+                    .charge_native_execution(component_load_points(count.items, 0))?;
+                self.tracker
+                    .charge_native_execution(component_load_points(0, count.counted_tags))
+            },
+            None => {
+                // The items counted are paid for before failing, which leaves nothing for a repeat of
+                // the load to count.
+                self.tracker
+                    .charge_native_execution(component_load_points(affordable, 0))?;
+                self.tracker.charge_native_execution(component_load_points(1, 0))?;
+                Err(RuntimeError::InvariantError {
+                    function: "charge_component_load",
+                    details: "an item beyond the native execution headroom was affordable".to_string(),
+                })
+            },
+        }
+    }
 }
 
 impl<TStore, TTemplateProvider> RuntimeInterface for RuntimeInterfaceImpl<TStore, TTemplateProvider>
@@ -1267,15 +1309,10 @@ where
         Ok(())
     }
 
-    fn load_component(&self, call: ComponentReference) -> Result<(ComponentAddress, Component), RuntimeError> {
+    fn load_component(&self, call: ComponentReference) -> Result<LoadedComponent, RuntimeError> {
         self.invoke_modules_on_runtime_call("load_component")?;
-        match call {
-            ComponentReference::Address(address) => self.tracker.write_with(|state_mut| {
-                state_mut
-                    .load_and_cache_component(address)
-                    .cloned()
-                    .map(|c| (address, c))
-            }),
+        let address = match call {
+            ComponentReference::Address(address) => address,
             ComponentReference::Workspace(id) => self.tracker.write_with(|state_mut| {
                 let id = WorkspaceOffsetId::new(id);
                 let value = state_mut
@@ -1326,12 +1363,19 @@ where
                         ),
                     });
                 };
-                state_mut
-                    .load_and_cache_component(address)
-                    .cloned()
-                    .map(|c| (address, c))
-            }),
-        }
+                Ok::<_, RuntimeError>(address)
+            })?,
+        };
+        self.charge_component_load(address)?;
+        self.tracker.write_with(|state_mut| {
+            let component = state_mut.load_and_cache_component(address)?;
+            Ok(LoadedComponent {
+                address,
+                template_address: *component.template_address(),
+                entity_id: *component.entity_id(),
+                state_scope: IndexedWellKnownTypes::from_value(component.state())?,
+            })
+        })
     }
 
     fn lock_component(&self, address: ComponentAddress, lock_flag: LockFlag) -> Result<LockedSubstate, RuntimeError> {

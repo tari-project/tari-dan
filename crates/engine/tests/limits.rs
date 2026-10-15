@@ -666,6 +666,122 @@ fn an_engine_call_response_is_charged_per_byte_and_item() {
     );
 }
 
+/// A `PushItToTheLimit` component whose state holds `items` zeros, open to calls from any frame.
+fn open_component_with_items(test: &mut TemplateTest, items: u32) -> ComponentAddress {
+    let component = component_with_state(test, 4, items);
+    test.execute_expect_success(
+        Transaction::builder_localnet(Epoch(1))
+            .call_method(component, "allow_all_methods", args![])
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+    component
+}
+
+/// Native points `calls` more method calls on `component` are charged than a single call, each made
+/// from a template and to a method that leaves the state unread.
+fn native_points_for_extra_method_calls(test: &mut TemplateTest, component: ComponentAddress, calls: u32) -> u64 {
+    let template = test.get_template_address(TEMPLATE_NAME);
+    let mut native_points = |calls: u32| {
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(template, "touch_component", args![component, calls])
+                .build_and_seal(test.secret_key()),
+            vec![],
+        )
+        .native_execution_points
+    };
+    native_points(1 + calls) - native_points(1)
+}
+
+/// Every method call loads its component and indexes the state on the host, outside the Wasmer
+/// meter, whether or not the method reads the state. So each call is charged for each item the
+/// state holds.
+#[test]
+fn a_method_call_is_charged_per_item_its_component_state_holds() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let large_items = 10_000u32;
+    let small = open_component_with_items(&mut test, 0);
+    let large = open_component_with_items(&mut test, large_items);
+    let calls = 10;
+
+    let small_points = native_points_for_extra_method_calls(&mut test, small, calls);
+    let large_points = native_points_for_extra_method_calls(&mut test, large, calls);
+
+    assert_eq!(
+        large_points - small_points,
+        u64::from(calls) * limits::component_load_points(u64::from(large_items), 0),
+        "{calls} calls on a component holding {large_items} more items must cost exactly the difference in component \
+         load charges"
+    );
+}
+
+/// Indexing a component's state decodes each substate address it holds and brings it into the
+/// frame's scope, so each method call is also charged for each address the state holds.
+#[test]
+fn a_method_call_is_charged_per_reference_its_component_state_holds() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let references = 1_000u64;
+    let small = open_component_with_items(&mut test, 0);
+    let large = open_component_with_items(&mut test, 0);
+    let addresses = (0..references)
+        .map(|i| {
+            let mut key = [0u8; 32];
+            key[..8].copy_from_slice(&i.to_be_bytes());
+            tari_bor::Value::Tag(
+                BinaryTag::ComponentAddress as u64,
+                Box::new(tari_bor::Value::Bytes(key.to_vec())),
+            )
+        })
+        .collect();
+    seed_extra(&mut test, large, tari_bor::Value::Array(addresses));
+    let calls = 10;
+
+    let small_points = native_points_for_extra_method_calls(&mut test, small, calls);
+    let large_points = native_points_for_extra_method_calls(&mut test, large, calls);
+
+    // The array replaces a null, and each address is a tag and a byte string.
+    let extra_items = 2 * references;
+    assert_eq!(
+        large_points - small_points,
+        u64::from(calls) * limits::component_load_points(extra_items, references),
+        "{calls} calls on a component holding {references} more addresses must cost exactly the difference in \
+         component load charges"
+    );
+}
+
+/// Component loads are charged against the transaction's compute allowance, so a template that
+/// calls a method on a large component over and over fails out of compute. Run in the fee intent,
+/// whose flat credit is the allowance, with too few calls for their other charges alone to exhaust
+/// it.
+#[test]
+fn component_loads_are_charged_against_the_fee_intent_credit() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let template = test.get_template_address(TEMPLATE_NAME);
+    let items = 30_000u32;
+    let component = open_component_with_items(&mut test, items);
+    let mut fee_table = FeeTable::zero_rated();
+    fee_table.per_wasm_point_cost = 1;
+    fee_table.wasm_points_cost_divisor = 1;
+    test.set_fee_table(fee_table);
+    test.enable_fees();
+
+    let calls = limits::FREE_COMPUTE_GRACE_POINTS / limits::component_load_points(u64::from(items), 0) + 1;
+    let reason = test.execute_expect_failure(
+        Transaction::builder_localnet(Epoch(1))
+            .with_fee_instructions_builder(|builder| {
+                builder.call_function(template, "touch_component", args![
+                    component,
+                    u32::try_from(calls).unwrap()
+                ])
+            })
+            .build_and_seal(test.secret_key()),
+        vec![],
+    );
+
+    assert_reject_reason(reason, "exceeds the fee intent's");
+}
+
 /// Every engine call is charged a flat cost for the host work around it, on top of its argument and
 /// its response, whether or not the template reads the response.
 #[test]
@@ -726,9 +842,9 @@ fn engine_call_responses_are_charged_against_the_fee_intent_credit() {
     assert_reject_reason(reason, "exceeds the fee intent's");
 }
 
-/// Writes a bucket id into `component`'s state directly in the store, keeping its substate
-/// version. No template can set such a state: validating it as a component state fails.
-fn seed_state_failing_validation(test: &mut TemplateTest, component: ComponentAddress) {
+/// Writes `extra` into the `extra` field of `component`'s state directly in the store, keeping its
+/// substate version.
+fn seed_extra(test: &mut TemplateTest, component: ComponentAddress, extra: tari_bor::Value) {
     let id = SubstateId::Component(component);
     let substate = test.read_only_state_store().get_substate(&id).unwrap();
     let version = substate.version();
@@ -737,11 +853,20 @@ fn seed_state_failing_validation(test: &mut TemplateTest, component: ComponentAd
         panic!("the component state is an array of its fields");
     };
     // `extra`, the last field.
-    *fields.last_mut().unwrap() =
-        tari_bor::Value::Tag(BinaryTag::BucketId as u64, Box::new(tari_bor::Value::Integer(0)));
+    *fields.last_mut().unwrap() = extra;
     test.get_state_store_mut()
         .set_state(id, Substate::new(version, value))
         .unwrap();
+}
+
+/// Writes a bucket id into `component`'s state directly in the store. No template can set such a
+/// state: validating it as a component state fails.
+fn seed_state_failing_validation(test: &mut TemplateTest, component: ComponentAddress) {
+    seed_extra(
+        test,
+        component,
+        tari_bor::Value::Tag(BinaryTag::BucketId as u64, Box::new(tari_bor::Value::Integer(0))),
+    );
 }
 
 /// Access rules and the owner rule live outside a component's state, so changing them leaves the
