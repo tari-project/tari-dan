@@ -98,6 +98,9 @@ impl StealthTransferParams {
                 })?;
         }
 
+        // A TARI transfer may select inputs covering the outputs and the fee together.
+        self.total_output_amount_with_fee(Amount::from(self.max_fee))?;
+
         if let Some(swap) = &self.fee_params.pay_fee_with_swap &&
             !swap.input_amount.is_positive()
         {
@@ -112,12 +115,30 @@ impl StealthTransferParams {
         Ok(())
     }
 
-    pub fn total_output_amount(&self) -> Amount {
-        self.outputs.iter().map(|o| o.total_output_amount()).sum()
+    /// The sum of every output's revealed and blinded amounts, or `None` if it exceeds [`Amount::MAX`].
+    pub fn total_output_amount(&self) -> Option<Amount> {
+        self.outputs
+            .iter()
+            .try_fold(Amount::zero(), |sum, o| sum.checked_add(o.total_output_amount()?))
     }
 
-    pub fn total_revealed_output_amount(&self) -> Amount {
-        self.outputs.iter().map(|o| o.revealed_amount).sum()
+    /// The total output amount plus `fee`: what a transfer that also reveals `fee` must select inputs to cover.
+    pub fn total_output_amount_with_fee(&self, fee: Amount) -> Result<Amount, StealthTransferApiError> {
+        self.total_output_amount()
+            .and_then(|total| total.checked_add(fee))
+            .ok_or_else(|| StealthTransferApiError::InvalidParameter {
+                param: "outputs",
+                reason: format!("Total output amount plus a fee of {fee} exceeds the maximum amount"),
+            })
+    }
+
+    /// The sum of every output's revealed amount, or `None` if it exceeds [`Amount::MAX`].
+    pub fn total_revealed_output_amount(&self) -> Option<Amount> {
+        Amount::sum_from_positive(self.outputs.iter().map(|o| o.revealed_amount))
+    }
+
+    pub fn has_revealed_outputs(&self) -> bool {
+        self.outputs.iter().any(|o| o.revealed_amount.is_positive())
     }
 }
 
@@ -139,8 +160,9 @@ pub struct TransferOutput {
 }
 
 impl TransferOutput {
-    pub fn total_output_amount(&self) -> Amount {
-        self.revealed_amount + Amount::from(self.blinded_amount)
+    /// The revealed plus blinded amount, or `None` if it exceeds [`Amount::MAX`].
+    pub fn total_output_amount(&self) -> Option<Amount> {
+        self.revealed_amount.checked_add(Amount::from(self.blinded_amount))
     }
 
     /// Checks that this output's `pay_to` intent will be honoured as written, returning the reason it will not.
@@ -378,6 +400,57 @@ mod tests {
         params_paying_fee_with_swap(2100)
             .validate(NETWORK)
             .expect("a fee swap with an explicit input amount is valid");
+    }
+
+    fn params_with_outputs(amounts: &[(Amount, u64)], max_fee: u64) -> StealthTransferParams {
+        StealthTransferParams {
+            outputs: amounts
+                .iter()
+                .map(|&(revealed_amount, blinded_amount)| TransferOutput {
+                    address: address(),
+                    revealed_amount,
+                    blinded_amount,
+                    memo: None,
+                    pay_to: PayTo::StealthPublicKey,
+                })
+                .collect(),
+            max_fee,
+            ..params_paying_to(100, 0, PayTo::StealthPublicKey)
+        }
+    }
+
+    fn assert_rejects_output_total(params: StealthTransferParams) {
+        let err = params
+            .validate(NETWORK)
+            .expect_err("outputs whose total exceeds the maximum amount must be rejected");
+        assert!(
+            matches!(err, StealthTransferApiError::InvalidParameter { param: "outputs", .. }),
+            "expected an InvalidParameter naming outputs, got: {err}"
+        );
+    }
+
+    #[test]
+    fn rejects_outputs_whose_total_exceeds_the_maximum_amount() {
+        assert_rejects_output_total(params_with_outputs(&[(Amount::MAX, 0), (Amount::ONE, 0)], 0));
+    }
+
+    #[test]
+    fn rejects_an_output_whose_revealed_and_blinded_amounts_exceed_the_maximum_amount() {
+        assert_rejects_output_total(params_with_outputs(&[(Amount::MAX, 1)], 0));
+    }
+
+    #[test]
+    fn rejects_outputs_whose_total_plus_the_fee_exceeds_the_maximum_amount() {
+        assert_rejects_output_total(params_with_outputs(&[(Amount::MAX, 0)], 1));
+    }
+
+    #[test]
+    fn accepts_outputs_totalling_the_maximum_amount() {
+        let params = params_with_outputs(&[(Amount::MAX - Amount::from(3u64), 1), (Amount::ONE, 1)], 0);
+        params
+            .validate(NETWORK)
+            .expect("a total of exactly the maximum amount is representable");
+        assert_eq!(params.total_output_amount(), Some(Amount::MAX));
     }
 
     #[test]

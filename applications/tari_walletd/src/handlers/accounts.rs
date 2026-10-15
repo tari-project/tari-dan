@@ -1753,7 +1753,9 @@ pub async fn handle_create_stealth_transfer_statement(
                 .map_err(|reason| invalid_params("pay_to", Some(reason)))?;
         }
 
-        let amount_to_spend = req.total_output_amount();
+        let amount_to_spend = req
+            .total_output_amount()
+            .ok_or_else(|| invalid_params("outputs", Some("total output amount exceeds the maximum amount")))?;
 
         let inputs = if let Some(utxo_addresses) = req.input_selection.as_specific() {
             // Exact stealth inputs named by the caller: resolve, validate and lock precisely these UTXOs,
@@ -1802,7 +1804,13 @@ pub async fn handle_create_stealth_transfer_statement(
         // The signing key is what the engine sees as a badge, so it is the key a revealed output must name.
         let signing_public_key = sdk.key_manager_api().get_public_key(signing_key_id)?;
 
-        let output_revealed_amount: Amount = req.outputs.iter().map(|o| o.revealed_amount).sum();
+        let output_revealed_amount = Amount::sum_from_positive(req.outputs.iter().map(|o| o.revealed_amount))
+            .ok_or_else(|| {
+                invalid_params(
+                    "outputs",
+                    Some("total revealed output amount exceeds the maximum amount"),
+                )
+            })?;
         let outputs = req
             .outputs
             .iter()
