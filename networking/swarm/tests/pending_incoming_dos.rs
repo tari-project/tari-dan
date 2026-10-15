@@ -3,24 +3,24 @@
 
 //! Regression test for pending-inbound slot exhaustion by stalled handshakes.
 //!
-//! A peer that completes the TCP connect but never drives the multistream-select
-//! / noise handshake holds one of the `max_pending_incoming` slots for as long as
-//! the upgrade stays pending. Without a transport upgrade timeout those slots are
-//! never reclaimed, so enough stalled sockets deny all further inbound
-//! connections indefinitely.
+//! A peer that completes the TCP connect but never drives the multistream-select / noise handshake
+//! holds one of the `max_pending_incoming` slots until the upgrade resolves, and only the transport
+//! upgrade timeout resolves it.
 //!
-//! This test drives that exact sequence with a short `connection_upgrade_timeout`:
-//! it fills the pending-inbound cap with stalled sockets, confirms the next
-//! inbound is refused with a connection-limit denial, then confirms the slots are
-//! reclaimed once the upgrade times out so inbound is accepted again. On a build
-//! without the upgrade timeout the slots are never freed and the final step is a
-//! connection-limit denial instead of an acceptance, so the test fails.
-//! (Loopback is exempt from the per-IP cap, so the global pending cap is the
-//! limiter here.)
+//! The test fills the pending-inbound cap with stalled sockets, confirms the next inbound is refused
+//! by the pending-incoming limit, then confirms the slots are reclaimed once the upgrade times out so
+//! inbound is accepted again. Loopback is exempt from the per-source caps, so the swarm-wide pending
+//! cap is the limiter here.
 
 use std::{collections::HashSet, net::SocketAddr, time::Duration};
 
-use libp2p::{Multiaddr, futures::StreamExt, multiaddr::Protocol, swarm::SwarmEvent};
+use libp2p::{
+    Multiaddr,
+    connection_limits,
+    futures::StreamExt,
+    multiaddr::Protocol,
+    swarm::{ListenError, SwarmEvent},
+};
 use tari_swarm::{config::Config, create_swarm, identity::Keypair, messaging::prost::ProstCodec};
 use tokio::{net::TcpStream, sync::mpsc, time::timeout};
 
@@ -40,9 +40,10 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> SocketAddr {
 
 enum Ev {
     Incoming,
-    /// An `IncomingConnectionError`, carrying its debug string so a
-    /// connection-limit denial can be told apart from an upgrade-timeout failure.
-    Error(String),
+    /// An inbound connection refused by the `max_pending_incoming` cap.
+    PendingCapDenial,
+    /// Any other `IncomingConnectionError`, such as an upgrade timeout.
+    OtherError,
     Established,
 }
 
@@ -51,11 +52,6 @@ struct Counts {
     incoming: u32,
     established: u32,
     limit_denials: u32,
-}
-
-fn is_limit_denial(s: &str) -> bool {
-    let s = s.to_lowercase();
-    s.contains("exceeded") || s.contains("limit") || s.contains("denied")
 }
 
 async fn drain_for(rx: &mut mpsc::UnboundedReceiver<Ev>, dur: Duration) -> Counts {
@@ -70,8 +66,8 @@ async fn drain_for(rx: &mut mpsc::UnboundedReceiver<Ev>, dur: Duration) -> Count
         match ev {
             Ev::Incoming => c.incoming += 1,
             Ev::Established => c.established += 1,
-            Ev::Error(s) if is_limit_denial(&s) => c.limit_denials += 1,
-            Ev::Error(_) => {},
+            Ev::PendingCapDenial => c.limit_denials += 1,
+            Ev::OtherError => {},
         }
     }
     c
@@ -109,8 +105,19 @@ async fn stalled_inbound_handshakes_are_reclaimed_after_upgrade_timeout() {
                 SwarmEvent::IncomingConnection { .. } => {
                     let _unused = tx.send(Ev::Incoming);
                 },
-                SwarmEvent::IncomingConnectionError { error, .. } => {
-                    let _unused = tx.send(Ev::Error(format!("{error:?}")));
+                // `max_pending_incoming` is the only connection limit this test can reach, so an
+                // `Exceeded` at that limit is a denial by the pending-incoming cap.
+                SwarmEvent::IncomingConnectionError {
+                    error: ListenError::Denied { cause },
+                    ..
+                } if cause
+                    .downcast_ref::<connection_limits::Exceeded>()
+                    .is_some_and(|e| e.limit() == MAX_PENDING) =>
+                {
+                    let _unused = tx.send(Ev::PendingCapDenial);
+                },
+                SwarmEvent::IncomingConnectionError { .. } => {
+                    let _unused = tx.send(Ev::OtherError);
                 },
                 SwarmEvent::ConnectionEstablished { .. } => {
                     let _unused = tx.send(Ev::Established);

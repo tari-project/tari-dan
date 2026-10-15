@@ -83,10 +83,10 @@ pub fn create_swarm<TCodec>(
 where
     TCodec: messaging::Codec + Clone + Send + 'static,
 {
-    // The TCP and relay client transports are built explicitly rather than via `with_tcp` and
-    // `with_relay_client` so their upgrades carry a timeout: the builder leaves the
-    // security/multiplexer handshake deadline-free, and a pending inbound connection holds a
-    // `max_pending_incoming` slot until it resolves. QUIC enforces its own handshake timeout.
+    // A pending inbound connection holds a `max_pending_incoming` slot until its handshake resolves,
+    // so every transport's security/multiplexer upgrade carries `connection_upgrade_timeout`. The
+    // TCP and relay client transports are assembled here because `with_tcp` and `with_relay_client`
+    // apply no upgrade timeout; QUIC enforces its own.
     let connection_upgrade_timeout = config.connection_upgrade_timeout;
     let idle_connection_timeout = config.idle_connection_timeout;
     let noise_config = noise_config(&identity)?;
