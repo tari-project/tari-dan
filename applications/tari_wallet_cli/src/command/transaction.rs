@@ -769,7 +769,7 @@ impl CliArg {
                 SubstateId::ClaimedOutputTombstone(v) => call_arg!(v),
                 SubstateId::NonFungible(v) => call_arg!(v),
                 SubstateId::TransactionReceipt(v) => call_arg!(v),
-                SubstateId::Template(v) => call_arg!(v),
+                SubstateId::Template(v) => call_arg!(v.as_template_address()),
                 SubstateId::ValidatorFeePool(v) => call_arg!(v),
                 SubstateId::Utxo(v) => call_arg!(v),
                 SubstateId::ConfidentialOutput(v) => call_arg!(v),

@@ -352,7 +352,7 @@ fn encode_address(s: &str) -> Result<InstructionArg, OotleSdkError> {
         SubstateId::Vault(a) => from_type(&a),
         SubstateId::NonFungible(a) => from_type(&a),
         SubstateId::TransactionReceipt(a) => from_type(&a),
-        SubstateId::Template(a) => from_type(&a),
+        SubstateId::Template(a) => from_type(&a.as_template_address()),
         SubstateId::ValidatorFeePool(a) => from_type(&a),
         SubstateId::Utxo(a) => from_type(&a),
         SubstateId::ConfidentialOutput(a) => from_type(&a),
@@ -372,7 +372,7 @@ fn address_to_value(s: &str) -> Result<tari_bor::Value, OotleSdkError> {
         SubstateId::Vault(a) => to_value(&a),
         SubstateId::NonFungible(a) => to_value(&a),
         SubstateId::TransactionReceipt(a) => to_value(&a),
-        SubstateId::Template(a) => to_value(&a),
+        SubstateId::Template(a) => to_value(&a.as_template_address()),
         SubstateId::ValidatorFeePool(a) => to_value(&a),
         SubstateId::Utxo(a) => to_value(&a),
         SubstateId::ConfidentialOutput(a) => to_value(&a),
@@ -741,12 +741,12 @@ mod tests {
     }
 
     #[test]
-    fn template_address_encodes_as_the_typed_address() {
+    fn template_address_encodes_as_a_template_address() {
         use tari_engine_types::published_template::PublishedTemplateAddress;
         let addr = PublishedTemplateAddress::from_hash(Hash32::from_array([0x12; Hash32::LENGTH]));
         let s = SubstateId::from(addr).to_string();
         let dsl = encode_arg(&ArgValue::Address(s)).unwrap();
-        assert_eq!(dsl, native(&addr));
+        assert_eq!(dsl, native(&addr.as_template_address()));
     }
 
     #[test]

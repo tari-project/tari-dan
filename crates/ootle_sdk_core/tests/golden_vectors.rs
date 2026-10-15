@@ -1739,7 +1739,7 @@ fn arg_address_transaction_receipt() -> Fixture {
     encode_arg_fixture("arg_dsl/address_transaction_receipt", ArgValue::Address(addr))
 }
 
-/// Arg vector — a `template_<hex>` address (encoded as the typed engine template address).
+/// Arg vector — a `template_<hex>` address (encoded as the untagged `TemplateAddress` hash a template parameter takes).
 fn arg_address_template() -> Fixture {
     let addr = tari_engine_types::published_template::PublishedTemplateAddress::from_hash(Hash32::from_array(
         [0x12; Hash32::LENGTH],
