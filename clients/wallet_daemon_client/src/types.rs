@@ -956,6 +956,11 @@ pub struct ConfidentialCreateOutputProofRequest {
     #[cfg_attr(feature = "ts", ts(type = "number | bigint | string"))]
     #[serde(deserialize_with = "ootle_serde::str_number::deserialize")]
     pub amount: u64,
+    pub resource_address: ResourceAddress,
+    /// The address whose view key the output value and mask are encrypted to.
+    pub destination_address: OotleAddress,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_memo: Option<Memo>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

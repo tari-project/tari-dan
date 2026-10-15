@@ -22,10 +22,14 @@
 
 use std::str::FromStr;
 
+use anyhow::anyhow;
 use base64::{Engine, prelude::BASE64_STANDARD};
 use clap::{Args, Subcommand};
 use tari_bor::encode;
+use tari_ootle_address::OotleAddress;
+use tari_ootle_wallet_sdk::crypto::memo::Memo;
 use tari_ootle_walletd_client::{WalletDaemonClient, types::ConfidentialCreateOutputProofRequest};
+use tari_template_lib::types::ResourceAddress;
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum ProofsSubcommand {
@@ -36,6 +40,12 @@ pub enum ProofsSubcommand {
 #[derive(Debug, Args, Clone)]
 pub struct GenerateArgs {
     pub amount: u64,
+    pub resource_address: ResourceAddress,
+    /// The address that can recover and spend the output
+    pub destination_address: OotleAddress,
+    /// An optional memo to include in the confidential output
+    #[clap(long, short = 'm')]
+    pub memo_message: Option<String>,
     #[clap(short = 'o', long)]
     pub output_type: OutputType,
 }
@@ -66,7 +76,15 @@ impl ProofsSubcommand {
         match self {
             Generate(args) => {
                 let resp = client
-                    .create_confidential_output_proof(ConfidentialCreateOutputProofRequest { amount: args.amount })
+                    .create_confidential_output_proof(ConfidentialCreateOutputProofRequest {
+                        amount: args.amount,
+                        resource_address: args.resource_address,
+                        destination_address: args.destination_address,
+                        output_memo: args
+                            .memo_message
+                            .map(|s| Memo::new_message(s).ok_or_else(|| anyhow!("Invalid memo length")))
+                            .transpose()?,
+                    })
                     .await?;
 
                 match args.output_type {
