@@ -46,11 +46,18 @@ pub struct WasmEnv<T> {
     state: Option<T>,
     mem_alloc: Option<WasmAllocFn>,
     mem_free: Option<WasmFreeFn>,
-    last_panic: Option<String>,
+    last_panic: Option<TemplatePanic>,
     last_engine_error: Option<WasmExecutionError>,
     invocation_meter: Option<InvocationMeter>,
     in_template_invocation: bool,
     refused_engine_call: Option<EngineOp>,
+}
+
+/// A panic a template reported through `on_panic`, with the source location it gave.
+pub(super) struct TemplatePanic {
+    pub message: String,
+    pub line: i32,
+    pub col: i32,
 }
 
 /// Per-invocation view of the Wasmer meter, letting host calls read the in-flight consumption of
@@ -242,8 +249,8 @@ impl<T> WasmEnv<T> {
         meter.binding_allowance = binding_allowance;
     }
 
-    pub(super) fn set_last_panic(&mut self, message: String) {
-        self.last_panic = Some(message);
+    pub(super) fn set_last_panic(&mut self, panic: TemplatePanic) {
+        self.last_panic = Some(panic);
     }
 
     pub(super) fn has_last_panic(&self) -> bool {
@@ -267,7 +274,7 @@ impl<T> WasmEnv<T> {
             .ok_or(WasmExecutionError::MissingAbiFunction { function: "tari_free" })
     }
 
-    pub(super) fn take_last_panic_message(&mut self) -> Option<String> {
+    pub(super) fn take_last_panic(&mut self) -> Option<TemplatePanic> {
         self.last_panic.take()
     }
 

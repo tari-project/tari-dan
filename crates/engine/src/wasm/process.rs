@@ -61,7 +61,7 @@ use crate::{
     wasm::{
         InstanceResetError,
         LoadedWasmTemplate,
-        environment::{AllocPtr, MeteredInvocation, WasmEnv},
+        environment::{AllocPtr, MeteredInvocation, TemplatePanic, WasmEnv},
         error::WasmExecutionError,
         mem_writer::MemWriter,
         module::MainFunction,
@@ -690,7 +690,8 @@ impl WasmProcess {
                 Ok(value)
             },
             InvocationOutcome::Trapped(err) => {
-                if let Some(message) = self.env_mut(store).take_last_panic_message() {
+                if let Some(TemplatePanic { message, line, col }) = self.env_mut(store).take_last_panic() {
+                    log::debug!(target: WASM_DEBUG_LOG_TARGET, "📣 PANIC: ({}:{}) {}", line, col, message);
                     return Err(WasmExecutionError::Panic {
                         message: expand_panic_message(func_def, message),
                         runtime_error: err,
@@ -823,10 +824,10 @@ fn take_refused_engine_call<T>(env: &mut WasmEnv<T>) -> Result<(), WasmExecution
 /// a plain runtime error with no message attached.
 ///
 /// `on_panic` is a host call, not a trap, so a template may make it any number of times in one
-/// invocation. Only the first report is kept, it is read no further than
-/// `max_panic_message_size`, and it is logged at debug level only: the message reaches the
-/// transaction as its reject reason, and anything more would be validator work the template gets
-/// for the price of a host call.
+/// invocation, and may go on to return normally. Only the first report is kept and it is read no
+/// further than `max_panic_message_size`. It is logged, at debug level, only by the trap that ends
+/// the call: the message reaches the transaction as its reject reason, and anything more would be
+/// validator work the template gets for the price of a host call.
 fn on_panic_handler<T: Send + 'static>(
     mut env: FunctionEnvMut<WasmEnv<T>>,
     msg_ptr: WasmPtr<u8>,
@@ -861,6 +862,5 @@ fn on_panic_handler<T: Send + 'static>(
         )
     });
 
-    log::debug!(target: WASM_DEBUG_LOG_TARGET, "📣 PANIC: ({}:{}) {}", line, col, message);
-    state.set_last_panic(message);
+    state.set_last_panic(TemplatePanic { message, line, col });
 }

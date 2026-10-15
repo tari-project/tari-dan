@@ -328,8 +328,9 @@ fn rejects_an_unexpected_exported_function() {
     assert!(err.contains("i_shouldnt_be_here"), "unexpected error: {err}");
 }
 
-/// A template writes to the validator's log only through engine calls, which are metered and whose
-/// log entries are bounded per transaction, so a module importing a debug host call is refused.
+/// A template writes to the validator's log through engine calls, which are metered and whose log
+/// entries are bounded per transaction, and through the one panic that ends a call. A module
+/// importing a debug host call is refused.
 #[test]
 fn rejects_a_module_importing_tari_debug() {
     let code = template_module_importing(r#"(import "env" "tari_debug" (func (param i32 i32)))"#, ABI_EXPORTS);
@@ -741,21 +742,36 @@ fn declared_table_capacity_is_charged_without_any_element_segment() {
 /// What the engine wrote to the validator's log while one call ran.
 #[derive(Debug, Clone, Copy, Default)]
 struct Logged {
+    /// Records at the levels a validator writes out by default.
     records: usize,
     bytes: usize,
+    /// Bytes of debug records under [`TEMPLATE_LOG_TARGET`], which the shipped validator log config
+    /// enables.
+    template_debug_bytes: usize,
 }
 
 thread_local! {
-    static LOGGED: Cell<Logged> = const { Cell::new(Logged { records: 0, bytes: 0 }) };
+    static LOGGED: Cell<Logged> = const {
+        Cell::new(Logged {
+            records: 0,
+            bytes: 0,
+            template_debug_bytes: 0,
+        })
+    };
 }
 
-/// Counts records at the levels a validator logs by default. The engine runs a call on the thread
-/// that submits it, so a thread-local tally sees only the test's own call.
+/// Log target of what the engine logs on a template's behalf.
+const TEMPLATE_LOG_TARGET: &str = "tari::ootle::wasm";
+
+/// Counts records at the levels a validator logs by default, and debug records under
+/// [`TEMPLATE_LOG_TARGET`]. The engine runs a call on the thread that submits it, so a thread-local
+/// tally sees only the test's own call.
 struct CountingLogger;
 
 impl log::Log for CountingLogger {
     fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
-        metadata.level() <= log::Level::Info
+        metadata.level() <= log::Level::Info ||
+            (metadata.target() == TEMPLATE_LOG_TARGET && metadata.level() <= log::Level::Debug)
     }
 
     fn log(&self, record: &log::Record<'_>) {
@@ -764,11 +780,14 @@ impl log::Log for CountingLogger {
         }
         let bytes = record.args().to_string().len();
         LOGGED.with(|logged| {
-            let Logged { records, bytes: total } = logged.get();
-            logged.set(Logged {
-                records: records + 1,
-                bytes: total + bytes,
-            });
+            let mut tally = logged.get();
+            if record.level() <= log::Level::Info {
+                tally.records += 1;
+                tally.bytes += bytes;
+            } else {
+                tally.template_debug_bytes += bytes;
+            }
+            logged.set(tally);
         });
     }
 
@@ -780,7 +799,7 @@ fn call_logged(code: Vec<u8>) -> (Result<u64, RejectReason>, Logged) {
     static LOGGER: CountingLogger = CountingLogger;
     // Each test installs the same logger; only the first install in a process takes.
     let _ignore = log::set_logger(&LOGGER);
-    log::set_max_level(log::LevelFilter::Info);
+    log::set_max_level(log::LevelFilter::Debug);
 
     let (mut test, address) = load(code);
     LOGGED.with(|logged| logged.set(Logged::default()));
@@ -795,8 +814,7 @@ const OVERSIZED_PANIC: (u32, u32) = (65536, 131072);
 const ON_PANIC_IMPORT: &str = r#"(import "env" "on_panic" (func $on_panic (param i32 i32 i32 i32)))"#;
 
 /// `on_panic` is a host call rather than a trap, so a template is free to make it any number of
-/// times. Only the first report of an invocation is kept, and none of them is written to the log
-/// at the levels a validator runs with.
+/// times. Only the first report of an invocation is kept, and only it is logged.
 #[test]
 fn repeated_panic_reports_keep_the_first_and_are_not_logged() {
     let (offset, len) = OVERSIZED_PANIC;
@@ -840,6 +858,11 @@ fn repeated_panic_reports_keep_the_first_and_are_not_logged() {
         logged.bytes,
         logged.records
     );
+    assert!(
+        logged.template_debug_bytes < 1024,
+        "{} bytes of panics logged",
+        logged.template_debug_bytes
+    );
 }
 
 /// A panic message is truncated before the engine reads it, so an oversized one never reaches the
@@ -877,6 +900,34 @@ fn an_oversized_panic_message_is_truncated() {
         logged.bytes,
         logged.records
     );
+    assert!(
+        logged.template_debug_bytes > 0 && logged.template_debug_bytes <= limit + 1024,
+        "{} bytes of the panic logged",
+        logged.template_debug_bytes
+    );
+}
+
+/// A panic report is logged only once the trap it announces ends the call, so a template that
+/// reports a panic and then returns normally writes nothing to the log.
+#[test]
+fn a_panic_report_the_call_survives_is_not_logged() {
+    let (offset, len) = OVERSIZED_PANIC;
+    let code = template_module_importing(
+        ON_PANIC_IMPORT,
+        &format!(
+            r#"
+        (func (export "tari_alloc") (param i32) (result i32) (i32.const 1024))
+        (func (export "tari_free") (param i32))
+        (func (export "Buggy_main") (param i32 i32) (result i32)
+          (call $on_panic (i32.const {offset}) (i32.const {len}) (i32.const 1) (i32.const 1))
+          (i32.const 20))
+        "#
+        ),
+    );
+
+    let (result, logged) = call_logged(code);
+    result.expect("a call that returned normally was rejected");
+    assert_eq!(logged.template_debug_bytes, 0, "a panic the call survived was logged");
 }
 
 const TARI_ENGINE_IMPORT: &str = r#"(import "env" "tari_engine" (func $tari_engine (param i32 i32 i32) (result i32)))"#;
