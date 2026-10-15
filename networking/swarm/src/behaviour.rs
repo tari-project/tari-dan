@@ -88,18 +88,18 @@ where
     // inbound connection holds a `max_pending_incoming` slot until it resolves. QUIC enforces its
     // own handshake timeout, so only the TCP upgrade needs wrapping here.
     let connection_upgrade_timeout = config.connection_upgrade_timeout;
-    let swarm = SwarmBuilder::with_existing_identity(identity)
+    let tcp_noise_config = noise_config(&identity)?;
+    let Ok(builder) = SwarmBuilder::with_existing_identity(identity)
         .with_tokio()
         .with_quic()
-        .with_other_transport(|keypair| {
-            let transport = tcp::tokio::Transport::new(tcp::Config::new().nodelay(true))
+        .with_other_transport(|_| {
+            tcp::tokio::Transport::new(tcp::Config::new().nodelay(true))
                 .upgrade(upgrade::Version::V1Lazy)
-                .authenticate(noise_config(keypair)?)
+                .authenticate(tcp_noise_config)
                 .multiplex(yamux::Config::default())
-                .timeout(connection_upgrade_timeout);
-            Ok::<_, Box<dyn std::error::Error + Send + Sync>>(transport)
-        })
-        .map_err(|e| TariSwarmError::BehaviourError(e.to_string()))?
+                .timeout(connection_upgrade_timeout)
+        });
+    let swarm = builder
         .with_relay_client(noise_config, yamux::Config::default)?
         .with_behaviour(|keypair, relay_client| {
             let local_peer_id = keypair.public().to_peer_id();

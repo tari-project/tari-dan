@@ -27,7 +27,7 @@ use tokio::{net::TcpStream, sync::mpsc, time::timeout};
 fn multiaddr_to_socketaddr(addr: &Multiaddr) -> SocketAddr {
     let mut ip = None;
     let mut port = None;
-    for p in addr.iter() {
+    for p in addr {
         match p {
             Protocol::Ip4(a) => ip = Some(std::net::IpAddr::V4(a)),
             Protocol::Ip6(a) => ip = Some(std::net::IpAddr::V6(a)),
@@ -107,13 +107,13 @@ async fn stalled_inbound_handshakes_are_reclaimed_after_upgrade_timeout() {
         loop {
             match swarm.select_next_some().await {
                 SwarmEvent::IncomingConnection { .. } => {
-                    let _ = tx.send(Ev::Incoming);
+                    let _unused = tx.send(Ev::Incoming);
                 },
                 SwarmEvent::IncomingConnectionError { error, .. } => {
-                    let _ = tx.send(Ev::Error(format!("{error:?}")));
+                    let _unused = tx.send(Ev::Error(format!("{error:?}")));
                 },
                 SwarmEvent::ConnectionEstablished { .. } => {
-                    let _ = tx.send(Ev::Established);
+                    let _unused = tx.send(Ev::Established);
                 },
                 _ => {},
             }

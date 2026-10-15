@@ -12904,6 +12904,7 @@ dependencies = [
  "libp2p-substream",
  "prometheus-client",
  "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]
