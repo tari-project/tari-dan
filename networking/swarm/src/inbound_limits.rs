@@ -99,7 +99,9 @@ impl Behaviour {
 pub enum Source {
     /// An IPv4 address, or an IPv6 address masked to its /64.
     Ip(IpAddr),
-    Relay(PeerId),
+    /// The relay a circuit arrived through. `None` is one bucket shared by every circuit whose
+    /// address does not name its relay.
+    Relay(Option<PeerId>),
 }
 
 impl fmt::Display for Source {
@@ -107,7 +109,8 @@ impl fmt::Display for Source {
         match self {
             Source::Ip(ip @ IpAddr::V4(_)) => write!(f, "{ip}"),
             Source::Ip(ip @ IpAddr::V6(_)) => write!(f, "{ip}/64"),
-            Source::Relay(relay) => write!(f, "relay {relay}"),
+            Source::Relay(Some(relay)) => write!(f, "relay {relay}"),
+            Source::Relay(None) => write!(f, "unidentified relays"),
         }
     }
 }
@@ -125,13 +128,14 @@ struct Tracked {
 }
 
 fn source(local_addr: &Multiaddr, remote_addr: &Multiaddr) -> Option<Source> {
-    // A relayed listen address is `<relay addr>/p2p/<relay id>/p2p-circuit`. The relay client refuses
-    // to listen on a circuit address without the relay's id, so a circuit always has one.
+    // A relayed connection's local address is `<relay addr>/p2p-circuit`, where `<relay addr>` is the
+    // remote address of this node's connection to the relay. It names the relay's id only when that
+    // connection's address carries one, so a circuit without it still counts, in the shared bucket.
     let mut relay = None;
     for p in local_addr {
         match p {
             Protocol::P2p(peer) => relay = Some(peer),
-            Protocol::P2pCircuit => return relay.map(Source::Relay),
+            Protocol::P2pCircuit => return Some(Source::Relay(relay)),
             _ => {},
         }
     }
@@ -335,7 +339,11 @@ mod tests {
         assert_eq!(source(&local, &addr("/ip6/::ffff:127.0.0.1/tcp/1")), None);
         assert_eq!(
             source(&relayed_local(), &relayed_remote()),
-            Some(Source::Relay(RELAY.parse().unwrap()))
+            Some(Source::Relay(Some(RELAY.parse().unwrap())))
+        );
+        assert_eq!(
+            source(&addr("/ip4/9.9.9.9/tcp/1/p2p-circuit"), &relayed_remote()),
+            Some(Source::Relay(None))
         );
     }
 
@@ -409,5 +417,19 @@ mod tests {
         establish(&mut limits, 0, &remotes[0]);
         establish(&mut limits, 1, &remotes[1]);
         pending(&mut limits, 3, &local, &remotes[3]).unwrap();
+    }
+
+    #[test]
+    fn circuits_without_a_relay_id_share_one_capped_bucket() {
+        let mut limits = Behaviour::new(Limits {
+            max_pending_per_relay: Some(1),
+            ..Limits::default()
+        });
+        let first_relay = addr("/ip4/9.9.9.9/tcp/1/p2p-circuit");
+        let second_relay = addr("/ip4/8.8.8.8/tcp/1/p2p-circuit");
+
+        pending(&mut limits, 0, &first_relay, &relayed_remote()).unwrap();
+        assert!(pending(&mut limits, 1, &second_relay, &relayed_remote()).is_err());
+        pending(&mut limits, 2, &relayed_local(), &relayed_remote()).unwrap();
     }
 }
