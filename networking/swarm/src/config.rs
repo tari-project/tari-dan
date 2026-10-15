@@ -21,6 +21,13 @@ pub struct Config {
     /// Inbound connections still completing their handshake. Bounds the work a burst of dials can
     /// make the node do before any of them is established.
     pub max_pending_incoming: Option<u32>,
+    /// Deadline for a connection's transport upgrade (security + multiplexer handshake) to
+    /// complete, inbound and outbound. A pending inbound connection holds one of the
+    /// `max_pending_incoming` slots until it establishes or fails, so without this deadline a peer
+    /// that completes the TCP connect but never drives the handshake pins its slot indefinitely;
+    /// enough such peers exhaust the pending-inbound capacity and the node accepts no further
+    /// inbound connections.
+    pub connection_upgrade_timeout: Duration,
     /// Inbound connections, pending or established, accepted from one IP address. Loopback and relayed
     /// connections are exempt.
     pub max_incoming_connections_per_ip: Option<u32>,
@@ -85,6 +92,7 @@ impl Default for Config {
             max_connections_per_peer: Some(3),
             max_established_incoming: Some(256),
             max_pending_incoming: Some(64),
+            connection_upgrade_timeout: Duration::from_secs(20),
             max_incoming_connections_per_ip: Some(16),
             enable_mdns: false,
             enable_relay: false,

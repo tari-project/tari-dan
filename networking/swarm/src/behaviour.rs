@@ -13,6 +13,7 @@ use libp2p::{
     autonat,
     connection_limits,
     connection_limits::ConnectionLimits,
+    core::{transport::Transport, upgrade},
     dcutr,
     gossipsub,
     identify,
@@ -82,10 +83,23 @@ pub fn create_swarm<TCodec>(
 where
     TCodec: messaging::Codec + Clone + Send + 'static,
 {
+    // The TCP transport is built explicitly rather than via `with_tcp` so the upgrade carries a
+    // timeout: `with_tcp` leaves the security/multiplexer handshake deadline-free, and a pending
+    // inbound connection holds a `max_pending_incoming` slot until it resolves. QUIC enforces its
+    // own handshake timeout, so only the TCP upgrade needs wrapping here.
+    let connection_upgrade_timeout = config.connection_upgrade_timeout;
     let swarm = SwarmBuilder::with_existing_identity(identity)
         .with_tokio()
-        .with_tcp(tcp::Config::new().nodelay(true), noise_config, yamux::Config::default)?
         .with_quic()
+        .with_other_transport(|keypair| {
+            let transport = tcp::tokio::Transport::new(tcp::Config::new().nodelay(true))
+                .upgrade(upgrade::Version::V1Lazy)
+                .authenticate(noise_config(keypair)?)
+                .multiplex(yamux::Config::default())
+                .timeout(connection_upgrade_timeout);
+            Ok::<_, Box<dyn std::error::Error + Send + Sync>>(transport)
+        })
+        .map_err(|e| TariSwarmError::BehaviourError(e.to_string()))?
         .with_relay_client(noise_config, yamux::Config::default)?
         .with_behaviour(|keypair, relay_client| {
             let local_peer_id = keypair.public().to_peer_id();
