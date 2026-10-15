@@ -643,7 +643,7 @@ mod tests {
 
     use rand::Rng;
     use tari_bor::cbor;
-    use tari_template_lib::types::{Metadata, NonFungibleId, metadata};
+    use tari_template_lib::types::{Metadata, NonFungibleId, UtxoId, crypto::PedersenCommitmentBytes, metadata};
 
     use super::*;
     use crate::hashing::{EngineHashDomainLabel, hasher32};
@@ -782,19 +782,30 @@ mod tests {
         let receipt = TransactionReceiptAddress::from_array([1; 32]);
         let template = PublishedTemplateAddress::from_hash(Hash32::from_array([2; 32]));
         let fee_pool = ValidatorFeePoolAddress::from_array([3; 32]);
+        let tombstone = ClaimedOutputTombstoneAddress::new(ObjectKey::from_array([4; 32]));
+        let resource = ResourceAddress::new(new_object_key());
+        let utxo = UtxoAddress::new(resource, UtxoId::from_array([5; 32]));
+        let confidential_output =
+            ConfidentialOutputAddress::new(resource, PedersenCommitmentBytes::from_array([6; 32]));
         let value = cbor!([
             tari_bor::to_value(&receipt).unwrap(),
             tari_bor::to_value(&template).unwrap(),
             tari_bor::to_value(&fee_pool).unwrap(),
+            tari_bor::to_value(&tombstone).unwrap(),
+            tari_bor::to_value(&utxo).unwrap(),
+            tari_bor::to_value(&confidential_output).unwrap(),
         ]);
 
         let indexed = IndexedValue::from_value(value).unwrap();
         let referenced = indexed.referenced_substates().collect::<Vec<_>>();
 
-        assert_eq!(referenced.len(), 3, "{referenced:?}");
+        assert_eq!(referenced.len(), 6, "{referenced:?}");
         assert!(referenced.contains(&SubstateId::TransactionReceipt(receipt)));
         assert!(referenced.contains(&SubstateId::Template(template)));
         assert!(referenced.contains(&SubstateId::ValidatorFeePool(fee_pool)));
+        assert!(referenced.contains(&SubstateId::ClaimedOutputTombstone(tombstone)));
+        assert!(referenced.contains(&SubstateId::Utxo(utxo)));
+        assert!(referenced.contains(&SubstateId::ConfidentialOutput(confidential_output)));
     }
 
     #[test]

@@ -2,8 +2,8 @@
   "name": "arg_dsl/address_template",
   "schema_version": 1,
   "provenance": {
-    "core_version": "0.41.2",
-    "git_rev": "f1de8633ae83fa2801be7c31c8a53a46cc0cb921",
+    "core_version": "0.46.1",
+    "git_rev": "5990ee1ede7282ddd65bdea77c7bbf45e38b5cb4",
     "generated_by": "ootle_sdk_core golden-vector generator"
   },
   "operation": "encode_arg",
@@ -13,6 +13,6 @@
     }
   },
   "expected": {
-    "encoded_arg_bytes": "d88958201212121212121212121212121212121212121212121212121212121212121212"
+    "encoded_arg_bytes": "58201212121212121212121212121212121212121212121212121212121212121212"
   }
 }
