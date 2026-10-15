@@ -26,10 +26,11 @@ prost = { workspace = true }
 serde = { workspace = true, default-features = true }
 futures = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, default-features = false, features = ["sync"] }
+tokio = { workspace = true, default-features = false, features = ["sync", "time"] }
 
 [dev-dependencies]
 tari_template_lib_types = { workspace = true }
+tokio = { workspace = true, default-features = false, features = ["macros", "rt", "test-util", "time"] }
 
 [build-dependencies]
 proto_builder = { workspace = true }
