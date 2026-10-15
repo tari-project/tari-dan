@@ -2089,6 +2089,19 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         Ok(exists)
     }
 
+    fn parked_blocks_count_by_proposer(
+        &self,
+        epoch: Epoch,
+        height: NodeHeight,
+        proposed_by: &RistrettoPublicKeyBytes,
+    ) -> Result<usize, StorageError> {
+        let count = self
+            .db()
+            .cf(parked_block::ByProposerQuery)?
+            .count_prefix(&(epoch, height, *proposed_by))?;
+        Ok(count)
+    }
+
     fn foreign_parked_blocks_exists(&self, block_id: &BlockId) -> Result<bool, StorageError> {
         const OPERATION: &str = "foreign_parked_blocks_exists";
         let cf = self.db().cf(ForeignParkedBlockCf)?;

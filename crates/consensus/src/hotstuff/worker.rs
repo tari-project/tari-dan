@@ -717,9 +717,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         current_height: NodeHeight,
         transaction_ids: I,
     ) -> Result<bool, HotStuffError> {
-        let (local_proposals, foreign_proposals) = self
-            .on_message_validate
-            .update_parked_blocks(current_height, transaction_ids)?;
+        let (local_proposals, foreign_proposals) = self.on_message_validate.update_parked_blocks(transaction_ids)?;
 
         let is_any_block_unparked = !local_proposals.is_empty() || !foreign_proposals.is_empty();
 

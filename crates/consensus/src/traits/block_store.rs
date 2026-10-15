@@ -73,6 +73,15 @@ impl BlockStore for Block {
                 &mut on_lock_block,
             )?;
             new_locked.as_locked().set(tx)?;
+            // A parked block at or below the locked block can never be voted on
+            let num_removed = tx.parked_blocks_remove_up_to(new_locked.epoch(), new_locked.height())?;
+            if num_removed > 0 {
+                debug!(
+                    target: LOG_TARGET,
+                    "🗑️ Removed {num_removed} parked block(s) at or below locked block {}",
+                    new_locked,
+                );
+            }
         }
 
         // b <- b'.justify.node

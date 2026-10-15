@@ -5,18 +5,19 @@ use std::collections::{HashSet, VecDeque};
 
 use log::*;
 use tari_bor::BorError;
-use tari_consensus_types::BlockId;
+use tari_consensus_types::{BlockId, LockedBlock};
 use tari_epoch_manager::EpochManagerReader;
 use tari_ootle_common_types::{
     Epoch,
     NodeHeight,
     committee::{Committee, CommitteeInfo},
+    optional::Optional,
 };
 use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
-    consensus_models::{Block, ForeignParkedProposal, ForeignProposal, TransactionRecord},
+    consensus_models::{Block, BookkeepingModel, ForeignParkedProposal, ForeignProposal, TransactionRecord},
 };
 use tari_ootle_transaction::{Transaction, TransactionId};
 use tokio::sync::broadcast;
@@ -47,6 +48,11 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::on_message_validate";
+
+/// How many blocks waiting on transactions one proposer may have parked at one height. An honest leader proposes once
+/// per height, so the allowance leaves room for a re-proposal. Slots are counted per proposer so that one member's
+/// blocks cannot take another member's.
+pub const MAX_PARKED_BLOCKS_PER_PROPOSER_PER_HEIGHT: usize = 2;
 
 pub struct OnMessageValidate<TConsensusSpec: ConsensusSpec> {
     config: HotstuffConfig,
@@ -392,7 +398,6 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
 
     pub fn update_parked_blocks<'a, I: IntoIterator<Item = &'a TransactionId> + ExactSizeIterator>(
         &self,
-        current_height: NodeHeight,
         transaction_ids: I,
     ) -> Result<(Vec<ProposalMessage>, Vec<ForeignProposalMessage>), HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "update_local_parked_blocks").with_iterations(transaction_ids.len());
@@ -403,7 +408,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             for transaction_id in transaction_ids {
                 debug!(target: LOG_TARGET, "🔍 Checking if transaction {} unparks any blocks", transaction_id);
                 if let Some((unparked_block, foreign_proposals)) =
-                    tx.parked_block_remove_missing_transaction(current_height + NodeHeight(1), transaction_id)?
+                    tx.parked_block_remove_missing_transaction(transaction_id)?
                 {
                     info!(target: LOG_TARGET, "♻️ all transactions for local block {unparked_block} are ready for consensus");
 
@@ -477,6 +482,10 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
                 from,
                 message: to_message(proposal),
             });
+        }
+
+        if !self.has_parking_slot(&from, epoch_state, &proposal.block)? {
+            return Ok(MessageValidationResult::Discard);
         }
 
         if !self
@@ -563,6 +572,54 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             missing_tx_ids.extend(foreign_missing);
         }
         Ok(missing_tx_ids)
+    }
+
+    /// Parked blocks are kept until their transactions arrive or the chain locks past them, so a block is only parked
+    /// if a local committee member proposed it above the locked block, and that member has a slot left at its height.
+    /// A block already parked keeps its slot.
+    fn has_parking_slot(
+        &self,
+        from: &TConsensusSpec::Addr,
+        epoch_state: &EpochState<TConsensusSpec::Addr>,
+        block: &Block,
+    ) -> Result<bool, HotStuffError> {
+        if !epoch_state.local_committee().contains_public_key(block.proposed_by()) {
+            warn!(
+                target: LOG_TARGET,
+                "⚠️ Not parking block {block} from {from}: proposer {} is not a local committee member",
+                block.proposed_by(),
+            );
+            return Ok(false);
+        }
+
+        self.store.with_read_tx(|tx| {
+            if tx.parked_block_exists(block.id())? {
+                return Ok(true);
+            }
+
+            if let Some(locked) = LockedBlock::get(tx, block.epoch()).optional()? &&
+                block.height() <= locked.height()
+            {
+                warn!(
+                    target: LOG_TARGET,
+                    "⚠️ Not parking block {block} from {from}: it is at or below the locked block {locked}",
+                );
+                return Ok(false);
+            }
+
+            let num_parked = tx.parked_blocks_count_by_proposer(block.epoch(), block.height(), block.proposed_by())?;
+            if num_parked >= MAX_PARKED_BLOCKS_PER_PROPOSER_PER_HEIGHT {
+                warn!(
+                    target: LOG_TARGET,
+                    "⚠️ Not parking block {block} from {from}: proposer {} already has {num_parked} parked block(s) at \
+                     this height",
+                    block.proposed_by(),
+                );
+                return Ok(false);
+            }
+
+            Ok(true)
+        })
     }
 
     /// The first parked copy of a block holds its slot until it is unparked, so a block is only parked if every
