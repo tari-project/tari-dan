@@ -865,7 +865,7 @@ where TConsensusSpec: ConsensusSpec
 
         let prepared = self
             .transaction_manager
-            .prepare(
+            .prepare_for_proposal(
                 substate_store,
                 local_committee_info,
                 &pool_tx,
@@ -895,6 +895,10 @@ where TConsensusSpec: ConsensusSpec
                 );
                 Ok(None)
             },
+            PreparedTransaction::InputsLocked { .. } => Err(HotStuffError::InvariantError(format!(
+                "Transaction {} was prepared as having its inputs locked without a deferrable lock conflict",
+                pool_tx.id(),
+            ))),
             PreparedTransaction::LocalOnly(local) => match *local {
                 LocalPreparedTransaction::Accept { execution, .. } => {
                     pool_tx

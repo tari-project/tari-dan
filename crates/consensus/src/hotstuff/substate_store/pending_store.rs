@@ -490,6 +490,53 @@ impl<'store, TTx: StateStoreReadTransaction> PendingSubstateStore<'store, TTx> {
         Ok(lock_status)
     }
 
+    /// Returns the conflicts that [Self::try_lock_all] must report for `transaction_id`'s input locks, whatever lock
+    /// type its execution resolves each input to and whether or not it locks under local-only rules. Nothing is
+    /// locked. An existing WRITE lock refuses every input lock from another transaction, as does an OUTPUT lock that
+    /// is not local-only. A READ lock admits a READ, so it is never reported.
+    pub fn check_input_locks<I, L>(
+        &self,
+        transaction_id: &TransactionId,
+        input_locks: I,
+    ) -> Result<LockStatus, SubstateStoreError>
+    where
+        I: IntoIterator<Item = L>,
+        L: LockIntent,
+    {
+        let mut lock_status = LockStatus::new();
+        for lock in input_locks {
+            let versioned_substate_id = lock.to_versioned_substate_id_ref();
+            let Some(existing) = self.get_latest_lock_by_id(versioned_substate_id.substate_id())? else {
+                continue;
+            };
+            if existing.transaction_id() == transaction_id {
+                continue;
+            }
+            let refuses_every_input = match existing.lock_type() {
+                SubstateLockType::Write => true,
+                SubstateLockType::Output => !existing.is_local_only(),
+                SubstateLockType::Read => false,
+            };
+            if !refuses_every_input {
+                continue;
+            }
+
+            let index = lock_status.add_failed(LockFailedError::LockConflict {
+                substate_id: versioned_substate_id.to_owned(),
+                conflict: LockConflict {
+                    existing_lock: existing.lock_type(),
+                    requested_lock: lock.lock_type(),
+                    transaction_id: *existing.transaction_id(),
+                    is_local_only: existing.is_local_only(),
+                },
+            });
+            if lock.requested_version().is_some() {
+                lock_status.hard_conflict_idx = Some(index);
+            }
+        }
+        Ok(lock_status)
+    }
+
     #[allow(clippy::too_many_lines)]
     pub fn try_lock<L: LockIntent + Display>(
         &mut self,

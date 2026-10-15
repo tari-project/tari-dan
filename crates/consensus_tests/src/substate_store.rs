@@ -394,6 +394,78 @@ fn locking_without_failures_is_not_a_deferrable_conflict() {
 }
 
 #[test]
+fn checking_input_locks_reports_a_write_lock_held_by_another_transaction() {
+    let (store, _tmp) = create_store();
+
+    let id = add_substate(&store, 0, SubstateVersion::ZERO);
+
+    let tx = store.create_read_tx().unwrap();
+    let mut store = create_pending_store::<TestStore>(&tx);
+
+    // Local-only rules admit no input lock over a WRITE lock either
+    store
+        .try_lock(
+            tx_id(1),
+            &RequireLockIntentRef::new(id.substate_id(), SubstateVersion::ZERO, SubstateLockType::Write),
+            true,
+        )
+        .unwrap();
+
+    let unversioned = VersionedSubstateIdLockIntent::read(id.clone(), false);
+    let lock_status = store.check_input_locks(&tx_id(2), [&unversioned]).unwrap();
+    assert!(lock_status.is_deferrable_conflict());
+
+    let versioned = VersionedSubstateIdLockIntent::read(id.clone(), true);
+    let lock_status = store.check_input_locks(&tx_id(2), [&versioned]).unwrap();
+    assert!(lock_status.is_hard_conflict());
+
+    let lock_status = store.check_input_locks(&tx_id(1), [&unversioned]).unwrap();
+    assert!(!lock_status.is_any_failed());
+
+    // Checking locks nothing, so the lock is still the first transaction's
+    let lock = store.get_latest_lock_by_id(id.substate_id()).unwrap().unwrap();
+    assert_eq!(*lock.transaction_id(), tx_id(1));
+}
+
+#[test]
+fn checking_input_locks_ignores_a_lock_an_input_may_share() {
+    let (store, _tmp) = create_store();
+
+    let read_locked = add_substate(&store, 0, SubstateVersion::ZERO);
+    let output_locked = add_substate(&store, 1, SubstateVersion::ZERO);
+
+    let tx = store.create_read_tx().unwrap();
+    let mut store = create_pending_store::<TestStore>(&tx);
+
+    store
+        .try_lock(
+            tx_id(1),
+            &RequireLockIntentRef::new(read_locked.substate_id(), SubstateVersion::ZERO, SubstateLockType::Read),
+            false,
+        )
+        .unwrap();
+    store
+        .try_lock(
+            tx_id(1),
+            &RequireLockIntentRef::new(
+                output_locked.substate_id(),
+                SubstateVersion::new(1),
+                SubstateLockType::Output,
+            ),
+            true,
+        )
+        .unwrap();
+
+    // An executed transaction may only read a write-declared input, and may lock under local-only rules
+    let intents = [
+        VersionedSubstateIdLockIntent::write(read_locked.clone(), false),
+        VersionedSubstateIdLockIntent::write(output_locked.clone(), false),
+    ];
+    let lock_status = store.check_input_locks(&tx_id(2), &intents).unwrap();
+    assert!(!lock_status.is_any_failed());
+}
+
+#[test]
 fn a_substate_with_no_live_version_is_a_skippable_lock_failure() {
     // A substate with no live version (e.g. surfaced by put_diff at propose time when an input version was
     // already spent) must be classified as a recoverable lock failure. The proposer relies on

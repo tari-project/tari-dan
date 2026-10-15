@@ -839,6 +839,13 @@ where TConsensusSpec: ConsensusSpec
                     block,
                 )));
             },
+            PreparedTransaction::InputsLocked { .. } => {
+                return Err(HotStuffError::InvariantError(format!(
+                    "Transaction {} in block {} was deferred for its locked inputs, which only a proposer checks",
+                    atom.id(),
+                    block,
+                )));
+            },
             PreparedTransaction::MultiShard(_) => {
                 warn!(
                     target: LOG_TARGET,
@@ -927,6 +934,13 @@ where TConsensusSpec: ConsensusSpec
             PreparedTransaction::PledgeBudgetReached { .. } => {
                 return Err(HotStuffError::InvariantError(format!(
                     "Transaction {} in block {} was deferred for the pledge budget, which only a proposing store has",
+                    atom.id(),
+                    block,
+                )));
+            },
+            PreparedTransaction::InputsLocked { .. } => {
+                return Err(HotStuffError::InvariantError(format!(
+                    "Transaction {} in block {} was deferred for its locked inputs, which only a proposer checks",
                     atom.id(),
                     block,
                 )));

@@ -138,6 +138,32 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         block: LeafBlock,
         change_set: &ProposedBlockChangeSet,
     ) -> Result<PreparedTransaction, BlockTransactionExecutorError> {
+        self.prepare_inner(store, local_committee_info, pool_tx, block, change_set, false)
+    }
+
+    /// Prepares the transaction for a block this node proposes. A proposer defers a transaction with a deferrable lock
+    /// conflict, so one whose declared local inputs are locked in a way no execution could lock alongside is
+    /// prepared as [PreparedTransaction::InputsLocked] without being executed.
+    pub fn prepare_for_proposal<TTx: StateStoreReadTransaction>(
+        &self,
+        store: &mut PendingSubstateStore<TTx>,
+        local_committee_info: &CommitteeInfo,
+        pool_tx: &TransactionPoolRecord,
+        block: LeafBlock,
+        change_set: &ProposedBlockChangeSet,
+    ) -> Result<PreparedTransaction, BlockTransactionExecutorError> {
+        self.prepare_inner(store, local_committee_info, pool_tx, block, change_set, true)
+    }
+
+    fn prepare_inner<TTx: StateStoreReadTransaction>(
+        &self,
+        store: &mut PendingSubstateStore<TTx>,
+        local_committee_info: &CommitteeInfo,
+        pool_tx: &TransactionPoolRecord,
+        block: LeafBlock,
+        change_set: &ProposedBlockChangeSet,
+        is_proposing: bool,
+    ) -> Result<PreparedTransaction, BlockTransactionExecutorError> {
         let _timer = TraceTimer::info(LOG_TARGET, "prepare");
         let transaction = pool_tx.get_transaction(store.read_transaction())?;
         let transaction_id = *transaction.id();
@@ -173,6 +199,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                     local_versions,
                     block,
                     execution_epoch.clone(),
+                    is_proposing,
                 )
             },
             ResolvedTransactionInputs::LocalAndForeignInputs {
@@ -207,6 +234,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                     IndexMap::new(),
                     block,
                     execution_epoch.clone(),
+                    is_proposing,
                 )
             },
             ResolvedTransactionInputs::OneOrMoreLocalInputsNotFound { is_local_only, err } => {
@@ -448,6 +476,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         local_versions: IndexMap<InputDeclarationRef<'_>, SubstateVersion>,
         block: LeafBlock,
         execution_locked_epoch: LockedEpoch,
+        is_proposing: bool,
     ) -> Result<PreparedTransaction, BlockTransactionExecutorError> {
         let transaction_id = *transaction.id();
         // CASE: All inputs are local and we can execute the transaction.
@@ -460,6 +489,28 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
             local_versions.len(),
             transaction.transaction().claim_burn_iter().count()
         );
+
+        // A transaction outside its validity window aborts without executing, so it is not worth deferring.
+        let max_epoch = transaction.transaction().max_epoch();
+        if is_proposing &&
+            self.window_abort_reason(execution_locked_epoch.epoch(), max_epoch)
+                .is_none()
+        {
+            let lock_status = store.check_input_locks(
+                &transaction_id,
+                local_versions
+                    .iter()
+                    .map(|(decl, version)| declared_lock_intent(decl, *version)),
+            )?;
+            if lock_status.is_deferrable_conflict() {
+                info!(
+                    target: LOG_TARGET,
+                    "👨‍🔧 PREPARE: transaction {} has local input(s) locked by another transaction. Not executing.",
+                    transaction_id,
+                );
+                return Ok(PreparedTransaction::InputsLocked { lock_status });
+            }
+        }
 
         let local_inputs = store.get_many(
             local_versions
