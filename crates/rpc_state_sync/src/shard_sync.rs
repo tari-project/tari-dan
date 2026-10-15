@@ -347,7 +347,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         let shard = self.shard;
         self.store.with_write_tx(|tx| {
             let mut rewind_point = tx.state_sync_rewind_point_get(shard)?;
-            if let Some((_, created_at)) = tx.state_sync_missing_values_get_earliest(shard)? {
+            if let Some((_, created_at)) = tx.state_sync_missing_values_get_earliest(shard, 0)? {
                 let latest = tx.state_tree_versions_get_latest(shard)?;
                 if calculate_state_root_for_shard(&**tx, shard, latest)? == self.checkpoint_shard_root {
                     let below_creation = created_at.saturating_sub(1);
@@ -567,15 +567,23 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                     }
                     // The peer serves a bounded stream only while its epoch GC has pruned no value of a substate
                     // destroyed after the checkpoint epoch, so every substate it streamed without a value is destroyed
-                    // within the stream.
-                    if let Some((address, created_at)) = self
-                        .store
-                        .with_read_tx(|tx| tx.state_sync_missing_values_get_earliest(shard))?
-                    {
+                    // within the stream. A substate an earlier attempt streamed without a value is that attempt's
+                    // peer's fault: this stream reached the checkpoint without destroying it because the checkpoint
+                    // keeps it up.
+                    let (from_this_stream, from_earlier) = self.store.with_read_tx(|tx| {
+                        Ok::<_, StorageError>((
+                            tx.state_sync_missing_values_get_earliest(shard, start_state_version)?,
+                            tx.state_sync_missing_values_get_earliest(shard, 0)?,
+                        ))
+                    })?;
+                    if let Some((address, created_at)) = from_this_stream {
                         return Err(RpcStateSyncError::InvalidResponse(anyhow!(
                             "Peer streamed the substate at {address} (v{created_at}) without its value and completed \
                              the stream without destroying it"
                         )));
+                    }
+                    if let Some((address, created_at)) = from_earlier {
+                        return Err(RpcStateSyncError::EarlierSyncMissingValue { address, created_at });
                     }
                     if has_unverified_state {
                         self.store
@@ -781,7 +789,8 @@ fn is_local_failure(err: &RpcStateSyncError) -> bool {
         RpcStateSyncError::StorageError(_) |
             RpcStateSyncError::EpochManagerError(_) |
             RpcStateSyncError::TransactionPoolError(_) |
-            RpcStateSyncError::InvariantError { .. }
+            RpcStateSyncError::InvariantError { .. } |
+            RpcStateSyncError::EarlierSyncMissingValue { .. }
     )
 }
 
@@ -2441,7 +2450,7 @@ mod tests {
 
     fn missing_value<TStore: StateStore>(store: &TStore) -> Option<(SubstateAddress, Version)> {
         store
-            .with_read_tx(|tx| tx.state_sync_missing_values_get_earliest(shard()))
+            .with_read_tx(|tx| tx.state_sync_missing_values_get_earliest(shard(), 0))
             .unwrap()
     }
 
@@ -2471,6 +2480,35 @@ mod tests {
 
         assert_eq!(synced, Some(N + 1));
         assert!(substate(&store, 1).is_some_and(|s| s.is_destroyed()));
+        assert_eq!(missing_value(&store), None);
+    }
+
+    #[tokio::test]
+    async fn a_value_an_earlier_attempt_left_missing_is_not_the_completing_peer_s_fault() {
+        let (store, _tmp) = create_store();
+        let mut checkpoint = versions_to_proof_point();
+        checkpoint.push((N + 1, vec![create(200)]));
+        // The first peer proves the shard below the checkpoint and closes the stream, leaving the substate recorded.
+        let err = sync_with_proofs(&store, &checkpoint, stream_to_proof_point_without_first_value())
+            .await
+            .unwrap_err();
+        assert!(err.is_peer_fault(), "{err}");
+        assert_eq!(local_version(&store), Some(N));
+        assert_eq!(missing_value(&store), Some((address(1), 1)));
+
+        let err = sync_with_proofs(&store, &checkpoint, vec![
+            batch(N + 1, vec![create(200)]),
+            complete(N + 1),
+        ])
+        .await
+        .unwrap_err();
+
+        assert!(
+            matches!(err, RpcStateSyncError::EarlierSyncMissingValue { created_at: 1, .. }),
+            "{err}"
+        );
+        assert!(!err.is_peer_fault());
+        assert_eq!(local_version(&store), None);
         assert_eq!(missing_value(&store), None);
     }
 

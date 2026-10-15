@@ -1966,6 +1966,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
     fn state_sync_missing_values_get_earliest(
         &self,
         shard: Shard,
+        from: Version,
     ) -> Result<Option<(SubstateAddress, Version)>, StorageError> {
         let cf = self.db().cf(StateSyncMissingValueCf)?;
         let start = cf.encode_key(&(shard, SubstateAddress::zero()));
@@ -1973,7 +1974,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         let mut earliest = None::<(SubstateAddress, Version)>;
         for entry in cf.range_iterator(Ordering::Ascending, start..end) {
             let ((_, address), created_at) = entry?;
-            if earliest.is_none_or(|(_, version)| created_at < version) {
+            if created_at >= from && earliest.is_none_or(|(_, version)| created_at < version) {
                 earliest = Some((address, created_at));
             }
         }

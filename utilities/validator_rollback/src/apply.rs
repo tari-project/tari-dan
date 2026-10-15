@@ -3,6 +3,7 @@
 
 use std::{
     iter,
+    ops::Deref,
     path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -23,6 +24,7 @@ use tari_state_store_rocksdb::{
     codecs::ByteColumn,
     column_families::bookkeeping::{CURRENT_SCHEMA_VERSION, DatabaseMigrationVersion},
 };
+use tari_state_tree::Version;
 
 use crate::{
     audit::AuditWriter,
@@ -239,10 +241,7 @@ pub fn run_with_options(opts: ApplyOptions) -> anyhow::Result<ApplyOutcome> {
         .to_string();
     store.with_write_tx(|tx| -> anyhow::Result<()> {
         for (shard, version) in &state_versions {
-            tx.state_tree_truncate_to_version(*shard, *version)
-                .with_context(|| format!("state_tree_truncate_to_version(shard={shard}, version={version})"))?;
-            tx.substates_rewind_to_state_version(*shard, *version)
-                .with_context(|| format!("substates_rewind_to_state_version(shard={shard}, version={version})"))?;
+            rewind_shard(tx, *shard, *version)?;
         }
         rollback_delete_after_epoch(tx, target_epoch).context("rollback_delete_after_epoch")?;
         rollback_history_insert(tx, &RollbackHistoryEntry {
@@ -258,6 +257,31 @@ pub fn run_with_options(opts: ApplyOptions) -> anyhow::Result<ApplyOutcome> {
 
     println!("Rollback applied successfully.");
     Ok(outcome)
+}
+
+/// Rewinds `shard`'s state tree and substates to `version`.
+///
+/// A rewind across a destruction whose value epoch GC has pruned restores the substate without its value. Consensus
+/// cannot execute against it and state sync never reports the node up to date, so the rollback is refused.
+fn rewind_shard<TTx>(tx: &mut TTx, shard: Shard, version: Version) -> anyhow::Result<()>
+where
+    TTx: StateStoreWriteTransaction + Deref,
+    TTx::Target: StateStoreReadTransaction,
+{
+    tx.state_tree_truncate_to_version(shard, version)
+        .with_context(|| format!("state_tree_truncate_to_version(shard={shard}, version={version})"))?;
+    tx.substates_rewind_to_state_version(shard, version)
+        .with_context(|| format!("substates_rewind_to_state_version(shard={shard}, version={version})"))?;
+    if let Some((address, created_at)) = tx
+        .state_sync_missing_values_get_earliest(shard, 0)
+        .with_context(|| format!("state_sync_missing_values_get_earliest(shard={shard})"))?
+    {
+        bail!(
+            "rolling {shard} back to v{version} leaves the substate at {address} (created at v{created_at}) up \
+             without its value, which epoch GC has pruned; roll back to a later epoch"
+        );
+    }
+    Ok(())
 }
 
 fn locate_checkpoint(

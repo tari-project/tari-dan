@@ -467,11 +467,12 @@ pub trait StateStoreReadTransaction: Sized {
     fn state_sync_rewind_point_get(&self, shard: Shard) -> Result<Option<Version>, StorageError>;
     /// Every shard that has a rewind point, with that rewind point.
     fn state_sync_rewind_points_get_all(&self) -> Result<Vec<(Shard, Version)>, StorageError>;
-    /// Of the up substates of `shard` that state sync committed without their value, the one created at the lowest
-    /// state version, with that version.
+    /// Of the up substates of `shard` that state sync committed without their value at state version `from` or later,
+    /// the one created at the lowest state version, with that version.
     fn state_sync_missing_values_get_earliest(
         &self,
         shard: Shard,
+        from: Version,
     ) -> Result<Option<(SubstateAddress, Version)>, StorageError>;
     /// The state version proofs held for `shard` at versions in `from..=to`, in ascending version order.
     fn state_version_proofs_get_range(

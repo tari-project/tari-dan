@@ -4,10 +4,10 @@
 use tari_consensus::hotstuff::{HotStuffError, ProposalValidationError};
 use tari_consensus_types::BlockId;
 use tari_epoch_manager::EpochManagerError;
-use tari_ootle_common_types::{Epoch, ValidatorSetHash};
+use tari_ootle_common_types::{Epoch, SubstateAddress, ValidatorSetHash};
 use tari_ootle_storage::{StorageError, consensus_models::TransactionPoolError};
 use tari_rpc_framework::{RpcError, RpcStatus};
-use tari_state_tree::{JmtStorageError, TreeHash};
+use tari_state_tree::{JmtStorageError, TreeHash, Version};
 use tari_validator_node_rpc::ValidatorNodeRpcClientError;
 
 #[derive(Debug, thiserror::Error)]
@@ -52,6 +52,16 @@ pub enum RpcStateSyncError {
         epoch: Epoch,
         local: ValidatorSetHash,
         committed: ValidatorSetHash,
+    },
+    /// An earlier sync attempt left a substate up without its value, and this attempt reached the checkpoint
+    /// without destroying it. The fault lies with the peer that served the earlier attempt.
+    #[error(
+        "An earlier sync left the substate at {address} (created at v{created_at}) up without its value, and the \
+         checkpoint keeps it up"
+    )]
+    EarlierSyncMissingValue {
+        address: SubstateAddress,
+        created_at: Version,
     },
 }
 
