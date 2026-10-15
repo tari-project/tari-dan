@@ -1,0 +1,329 @@
+//   Copyright 2026 The Tari Project
+//   SPDX-License-Identifier: BSD-3-Clause
+
+//! Signed fixtures: validator sets with real committee proofs, and end-of-epoch checkpoints and block commit proofs
+//! that a committee's keys sign over a 3-chain of quorum certificates.
+
+#![allow(dead_code)]
+
+use indexmap::IndexMap;
+use ootle_network::Network;
+use tari_common_types::types::{CompressedPublicKey, FixedHash, PrivateKey};
+use tari_crypto::{keys::SecretKey, tari_utilities::ByteArray};
+use tari_engine_types::ProtocolVersion;
+use tari_indexer_client::types::{EpochCheckpointEntry, ValidatorSetCommittee, ValidatorSetCommitteeMember};
+use tari_ootle_common_types::{
+    Epoch,
+    ExtraData,
+    ExtraFieldKey,
+    NumPreshards,
+    ShardGroup,
+    ValidatorSetHash,
+    VotePower,
+    committee::{Committee, CommitteeMember},
+    shard::Shard,
+};
+use tari_ootle_storage::consensus_models::{
+    BlockHeaderMetadata,
+    CommittedBlockProof,
+    EndOfEpochCommand,
+    EpochCheckpoint,
+};
+use tari_sidechain::{
+    ChainLink,
+    CommandCommitProof,
+    CommitProofElement,
+    DecodedValidatorBlockSignature,
+    ProposalVoteMessage,
+    QuorumCertificate,
+    QuorumDecision,
+    SidechainBlockCommitProof,
+    SidechainBlockHeader,
+    ToCommand,
+    ValidatorBlockSignature,
+    ValidatorQcSignature,
+};
+use tari_state_tree::{TreeHash, ValidatorSetTree, compute_merkle_root_for_hashes, compute_proof_for_hashes};
+use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
+
+pub const NETWORK: Network = Network::LocalNet;
+pub const NUM_PRESHARDS: NumPreshards = NumPreshards::P4;
+
+/// The shard group the light client walks, holding [`walk_shard`].
+pub fn low() -> ShardGroup {
+    ShardGroup::new(1u32, 2u32)
+}
+
+pub fn high() -> ShardGroup {
+    ShardGroup::new(3u32, 4u32)
+}
+
+pub fn walk_shard() -> Shard {
+    Shard::first()
+}
+
+/// A committee's signing keys.
+#[derive(Clone)]
+pub struct Signers {
+    pub keys: Vec<PrivateKey>,
+}
+
+impl Signers {
+    /// `n` keys, distinct for every distinct `seed`.
+    pub fn new(seed: u8, n: u8) -> Self {
+        let keys = (1..=n)
+            .map(|i| {
+                let mut bytes = [seed; 64];
+                bytes[0] = i;
+                PrivateKey::from_uniform_bytes(&bytes).unwrap()
+            })
+            .collect();
+        Self { keys }
+    }
+
+    pub fn committee(&self) -> Committee<RistrettoPublicKeyBytes> {
+        let mut members = self
+            .keys
+            .iter()
+            .map(|key| {
+                let public_key = public_key_bytes(key);
+                CommitteeMember {
+                    address: public_key,
+                    public_key,
+                    vote_power: VotePower::of(1),
+                }
+            })
+            .collect::<Vec<_>>();
+        members.sort_by_key(|member| member.public_key);
+        Committee::new(members)
+    }
+}
+
+fn public_key_bytes(key: &PrivateKey) -> RistrettoPublicKeyBytes {
+    RistrettoPublicKeyBytes::from_bytes(CompressedPublicKey::from_secret_key(key).as_bytes()).unwrap()
+}
+
+/// An epoch's validator set of two shard groups, [`low`] and [`high`].
+pub struct ValidatorSetFixture {
+    pub network: Network,
+    pub epoch: Epoch,
+    pub low: Signers,
+    pub high: Signers,
+    tree: ValidatorSetTree,
+}
+
+impl ValidatorSetFixture {
+    pub fn new(epoch: u64) -> Self {
+        Self::with_signers(
+            NETWORK,
+            epoch,
+            Signers::new(epoch as u8 * 2, 4),
+            Signers::new(epoch as u8 * 2 + 1, 4),
+        )
+    }
+
+    pub fn with_signers(network: Network, epoch: u64, low_signers: Signers, high_signers: Signers) -> Self {
+        let epoch = Epoch(epoch);
+        let leaves = [(low(), &low_signers), (high(), &high_signers)].map(|(shard_group, signers)| {
+            (
+                shard_group,
+                signers
+                    .committee()
+                    .calculate_validator_set_leaf_hash(&shard_group)
+                    .unwrap(),
+            )
+        });
+        let tree = ValidatorSetTree::build(network, epoch, NUM_PRESHARDS, leaves).unwrap();
+        Self {
+            network,
+            epoch,
+            low: low_signers,
+            high: high_signers,
+            tree,
+        }
+    }
+
+    pub fn hash(&self) -> ValidatorSetHash {
+        self.tree.hash()
+    }
+
+    pub fn signers(&self, shard_group: ShardGroup) -> &Signers {
+        if shard_group == low() { &self.low } else { &self.high }
+    }
+
+    /// The committee of `shard_group` as the indexer serves it.
+    pub fn committee(&self, shard_group: ShardGroup) -> ValidatorSetCommittee {
+        let committee = self.signers(shard_group).committee();
+        let proof = self.tree.committee_proof(&shard_group, &committee).unwrap();
+        ValidatorSetCommittee {
+            epoch: self.epoch,
+            shard_group,
+            validator_set_hash: self.hash(),
+            members: (&committee)
+                .into_iter()
+                .map(|member| ValidatorSetCommitteeMember {
+                    public_key: member.public_key,
+                    vote_power: member.vote_power.value(),
+                })
+                .collect(),
+            proof: proof.to_bytes(),
+        }
+    }
+}
+
+/// How [`checkpoint_entry`] builds an end-of-epoch checkpoint.
+pub struct CheckpointSpec<'a> {
+    pub network: Network,
+    pub epoch: Epoch,
+    pub shard_group: ShardGroup,
+    pub signers: &'a Signers,
+    /// The validator set the end-of-epoch header names for the next epoch.
+    pub next_set: ValidatorSetHash,
+    /// Whether the checkpoint carries the header metadata preimage.
+    pub carry_preimage: bool,
+    pub next_epoch_committee: Option<ValidatorSetCommittee>,
+}
+
+impl<'a> CheckpointSpec<'a> {
+    /// The checkpoint of [`low`] ending `current`'s epoch, which hands over to `next`.
+    pub fn handover(current: &'a ValidatorSetFixture, next: &ValidatorSetFixture) -> Self {
+        Self {
+            network: current.network,
+            epoch: current.epoch,
+            shard_group: low(),
+            signers: &current.low,
+            next_set: next.hash(),
+            carry_preimage: true,
+            next_epoch_committee: Some(next.committee(low())),
+        }
+    }
+}
+
+pub fn checkpoint_entry(spec: CheckpointSpec<'_>) -> EpochCheckpointEntry {
+    let mut extra_data = ExtraData::new();
+    extra_data.insert_validator_set_hash(ExtraFieldKey::NextEpochValidatorSetHash, &spec.next_set);
+    let metadata = BlockHeaderMetadata {
+        total_leader_fee: 0,
+        timestamp: 1234,
+        extra_data,
+        timeout_certificate_id: None,
+        is_dummy: false,
+    };
+
+    let command = EndOfEpochCommand::new(FixedHash::from([spec.epoch.as_u64() as u8; 32]));
+    let command_hash = TreeHash::new(command.to_command().hash().into_array());
+    let (_, inclusion_proof) = compute_proof_for_hashes([command_hash].into_iter(), command_hash).unwrap();
+    let mut header = header(spec.network, spec.epoch, spec.shard_group, 10);
+    header.command_merkle_root = FixedHash::new(compute_merkle_root_for_hashes([command_hash]).unwrap().into_array());
+    header.metadata_hash = metadata.calculate_hash();
+
+    let build = |commit_proof: SidechainBlockCommitProof| {
+        EpochCheckpoint::new(
+            CommandCommitProof::new(command.clone(), commit_proof, inclusion_proof.clone()),
+            IndexMap::new(),
+            spec.carry_preimage.then(|| metadata.clone()),
+        )
+    };
+    let unsigned = build(SidechainBlockCommitProof {
+        header: header.clone(),
+        proof_elements: vec![],
+    });
+    header.state_merkle_root = FixedHash::new(unsigned.compute_state_merkle_root().unwrap().into_array());
+    let checkpoint = build(sign(header, spec.signers));
+
+    EpochCheckpointEntry {
+        epoch: spec.epoch,
+        shard_group: spec.shard_group,
+        next_epoch_validator_set_hash: checkpoint.next_epoch_validator_set_hash(),
+        checkpoint: tari_bor::encode(&checkpoint).unwrap(),
+        next_epoch_committee: spec.next_epoch_committee,
+    }
+}
+
+/// A commit proof of a block of `shard_group` in `epoch` committing `state_merkle_root`, signed by `signers`.
+pub fn block_commit_proof(
+    network: Network,
+    epoch: Epoch,
+    shard_group: ShardGroup,
+    height: u64,
+    state_merkle_root: TreeHash,
+    signers: &Signers,
+) -> Vec<u8> {
+    let mut header = header(network, epoch, shard_group, height);
+    header.state_merkle_root = FixedHash::new(state_merkle_root.into_array());
+    CommittedBlockProof::new(sign(header, signers)).to_bytes()
+}
+
+fn header(network: Network, epoch: Epoch, shard_group: ShardGroup, height: u64) -> SidechainBlockHeader {
+    SidechainBlockHeader {
+        network: network.as_byte(),
+        protocol_version: ProtocolVersion::at(network, epoch).as_u32(),
+        parent_id: FixedHash::from([0xaa; 32]),
+        justify_id: FixedHash::zero(),
+        height,
+        epoch: epoch.as_u64(),
+        epoch_hash: FixedHash::zero(),
+        shard_group: tari_sidechain::ShardGroup {
+            start: shard_group.start().as_u32(),
+            end_inclusive: shard_group.end().as_u32(),
+        },
+        proposed_by: CompressedPublicKey::default(),
+        state_merkle_root: FixedHash::zero(),
+        command_merkle_root: FixedHash::zero(),
+        transaction_merkle_root: None,
+        signature: ValidatorBlockSignature::default(),
+        accumulated_data: Default::default(),
+        metadata_hash: FixedHash::zero(),
+    }
+}
+
+/// Commits `header` with a 3-chain of certificates that every one of `signers` signs.
+fn sign(header: SidechainBlockHeader, signers: &Signers) -> SidechainBlockCommitProof {
+    let certify = |header_hash: FixedHash, parent_id: FixedHash, height: u64| {
+        let block_id = ChainLink { header_hash, parent_id }.calc_block_id();
+        let message = ProposalVoteMessage::new(
+            header.protocol_version,
+            &block_id,
+            QuorumDecision::Accept,
+            header.epoch,
+            height,
+        )
+        .calculate_hash();
+        let signatures = signers
+            .keys
+            .iter()
+            .map(|secret| {
+                let nonce = PrivateKey::from_uniform_bytes(&[secret.as_bytes(), message.as_slice()].concat()).unwrap();
+                let signature =
+                    DecodedValidatorBlockSignature::sign_with_nonce_and_message(secret, nonce, message).unwrap();
+                ValidatorQcSignature {
+                    public_key: CompressedPublicKey::from_secret_key(secret),
+                    signature: ValidatorBlockSignature::new_from_schnorr(signature),
+                }
+            })
+            .collect();
+        QuorumCertificate {
+            header_hash,
+            parent_id,
+            protocol_version: header.protocol_version,
+            epoch: header.epoch,
+            height,
+            signatures,
+            decision: QuorumDecision::Accept,
+        }
+    };
+
+    let block_id = header.calculate_block_id();
+    let child_hash = FixedHash::from([0xc1; 32]);
+    let child_id = ChainLink {
+        header_hash: child_hash,
+        parent_id: block_id,
+    }
+    .calc_block_id();
+    let proof_elements = vec![
+        CommitProofElement::QuorumCertificate(certify(FixedHash::from([0xc2; 32]), child_id, header.height + 2)),
+        CommitProofElement::QuorumCertificate(certify(child_hash, block_id, header.height + 1)),
+        CommitProofElement::QuorumCertificate(certify(header.calculate_hash(), header.parent_id, header.height)),
+    ];
+    SidechainBlockCommitProof { header, proof_elements }
+}

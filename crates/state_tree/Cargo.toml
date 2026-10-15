@@ -1,6 +1,6 @@
 [package]
 name = "tari_state_tree"
-publish = false
+description = "Sharded state trees and validator set trees for Tari Ootle"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

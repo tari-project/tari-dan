@@ -49,6 +49,7 @@ members = [
     "crates/validator_node_rpc",
     "crates/wallet/ootle-rs",
     "crates/wallet/crypto",
+    "crates/wallet/light_client",
     "crates/wallet/sdk",
     "crates/wallet/sdk_services",
     "crates/wallet/sdk_tests",
@@ -104,9 +105,10 @@ tari_ootle_address = { path = "crates/ootle_address", version = "0.13" }
 ootle-network = { path = "crates/ootle_network", version = "0.2" }
 tari_engine = { path = "crates/engine", version = "0.46.0" }
 tari_ootle_p2p = { path = "crates/p2p" }
-tari_ootle_storage = { path = "crates/storage" }
+tari_ootle_storage = { path = "crates/storage", version = "0.46" }
 tari_ootle_storage_sqlite = { path = "crates/storage_sqlite" }
 tari_ootle_wallet_crypto = { path = "crates/wallet/crypto", version = "0.47" }
+tari_ootle_light_client = { path = "crates/wallet/light_client", version = "0.1" }
 tari_ootle_wallet_sdk = { path = "crates/wallet/sdk", version = "0.48.0" }
 tari_ootle_wallet_sdk_services = { path = "crates/wallet/sdk_services" }
 tari_ootle_wallet_storage_sqlite = { path = "crates/wallet/storage_sqlite", version = "0.48.0" }
@@ -115,7 +117,7 @@ tari_epoch_oracles = { path = "crates/epoch_oracles" }
 tari_indexer_lib = { path = "crates/indexer_lib" }
 tari_rpc_state_sync = { path = "crates/rpc_state_sync" }
 tari_state_store_rocksdb = { path = "crates/state_store_rocksdb" }
-tari_state_tree = { path = "crates/state_tree" }
+tari_state_tree = { path = "crates/state_tree", version = "0.46" }
 tari_template_test_tooling = { path = "crates/template_test_tooling", version = "0.46.0" }
 tari_transaction_manifest = { path = "crates/transaction_manifest", version = "0.46.0" }
 tari_validator_node_rpc = { path = "crates/validator_node_rpc" }
