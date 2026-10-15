@@ -274,10 +274,6 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             .await
     }
 
-    /// True if this node's committed state already matches `checkpoint` for every shard it is responsible for (its
-    /// local shard group plus the global shard), with the value of every up substate. Distinguishes a rolled-back node
-    /// (complete state, checkpoint retained) from one whose first-time state sync was interrupted after one shard
-    /// group's checkpoint was stored but before the others finished streaming (checkpoint present, state incomplete).
     /// True if a sync whose proofs settled but that never completed left substates of `shard_group` up without their
     /// value. No transaction can execute against them, so the node must sync again before joining consensus.
     fn holds_missing_values(&self, shard_group: ShardGroup) -> Result<bool, RpcStateSyncError> {
@@ -293,6 +289,10 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         Ok(holds)
     }
 
+    /// True if this node's committed state already matches `checkpoint` for every shard it is responsible for (its
+    /// local shard group plus the global shard), with the value of every up substate. Distinguishes a rolled-back node
+    /// (complete state, checkpoint retained) from one whose first-time state sync was interrupted after one shard
+    /// group's checkpoint was stored but before the others finished streaming (checkpoint present, state incomplete).
     async fn local_state_matches_checkpoint(&self, checkpoint: &EpochCheckpoint) -> Result<bool, RpcStateSyncError> {
         let local_info = self.epoch_manager.get_local_committee_info(checkpoint.epoch()).await?;
         self.state_store.with_read_tx(|tx| {
