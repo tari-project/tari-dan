@@ -28,6 +28,5 @@
 #[link(wasm_import_module = "env")]
 unsafe extern "C" {
     pub fn tari_engine(op: i32, input_ptr: *const u8, input_len: usize) -> *mut u8;
-    pub fn tari_debug(input_ptr: *const u8, input_len: usize);
     pub fn on_panic(msg_ptr: *const u8, msg_len: u32, line: u32, column: u32);
 }

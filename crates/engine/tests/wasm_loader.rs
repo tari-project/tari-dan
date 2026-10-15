@@ -328,6 +328,16 @@ fn rejects_an_unexpected_exported_function() {
     assert!(err.contains("i_shouldnt_be_here"), "unexpected error: {err}");
 }
 
+/// A template writes to the validator's log only through engine calls, which are metered and whose
+/// log entries are bounded per transaction, so a module importing a debug host call is refused.
+#[test]
+fn rejects_a_module_importing_tari_debug() {
+    let code = template_module_importing(r#"(import "env" "tari_debug" (func (param i32 i32)))"#, ABI_EXPORTS);
+
+    let err = validation_error(&code);
+    assert!(err.contains("tari_debug"), "unexpected error: {err}");
+}
+
 /// Loads `code` as a template and calls its `main`, returning the WASM points the call consumed.
 ///
 /// The harness's template provider is a fixed map, so the module is registered directly rather than

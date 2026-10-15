@@ -69,7 +69,7 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::ootle::engine::wasm::process";
-/// Log target for everything a template itself writes: its `tari_debug` output and its panics.
+/// Log target for the panics a template reports.
 const WASM_DEBUG_LOG_TARGET: &str = "tari::ootle::wasm";
 
 pub struct WasmProcess {
@@ -88,7 +88,6 @@ impl WasmProcess {
         let imports = imports! {
             "env" => {
                 "tari_engine" => tari_engine,
-                "tari_debug" => Function::new_typed_with_env(store, &fn_env, debug_handler),
                 "on_panic" => Function::new_typed_with_env(store,&fn_env, on_panic_handler),
             }
         };
@@ -811,30 +810,6 @@ fn take_refused_engine_call<T>(env: &mut WasmEnv<T>) -> Result<(), WasmExecution
             RuntimeError::EngineCallOutsideInvocation { op },
         )),
         None => Ok(()),
-    }
-}
-
-/// `tari_debug` is a template's only way to write to the validator's log. What it writes goes
-/// through `log` rather than straight to stderr, is bounded in size and in count, and — like an
-/// engine call — is answered only while a template function invocation is in flight.
-fn debug_handler<T: Send + 'static>(mut env: FunctionEnvMut<WasmEnv<T>>, arg_ptr: WasmPtr<u8>, arg_len: u32) {
-    let (state, mut store) = env.data_and_store_mut();
-    if !state.is_in_template_invocation() ||
-        !log::log_enabled!(target: WASM_DEBUG_LOG_TARGET, log::Level::Debug) ||
-        !state.allow_debug_message()
-    {
-        return;
-    }
-
-    let len = arg_len.min(limits::ENGINE_LIMITS.max_log_size_bytes as u32);
-
-    // SAFETY: WasmProcess is not used concurrently
-    unsafe {
-        if let Err(err) = state.with_memory_slice(&mut store, arg_ptr, len, |msg| {
-            log::debug!(target: WASM_DEBUG_LOG_TARGET, "{}", String::from_utf8_lossy(msg));
-        }) {
-            log::error!(target: WASM_DEBUG_LOG_TARGET, "Failed to read from memory: {}", err);
-        }
     }
 }
 

@@ -152,7 +152,6 @@ impl WasmModule {
         let imports = imports! {
             "env" => {
                 "tari_engine" => Function::new_typed(&mut store, |_op: i32, _arg_ptr: i32, _arg_len: i32| 0i32),
-                "tari_debug" => Function::new_typed(&mut store, |_arg_ptr: i32, _arg_len: i32| {  }),
                 "on_panic" => Function::new_typed(&mut store, |_msg_ptr: i32, _msg_len: i32, _line: i32, _col: i32| {  }),
             }
         };

@@ -592,10 +592,6 @@ pub struct EngineLimits {
     pub max_internal_call_size: usize,
     pub max_logs: usize,
     pub max_log_size_bytes: usize,
-    /// Maximum number of `tari_debug` messages one template call may write. Debug output is
-    /// validator I/O that never reaches the transaction result, so it carries its own budget rather
-    /// than drawing on [`EngineLimits::max_logs`].
-    pub max_debug_messages: usize,
     pub max_events: usize,
     /// Maximum CBOR-encoded size of a single event.
     ///
@@ -629,7 +625,6 @@ pub const ENGINE_LIMITS: EngineLimits = EngineLimits {
     max_internal_call_size: 512 * 1024, // 512 KiB
     max_logs: 256,
     max_log_size_bytes: 32 * 1024, // 32 KiB
-    max_debug_messages: 256,
     max_events: 256,
     max_event_size_bytes: 2 * 1024, // 2 KiB; 256 * 2 KiB = 512 KiB of the 1 MiB substate budget
     max_panic_message_size: 32 * 1024, // 32 KiB

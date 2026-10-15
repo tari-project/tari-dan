@@ -22,7 +22,6 @@
 
 use std::fmt::{Debug, Formatter};
 
-use tari_engine_types::limits;
 use tari_template_abi::{EngineOp, WASM_PTR_SIZE};
 use tari_wasmer_middlewares::metering::{MeteringPoints, get_remaining_points, set_remaining_points};
 use wasmer::{AsStoreMut, AsStoreRef, Instance, Memory, MemoryAccessError, MemoryView, TypedFunction, WasmPtr};
@@ -52,7 +51,6 @@ pub struct WasmEnv<T> {
     invocation_meter: Option<InvocationMeter>,
     in_template_invocation: bool,
     refused_engine_call: Option<EngineOp>,
-    debug_messages_written: usize,
 }
 
 /// Per-invocation view of the Wasmer meter, letting host calls read the in-flight consumption of
@@ -101,7 +99,6 @@ impl<T> WasmEnv<T> {
             invocation_meter: None,
             in_template_invocation: false,
             refused_engine_call: None,
-            debug_messages_written: 0,
         }
     }
 
@@ -114,26 +111,12 @@ impl<T> WasmEnv<T> {
         self.invocation_meter = None;
         self.in_template_invocation = false;
         self.refused_engine_call = None;
-        self.debug_messages_written = 0;
     }
 
     /// Releases the state bound by [`Self::bind_call`]. An idle instance holds none, so a cached
     /// instance keeps no reference to the transaction state that owns the cache.
     pub(super) fn unbind_call(&mut self) -> Option<T> {
         self.state.take()
-    }
-
-    /// Counts one `tari_debug` message against this call's debug budget, reporting whether it
-    /// may be written.
-    ///
-    /// Debug output is validator I/O a template pays almost nothing for — one host call, whatever
-    /// it writes — and it never reaches the transaction result, so it carries its own budget.
-    pub(super) fn allow_debug_message(&mut self) -> bool {
-        if self.debug_messages_written >= limits::ENGINE_LIMITS.max_debug_messages {
-            return false;
-        }
-        self.debug_messages_written += 1;
-        true
     }
 
     /// Marks template code as running inside a function invocation, which is the only context
