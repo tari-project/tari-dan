@@ -697,7 +697,7 @@ impl<'a, TSpec: WalletSdkSpec> StealthTransferApi<'a, TSpec> {
                 .total_revealed_output_amount()
                 .and_then(|revealed| revealed.checked_add(merged_fee_amount))
                 .ok_or_else(|| StealthTransferApiError::InvariantViolation {
-                    details: "Total revealed output amount exceeds the total output amount".to_string(),
+                    details: "Total revealed output amount plus the fee exceeds the maximum amount".to_string(),
                 })?;
             let outputs_to_create = params
                 .outputs
