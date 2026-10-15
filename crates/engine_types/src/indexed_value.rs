@@ -64,13 +64,7 @@ impl IndexedValue {
     }
 
     pub fn referenced_substates(&self) -> impl Iterator<Item = SubstateId> + '_ {
-        self.indexed
-            .component_addresses
-            .iter()
-            .map(|a| (*a).into())
-            .chain(self.indexed.resource_addresses.iter().map(|a| (*a).into()))
-            .chain(self.indexed.non_fungible_addresses.iter().map(|a| a.clone().into()))
-            .chain(self.indexed.vault_ids.iter().map(|a| (*a).into()))
+        self.indexed.referenced_substates()
     }
 
     pub fn well_known_types(&self) -> &IndexedWellKnownTypes {
@@ -477,8 +471,8 @@ impl FromTagAndValue for WellKnownTariValue {
                 Ok(Some(Self::PublishedTemplateAddress(value.into())))
             },
             BinaryTag::ValidatorNodeFeePool => {
-                let value: [u8; 32] = value.decoded()?;
-                Ok(Some(Self::ValidatorNodeFeePool(value.into())))
+                let value: ObjectKey = value.decoded()?;
+                Ok(Some(Self::ValidatorNodeFeePool(value.into_array().into())))
             },
             BinaryTag::AllocatedComponentAddress => {
                 let value = value.decoded()?;
@@ -779,6 +773,28 @@ mod tests {
 
         let indexed = IndexedValue::from_value(value).unwrap();
         assert!(indexed.component_addresses().contains(&addr));
+    }
+
+    /// A transaction's inputs are detected from `IndexedValue::referenced_substates`, and the engine rejects an
+    /// argument referencing any substate kind that is not an input, so every kind it indexes must be listed.
+    #[test]
+    fn it_lists_every_referenced_substate_kind() {
+        let receipt = TransactionReceiptAddress::from_array([1; 32]);
+        let template = PublishedTemplateAddress::from_hash(Hash32::from_array([2; 32]));
+        let fee_pool = ValidatorFeePoolAddress::from_array([3; 32]);
+        let value = cbor!([
+            tari_bor::to_value(&receipt).unwrap(),
+            tari_bor::to_value(&template).unwrap(),
+            tari_bor::to_value(&fee_pool).unwrap(),
+        ]);
+
+        let indexed = IndexedValue::from_value(value).unwrap();
+        let referenced = indexed.referenced_substates().collect::<Vec<_>>();
+
+        assert_eq!(referenced.len(), 3, "{referenced:?}");
+        assert!(referenced.contains(&SubstateId::TransactionReceipt(receipt)));
+        assert!(referenced.contains(&SubstateId::Template(template)));
+        assert!(referenced.contains(&SubstateId::ValidatorFeePool(fee_pool)));
     }
 
     #[test]
