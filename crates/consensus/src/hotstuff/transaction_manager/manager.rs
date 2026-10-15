@@ -1,7 +1,10 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, marker::PhantomData};
+use std::{
+    collections::{HashMap, hash_map::Entry},
+    marker::PhantomData,
+};
 
 use indexmap::{IndexMap, IndexSet};
 use log::*;
@@ -27,6 +30,7 @@ use tari_ootle_storage::{
         BlockTransactionExecution,
         Evidence,
         LockedEpoch,
+        SubstatePledge,
         SubstateRequirementLockIntent,
         TransactionExecution,
         TransactionPoolRecord,
@@ -681,28 +685,10 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         );
 
         let proposed_foreign_pledges = change_set.get_foreign_pledges(&transaction_id);
-        let mut resolved_inputs: HashMap<SubstateRequirement, Substate> = HashMap::new();
-        for (id, substate) in foreign_pledges
-            .into_iter()
-            .chain(proposed_foreign_pledges.cloned())
-            .filter_map(|pledge| pledge.into_input())
-        {
-            let version = id.version();
-            let req: SubstateRequirement = id.into();
-            if let Some(existing) = resolved_inputs.get(&req) {
-                // Duplicate pledges must refer to the same substate version and value
-                if existing.version() != version {
-                    return Err(BlockTransactionExecutorError::InvariantError(format!(
-                        "Conflicting versions for duplicate foreign pledge on substate {}: existing version {}, proposed version {}",
-                        req.substate_id(),
-                        existing.version(),
-                        version
-                    )));
-                }
-            } else {
-                resolved_inputs.insert(req, Substate::new(version, substate));
-            }
-        }
+        let resolved_inputs = resolve_foreign_input_pledges(
+            &transaction_id,
+            foreign_pledges.into_iter().chain(proposed_foreign_pledges.cloned()),
+        )?;
 
         // Check that we have all the required foreign input pledges
         if let Some(req) = non_local_inputs
@@ -756,6 +742,38 @@ struct ResolvedInputs<'a> {
     pub num_local_tombstones: usize,
 }
 
+/// Collects the input pledges among `pledges` into the inputs a transaction executes against, excluding output
+/// pledges. Every pledge for a substate must be at the same version. A pledge's value is authenticated against its
+/// evidence's value hash when the foreign proposal is accepted (`BlockPledge::get_committed_pledge`), so only the
+/// version is compared here.
+fn resolve_foreign_input_pledges(
+    transaction_id: &TransactionId,
+    pledges: impl IntoIterator<Item = SubstatePledge>,
+) -> Result<HashMap<SubstateRequirement, Substate>, BlockTransactionExecutorError> {
+    let mut resolved_inputs = HashMap::new();
+    // Exclude any output pledges
+    for (id, substate) in pledges.into_iter().filter_map(|pledge| pledge.into_input()) {
+        let version = id.version();
+        match resolved_inputs.entry(SubstateRequirement::from(id)) {
+            Entry::Occupied(entry) => {
+                let existing: &Substate = entry.get();
+                if existing.version() != version {
+                    return Err(BlockTransactionExecutorError::InvariantError(format!(
+                        "Foreign pledges for transaction {transaction_id} pledge substate {} at both v{} and \
+                         v{version}",
+                        entry.key().substate_id(),
+                        existing.version(),
+                    )));
+                }
+            },
+            Entry::Vacant(entry) => {
+                entry.insert(Substate::new(version, substate));
+            },
+        }
+    }
+    Ok(resolved_inputs)
+}
+
 /// The lock a shard group takes on an input it holds but cannot execute against, from the transaction's
 /// declaration alone. Writing to a read-declared input aborts in the engine, so a read lock cannot be escaped by
 /// the transaction that asked for it. A substate that no transaction can write takes a read lock whatever was
@@ -771,15 +789,27 @@ fn declared_lock_intent(decl: &InputDeclarationRef<'_>, version: SubstateVersion
 
 #[cfg(test)]
 mod tests {
-    use tari_engine_types::substate::SubstateId;
-    use tari_ootle_common_types::{InputDeclarationRef, SubstateLockType, SubstateVersion};
+    use tari_engine_types::{
+        non_fungible::NonFungibleContainer,
+        substate::{SubstateId, SubstateValue},
+    };
+    use tari_ootle_common_types::{
+        InputDeclarationRef,
+        SubstateLockType,
+        SubstateRequirement,
+        SubstateVersion,
+        VersionedSubstateId,
+    };
+    use tari_ootle_storage::consensus_models::SubstatePledge;
+    use tari_ootle_transaction::TransactionId;
     use tari_template_lib_types::{
         ComponentAddress,
         ObjectKey,
         constants::{PUBLIC_IDENTITY_RESOURCE_ADDRESS, STEALTH_TARI_RESOURCE_ADDRESS},
     };
 
-    use super::declared_lock_intent;
+    use super::{declared_lock_intent, resolve_foreign_input_pledges};
+    use crate::traits::BlockTransactionExecutorError;
 
     fn lock_type(decl: InputDeclarationRef<'_>) -> SubstateLockType {
         declared_lock_intent(&decl, SubstateVersion::ZERO).lock_type()
@@ -801,5 +831,55 @@ mod tests {
             assert!(id.is_read_only());
             assert_eq!(lock_type(InputDeclarationRef::write(&id)), SubstateLockType::Read);
         }
+    }
+
+    fn component_id(n: u8) -> SubstateId {
+        SubstateId::Component(ComponentAddress::new(ObjectKey::from_array([n; 32])))
+    }
+
+    fn input_pledge(id: &SubstateId, version: u64) -> SubstatePledge {
+        SubstatePledge::Input {
+            substate_id: VersionedSubstateId::new(id.clone(), SubstateVersion::new(version)),
+            is_write: true,
+            substate: Box::new(SubstateValue::from(NonFungibleContainer::no_data())),
+        }
+    }
+
+    #[test]
+    fn duplicate_input_pledges_at_the_same_version_resolve_to_one_input() {
+        let id = component_id(1);
+        let resolved =
+            resolve_foreign_input_pledges(&TransactionId::default(), [input_pledge(&id, 3), input_pledge(&id, 3)])
+                .unwrap();
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(
+            resolved[&SubstateRequirement::unversioned(id)].version(),
+            SubstateVersion::new(3)
+        );
+    }
+
+    #[test]
+    fn input_pledges_for_one_substate_at_different_versions_are_an_invariant_error() {
+        let id = component_id(1);
+        let err =
+            resolve_foreign_input_pledges(&TransactionId::default(), [input_pledge(&id, 3), input_pledge(&id, 4)])
+                .unwrap_err();
+        assert!(matches!(err, BlockTransactionExecutorError::InvariantError(_)));
+    }
+
+    #[test]
+    fn output_pledges_are_not_resolved_as_inputs() {
+        let input = component_id(1);
+        let output = component_id(2);
+        let resolved = resolve_foreign_input_pledges(&TransactionId::default(), [
+            input_pledge(&input, 0),
+            SubstatePledge::Output {
+                substate_id: VersionedSubstateId::new(output.clone(), SubstateVersion::ZERO),
+            },
+        ])
+        .unwrap();
+        assert_eq!(resolved.len(), 1);
+        assert!(resolved.contains_key(&input));
+        assert!(!resolved.contains_key(&output));
     }
 }
