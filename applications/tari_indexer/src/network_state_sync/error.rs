@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_epoch_manager::EpochManagerError;
+use tari_ootle_common_types::{Epoch, ValidatorSetHash};
 use tari_ootle_storage::StorageError;
 use tari_rpc_framework::{RpcError, RpcStatus};
 
@@ -27,6 +28,16 @@ pub enum NetworkStateSyncError {
     RpcError(#[from] RpcError),
     #[error("Invariant error: {details}. This indicates a bug in the code, please report it.")]
     InvariantError { details: String },
+    #[error(
+        "The network committed validator set {committed} for {epoch}, but this indexer assigned {local}. This indexer \
+         disagrees with the network on the validators registered for {epoch} or on how they form committees; check \
+         its epoch oracle and committee configuration."
+    )]
+    ValidatorSetDiverged {
+        epoch: Epoch,
+        local: ValidatorSetHash,
+        committed: ValidatorSetHash,
+    },
 }
 
 impl NetworkStateSyncError {
@@ -61,6 +72,14 @@ mod tests {
             .is_peer_fault()
         );
         assert!(!NetworkStateSyncError::InvariantError { details: String::new() }.is_peer_fault());
+        assert!(
+            !NetworkStateSyncError::ValidatorSetDiverged {
+                epoch: Epoch(1),
+                local: ValidatorSetHash::from_array([1; 32]),
+                committed: ValidatorSetHash::from_array([2; 32]),
+            }
+            .is_peer_fault()
+        );
     }
 
     #[test]

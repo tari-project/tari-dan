@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, btree_map::Entry};
 
 use ootle_network::Network;
 use serde::{Deserialize, Serialize};
+use tari_engine_types::limits::MAX_CBOR_NESTING_DEPTH;
 use tari_jellyfish::{JmtHashScheme, LeafKey, SparseMerkleProofExt, TreeHash};
 use tari_ootle_common_types::{
     Epoch,
@@ -165,14 +166,31 @@ pub struct ValidatorSetCommitteeProof {
 }
 
 impl ValidatorSetCommitteeProof {
-    /// Returns the members once they are proved to be `shard_group`'s committee in the set `expected` commits to.
-    pub fn verify(&self, expected: &ValidatorSetHash) -> Result<&[ValidatorSetMember], ValidatorSetProofError> {
-        let computed = ValidatorSetHash::calculate(
+    /// Decodes a proof that [`Self::to_bytes`] encoded.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ValidatorSetProofError> {
+        tari_bor::serde_codec::from_slice_with_max_depth(bytes, MAX_CBOR_NESTING_DEPTH)
+            .map_err(|e| ValidatorSetProofError::Decode(e.to_string()))
+    }
+
+    /// The proof as CBOR, the form it is served in.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        tari_bor::serde_codec::to_vec(self).expect("ValidatorSetCommitteeProof serialization is infallible")
+    }
+
+    /// The validator set hash this proof proves the committee against. Untrusted until [`Self::verify`] succeeds
+    /// against a trusted hash.
+    pub fn validator_set_hash(&self) -> ValidatorSetHash {
+        ValidatorSetHash::calculate(
             self.network,
             self.epoch,
             self.num_preshards,
             &Hash32::from_array(self.committee_root.into_array()),
-        );
+        )
+    }
+
+    /// Returns the members once they are proved to be `shard_group`'s committee in the set `expected` commits to.
+    pub fn verify(&self, expected: &ValidatorSetHash) -> Result<&[ValidatorSetMember], ValidatorSetProofError> {
+        let computed = self.validator_set_hash();
         if computed != *expected {
             return Err(ValidatorSetProofError::SetHashMismatch {
                 expected: *expected,
@@ -204,6 +222,8 @@ impl ValidatorSetCommitteeProof {
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ValidatorSetProofError {
+    #[error("Committee proof failed to decode: {0}")]
+    Decode(String),
     #[error(
         "Committee proof names a validator set with hash {computed}, but the trusted validator set hash is {expected}"
     )]

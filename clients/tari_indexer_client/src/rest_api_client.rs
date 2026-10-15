@@ -16,8 +16,11 @@ use crate::{
     protobuf_stream::ProtobufStream,
     sse::{SseEventStream, SseEventStreamBuilder},
     types::{
+        GetCommitteeRequest,
+        GetCommitteeResponse,
         GetConnectionsResponse,
         GetEpochManagerStatsResponse,
+        GetLatestEpochCheckpointRequest,
         GetLatestEpochCheckpointResponse,
         GetNetworkEconomicsResponse,
         GetNetworkInfoResponse,
@@ -336,10 +339,18 @@ impl IndexerRestApiClient {
         self.send_get("epoch-checkpoints", req).await
     }
 
+    pub async fn get_committee(
+        &self,
+        req: GetCommitteeRequest,
+    ) -> Result<GetCommitteeResponse, IndexerRestClientError> {
+        self.send_get("committees", req).await
+    }
+
     pub async fn get_latest_epoch_checkpoint(
         &self,
+        req: GetLatestEpochCheckpointRequest,
     ) -> Result<GetLatestEpochCheckpointResponse, IndexerRestClientError> {
-        self.send_get("epoch-checkpoints/latest", ()).await
+        self.send_get("epoch-checkpoints/latest", req).await
     }
 
     pub async fn sse_events(&self) -> Result<SseEventStream, IndexerRestClientError> {

@@ -37,6 +37,7 @@ tari_ootle_app_utilities = { workspace = true, features = ["consensus_constants"
 tari_ootle_common_types = { workspace = true }
 tari_ootle_p2p = { workspace = true }
 tari_ootle_storage = { workspace = true }
+tari_state_tree = { workspace = true }
 tari_ootle_storage_sqlite = { workspace = true }
 tari_rpc_framework = { workspace = true }
 tari_shutdown = { workspace = true }
@@ -104,7 +105,6 @@ utoipa-swagger-ui = { workspace = true, features = ["axum"] }
 
 [dev-dependencies]
 tari_sidechain = { workspace = true }
-tari_state_tree = { workspace = true }
 tempfile = { workspace = true }
 toml = { workspace = true }
 

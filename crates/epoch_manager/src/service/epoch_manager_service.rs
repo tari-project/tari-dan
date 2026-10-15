@@ -413,6 +413,15 @@ impl<TSpec: EpochManagerSpec> EpochManagerService<TSpec> {
             EpochManagerRequest::GetValidatorSetHash { epoch, reply } => {
                 handle(reply, self.inner.get_validator_set_hash(epoch), context)
             },
+            EpochManagerRequest::GetValidatorSetCommitteeProof {
+                epoch,
+                shard_group,
+                reply,
+            } => handle(
+                reply,
+                self.inner.get_validator_set_committee_proof(epoch, shard_group),
+                context,
+            ),
             EpochManagerRequest::GetValidatorNodeByPublicKey {
                 epoch,
                 public_key,

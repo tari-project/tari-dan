@@ -39,6 +39,7 @@ use tari_ootle_common_types::{
     layer_one_transaction::LayerOneTransactionDef,
 };
 use tari_ootle_storage::global::models::ValidatorNode;
+use tari_state_tree::ValidatorSetCommitteeProof;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::sync::broadcast;
 
@@ -136,6 +137,13 @@ pub trait EpochManagerReader: Send + Sync {
         &self,
         epoch: Epoch,
     ) -> impl Future<Output = Result<ValidatorSetHash, EpochManagerError>> + Send;
+    /// `shard_group`'s committee in `epoch` with its proof against the epoch's [`ValidatorSetHash`]. A not-found error
+    /// until this node has assigned the epoch's committees, or if `shard_group` is not one of them.
+    fn get_validator_set_committee_proof(
+        &self,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+    ) -> impl Future<Output = Result<ValidatorSetCommitteeProof, EpochManagerError>> + Send;
 
     fn get_num_committees(&self, epoch: Epoch) -> impl Future<Output = Result<u32, EpochManagerError>> + Send;
 

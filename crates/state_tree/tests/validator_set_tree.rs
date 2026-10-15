@@ -172,6 +172,24 @@ fn a_proof_survives_a_json_round_trip() {
 }
 
 #[test]
+fn a_proof_survives_a_cbor_round_trip() {
+    let tree = sample_tree();
+    let proof = tree.committee_proof(&high(), &high_committee()).unwrap();
+
+    let decoded = ValidatorSetCommitteeProof::from_bytes(&proof.to_bytes()).unwrap();
+    assert_eq!(decoded, proof);
+    decoded.verify(&tree.hash()).unwrap();
+}
+
+#[test]
+fn bytes_that_are_not_a_proof_fail_to_decode() {
+    assert!(matches!(
+        ValidatorSetCommitteeProof::from_bytes(&[0xff, 0x00]),
+        Err(ValidatorSetProofError::Decode(_))
+    ));
+}
+
+#[test]
 fn a_shard_group_outside_the_set_has_no_proof() {
     let outside = ShardGroup::new(0u32, 3u32);
     let err = sample_tree().committee_proof(&outside, &low_committee()).unwrap_err();

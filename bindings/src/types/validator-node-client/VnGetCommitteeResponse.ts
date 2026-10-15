@@ -2,4 +2,4 @@
 import type { Committee } from "../Committee";
 import type { PeerAddress } from "../PeerAddress";
 
-export type GetCommitteeResponse = { committee: Committee<PeerAddress> };
+export type VnGetCommitteeResponse = { committee: Committee<PeerAddress> };

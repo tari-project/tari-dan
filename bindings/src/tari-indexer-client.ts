@@ -1,7 +1,11 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+export * from "./types/tari-indexer-client/EpochCheckpointEntry";
+export * from "./types/tari-indexer-client/GetCommitteeRequest";
+export * from "./types/tari-indexer-client/GetCommitteeResponse";
 export * from "./types/tari-indexer-client/GetIndexerInfoResponse";
+export * from "./types/tari-indexer-client/GetLatestEpochCheckpointRequest";
 export * from "./types/tari-indexer-client/GetLatestEpochCheckpointResponse";
 export * from "./types/tari-indexer-client/GetNetworkEconomicsResponse";
 export * from "./types/tari-indexer-client/GetNetworkInfoResponse";
@@ -65,6 +69,8 @@ export * from "./types/tari-indexer-client/ValidatorConsensusState";
 export * from "./types/tari-indexer-client/ValidatorInfo";
 export * from "./types/tari-indexer-client/ValidatorProbeError";
 export * from "./types/tari-indexer-client/ValidatorProbeErrorKind";
+export * from "./types/tari-indexer-client/ValidatorSetCommittee";
+export * from "./types/tari-indexer-client/ValidatorSetCommitteeMember";
 export * from "./types/tari-indexer-client/ValidatorStatus";
 export * from "./types/tari-indexer-client/ValidatorStatusSnapshot";
 export * from "./types/tari-indexer-client/WatchedSubstateItem";

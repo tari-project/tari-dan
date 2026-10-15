@@ -16,6 +16,7 @@ use tari_ootle_common_types::{
     committee::{Committee, CommitteeInfo},
 };
 use tari_ootle_storage::global::models::ValidatorNode;
+use tari_state_tree::ValidatorSetCommitteeProof;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::sync::oneshot;
 
@@ -38,6 +39,11 @@ pub enum EpochManagerRequest<TAddr> {
     GetValidatorSetHash {
         epoch: Epoch,
         reply: Reply<ValidatorSetHash>,
+    },
+    GetValidatorSetCommitteeProof {
+        epoch: Epoch,
+        shard_group: ShardGroup,
+        reply: Reply<ValidatorSetCommitteeProof>,
     },
     GetValidatorNodeByPublicKey {
         epoch: Epoch,

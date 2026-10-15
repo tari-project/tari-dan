@@ -2,4 +2,4 @@
 import type { Epoch } from "../Epoch";
 import type { SubstateAddress } from "../SubstateAddress";
 
-export type GetCommitteeRequest = { epoch: Epoch; substate_address: SubstateAddress };
+export type VnGetCommitteeRequest = { epoch: Epoch; substate_address: SubstateAddress };

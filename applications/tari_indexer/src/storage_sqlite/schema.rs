@@ -22,6 +22,9 @@ diesel::table! {
         json_data -> Text,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        shard_start -> Integer,
+        shard_end -> Integer,
+        has_header_metadata -> Bool,
     }
 }
 

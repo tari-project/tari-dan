@@ -26,7 +26,15 @@ use tari_epoch_manager::{
 };
 use tari_indexer_client::event::{IndexerEvent, NewEpochEvent, TransactionEvent, TransactionFinalizedEvent};
 use tari_networking::NetworkingHandle;
-use tari_ootle_common_types::{Epoch, ShardGroup, StateVersion, VotePower, optional::Optional, shard::Shard};
+use tari_ootle_common_types::{
+    Epoch,
+    ShardGroup,
+    StateVersion,
+    ValidatorSetHash,
+    VotePower,
+    optional::Optional,
+    shard::Shard,
+};
 use tari_ootle_p2p::{PeerAddress, TariMessagingSpec, proto::rpc};
 use tari_ootle_storage::{
     StorageError,
@@ -345,7 +353,6 @@ impl NetworkWideStateSync {
 
     /// Syncs `shard_group`'s checkpoints up to the epoch before `epoch`, from wherever it left off.
     /// Nothing to do once they are recorded, so this is run before every stream the group opens.
-    #[expect(clippy::too_many_lines)]
     async fn sync_group_checkpoints(
         &self,
         shard_group: ShardGroup,
@@ -369,7 +376,7 @@ impl NetworkWideStateSync {
         // Perform sync operations using the pool and checkpoint
         let validator_status = self.validator_status.clone();
         let consensus_epoch = self.consensus_epoch.clone();
-        let mut checkpoints: Vec<_> = pool
+        let (served_by, mut checkpoints) = pool
             .try_with_random_members(|mut session| {
                 let validator_status = validator_status.clone();
                 let consensus_epoch = consensus_epoch.clone();
@@ -387,33 +394,18 @@ impl NetworkWideStateSync {
                             });
                         },
                     }
-                    let resp = session
-                        .get_checkpoints(rpc::GetCheckpointsRequest {
-                            from_epoch: Some(from_epoch.into()),
-                            num_to_return: 100,
-                            shard_group: None,
-                        })
-                        .await?;
-
-                    debug!(target: LOG_TARGET, "🌍️ Received {} checkpoints for shard group {} from peer {}", resp.checkpoints.len(), shard_group, session.peer_address());
-
-                    resp.checkpoints
-                        .into_iter()
-                        .map(|cp| {
-                            EpochCheckpoint::try_from(cp).map_err(|e| {
-                                NetworkStateSyncError::InvalidCheckpoint {
-                                    details: format!(
-                                        "Failed to convert checkpoint for shard group {}: {}",
-                                        shard_group, e
-                                    ),
-                                }
-                            })
-                        })
-                        .collect()
+                    let checkpoints = fetch_checkpoints(&mut session, shard_group, from_epoch).await?;
+                    Ok::<_, NetworkStateSyncError>((*session.peer_address(), checkpoints))
                 }
             })
             .await?;
         retain_checkpoints_in_sync_range(&mut checkpoints, from_epoch, prev_epoch);
+        if checkpoints
+            .iter()
+            .any(|checkpoint| checkpoint.header_metadata().is_none())
+        {
+            restore_stripped_preimages(pool, served_by, shard_group, from_epoch, &mut checkpoints).await;
+        }
 
         if checkpoints.is_empty() {
             info!(target: LOG_TARGET, "🌍️ No checkpoints found for shard group {shard_group} from epoch {from_epoch} (prev_epoch {prev_epoch})");
@@ -438,41 +430,8 @@ impl NetworkWideStateSync {
                         details: format!("Checkpoint for shard group {} is not valid: {}", shard_group, e),
                     })?;
 
-            // TODO: we require historical committees to validate older checkpoints. Figure out the best way to
-            //       avoid needing the full historical validator data (e.g. VN merkle inclusion proof + historic L1
-            // block MR), or,       decide it is ok to require this data to be locally stored by all
-            // indexers. For now, to avoid       complexity that may be removed later, we'll skip
-            // validating them and only validate prev_epochs       checkpoint.
-            if checkpoint.epoch() == prev_epoch {
-                // Use the checkpoint's own shard group, not the iterator's: the network may have
-                // had a different shard-group structure at prev_epoch than the current epoch we
-                // are iterating, so the QC is signed by the committee for `checkpoint_shard_group`,
-                // not `shard_group`.
-                let committee = self
-                    .epoch_manager
-                    .get_committee_by_shard_group(checkpoint.epoch(), checkpoint_shard_group)
-                    .await?;
-                checkpoint
-                    .validate(checkpoint.epoch(), committee.quorum_threshold(), |pk| {
-                        Ok(committee.get_power_by_public_key(pk).unwrap_or_else(VotePower::zero))
-                    })
-                    .map_err(|e| NetworkStateSyncError::InvalidCheckpoint {
-                        details: format!(
-                            "Failed to validate checkpoint for shard group {}: {}",
-                            checkpoint_shard_group, e
-                        ),
-                    })?;
-            } else {
-                checkpoint
-                    .validate_well_formed()
-                    .map_err(|e| NetworkStateSyncError::InvalidCheckpoint {
-                        details: format!(
-                            "Failed to validate well-formedness of checkpoint for shard group {}: {}",
-                            checkpoint_shard_group, e
-                        ),
-                    })?;
-                debug!(target: LOG_TARGET, "🌍️ Skipping checkpoint for shard group {shard_group} with epoch {} (expected {})", checkpoint.epoch(), prev_epoch);
-            }
+            verify_checkpoint(&self.epoch_manager, &checkpoint, checkpoint_shard_group, prev_epoch).await?;
+            require_header_metadata(&self.store, &checkpoint).await?;
 
             info!(target: LOG_TARGET, "🌍️ Inserting checkpoint for {}, shard group {}", checkpoint.epoch(), checkpoint_shard_group);
 
@@ -1257,6 +1216,171 @@ fn checkpoint_exhaust_burn(checkpoint: &EpochCheckpoint) -> Result<Amount, Netwo
         })
 }
 
+/// Requests `shard_group`'s checkpoints from `from_epoch` on from `session`'s committee member.
+async fn fetch_checkpoints(
+    session: &mut ValidatorRpcSession,
+    shard_group: ShardGroup,
+    from_epoch: Epoch,
+) -> Result<Vec<EpochCheckpoint>, NetworkStateSyncError> {
+    let resp = session
+        .get_checkpoints(rpc::GetCheckpointsRequest {
+            from_epoch: Some(from_epoch.into()),
+            num_to_return: 100,
+            shard_group: None,
+        })
+        .await?;
+
+    debug!(target: LOG_TARGET, "🌍️ Received {} checkpoints for shard group {} from peer {}", resp.checkpoints.len(), shard_group, session.peer_address());
+
+    resp.checkpoints
+        .into_iter()
+        .map(|cp| {
+            EpochCheckpoint::try_from(cp).map_err(|e| NetworkStateSyncError::InvalidCheckpoint {
+                details: format!("Failed to convert checkpoint for shard group {}: {}", shard_group, e),
+            })
+        })
+        .collect()
+}
+
+/// Gives each checkpoint in `checkpoints` that lacks its header metadata preimage the preimage from another committee
+/// member's copy of the same block, where that member has one.
+///
+/// The quorum certificate does not cover the preimage, so `served_by` may have stripped it, and a checkpoint stored
+/// without it is never served nor fetched again. A checkpoint from before end-of-epoch blocks named the next validator
+/// set lacks it from every member. Failing to reach another member leaves `checkpoints` as they are.
+async fn restore_stripped_preimages(
+    pool: &mut ValidatorCommitteeRpcPool,
+    served_by: PeerAddress,
+    shard_group: ShardGroup,
+    from_epoch: Epoch,
+    checkpoints: &mut [EpochCheckpoint],
+) {
+    let others = match pool
+        .try_with_another_member(served_by, |mut session| async move {
+            fetch_checkpoints(&mut session, shard_group, from_epoch).await
+        })
+        .await
+    {
+        Ok(others) => others,
+        Err(e) => {
+            debug!(target: LOG_TARGET, "🌍️ No second copy of shard group {shard_group}'s checkpoints from {from_epoch} to restore their preimages from: {e}");
+            return;
+        },
+    };
+    restore_preimages_from(checkpoints, others);
+}
+
+/// Replaces each checkpoint in `checkpoints` that lacks its header metadata preimage with the copy of the same block in
+/// `others` that carries it.
+fn restore_preimages_from(checkpoints: &mut [EpochCheckpoint], others: Vec<EpochCheckpoint>) {
+    for other in others.into_iter().filter(|other| other.header_metadata().is_some()) {
+        let block_id = other.header().calculate_hash();
+        if let Some(stripped) = checkpoints.iter_mut().find(|checkpoint| {
+            checkpoint.header_metadata().is_none() && checkpoint.header().calculate_hash() == block_id
+        }) {
+            warn!(target: LOG_TARGET, "🌍️ Restored the header metadata preimage of the checkpoint for {} from another committee member", other.epoch());
+            *stripped = other;
+        }
+    }
+}
+
+/// Verifies `checkpoint` against `epoch_manager`'s record of its epoch, before it is stored and served.
+///
+/// In an epoch the epoch manager has a record of, the checkpoint must be of one of that epoch's shard groups, and its
+/// quorum certificate is checked against that shard group's committee. `shard_group` is the checkpoint's own, which
+/// can differ from the shard group being synced because shard groups change with the number of committees. Only a
+/// checkpoint of an epoch before the epoch manager's records is checked for form alone. `prev_epoch` is always
+/// recorded.
+///
+/// The next epoch's validator set the checkpoint names, which the committee ratified, must be the one this indexer
+/// assigned: an indexer that disagrees would serve committees the network does not run.
+async fn verify_checkpoint<TEpochManager: EpochManagerReader>(
+    epoch_manager: &TEpochManager,
+    checkpoint: &EpochCheckpoint,
+    shard_group: ShardGroup,
+    prev_epoch: Epoch,
+) -> Result<(), NetworkStateSyncError> {
+    let epoch = checkpoint.epoch();
+    let recorded = epoch == prev_epoch || epoch_manager.get_epoch_hash(epoch).await.optional()?.is_some();
+    if !recorded {
+        debug!(target: LOG_TARGET, "🌍️ {epoch} is before this indexer's records: checking its checkpoint for form only");
+        return checkpoint
+            .validate_well_formed()
+            .map_err(|e| NetworkStateSyncError::InvalidCheckpoint {
+                details: format!("Checkpoint for {epoch}, shard group {shard_group} is not well formed: {e}"),
+            });
+    }
+    let Some(committee) = epoch_manager
+        .get_committee_by_shard_group(epoch, shard_group)
+        .await
+        .optional()?
+    else {
+        return Err(NetworkStateSyncError::InvalidCheckpoint {
+            details: format!(
+                "Checkpoint for {epoch} names shard group {shard_group}, which is not one of that epoch's shard \
+                 groups as this indexer assigned them. If every committee member is refused this way, this indexer's \
+                 committee assignment for {epoch} differs from the network's; check its epoch oracle and committee \
+                 configuration."
+            ),
+        });
+    };
+    checkpoint
+        .validate(epoch, committee.quorum_threshold(), |pk| {
+            Ok(committee.get_power_by_public_key(pk).unwrap_or_else(VotePower::zero))
+        })
+        .map_err(|e| NetworkStateSyncError::InvalidCheckpoint {
+            details: format!("Checkpoint for {epoch}, shard group {shard_group} is not valid: {e}"),
+        })?;
+
+    let Some(committed) = checkpoint.next_epoch_validator_set_hash() else {
+        return Ok(());
+    };
+    let next_epoch = epoch + Epoch(1);
+    let local = epoch_manager.get_validator_set_hash(next_epoch).await?;
+    check_validator_set(next_epoch, local, committed)
+}
+
+fn check_validator_set(
+    epoch: Epoch,
+    local: ValidatorSetHash,
+    committed: ValidatorSetHash,
+) -> Result<(), NetworkStateSyncError> {
+    if local != committed {
+        return Err(NetworkStateSyncError::ValidatorSetDiverged {
+            epoch,
+            local,
+            committed,
+        });
+    }
+    Ok(())
+}
+
+/// Rejects a checkpoint without its header metadata preimage once a checkpoint of an earlier epoch is stored with one.
+///
+/// The quorum certificate does not cover the preimage, so a peer can strip it, and a checkpoint stored without it is
+/// never served. Checkpoints from before end-of-epoch blocks named the next validator set legitimately lack it, so it
+/// is only required once the chain is known to carry it.
+async fn require_header_metadata(
+    store: &SqliteIndexerStore,
+    checkpoint: &EpochCheckpoint,
+) -> Result<(), NetworkStateSyncError> {
+    if checkpoint.header_metadata().is_some() {
+        return Ok(());
+    }
+    let epoch = checkpoint.epoch();
+    let carried_earlier = store
+        .with_read_tx(move |tx| tx.epoch_checkpoint_with_header_metadata_exists_before(epoch))
+        .await?;
+    if carried_earlier {
+        return Err(NetworkStateSyncError::InvalidCheckpoint {
+            details: format!(
+                "Checkpoint for {epoch} carries no header metadata preimage, which earlier checkpoints carry"
+            ),
+        });
+    }
+    Ok(())
+}
+
 /// Keeps the checkpoints a sync from `from_epoch` can use: those from `from_epoch` up to `prev_epoch`.
 /// Later ones are for an epoch that has not ended for this indexer, and earlier ones were already
 /// synced.
@@ -2037,6 +2161,344 @@ mod tests {
             assert_eq!(cursors.len(), 1);
             assert_eq!(cursors[0].shard, 2);
             assert_eq!(cursors[0].start_state_version, u64::MAX);
+        }
+    }
+
+    mod checkpoint_verification {
+        use std::{
+            collections::{HashMap, HashSet},
+            sync::Arc,
+        };
+
+        use tari_common_types::types::FixedHash;
+        use tari_epoch_manager::EpochManagerError;
+        use tari_ootle_common_types::{
+            SubstateAddress,
+            committee::{Committee, CommitteeInfo, CommitteeMember},
+        };
+        use tari_ootle_storage::{
+            consensus_models::{BlockHeaderMetadata, EndOfEpochCommand},
+            global::models::ValidatorNode,
+        };
+        use tari_sidechain::{CommandCommitProof, SidechainBlockCommitProof, SidechainBlockHeader};
+        use tari_state_tree::{TreeHash, compute_proof_for_hashes};
+        use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
+        use tokio::sync::broadcast;
+
+        use super::*;
+
+        type Addr = String;
+
+        fn low() -> ShardGroup {
+            ShardGroup::new(1u32, 127u32)
+        }
+
+        fn high() -> ShardGroup {
+            ShardGroup::new(128u32, 255u32)
+        }
+
+        /// A well-formed checkpoint that no committee signed, carrying its header metadata preimage when `carried`.
+        fn checkpoint(epoch: u64, shard_group: ShardGroup, carried: bool) -> EpochCheckpoint {
+            let state_root = checkpoint_with_state_root(epoch, shard_group, carried, FixedHash::zero())
+                .compute_state_merkle_root()
+                .unwrap();
+            checkpoint_with_state_root(epoch, shard_group, carried, FixedHash::from(state_root.into_array()))
+        }
+
+        fn checkpoint_with_state_root(
+            epoch: u64,
+            shard_group: ShardGroup,
+            carried: bool,
+            state_merkle_root: FixedHash,
+        ) -> EpochCheckpoint {
+            let header_metadata = BlockHeaderMetadata {
+                total_leader_fee: 0,
+                timestamp: epoch,
+                extra_data: Default::default(),
+                timeout_certificate_id: None,
+                is_dummy: false,
+            };
+            let key = TreeHash::new([1; 32]);
+            let (_, inclusion_proof) = compute_proof_for_hashes([key].into_iter(), key).unwrap();
+            let commit_proof = SidechainBlockCommitProof {
+                header: SidechainBlockHeader {
+                    network: 0,
+                    protocol_version: 0,
+                    parent_id: FixedHash::zero(),
+                    justify_id: FixedHash::zero(),
+                    height: 0,
+                    epoch,
+                    epoch_hash: FixedHash::zero(),
+                    shard_group: tari_sidechain::ShardGroup {
+                        start: shard_group.start().as_u32(),
+                        end_inclusive: shard_group.end().as_u32(),
+                    },
+                    proposed_by: Default::default(),
+                    state_merkle_root,
+                    command_merkle_root: FixedHash::zero(),
+                    transaction_merkle_root: None,
+                    signature: Default::default(),
+                    accumulated_data: Default::default(),
+                    metadata_hash: header_metadata.calculate_hash(),
+                },
+                proof_elements: vec![],
+            };
+            EpochCheckpoint::new(
+                CommandCommitProof::new(EndOfEpochCommand::new(FixedHash::zero()), commit_proof, inclusion_proof),
+                Default::default(),
+                carried.then_some(header_metadata),
+            )
+        }
+
+        fn committee() -> Arc<Committee<Addr>> {
+            Arc::new(Committee::new(vec![CommitteeMember {
+                address: "member".to_string(),
+                public_key: RistrettoPublicKeyBytes::default(),
+                vote_power: VotePower::of(1),
+            }]))
+        }
+
+        /// The epochs an epoch manager has a record of, each with the committees of its shard groups.
+        #[derive(Default)]
+        struct EpochRecords {
+            committees: HashMap<Epoch, Vec<ShardGroup>>,
+            validator_set_hash: Option<ValidatorSetHash>,
+        }
+
+        impl EpochRecords {
+            fn with(mut self, epoch: u64, shard_groups: &[ShardGroup]) -> Self {
+                self.committees.insert(Epoch(epoch), shard_groups.to_vec());
+                self
+            }
+        }
+
+        impl EpochManagerReader for EpochRecords {
+            type Addr = Addr;
+
+            fn subscribe(&self) -> broadcast::Receiver<EpochManagerEvent> {
+                unimplemented!()
+            }
+
+            async fn wait_for_initial_scanning_to_complete(&self) -> Result<(), EpochManagerError> {
+                unimplemented!()
+            }
+
+            async fn get_all_validator_nodes(&self, _: Epoch) -> Result<Vec<ValidatorNode<Addr>>, EpochManagerError> {
+                unimplemented!()
+            }
+
+            async fn get_committee_info_by_validator_address(
+                &self,
+                _: Epoch,
+                _: &Addr,
+            ) -> Result<CommitteeInfo, EpochManagerError> {
+                unimplemented!()
+            }
+
+            async fn get_committee_for_substate(
+                &self,
+                _: Epoch,
+                _: SubstateAddress,
+            ) -> Result<Arc<Committee<Addr>>, EpochManagerError> {
+                unimplemented!()
+            }
+
+            async fn get_validator_node_by_public_key(
+                &self,
+                _: Epoch,
+                _: RistrettoPublicKeyBytes,
+            ) -> Result<ValidatorNode<Addr>, EpochManagerError> {
+                unimplemented!()
+            }
+
+            async fn get_our_validator_node(&self, _: Epoch) -> Result<ValidatorNode<Addr>, EpochManagerError> {
+                unimplemented!()
+            }
+
+            async fn get_local_committee_info(&self, _: Epoch) -> Result<CommitteeInfo, EpochManagerError> {
+                unimplemented!()
+            }
+
+            async fn get_committee_info(&self, _: Epoch, _: ShardGroup) -> Result<CommitteeInfo, EpochManagerError> {
+                unimplemented!()
+            }
+
+            async fn get_committee_info_for_substate(
+                &self,
+                _: Epoch,
+                _: SubstateAddress,
+            ) -> Result<CommitteeInfo, EpochManagerError> {
+                unimplemented!()
+            }
+
+            async fn current_epoch(&self) -> Result<Epoch, EpochManagerError> {
+                unimplemented!()
+            }
+
+            async fn get_current_epoch_hash(&self) -> Result<FixedHash, EpochManagerError> {
+                unimplemented!()
+            }
+
+            async fn get_epoch_hash(&self, epoch: Epoch) -> Result<FixedHash, EpochManagerError> {
+                if self.committees.contains_key(&epoch) {
+                    Ok(FixedHash::zero())
+                } else {
+                    Err(EpochManagerError::NoEpochFound(epoch))
+                }
+            }
+
+            async fn get_validator_set_hash(&self, epoch: Epoch) -> Result<ValidatorSetHash, EpochManagerError> {
+                self.validator_set_hash
+                    .ok_or(EpochManagerError::NoValidatorSet { epoch })
+            }
+
+            async fn get_validator_set_committee_proof(
+                &self,
+                _: Epoch,
+                _: ShardGroup,
+            ) -> Result<tari_state_tree::ValidatorSetCommitteeProof, EpochManagerError> {
+                unimplemented!()
+            }
+
+            async fn get_num_committees(&self, _: Epoch) -> Result<u32, EpochManagerError> {
+                unimplemented!()
+            }
+
+            async fn get_committee_by_shard_group(
+                &self,
+                epoch: Epoch,
+                shard_group: ShardGroup,
+            ) -> Result<Arc<Committee<Addr>>, EpochManagerError> {
+                match self.committees.get(&epoch) {
+                    Some(shard_groups) if shard_groups.contains(&shard_group) => Ok(committee()),
+                    _ => Err(EpochManagerError::NoEpochFound(epoch)),
+                }
+            }
+
+            async fn get_committees_overlapping_shard_group(
+                &self,
+                _: Epoch,
+                _: ShardGroup,
+            ) -> Result<HashMap<ShardGroup, Committee<Addr>>, EpochManagerError> {
+                unimplemented!()
+            }
+
+            async fn get_random_committee_member(
+                &self,
+                _: Epoch,
+                _: Option<ShardGroup>,
+                _: HashSet<Addr>,
+            ) -> Result<ValidatorNode<Addr>, EpochManagerError> {
+                unimplemented!()
+            }
+
+            async fn lock_epoch(&self, _: Epoch) -> Result<(), EpochManagerError> {
+                unimplemented!()
+            }
+
+            async fn get_observed_epoch_hash(&self, _: Epoch) -> Result<Option<FixedHash>, EpochManagerError> {
+                unimplemented!()
+            }
+
+            async fn get_birthday_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
+                unimplemented!()
+            }
+        }
+
+        fn is_invalid_checkpoint(result: &Result<(), NetworkStateSyncError>) -> bool {
+            matches!(result, Err(NetworkStateSyncError::InvalidCheckpoint { .. }))
+        }
+
+        #[tokio::test]
+        async fn a_checkpoint_before_the_records_is_checked_for_form_only() {
+            let records = EpochRecords::default().with(5, &[low(), high()]);
+
+            let result = verify_checkpoint(&records, &checkpoint(2, low(), true), low(), Epoch(5)).await;
+
+            assert!(result.is_ok(), "{result:?}");
+        }
+
+        #[tokio::test]
+        async fn an_older_recorded_checkpoint_is_checked_against_its_committee() {
+            let records = EpochRecords::default()
+                .with(3, &[low(), high()])
+                .with(5, &[low(), high()]);
+
+            let result = verify_checkpoint(&records, &checkpoint(3, low(), true), low(), Epoch(5)).await;
+
+            assert!(is_invalid_checkpoint(&result), "{result:?}");
+        }
+
+        /// A shard group is one the peer names, so naming one the epoch did not have must not skip the committee check.
+        #[tokio::test]
+        async fn a_shard_group_outside_a_recorded_epoch_is_rejected() {
+            let records = EpochRecords::default()
+                .with(3, &[low(), high()])
+                .with(5, &[low(), high()]);
+            let all = ShardGroup::new(1u32, 255u32);
+
+            for epoch in [3, 5] {
+                let result = verify_checkpoint(&records, &checkpoint(epoch, all, true), all, Epoch(5)).await;
+                assert!(is_invalid_checkpoint(&result), "{epoch}: {result:?}");
+                assert!(result.unwrap_err().is_peer_fault());
+            }
+        }
+
+        #[test]
+        fn a_next_epoch_set_other_than_the_local_one_diverges() {
+            let local = ValidatorSetHash::from_array([1; 32]);
+            let committed = ValidatorSetHash::from_array([2; 32]);
+
+            assert!(check_validator_set(Epoch(4), local, local).is_ok());
+            assert!(matches!(
+                check_validator_set(Epoch(4), local, committed),
+                Err(NetworkStateSyncError::ValidatorSetDiverged { epoch, .. }) if epoch == Epoch(4)
+            ));
+        }
+
+        #[tokio::test]
+        async fn a_checkpoint_without_its_preimage_is_rejected_once_an_earlier_one_carries_it() {
+            use crate::store::IndexerStoreWriteTransaction;
+
+            let dir = tempfile::tempdir().unwrap();
+            let store = SqliteIndexerStore::try_create(dir.path().join("indexer.db")).unwrap();
+
+            assert!(
+                require_header_metadata(&store, &checkpoint(2, low(), false))
+                    .await
+                    .is_ok()
+            );
+            store
+                .with_write_tx(|tx| tx.insert_or_ignore_epoch_checkpoint(&checkpoint(2, high(), true)))
+                .await
+                .unwrap();
+
+            assert!(
+                require_header_metadata(&store, &checkpoint(2, low(), false))
+                    .await
+                    .is_ok()
+            );
+            assert!(is_invalid_checkpoint(
+                &require_header_metadata(&store, &checkpoint(3, low(), false)).await
+            ));
+            assert!(
+                require_header_metadata(&store, &checkpoint(3, low(), true))
+                    .await
+                    .is_ok()
+            );
+        }
+
+        #[test]
+        fn a_stripped_preimage_is_restored_from_another_copy_of_the_same_block() {
+            let mut checkpoints = vec![checkpoint(2, low(), false), checkpoint(3, low(), false)];
+
+            restore_preimages_from(&mut checkpoints, vec![
+                checkpoint(2, low(), true),
+                checkpoint(3, high(), true),
+            ]);
+
+            assert!(checkpoints[0].header_metadata().is_some());
+            assert!(checkpoints[1].header_metadata().is_none());
         }
     }
 }
