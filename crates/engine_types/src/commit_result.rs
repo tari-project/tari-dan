@@ -646,9 +646,6 @@ pub enum AbortReason {
     InsufficientFeesPaid,
     #[n(7)]
     FeePaymentInMainIntent,
-    /// The epoch the transaction was pinned to is past its `max_epoch`, or the transaction calls the
-    /// burn rate governance component and reached execution in a later epoch than the one it was
-    /// pinned to.
     #[n(8)]
     EpochExpired,
     /// The transaction's `max_epoch` is further ahead of the epoch it was pinned to than the network
@@ -659,6 +656,10 @@ pub enum AbortReason {
     /// groups involved, so no block could deliver them.
     #[n(10)]
     InputPledgeTooLarge,
+    /// The transaction calls the burn rate governance component and reached execution in a later
+    /// epoch than the one it was pinned to. The council can resubmit it.
+    #[n(11)]
+    GovernanceCallAfterPinnedEpoch,
 }
 
 impl Display for AbortReason {

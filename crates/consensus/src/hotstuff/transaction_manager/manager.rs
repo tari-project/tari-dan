@@ -872,18 +872,21 @@ fn burn_rate_governance_abort_reason(
     transaction
         .all_inputs_substate_ids_iter()
         .any(|id| id.is_burn_rate_governance())
-        .then_some(AbortReason::EpochExpired)
+        .then_some(AbortReason::GovernanceCallAfterPinnedEpoch)
 }
 
 #[cfg(test)]
 mod tests {
     use tari_common_types::types::PrivateKey;
+    use tari_consensus_types::BlockId;
     use tari_engine_types::{
         non_fungible::NonFungibleContainer,
         substate::{SubstateId, SubstateValue},
     };
     use tari_ootle_common_types::{
         InputDeclarationRef,
+        NumPreshards,
+        ShardGroup,
         SubstateLockType,
         SubstateRequirement,
         SubstateVersion,
@@ -945,7 +948,40 @@ mod tests {
         let execution = manager()
             .execute(pinned_to(5), Epoch(6), calling(BURN_RATE_GOVERNANCE_COMPONENT_ADDRESS))
             .expect("aborts before reaching the engine");
-        assert_eq!(execution.decision().abort_reason(), Some(AbortReason::EpochExpired));
+        assert_eq!(
+            execution.decision().abort_reason(),
+            Some(AbortReason::GovernanceCallAfterPinnedEpoch)
+        );
+    }
+
+    #[test]
+    fn a_governance_call_prepared_after_its_pinned_epoch_aborts() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RocksDbStateStore::<String>::open(dir.path().join("db"), Default::default()).unwrap();
+        let block = LeafBlock {
+            block_id: BlockId::zero(),
+            height: Default::default(),
+            epoch: Epoch(6),
+            shard_group: ShardGroup::all_shards(NumPreshards::P256),
+        };
+        let pledged = calling(BURN_RATE_GOVERNANCE_COMPONENT_ADDRESS);
+
+        let execution = store
+            .with_read_tx(|tx| {
+                let mut substate_store = PendingSubstateStore::init(tx, block, NumPreshards::P256)?;
+                manager().execute_or_fetch(
+                    &mut substate_store,
+                    &pledged.transaction,
+                    &HashMap::new(),
+                    &block,
+                    pinned_to(5),
+                )
+            })
+            .expect("aborts before reaching the engine");
+        assert_eq!(
+            execution.decision().abort_reason(),
+            Some(AbortReason::GovernanceCallAfterPinnedEpoch)
+        );
     }
 
     #[test]

@@ -31,12 +31,15 @@ const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::exhaust_burn_rate";
 
 /// The exhaust burn rate `epoch` runs at.
 ///
-/// Reads committed state rather than anything pending, which is sound because a council transaction
-/// cannot name an activation epoch less than `MIN_BURN_RATE_ACTIVATION_LEAD_EPOCHS` ahead of the
-/// epoch it executes in: the template measures the lead time from the transaction's pinned epoch,
-/// and consensus aborts a governance call executing in any other epoch. The end-of-epoch block of
-/// epoch `N` resolves the rate for `N + 1`, so every change that can reach `N + 1` was committed in
-/// `N - 1` at the latest.
+/// Reads committed state rather than anything pending. A council transaction cannot name an
+/// activation epoch less than `MIN_BURN_RATE_ACTIVATION_LEAD_EPOCHS` ahead of the epoch it executes
+/// in: the template measures the lead time from the transaction's pinned epoch, and consensus aborts
+/// a governance call executing in any other epoch. The end-of-epoch block of epoch `N` resolves the
+/// rate for `N + 1`, so every change that can reach `N + 1` executed in `N - 1` at the latest.
+///
+/// Each shard group commits a change on its own schedule: a call that spans several shard groups
+/// can finalize in a group after its pinned epoch. The groups agree on the rate for `N + 1` when
+/// each has committed every such change before it proposes the end-of-epoch block of `N`.
 pub fn resolve_epoch_exhaust_burn_rate<TTx: StateStoreReadTransaction>(
     tx: &TTx,
     network: Network,

@@ -11,4 +11,5 @@ export type AbortReason =
   | "FeePaymentInMainIntent"
   | "EpochExpired"
   | "ValidityWindowTooLong"
-  | "InputPledgeTooLarge";
+  | "InputPledgeTooLarge"
+  | "GovernanceCallAfterPinnedEpoch";
