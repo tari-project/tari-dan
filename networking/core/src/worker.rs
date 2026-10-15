@@ -712,7 +712,7 @@ where
                 // This is unreachable as connection-limits has no events
                 info!(target: LOG_TARGET, "ℹ️ ConnectionLimits event");
             },
-            IpLimits(event) => match event {},
+            InboundLimits(event) => match event {},
             Mdns(event) => {
                 self.on_mdns_event(event)?;
             },

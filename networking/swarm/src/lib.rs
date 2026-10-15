@@ -4,7 +4,7 @@
 mod behaviour;
 pub mod config;
 mod error;
-pub mod ip_limits;
+pub mod inbound_limits;
 mod protocol_version;
 
 #[cfg(feature = "metrics")]
