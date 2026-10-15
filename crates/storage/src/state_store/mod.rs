@@ -35,6 +35,7 @@ use tari_consensus_types::{
 };
 use tari_engine_types::{
     SubstateVersion,
+    fees::ExhaustBurnRate,
     substate::{Substate, SubstateId},
 };
 use tari_ootle_common_types::{
@@ -506,6 +507,10 @@ pub trait StateStoreReadTransaction: Sized {
 
     fn epoch_checkpoint_get_last(&self) -> Result<EpochCheckpoint, StorageError>;
 
+    // -------------------------------- Epoch exhaust burn rate -------------------------------- //
+    /// The exhaust burn rate this node opened `epoch` at, or `None` if it never opened `epoch`.
+    fn epoch_exhaust_burn_rate_get(&self, epoch: Epoch) -> Result<Option<ExhaustBurnRate>, StorageError>;
+
     // -------------------------------- Foreign Substate Pledges -------------------------------- //
     fn foreign_substate_pledges_exists_for_transaction_and_address<T: ToSubstateAddress>(
         &self,
@@ -849,6 +854,14 @@ pub trait StateStoreWriteTransaction {
 
     // -------------------------------- Epoch checkpoint -------------------------------- //
     fn epoch_checkpoint_save(&mut self, checkpoint: &EpochCheckpoint) -> Result<(), StorageError>;
+
+    // -------------------------------- Epoch exhaust burn rate -------------------------------- //
+    /// Records that this node opened `epoch` at `exhaust_burn_rate`.
+    fn epoch_exhaust_burn_rate_set(
+        &mut self,
+        epoch: Epoch,
+        exhaust_burn_rate: ExhaustBurnRate,
+    ) -> Result<(), StorageError>;
 
     // -------------------------------- Lock conflicts -------------------------------- //
     fn lock_conflicts_insert_all<'a, I: IntoIterator<Item = (&'a TransactionId, &'a Vec<LockConflict>)>>(

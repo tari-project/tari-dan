@@ -38,7 +38,7 @@ use crate::{
         ProposalValidationError,
         block_change_set::ProposedBlockChangeSet,
         error::HotStuffError,
-        exhaust_burn_rate::resolve_epoch_exhaust_burn_rate,
+        exhaust_burn_rate::foreign_proposal_exhaust_burn_rate,
         substate_store::PendingSubstateStore,
     },
     tracing::TraceTimer,
@@ -59,11 +59,11 @@ pub fn process_foreign_block<TTx: StateStoreReadTransaction>(
     let local_leaf = &substate_store.parent_block();
 
     // The proposal is proved against the layer-1 shaped header, which carries a metadata hash and not
-    // the extra data the rate lives in, so the rate for its epoch is resolved here instead. Every shard
-    // group resolves the same value from the same global-shard state, which is what keeps groups that
-    // sequence this proposal in different epochs of their own agreeing on what a transaction pinned to
-    // `proposal.epoch()` settles at.
-    let foreign_exhaust_burn_rate = resolve_epoch_exhaust_burn_rate(tx, network, proposal.epoch())?;
+    // the extra data the rate lives in, so the rate for its epoch is taken from this node's own view of
+    // that epoch instead. Every shard group opens an epoch at the same rate, which is what keeps groups
+    // that sequence this proposal in different epochs of their own agreeing on what a transaction
+    // pinned to `proposal.epoch()` settles at.
+    let foreign_exhaust_burn_rate = foreign_proposal_exhaust_burn_rate(tx, network, proposal.epoch())?;
 
     let foreign_shard_group = proposal.shard_group_unchecked();
     info!(

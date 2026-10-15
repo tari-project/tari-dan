@@ -110,6 +110,35 @@ impl DbDecoder<u8> for NumberCodec<u8> {
     }
 }
 
+impl DbEncoder<u16> for NumberCodec<u16> {
+    fn encode_len(&self, _value: &u16) -> Result<usize, RocksDbStorageError> {
+        Ok(size_of::<u16>())
+    }
+
+    fn encode_into<W: Write>(&self, value: &u16, writer: &mut W) -> Result<(), RocksDbStorageError> {
+        writer
+            .write_all(&value.to_be_bytes())
+            .map_err(|e| RocksDbStorageError::EncodeError {
+                source: anyhow::anyhow!("NumberCodec<u16>: Failed to write u16: {}", e),
+            })?;
+        Ok(())
+    }
+
+    fn encode(&self, value: &u16) -> Result<EncodeVec, RocksDbStorageError> {
+        Ok(EncodeVec::new_from_array(value.to_be_bytes()))
+    }
+}
+
+impl DbDecoder<u16> for NumberCodec<u16> {
+    fn decode(&self, bytes: &[u8]) -> Result<(u16, usize), RocksDbStorageError> {
+        let arr: [u8; 2] = take_fixed(bytes).ok_or_else(|| RocksDbStorageError::MalformedData {
+            operation: "decode u16",
+            details: "Invalid bytes size for NumberCodec<u16>".to_string(),
+        })?;
+        Ok((u16::from_be_bytes(arr), 2))
+    }
+}
+
 impl DbEncoder<u32> for NumberCodec<u32> {
     fn encode_len(&self, _value: &u32) -> Result<usize, RocksDbStorageError> {
         Ok(size_of::<u32>())

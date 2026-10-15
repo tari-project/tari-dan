@@ -58,8 +58,9 @@ mod template {
                  {current_epoch} may activate at is {earliest}"
             );
 
-            // A foreign proposal from the previous epoch can still reach a shard group after this
-            // commits, and resolves its rate from this schedule, so the entry in force there stays.
+            // A node that joined by state sync after the previous epoch opened has no record of its
+            // rate, and resolves a foreign proposal from it from this schedule, so the entry in force
+            // there stays.
             prune_before(&mut self.schedule, current_epoch.saturating_sub(1));
             schedule_change(&mut self.schedule, BurnRateChange {
                 activation_epoch,

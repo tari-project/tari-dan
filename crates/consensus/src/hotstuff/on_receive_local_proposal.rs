@@ -27,6 +27,7 @@ use tari_ootle_common_types::{
 use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
+    StateStoreWriteTransaction,
     consensus_models::{
         Block,
         BookkeepingModel,
@@ -681,6 +682,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     )));
                 }
                 checkpoint.save(tx)?;
+                tx.epoch_exhaust_burn_rate_set(next_epoch, next_exhaust_burn_rate)?;
 
                 if let Some(next_shard_group) = next_shard_group.filter(|_| !shard_group_changed) {
                     let next_protocol_version = ProtocolVersion::at(network, next_epoch);

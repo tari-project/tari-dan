@@ -33,6 +33,7 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_storage::{
     StateStore,
+    StateStoreWriteTransaction,
     consensus_models::{
         Block,
         BookkeepingEpochAgnosticRead,
@@ -1746,6 +1747,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             genesis.as_last_voted().set(tx)?;
             genesis.justify().as_high_pc().set(tx)?;
             genesis.commit_block_without_state_changes(tx, &genesis.justify().calculate_id())?;
+            tx.epoch_exhaust_burn_rate_set(epoch, exhaust_burn_rate)?;
 
             Ok(true)
         })

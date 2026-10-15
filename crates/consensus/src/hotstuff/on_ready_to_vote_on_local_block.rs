@@ -1812,7 +1812,7 @@ where TConsensusSpec: ConsensusSpec
 
         let execution = self
             .transaction_manager
-            .execute(locked_epoch, pledged)
+            .execute(locked_epoch, block.epoch, pledged)
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
 
         Ok(execution.for_block(block, transaction_id))
