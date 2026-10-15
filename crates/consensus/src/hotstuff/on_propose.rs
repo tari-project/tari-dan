@@ -94,10 +94,16 @@ const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::on_propose";
 /// take from transactions that fit.
 const HEAVY_TRANSACTION_TURN_INTERVAL: u64 = 10;
 
-/// The leader reads at most this many ready pool records per transaction slot when choosing a block's transactions,
-/// so choosing a batch costs the same however large the pool grows. A window several times the batch size keeps the
-/// choice random, and the window moves to a random point of the pool on every proposal.
+/// The leader samples at most this many ready pool records per transaction slot when choosing a block's
+/// transactions. A window several times the batch size keeps the choice random, and the window moves to a random
+/// point of the pool on every proposal.
 const PROPOSAL_CANDIDATES_PER_TRANSACTION: usize = 8;
+
+/// The leader reads at most this many pool records, ready or not, per candidate it samples. Together with
+/// [`PROPOSAL_CANDIDATES_PER_TRANSACTION`] this bounds the cost of choosing a batch however large the pool grows.
+/// Records that are not ready, such as those waiting on other shard groups, count as reads, so when they fill the
+/// window a proposal samples fewer candidates.
+const PROPOSAL_READS_PER_CANDIDATE: usize = 4;
 
 struct NextBlock {
     block: Block,
@@ -810,6 +816,7 @@ where TConsensusSpec: ConsensusSpec
         // stays under the hard command cap regardless of how light the transactions are.
         let max_tx_count = max_commands.saturating_sub(foreign_proposals.len());
         let heavy_turn = next_height.as_u64().is_multiple_of(HEAVY_TRANSACTION_TURN_INTERVAL);
+        let max_candidates = max_tx_count.saturating_mul(PROPOSAL_CANDIDATES_PER_TRANSACTION);
 
         let transactions = remaining_weight
             .filter(|_| max_tx_count > 0)
@@ -818,7 +825,8 @@ where TConsensusSpec: ConsensusSpec
                     tx,
                     weight_budget,
                     max_tx_count,
-                    max_tx_count.saturating_mul(PROPOSAL_CANDIDATES_PER_TRANSACTION),
+                    max_candidates,
+                    max_candidates.saturating_mul(PROPOSAL_READS_PER_CANDIDATE),
                     heavy_turn,
                     state_anchor_leaf.block_id(),
                     epoch,

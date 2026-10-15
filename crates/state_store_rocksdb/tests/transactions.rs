@@ -131,9 +131,14 @@ mod confirm_all_transitions {
             .unwrap();
 
         let mut num_ready = 0;
-        tx.transaction_pool_for_each_ready(&block_id, Epoch(0), &TransactionId::default(), usize::MAX, |_| {
-            num_ready += 1
-        })
+        tx.transaction_pool_for_each_ready(
+            &block_id,
+            Epoch(0),
+            &TransactionId::default(),
+            usize::MAX,
+            usize::MAX,
+            |_| num_ready += 1,
+        )
         .unwrap();
         assert_eq!(num_ready, 3);
 
@@ -213,8 +218,15 @@ mod confirm_all_transitions {
 
         let count_offered = |epoch| {
             let mut num = 0;
-            tx.transaction_pool_for_each_ready(block1.id(), epoch, &TransactionId::default(), usize::MAX, |_| num += 1)
-                .unwrap();
+            tx.transaction_pool_for_each_ready(
+                block1.id(),
+                epoch,
+                &TransactionId::default(),
+                usize::MAX,
+                usize::MAX,
+                |_| num += 1,
+            )
+            .unwrap();
             num
         };
         assert_eq!(count_offered(Epoch(1)), 0);
@@ -902,6 +914,7 @@ mod get_batch_for_next_block {
                 weight_budget,
                 max_count,
                 max_candidates,
+                usize::MAX,
                 heavy_turn,
                 block_id,
                 Epoch(0),
@@ -915,8 +928,18 @@ mod get_batch_for_next_block {
         start_id: TransactionId,
         max_records: usize,
     ) -> Vec<TransactionId> {
+        visit_ready_reading(tx, block_id, start_id, max_records, usize::MAX)
+    }
+
+    fn visit_ready_reading(
+        tx: &impl StateStoreReadTransaction,
+        block_id: &BlockId,
+        start_id: TransactionId,
+        max_records: usize,
+        max_reads: usize,
+    ) -> Vec<TransactionId> {
         let mut visited = Vec::new();
-        tx.transaction_pool_for_each_ready(block_id, Epoch(0), &start_id, max_records, |rec| {
+        tx.transaction_pool_for_each_ready(block_id, Epoch(0), &start_id, max_records, max_reads, |rec| {
             visited.push(*rec.id())
         })
         .unwrap();
@@ -1144,6 +1167,37 @@ mod get_batch_for_next_block {
         // A window larger than the pool offers every record exactly once.
         let visited = visit_ready(&tx, &block_id, id_of(30), usize::MAX);
         assert_eq!(visited, (30..100).chain(0..30).map(id_of).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn for_each_ready_counts_records_that_are_not_ready_as_reads_rocksdb() {
+        let (db, _tmp) = create_rocksdb();
+        let ready = (100..110u8).map(|i| (id_of(i), 1)).collect::<Vec<_>>();
+        let block_id = setup_ready_pool_with_ids(&db, &ready);
+        let mut tx = db.create_write_tx().unwrap();
+        for i in 0..100u8 {
+            tx.transaction_pool_insert_new(
+                id_of(i),
+                Decision::Commit,
+                &Evidence::empty(),
+                false,
+                false,
+                Epoch(1),
+                1,
+            )
+            .unwrap();
+        }
+        tx.commit().unwrap();
+        let tx = db.create_read_tx().unwrap();
+
+        // The 100 records that are not ready come first from this start, so 50 reads reach no ready record.
+        assert!(visit_ready_reading(&tx, &block_id, id_of(0), 10, 50).is_empty());
+
+        let visited = visit_ready_reading(&tx, &block_id, id_of(0), 10, 105);
+        assert_eq!(visited, (100..105).map(id_of).collect::<Vec<_>>());
+
+        let visited = visit_ready_reading(&tx, &block_id, id_of(0), 10, usize::MAX);
+        assert_eq!(visited, (100..110).map(id_of).collect::<Vec<_>>());
     }
 
     #[test]
