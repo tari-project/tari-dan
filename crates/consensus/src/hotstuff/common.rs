@@ -430,7 +430,7 @@ where
         });
     }
 
-    let checkpoint = EpochCheckpoint::new(commit_proof, shard_tree_summary);
+    let checkpoint = EpochCheckpoint::new(commit_proof, shard_tree_summary, Some(eoe_block.header().metadata()));
     Ok(checkpoint)
 }
 

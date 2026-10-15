@@ -35,6 +35,7 @@ use tari_ootle_common_types::{
     NumPreshards,
     ProtocolVersion,
     ShardGroup,
+    ValidatorSetHash,
     VersionedSubstateId,
     VersionedSubstateIdRef,
     committee::CommitteeInfo,
@@ -498,6 +499,11 @@ impl Block {
     /// The exhaust burn rate the next epoch opens at, which only an end-of-epoch block names.
     pub fn next_epoch_exhaust_burn_rate(&self) -> Option<ExhaustBurnRate> {
         self.header.next_epoch_exhaust_burn_rate()
+    }
+
+    /// The [`ValidatorSetHash`] of the next epoch's committees, which only an end-of-epoch block names.
+    pub fn next_epoch_validator_set_hash(&self) -> Option<ValidatorSetHash> {
+        self.header.next_epoch_validator_set_hash()
     }
 
     pub fn compute_command_inclusion_proof(&self, command_index: usize) -> Result<SparseMerkleProofExt, BlockError> {

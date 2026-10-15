@@ -4,7 +4,7 @@
 use tari_consensus::hotstuff::{HotStuffError, ProposalValidationError};
 use tari_consensus_types::BlockId;
 use tari_epoch_manager::EpochManagerError;
-use tari_ootle_common_types::Epoch;
+use tari_ootle_common_types::{Epoch, ValidatorSetHash};
 use tari_ootle_storage::{StorageError, consensus_models::TransactionPoolError};
 use tari_rpc_framework::{RpcError, RpcStatus};
 use tari_state_tree::{JmtStorageError, TreeHash};
@@ -43,6 +43,16 @@ pub enum RpcStateSyncError {
     NoCommittees(Epoch),
     #[error("Invariant error: {details}")]
     InvariantError { details: String },
+    #[error(
+        "The previous committee committed validator set {committed} for {epoch}, but this node assigned {local}. This \
+         node disagrees with the network on the validators registered for {epoch} or on how they form committees; \
+         check its epoch oracle and committee configuration."
+    )]
+    ValidatorSetDiverged {
+        epoch: Epoch,
+        local: ValidatorSetHash,
+        committed: ValidatorSetHash,
+    },
 }
 
 impl RpcStateSyncError {

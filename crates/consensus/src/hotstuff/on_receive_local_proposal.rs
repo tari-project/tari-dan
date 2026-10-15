@@ -51,7 +51,7 @@ use crate::{
         epoch_state::EpochState,
         error::HotStuffError,
         generate_epoch_checkpoint,
-        on_ready_to_vote_on_local_block::OnReadyToVoteOnLocalBlock,
+        on_ready_to_vote_on_local_block::{LocalNextEpochView, OnReadyToVoteOnLocalBlock},
         on_receive_foreign_proposal::OnReceiveForeignProposalHandler,
         pacemaker_handle::PaceMakerHandle,
         transaction_manager::ConsensusTransactionManager,
@@ -351,25 +351,28 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         let em_epoch = self.epoch_manager.current_epoch().await?;
         let is_epoch_end = valid_block.block().is_epoch_end();
 
-        // Our own view of the next epoch's boundary hash, used by the voter to ratify the hash carried
-        // in an EndEpoch command. `None` if we have not observed that boundary — in which case the
-        // voter abstains rather than lending quorum to an unratified hash. Having observed the boundary
-        // is what qualifies a node to ratify, not having activated the epoch: the scanner stores headers
-        // before the resulting `EpochChanged` event is applied, and during a catch-up that event can sit
-        // behind several epoch activations.
-        let expected_next_epoch_hash = if is_epoch_end {
-            self.epoch_manager
-                .get_observed_epoch_hash(current_epoch + Epoch(1))
-                .await?
+        // Our own view of the next epoch, used by the voter to ratify what an EndEpoch block commits it to. The
+        // boundary hash is `None` if we have not observed that boundary, and the validator set hash is `None` until
+        // we have assigned the next epoch's committees; in either case the voter abstains rather than lending
+        // quorum to a value it cannot check. Having observed the boundary is what qualifies a node to ratify the
+        // boundary hash, not having activated the epoch: the scanner stores headers before the resulting
+        // `EpochChanged` event is applied, and during a catch-up that event can sit behind several epoch
+        // activations.
+        let local_next_epoch = if is_epoch_end {
+            let next_epoch = current_epoch + Epoch(1);
+            LocalNextEpochView {
+                epoch_hash: self.epoch_manager.get_observed_epoch_hash(next_epoch).await?,
+                validator_set_hash: self.epoch_manager.get_validator_set_hash(next_epoch).await.optional()?,
+            }
         } else {
-            None
+            LocalNextEpochView::default()
         };
 
         // Accept an EndEpoch proposal when our oracle has advanced past `current_epoch`, or when we
         // have scanned the boundary block that ends it. The second branch rescues the case where a
         // short base-layer reorg near the lag horizon leaves our scanner behind the leader's — without
         // it, such splits can wedge consensus because every node requires the strict inequality.
-        let can_propose_epoch_end = em_epoch > current_epoch || expected_next_epoch_hash.is_some();
+        let can_propose_epoch_end = em_epoch > current_epoch || local_next_epoch.epoch_hash.is_some();
 
         let mut on_ready_to_vote_on_local_block = self.on_ready_to_vote_on_local_block.clone();
 
@@ -393,7 +396,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     &local_committee_info,
                     &proposer_claim_public_key_bytes,
                     can_propose_epoch_end,
-                    expected_next_epoch_hash,
+                    local_next_epoch,
                     &mut change_set,
                 )?;
 
@@ -578,6 +581,36 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             );
             self.pending_end_of_epoch = Some(PendingEndOfEpoch { eoe_block, commit_qc });
             return Ok(());
+        }
+
+        // The committed block names the next epoch's validator set, which a quorum ratified against their own
+        // committee assignment. A node whose own assignment differs would open the next epoch on committees the
+        // rest of the network does not run, so it does not open it: the EOE stays pending, and the retry opens the
+        // epoch if an oracle correction brings this node's assignment into line. This check precedes
+        // `lock_epoch(next_epoch)`, which would end such corrections. An EOE that names no set leaves nothing to
+        // check.
+        if let Some(committed) = eoe_block.next_epoch_validator_set_hash() {
+            let local = self.epoch_manager.get_validator_set_hash(next_epoch).await.optional()?;
+            if local != Some(committed) {
+                match local {
+                    Some(local) => error!(
+                        target: LOG_TARGET,
+                        "🚨 Validator set divergence at {next_epoch}: the committee committed validator set {committed} \
+                         in EOE block {} but this node assigned {local}. This node will not take part in \
+                         {next_epoch}. It disagrees with the network on the validators registered for {next_epoch} \
+                         or on how they form committees; check its epoch oracle and committee configuration.",
+                        eoe_block.id()
+                    ),
+                    None => warn!(
+                        target: LOG_TARGET,
+                        "⏳ EOE block {} committed but this node has not assigned the committees for {next_epoch}. \
+                         Deferring next-epoch genesis until it has.",
+                        eoe_block.id()
+                    ),
+                }
+                self.pending_end_of_epoch = Some(PendingEndOfEpoch { eoe_block, commit_qc });
+                return Ok(());
+            }
         }
 
         // We're registered for the next epoch. Checkpoint and create a new genesis block.

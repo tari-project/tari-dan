@@ -204,6 +204,7 @@ fn miscellaneous_rocksdb() {
             inclusion_proof.clone(),
         ),
         shard_summary.clone(),
+        None,
     );
     let mut max_commit_proof = commit_proof.clone();
     max_commit_proof.header.epoch = u64::MAX;
@@ -214,13 +215,14 @@ fn miscellaneous_rocksdb() {
             inclusion_proof.clone(),
         ),
         shard_summary.clone(),
+        None,
     );
     let proof = CommandCommitProof::new(
         EndOfEpochCommand::new(FixedHash::default()),
         commit_proof,
         inclusion_proof,
     );
-    let epoch_checkpoint = EpochCheckpoint::new(proof, shard_summary);
+    let epoch_checkpoint = EpochCheckpoint::new(proof, shard_summary, Some(block.header().metadata()));
 
     tx.epoch_checkpoint_save(&epoch_checkpoint).unwrap();
     tx.epoch_checkpoint_save(&next_epoch_checkpoint).unwrap();

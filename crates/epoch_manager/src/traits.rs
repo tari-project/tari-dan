@@ -33,6 +33,7 @@ use tari_ootle_common_types::{
     NodeAddressable,
     ShardGroup,
     SubstateAddress,
+    ValidatorSetHash,
     VotePower,
     committee::{Committee, CommitteeInfo},
     layer_one_transaction::LayerOneTransactionDef,
@@ -130,6 +131,11 @@ pub trait EpochManagerReader: Send + Sync {
     fn current_epoch(&self) -> impl Future<Output = Result<Epoch, EpochManagerError>> + Send;
     fn get_current_epoch_hash(&self) -> impl Future<Output = Result<FixedHash, EpochManagerError>> + Send;
     fn get_epoch_hash(&self, epoch: Epoch) -> impl Future<Output = Result<FixedHash, EpochManagerError>> + Send;
+    /// The [`ValidatorSetHash`] of `epoch`'s committees. A not-found error until this node has assigned them.
+    fn get_validator_set_hash(
+        &self,
+        epoch: Epoch,
+    ) -> impl Future<Output = Result<ValidatorSetHash, EpochManagerError>> + Send;
 
     fn get_num_committees(&self, epoch: Epoch) -> impl Future<Output = Result<u32, EpochManagerError>> + Send;
 

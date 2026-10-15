@@ -532,6 +532,7 @@ mod tests {
     use tari_epoch_manager::EpochManagerEvent;
     use tari_ootle_common_types::{
         SubstateRequirementRef,
+        ValidatorSetHash,
         committee::{CommitteeInfo, CommitteeMember},
     };
     use tari_ootle_storage::{global::models::ValidatorNode, time::PrimitiveDateTime};
@@ -682,6 +683,10 @@ mod tests {
         }
 
         async fn get_epoch_hash(&self, _: Epoch) -> Result<FixedHash, EpochManagerError> {
+            unimplemented!()
+        }
+
+        async fn get_validator_set_hash(&self, _: Epoch) -> Result<ValidatorSetHash, EpochManagerError> {
             unimplemented!()
         }
 

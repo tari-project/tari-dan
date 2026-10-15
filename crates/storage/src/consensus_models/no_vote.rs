@@ -3,7 +3,7 @@
 
 use tari_common_types::types::FixedHash;
 use tari_consensus_types::{BlockId, Decision};
-use tari_ootle_common_types::ShardGroup;
+use tari_ootle_common_types::{ShardGroup, ValidatorSetHash};
 use tari_ootle_transaction::TransactionId;
 
 use crate::consensus_models::TransactionPoolStage;
@@ -88,6 +88,18 @@ pub enum NoVoteReason {
     EndOfEpochBurnRateMissing,
     #[error("End-of-epoch next-epoch exhaust burn rate mismatch. Local: {local_bps}bps, proposed: {proposed_bps}bps")]
     EndOfEpochBurnRateMismatch { local_bps: u16, proposed_bps: u16 },
+    #[error("End-of-epoch block does not name the next epoch's validator set hash")]
+    EndOfEpochValidatorSetMissing,
+    #[error(
+        "End-of-epoch next-epoch validator set hash cannot be ratified: this node has not assigned the next epoch's \
+         committees"
+    )]
+    EndOfEpochValidatorSetNotKnown,
+    #[error("End-of-epoch next-epoch validator set hash mismatch. Local: {local}, proposed: {proposed}")]
+    EndOfEpochValidatorSetMismatch {
+        local: ValidatorSetHash,
+        proposed: ValidatorSetHash,
+    },
     #[error("The state Merkle root does not match")]
     StateMerkleRootMismatch,
     #[error("Not all foreign input pledges are present")]
@@ -174,6 +186,9 @@ impl NoVoteReason {
             Self::EndOfEpochHashNotObserved => "EndOfEpochHashNotObserved",
             Self::EndOfEpochBurnRateMissing => "EndOfEpochBurnRateMissing",
             Self::EndOfEpochBurnRateMismatch { .. } => "EndOfEpochBurnRateMismatch",
+            Self::EndOfEpochValidatorSetMissing => "EndOfEpochValidatorSetMissing",
+            Self::EndOfEpochValidatorSetNotKnown => "EndOfEpochValidatorSetNotKnown",
+            Self::EndOfEpochValidatorSetMismatch { .. } => "EndOfEpochValidatorSetMismatch",
             Self::TotalLeaderFeeDisagreement => "TotalLeaderFeeDisagreement",
             Self::StateMerkleRootMismatch => "StateMerkleRootMismatch",
             Self::NotAllForeignInputPledges => "NotAllForeignInputPledges",

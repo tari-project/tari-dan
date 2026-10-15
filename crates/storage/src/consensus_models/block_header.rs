@@ -30,6 +30,7 @@ use tari_ootle_common_types::{
     NumPreshards,
     ProtocolVersion,
     ShardGroup,
+    ValidatorSetHash,
     hashing,
 };
 use tari_ootle_transaction::Network;
@@ -378,14 +379,27 @@ impl BlockHeader {
     }
 
     fn calculate_metadata_hash_as(&self, is_dummy: bool) -> FixedHash {
-        let fields = MetadataHashFields::V1(MetadataHashFieldsV1 {
+        MetadataHashFields::V1(MetadataHashFieldsV1 {
             total_leader_fee: self.total_leader_fee,
             timestamp: self.timestamp,
             extra_data: &self.extra_data,
             timeout_certificate_id: self.timeout_certificate_id.as_ref().map(TcId::hash),
             is_dummy,
-        });
-        hashing::block_metadata_hasher().chain(&fields).finalize().into()
+        })
+        .calculate_hash()
+    }
+
+    /// The fields this header commits to through its metadata hash. With them, a holder of the L1-shaped header
+    /// (which carries only the hash) can recompute that hash and read the fields it covers, such as
+    /// [`Self::extra_data`].
+    pub fn metadata(&self) -> BlockHeaderMetadata {
+        BlockHeaderMetadata {
+            total_leader_fee: self.total_leader_fee,
+            timestamp: self.timestamp,
+            extra_data: self.extra_data.clone(),
+            timeout_certificate_id: self.timeout_certificate_id.as_ref().map(|id| *id.hash()),
+            is_dummy: self.is_dummy(),
+        }
     }
 
     pub fn calculate_hash(&self) -> FixedHash {
@@ -606,6 +620,12 @@ impl BlockHeader {
             .and_then(ExhaustBurnRate::try_new)
     }
 
+    /// The [`ValidatorSetHash`] of the next epoch's committees, which only an end-of-epoch block names.
+    pub fn next_epoch_validator_set_hash(&self) -> Option<ValidatorSetHash> {
+        self.extra_data
+            .get_validator_set_hash(&ExtraFieldKey::NextEpochValidatorSetHash)
+    }
+
     pub fn extra_data(&self) -> &ExtraData {
         &self.extra_data
     }
@@ -676,6 +696,49 @@ enum MetadataHashFields<'a> {
     V1(MetadataHashFieldsV1<'a>),
 }
 
+impl MetadataHashFields<'_> {
+    fn calculate_hash(&self) -> FixedHash {
+        hashing::block_metadata_hasher().chain(self).finalize().into()
+    }
+}
+
+/// The preimage of a block header's metadata hash. See [`BlockHeader::metadata`].
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, CborLen)]
+pub struct BlockHeaderMetadata {
+    #[n(0)]
+    pub total_leader_fee: u64,
+    #[n(1)]
+    pub timestamp: u64,
+    #[n(2)]
+    pub extra_data: ExtraData,
+    #[serde(default, with = "ootle_serde::hex::option")]
+    #[n(3)]
+    #[cbor(with = "tari_bor::adapters::serde_bridge")]
+    pub timeout_certificate_id: Option<FixedHash>,
+    #[n(4)]
+    pub is_dummy: bool,
+}
+
+impl BlockHeaderMetadata {
+    /// The metadata hash these fields form, which equals the header's when they are that header's fields.
+    pub fn calculate_hash(&self) -> FixedHash {
+        MetadataHashFields::V1(MetadataHashFieldsV1 {
+            total_leader_fee: self.total_leader_fee,
+            timestamp: self.timestamp,
+            extra_data: &self.extra_data,
+            timeout_certificate_id: self.timeout_certificate_id.as_ref(),
+            is_dummy: self.is_dummy,
+        })
+        .calculate_hash()
+    }
+
+    /// The [`ValidatorSetHash`] of the next epoch's committees, which only an end-of-epoch block names.
+    pub fn next_epoch_validator_set_hash(&self) -> Option<ValidatorSetHash> {
+        self.extra_data
+            .get_validator_set_hash(&ExtraFieldKey::NextEpochValidatorSetHash)
+    }
+}
+
 #[derive(Debug, BorshSerialize)]
 struct MetadataHashFieldsV1<'a> {
     total_leader_fee: u64,
@@ -736,6 +799,82 @@ mod tests {
         let decoded: BlockHeader = tari_bor::decode(&bytes).unwrap();
         assert_eq!(decoded.transaction_merkle_root(), None);
         assert_eq!(decoded.calculate_hash(), header.calculate_hash());
+    }
+
+    fn header_with_extra_data(extra_data: ExtraData, timeout_certificate_id: Option<TcId>) -> BlockHeader {
+        let shard_group = ShardGroup::all_shards(NumPreshards::P64);
+        BlockHeader::create(
+            Network::LocalNet,
+            ProtocolVersion::V2,
+            BlockId::zero(),
+            ProposalCertificate::genesis(Epoch(1), shard_group).calculate_id(),
+            timeout_certificate_id,
+            NodeHeight(2),
+            Epoch(1),
+            shard_group,
+            RistrettoPublicKeyBytes::default(),
+            FixedHash::zero(),
+            &BlockCommands::empty(),
+            7,
+            SchnorrSignatureBytes::zero(),
+            1234,
+            FixedHash::zero(),
+            ShardGroupAccumulatedData::default(),
+            extra_data,
+        )
+        .unwrap()
+    }
+
+    fn eoe_extra_data() -> ExtraData {
+        let mut extra_data = ExtraData::new();
+        extra_data
+            .insert_bps(ExtraFieldKey::ExhaustBurnRate, 500)
+            .insert_bps(ExtraFieldKey::NextEpochExhaustBurnRate, 600)
+            .insert_validator_set_hash(
+                ExtraFieldKey::NextEpochValidatorSetHash,
+                &ValidatorSetHash::from_array([9; 32]),
+            );
+        extra_data
+    }
+
+    #[test]
+    fn the_metadata_preimage_hashes_to_the_header_metadata_hash() {
+        for header in [
+            header(ProtocolVersion::V2),
+            header_with_extra_data(eoe_extra_data(), None),
+            header_with_extra_data(eoe_extra_data(), Some(TcId::from([4u8; 32]))),
+        ] {
+            assert_eq!(header.metadata().calculate_hash(), header.calculate_metadata_hash());
+        }
+
+        let header = header_with_extra_data(eoe_extra_data(), None);
+        let mut as_dummy = header.metadata();
+        as_dummy.is_dummy = true;
+        assert_eq!(as_dummy.calculate_hash(), header.calculate_metadata_hash_as(true));
+    }
+
+    #[test]
+    fn the_metadata_preimage_names_the_next_epoch_validator_set_hash() {
+        let eoe = header_with_extra_data(eoe_extra_data(), None);
+        let expected = Some(ValidatorSetHash::from_array([9; 32]));
+        assert_eq!(eoe.next_epoch_validator_set_hash(), expected);
+        assert_eq!(eoe.metadata().next_epoch_validator_set_hash(), expected);
+        assert_eq!(
+            header(ProtocolVersion::V2).metadata().next_epoch_validator_set_hash(),
+            None
+        );
+    }
+
+    #[test]
+    fn the_metadata_preimage_round_trips_through_cbor_and_json() {
+        let header = header_with_extra_data(eoe_extra_data(), Some(TcId::from([4u8; 32])));
+        let metadata = header.metadata();
+
+        let from_cbor: BlockHeaderMetadata = tari_bor::decode(&tari_bor::encode(&metadata).unwrap()).unwrap();
+        assert_eq!(from_cbor.calculate_hash(), header.calculate_metadata_hash());
+
+        let from_json: BlockHeaderMetadata = serde_json::from_str(&serde_json::to_string(&metadata).unwrap()).unwrap();
+        assert_eq!(from_json.calculate_hash(), header.calculate_metadata_hash());
     }
 
     #[test]

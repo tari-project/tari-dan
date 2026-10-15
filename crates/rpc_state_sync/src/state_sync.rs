@@ -330,6 +330,24 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         Ok(sources)
     }
 
+    /// Fails if `checkpoint`, which ends the epoch before `epoch`, commits `epoch` to a validator set other than the
+    /// one this node assigned. Such a node would run `epoch` on committees the rest of the network does not, so it
+    /// does not sync into it. A checkpoint that names no set leaves nothing to check.
+    async fn check_validator_set(&self, checkpoint: &EpochCheckpoint, epoch: Epoch) -> Result<(), RpcStateSyncError> {
+        let Some(committed) = checkpoint.next_epoch_validator_set_hash() else {
+            return Ok(());
+        };
+        let local = self.epoch_manager.get_validator_set_hash(epoch).await?;
+        if local != committed {
+            return Err(RpcStateSyncError::ValidatorSetDiverged {
+                epoch,
+                local,
+                committed,
+            });
+        }
+        Ok(())
+    }
+
     fn validate_checkpoint(
         &self,
         checkpoint: &EpochCheckpoint,
@@ -570,6 +588,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             }
             // The global shard synced first, so every shard this node takes from the checkpoint now matches it.
             if let Some(checkpoint) = self.unsaved_checkpoints.remove(&shard_group) {
+                self.check_validator_set(&checkpoint, current_epoch).await?;
                 self.state_store.with_write_tx(|tx| checkpoint.save(tx))?;
             }
         }
