@@ -17,6 +17,7 @@ use tari_ootle_common_types::{
     committee::{Committee, CommitteeInfo},
 };
 use tari_ootle_storage::global::models::ValidatorNode;
+use tari_state_tree::ValidatorSetCommitteeProof;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::sync::{broadcast, mpsc, oneshot};
 
@@ -306,6 +307,23 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetValidatorSetHash { epoch, reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
+    async fn get_validator_set_committee_proof(
+        &self,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+    ) -> Result<ValidatorSetCommitteeProof, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetValidatorSetCommitteeProof {
+                epoch,
+                shard_group,
+                reply: tx,
+            })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?

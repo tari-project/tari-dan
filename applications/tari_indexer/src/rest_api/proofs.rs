@@ -1,9 +1,18 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_indexer_client::types::{SubstateProof, SubstateProofAnchor};
-use tari_ootle_common_types::Epoch;
-use tari_ootle_storage::consensus_models::CommittedBlockProof;
+use tari_epoch_manager::{EpochManagerReader, service::EpochManagerHandle};
+use tari_indexer_client::types::{
+    EpochCheckpointEntry,
+    SubstateProof,
+    SubstateProofAnchor,
+    ValidatorSetCommittee,
+    ValidatorSetCommitteeMember,
+};
+use tari_ootle_common_types::{Epoch, optional::Optional, shard::Shard};
+use tari_ootle_p2p::PeerAddress;
+use tari_ootle_storage::consensus_models::{CommittedBlockProof, EpochCheckpoint};
+use tari_state_tree::ValidatorSetCommitteeProof;
 use tari_template_lib_types::Hash32;
 use tari_validator_node_rpc::client::SubstateProofData;
 
@@ -39,6 +48,75 @@ pub fn to_substate_proof(proof: SubstateProofData) -> Result<SubstateProof, Erro
         commit_proof: proof.commit_proof,
         value_proof: proof.substate_value_proof,
         value_hash_epoch: Epoch(proof.proof_epoch),
+    })
+}
+
+/// `epoch`'s committee for the shard group that contains `shard`, with its proof against the epoch's validator set
+/// hash. `None` if this indexer holds no validator set for `epoch`.
+pub async fn committee_for_shard(
+    epoch_manager: &EpochManagerHandle<PeerAddress>,
+    epoch: Epoch,
+    shard: Shard,
+) -> Result<Option<ValidatorSetCommittee>, ErrorResponse> {
+    let num_preshards = epoch_manager
+        .get_network_description()
+        .await
+        .map_err(ErrorResponse::anyhow)?
+        .num_preshards;
+    let num_committees = epoch_manager
+        .get_num_committees(epoch)
+        .await
+        .map_err(ErrorResponse::anyhow)?;
+    let Some(shard_group) = num_preshards
+        .all_shard_groups_iter(num_committees)
+        .find(|shard_group| shard_group.contains(&shard))
+    else {
+        return Err(ErrorResponse::bad_request(format!(
+            "Shard {shard} is not in any shard group of {epoch}"
+        )));
+    };
+    let proof = epoch_manager
+        .get_validator_set_committee_proof(epoch, shard_group)
+        .await
+        .optional()
+        .map_err(ErrorResponse::anyhow)?;
+    Ok(proof.as_ref().map(to_validator_set_committee))
+}
+
+/// The client form of a committee proof, with the members and set hash read out of it.
+pub fn to_validator_set_committee(proof: &ValidatorSetCommitteeProof) -> ValidatorSetCommittee {
+    ValidatorSetCommittee {
+        epoch: proof.epoch,
+        shard_group: proof.shard_group,
+        validator_set_hash: proof.validator_set_hash(),
+        members: proof
+            .members
+            .iter()
+            .map(|member| ValidatorSetCommitteeMember {
+                public_key: member.public_key,
+                vote_power: member.vote_power.value(),
+            })
+            .collect(),
+        proof: proof.to_bytes(),
+    }
+}
+
+/// The client form of a stored checkpoint, with the fields a caller selects on read out of it.
+pub fn to_checkpoint_entry(
+    checkpoint: &EpochCheckpoint,
+    next_epoch_committee: Option<ValidatorSetCommittee>,
+) -> Result<EpochCheckpointEntry, ErrorResponse> {
+    let shard_group = checkpoint
+        .checked_shard_group()
+        .map_err(|e| ErrorResponse::internal_error(format!("Stored checkpoint has an invalid shard group: {e}")))?;
+    let encoded = tari_bor::encode(checkpoint)
+        .map_err(|e| ErrorResponse::internal_error(format!("Stored checkpoint failed to encode: {e}")))?;
+    Ok(EpochCheckpointEntry {
+        epoch: checkpoint.epoch(),
+        shard_group,
+        next_epoch_validator_set_hash: checkpoint.next_epoch_validator_set_hash(),
+        checkpoint: encoded,
+        next_epoch_committee,
     })
 }
 
@@ -100,6 +178,48 @@ mod tests {
         assert_eq!(proof.commit_proof, commit_proof.to_bytes());
         assert_eq!(proof.value_proof, vec![1, 2, 3]);
         assert_eq!(proof.value_hash_epoch, Epoch(2));
+    }
+
+    #[test]
+    fn a_committee_carries_its_members_set_hash_and_decodable_proof() {
+        use ootle_network::Network;
+        use tari_ootle_common_types::{
+            NumPreshards,
+            VotePower,
+            committee::{Committee, CommitteeMember},
+        };
+        use tari_state_tree::ValidatorSetTree;
+        use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
+
+        let shard_group = ShardGroup::new(0u32, 3u32);
+        let committee = Committee::new(
+            [1u8, 2]
+                .into_iter()
+                .map(|byte| CommitteeMember {
+                    address: byte,
+                    public_key: RistrettoPublicKeyBytes::from_bytes(&[byte; 32]).unwrap(),
+                    vote_power: VotePower::of(1),
+                })
+                .collect(),
+        );
+        let tree = ValidatorSetTree::build(Network::LocalNet, Epoch(5), NumPreshards::try_from(4u32).unwrap(), [(
+            shard_group,
+            committee.calculate_validator_set_leaf_hash(&shard_group).unwrap(),
+        )])
+        .unwrap();
+        let proof = tree.committee_proof(&shard_group, &committee).unwrap();
+
+        let served = to_validator_set_committee(&proof);
+
+        assert_eq!(served.epoch, Epoch(5));
+        assert_eq!(served.shard_group, shard_group);
+        assert_eq!(served.validator_set_hash, tree.hash());
+        assert_eq!(
+            served.members.iter().map(|m| m.public_key).collect::<Vec<_>>(),
+            proof.members.iter().map(|m| m.public_key).collect::<Vec<_>>()
+        );
+        let decoded = ValidatorSetCommitteeProof::from_bytes(&served.proof).unwrap();
+        decoded.verify(&tree.hash()).unwrap();
     }
 
     #[test]

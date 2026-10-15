@@ -10,15 +10,90 @@
       "name": "BSD-3-Clause",
       "identifier": "BSD-3-Clause"
     },
-    "version": "0.43.0"
+    "version": "0.46.1"
   },
   "paths": {
+    "/committees": {
+      "get": {
+        "tags": [
+          "handlers::committees"
+        ],
+        "description": "Get one shard group's committee in an epoch, with its proof against the epoch's validator set hash",
+        "operationId": "get_committee",
+        "parameters": [
+          {
+            "name": "epoch",
+            "in": "query",
+            "description": "The epoch of the committee",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "shard",
+            "in": "query",
+            "description": "Any shard of the shard group whose committee to return",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The committee and its proof",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetCommitteeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The epoch has not occurred yet, or the shard is in no shard group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "This indexer holds no validator set for the epoch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/epoch-checkpoints": {
       "get": {
         "tags": [
           "handlers::epoch_checkpoints"
         ],
-        "description": "List epoch checkpoints from storage",
+        "description": "List epoch checkpoints from storage, ascending by epoch",
         "operationId": "list_epoch_checkpoints",
         "parameters": [
           {
@@ -42,6 +117,26 @@
               "format": "int32",
               "minimum": 0
             }
+          },
+          {
+            "name": "shard",
+            "in": "query",
+            "description": "Only the checkpoints of the shard group containing this shard",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "include_committees",
+            "in": "query",
+            "description": "Include the next epoch's committee for the shard group containing `shard`, with its proof against the next epoch's validator set hash. Requires `shard`",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -51,6 +146,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ListEpochCheckpointsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`include_committees` without `shard`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -75,6 +180,28 @@
         ],
         "description": "Get the latest epoch checkpoint",
         "operationId": "get_latest_epoch_checkpoint",
+        "parameters": [
+          {
+            "name": "shard",
+            "in": "query",
+            "description": "The latest checkpoint of the shard group containing this shard",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "include_committees",
+            "in": "query",
+            "description": "Include the next epoch's committee for the shard group containing `shard`, with its proof against the next epoch's validator set hash. Requires `shard`",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "The latest epoch checkpoint",
@@ -82,6 +209,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GetLatestEpochCheckpointResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`include_committees` without `shard`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1366,6 +1503,49 @@
           }
         }
       },
+      "EpochCheckpointEntry": {
+        "type": "object",
+        "description": "A shard group's checkpoint of the end of an epoch: the commit proof of its end-of-epoch block, which the\ncommittee of `epoch` signed.\n\nEvery field but `checkpoint` is read out of `checkpoint` for convenience, and is untrusted until the checkpoint\nverifies against that committee.",
+        "required": [
+          "epoch",
+          "shard_group",
+          "checkpoint"
+        ],
+        "properties": {
+          "checkpoint": {
+            "type": "string",
+            "format": "byte",
+            "description": "CBOR-encoded `EpochCheckpoint`."
+          },
+          "epoch": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The epoch the checkpoint ends.",
+            "minimum": 0
+          },
+          "next_epoch_committee": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ValidatorSetCommittee",
+                "description": "The next epoch's committee for the requested shard, when `include_committees` was set and this indexer holds\nthat epoch's validator set."
+              }
+            ]
+          },
+          "next_epoch_validator_set_hash": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The validator set hash of the next epoch that the end-of-epoch block names, read from the header metadata\npreimage the checkpoint carries. Absent if the block names none."
+          },
+          "shard_group": {
+            "type": "object"
+          }
+        }
+      },
       "ErrorResponse": {
         "type": "object",
         "required": [
@@ -1374,6 +1554,17 @@
         "properties": {
           "error": {
             "type": "string"
+          }
+        }
+      },
+      "GetCommitteeResponse": {
+        "type": "object",
+        "required": [
+          "committee"
+        ],
+        "properties": {
+          "committee": {
+            "$ref": "#/components/schemas/ValidatorSetCommittee"
           }
         }
       },
@@ -1466,9 +1657,18 @@
             "description": "The current epoch, so a client can resolve the epoch-denominated fields below against a clock\nwithout a second request.",
             "minimum": 0
           },
+          "event_retention_epochs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "How many epochs past the epoch its transaction committed in this indexer retains an event\nbefore pruning it. `None` means events are retained indefinitely. Event queries and the event\nstream's catch-up answer no further back than this.",
+            "minimum": 0
+          },
           "index_gossiped_transactions": {
             "type": "boolean",
-            "description": "Whether this indexer stores transactions observed on the network gossip topic in addition to\nthose submitted directly to it. When false, a transaction submitted elsewhere is unknown to\nthis indexer until its receipt is synced.\n\nEven when true the stored set of transactions is best effort: an indexer misses whatever was\ngossiped while it was offline or while its inbound queue was full, and there is no backfill.\nTransaction receipts carry no such caveat — they are synced from network state and are\ncomplete back to `transaction_receipt_retention_epochs` — so a committed transaction always\nhas a receipt even when its body is missing here. Transactions that never committed get no receipt, so gossip is the only source\nfor them."
+            "description": "Whether this indexer stores transactions observed on the network gossip topic in addition to\nthose submitted directly to it. When false, a transaction submitted elsewhere is unknown to\nthis indexer until its receipt is synced.\n\nEven when true the stored set of transactions is best effort: an indexer misses whatever was\ngossiped while it was offline or while its inbound queue was full, and there is no backfill.\nTransaction receipts carry no such caveat — they are synced from network state and are\ncomplete back to `transaction_receipt_retention_epochs` — so a committed transaction always\nhas a receipt even when its body is missing here. Transactions that never committed get no receipt, so gossip\nis the only source for them."
           },
           "indexes_all_events": {
             "type": "boolean",
@@ -1495,15 +1695,6 @@
             "description": "How long after a shard was last confirmed synced this indexer keeps serving cached substates\nfor it, in seconds. Cached values are invalidated by the state transitions this indexer syncs\nrather than expired on a timer, so a served value trails the chain by the sync interval rather\nthan by this bound - which is what stops a validator that has stopped serving transitions from\nholding a stale value open indefinitely.",
             "minimum": 0
           },
-          "transaction_retention_epochs": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64",
-            "description": "How many epochs past its terminal epoch this indexer retains a transaction before pruning the\nrecord. `None` means transactions are retained indefinitely. A client paginating transaction\nhistory hits this floor rather than the start of the chain.",
-            "minimum": 0
-          },
           "transaction_receipt_retention_epochs": {
             "type": [
               "integer",
@@ -1513,13 +1704,13 @@
             "description": "How many epochs past the epoch its transaction committed in this indexer retains a transaction\nreceipt before pruning it. `None` means receipts are retained indefinitely. Longer than\n`transaction_retention_epochs`, so a retained transaction always has its receipt.",
             "minimum": 0
           },
-          "event_retention_epochs": {
+          "transaction_retention_epochs": {
             "type": [
               "integer",
               "null"
             ],
             "format": "int64",
-            "description": "How many epochs past the epoch its transaction committed in this indexer retains an event\nbefore pruning it. `None` means events are retained indefinitely. Event queries and the event\nstream's catch-up answer no further back than this.",
+            "description": "How many epochs past its terminal epoch this indexer retains a transaction before pruning the\nrecord. `None` means transactions are retained indefinitely. A client paginating transaction\nhistory hits this floor rather than the start of the chain.",
             "minimum": 0
           },
           "verify_substate_proofs": {
@@ -1539,7 +1730,7 @@
         ],
         "properties": {
           "checkpoint": {
-            "type": "object"
+            "$ref": "#/components/schemas/EpochCheckpointEntry"
           }
         }
       },
@@ -1895,8 +2086,9 @@
           "checkpoints": {
             "type": "array",
             "items": {
-              "type": "object"
-            }
+              "$ref": "#/components/schemas/EpochCheckpointEntry"
+            },
+            "description": "Ascending by epoch. Only checkpoints that carry their end-of-epoch header's metadata preimage are listed."
           }
         }
       },
@@ -2429,6 +2621,59 @@
           "StatusUnavailable",
           "InvalidProof"
         ]
+      },
+      "ValidatorSetCommittee": {
+        "type": "object",
+        "description": "One shard group's committee in an epoch, with the proof that it is that shard group's committee in the validator\nset `validator_set_hash` commits to.\n\nThe proof is only as good as the hash it is checked against: a verifier checks it against a validator set hash it\ntrusts, such as one a verified end-of-epoch checkpoint names, never against `validator_set_hash` alone.",
+        "required": [
+          "epoch",
+          "shard_group",
+          "validator_set_hash",
+          "members",
+          "proof"
+        ],
+        "properties": {
+          "epoch": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidatorSetCommitteeMember"
+            },
+            "description": "Ascending by public key."
+          },
+          "proof": {
+            "type": "string",
+            "format": "byte",
+            "description": "CBOR-encoded `ValidatorSetCommitteeProof`. It carries the members, and a verifier reads them from it."
+          },
+          "shard_group": {
+            "type": "object"
+          },
+          "validator_set_hash": {
+            "type": "string"
+          }
+        }
+      },
+      "ValidatorSetCommitteeMember": {
+        "type": "object",
+        "required": [
+          "public_key",
+          "vote_power"
+        ],
+        "properties": {
+          "public_key": {
+            "type": "string"
+          },
+          "vote_power": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
       },
       "ValidatorStatus": {
         "type": "object",

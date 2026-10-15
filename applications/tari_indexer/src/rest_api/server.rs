@@ -74,7 +74,8 @@ const REQUEST_BODY_LIMIT: usize = 4 * 1024 * 1024; // 4 MB
     handlers::transaction_events::sse_transaction_events,
     handlers::epoch_checkpoints::list_epoch_checkpoints,
     handlers::epoch_checkpoints::get_latest_epoch_checkpoint,
-    handlers::validators::list_validators
+    handlers::validators::list_validators,
+    handlers::committees::get_committee
 ))]
 pub struct ApiDoc;
 
@@ -217,6 +218,9 @@ fn api_routes(rate_limits: &IndexerRateLimitsConfig, sse_metrics: &SseConnection
             .route("/network/connections", get(handlers::network::get_connections))
             // GET /validators – per-IP rate limit (rate_limits.reads_rate)
             .route("/validators", get(handlers::validators::list_validators)
+                .route_layer(middleware::from_fn_with_state(reads_limiter.clone(), rate_limit_middleware)))
+            // GET /committees – per-IP rate limit (rate_limits.reads_rate)
+            .route("/committees", get(handlers::committees::get_committee)
                 .route_layer(middleware::from_fn_with_state(reads_limiter.clone(), rate_limit_middleware)))
             // ----------------------------------------------------------------
             // /substates/* – per-IP rate limit (rate_limits.substates_rate)
@@ -367,6 +371,7 @@ mod tests {
             "/resources/tari",
             "/templates/catalogue",
             "/validators",
+            "/committees?epoch=1&shard=1",
         ] {
             let mut limited = false;
             for _ in 0..ATTEMPTS {

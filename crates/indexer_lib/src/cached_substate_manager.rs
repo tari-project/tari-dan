@@ -1514,6 +1514,14 @@ mod tests {
             unimplemented!()
         }
 
+        async fn get_validator_set_committee_proof(
+            &self,
+            _: Epoch,
+            _: ShardGroup,
+        ) -> Result<tari_state_tree::ValidatorSetCommitteeProof, EpochManagerError> {
+            unimplemented!()
+        }
+
         async fn get_num_committees(&self, _: Epoch) -> Result<u32, EpochManagerError> {
             Ok(1)
         }

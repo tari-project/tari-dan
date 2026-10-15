@@ -608,17 +608,42 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         Ok(count > 0)
     }
 
+    fn epoch_checkpoint_with_header_metadata_exists_before(&mut self, epoch: Epoch) -> Result<bool, StorageError> {
+        const OPERATION: &str = "epoch_checkpoint_with_header_metadata_exists_before";
+        use crate::storage_sqlite::schema::epoch_checkpoints;
+        let count: i64 = epoch_checkpoints::table
+            .filter(epoch_checkpoints::epoch.lt(epoch.as_u64() as i64))
+            .filter(epoch_checkpoints::has_header_metadata.eq(true))
+            .limit(1)
+            .count()
+            .get_result(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("{OPERATION}: {}", e),
+            })?;
+        Ok(count > 0)
+    }
+
     fn epoch_checkpoint_get_all(
         &mut self,
         from_epoch: Epoch,
+        shard: Option<Shard>,
         limit: u64,
     ) -> Result<Vec<EpochCheckpoint>, StorageError> {
         const OPERATION: &str = "epoch_checkpoint_get_all";
         use crate::storage_sqlite::schema::epoch_checkpoints;
 
-        let rows: Vec<String> = epoch_checkpoints::table
+        let mut query = epoch_checkpoints::table
             .select(epoch_checkpoints::json_data)
             .filter(epoch_checkpoints::epoch.ge(from_epoch.as_u64() as i64))
+            .filter(epoch_checkpoints::has_header_metadata.eq(true))
+            .into_boxed();
+        if let Some(shard) = shard {
+            let shard = shard.as_u32() as i32;
+            query = query
+                .filter(epoch_checkpoints::shard_start.le(shard))
+                .filter(epoch_checkpoints::shard_end.ge(shard));
+        }
+        let rows: Vec<String> = query
             .order_by(epoch_checkpoints::epoch.asc())
             .limit(limit as i64)
             .load(self.connection())
@@ -629,12 +654,21 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         rows.into_iter().map(|json_data| deserialize_json(&json_data)).collect()
     }
 
-    fn epoch_checkpoint_get_latest(&mut self) -> Result<EpochCheckpoint, StorageError> {
+    fn epoch_checkpoint_get_latest(&mut self, shard: Option<Shard>) -> Result<EpochCheckpoint, StorageError> {
         const OPERATION: &str = "epoch_checkpoint_get_latest";
         use crate::storage_sqlite::schema::epoch_checkpoints;
 
-        let json_data: String = epoch_checkpoints::table
+        let mut query = epoch_checkpoints::table
             .select(epoch_checkpoints::json_data)
+            .filter(epoch_checkpoints::has_header_metadata.eq(true))
+            .into_boxed();
+        if let Some(shard) = shard {
+            let shard = shard.as_u32() as i32;
+            query = query
+                .filter(epoch_checkpoints::shard_start.le(shard))
+                .filter(epoch_checkpoints::shard_end.ge(shard));
+        }
+        let json_data: String = query
             .order_by(epoch_checkpoints::epoch.desc())
             .first(self.connection())
             .optional()

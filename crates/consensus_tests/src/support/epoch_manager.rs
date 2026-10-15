@@ -408,6 +408,14 @@ impl EpochManagerReader for TestEpochManager {
         ))
     }
 
+    async fn get_validator_set_committee_proof(
+        &self,
+        _epoch: Epoch,
+        _shard_group: ShardGroup,
+    ) -> Result<tari_state_tree::ValidatorSetCommitteeProof, EpochManagerError> {
+        unimplemented!()
+    }
+
     async fn get_num_committees(&self, _epoch: Epoch) -> Result<u32, EpochManagerError> {
         Ok(self.inner.lock().await.committees.len() as u32)
     }

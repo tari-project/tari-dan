@@ -161,9 +161,19 @@ pub trait IndexerStoreReadTransaction {
 
     // -------------------------------- Epoch Checkpoints -------------------------------- //
     fn epoch_checkpoint_exists(&mut self, shard_group: ShardGroup, epoch: Epoch) -> Result<bool, StorageError>;
-    fn epoch_checkpoint_get_all(&mut self, from_epoch: Epoch, limit: u64)
-    -> Result<Vec<EpochCheckpoint>, StorageError>;
-    fn epoch_checkpoint_get_latest(&mut self) -> Result<EpochCheckpoint, StorageError>;
+    /// True if a checkpoint of an epoch before `epoch` carries its header metadata preimage.
+    fn epoch_checkpoint_with_header_metadata_exists_before(&mut self, epoch: Epoch) -> Result<bool, StorageError>;
+    /// Checkpoints from `from_epoch` on, ascending by epoch, of every shard group or of the shard groups that contain
+    /// `shard`. Only checkpoints that carry their header metadata preimage are returned.
+    fn epoch_checkpoint_get_all(
+        &mut self,
+        from_epoch: Epoch,
+        shard: Option<Shard>,
+        limit: u64,
+    ) -> Result<Vec<EpochCheckpoint>, StorageError>;
+    /// The checkpoint of the latest epoch, of any shard group or of the shard group that contains `shard`, among those
+    /// that carry their header metadata preimage.
+    fn epoch_checkpoint_get_latest(&mut self, shard: Option<Shard>) -> Result<EpochCheckpoint, StorageError>;
 
     // -------------------------------- UTXOs -------------------------------- //
 
@@ -644,15 +654,18 @@ impl<T: IndexerStoreReader> ReadOnlyStore<T> {
     pub async fn epoch_checkpoint_get_all(
         &self,
         from_epoch: Epoch,
+        shard: Option<Shard>,
         limit: u64,
     ) -> Result<Vec<EpochCheckpoint>, StorageError> {
         self.inner
-            .with_read_tx(move |tx| tx.epoch_checkpoint_get_all(from_epoch, limit))
+            .with_read_tx(move |tx| tx.epoch_checkpoint_get_all(from_epoch, shard, limit))
             .await
     }
 
-    pub async fn epoch_checkpoint_get_latest(&self) -> Result<EpochCheckpoint, StorageError> {
-        self.inner.with_read_tx(|tx| tx.epoch_checkpoint_get_latest()).await
+    pub async fn epoch_checkpoint_get_latest(&self, shard: Option<Shard>) -> Result<EpochCheckpoint, StorageError> {
+        self.inner
+            .with_read_tx(move |tx| tx.epoch_checkpoint_get_latest(shard))
+            .await
     }
 
     pub async fn list_watched_substates(

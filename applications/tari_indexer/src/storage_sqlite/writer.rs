@@ -493,13 +493,16 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
         const OPERATION: &str = "insert_or_ignore_epoch_checkpoint";
         use crate::storage_sqlite::schema::epoch_checkpoints;
 
+        let shard_group = epoch_checkpoint
+            .checked_shard_group()
+            .expect("shard group should be valid");
         diesel::insert_into(epoch_checkpoints::table)
             .values((
                 epoch_checkpoints::epoch.eq(epoch_checkpoint.epoch().as_u64() as i64),
-                epoch_checkpoints::shard_group.eq(epoch_checkpoint
-                    .checked_shard_group()
-                    .expect("shard group should be valid")
-                    .to_parsable_string()),
+                epoch_checkpoints::shard_group.eq(shard_group.to_parsable_string()),
+                epoch_checkpoints::shard_start.eq(shard_group.start().as_u32() as i32),
+                epoch_checkpoints::shard_end.eq(shard_group.end().as_u32() as i32),
+                epoch_checkpoints::has_header_metadata.eq(epoch_checkpoint.header_metadata().is_some()),
                 epoch_checkpoints::json_data.eq(serialize_json(epoch_checkpoint)?),
             ))
             .on_conflict((epoch_checkpoints::epoch, epoch_checkpoints::shard_group))

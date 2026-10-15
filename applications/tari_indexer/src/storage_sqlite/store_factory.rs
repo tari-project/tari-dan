@@ -317,7 +317,7 @@ mod tests {
     };
     use tari_indexer_client::types::TransactionSource;
     use tari_indexer_lib::substate_cache::{FetchWatermark, SubstateCacheEntry, SubstateCacheEntryRef};
-    use tari_ootle_common_types::{Epoch, NodeHeight, ShardGroup, StateVersion, SubstateVersion};
+    use tari_ootle_common_types::{Epoch, NodeHeight, ShardGroup, StateVersion, SubstateVersion, shard::Shard};
     use tari_ootle_transaction::{Transaction, TransactionId};
     use tari_validator_node_rpc::client::SubstateResult;
 
@@ -2534,6 +2534,181 @@ mod tests {
         assert_eq!(
             read_proof_marker(&store, &newer, SubstateVersion::new(1)).await,
             Some(2)
+        );
+    }
+
+    /// A checkpoint whose header commits to a metadata preimage, which it carries when `carried`.
+    fn epoch_checkpoint(
+        epoch: u64,
+        shard_group: ShardGroup,
+        carried: bool,
+    ) -> tari_ootle_storage::consensus_models::EpochCheckpoint {
+        use tari_ootle_storage::consensus_models::{BlockHeaderMetadata, EndOfEpochCommand, EpochCheckpoint};
+
+        let header_metadata = BlockHeaderMetadata {
+            total_leader_fee: 0,
+            timestamp: 0,
+            extra_data: Default::default(),
+            timeout_certificate_id: None,
+            is_dummy: false,
+        };
+        use tari_sidechain::{CommandCommitProof, SidechainBlockCommitProof, SidechainBlockHeader};
+        use tari_state_tree::{TreeHash, compute_proof_for_hashes};
+
+        let key = TreeHash::new([1; 32]);
+        let (_, inclusion_proof) = compute_proof_for_hashes([key].into_iter(), key).unwrap();
+        let commit_proof = SidechainBlockCommitProof {
+            header: SidechainBlockHeader {
+                network: 0,
+                protocol_version: 0,
+                parent_id: FixedHash::zero(),
+                justify_id: FixedHash::zero(),
+                height: 0,
+                epoch,
+                epoch_hash: FixedHash::zero(),
+                shard_group: tari_sidechain::ShardGroup {
+                    start: shard_group.start().as_u32(),
+                    end_inclusive: shard_group.end().as_u32(),
+                },
+                proposed_by: Default::default(),
+                state_merkle_root: FixedHash::zero(),
+                command_merkle_root: FixedHash::zero(),
+                transaction_merkle_root: None,
+                signature: Default::default(),
+                accumulated_data: Default::default(),
+                metadata_hash: header_metadata.calculate_hash(),
+            },
+            proof_elements: vec![],
+        };
+        EpochCheckpoint::new(
+            CommandCommitProof::new(EndOfEpochCommand::new(FixedHash::zero()), commit_proof, inclusion_proof),
+            Default::default(),
+            carried.then_some(header_metadata),
+        )
+    }
+
+    async fn checkpoint_keys(
+        store: &SqliteIndexerStore,
+        from_epoch: Epoch,
+        shard: Option<Shard>,
+    ) -> Vec<(Epoch, ShardGroup)> {
+        crate::store::ReadOnlyStore::new(store.clone())
+            .epoch_checkpoint_get_all(from_epoch, shard, 100)
+            .await
+            .unwrap()
+            .iter()
+            .map(|checkpoint| (checkpoint.epoch(), checkpoint.checked_shard_group().unwrap()))
+            .collect()
+    }
+
+    /// A wallet follows one shard across epochs, through whichever shard group holds it as the number of committees
+    /// changes.
+    #[tokio::test]
+    async fn checkpoints_are_selected_by_the_shard_their_shard_group_contains() {
+        use crate::store::IndexerStoreWriteTransaction;
+
+        let (_dir, store) = temp_store().await;
+        let low = ShardGroup::new(1u32, 127u32);
+        let high = ShardGroup::new(128u32, 255u32);
+        let all = ShardGroup::new(1u32, 255u32);
+        store
+            .with_write_tx(move |tx| {
+                for checkpoint in [
+                    epoch_checkpoint(1, all, true),
+                    epoch_checkpoint(2, low, true),
+                    epoch_checkpoint(2, high, true),
+                    epoch_checkpoint(3, low, true),
+                    epoch_checkpoint(3, high, true),
+                ] {
+                    tx.insert_or_ignore_epoch_checkpoint(&checkpoint)?;
+                }
+                Ok::<_, StorageError>(())
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(
+            checkpoint_keys(&store, Epoch(0), Some(Shard::from(200u32))).await,
+            vec![(Epoch(1), all), (Epoch(2), high), (Epoch(3), high)]
+        );
+        assert_eq!(
+            checkpoint_keys(&store, Epoch(2), Some(Shard::from(127u32))).await,
+            vec![(Epoch(2), low), (Epoch(3), low)]
+        );
+        assert_eq!(checkpoint_keys(&store, Epoch(0), None).await.len(), 5);
+    }
+
+    /// A checkpoint without its header metadata preimage cannot name the next validator set to a wallet, so it is
+    /// never served, and once one with the preimage is stored, a later one without it was stripped.
+    #[tokio::test]
+    async fn only_checkpoints_carrying_their_header_metadata_are_served() {
+        use crate::store::{IndexerStoreReadTransaction, IndexerStoreWriteTransaction, ReadOnlyStore};
+
+        let (_dir, store) = temp_store().await;
+        let all = ShardGroup::new(1u32, 255u32);
+        store
+            .with_write_tx(move |tx| {
+                tx.insert_or_ignore_epoch_checkpoint(&epoch_checkpoint(1, all, false))?;
+                tx.insert_or_ignore_epoch_checkpoint(&epoch_checkpoint(2, all, true))?;
+                tx.insert_or_ignore_epoch_checkpoint(&epoch_checkpoint(3, all, false))
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(checkpoint_keys(&store, Epoch(0), None).await, vec![(Epoch(2), all)]);
+        let latest = ReadOnlyStore::new(store.clone())
+            .epoch_checkpoint_get_latest(None)
+            .await
+            .unwrap();
+        assert_eq!(latest.epoch(), Epoch(2));
+
+        let carried_before =
+            |epoch| store.with_read_tx(move |tx| tx.epoch_checkpoint_with_header_metadata_exists_before(Epoch(epoch)));
+        assert!(!carried_before(2).await.unwrap());
+        assert!(carried_before(3).await.unwrap());
+    }
+
+    /// An indexer upgrading in place selects the checkpoints it stored before their shard range and preimage were
+    /// recorded.
+    #[tokio::test]
+    async fn the_shard_range_migration_covers_stored_checkpoints() {
+        use diesel_migrations::MigrationHarness;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("indexer.db");
+        let high = ShardGroup::new(128u32, 255u32);
+        {
+            let mut conn = SqliteConnection::establish(path.to_str().unwrap()).unwrap();
+            for _ in 0..4 {
+                conn.run_next_migration(MIGRATIONS).unwrap();
+            }
+            for (epoch, carried) in [(4, true), (5, false)] {
+                sql_query("insert into epoch_checkpoints (epoch, shard_group, json_data) values (?, ?, ?)")
+                    .bind::<diesel::sql_types::BigInt, _>(epoch)
+                    .bind::<diesel::sql_types::Text, _>(high.to_parsable_string())
+                    .bind::<diesel::sql_types::Text, _>(
+                        crate::storage_sqlite::serialization::serialize_json(&epoch_checkpoint(
+                            epoch as u64,
+                            high,
+                            carried,
+                        ))
+                        .unwrap(),
+                    )
+                    .execute(&mut conn)
+                    .unwrap();
+            }
+        }
+
+        let store = SqliteIndexerStore::try_create(path).unwrap();
+
+        assert_eq!(
+            checkpoint_keys(&store, Epoch(0), Some(Shard::from(128u32))).await,
+            vec![(Epoch(4), high)]
+        );
+        assert!(
+            checkpoint_keys(&store, Epoch(0), Some(Shard::from(127u32)))
+                .await
+                .is_empty()
         );
     }
 }

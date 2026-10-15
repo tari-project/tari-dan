@@ -345,7 +345,6 @@ impl NetworkWideStateSync {
 
     /// Syncs `shard_group`'s checkpoints up to the epoch before `epoch`, from wherever it left off.
     /// Nothing to do once they are recorded, so this is run before every stream the group opens.
-    #[expect(clippy::too_many_lines)]
     async fn sync_group_checkpoints(
         &self,
         shard_group: ShardGroup,
@@ -438,41 +437,9 @@ impl NetworkWideStateSync {
                         details: format!("Checkpoint for shard group {} is not valid: {}", shard_group, e),
                     })?;
 
-            // TODO: we require historical committees to validate older checkpoints. Figure out the best way to
-            //       avoid needing the full historical validator data (e.g. VN merkle inclusion proof + historic L1
-            // block MR), or,       decide it is ok to require this data to be locally stored by all
-            // indexers. For now, to avoid       complexity that may be removed later, we'll skip
-            // validating them and only validate prev_epochs       checkpoint.
-            if checkpoint.epoch() == prev_epoch {
-                // Use the checkpoint's own shard group, not the iterator's: the network may have
-                // had a different shard-group structure at prev_epoch than the current epoch we
-                // are iterating, so the QC is signed by the committee for `checkpoint_shard_group`,
-                // not `shard_group`.
-                let committee = self
-                    .epoch_manager
-                    .get_committee_by_shard_group(checkpoint.epoch(), checkpoint_shard_group)
-                    .await?;
-                checkpoint
-                    .validate(checkpoint.epoch(), committee.quorum_threshold(), |pk| {
-                        Ok(committee.get_power_by_public_key(pk).unwrap_or_else(VotePower::zero))
-                    })
-                    .map_err(|e| NetworkStateSyncError::InvalidCheckpoint {
-                        details: format!(
-                            "Failed to validate checkpoint for shard group {}: {}",
-                            checkpoint_shard_group, e
-                        ),
-                    })?;
-            } else {
-                checkpoint
-                    .validate_well_formed()
-                    .map_err(|e| NetworkStateSyncError::InvalidCheckpoint {
-                        details: format!(
-                            "Failed to validate well-formedness of checkpoint for shard group {}: {}",
-                            checkpoint_shard_group, e
-                        ),
-                    })?;
-                debug!(target: LOG_TARGET, "🌍️ Skipping checkpoint for shard group {shard_group} with epoch {} (expected {})", checkpoint.epoch(), prev_epoch);
-            }
+            self.verify_checkpoint(&checkpoint, checkpoint_shard_group, prev_epoch)
+                .await?;
+            self.require_header_metadata(&checkpoint).await?;
 
             info!(target: LOG_TARGET, "🌍️ Inserting checkpoint for {}, shard group {}", checkpoint.epoch(), checkpoint_shard_group);
 
@@ -491,6 +458,89 @@ impl NetworkWideStateSync {
                     tx.key_value_set(Key::SyncProgress, sync_progress_snapshot)
                 })
                 .await?;
+        }
+        Ok(())
+    }
+
+    /// Verifies `checkpoint` against this indexer's own record of its epoch, before it is stored and served.
+    ///
+    /// The quorum certificate is checked against the committee the epoch manager assigned `shard_group` in the
+    /// checkpoint's epoch. `shard_group` is the checkpoint's own, which can differ from the shard group being synced
+    /// because shard groups change with the number of committees. The epoch manager holds the committees of every
+    /// epoch it has activated, so only a checkpoint of an epoch before its records has none, and is checked for form
+    /// only. A `prev_epoch` checkpoint must have its committee.
+    ///
+    /// The next epoch's validator set the checkpoint names, which the committee ratified, must be the one this indexer
+    /// assigned: an indexer that disagrees would serve committees the network does not run.
+    async fn verify_checkpoint(
+        &self,
+        checkpoint: &EpochCheckpoint,
+        shard_group: ShardGroup,
+        prev_epoch: Epoch,
+    ) -> Result<(), NetworkStateSyncError> {
+        let epoch = checkpoint.epoch();
+        let committee = if epoch == prev_epoch {
+            Some(
+                self.epoch_manager
+                    .get_committee_by_shard_group(epoch, shard_group)
+                    .await?,
+            )
+        } else {
+            self.epoch_manager
+                .get_committee_by_shard_group(epoch, shard_group)
+                .await
+                .optional()?
+        };
+        let Some(committee) = committee else {
+            debug!(target: LOG_TARGET, "🌍️ No committee for shard group {shard_group} in {epoch}: checking its checkpoint for form only");
+            return checkpoint
+                .validate_well_formed()
+                .map_err(|e| NetworkStateSyncError::InvalidCheckpoint {
+                    details: format!("Checkpoint for {epoch}, shard group {shard_group} is not well formed: {e}"),
+                });
+        };
+        checkpoint
+            .validate(epoch, committee.quorum_threshold(), |pk| {
+                Ok(committee.get_power_by_public_key(pk).unwrap_or_else(VotePower::zero))
+            })
+            .map_err(|e| NetworkStateSyncError::InvalidCheckpoint {
+                details: format!("Checkpoint for {epoch}, shard group {shard_group} is not valid: {e}"),
+            })?;
+
+        if let Some(committed) = checkpoint.next_epoch_validator_set_hash() {
+            let next_epoch = epoch + Epoch(1);
+            let local = self.epoch_manager.get_validator_set_hash(next_epoch).await?;
+            if local != committed {
+                return Err(NetworkStateSyncError::ValidatorSetDiverged {
+                    epoch: next_epoch,
+                    local,
+                    committed,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Rejects a checkpoint without its header metadata preimage once an earlier stored checkpoint carries one.
+    ///
+    /// The quorum certificate does not cover the preimage, so a peer can strip it, and a checkpoint stored without it
+    /// is never served. Checkpoints from before end-of-epoch blocks named the next validator set legitimately lack it,
+    /// so it is only required once the chain is known to carry it.
+    async fn require_header_metadata(&self, checkpoint: &EpochCheckpoint) -> Result<(), NetworkStateSyncError> {
+        if checkpoint.header_metadata().is_some() {
+            return Ok(());
+        }
+        let epoch = checkpoint.epoch();
+        let carried_earlier = self
+            .store
+            .with_read_tx(move |tx| tx.epoch_checkpoint_with_header_metadata_exists_before(epoch))
+            .await?;
+        if carried_earlier {
+            return Err(NetworkStateSyncError::InvalidCheckpoint {
+                details: format!(
+                    "Checkpoint for {epoch} carries no header metadata preimage, which earlier checkpoints carry"
+                ),
+            });
         }
         Ok(())
     }

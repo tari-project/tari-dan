@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 // pub mod eth_style;
+pub mod committees;
 pub mod epoch_checkpoints;
 pub mod indexer_events;
 pub mod misc;

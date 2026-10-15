@@ -20,7 +20,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateId, SubstateValue},
     transaction_receipt::{FinalizeOutcome, TransactionReceipt},
 };
-use tari_ootle_common_types::{Epoch, NumPreshards, ShardGroup, StateVersion, shard::Shard};
+use tari_ootle_common_types::{Epoch, NumPreshards, ShardGroup, StateVersion, ValidatorSetHash, shard::Shard};
 use tari_ootle_template_metadata::MetadataHash;
 use tari_ootle_transaction::{Network, PrunedTransaction, TransactionEnvelope, TransactionId};
 use tari_template_abi::TemplateDef;
@@ -1098,33 +1098,135 @@ pub struct ScheduledBurnRate {
     pub rate_bps: u16,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 pub struct ListEpochCheckpointsRequest {
     /// The epoch to start listing from (inclusive). Defaults to 0.
     #[cfg_attr(feature = "utoipa", schema(value_type = Option<u64>))]
     pub from_epoch: Option<Epoch>,
-    /// Maximum number of checkpoints to return (default: 20, max: 20).
+    /// Maximum number of checkpoints to return (default: 20, max: 100).
     pub limit: Option<u32>,
+    /// Only the checkpoint of the shard group that contains this shard, one per epoch. Shard groups change when the
+    /// number of committees does, so a fixed shard is what follows one line of committees across epochs.
+    #[cfg_attr(feature = "utoipa", schema(value_type = Option<u32>))]
+    pub shard: Option<Shard>,
+    /// Include, with each checkpoint, the next epoch's committee for the shard group that contains `shard`, proved
+    /// against the validator set hash the checkpoint names. Requires `shard`.
+    #[serde(default)]
+    pub include_committees: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 pub struct ListEpochCheckpointsResponse {
-    #[cfg_attr(feature = "ts", ts(type = "Array<Record<string, unknown>>"))]
-    #[cfg_attr(feature = "utoipa", schema(value_type = Vec<Object>))]
-    pub checkpoints: Vec<serde_json::Value>,
+    /// Ascending by epoch. Only checkpoints that carry their end-of-epoch header's metadata preimage are listed.
+    pub checkpoints: Vec<EpochCheckpointEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+pub struct GetLatestEpochCheckpointRequest {
+    /// The latest checkpoint of the shard group that contains this shard, rather than of any shard group.
+    #[cfg_attr(feature = "utoipa", schema(value_type = Option<u32>))]
+    pub shard: Option<Shard>,
+    /// Include the next epoch's committee for the shard group that contains `shard`, proved against the validator set
+    /// hash the checkpoint names. Requires `shard`.
+    #[serde(default)]
+    pub include_committees: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 pub struct GetLatestEpochCheckpointResponse {
-    #[cfg_attr(feature = "ts", ts(type = "Record<string, unknown>"))]
+    pub checkpoint: EpochCheckpointEntry,
+}
+
+/// A shard group's checkpoint of the end of an epoch: the commit proof of its end-of-epoch block, which the
+/// committee of `epoch` signed.
+///
+/// Every field but `checkpoint` is read out of `checkpoint` for convenience, and is untrusted until the checkpoint
+/// verifies against that committee.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+pub struct EpochCheckpointEntry {
+    /// The epoch the checkpoint ends.
+    #[cfg_attr(feature = "utoipa", schema(value_type = u64))]
+    pub epoch: Epoch,
     #[cfg_attr(feature = "utoipa", schema(value_type = Object))]
-    pub checkpoint: serde_json::Value,
+    pub shard_group: ShardGroup,
+    /// The validator set hash of the next epoch that the end-of-epoch block names, read from the header metadata
+    /// preimage the checkpoint carries. Absent if the block names none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional, type = "string"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>))]
+    pub next_epoch_validator_set_hash: Option<ValidatorSetHash>,
+    /// CBOR-encoded `EpochCheckpoint`.
+    #[serde(with = "ootle_serde::base64")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = String, format = Byte))]
+    pub checkpoint: Vec<u8>,
+    /// The next epoch's committee for the requested shard, when `include_committees` was set and this indexer holds
+    /// that epoch's validator set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub next_epoch_committee: Option<ValidatorSetCommittee>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+pub struct GetCommitteeRequest {
+    #[cfg_attr(feature = "utoipa", schema(value_type = u64))]
+    pub epoch: Epoch,
+    /// Any shard of the shard group whose committee to return.
+    #[cfg_attr(feature = "utoipa", schema(value_type = u32))]
+    pub shard: Shard,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+pub struct GetCommitteeResponse {
+    pub committee: ValidatorSetCommittee,
+}
+
+/// One shard group's committee in an epoch, with the proof that it is that shard group's committee in the validator
+/// set `validator_set_hash` commits to.
+///
+/// The proof is only as good as the hash it is checked against: a verifier checks it against a validator set hash it
+/// trusts, such as one a verified end-of-epoch checkpoint names, never against `validator_set_hash` alone.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+pub struct ValidatorSetCommittee {
+    #[cfg_attr(feature = "utoipa", schema(value_type = u64))]
+    pub epoch: Epoch,
+    #[cfg_attr(feature = "utoipa", schema(value_type = Object))]
+    pub shard_group: ShardGroup,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = String))]
+    pub validator_set_hash: ValidatorSetHash,
+    /// Ascending by public key.
+    pub members: Vec<ValidatorSetCommitteeMember>,
+    /// CBOR-encoded `ValidatorSetCommitteeProof`. It carries the members, and a verifier reads them from it.
+    #[serde(with = "ootle_serde::base64")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = String, format = Byte))]
+    pub proof: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+pub struct ValidatorSetCommitteeMember {
+    #[cfg_attr(feature = "utoipa", schema(value_type = String))]
+    pub public_key: RistrettoPublicKeyBytes,
+    pub vote_power: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
