@@ -1161,16 +1161,23 @@ mod tests {
 
     /// The shard root a checkpoint commits to once `versions` are applied in order.
     fn root_after(versions: &Versions) -> TreeHash {
+        root_after_at(versions, |_| EPOCH)
+    }
+
+    /// The shard root once `versions` are applied in order, each committed at the epoch `epoch_of` gives it. A full
+    /// value's hash binds the epoch it is created in.
+    fn root_after_at(versions: &Versions, epoch_of: impl Fn(Version) -> Epoch) -> TreeHash {
         let mut store = MemoryTreeStore::new();
         let mut tree = SpreadPrefixStateTree::new(&mut store);
         let mut prev = None;
         let mut root = SPARSE_MERKLE_PLACEHOLDER_HASH;
         for (version, updates) in versions {
+            let epoch = epoch_of(*version);
             root = tree
                 .put_substate_changes(
                     prev,
                     *version,
-                    updates.iter().map(|u| extract_tree_change(NETWORK, u, EPOCH)),
+                    updates.iter().map(|u| extract_tree_change(NETWORK, u, epoch)),
                 )
                 .unwrap();
             prev = Some(*version);
@@ -1206,12 +1213,13 @@ mod tests {
         checkpoint: &Versions,
         responses: Vec<Result<SyncStateResponse, RpcStatus>>,
     ) -> Result<Option<Version>, RpcStateSyncError> {
-        sync_at(store, checkpoint, EPOCH, responses).await
+        sync_at(store, checkpoint, root_after(checkpoint), EPOCH, responses).await
     }
 
     async fn sync_at<TStore: StateStore>(
         store: &TStore,
         checkpoint: &Versions,
+        checkpoint_root: TreeHash,
         checkpoint_epoch: Epoch,
         responses: Vec<Result<SyncStateResponse, RpcStatus>>,
     ) -> Result<Option<Version>, RpcStateSyncError> {
@@ -1220,7 +1228,7 @@ mod tests {
             NUM_PRESHARDS,
             store,
             shard(),
-            root_after(checkpoint),
+            checkpoint_root,
             version_after(checkpoint),
             checkpoint_epoch,
             UP_VERSION_LOOKBACK,
@@ -1435,7 +1443,13 @@ mod tests {
             (3, vec![destroy(HONEST)]),
         ];
 
-        sync_at(&store, &checkpoint, checkpoint_epoch, vec![
+        let checkpoint_root = root_after_at(&checkpoint, |version| match version {
+            1 => EPOCH,
+            2 => middle_epoch,
+            _ => checkpoint_epoch,
+        });
+
+        sync_at(&store, &checkpoint, checkpoint_root, checkpoint_epoch, vec![
             chunk(1, EPOCH, false, vec![create(HONEST)]),
             chunk(2, middle_epoch, true, vec![create(2)]),
             chunk(2, middle_epoch, false, vec![create(3)]),
