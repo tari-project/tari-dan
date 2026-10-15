@@ -12,7 +12,7 @@ use tari_consensus::{
     messages::HotstuffMessage,
 };
 use tari_consensus_types::{Decision, LeafBlock};
-use tari_ootle_common_types::{Epoch, NodeHeight, optional::Optional};
+use tari_ootle_common_types::{Epoch, NodeHeight, ValidatorSetHash, optional::Optional};
 use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
@@ -226,63 +226,6 @@ async fn epoch_change_unobserved_next_hash_is_not_voted() {
     test.assert_clean_shutdown().await;
 }
 
-/// A validator whose oracle has scanned the next epoch's boundary block, but has not yet applied the
-/// `EpochChanged` event that activates it, votes for the `EndEpoch`.
-///
-/// This is the counterpart to `epoch_change_unobserved_next_hash_is_not_voted`: there the validator
-/// cannot see the boundary and must abstain; here it can, and abstaining would be a self-inflicted
-/// stall. The two gates are deliberately different questions — "has the epoch ended?" and "can I
-/// verify the hash this block proposes?" — and the boundary block answers both.
-///
-/// The window is real on a lagging node: the scanner writes headers as it crosses them, while the
-/// `EpochChanged` those scans produce queue behind epoch activations that each reassign committees.
-///
-/// The test caps only `current_epoch()` for validator "1", leaving `get_epoch_hash(Epoch(2))`
-/// answering, and asserts every validator — including the capped one — reaches `Epoch(2)`.
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn epoch_change_observed_boundary_is_voted_before_activation() {
-    setup_logger();
-    let mut test = Test::builder()
-        .modify_config(|cfg| {
-            cfg.epoch_end_grace_period = Duration::from_millis(10);
-        })
-        .modify_consensus_constants(|c| {
-            c.pacemaker_block_time = Duration::from_secs(2);
-        })
-        .with_test_timeout(Duration::from_secs(60))
-        .add_committee(0, vec!["1", "2", "3", "4"])
-        .start()
-        .await;
-
-    let unactivated_addr = TestAddress::new("1");
-
-    test.start_epoch(Epoch(1)).await;
-
-    for _ in 0..3 {
-        test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
-    }
-
-    // Cap only `current_epoch()`. Validator "1"'s oracle still answers `get_epoch_hash(Epoch(2))` —
-    // it has the boundary block — but `em_epoch > current_epoch` is false, so its vote can only come
-    // from that observation.
-    test.get_validator(&unactivated_addr)
-        .epoch_manager
-        .set_oracle_current_epoch_cap(Epoch(1));
-
-    test.start_epoch(Epoch(2)).await;
-
-    for _ in 0..3 {
-        test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
-    }
-
-    wait_for_all_validators_at_epoch(&mut test, Epoch(2), Duration::from_secs(30)).await;
-
-    log::info!("✅ validator with an observed but unactivated boundary voted the EOE and advanced with the committee");
-
-    test.stop();
-    test.assert_clean_shutdown().await;
-}
-
 /// A validator that deferred its end-of-epoch processing must resume as soon as its oracle has the
 /// epoch row — not when the whole base-layer catch-up finishes.
 ///
@@ -295,9 +238,10 @@ async fn epoch_change_observed_boundary_is_voted_before_activation() {
 /// for the rest of the scan — a wait that scales with the scanner's lag, not with consensus lag.
 ///
 /// The test:
-///   1. Gives validator "1" an observed boundary for `Epoch(2)` but no activated epoch — the exact mid-catch-up state:
-///      it can ratify the `EndEpoch` hash, so it votes and commits the EOE, but `get_epoch_hash(Epoch(2))` is
-///      `NoEpochFound`, so it defers.
+///   1. Gives validator "1" an observed boundary for `Epoch(2)` but no activated epoch — the exact mid-catch-up state.
+///      It has no `Epoch(2)` validator set to ratify, so it abstains on the EOE, and the other three commit it. It
+///      commits the EOE too, through the blocks that follow, but `get_epoch_hash(Epoch(2))` is `NoEpochFound`, so it
+///      defers.
 ///   2. Asserts the deferral: EOE committed in `Epoch(1)`, no leaf in `Epoch(2)`. This is correct behaviour, not the
 ///      bug.
 ///   3. Makes `get_epoch_hash(Epoch(2))` start answering — standing in for `activate_epoch` running between scan
@@ -332,7 +276,8 @@ async fn epoch_change_deferred_eoe_resumes_without_scan_completion() {
     }
 
     // The mid-catch-up state, which needs both halves set independently:
-    //   - the oracle has scanned the Epoch(2) boundary, so the node can ratify the EndEpoch hash and votes;
+    //   - the oracle has scanned the Epoch(2) boundary, so the node accepts the EndEpoch proposal, though it abstains
+    //     because it has no Epoch(2) validator set;
     //   - the epoch is not activated, so `get_epoch_hash(Epoch(2))` is `NoEpochFound` and `process_end_of_epoch` defers
     //     after the EOE commits.
     let deferring = test.get_validator(&deferring_addr);
@@ -347,7 +292,7 @@ async fn epoch_change_deferred_eoe_resumes_without_scan_completion() {
 
     wait_for_validators_at_epoch(&mut test, &deferring_addr, Epoch(2), Duration::from_secs(45)).await;
 
-    // The deferring validator observed the boundary, so it ratifies and votes: the EOE commits on it too. Its
+    // The other three commit the EOE, and the deferring validator commits it too through the blocks that follow. Its
     // commit lands independently of the other three, so it must be waited for rather than read once.
     wait_for_committed_epoch_end(&mut test, &deferring_addr, Epoch(1), Duration::from_secs(30)).await;
 
@@ -382,6 +327,237 @@ async fn epoch_change_deferred_eoe_resumes_without_scan_completion() {
 
     test.stop();
     test.assert_clean_shutdown().await;
+}
+
+/// A validator whose epoch oracle assigned the next epoch different committees than its peers did must neither
+/// lend its vote to the end-of-epoch block nor open the next epoch on its own committees.
+///
+/// The end-of-epoch block names the next epoch's validator set hash, and voters ratify it against the set they
+/// assigned themselves. A node that assigned a different set refuses the block, so the set the network hands over
+/// to is the one a quorum agrees on. Once the block commits anyway, that node would run the next epoch on
+/// committees nobody else runs, so it keeps the end-of-epoch pending and sits the epoch out.
+///
+/// The test:
+///   1. Gives validator "1" a validator set hash for `Epoch(2)` that its three peers do not share.
+///   2. Drives an epoch change. The three peers ratify and commit the end-of-epoch block (3 = quorum) and open
+///      `Epoch(2)`.
+///   3. Waits for validator "1" to commit the end-of-epoch block too, and asserts it did not open `Epoch(2)`.
+///   4. Brings validator "1"'s set into line, standing in for an oracle correction, and asserts it then opens
+///      `Epoch(2)` from the pending end-of-epoch block.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn epoch_change_divergent_validator_set_is_not_opened() {
+    setup_logger();
+    let mut test = Test::builder()
+        .modify_config(|cfg| {
+            cfg.epoch_end_grace_period = Duration::from_millis(10);
+        })
+        .modify_consensus_constants(|c| {
+            c.pacemaker_block_time = Duration::from_secs(2);
+        })
+        .with_test_timeout(Duration::from_secs(120))
+        .add_committee(0, vec!["1", "2", "3", "4"])
+        .start()
+        .await;
+
+    let divergent_addr = TestAddress::new("1");
+
+    test.start_epoch(Epoch(1)).await;
+
+    for _ in 0..3 {
+        test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
+    }
+
+    test.get_validator(&divergent_addr)
+        .epoch_manager
+        .set_validator_set_hash(ValidatorSetHash::from_array([0x0d; 32]));
+
+    test.start_epoch(Epoch(2)).await;
+
+    for _ in 0..3 {
+        test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
+    }
+
+    wait_for_validators_at_epoch(&mut test, &divergent_addr, Epoch(2), Duration::from_secs(45)).await;
+    wait_for_leaf_or_committed_epoch_end(&mut test, &divergent_addr, Epoch(1), Duration::from_secs(30)).await;
+
+    // Give the divergent node time to act on the committed end-of-epoch block, including a periodic retry.
+    let drain_until = Instant::now() + Duration::from_secs(12);
+    while Instant::now() < drain_until {
+        let _unused = tokio::time::timeout(Duration::from_millis(200), test.on_block_committed()).await;
+    }
+
+    let divergent = test.get_validator(&divergent_addr);
+    let leaf_at_2 = divergent
+        .state_store
+        .with_read_tx(|tx| LeafBlock::get(tx, Epoch(2)))
+        .optional()
+        .unwrap();
+    assert!(
+        leaf_at_2.is_none(),
+        "a validator whose validator set differs from the committed one must not open Epoch(2); got {leaf_at_2:?}"
+    );
+    assert_eq!(divergent._current_view.get_epoch(), Epoch(1));
+
+    log::info!("✅ divergent validator committed the end of Epoch(1) and did not open Epoch(2)");
+
+    test.get_validator(&divergent_addr)
+        .epoch_manager
+        .clear_validator_set_hash();
+
+    wait_for_leaf_at_epoch(&mut test, &divergent_addr, Epoch(2), Duration::from_secs(60)).await;
+
+    log::info!("✅ once its validator set matched the committed one, the validator opened Epoch(2)");
+
+    test.stop();
+    test.assert_clean_shutdown().await;
+}
+
+/// Validators split 2/2 on the next epoch's validator set must not commit the end-of-epoch block, and commit it
+/// once they agree. Each half refuses the block the other half proposes, so neither set reaches quorum.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn epoch_change_validator_set_split_is_not_committed() {
+    setup_logger();
+    let mut test = Test::builder()
+        .modify_config(|cfg| {
+            cfg.epoch_end_grace_period = Duration::from_millis(10);
+        })
+        .modify_consensus_constants(|c| {
+            c.pacemaker_block_time = Duration::from_secs(1);
+        })
+        .with_test_timeout(Duration::from_secs(120))
+        // 4 validators: quorum is 3, so a 2/2 split can never reach it.
+        .add_committee(0, vec!["1", "2", "3", "4"])
+        .start()
+        .await;
+
+    test.start_epoch(Epoch(1)).await;
+    for _ in 0..3 {
+        test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
+    }
+
+    for addr in ["1", "2"] {
+        test.get_validator(&TestAddress::new(addr))
+            .epoch_manager
+            .set_validator_set_hash(ValidatorSetHash::from_array([0x0a; 32]));
+    }
+
+    test.start_epoch(Epoch(2)).await;
+
+    drain_blocks(&mut test, Duration::from_secs(12)).await;
+    assert_no_validator_opened(&test, Epoch(2));
+    log::info!("✅ committee split on the Epoch(2) validator set: no end-of-epoch block reached quorum");
+
+    for addr in ["1", "2"] {
+        test.get_validator(&TestAddress::new(addr))
+            .epoch_manager
+            .clear_validator_set_hash();
+    }
+
+    wait_for_all_validators_at_epoch(&mut test, Epoch(2), Duration::from_secs(45)).await;
+
+    test.stop();
+    test.assert_clean_shutdown().await;
+}
+
+/// A validator that has observed the next epoch's boundary but not yet assigned its committees cannot ratify the
+/// validator set an end-of-epoch block names, so it abstains. With two of four abstaining, the block cannot commit
+/// until they assign their committees.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn epoch_change_unknown_validator_set_is_not_voted() {
+    setup_logger();
+    let mut test = Test::builder()
+        .modify_config(|cfg| {
+            cfg.epoch_end_grace_period = Duration::from_millis(10);
+        })
+        .modify_consensus_constants(|c| {
+            c.pacemaker_block_time = Duration::from_secs(1);
+        })
+        .with_test_timeout(Duration::from_secs(120))
+        .add_committee(0, vec!["1", "2", "3", "4"])
+        .start()
+        .await;
+
+    test.start_epoch(Epoch(1)).await;
+    for _ in 0..3 {
+        test.send_transaction_to_all(Decision::Commit, 1, 1, 1).await;
+    }
+
+    // Each of these can ratify the Epoch(2) boundary hash, but has not activated Epoch(2), so has no validator set
+    // for it.
+    for addr in ["1", "2"] {
+        let epoch_manager = &test.get_validator(&TestAddress::new(addr)).epoch_manager;
+        epoch_manager.set_oracle_observed_boundary(Epoch(2));
+        epoch_manager.set_oracle_visible_epoch(Epoch(1));
+    }
+
+    test.start_epoch(Epoch(2)).await;
+
+    drain_blocks(&mut test, Duration::from_secs(12)).await;
+    assert_no_validator_opened(&test, Epoch(2));
+    log::info!("✅ two validators without an Epoch(2) validator set abstained: no end-of-epoch block reached quorum");
+
+    for addr in ["1", "2"] {
+        test.get_validator(&TestAddress::new(addr))
+            .epoch_manager
+            .clear_oracle_visible_epoch();
+    }
+
+    wait_for_all_validators_at_epoch(&mut test, Epoch(2), Duration::from_secs(45)).await;
+
+    test.stop();
+    test.assert_clean_shutdown().await;
+}
+
+async fn drain_blocks(test: &mut Test, duration: Duration) {
+    let drain_until = Instant::now() + duration;
+    while Instant::now() < drain_until {
+        let _unused = tokio::time::timeout(Duration::from_millis(200), test.on_block_committed()).await;
+    }
+}
+
+/// Asserts that no validator has opened `epoch`: each is still in the epoch before it, with no leaf in `epoch`.
+fn assert_no_validator_opened(test: &Test, epoch: Epoch) {
+    for vn in test.validators_iter() {
+        assert!(
+            vn._current_view.get_epoch() < epoch,
+            "validator {} must not have reached {epoch}",
+            vn.address
+        );
+        let leaf = vn
+            .state_store
+            .with_read_tx(|tx| LeafBlock::get(tx, epoch))
+            .optional()
+            .unwrap();
+        assert!(
+            leaf.is_none(),
+            "validator {} must not have a leaf in {epoch}; got {leaf:?}",
+            vn.address
+        );
+    }
+}
+
+/// Waits until `addr` has committed the `EndEpoch` block in `epoch` or has opened the epoch after it, whichever
+/// comes first.
+async fn wait_for_leaf_or_committed_epoch_end(test: &mut Test, addr: &TestAddress, epoch: Epoch, timeout: Duration) {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        let _unused = tokio::time::timeout(Duration::from_millis(100), test.on_block_committed()).await;
+
+        let done = test
+            .get_validator(addr)
+            .state_store
+            .with_read_tx(|tx| {
+                if LeafBlock::get(tx, epoch + Epoch(1)).optional()?.is_some() {
+                    return Ok(true);
+                }
+                chain_has_committed_epoch_end(tx, epoch)
+            })
+            .unwrap();
+        if done {
+            return;
+        }
+    }
+    panic!("Timed out waiting for {addr} to commit the end of {epoch}");
 }
 
 /// Waits until `addr` has a leaf block in `epoch`, i.e. it created that epoch's genesis.

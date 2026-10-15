@@ -8,7 +8,7 @@ use tari_common_types::types::FixedHash;
 use tari_consensus_types::{Decision, LastVoted, LeafBlock, PcId, ProposalCertificate};
 use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_engine_types::commit_result::{AbortReason, RejectReason};
-use tari_ootle_common_types::{Epoch, ShardGroup, committee::CommitteeInfo, optional::Optional};
+use tari_ootle_common_types::{Epoch, ShardGroup, ValidatorSetHash, committee::CommitteeInfo, optional::Optional};
 use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
@@ -78,6 +78,15 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::on_ready_to_vote_on_local_block";
 
+/// This node's own view of the epoch after the one a block is in, against which an end-of-epoch block is ratified.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LocalNextEpochView {
+    /// The next epoch's boundary hash, or `None` if this node's oracle has not observed it.
+    pub epoch_hash: Option<FixedHash>,
+    /// The next epoch's validator set hash, or `None` if this node has not assigned the next epoch's committees.
+    pub validator_set_hash: Option<ValidatorSetHash>,
+}
+
 #[derive(Debug, Clone)]
 pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     local_validator_pk: RistrettoPublicKey,
@@ -116,10 +125,9 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
         proposer_claim_public_key_bytes: &RistrettoPublicKeyBytes,
         can_propose_epoch_end: bool,
-        // The local oracle's view of the next epoch's boundary hash, if it has observed it. Used to
-        // ratify the hash carried in an EndEpoch command before voting. `None` means our oracle has
-        // not yet crossed the boundary, so we cannot ratify and must abstain.
-        expected_next_epoch_hash: Option<FixedHash>,
+        // Used to ratify what an end-of-epoch block commits the next epoch to before voting. Where this node does
+        // not know a value, it cannot ratify it and abstains.
+        local_next_epoch: LocalNextEpochView,
         change_set: &mut ProposedBlockChangeSet,
     ) -> Result<BlockDecision, HotStuffError> {
         let _timer =
@@ -179,7 +187,7 @@ where TConsensusSpec: ConsensusSpec
                 local_committee_info,
                 proposer_claim_public_key_bytes,
                 can_propose_epoch_end,
-                expected_next_epoch_hash,
+                local_next_epoch,
                 change_set,
             )?;
         } else {
@@ -249,7 +257,7 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
         proposer_claim_public_key_bytes: &RistrettoPublicKeyBytes,
         can_propose_epoch_end: bool,
-        expected_next_epoch_hash: Option<FixedHash>,
+        local_next_epoch: LocalNextEpochView,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
     ) -> Result<(), HotStuffError> {
         if let Some(reason) = check_no_commands_after_epoch_end(tx, parent, block)? {
@@ -410,7 +418,7 @@ where TConsensusSpec: ConsensusSpec
                     // by gating on the LOCAL oracle (not on the majority signal that may have set
                     // can_propose_epoch_end above), a node never lends quorum to a hash it has not
                     // itself observed. If our oracle has not crossed the boundary, abstain until it has.
-                    match expected_next_epoch_hash {
+                    match local_next_epoch.epoch_hash {
                         Some(local) if local == *atom.next_epoch_hash() => {},
                         Some(local) => {
                             warn!(
@@ -468,6 +476,18 @@ where TConsensusSpec: ConsensusSpec
                             proposed_block_change_set.set_no_vote(NoVoteReason::EndOfEpochBurnRateMissing);
                             return Ok(());
                         },
+                    }
+
+                    // Ratify the next epoch's validator set the same way. The quorum committing this block is what
+                    // hands the chain over to the next epoch's committees, so a node only lends its vote to a set
+                    // it has assigned itself.
+                    if let Some(reason) = check_next_epoch_validator_set(
+                        local_next_epoch.validator_set_hash,
+                        block.next_epoch_validator_set_hash(),
+                    ) {
+                        warn!(target: LOG_TARGET, "❌ NO VOTE: {reason} (block {})", block.id());
+                        proposed_block_change_set.set_no_vote(reason);
+                        return Ok(());
                     }
 
                     continue;
@@ -1963,6 +1983,22 @@ fn exceeds_block_validation_weight(
     num_transaction_commands > 1 && block_execution_weight > max_validation_weight
 }
 
+/// Ratifies the next epoch's validator set hash that an end-of-epoch block names against this node's own. A block
+/// that names none is refused whatever this node knows, and a node that has not assigned the next epoch's committees
+/// abstains.
+fn check_next_epoch_validator_set(
+    local: Option<ValidatorSetHash>,
+    proposed: Option<ValidatorSetHash>,
+) -> Option<NoVoteReason> {
+    let Some(proposed) = proposed else {
+        return Some(NoVoteReason::EndOfEpochValidatorSetMissing);
+    };
+    let Some(local) = local else {
+        return Some(NoVoteReason::EndOfEpochValidatorSetNotKnown);
+    };
+    (local != proposed).then_some(NoVoteReason::EndOfEpochValidatorSetMismatch { local, proposed })
+}
+
 /// Consensus rule: the end-of-epoch block is the last block of its epoch to carry commands. The epoch checkpoint and
 /// the next epoch's genesis are both built from its state, so the blocks that extend it, up to and including the one
 /// that commits it, must leave that state as it is. This holds whether or not the end-of-epoch block has committed: a
@@ -2120,6 +2156,52 @@ mod tests {
         fn all_accept_after_every_shard_group_accepted_is_voted_for() {
             let reason = check_ready_to_leave_stage(&local_accepted_record(true), &local_block(), "AllAccept");
             assert!(reason.is_none(), "unexpected reason: {reason:?}");
+        }
+    }
+
+    mod check_next_epoch_validator_set {
+        use super::*;
+
+        fn hash(byte: u8) -> ValidatorSetHash {
+            ValidatorSetHash::from_array([byte; 32])
+        }
+
+        #[test]
+        fn a_matching_set_is_voted_for() {
+            assert!(check_next_epoch_validator_set(Some(hash(1)), Some(hash(1))).is_none());
+        }
+
+        #[test]
+        fn a_different_set_is_refused_naming_both() {
+            let reason = check_next_epoch_validator_set(Some(hash(1)), Some(hash(2)));
+            assert!(
+                matches!(
+                    reason,
+                    Some(NoVoteReason::EndOfEpochValidatorSetMismatch { local, proposed })
+                        if local == hash(1) && proposed == hash(2)
+                ),
+                "{reason:?}"
+            );
+        }
+
+        #[test]
+        fn an_unknown_local_set_abstains() {
+            let reason = check_next_epoch_validator_set(None, Some(hash(1)));
+            assert!(
+                matches!(reason, Some(NoVoteReason::EndOfEpochValidatorSetNotKnown)),
+                "{reason:?}"
+            );
+        }
+
+        #[test]
+        fn a_block_without_a_set_is_refused_whatever_this_node_knows() {
+            for local in [Some(hash(1)), None] {
+                let reason = check_next_epoch_validator_set(local, None);
+                assert!(
+                    matches!(reason, Some(NoVoteReason::EndOfEpochValidatorSetMissing)),
+                    "{reason:?}"
+                );
+            }
         }
     }
 

@@ -26,7 +26,7 @@ use borsh::BorshSerialize;
 use minicbor::{CborLen, Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-use crate::MaxSizeBytes;
+use crate::{MaxSizeBytes, ValidatorSetHash};
 
 const MAX_DATA_SIZE: usize = 256;
 type ExtraFieldValue = MaxSizeBytes<MAX_DATA_SIZE>;
@@ -49,6 +49,11 @@ pub enum ExtraFieldKey {
     /// next epoch's genesis block carries it into [`Self::ExhaustBurnRate`].
     #[n(2)]
     NextEpochExhaustBurnRate = 0x02,
+    /// The [`ValidatorSetHash`] of the next epoch's committees, 32 bytes. Present on an end-of-epoch
+    /// block only: the quorum committing that block ratifies it, which makes each end-of-epoch block
+    /// a signed handover from one epoch's committees to the next.
+    #[n(3)]
+    NextEpochValidatorSetHash = 0x03,
     #[n(255)]
     Custom = 0xff,
 }
@@ -101,6 +106,21 @@ impl ExtraData {
         let bytes: [u8; 2] = self.get(key)?.as_ref().try_into().ok()?;
         Some(u16::from_be_bytes(bytes))
     }
+
+    /// Records a validator set hash under `key` as its 32 bytes.
+    pub fn insert_validator_set_hash(&mut self, key: ExtraFieldKey, hash: &ValidatorSetHash) -> &mut Self {
+        self.insert(
+            key,
+            hash.as_bytes().try_into().expect("32 bytes is within MAX_DATA_SIZE"),
+        )
+    }
+
+    /// The validator set hash under `key`, or `None` if the key is absent or does not hold exactly 32 bytes.
+    /// A malformed value reads as absent for the reason [`Self::get_bps`] gives.
+    pub fn get_validator_set_hash(&self, key: &ExtraFieldKey) -> Option<ValidatorSetHash> {
+        let bytes: [u8; 32] = self.get(key)?.as_ref().try_into().ok()?;
+        Some(ValidatorSetHash::from_array(bytes))
+    }
 }
 
 #[cfg(test)]
@@ -117,6 +137,36 @@ mod tests {
                 &bps.to_be_bytes()
             );
             assert_eq!(extra_data.get_bps(&ExtraFieldKey::ExhaustBurnRate), Some(bps));
+        }
+    }
+
+    #[test]
+    fn a_validator_set_hash_round_trips_through_its_bytes() {
+        let hash = ValidatorSetHash::from_array([7; 32]);
+        let mut extra_data = ExtraData::new();
+        extra_data.insert_validator_set_hash(ExtraFieldKey::NextEpochValidatorSetHash, &hash);
+        assert_eq!(
+            extra_data
+                .get(&ExtraFieldKey::NextEpochValidatorSetHash)
+                .unwrap()
+                .as_ref(),
+            &[7; 32]
+        );
+        assert_eq!(
+            extra_data.get_validator_set_hash(&ExtraFieldKey::NextEpochValidatorSetHash),
+            Some(hash)
+        );
+    }
+
+    #[test]
+    fn a_validator_set_hash_that_is_not_32_bytes_reads_as_none() {
+        for bytes in [[].as_slice(), [1; 31].as_slice(), [1; 33].as_slice()] {
+            let mut extra_data = ExtraData::new();
+            extra_data.insert(ExtraFieldKey::NextEpochValidatorSetHash, bytes.try_into().unwrap());
+            assert_eq!(
+                extra_data.get_validator_set_hash(&ExtraFieldKey::NextEpochValidatorSetHash),
+                None
+            );
         }
     }
 

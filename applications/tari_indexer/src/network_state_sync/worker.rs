@@ -1751,6 +1751,7 @@ mod tests {
             EpochCheckpoint::new(
                 CommandCommitProof::new(EndOfEpochCommand::new(FixedHash::zero()), commit_proof, inclusion_proof),
                 IndexMap::new(),
+                None,
             )
         }
 

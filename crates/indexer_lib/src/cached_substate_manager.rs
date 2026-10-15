@@ -1282,7 +1282,10 @@ mod tests {
 
     use tari_engine_types::{non_fungible::NonFungibleContainer, substate::SubstateValue};
     use tari_epoch_manager::{EpochManagerError, EpochManagerEvent};
-    use tari_ootle_common_types::committee::{CommitteeInfo, CommitteeMember};
+    use tari_ootle_common_types::{
+        ValidatorSetHash,
+        committee::{CommitteeInfo, CommitteeMember},
+    };
     use tari_ootle_storage::global::models::ValidatorNode;
     use tari_ootle_transaction::{Transaction, TransactionId};
     use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
@@ -1503,6 +1506,10 @@ mod tests {
         }
 
         async fn get_epoch_hash(&self, _: Epoch) -> Result<FixedHash, EpochManagerError> {
+            unimplemented!()
+        }
+
+        async fn get_validator_set_hash(&self, _: Epoch) -> Result<ValidatorSetHash, EpochManagerError> {
             unimplemented!()
         }
 

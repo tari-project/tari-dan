@@ -110,6 +110,7 @@ fn checkpoint_of(
             inclusion_proof,
         ),
         summary,
+        None,
     )
 }
 

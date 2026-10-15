@@ -11,6 +11,7 @@ use tari_ootle_common_types::{
     Epoch,
     ShardGroup,
     SubstateAddress,
+    ValidatorSetHash,
     VotePower,
     committee::{Committee, CommitteeInfo},
 };
@@ -33,6 +34,10 @@ pub enum EpochManagerRequest<TAddr> {
     },
     GetCurrentEpochHash {
         reply: Reply<FixedHash>,
+    },
+    GetValidatorSetHash {
+        epoch: Epoch,
+        reply: Reply<ValidatorSetHash>,
     },
     GetValidatorNodeByPublicKey {
         epoch: Epoch,

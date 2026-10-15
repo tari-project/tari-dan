@@ -18,13 +18,15 @@ use tari_ootle_common_types::{
     SubstateAddress,
     SubstateVersion,
     ToSubstateAddress,
+    ValidatorSetHash,
     VersionedSubstateId,
     VotePower,
     committee::{Committee, CommitteeInfo},
     optional::Optional,
 };
 use tari_ootle_storage::{StorageError, global::models::ValidatorNode};
-use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
+use tari_ootle_transaction::Network;
+use tari_template_lib_types::{Hash32, crypto::RistrettoPublicKeyBytes};
 use tokio::sync::{Mutex, MutexGuard, broadcast};
 
 use crate::support::{
@@ -63,9 +65,14 @@ pub struct TestEpochManager {
     ///
     /// Production keeps the two apart: the activated row wins, and the oracle's scanned boundary is
     /// the fallback. Separating them here is what lets a test hold a validator in the state where it
-    /// can ratify an `EndEpoch` but cannot yet open the next epoch. Like the lag fields, a fresh
-    /// `Arc` is allocated per validator by `clone_for`.
+    /// can ratify an `EndEpoch`'s boundary hash but has no validator set for the next epoch. Like the lag fields, a
+    /// fresh `Arc` is allocated per validator by `clone_for`.
     oracle_observed_boundaries: Arc<StdMutex<HashSet<Epoch>>>,
+    /// Overrides the validator set hash this validator reports from `get_validator_set_hash`. When `Some(hash)`,
+    /// simulates a node whose epoch oracle assigned different committees than its peers. `None` = derive the hash
+    /// from the epoch hash this validator reports. Like the lag fields, a fresh `Arc` is allocated per validator by
+    /// `clone_for`.
+    validator_set_hash_override: Arc<StdMutex<Option<ValidatorSetHash>>>,
 }
 
 impl TestEpochManager {
@@ -79,6 +86,7 @@ impl TestEpochManager {
             oracle_current_epoch_cap: Arc::new(StdMutex::new(None)),
             oracle_epoch_hash_override: Arc::new(StdMutex::new(None)),
             oracle_observed_boundaries: Arc::new(StdMutex::new(HashSet::new())),
+            validator_set_hash_override: Arc::new(StdMutex::new(None)),
         }
     }
 
@@ -136,15 +144,29 @@ impl TestEpochManager {
 
     /// Mark `epoch`'s boundary block as scanned by this validator's oracle without activating the
     /// epoch. `get_observed_epoch_hash(epoch)` then reports the boundary hash — enough to ratify an
-    /// `EndEpoch` — while a `set_oracle_visible_epoch` cap keeps `get_epoch_hash(epoch)` answering
-    /// `NoEpochFound`, so the node still cannot open the epoch. That pair is the real state of a node
-    /// mid-catch-up, and the two must be settable independently.
+    /// `EndEpoch`'s boundary hash but not its validator set — while a `set_oracle_visible_epoch` cap
+    /// keeps `get_epoch_hash(epoch)` answering `NoEpochFound`, so the node still cannot open the epoch. That pair is
+    /// the real state of a node mid-catch-up, and the two must be settable independently.
     pub fn set_oracle_observed_boundary(&self, epoch: Epoch) {
         self.oracle_observed_boundaries.lock().unwrap().insert(epoch);
     }
 
     fn has_oracle_observed_boundary(&self, epoch: Epoch) -> bool {
         self.oracle_observed_boundaries.lock().unwrap().contains(&epoch)
+    }
+
+    /// Override the validator set hash this validator reports for every epoch, modelling a node whose epoch oracle
+    /// assigned committees its peers did not.
+    pub fn set_validator_set_hash(&self, hash: ValidatorSetHash) {
+        *self.validator_set_hash_override.lock().unwrap() = Some(hash);
+    }
+
+    pub fn clear_validator_set_hash(&self) {
+        *self.validator_set_hash_override.lock().unwrap() = None;
+    }
+
+    fn validator_set_hash_override(&self) -> Option<ValidatorSetHash> {
+        *self.validator_set_hash_override.lock().unwrap()
     }
 
     pub async fn set_current_epoch(&mut self, current_epoch: Epoch, shard_group: ShardGroup) -> &Self {
@@ -182,6 +204,7 @@ impl TestEpochManager {
         copy.oracle_current_epoch_cap = Arc::new(StdMutex::new(None));
         copy.oracle_epoch_hash_override = Arc::new(StdMutex::new(None));
         copy.oracle_observed_boundaries = Arc::new(StdMutex::new(HashSet::new()));
+        copy.validator_set_hash_override = Arc::new(StdMutex::new(None));
         if let Some(our_validator_node) = self.our_validator_node.clone() {
             copy.our_validator_node = Some(ValidatorNode {
                 address,
@@ -363,6 +386,26 @@ impl EpochManagerReader for TestEpochManager {
             return Ok(hash);
         }
         Ok(self.inner.lock().await.last_epoch_hash)
+    }
+
+    async fn get_validator_set_hash(&self, epoch: Epoch) -> Result<ValidatorSetHash, EpochManagerError> {
+        // Committees are assigned when an epoch activates, so the set is unknown until the epoch is.
+        if epoch > self.current_epoch().await? {
+            return Err(EpochManagerError::NoValidatorSet { epoch });
+        }
+        let Some(epoch_hash) = self.get_epoch_hash(epoch).await.optional()? else {
+            return Err(EpochManagerError::NoValidatorSet { epoch });
+        };
+        if let Some(hash) = self.validator_set_hash_override() {
+            return Ok(hash);
+        }
+        // Every validator that agrees on the epoch hash agrees on the set.
+        Ok(ValidatorSetHash::calculate(
+            Network::LocalNet,
+            epoch,
+            TEST_NUM_PRESHARDS,
+            &Hash32::from_array(epoch_hash.into_array()),
+        ))
     }
 
     async fn get_num_committees(&self, _epoch: Epoch) -> Result<u32, EpochManagerError> {

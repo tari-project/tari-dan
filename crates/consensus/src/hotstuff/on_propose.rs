@@ -24,6 +24,7 @@ use tari_ootle_common_types::{
     ExtraFieldKey,
     NodeHeight,
     ProtocolVersion,
+    ValidatorSetHash,
     committee::CommitteeInfo,
     displayable::Displayable,
     optional::Optional,
@@ -105,6 +106,13 @@ const PROPOSAL_CANDIDATES_PER_TRANSACTION: usize = 8;
 /// window a proposal samples fewer candidates.
 const PROPOSAL_READS_PER_CANDIDATE: usize = 4;
 
+/// What an end-of-epoch block commits the next epoch to.
+#[derive(Debug, Clone, Copy)]
+struct NextEpochCommitment {
+    epoch_hash: FixedHash,
+    validator_set_hash: ValidatorSetHash,
+}
+
 struct NextBlock {
     block: Block,
     foreign_proposals: Vec<ForeignProposal>,
@@ -168,23 +176,12 @@ where TConsensusSpec: ConsensusSpec
         let local_committee = epoch_state.local_committee();
         let _timer = TraceTimer::info(LOG_TARGET, "OnPropose");
 
-        // The EndEpoch command commits the committee to the *next* epoch's boundary hash. Only propose
-        // it once our (lagged, reorg-stable) oracle has actually observed that epoch — otherwise we have
-        // no hash to commit to and would be locking a value the committee hasn't ratified. If the oracle
-        // hasn't crossed the boundary yet, defer the EOE proposal; a later round proposes it once the
-        // boundary block is scanned.
-        let next_epoch_hash = if propose_epoch_end {
-            let next_epoch = epoch + Epoch(1);
-            match self.epoch_manager.get_epoch_hash(next_epoch).await.optional()? {
-                Some(hash) => Some(hash),
-                None => {
-                    info!(
-                        target: LOG_TARGET,
-                        "⏳ Not proposing EndEpoch for {epoch}: oracle has not yet observed the boundary block for {next_epoch}"
-                    );
-                    None
-                },
-            }
+        // The EndEpoch block commits the committee to the *next* epoch's boundary hash and validator set. Only
+        // propose it once our (lagged, reorg-stable) oracle has observed that epoch and our epoch manager has
+        // assigned its committees — otherwise we have nothing to commit to and would be locking values the
+        // committee hasn't ratified. A later round proposes it once both are known.
+        let next_epoch_commitment = if propose_epoch_end {
+            self.resolve_next_epoch_commitment(epoch).await?
         } else {
             None
         };
@@ -207,7 +204,7 @@ where TConsensusSpec: ConsensusSpec
                     &local_committee_info,
                     &local_claim_public_key,
                     propose_high_tc,
-                    next_epoch_hash,
+                    next_epoch_commitment,
                 )?;
 
                 let NextBlock {
@@ -372,6 +369,30 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
+    /// What an end-of-epoch block for `epoch` commits the next epoch to, or `None` while this node does not yet
+    /// know the next epoch's boundary hash or committees.
+    async fn resolve_next_epoch_commitment(&self, epoch: Epoch) -> Result<Option<NextEpochCommitment>, HotStuffError> {
+        let next_epoch = epoch + Epoch(1);
+        let Some(epoch_hash) = self.epoch_manager.get_epoch_hash(next_epoch).await.optional()? else {
+            info!(
+                target: LOG_TARGET,
+                "⏳ Not proposing EndEpoch for {epoch}: oracle has not yet observed the boundary block for {next_epoch}"
+            );
+            return Ok(None);
+        };
+        let Some(validator_set_hash) = self.epoch_manager.get_validator_set_hash(next_epoch).await.optional()? else {
+            info!(
+                target: LOG_TARGET,
+                "⏳ Not proposing EndEpoch for {epoch}: this node has not assigned the committees for {next_epoch}"
+            );
+            return Ok(None);
+        };
+        Ok(Some(NextEpochCommitment {
+            epoch_hash,
+            validator_set_hash,
+        }))
+    }
+
     #[allow(clippy::too_many_lines)]
     fn build_next_block<TTx: StateStoreReadTransaction>(
         &self,
@@ -384,8 +405,8 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
         local_claim_public_key_bytes: &RistrettoPublicKeyBytes,
         propose_high_tc: Option<TimeoutCertificate>,
-        // `Some(hash)` if we are proposing an end-of-epoch block; carries the next epoch's boundary hash.
-        end_epoch_hash: Option<FixedHash>,
+        // `Some` if we are proposing an end-of-epoch block; carries what it commits the next epoch to.
+        end_epoch: Option<NextEpochCommitment>,
     ) -> Result<NextBlock, HotStuffError> {
         let high_qc_id = high_qc_certificate.calculate_id();
         let justify_block = Block::get_justified_block(tx, &high_qc_certificate, epoch)?;
@@ -396,7 +417,7 @@ where TConsensusSpec: ConsensusSpec
         // EndEpoch there binds nothing.
         let is_end_of_epoch_in_chain = justify_block.is_epoch_end_proposed_in_chain(tx)?;
 
-        let should_not_propose_commands = is_end_of_epoch_in_chain || end_epoch_hash.is_some();
+        let should_not_propose_commands = is_end_of_epoch_in_chain || end_epoch.is_some();
 
         let mut total_leader_fee = 0u64;
         // The block the candidate extends from, and the point at which every speculative state and pool read for
@@ -429,8 +450,8 @@ where TConsensusSpec: ConsensusSpec
 
         let mut commands = if is_end_of_epoch_in_chain {
             vec![]
-        } else if let Some(next_epoch_hash) = end_epoch_hash {
-            vec![Command::EndEpoch(EndEpochAtom::new(next_epoch_hash))]
+        } else if let Some(end_epoch) = end_epoch {
+            vec![Command::EndEpoch(EndEpochAtom::new(end_epoch.epoch_hash))]
         } else {
             batch
                 .foreign_proposals
@@ -697,15 +718,19 @@ where TConsensusSpec: ConsensusSpec
         // Every block names the rate its epoch runs at, carried forward from the block it extends, so a
         // transaction settles at a rate the block that sequenced it commits to. An end-of-epoch block
         // additionally names the rate the next epoch opens at: that is the value the quorum committing it
-        // ratifies, and the next epoch's genesis block carries it forward from there.
+        // ratifies, and the next epoch's genesis block carries it forward from there. It also names the next
+        // epoch's validator set hash, which the same quorum ratifies, so that each end-of-epoch block hands the
+        // chain over from one epoch's committees to the next.
         let mut extra_data = ExtraData::new();
         extra_data.insert_bps(
             ExtraFieldKey::ExhaustBurnRate,
             highest_seen_block.exhaust_burn_rate().as_bps(),
         );
-        if end_epoch_hash.is_some() {
+        if let Some(end_epoch) = end_epoch {
             let next_epoch_rate = resolve_epoch_exhaust_burn_rate(tx, self.config.network, epoch + Epoch(1))?;
-            extra_data.insert_bps(ExtraFieldKey::NextEpochExhaustBurnRate, next_epoch_rate.as_bps());
+            extra_data
+                .insert_bps(ExtraFieldKey::NextEpochExhaustBurnRate, next_epoch_rate.as_bps())
+                .insert_validator_set_hash(ExtraFieldKey::NextEpochValidatorSetHash, &end_epoch.validator_set_hash);
         }
 
         let mut header = BlockHeader::create_unsigned(
