@@ -13,6 +13,7 @@ use libp2p::{
     autonat,
     connection_limits,
     connection_limits::ConnectionLimits,
+    core::{transport::Transport, upgrade},
     dcutr,
     gossipsub,
     identify,
@@ -34,7 +35,7 @@ use libp2p_substream as substream;
 use crate::{
     config::{Config, RelayCircuitLimits, RelayReservationLimits},
     error::TariSwarmError,
-    ip_limits,
+    inbound_limits,
 };
 
 pub type PeerData = ();
@@ -46,7 +47,7 @@ where TCodec: messaging::Codec + Send + Clone + 'static
     pub ping: ping::Behaviour,
     pub dcutr: dcutr::Behaviour,
     pub connection_limits: connection_limits::Behaviour,
-    pub ip_limits: Toggle<ip_limits::Behaviour>,
+    pub inbound_limits: inbound_limits::Behaviour,
 
     pub relay: Toggle<relay::Behaviour>,
     pub relay_client: relay::client::Behaviour,
@@ -82,42 +83,36 @@ pub fn create_swarm<TCodec>(
 where
     TCodec: messaging::Codec + Clone + Send + 'static,
 {
-    let swarm = SwarmBuilder::with_existing_identity(identity)
+    // A pending inbound connection holds a `max_pending_incoming` slot until its handshake resolves,
+    // so every transport's security/multiplexer upgrade carries `connection_upgrade_timeout`. The
+    // TCP and relay client transports are assembled here because `with_tcp` and `with_relay_client`
+    // apply no upgrade timeout; QUIC enforces its own.
+    let connection_upgrade_timeout = config.connection_upgrade_timeout;
+    let idle_connection_timeout = config.idle_connection_timeout;
+    let noise_config = noise_config(&identity)?;
+    let (relay_transport, relay_client) = relay::client::new(identity.public().to_peer_id());
+    let Ok(builder) = SwarmBuilder::with_existing_identity(identity)
         .with_tokio()
-        .with_tcp(tcp::Config::new().nodelay(true), noise_config, yamux::Config::default)?
         .with_quic()
-        .with_relay_client(noise_config, yamux::Config::default)?
-        .with_behaviour(|keypair, relay_client| {
+        .with_other_transport(|_| {
+            relay_transport
+                .upgrade(upgrade::Version::V1Lazy)
+                .authenticate(noise_config.clone())
+                .multiplex(yamux::Config::default())
+                .timeout(connection_upgrade_timeout)
+        });
+    let Ok(builder) = builder.with_other_transport(|_| {
+        tcp::tokio::Transport::new(tcp::Config::new().nodelay(true))
+            .upgrade(upgrade::Version::V1Lazy)
+            .authenticate(noise_config)
+            .multiplex(yamux::Config::default())
+            .timeout(connection_upgrade_timeout)
+    });
+    let swarm = builder
+        .with_behaviour(|keypair| {
             let local_peer_id = keypair.public().to_peer_id();
 
-            // Gossipsub
-            // Everything gossipsub retains is set here rather than left to a library default: the
-            // message cache, the duplicate cache and the per-connection send queue are all bounds
-            // on how much memory a flood of gossip can make the node hold, and a bound nobody chose
-            // is not a bound. See `Config` for what each one trades away.
-            let gossipsub_config = gossipsub::ConfigBuilder::default()
-                .max_transmit_size(config.gossip_sub_max_message_size)
-                .validation_mode(gossipsub::ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
-                .validate_messages()
-                .message_id_fn(get_message_id) // content-address messages. No two messages of the same content will be propagated.
-                .history_length(config.gossip_sub_history_length)
-                .history_gossip(config.gossip_sub_history_gossip)
-                .duplicate_cache_time(config.gossip_sub_duplicate_cache_time)
-                .connection_handler_queue_len(config.gossip_sub_max_send_queue_messages)
-                .build()?;
-
-            let mut gossipsub = gossipsub::Behaviour::new(
-                gossipsub::MessageAuthenticity::Signed(keypair.clone()),
-                gossipsub_config,
-            )
-            .unwrap();
-
-            if !config.gossip_sub_scored_topics.is_empty() {
-                let (params, thresholds) = peer_score_params(&config.gossip_sub_scored_topics);
-                // Only fails if the parameters are invalid or scoring is already active, both of
-                // which are constructed here.
-                gossipsub.with_peer_score(params, thresholds).unwrap();
-            }
+            let gossipsub = create_gossipsub(keypair, &config)?;
 
             // Ping
             let ping = ping::Behaviour::new(config.ping);
@@ -162,7 +157,11 @@ where
                     .with_max_established_incoming(config.max_established_incoming)
                     .with_max_pending_incoming(config.max_pending_incoming),
             );
-            let ip_limits = config.max_incoming_connections_per_ip.map(ip_limits::Behaviour::new);
+            let inbound_limits = inbound_limits::Behaviour::new(inbound_limits::Limits {
+                max_per_ip: config.max_incoming_connections_per_ip,
+                max_pending_per_ip: config.max_pending_incoming_per_ip,
+                max_pending_per_relay: config.max_pending_incoming_per_relay,
+            });
 
             // mDNS
             let maybe_mdns = if config.enable_mdns {
@@ -198,7 +197,7 @@ where
                 substream,
                 messaging: Toggle::from(messaging),
                 connection_limits,
-                ip_limits: Toggle::from(ip_limits),
+                inbound_limits,
                 mdns: Toggle::from(maybe_mdns),
                 peer_store,
                 rendezvous_server: Toggle::from(rendezvous_server),
@@ -206,10 +205,41 @@ where
             })
         })
         .map_err(|e| TariSwarmError::BehaviourError(e.to_string()))?
-        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(config.idle_connection_timeout))
+        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(idle_connection_timeout))
         .build();
 
     Ok(swarm)
+}
+
+fn create_gossipsub(keypair: &Keypair, config: &Config) -> Result<gossipsub::Behaviour, gossipsub::ConfigBuilderError> {
+    // Everything gossipsub retains is set here rather than left to a library default: the
+    // message cache, the duplicate cache and the per-connection send queue are all bounds
+    // on how much memory a flood of gossip can make the node hold, and a bound nobody chose
+    // is not a bound. See `Config` for what each one trades away.
+    let gossipsub_config = gossipsub::ConfigBuilder::default()
+        .max_transmit_size(config.gossip_sub_max_message_size)
+        .validation_mode(gossipsub::ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
+        .validate_messages()
+        .message_id_fn(get_message_id) // content-address messages. No two messages of the same content will be propagated.
+        .history_length(config.gossip_sub_history_length)
+        .history_gossip(config.gossip_sub_history_gossip)
+        .duplicate_cache_time(config.gossip_sub_duplicate_cache_time)
+        .connection_handler_queue_len(config.gossip_sub_max_send_queue_messages)
+        .build()?;
+
+    let mut gossipsub = gossipsub::Behaviour::new(
+        gossipsub::MessageAuthenticity::Signed(keypair.clone()),
+        gossipsub_config,
+    )
+    .unwrap();
+
+    if !config.gossip_sub_scored_topics.is_empty() {
+        let (params, thresholds) = peer_score_params(&config.gossip_sub_scored_topics);
+        // Only fails if the parameters are invalid or scoring is already active, both of
+        // which are constructed here.
+        gossipsub.with_peer_score(params, thresholds).unwrap();
+    }
+    Ok(gossipsub)
 }
 
 fn create_relay_config(circuit: &RelayCircuitLimits, reservations: &RelayReservationLimits) -> relay::Config {

@@ -21,9 +21,25 @@ pub struct Config {
     /// Inbound connections still completing their handshake. Bounds the work a burst of dials can
     /// make the node do before any of them is established.
     pub max_pending_incoming: Option<u32>,
-    /// Inbound connections, pending or established, accepted from one IP address. Loopback and relayed
-    /// connections are exempt.
+    /// Deadline for a connection's transport upgrade (security + multiplexer handshake) to
+    /// complete, inbound and outbound. A pending inbound connection holds one of the
+    /// `max_pending_incoming` slots until it establishes or fails, so without this deadline a peer
+    /// that completes the TCP connect but never drives the handshake pins its slot indefinitely;
+    /// enough such peers exhaust the pending-inbound capacity and the node accepts no further
+    /// inbound connections.
+    pub connection_upgrade_timeout: Duration,
+    /// Inbound connections, pending or established, accepted from one IP address, with IPv6 counted
+    /// per /64. Loopback and relayed connections are exempt.
     pub max_incoming_connections_per_ip: Option<u32>,
+    /// Inbound connections still completing their handshake from one IP address, with IPv6 counted
+    /// per /64. This is what stops one host filling the `max_pending_incoming` pool: doing so takes
+    /// `max_pending_incoming / max_pending_incoming_per_ip` addresses. Loopback connections are
+    /// exempt.
+    pub max_pending_incoming_per_ip: Option<u32>,
+    /// Inbound connections still completing their handshake through one relay. A relayed connection
+    /// carries no remote IP, so this, not the per-IP caps, bounds the pending slots a remote can take
+    /// through a relay this node listens on.
+    pub max_pending_incoming_per_relay: Option<u32>,
     pub enable_mdns: bool,
     pub enable_relay: bool,
     pub enable_messaging: bool,
@@ -85,7 +101,10 @@ impl Default for Config {
             max_connections_per_peer: Some(3),
             max_established_incoming: Some(256),
             max_pending_incoming: Some(64),
+            connection_upgrade_timeout: Duration::from_secs(10),
             max_incoming_connections_per_ip: Some(16),
+            max_pending_incoming_per_ip: Some(4),
+            max_pending_incoming_per_relay: Some(8),
             enable_mdns: false,
             enable_relay: false,
             enable_messaging: true,

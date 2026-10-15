@@ -1273,6 +1273,7 @@ fn decode_commit_proof(commit_proof: &[u8]) -> Result<CommittedBlockProof, Index
 mod tests {
     use std::{
         collections::HashSet,
+        slice,
         str::FromStr,
         sync::{
             Mutex,
@@ -2458,7 +2459,7 @@ mod tests {
             .with_substate_proof_verification(true)
             .with_trusted_root_store(Arc::new(TrustEverything));
 
-        let found = manager.fetch_and_cache_substates(&[id.clone()]).await.unwrap();
+        let found = manager.fetch_and_cache_substates(slice::from_ref(&id)).await.unwrap();
 
         let proof = found[&id].proof.as_ref().expect("the batch proved the substate");
         assert_eq!(proof.substate_down_proof, None);
