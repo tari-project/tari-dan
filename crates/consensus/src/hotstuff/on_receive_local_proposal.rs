@@ -396,14 +396,15 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         // instead, which names the value it is missing.
         let can_propose_epoch_end = em_epoch > current_epoch || local_next_epoch.epoch_hash.is_some();
 
-        // A leader draining cross-shard transactions before an end of epoch that changes the number of committees
-        // aborts those still waiting in LocalPrepared. Only looked up for a block that carries such an abort.
+        // Before an end of epoch that changes the number of committees, a leader aborts transactions still waiting in
+        // LocalPrepared, and the end-of-epoch block may not leave any there. Only looked up for a block that carries
+        // such an abort or ends the epoch.
         let has_local_accept_abort = valid_block
             .block()
             .commands()
             .iter()
             .any(|cmd| cmd.local_accept().is_some_and(|atom| atom.decision.is_abort()));
-        let next_epoch_changes_layout = has_local_accept_abort &&
+        let next_epoch_changes_layout = (has_local_accept_abort || is_epoch_end) &&
             em_epoch > current_epoch &&
             self.epoch_manager.get_num_committees(current_epoch + Epoch(1)).await? !=
                 local_committee_info.num_committees();

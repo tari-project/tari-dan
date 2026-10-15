@@ -78,6 +78,11 @@ pub enum NoVoteReason {
     EndOfEpochWithOtherCommands,
     #[error("The proposer included commands in a block that extends the end-of-epoch block")]
     CommandsAfterEndOfEpoch,
+    #[error(
+        "The proposer ended an epoch that changes the number of committees while a cross-shard transaction is still \
+         in LocalPrepared"
+    )]
+    EndOfEpochWithTransactionsInLocalPrepared,
     #[error("End-of-epoch next-epoch hash mismatch. Local oracle: {local}, proposed: {proposed}")]
     EndOfEpochHashMismatch { local: FixedHash, proposed: FixedHash },
     #[error(
@@ -182,6 +187,7 @@ impl NoVoteReason {
             Self::NotEndOfEpoch => "NotEndOfEpoch",
             Self::EndOfEpochWithOtherCommands => "EndOfEpochWithOtherCommands",
             Self::CommandsAfterEndOfEpoch => "CommandsAfterEndOfEpoch",
+            Self::EndOfEpochWithTransactionsInLocalPrepared => "EndOfEpochWithTransactionsInLocalPrepared",
             Self::EndOfEpochHashMismatch { .. } => "EndOfEpochHashMismatch",
             Self::EndOfEpochHashNotObserved => "EndOfEpochHashNotObserved",
             Self::EndOfEpochBurnRateMissing => "EndOfEpochBurnRateMissing",

@@ -5,7 +5,7 @@ use std::num::NonZeroU64;
 
 use log::*;
 use tari_common_types::types::FixedHash;
-use tari_consensus_types::{Decision, LastVoted, LeafBlock, PcId, ProposalCertificate};
+use tari_consensus_types::{BlockId, Decision, LastVoted, LeafBlock, PcId, ProposalCertificate};
 use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_engine_types::commit_result::{AbortReason, RejectReason};
 use tari_ootle_common_types::{Epoch, ShardGroup, ValidatorSetHash, committee::CommitteeInfo, optional::Optional};
@@ -129,8 +129,9 @@ where TConsensusSpec: ConsensusSpec
         // Used to ratify what an end-of-epoch block commits the next epoch to before voting. Where this node does
         // not know a value, it cannot ratify it and abstains.
         local_next_epoch: LocalNextEpochView,
-        // True if the local oracle reports a next epoch with a different number of committees, which permits
-        // aborting a transaction from LocalPrepared (see `abort_local_prepared_for_epoch_end`).
+        // True if the local oracle reports a next epoch with a different number of committees. That permits aborting
+        // a transaction from LocalPrepared (see `abort_local_prepared_for_epoch_end`) and requires the end-of-epoch
+        // block to leave none there (see `check_epoch_end_drained`).
         next_epoch_changes_layout: bool,
         change_set: &mut ProposedBlockChangeSet,
     ) -> Result<BlockDecision, HotStuffError> {
@@ -417,6 +418,13 @@ where TConsensusSpec: ConsensusSpec
                             block.id()
                         );
                         proposed_block_change_set.set_no_vote(NoVoteReason::EndOfEpochWithOtherCommands);
+                        return Ok(());
+                    }
+                    if let Some(reason) =
+                        check_epoch_end_drained(tx, &block.justify().calculate_block_id(), next_epoch_changes_layout)?
+                    {
+                        warn!(target: LOG_TARGET, "❌ NO VOTE: {reason} (block {block})");
+                        proposed_block_change_set.set_no_vote(reason);
                         return Ok(());
                     }
 
@@ -2041,6 +2049,27 @@ fn check_no_commands_after_epoch_end<TTx: StateStoreReadTransaction>(
     Ok(Some(NoVoteReason::CommandsAfterEndOfEpoch))
 }
 
+/// Consensus rule: an end-of-epoch block that changes the number of committees may not leave a transaction in
+/// `LocalPrepared` on the chain it extends. Validators move to new shard groups at such a boundary and drop their
+/// transaction pools, so that transaction would keep its substate locks with no record left to finalize it. The rule
+/// cannot wedge the epoch: a replica that sees such a next epoch accepts the abort of these transactions (see
+/// [`abort_local_prepared_for_epoch_end`]), so a leader can always clear them first.
+///
+/// The pool is read with the pending updates of the chain ending at `justify_block_id`, the block the end-of-epoch
+/// block's certificate justifies, which is the chain a leader checks before proposing it.
+fn check_epoch_end_drained<TTx: StateStoreReadTransaction>(
+    tx: &TTx,
+    justify_block_id: &BlockId,
+    next_epoch_changes_layout: bool,
+) -> Result<Option<NoVoteReason>, StorageError> {
+    if !next_epoch_changes_layout {
+        return Ok(None);
+    }
+    let is_prepared_in_flight =
+        tx.transaction_pool_any_in_chain(justify_block_id, |rec| rec.current_stage().is_local_prepared())?;
+    Ok(is_prepared_in_flight.then_some(NoVoteReason::EndOfEpochWithTransactionsInLocalPrepared))
+}
+
 /// Consensus rule: a leader may only move a transaction out of its current stage once the shard groups involved in it
 /// are ready for that, which is the same condition under which an honest leader proposes `command`. Evidence equality
 /// with the atom cannot stand in for this, because every replica derives the same incomplete evidence.
@@ -2456,6 +2485,78 @@ mod tests {
             chain.push(foreign_proposal(), true).push(none(), false);
             let reason = chain.decide(end_epoch());
             assert!(reason.is_none(), "unexpected reason: {reason:?}");
+        }
+
+        mod check_epoch_end_drained {
+            use tari_ootle_storage::consensus_models::{Evidence, TransactionPoolStatusUpdate};
+            use tari_ootle_transaction::TransactionId;
+
+            use super::*;
+
+            impl Chain {
+                /// Pools a transaction and moves it to `stage` in a pending update at the tip.
+                fn pool_transaction_at(&self, stage: TransactionPoolStage) -> &Self {
+                    let id = TransactionId::new([3; 32]);
+                    let tip = self.tip.as_leaf();
+                    self.store
+                        .with_write_tx(|tx| {
+                            tx.transaction_pool_insert_new(
+                                id,
+                                Decision::Commit,
+                                &Evidence::empty(),
+                                false,
+                                false,
+                                Epoch(1),
+                                0,
+                            )?;
+                            let mut rec = tx.transaction_pool_get_all(1)?.pop().unwrap();
+                            rec.set_next_stage_and_readiness(stage, tip.shard_group()).unwrap();
+                            tx.transaction_pool_add_pending_update(&tip, &TransactionPoolStatusUpdate::new(rec, false))
+                        })
+                        .unwrap();
+                    self
+                }
+
+                /// The rule's decision on an end-of-epoch block whose certificate justifies the tip.
+                fn decide_epoch_end(&self, next_epoch_changes_layout: bool) -> Option<NoVoteReason> {
+                    self.store
+                        .with_read_tx(|tx| check_epoch_end_drained(tx, self.tip.id(), next_epoch_changes_layout))
+                        .unwrap()
+                }
+            }
+
+            #[test]
+            fn an_epoch_end_that_changes_the_committees_with_a_prepared_transaction_is_not_voted_for() {
+                let mut chain = Chain::new();
+                chain.push(foreign_proposal(), true).push(none(), false);
+                chain.pool_transaction_at(TransactionPoolStage::LocalPrepared);
+                let reason = chain.decide_epoch_end(true);
+                assert!(
+                    matches!(reason, Some(NoVoteReason::EndOfEpochWithTransactionsInLocalPrepared)),
+                    "unexpected reason: {reason:?}"
+                );
+            }
+
+            #[test]
+            fn an_epoch_end_that_keeps_the_committees_is_voted_for_with_a_prepared_transaction() {
+                let mut chain = Chain::new();
+                chain.push(foreign_proposal(), true).push(none(), false);
+                chain.pool_transaction_at(TransactionPoolStage::LocalPrepared);
+                let reason = chain.decide_epoch_end(false);
+                assert!(reason.is_none(), "unexpected reason: {reason:?}");
+            }
+
+            #[test]
+            fn an_epoch_end_that_changes_the_committees_is_voted_for_once_nothing_is_prepared() {
+                let mut chain = Chain::new();
+                chain.push(foreign_proposal(), true).push(none(), false);
+                let reason = chain.decide_epoch_end(true);
+                assert!(reason.is_none(), "unexpected reason: {reason:?}");
+
+                chain.pool_transaction_at(TransactionPoolStage::LocalAccepted);
+                let reason = chain.decide_epoch_end(true);
+                assert!(reason.is_none(), "unexpected reason: {reason:?}");
+            }
         }
     }
 }
