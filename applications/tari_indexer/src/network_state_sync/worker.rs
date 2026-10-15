@@ -1317,7 +1317,10 @@ async fn verify_checkpoint<TEpochManager: EpochManagerReader>(
     else {
         return Err(NetworkStateSyncError::InvalidCheckpoint {
             details: format!(
-                "Checkpoint for {epoch} names shard group {shard_group}, which is not one of that epoch's"
+                "Checkpoint for {epoch} names shard group {shard_group}, which is not one of that epoch's shard \
+                 groups as this indexer assigned them. If every committee member is refused this way, this indexer's \
+                 committee assignment for {epoch} differs from the network's; check its epoch oracle and committee \
+                 configuration."
             ),
         });
     };
