@@ -131,8 +131,15 @@ mod confirm_all_transitions {
             .unwrap();
 
         let mut num_ready = 0;
-        tx.transaction_pool_for_each_ready(&block_id, Epoch(0), |_| num_ready += 1)
-            .unwrap();
+        tx.transaction_pool_for_each_ready(
+            &block_id,
+            Epoch(0),
+            &TransactionId::default(),
+            usize::MAX,
+            usize::MAX,
+            |_| num_ready += 1,
+        )
+        .unwrap();
         assert_eq!(num_ready, 3);
 
         let rec = tx.transaction_pool_get_for_blocks(&block_id, &atom1.id).unwrap();
@@ -211,8 +218,15 @@ mod confirm_all_transitions {
 
         let count_offered = |epoch| {
             let mut num = 0;
-            tx.transaction_pool_for_each_ready(block1.id(), epoch, |_| num += 1)
-                .unwrap();
+            tx.transaction_pool_for_each_ready(
+                block1.id(),
+                epoch,
+                &TransactionId::default(),
+                usize::MAX,
+                usize::MAX,
+                |_| num += 1,
+            )
+            .unwrap();
             num
         };
         assert_eq!(count_offered(Epoch(1)), 0);
@@ -883,9 +897,53 @@ mod get_batch_for_next_block {
         heavy_turn: bool,
         block_id: &BlockId,
     ) -> Vec<TransactionPoolRecord> {
+        get_batch_from_candidates(tx, weight_budget, max_count, usize::MAX, heavy_turn, block_id)
+    }
+
+    fn get_batch_from_candidates(
+        tx: &impl StateStoreReadTransaction,
+        weight_budget: u64,
+        max_count: usize,
+        max_candidates: usize,
+        heavy_turn: bool,
+        block_id: &BlockId,
+    ) -> Vec<TransactionPoolRecord> {
         TransactionPool::<RocksDbStateStore<String>>::new()
-            .get_batch_for_next_block(tx, weight_budget, max_count, heavy_turn, block_id, Epoch(0))
+            .get_batch_for_next_block(
+                tx,
+                weight_budget,
+                max_count,
+                max_candidates,
+                usize::MAX,
+                heavy_turn,
+                block_id,
+                Epoch(0),
+            )
             .unwrap()
+    }
+
+    fn visit_ready(
+        tx: &impl StateStoreReadTransaction,
+        block_id: &BlockId,
+        start_id: TransactionId,
+        max_records: usize,
+    ) -> Vec<TransactionId> {
+        visit_ready_reading(tx, block_id, start_id, max_records, usize::MAX)
+    }
+
+    fn visit_ready_reading(
+        tx: &impl StateStoreReadTransaction,
+        block_id: &BlockId,
+        start_id: TransactionId,
+        max_records: usize,
+        max_reads: usize,
+    ) -> Vec<TransactionId> {
+        let mut visited = Vec::new();
+        tx.transaction_pool_for_each_ready(block_id, Epoch(0), &start_id, max_records, max_reads, |rec| {
+            visited.push(*rec.id())
+        })
+        .unwrap();
+        visited
     }
 
     /// Insert `weights.len()` ready (New stage) transactions with the given static weights and return
@@ -1070,5 +1128,104 @@ mod get_batch_for_next_block {
         assert!(tx.transaction_pool_any(true, |rec| *rec.id() != conflicted).unwrap());
         assert!(!tx.transaction_pool_any(true, |rec| *rec.id() == conflicted).unwrap());
         assert!(tx.transaction_pool_any(false, |rec| *rec.id() == conflicted).unwrap());
+    }
+
+    fn id_of(byte: u8) -> TransactionId {
+        TransactionId::new([byte; 32])
+    }
+
+    #[test]
+    fn for_each_ready_reads_at_most_max_records_from_the_start_id_rocksdb() {
+        let (db, _tmp) = create_rocksdb();
+        let records = (0..100u8).map(|i| (id_of(i), 1)).collect::<Vec<_>>();
+        let block_id = setup_ready_pool_with_ids(&db, &records);
+        let tx = db.create_read_tx().unwrap();
+
+        let visited = visit_ready(&tx, &block_id, id_of(50), 10);
+        assert_eq!(visited, (50..60).map(id_of).collect::<Vec<_>>());
+
+        // A start id between two records begins at the next one.
+        let mut between = [50u8; 32];
+        between[31] = 51;
+        let visited = visit_ready(&tx, &block_id, TransactionId::new(between), 3);
+        assert_eq!(visited, (51..54).map(id_of).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn for_each_ready_wraps_around_to_the_lowest_id_rocksdb() {
+        let (db, _tmp) = create_rocksdb();
+        let records = (0..100u8).map(|i| (id_of(i), 1)).collect::<Vec<_>>();
+        let block_id = setup_ready_pool_with_ids(&db, &records);
+        let tx = db.create_read_tx().unwrap();
+
+        let visited = visit_ready(&tx, &block_id, id_of(95), 10);
+        assert_eq!(visited, (95..100).chain(0..5).map(id_of).collect::<Vec<_>>());
+
+        let visited = visit_ready(&tx, &block_id, id_of(0xff), 4);
+        assert_eq!(visited, (0..4).map(id_of).collect::<Vec<_>>());
+
+        // A window larger than the pool offers every record exactly once.
+        let visited = visit_ready(&tx, &block_id, id_of(30), usize::MAX);
+        assert_eq!(visited, (30..100).chain(0..30).map(id_of).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn for_each_ready_counts_records_that_are_not_ready_as_reads_rocksdb() {
+        let (db, _tmp) = create_rocksdb();
+        let ready = (100..110u8).map(|i| (id_of(i), 1)).collect::<Vec<_>>();
+        let block_id = setup_ready_pool_with_ids(&db, &ready);
+        let mut tx = db.create_write_tx().unwrap();
+        for i in 0..100u8 {
+            tx.transaction_pool_insert_new(
+                id_of(i),
+                Decision::Commit,
+                &Evidence::empty(),
+                false,
+                false,
+                Epoch(1),
+                1,
+            )
+            .unwrap();
+        }
+        tx.commit().unwrap();
+        let tx = db.create_read_tx().unwrap();
+
+        // The 100 records that are not ready come first from this start, so 50 reads reach no ready record.
+        assert!(visit_ready_reading(&tx, &block_id, id_of(0), 10, 50).is_empty());
+
+        let visited = visit_ready_reading(&tx, &block_id, id_of(0), 10, 105);
+        assert_eq!(visited, (100..105).map(id_of).collect::<Vec<_>>());
+
+        let visited = visit_ready_reading(&tx, &block_id, id_of(0), 10, usize::MAX);
+        assert_eq!(visited, (100..110).map(id_of).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn get_batch_reads_no_more_than_max_candidates_rocksdb() {
+        let (db, _tmp) = create_rocksdb();
+        let block_id = setup_ready_pool(&db, &[1; 1000]);
+        let tx = db.create_read_tx().unwrap();
+
+        // Every candidate fits the batch, so the batch holds exactly the candidates that were read.
+        let batch = get_batch_from_candidates(&tx, u64::MAX, 1000, 50, false, &block_id);
+        assert_eq!(batch.len(), 50);
+    }
+
+    #[test]
+    fn every_ready_record_is_eventually_proposed_when_the_pool_exceeds_the_window_rocksdb() {
+        let (db, _tmp) = create_rocksdb();
+        let records = (0..200u8).map(|i| (id_of(i), 1)).collect::<Vec<_>>();
+        let block_id = setup_ready_pool_with_ids(&db, &records);
+        let tx = db.create_read_tx().unwrap();
+
+        // Each call reads 20 of the 200 records and proposes 10 of those. A record is proposed by a call with
+        // probability over 3%, so 1000 calls miss one with negligible probability.
+        let mut proposed = HashSet::new();
+        for _ in 0..1000 {
+            let batch = get_batch_from_candidates(&tx, u64::MAX, 10, 20, false, &block_id);
+            assert_eq!(batch.len(), 10);
+            proposed.extend(batch.iter().map(|rec| *rec.id()));
+        }
+        assert_eq!(proposed, records.iter().map(|(id, _)| *id).collect::<HashSet<_>>());
     }
 }

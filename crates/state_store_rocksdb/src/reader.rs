@@ -1341,6 +1341,9 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         &self,
         block_id: &BlockId,
         epoch: Epoch,
+        start_id: &TransactionId,
+        max_records: usize,
+        max_reads: usize,
         mut f: F,
     ) -> Result<(), StorageError>
     where
@@ -1372,8 +1375,15 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
             }
         }
 
-        let iter = cf.value_iterator(Ordering::default(), OPERATION);
+        let iter = cf
+            .table_range_value_iterator(Ordering::Ascending, Some(start_id), None, OPERATION)
+            .chain(cf.table_range_value_iterator(Ordering::Ascending, None, Some(start_id), OPERATION))
+            .take(max_reads);
 
+        if max_records == 0 {
+            return Ok(());
+        }
+        let mut num_offered = 0usize;
         for result in iter {
             let mut tx = result?;
             if lock_conflicted.contains(tx.id()) {
@@ -1384,6 +1394,10 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
             }
             if tx.is_ready_to_propose_in(epoch) {
                 f(tx);
+                num_offered += 1;
+                if num_offered == max_records {
+                    break;
+                }
             }
         }
 
