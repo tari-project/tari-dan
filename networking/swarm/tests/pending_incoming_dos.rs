@@ -20,7 +20,7 @@
 
 use std::{collections::HashSet, net::SocketAddr, time::Duration};
 
-use libp2p::{futures::StreamExt, multiaddr::Protocol, swarm::SwarmEvent, Multiaddr};
+use libp2p::{Multiaddr, futures::StreamExt, multiaddr::Protocol, swarm::SwarmEvent};
 use tari_swarm::{config::Config, create_swarm, identity::Keypair, messaging::prost::ProstCodec};
 use tokio::{net::TcpStream, sync::mpsc, time::timeout};
 
@@ -32,7 +32,7 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> SocketAddr {
             Protocol::Ip4(a) => ip = Some(std::net::IpAddr::V4(a)),
             Protocol::Ip6(a) => ip = Some(std::net::IpAddr::V6(a)),
             Protocol::Tcp(p) => port = Some(p),
-            _ => {}
+            _ => {},
         }
     }
     SocketAddr::new(ip.expect("ip"), port.expect("tcp port"))
@@ -71,7 +71,7 @@ async fn drain_for(rx: &mut mpsc::UnboundedReceiver<Ev>, dur: Duration) -> Count
             Ev::Incoming => c.incoming += 1,
             Ev::Established => c.established += 1,
             Ev::Error(s) if is_limit_denial(&s) => c.limit_denials += 1,
-            Ev::Error(_) => {}
+            Ev::Error(_) => {},
         }
     }
     c
@@ -90,8 +90,7 @@ async fn stalled_inbound_handshakes_are_reclaimed_after_upgrade_timeout() {
     };
 
     let mut swarm =
-        create_swarm::<ProstCodec<Vec<u8>>>(Keypair::generate_ed25519(), HashSet::new(), config)
-            .expect("create_swarm");
+        create_swarm::<ProstCodec<Vec<u8>>>(Keypair::generate_ed25519(), HashSet::new(), config).expect("create_swarm");
     swarm
         .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
         .expect("listen_on");
@@ -109,14 +108,14 @@ async fn stalled_inbound_handshakes_are_reclaimed_after_upgrade_timeout() {
             match swarm.select_next_some().await {
                 SwarmEvent::IncomingConnection { .. } => {
                     let _ = tx.send(Ev::Incoming);
-                }
+                },
                 SwarmEvent::IncomingConnectionError { error, .. } => {
                     let _ = tx.send(Ev::Error(format!("{error:?}")));
-                }
+                },
                 SwarmEvent::ConnectionEstablished { .. } => {
                     let _ = tx.send(Ev::Established);
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
     });
@@ -128,15 +127,25 @@ async fn stalled_inbound_handshakes_are_reclaimed_after_upgrade_timeout() {
     }
     let c = drain_for(&mut rx, Duration::from_millis(800)).await;
     assert_eq!(c.established, 0, "stalled sockets must not establish");
-    assert_eq!(c.limit_denials, 0, "the first {MAX_PENDING} fill the cap but are not denied");
-    assert!(c.incoming >= MAX_PENDING, "listener should accept {MAX_PENDING} pending, saw {}", c.incoming);
+    assert_eq!(
+        c.limit_denials, 0,
+        "the first {MAX_PENDING} fill the cap but are not denied"
+    );
+    assert!(
+        c.incoming >= MAX_PENDING,
+        "listener should accept {MAX_PENDING} pending, saw {}",
+        c.incoming
+    );
 
     // Cap is full: one more inbound is refused with a connection-limit denial
     // (this is the exposure; the stalled sockets have not yet timed out).
     let extra = TcpStream::connect(sock).await.expect("extra connect");
     let c = drain_for(&mut rx, Duration::from_millis(800)).await;
     assert_eq!(c.established, 0, "extra inbound must not establish while cap is pinned");
-    assert!(c.limit_denials >= 1, "extra inbound must be connection-limit denied while slots are pinned");
+    assert!(
+        c.limit_denials >= 1,
+        "extra inbound must be connection-limit denied while slots are pinned"
+    );
     drop(extra);
 
     // After the upgrade timeout elapses the stalled upgrades fail and free their
@@ -151,8 +160,8 @@ async fn stalled_inbound_handshakes_are_reclaimed_after_upgrade_timeout() {
     let c = drain_for(&mut rx, Duration::from_secs(2)).await;
     assert!(
         c.incoming >= 1 && c.limit_denials == 0,
-        "after the upgrade timeout reclaims the pinned slots, inbound must be accepted again \
-         (incoming={}, limit_denials={})",
+        "after the upgrade timeout reclaims the pinned slots, inbound must be accepted again (incoming={}, \
+         limit_denials={})",
         c.incoming,
         c.limit_denials,
     );
