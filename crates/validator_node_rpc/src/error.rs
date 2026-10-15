@@ -22,6 +22,8 @@ pub enum ValidatorNodeRpcClientError {
     BorError(#[from] BorError),
     #[error("Timed out after {timeout:.0?} connecting to peer {peer_id}")]
     ConnectTimeout { peer_id: PeerId, timeout: Duration },
+    #[error("Node did not finish its response within {timeout:.0?}")]
+    ResponseTimeout { timeout: Duration },
 }
 
 impl ValidatorNodeRpcClientError {
