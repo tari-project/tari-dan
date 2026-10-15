@@ -204,13 +204,18 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
     }
 
     /// Verifies that `proof` proves the shard at `proof.state_version` with the root of `written_version`, the last
-    /// version the stream wrote, and keeps it to re-serve to peers that sync from this node.
+    /// version the stream wrote, and keeps it to re-serve to peers that sync from this node. Returns the proven version
+    /// and the epoch of the block that proves it.
+    ///
+    /// Every version at or below the proven one was committed no later than that block, so `written_epoch`, the epoch
+    /// of the last version written, must not lie after the block's epoch.
     async fn apply_version_proof(
         &self,
         validator: &TValidator,
         proof: proto::StateVersionProof,
         written_version: Option<Version>,
-    ) -> Result<Version, RpcStateSyncError> {
+        written_epoch: Epoch,
+    ) -> Result<(Version, Epoch), RpcStateSyncError> {
         let shard = self.shard;
         if proof.shard != shard.as_u32() {
             return Err(RpcStateSyncError::InvalidResponse(anyhow!(
@@ -249,6 +254,14 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         )
         .map_err(|e| RpcStateSyncError::InvalidResponse(e.into()))?;
         validator.validate(&commit_proof).await?;
+        let proof_epoch = commit_proof.epoch();
+        if written_epoch > proof_epoch {
+            return Err(RpcStateSyncError::InvalidResponse(anyhow!(
+                "Peer streamed {shard} through v{} at epoch {written_epoch}, after epoch {proof_epoch} of the block \
+                 that proves v{state_version}",
+                written_version.unwrap_or(0)
+            )));
+        }
 
         self.store.with_write_tx(|tx| {
             tx.state_version_proofs_insert(&StateVersionProof {
@@ -263,7 +276,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
             tx.state_sync_rewind_point_remove(shard)
         })?;
         debug!(target: LOG_TARGET, "🛜 ✅ {shard} proven at v{state_version}");
-        Ok(state_version)
+        Ok((state_version, proof_epoch))
     }
 
     /// Advances the shard from `verified_version`, whose root matches the checkpoint, to the checkpoint's state
@@ -441,7 +454,8 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         let mut last_proven_version = None;
         let mut version_started = tokio::time::Instant::now();
         let mut version_bytes = 0u64;
-        // The epoch of the last version committed, below which no later version can lie.
+        // The latest epoch the shard is known to have reached, from the last version committed or the block that
+        // proved it. No later version can lie below it.
         let mut epoch_floor = self.latest_local_epoch(maybe_persisted_state_version)?;
 
         // syncing states
@@ -488,9 +502,11 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                             proof.state_version
                         )));
                     }
-                    let proven = self
-                        .apply_version_proof(validator, proof, maybe_persisted_state_version)
+                    let (proven, proof_epoch) = self
+                        .apply_version_proof(validator, proof, maybe_persisted_state_version, epoch_floor)
                         .await?;
+                    // Every later version is committed after the proving block, so no earlier than its epoch.
+                    epoch_floor = proof_epoch;
                     schedule.proven(proven);
                     last_proven_version = Some(proven);
                     last_committed_version = Some(proven);
@@ -1121,6 +1137,15 @@ mod tests {
         checkpoint: &Versions,
         responses: Vec<Result<SyncStateResponse, RpcStatus>>,
     ) -> Result<Option<Version>, RpcStateSyncError> {
+        sync_at(store, checkpoint, EPOCH, responses).await
+    }
+
+    async fn sync_at<TStore: StateStore>(
+        store: &TStore,
+        checkpoint: &Versions,
+        checkpoint_epoch: Epoch,
+        responses: Vec<Result<SyncStateResponse, RpcStatus>>,
+    ) -> Result<Option<Version>, RpcStateSyncError> {
         let sync = ShardSync::new(
             NETWORK,
             NUM_PRESHARDS,
@@ -1128,7 +1153,7 @@ mod tests {
             shard(),
             root_after(checkpoint),
             version_after(checkpoint),
-            EPOCH,
+            checkpoint_epoch,
             UP_VERSION_LOOKBACK,
         );
         let verified_version = sync.discard_unverified_state()?;
@@ -1325,6 +1350,33 @@ mod tests {
         assert!(substate(&store, 2).is_none());
         assert!(substate(&store, HONEST).is_none());
         assert_eq!(rewind_point(&store), None);
+    }
+
+    #[tokio::test]
+    async fn versions_whose_epochs_rise_to_the_checkpoint_epoch_are_kept() {
+        let (store, _tmp) = create_store();
+        let middle_epoch = Epoch(EPOCH.as_u64() + 1);
+        let checkpoint_epoch = Epoch(EPOCH.as_u64() + 2);
+        let checkpoint = vec![
+            (1, vec![create(HONEST)]),
+            (2, vec![create(2), create(3)]),
+            (3, vec![destroy(HONEST)]),
+        ];
+
+        sync_at(&store, &checkpoint, checkpoint_epoch, vec![
+            chunk(1, EPOCH, false, vec![create(HONEST)]),
+            chunk(2, middle_epoch, true, vec![create(2)]),
+            chunk(2, middle_epoch, false, vec![create(3)]),
+            chunk(3, checkpoint_epoch, false, vec![destroy(HONEST)]),
+            complete(3),
+        ])
+        .await
+        .unwrap();
+
+        assert_eq!(local_version(&store), Some(3));
+        assert_eq!(substate(&store, 3).unwrap().created().at_epoch, middle_epoch);
+        let destroyed = substate(&store, HONEST).unwrap().destroyed.unwrap();
+        assert_eq!(destroyed.at_epoch, checkpoint_epoch);
     }
 
     #[tokio::test]
@@ -1567,11 +1619,20 @@ mod tests {
 
     /// A proof that the shard was at `state_version` with `shard_root`, in a block whose state root holds that leaf.
     fn version_proof(state_version: Version, shard_root: TreeHash) -> Result<SyncStateResponse, RpcStatus> {
+        version_proof_at(state_version, shard_root, EPOCH)
+    }
+
+    /// [`version_proof`] from a block at `epoch`.
+    fn version_proof_at(
+        state_version: Version,
+        shard_root: TreeHash,
+        epoch: Epoch,
+    ) -> Result<SyncStateResponse, RpcStatus> {
         use tari_common_types::types::FixedHash;
         use tari_sidechain::{SidechainBlockCommitProof, SidechainBlockHeader};
         use tari_state_tree::ShardGroupRootTree;
 
-        let protocol_version = ProtocolVersion::at(NETWORK, EPOCH);
+        let protocol_version = ProtocolVersion::at(NETWORK, epoch);
         let root_tree = ShardGroupRootTree::build(protocol_version, [
             (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0),
             (shard(), shard_root, state_version),
@@ -1585,7 +1646,7 @@ mod tests {
             parent_id: FixedHash::zero(),
             justify_id: FixedHash::zero(),
             height: 1,
-            epoch: EPOCH.as_u64(),
+            epoch: epoch.as_u64(),
             epoch_hash: FixedHash::zero(),
             shard_group: tari_sidechain::ShardGroup {
                 start: 1,
@@ -1618,6 +1679,15 @@ mod tests {
         checkpoint: &Versions,
         responses: Vec<Result<SyncStateResponse, RpcStatus>>,
     ) -> Result<Option<Version>, RpcStateSyncError> {
+        sync_with_proofs_at(store, checkpoint, EPOCH, responses).await
+    }
+
+    async fn sync_with_proofs_at<TStore: StateStore>(
+        store: &TStore,
+        checkpoint: &Versions,
+        checkpoint_epoch: Epoch,
+        responses: Vec<Result<SyncStateResponse, RpcStatus>>,
+    ) -> Result<Option<Version>, RpcStateSyncError> {
         let validator = AcceptAll;
         let sync = ShardSync::new(
             NETWORK,
@@ -1626,7 +1696,7 @@ mod tests {
             shard(),
             root_after(checkpoint),
             version_after(checkpoint),
-            EPOCH,
+            checkpoint_epoch,
             UP_VERSION_LOOKBACK,
         )
         .with_version_proofs(&validator);
@@ -1749,6 +1819,54 @@ mod tests {
         assert!(matches!(err, RpcStateSyncError::StateRootMismatch { .. }), "{err}");
         assert_eq!(local_version(&store), Some(N));
         assert!(substate(&store, POISON).is_none());
+    }
+
+    #[tokio::test]
+    async fn a_version_streamed_after_the_epoch_of_the_block_that_proves_it_is_rejected() {
+        let (store, _tmp) = create_store();
+        let later_epoch = Epoch(EPOCH.as_u64() + 1);
+        let v1 = vec![(1, vec![create(HONEST)])];
+
+        let err = sync_with_proofs_at(&store, &v1, later_epoch, vec![
+            chunk(1, later_epoch, false, v1[0].1.clone()),
+            version_proof_at(1, root_after(&v1), EPOCH),
+            complete(1),
+        ])
+        .await
+        .unwrap_err();
+
+        assert!(matches!(err, RpcStateSyncError::InvalidResponse(_)), "{err}");
+        assert_eq!(local_version(&store), None);
+        assert!(held_proofs(&store).is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_version_stamped_before_the_epoch_of_the_block_proving_the_one_below_it_is_rejected() {
+        let later_epoch = Epoch(EPOCH.as_u64() + 1);
+        let v1 = vec![(1, vec![create(HONEST)])];
+        let checkpoint = vec![v1[0].clone(), (2, vec![destroy(HONEST)])];
+        let responses = |v2_epoch| {
+            vec![
+                chunk(1, EPOCH, false, v1[0].1.clone()),
+                version_proof_at(1, root_after(&v1), later_epoch),
+                chunk(2, v2_epoch, false, vec![destroy(HONEST)]),
+                complete(2),
+            ]
+        };
+
+        let (store, _tmp) = create_store();
+        let err = sync_with_proofs_at(&store, &checkpoint, later_epoch, responses(EPOCH))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, RpcStateSyncError::InvalidResponse(_)), "{err}");
+        assert_eq!(local_version(&store), Some(1));
+        assert!(substate(&store, HONEST).is_some_and(|s| s.is_up()));
+
+        let (store, _tmp) = create_store();
+        sync_with_proofs_at(&store, &checkpoint, later_epoch, responses(later_epoch))
+            .await
+            .unwrap();
+        assert_eq!(local_version(&store), Some(2));
     }
 
     #[tokio::test]
