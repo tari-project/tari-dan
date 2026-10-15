@@ -1089,8 +1089,8 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 self.transaction_pool.has_ready_or_pending_transaction_updates(
                     tx,
                     highest_block.block_id(),
-                    epoch_state.epoch(),
-                    epoch_end_drain.aborts_waiting_prepared(),
+                    &epoch_end_drain
+                        .proposal_filter(epoch_state.epoch(), epoch_state.local_committee_info().shard_group()),
                 )?;
             let is_epoch_end_held = epoch_end_drain.is_active() &&
                 self.transaction_pool

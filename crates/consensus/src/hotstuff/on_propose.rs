@@ -46,6 +46,7 @@ use tari_ootle_storage::{
         LockedEpoch,
         MultiShardAtom,
         PendingShardStateTreeDiff,
+        ProposalFilter,
         TransactionExecution,
         TransactionPool,
         TransactionPoolRecord,
@@ -464,16 +465,11 @@ where TConsensusSpec: ConsensusSpec
 
         let mut executed_transactions = HashMap::new();
 
+        let proposal_filter = epoch_end_drain.proposal_filter(epoch, local_committee_info.shard_group());
         let batch = if should_not_propose_commands {
             ProposalBatch::default()
         } else {
-            self.fetch_next_proposal_batch(
-                tx,
-                state_anchor_leaf,
-                epoch,
-                next_height,
-                epoch_end_drain.aborts_waiting_prepared(),
-            )?
+            self.fetch_next_proposal_batch(tx, state_anchor_leaf, next_height, &proposal_filter)?
         };
         debug!(target: LOG_TARGET, "🌿 PROPOSE: {} (justify: {}) {batch}", highest_seen_block.height(), justify_block.height());
 
@@ -614,7 +610,7 @@ where TConsensusSpec: ConsensusSpec
             // justified block, and to propose a transaction that a foreign proposal in this block has just
             // moved to ABORT with the decision that move implies.
             change_set.apply_transaction_update(&mut transaction);
-            if epoch_end_drain.holds_back(&transaction, local_committee_info.shard_group()) {
+            if proposal_filter.holds_back(&transaction) {
                 debug!(
                     target: LOG_TARGET,
                     "🌊 PROPOSE: holding back cross-shard transaction {} until the next epoch",
@@ -623,7 +619,7 @@ where TConsensusSpec: ConsensusSpec
                 continue;
             }
             let expired_abort = abort_if_local_prepared_expired(&mut transaction, epoch).or_else(|| {
-                let is_waiting = epoch_end_drain.aborts_waiting_prepared() &&
+                let is_waiting = proposal_filter.aborts_waiting_prepared() &&
                     !transaction.is_ready_for_pending_stage(local_committee_info.shard_group());
                 is_waiting
                     .then(|| abort_local_prepared_for_epoch_end(&mut transaction))
@@ -821,9 +817,8 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &TTx,
         state_anchor_leaf: LeafBlock,
-        epoch: Epoch,
         next_height: NodeHeight,
-        abort_waiting_prepared: bool,
+        proposal_filter: &ProposalFilter,
     ) -> Result<ProposalBatch, HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "fetch_next_proposal_batch");
         // A block is budgeted by total command weight (`max_block_weight`), not a flat command count.
@@ -898,8 +893,7 @@ where TConsensusSpec: ConsensusSpec
                     max_candidates.saturating_mul(PROPOSAL_READS_PER_CANDIDATE),
                     heavy_turn,
                     state_anchor_leaf.block_id(),
-                    epoch,
-                    abort_waiting_prepared,
+                    proposal_filter,
                 )
             })
             .transpose()?

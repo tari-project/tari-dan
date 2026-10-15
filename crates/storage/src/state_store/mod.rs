@@ -72,6 +72,7 @@ use crate::{
         LockedSubstateValue,
         NoVoteReason,
         PendingShardStateTreeDiff,
+        ProposalFilter,
         StateVersionProof,
         StateVersionTransitions,
         SubstateChange,
@@ -333,17 +334,14 @@ pub trait StateStoreReadTransaction: Sized {
     ) -> Result<TransactionPoolRecord, StorageError>;
     fn transaction_pool_exists(&self, transaction_id: &TransactionId) -> Result<bool, StorageError>;
     fn transaction_pool_get_all(&self, limit: usize) -> Result<Vec<TransactionPoolRecord>, StorageError>;
-    /// Offers `f` records that are not lock-conflicted and are ready to propose in a block in `epoch` (see
-    /// [`TransactionPoolRecord::is_ready_to_propose_in`]), with the pending updates in the chain ending at `block_id`
-    /// applied. Records are read in transaction id order from the first id at or after `start_id`, wrapping around
-    /// to the lowest id, until `max_records` have been offered, `max_reads` records have been read (ready or not), or
-    /// every record has been read once.
-    #[expect(clippy::too_many_arguments)]
+    /// Offers `f` records that are not lock-conflicted and that `filter` accepts, with the pending updates in the chain
+    /// ending at `block_id` applied. Records are read in transaction id order from the first id at or after
+    /// `start_id`, wrapping around to the lowest id, until `max_records` have been offered, `max_reads` records have
+    /// been read (accepted or not), or every record has been read once.
     fn transaction_pool_for_each_ready<F>(
         &self,
         block_id: &BlockId,
-        epoch: Epoch,
-        abort_waiting_prepared: bool,
+        filter: &ProposalFilter,
         start_id: &TransactionId,
         max_records: usize,
         max_reads: usize,

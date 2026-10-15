@@ -3,8 +3,8 @@
 
 use std::time::Duration;
 
-use tari_ootle_common_types::ShardGroup;
-use tari_ootle_storage::consensus_models::{TransactionPoolRecord, TransactionPoolStage};
+use tari_ootle_common_types::{Epoch, ShardGroup};
+use tari_ootle_storage::consensus_models::{ProposalFilter, TransactionPoolStage};
 
 /// How far a leader has drained cross-shard transactions ahead of an end of epoch that changes the number of
 /// committees.
@@ -58,14 +58,19 @@ impl EpochEndDrain {
         matches!(self, Self::Aborting | Self::Overdue)
     }
 
-    /// True if `rec` is a cross-shard transaction that has not been prepared by the local shard group, and this
-    /// drain holds it back.
-    pub fn holds_back(&self, rec: &TransactionPoolRecord, local_shard_group: ShardGroup) -> bool {
-        self.is_active() &&
-            rec.current_stage().is_new() &&
-            rec.current_decision().is_commit() &&
-            rec.evidence().num_shard_groups() > 1 &&
-            rec.evidence().has_inputs(local_shard_group)
+    /// The pool records a block in `epoch` may propose a command for under this drain.
+    pub fn proposal_filter(&self, epoch: Epoch, local_shard_group: ShardGroup) -> ProposalFilter {
+        let filter = ProposalFilter::new(epoch);
+        let filter = if self.is_active() {
+            filter.with_cross_shard_held_back(local_shard_group)
+        } else {
+            filter
+        };
+        if self.aborts_waiting_prepared() {
+            filter.with_waiting_prepared_aborted()
+        } else {
+            filter
+        }
     }
 
     /// True if `EndEpoch` may not be proposed while a pooled transaction is in `stage`.
