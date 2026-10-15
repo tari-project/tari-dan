@@ -331,14 +331,22 @@ pub enum LogLevel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "validator-node-client/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "validator-node-client/", rename = "VnGetCommitteeRequest")
+)]
 pub struct GetCommitteeRequest {
     pub epoch: Epoch,
     pub substate_address: SubstateAddress,
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "validator-node-client/"))]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "validator-node-client/", rename = "VnGetCommitteeResponse")
+)]
 pub struct GetCommitteeResponse {
     pub committee: Arc<Committee<PeerAddress>>,
 }

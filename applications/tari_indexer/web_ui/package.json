@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "fmt": "pnpm npx prettier --write \"./**/*.{ts,tsx,css,json}\" --log-level=warn",
     "clean-dist": "rm -rf dist/* && rm -f tsconfig.tsbuildinfo"
   },
   "dependencies": {
