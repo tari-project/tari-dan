@@ -298,6 +298,24 @@ impl<'db, CF: Cf, DB: RocksReader> CfContext<'db, DB, CF> {
         })
     }
 
+    /// Returns an iterator over the values whose keys are at or after `start` (when given) and before `end` (when
+    /// given). An open bound extends to the edge of the table.
+    pub fn table_range_value_iterator(
+        &self,
+        ordering: Ordering,
+        start: Option<&CF::Key>,
+        end: Option<&CF::Key>,
+        operation: &'static str,
+    ) -> impl Iterator<Item = Result<CF::Value, RocksDbStorageError>> + '_ {
+        let mode = ordering_to_mode(ordering);
+        let bounds = TableBounds::for_cf::<CF>(start.map(|k| self.encode_key(k)), end.map(|k| self.encode_key(k)));
+        self.db
+            .iterator_cf_opt(self.handle, range_opts(bounds), mode, move |res| {
+                res.map_err(|e| RocksDbStorageError::RocksDbError { operation, source: e })
+                    .and_then(|(_, v)| self.value_codec.decode_exact(v))
+            })
+    }
+
     pub fn range_iterator(
         &self,
         ordering: Ordering,

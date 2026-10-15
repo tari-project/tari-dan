@@ -94,6 +94,11 @@ const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::on_propose";
 /// take from transactions that fit.
 const HEAVY_TRANSACTION_TURN_INTERVAL: u64 = 10;
 
+/// The leader reads at most this many ready pool records per transaction slot when choosing a block's transactions,
+/// so choosing a batch costs the same however large the pool grows. A window several times the batch size keeps the
+/// choice random, and the window moves to a random point of the pool on every proposal.
+const PROPOSAL_CANDIDATES_PER_TRANSACTION: usize = 8;
+
 struct NextBlock {
     block: Block,
     foreign_proposals: Vec<ForeignProposal>,
@@ -813,6 +818,7 @@ where TConsensusSpec: ConsensusSpec
                     tx,
                     weight_budget,
                     max_tx_count,
+                    max_tx_count.saturating_mul(PROPOSAL_CANDIDATES_PER_TRANSACTION),
                     heavy_turn,
                     state_anchor_leaf.block_id(),
                     epoch,

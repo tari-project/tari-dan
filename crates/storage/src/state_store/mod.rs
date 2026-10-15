@@ -333,11 +333,20 @@ pub trait StateStoreReadTransaction: Sized {
     ) -> Result<TransactionPoolRecord, StorageError>;
     fn transaction_pool_exists(&self, transaction_id: &TransactionId) -> Result<bool, StorageError>;
     fn transaction_pool_get_all(&self, limit: usize) -> Result<Vec<TransactionPoolRecord>, StorageError>;
-    /// Offers `f` every record that is not lock-conflicted and is ready to propose in a block in `epoch` (see
+    /// Offers `f` records that are not lock-conflicted and are ready to propose in a block in `epoch` (see
     /// [`TransactionPoolRecord::is_ready_to_propose_in`]), with the pending updates in the chain ending at `block_id`
-    /// applied. The order the records are offered in is unspecified.
-    fn transaction_pool_for_each_ready<F>(&self, block_id: &BlockId, epoch: Epoch, f: F) -> Result<(), StorageError>
-    where F: FnMut(TransactionPoolRecord);
+    /// applied. Records are offered in transaction id order from the first id at or after `start_id`, wrapping around
+    /// to the lowest id, until `max_records` have been offered or every ready record has been offered once.
+    fn transaction_pool_for_each_ready<F>(
+        &self,
+        block_id: &BlockId,
+        epoch: Epoch,
+        start_id: &TransactionId,
+        max_records: usize,
+        f: F,
+    ) -> Result<(), StorageError>
+    where
+        F: FnMut(TransactionPoolRecord);
     fn transaction_pool_has_pending_state_updates(&self, block_id: &BlockId) -> Result<bool, StorageError>;
 
     fn transaction_pool_count(

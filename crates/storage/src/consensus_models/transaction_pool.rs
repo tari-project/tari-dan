@@ -130,21 +130,30 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
 
     /// Fetch transactions ready to propose in a block in `epoch`, bounded by a weight budget and a hard command
     /// count cap. See [`select_proposal_batch`] for how records are chosen.
+    ///
+    /// At most `max_candidates` ready records are read, so the cost of a call is bounded however many
+    /// transactions are ready. The candidates are the ready records that follow a random transaction id, wrapping
+    /// around, so when more than `max_candidates` are ready each call samples a different, uniformly placed
+    /// window of the pool.
     pub fn get_batch_for_next_block(
         &self,
         tx: &impl StateStoreReadTransaction,
         weight_budget: u64,
         max_count: usize,
+        max_candidates: usize,
         heavy_turn: bool,
         block_id: &BlockId,
         epoch: Epoch,
     ) -> Result<Vec<TransactionPoolRecord>, TransactionPoolError> {
-        if weight_budget == 0 || max_count == 0 {
+        if weight_budget == 0 || max_count == 0 || max_candidates == 0 {
             return Ok(Vec::new());
         }
         let mut rng = rand::rng();
+        let start_id = TransactionId::new(rng.random());
         let mut sample = ProposalSample::new(weight_budget, max_count, heavy_turn);
-        tx.transaction_pool_for_each_ready(block_id, epoch, |rec| sample.offer(rec, &mut rng))?;
+        tx.transaction_pool_for_each_ready(block_id, epoch, &start_id, max_candidates, |rec| {
+            sample.offer(rec, &mut rng)
+        })?;
         Ok(sample.into_batch(&mut rng))
     }
 
