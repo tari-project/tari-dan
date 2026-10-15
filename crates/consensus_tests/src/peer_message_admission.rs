@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     sync::{
         Arc,
         Mutex,
@@ -23,11 +23,19 @@ use tari_consensus::{
     traits::InboundMessagingError,
 };
 use tari_consensus_types::{BlockId, Decision};
-use tari_ootle_common_types::{Epoch, NodeHeight, SubstateLockType};
+use tari_ootle_common_types::{Epoch, NodeHeight, SubstateLockType, committee::Committee};
 use tari_ootle_transaction::{Transaction, TransactionId};
 use tokio::time::sleep;
 
-use crate::support::{Test, TestAddress, TestVnDestination, build_transaction_from, logging::setup_logger};
+use crate::support::{
+    TEST_NUM_PRESHARDS,
+    Test,
+    TestAddress,
+    TestVnDestination,
+    build_transaction_from,
+    committee_number_to_shard_group,
+    logging::setup_logger,
+};
 
 /// Commits blocks until the transaction pool drains, failing if it takes more than ten blocks.
 async fn commit_until_pool_is_empty(test: &mut Test, address: &TestAddress) {
@@ -185,6 +193,100 @@ async fn a_notification_from_a_peer_at_its_pending_cap_is_still_followed_up() {
     assert_eq!(requests_sent.load(Ordering::SeqCst), num_notifications + 1);
 
     test.stop();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_notification_from_an_epoch_with_a_different_committee_layout_does_not_interrupt_consensus() {
+    setup_logger();
+    let target = TestAddress::new("1");
+    let notifier = TestAddress::new("3");
+    let mut test = Test::builder()
+        .add_committee(0, vec!["1", "2"])
+        .add_committee(1, vec!["3", "4"])
+        .start()
+        .await;
+
+    // Epoch 1 had a single committee, so the notifier's shard group then spans every shard
+    let epoch_manager = test.get_validator(&target).epoch_manager.clone();
+    let previous_committee = {
+        let state = epoch_manager.state_lock().await;
+        Committee::new(state.committees.values().flat_map(|c| c.iter().cloned()).collect())
+    };
+    epoch_manager
+        .set_epoch_committees(
+            Epoch(1),
+            HashMap::from([(
+                committee_number_to_shard_group(TEST_NUM_PRESHARDS, 0, 1),
+                previous_committee,
+            )]),
+        )
+        .await;
+
+    let inputs = test.create_substates_on_vns(TestVnDestination::Committee(0), 1);
+    // An output on each committee, so every validator commits a substate
+    let outputs = [0, 1]
+        .into_iter()
+        .flat_map(|committee_no| test.build_outputs_for_committee(committee_no, 1))
+        .collect();
+    let tx = build_transaction_from(
+        Transaction::builder_localnet(Epoch(2))
+            .with_inputs(inputs.iter().cloned().map(|i| i.into()))
+            .build_and_seal(&PrivateKey::default()),
+    );
+    test.create_execution_at_destination_for_transaction(
+        TestVnDestination::All,
+        &tx,
+        Decision::Commit,
+        100,
+        inputs
+            .into_iter()
+            .map(|input| (input.substate_id().clone(), SubstateLockType::Write))
+            .collect(),
+        outputs,
+    );
+    test.send_transaction_to_destination(TestVnDestination::All, tx.clone())
+        .await;
+    test.start_epoch(Epoch(2)).await;
+
+    let shard_groups = [&target, &notifier].map(|address| test.get_validator(address).shard_group);
+    let validator = test.get_validator_mut(&target);
+    let mut state = validator.current_state_machine_state.clone();
+    state.mark_unchanged();
+    validator
+        .tx_inbound_message
+        .send((
+            notifier,
+            HotstuffMessage::ForeignProposalNotification(ForeignProposalNotificationMessage {
+                block_id: BlockId::from([1u8; 32]),
+                epoch: Epoch(1),
+                shard_groups: shard_groups.to_vec(),
+            }),
+        ))
+        .await
+        .unwrap();
+
+    loop {
+        test.on_block_committed().await;
+        if test.is_transaction_pool_empty() {
+            break;
+        }
+        let leaf = test.get_validator(&target).get_leaf_block();
+        assert!(
+            leaf.height <= NodeHeight(30),
+            "Transaction not committed after {} blocks",
+            leaf.height
+        );
+    }
+
+    assert!(
+        !state.has_changed().unwrap(),
+        "consensus state machine left Running (now {})",
+        *state.borrow()
+    );
+    test.stop();
+    test.assert_all_validators_have_decision(tx.id(), Decision::Commit)
+        .await;
+    test.assert_all_validators_committed(tx.id());
 }
 
 /// Commits a transaction with inputs on committee 0 and outputs on committees 1 and 2.

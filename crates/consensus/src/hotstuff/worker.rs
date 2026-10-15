@@ -1437,7 +1437,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             HotstuffMessage::ForeignProposalNotification(msg) => log_err(
                 "on_receive_foreign_proposal (notification)",
                 self.on_receive_foreign_proposal
-                    .handle_notification_received(from, epoch_state.epoch(), msg, epoch_state.local_committee_info())
+                    .handle_notification_received(from, msg, epoch_state.local_committee_info())
                     .await,
             ),
             HotstuffMessage::ForeignProposalRequest(msg) => log_err(

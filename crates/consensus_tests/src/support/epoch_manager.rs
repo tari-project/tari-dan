@@ -235,6 +235,19 @@ impl TestEpochManager {
         self
     }
 
+    /// Gives `epoch` a committee layout of its own, read only by `get_committee_info_by_validator_address` and
+    /// `get_random_committee_member`. Every other lookup returns the `add_committees` layout for any epoch. Its
+    /// members must also belong to a committee added with `add_committees`.
+    pub async fn set_epoch_committees(
+        &self,
+        epoch: Epoch,
+        committees: HashMap<ShardGroup, Committee<TestAddress>>,
+    ) -> &Self {
+        let committees = committees.into_iter().map(|(sg, c)| (sg, Arc::new(c))).collect();
+        self.state_lock().await.epoch_committees.insert(epoch, committees);
+        self
+    }
+
     pub async fn set_claim_keys(&self, dest: TestVnDestination, claim_key: RistrettoPublicKey) -> &Self {
         let mut state = self.state_lock().await;
         let num_committees = state.committees.len() as u32;
@@ -362,21 +375,17 @@ impl EpochManagerReader for TestEpochManager {
         address: &Self::Addr,
     ) -> Result<CommitteeInfo, EpochManagerError> {
         let state = self.state_lock().await;
-        let (sg, committee) = state
-            .committees
+        let committees = state.committees_at(epoch);
+        let (sg, committee) = committees
             .iter()
             .find(|(_, committee)| committee.contains(address))
             .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered {
                 address: address.to_string(),
                 epoch,
             })?;
-        let num_committees = state.committees.len() as u32;
+        let num_committees = committees.len() as u32;
         let num_members = committee.len();
-        let total_power = state
-            .committees
-            .get(sg)
-            .map(|c| c.total_power())
-            .unwrap_or_else(VotePower::zero);
+        let total_power = committee.total_power();
         Ok(CommitteeInfo::new(
             TEST_NUM_PRESHARDS,
             num_members as u32,
@@ -481,18 +490,19 @@ impl EpochManagerReader for TestEpochManager {
 
     async fn get_random_committee_member(
         &self,
-        _epoch: Epoch,
+        epoch: Epoch,
         shard_group: Option<ShardGroup>,
         excluding: HashSet<Self::Addr>,
     ) -> Result<ValidatorNode<Self::Addr>, EpochManagerError> {
         let state = self.state_lock().await;
         let vn = match shard_group {
             Some(shard_group) => state
-                .validator_nodes
-                .values()
-                .filter(|(_, sg)| *sg == shard_group)
-                .map(|(vn, _)| vn)
-                .find(|vn| !excluding.contains(&vn.address))
+                .committees_at(epoch)
+                .get(&shard_group)
+                .into_iter()
+                .flat_map(|committee| committee.iter())
+                .find(|member| !excluding.contains(&member.address))
+                .map(|member| &state.validator_nodes[&member.address].0)
                 .ok_or_else(|| {
                     EpochManagerError::StorageError(StorageError::NotFound {
                         item: "validator_nodes",
@@ -570,7 +580,17 @@ pub struct TestEpochManagerState {
     #[allow(clippy::type_complexity)]
     pub validator_nodes: HashMap<TestAddress, (ValidatorNode<TestAddress>, ShardGroup)>,
     pub committees: HashMap<ShardGroup, Arc<Committee<TestAddress>>>,
+    /// Layouts of epochs whose committees differ from `committees`. See `TestEpochManager::set_epoch_committees`
+    /// for the lookups that read them.
+    #[allow(clippy::type_complexity)]
+    pub epoch_committees: HashMap<Epoch, HashMap<ShardGroup, Arc<Committee<TestAddress>>>>,
     pub address_shard: HashMap<TestAddress, ShardGroup>,
+}
+
+impl TestEpochManagerState {
+    fn committees_at(&self, epoch: Epoch) -> &HashMap<ShardGroup, Arc<Committee<TestAddress>>> {
+        self.epoch_committees.get(&epoch).unwrap_or(&self.committees)
+    }
 }
 
 impl Default for TestEpochManagerState {
@@ -581,6 +601,7 @@ impl Default for TestEpochManagerState {
             last_epoch_hash: FixedHash::default(),
             validator_nodes: HashMap::new(),
             committees: HashMap::new(),
+            epoch_committees: HashMap::new(),
             address_shard: HashMap::new(),
         }
     }
