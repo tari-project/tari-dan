@@ -53,6 +53,7 @@ use tari_ootle_common_types::{
     NodeHeight,
     NumPreshards,
     ShardGroup,
+    SubstateAddress,
     ToSubstateAddress,
     VersionedSubstateId,
     optional::Optional,
@@ -147,7 +148,7 @@ use crate::{
         parked_block,
         parked_block::{ParkedBlockCf, ParkedBlockDataRef},
         pending_state_tree_diff::{PendingStateTreeDiffRecordCf, ShardStateTreeDiff, ShardStateTreeDiffRef},
-        state_sync_rewind_point::StateSyncRewindPointCf,
+        state_sync_rewind_point::{StateSyncMissingValueCf, StateSyncRewindPointCf},
         state_transition,
         state_transition::{
             StateTransitionCf,
@@ -1453,6 +1454,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         let unpruned_cf = db.cf(substate::UnprunedDownedValuesIndex)?;
         let down_proofs_cf = db.cf(SubstateDownProofCf)?;
         let down_proofs_epoch_index = db.cf(SubstateDownProofEpochIndex)?;
+        let missing_values_cf = db.cf(StateSyncMissingValueCf)?;
 
         let start_version = target_state_version.saturating_add(1);
         let mut touched: HashSet<SubstateId> = HashSet::new();
@@ -1477,6 +1479,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
                         let substate = substates_cf.get(address, OPERATION)?;
                         touched.insert(substate.substate_id.clone());
                         substates_cf.delete(address, OPERATION)?;
+                        missing_values_cf.delete(&(shard, *address), OPERATION)?;
                         stats.substates_created_deleted += 1;
                     },
                     StateTransitionType::Down => {
@@ -1484,6 +1487,9 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
                         touched.insert(substate.substate_id.clone());
                         substate.destroyed = None;
                         substates_cf.put(address, &substate, OPERATION)?;
+                        if substate.substate_value.is_none() {
+                            missing_values_cf.put(&(shard, *address), &substate.created.at_state_version, OPERATION)?;
+                        }
                         down_proofs_cf.delete(&(shard, *address), OPERATION)?;
                         down_proofs_epoch_index.delete(&(record.epoch, shard, *address), OPERATION)?;
                         stats.substates_destroyed_restored += 1;
@@ -1906,6 +1912,27 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
     fn state_sync_rewind_point_remove(&mut self, shard: Shard) -> Result<(), StorageError> {
         const OPERATION: &str = "state_sync_rewind_point_remove";
         self.db().cf(StateSyncRewindPointCf)?.delete(&shard, OPERATION)?;
+        Ok(())
+    }
+
+    fn state_sync_missing_value_insert(
+        &mut self,
+        shard: Shard,
+        address: &SubstateAddress,
+        created_at: Version,
+    ) -> Result<(), StorageError> {
+        const OPERATION: &str = "state_sync_missing_value_insert";
+        self.db()
+            .cf(StateSyncMissingValueCf)?
+            .put(&(shard, *address), &created_at, OPERATION)?;
+        Ok(())
+    }
+
+    fn state_sync_missing_value_remove(&mut self, shard: Shard, address: &SubstateAddress) -> Result<(), StorageError> {
+        const OPERATION: &str = "state_sync_missing_value_remove";
+        self.db()
+            .cf(StateSyncMissingValueCf)?
+            .delete(&(shard, *address), OPERATION)?;
         Ok(())
     }
 

@@ -274,16 +274,18 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
     }
 
     /// True if this node's committed state already matches `checkpoint` for every shard it is responsible for (its
-    /// local shard group plus the global shard). Distinguishes a rolled-back node (complete state, checkpoint
-    /// retained) from one whose first-time state sync was interrupted after one shard group's checkpoint was stored
-    /// but before the others finished streaming (checkpoint present, state incomplete).
+    /// local shard group plus the global shard), with the value of every up substate. Distinguishes a rolled-back node
+    /// (complete state, checkpoint retained) from one whose first-time state sync was interrupted after one shard
+    /// group's checkpoint was stored but before the others finished streaming (checkpoint present, state incomplete).
     async fn local_state_matches_checkpoint(&self, checkpoint: &EpochCheckpoint) -> Result<bool, RpcStateSyncError> {
         let local_info = self.epoch_manager.get_local_committee_info(checkpoint.epoch()).await?;
         self.state_store.with_read_tx(|tx| {
             for shard in local_info.shard_group().shard_iter_with_global() {
                 let version = tx.state_tree_versions_get_latest(shard)?;
                 let local_root = calculate_state_root_for_shard(tx, shard, version)?;
-                if local_root != checkpoint.get_shard_root(shard) {
+                if local_root != checkpoint.get_shard_root(shard) ||
+                    tx.state_sync_missing_values_get_earliest(shard)?.is_some()
+                {
                     return Ok(false);
                 }
             }

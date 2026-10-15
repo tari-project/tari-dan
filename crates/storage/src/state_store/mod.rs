@@ -467,6 +467,12 @@ pub trait StateStoreReadTransaction: Sized {
     fn state_sync_rewind_point_get(&self, shard: Shard) -> Result<Option<Version>, StorageError>;
     /// Every shard that has a rewind point, with that rewind point.
     fn state_sync_rewind_points_get_all(&self) -> Result<Vec<(Shard, Version)>, StorageError>;
+    /// Of the up substates of `shard` that state sync committed without their value, the one created at the lowest
+    /// state version, with that version.
+    fn state_sync_missing_values_get_earliest(
+        &self,
+        shard: Shard,
+    ) -> Result<Option<(SubstateAddress, Version)>, StorageError>;
     /// The state version proofs held for `shard` at versions in `from..=to`, in ascending version order.
     fn state_version_proofs_get_range(
         &self,
@@ -813,6 +819,16 @@ pub trait StateStoreWriteTransaction {
     /// that they can be rewound if the sync never verifies them, even across a restart.
     fn state_sync_rewind_point_set(&mut self, shard: Shard, version: Version) -> Result<(), StorageError>;
     fn state_sync_rewind_point_remove(&mut self, shard: Shard) -> Result<(), StorageError>;
+    /// Records that state sync committed the substate at `address`, created at `created_at`, without its value. A
+    /// rewind keeps the record in step with the substate: it drops the record with the substate's creation, and adds
+    /// one for a substate it restores to up without its value.
+    fn state_sync_missing_value_insert(
+        &mut self,
+        shard: Shard,
+        address: &SubstateAddress,
+        created_at: Version,
+    ) -> Result<(), StorageError>;
+    fn state_sync_missing_value_remove(&mut self, shard: Shard, address: &SubstateAddress) -> Result<(), StorageError>;
     /// Stores `proof`. A proof point is kept for good. Any other proof is kept while its version is within
     /// `state_history_length` versions of its shard's latest, or while a live down proof record cites it.
     fn state_version_proofs_insert(&mut self, proof: &StateVersionProof) -> Result<(), StorageError>;

@@ -138,7 +138,7 @@ use crate::{
         lock_conflict,
         parked_block,
         pending_state_tree_diff::ShardStateTreeDiff,
-        state_sync_rewind_point::StateSyncRewindPointCf,
+        state_sync_rewind_point::{StateSyncMissingValueCf, StateSyncRewindPointCf},
         state_transition,
         state_transition::StateTransitionType,
         state_tree,
@@ -1961,6 +1961,23 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
             .iterator(Ordering::Ascending, OPERATION)
             .collect::<Result<_, _>>()?;
         Ok(points)
+    }
+
+    fn state_sync_missing_values_get_earliest(
+        &self,
+        shard: Shard,
+    ) -> Result<Option<(SubstateAddress, Version)>, StorageError> {
+        let cf = self.db().cf(StateSyncMissingValueCf)?;
+        let start = cf.encode_key(&(shard, SubstateAddress::zero()));
+        let end = cf.encode_key(&(shard, SubstateAddress::max()));
+        let mut earliest = None::<(SubstateAddress, Version)>;
+        for entry in cf.range_iterator(Ordering::Ascending, start..end) {
+            let ((_, address), created_at) = entry?;
+            if earliest.is_none_or(|(_, version)| created_at < version) {
+                earliest = Some((address, created_at));
+            }
+        }
+        Ok(earliest)
     }
 
     fn state_tree_versions_get_latest_for_shard_group(

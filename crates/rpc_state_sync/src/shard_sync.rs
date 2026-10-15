@@ -205,8 +205,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
 
     /// Verifies that `proof` proves the shard at `proof.state_version` with the root of `written_version`, the last
     /// version the stream wrote, and keeps it to re-serve to peers that sync from this node. Returns the proven version
-    /// and the epoch of the block that proves it. If `settle`, the state through `written_version` is kept even if the
-    /// stream later fails.
+    /// and the epoch of the block that proves it.
     ///
     /// Every version at or below the proven one was committed no later than that block, so `written_epoch`, the epoch
     /// of the last version written, must not lie after the block's epoch.
@@ -216,7 +215,6 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         proof: proto::StateVersionProof,
         written_version: Option<Version>,
         written_epoch: Epoch,
-        settle: bool,
     ) -> Result<(Version, Epoch), RpcStateSyncError> {
         let shard = self.shard;
         if proof.shard != shard.as_u32() {
@@ -274,11 +272,8 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                 },
                 shard_root_proof,
             })?;
-            if settle {
-                // The state through the written version is now proven, so a later failure rewinds no further back.
-                tx.state_sync_rewind_point_remove(shard)?;
-            }
-            Ok::<_, StorageError>(())
+            // The state through the written version is now proven, so a later failure rewinds no further back.
+            tx.state_sync_rewind_point_remove(shard)
         })?;
         debug!(target: LOG_TARGET, "🛜 ✅ {shard} proven at v{state_version}");
         Ok((state_version, proof_epoch))
@@ -344,10 +339,22 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
 
     /// Rewinds the versions of the shard that an earlier sync committed but never verified against its checkpoint,
     /// and returns the shard's latest verified version.
+    ///
+    /// A substate synced without its value stays recorded across proofs and resumed syncs, for a later version of
+    /// the stream to destroy. A shard already at the checkpoint root has no later version to stream, so one that
+    /// still holds such a substate is rewound to below the substate's creation, and its value is streamed again.
     pub fn discard_unverified_state(&self) -> Result<Option<Version>, RpcStateSyncError> {
         let shard = self.shard;
         self.store.with_write_tx(|tx| {
-            if let Some(rewind_point) = tx.state_sync_rewind_point_get(shard)? {
+            let mut rewind_point = tx.state_sync_rewind_point_get(shard)?;
+            if let Some((_, created_at)) = tx.state_sync_missing_values_get_earliest(shard)? {
+                let latest = tx.state_tree_versions_get_latest(shard)?;
+                if calculate_state_root_for_shard(&**tx, shard, latest)? == self.checkpoint_shard_root {
+                    let below_creation = created_at.saturating_sub(1);
+                    rewind_point = Some(rewind_point.map_or(below_creation, |point| point.min(below_creation)));
+                }
+            }
+            if let Some(rewind_point) = rewind_point {
                 rewind_shard(tx, shard, rewind_point)?;
             }
             Ok::<_, RpcStateSyncError>(tx.state_tree_versions_get_latest(shard)?)
@@ -462,12 +469,6 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         // The latest epoch the shard is known to have reached, from the last version committed or the block that
         // proved it. No later version can lie below it.
         let mut epoch_floor = self.latest_local_epoch(maybe_persisted_state_version)?;
-        // Substates the stream created as their value hash alone and has not yet destroyed. The sync requests every
-        // value, so an honest peer withholds only a value its epoch GC has pruned: that of a substate destroyed
-        // before the peer's GC horizon. The peer serves a bounded stream only while that horizon is no later than
-        // the checkpoint epoch, so the destruction lies within the stream. Each such substate must therefore be
-        // destroyed before the stream completes, and none may be settled by a proof while it is still up.
-        let mut created_without_value = HashSet::new();
 
         // syncing states
         loop {
@@ -513,9 +514,8 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                             proof.state_version
                         )));
                     }
-                    let settle = created_without_value.is_empty();
                     let (proven, proof_epoch) = self
-                        .apply_version_proof(validator, proof, maybe_persisted_state_version, epoch_floor, settle)
+                        .apply_version_proof(validator, proof, maybe_persisted_state_version, epoch_floor)
                         .await?;
                     // Every later version is committed after the proving block, so no earlier than its epoch.
                     epoch_floor = proof_epoch;
@@ -524,11 +524,9 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                     last_committed_version = Some(proven);
                     version_started = tokio::time::Instant::now();
                     version_bytes = 0;
-                    if settle {
-                        has_unverified_state = false;
-                        rewind_point = maybe_persisted_state_version.unwrap_or(0);
-                    }
-                    // Every version up to the proven one is proven, so the stream must continue above it.
+                    has_unverified_state = false;
+                    rewind_point = maybe_persisted_state_version.unwrap_or(0);
+                    // Every version up to the proven one is settled, so the stream must continue above it.
                     last_state_version = last_state_version.max(proven.saturating_add(1));
                     continue;
                 },
@@ -554,11 +552,6 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                         complete.synced_to_version,
                         maybe_persisted_state_version.unwrap_or(0),
                     );
-                    if let Some(id) = created_without_value.iter().next() {
-                        return Err(RpcStateSyncError::InvalidResponse(anyhow!(
-                            "Peer streamed {id} without its value and completed the stream without destroying it"
-                        )));
-                    }
                     let local_state_root = self.local_state_root(maybe_persisted_state_version)?;
                     if local_state_root != self.checkpoint_shard_root {
                         error!(
@@ -571,6 +564,18 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                             expected: self.checkpoint_shard_root,
                             actual: local_state_root,
                         });
+                    }
+                    // The peer serves a bounded stream only while its epoch GC has pruned no value of a substate
+                    // destroyed after the checkpoint epoch, so every substate it streamed without a value is destroyed
+                    // within the stream.
+                    if let Some((address, created_at)) = self
+                        .store
+                        .with_read_tx(|tx| tx.state_sync_missing_values_get_earliest(shard))?
+                    {
+                        return Err(RpcStateSyncError::InvalidResponse(anyhow!(
+                            "Peer streamed the substate at {address} (v{created_at}) without its value and completed \
+                             the stream without destroying it"
+                        )));
                     }
                     if has_unverified_state {
                         self.store
@@ -691,15 +696,6 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                     )));
                 }
                 let tree_change = extract_tree_change(self.network, &update, msg_epoch);
-                match &update {
-                    SubstateUpdateProof::Create(create) if create.substate.value.value().is_none() => {
-                        created_without_value.insert(id);
-                    },
-                    SubstateUpdateProof::Create(_) => {},
-                    SubstateUpdateProof::Destroy(_) => {
-                        created_without_value.remove(&id);
-                    },
-                }
 
                 debug!(target: LOG_TARGET, "🛜 -> state update (v{}) {}", state_version, update);
                 tree_changes.push(tree_change);
@@ -738,6 +734,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                 if !has_unverified_state {
                     tx.state_sync_rewind_point_set(shard, rewind_point)?;
                 }
+                record_missing_values(tx, shard, state_version, &updates)?;
 
                 let mut store = ShardScopedTreeStoreWriter::new(tx, shard);
 
@@ -833,6 +830,29 @@ fn check_updates_apply<TTx: StateStoreReadTransaction>(
                         "Peer streamed the destruction of {id} at v{state_version}, but {id} is not up"
                     )));
                 }
+            },
+        }
+    }
+    Ok(())
+}
+
+/// Keeps the shard's record of up substates without a value in step with one state version's updates: a create that
+/// carries only its value hash is added, and a destroy removes the substate it takes down.
+fn record_missing_values<TTx: StateStoreWriteTransaction>(
+    tx: &mut TTx,
+    shard: Shard,
+    state_version: Version,
+    updates: &[SubstateUpdateProof],
+) -> Result<(), StorageError> {
+    for update in updates {
+        let address = update.to_versioned_substate_id().to_substate_address();
+        match update {
+            SubstateUpdateProof::Create(create) if create.substate.value.value().is_none() => {
+                tx.state_sync_missing_value_insert(shard, &address, state_version)?;
+            },
+            SubstateUpdateProof::Create(_) => {},
+            SubstateUpdateProof::Destroy(_) => {
+                tx.state_sync_missing_value_remove(shard, &address)?;
             },
         }
     }
@@ -2371,6 +2391,7 @@ mod tests {
         assert!(matches!(err, RpcStateSyncError::InvalidResponse(_)), "{err}");
         assert_eq!(local_version(&store), None);
         assert!(substate(&store, HONEST).is_none());
+        assert_eq!(missing_value(&store), None);
         assert_eq!(rewind_point(&store), None);
     }
 
@@ -2414,24 +2435,64 @@ mod tests {
         assert!(matches!(err, RpcStateSyncError::InvalidResponse(_)), "{err}");
         assert_eq!(local_version(&store), None);
         assert!(substate(&store, 1).is_none());
+        assert_eq!(missing_value(&store), None);
         assert_eq!(rewind_point(&store), None);
     }
 
+    fn missing_value<TStore: StateStore>(store: &TStore) -> Option<(SubstateAddress, Version)> {
+        store
+            .with_read_tx(|tx| tx.state_sync_missing_values_get_earliest(shard()))
+            .unwrap()
+    }
+
     #[tokio::test]
-    async fn a_failure_after_a_proof_discards_a_substate_still_missing_its_value() {
+    async fn a_substate_missing_its_value_is_recorded_until_a_resumed_stream_destroys_it() {
         let (store, _tmp) = create_store();
         let mut checkpoint = versions_to_proof_point();
         checkpoint.push((N + 1, vec![destroy(1)]));
         let mut responses = stream_to_proof_point_without_first_value();
-        // The peer closes the stream before destroying the substate it streamed without a value.
-        responses.push(batch(N + 1, vec![create(POISON)]));
+        // The peer closes the stream after destroying the substate, so the rewind to the proof restores it.
+        responses.push(batch(N + 1, vec![destroy(1)]));
+
+        let err = sync_with_proofs(&store, &checkpoint, responses).await.unwrap_err();
+
+        assert!(matches!(err, RpcStateSyncError::InvalidResponse(_)), "{err}");
+        assert_eq!(local_version(&store), Some(N));
+        assert!(substate(&store, 1).is_some_and(|s| s.is_up() && s.substate_value().is_none()));
+        assert_eq!(missing_value(&store), Some((address(1), 1)));
+        assert_eq!(rewind_point(&store), None);
+
+        let synced = sync_with_proofs(&store, &checkpoint, vec![
+            batch(N + 1, vec![destroy(1)]),
+            complete(N + 1),
+        ])
+        .await
+        .unwrap();
+
+        assert_eq!(synced, Some(N + 1));
+        assert!(substate(&store, 1).is_some_and(|s| s.is_destroyed()));
+        assert_eq!(missing_value(&store), None);
+    }
+
+    #[tokio::test]
+    async fn a_shard_at_the_checkpoint_root_still_missing_a_value_is_rewound_below_it() {
+        let (store, _tmp) = create_store();
+        let checkpoint = versions_to_proof_point();
+        // The peer proves the checkpoint's root and closes the stream, so nothing can still destroy the substate.
+        let responses = stream_to_proof_point_without_first_value();
 
         let err = sync_with_proofs(&store, &checkpoint, responses).await.unwrap_err();
 
         assert!(matches!(err, RpcStateSyncError::InvalidResponse(_)), "{err}");
         assert_eq!(local_version(&store), None);
         assert!(substate(&store, 1).is_none());
-        assert_eq!(rewind_point(&store), None);
+        assert_eq!(missing_value(&store), None);
+
+        let mut responses = stream_of(&checkpoint);
+        responses.push(version_proof(N, root_after(&checkpoint)));
+        responses.push(complete(N));
+        sync_with_proofs(&store, &checkpoint, responses).await.unwrap();
+        assert!(substate(&store, 1).is_some_and(|s| s.substate_value().is_some()));
     }
 
     #[tokio::test]
