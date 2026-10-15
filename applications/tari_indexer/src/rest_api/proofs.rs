@@ -9,7 +9,7 @@ use tari_indexer_client::types::{
     ValidatorSetCommittee,
     ValidatorSetCommitteeMember,
 };
-use tari_ootle_common_types::{Epoch, optional::Optional, shard::Shard};
+use tari_ootle_common_types::{Epoch, NumPreshards, optional::Optional, shard::Shard};
 use tari_ootle_p2p::PeerAddress;
 use tari_ootle_storage::consensus_models::{CommittedBlockProof, EpochCheckpoint};
 use tari_state_tree::ValidatorSetCommitteeProof;
@@ -51,18 +51,23 @@ pub fn to_substate_proof(proof: SubstateProofData) -> Result<SubstateProof, Erro
     })
 }
 
+/// The network's number of preshards, which every epoch's shard groups partition.
+pub async fn num_preshards(epoch_manager: &EpochManagerHandle<PeerAddress>) -> Result<NumPreshards, ErrorResponse> {
+    Ok(epoch_manager
+        .get_network_description()
+        .await
+        .map_err(ErrorResponse::anyhow)?
+        .num_preshards)
+}
+
 /// `epoch`'s committee for the shard group that contains `shard`, with its proof against the epoch's validator set
 /// hash. `None` if this indexer holds no validator set for `epoch`.
 pub async fn committee_for_shard(
     epoch_manager: &EpochManagerHandle<PeerAddress>,
+    num_preshards: NumPreshards,
     epoch: Epoch,
     shard: Shard,
 ) -> Result<Option<ValidatorSetCommittee>, ErrorResponse> {
-    let num_preshards = epoch_manager
-        .get_network_description()
-        .await
-        .map_err(ErrorResponse::anyhow)?
-        .num_preshards;
     let num_committees = epoch_manager
         .get_num_committees(epoch)
         .await

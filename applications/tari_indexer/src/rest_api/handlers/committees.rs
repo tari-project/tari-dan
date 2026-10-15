@@ -8,7 +8,7 @@ use crate::rest_api::{
     context::HandlerContext,
     error::ErrorResponse,
     handlers::HandlerResult,
-    proofs::committee_for_shard,
+    proofs::{committee_for_shard, num_preshards},
 };
 
 #[utoipa::path(
@@ -37,7 +37,9 @@ pub async fn get_committee(
             req.epoch
         )));
     }
-    let Some(committee) = committee_for_shard(context.epoch_manager(), req.epoch, req.shard).await? else {
+    let num_preshards = num_preshards(context.epoch_manager()).await?;
+    let Some(committee) = committee_for_shard(context.epoch_manager(), num_preshards, req.epoch, req.shard).await?
+    else {
         return Err(ErrorResponse::not_found(format!(
             "This indexer holds no validator set for {}",
             req.epoch

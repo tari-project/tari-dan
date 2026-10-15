@@ -9,14 +9,14 @@ use tari_indexer_client::types::{
     ListEpochCheckpointsRequest,
     ListEpochCheckpointsResponse,
 };
-use tari_ootle_common_types::{Epoch, shard::Shard};
+use tari_ootle_common_types::{Epoch, NumPreshards, shard::Shard};
 use tari_ootle_storage::consensus_models::EpochCheckpoint;
 
 use crate::rest_api::{
     context::HandlerContext,
     error::ErrorResponse,
     handlers::HandlerResult,
-    proofs::{committee_for_shard, to_checkpoint_entry},
+    proofs::{committee_for_shard, num_preshards, to_checkpoint_entry},
 };
 
 const DEFAULT_LIMIT: u32 = 20;
@@ -51,7 +51,7 @@ pub async fn list_epoch_checkpoints(
 ) -> HandlerResult<Json<ListEpochCheckpointsResponse>> {
     let from_epoch = req.from_epoch.unwrap_or(Epoch(0));
     let limit = req.limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT);
-    let committee_shard = committee_shard(req.include_committees, req.shard)?;
+    let committee_shard = committee_shard(&context, req.include_committees, req.shard).await?;
 
     let stored = context
         .read_only_store()
@@ -91,7 +91,7 @@ pub async fn get_latest_epoch_checkpoint(
     Extension(context): Extension<HandlerContext>,
     axum::extract::Query(req): axum::extract::Query<GetLatestEpochCheckpointRequest>,
 ) -> HandlerResult<Json<GetLatestEpochCheckpointResponse>> {
-    let committee_shard = committee_shard(req.include_committees, req.shard)?;
+    let committee_shard = committee_shard(&context, req.include_committees, req.shard).await?;
     let checkpoint = context
         .read_only_store()
         .epoch_checkpoint_get_latest(req.shard)
@@ -103,11 +103,16 @@ pub async fn get_latest_epoch_checkpoint(
     }))
 }
 
-/// The shard whose next-epoch committee to include, if committees were asked for.
-fn committee_shard(include_committees: bool, shard: Option<Shard>) -> Result<Option<Shard>, ErrorResponse> {
+/// The shard whose next-epoch committee to include, with the network's number of preshards to place it with, if
+/// committees were asked for.
+async fn committee_shard(
+    context: &HandlerContext,
+    include_committees: bool,
+    shard: Option<Shard>,
+) -> Result<Option<(Shard, NumPreshards)>, ErrorResponse> {
     match (include_committees, shard) {
         (false, _) => Ok(None),
-        (true, Some(shard)) => Ok(Some(shard)),
+        (true, Some(shard)) => Ok(Some((shard, num_preshards(context.epoch_manager()).await?))),
         (true, None) => Err(ErrorResponse::bad_request(
             "include_committees requires shard: the next epoch's committee is the one whose shard group contains it",
         )),
@@ -119,11 +124,17 @@ fn committee_shard(include_committees: bool, shard: Option<Shard>) -> Result<Opt
 async fn checkpoint_entry(
     context: &HandlerContext,
     checkpoint: &EpochCheckpoint,
-    committee_shard: Option<Shard>,
+    committee_shard: Option<(Shard, NumPreshards)>,
 ) -> Result<EpochCheckpointEntry, ErrorResponse> {
     let next_epoch_committee = match committee_shard {
-        Some(shard) if checkpoint.next_epoch_validator_set_hash().is_some() => {
-            committee_for_shard(context.epoch_manager(), checkpoint.epoch() + Epoch(1), shard).await?
+        Some((shard, num_preshards)) if checkpoint.next_epoch_validator_set_hash().is_some() => {
+            committee_for_shard(
+                context.epoch_manager(),
+                num_preshards,
+                checkpoint.epoch() + Epoch(1),
+                shard,
+            )
+            .await?
         },
         _ => None,
     };

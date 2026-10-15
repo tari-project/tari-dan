@@ -611,16 +611,15 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
     fn epoch_checkpoint_with_header_metadata_exists_before(&mut self, epoch: Epoch) -> Result<bool, StorageError> {
         const OPERATION: &str = "epoch_checkpoint_with_header_metadata_exists_before";
         use crate::storage_sqlite::schema::epoch_checkpoints;
-        let count: i64 = epoch_checkpoints::table
-            .filter(epoch_checkpoints::epoch.lt(epoch.as_u64() as i64))
-            .filter(epoch_checkpoints::has_header_metadata.eq(true))
-            .limit(1)
-            .count()
-            .get_result(self.connection())
-            .map_err(|e| StorageError::QueryError {
-                reason: format!("{OPERATION}: {}", e),
-            })?;
-        Ok(count > 0)
+        diesel::select(diesel::dsl::exists(
+            epoch_checkpoints::table
+                .filter(epoch_checkpoints::epoch.lt(epoch.as_u64() as i64))
+                .filter(epoch_checkpoints::has_header_metadata.eq(true)),
+        ))
+        .get_result(self.connection())
+        .map_err(|e| StorageError::QueryError {
+            reason: format!("{OPERATION}: {}", e),
+        })
     }
 
     fn epoch_checkpoint_get_all(
