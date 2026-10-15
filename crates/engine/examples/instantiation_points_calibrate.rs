@@ -89,7 +89,6 @@ fn instantiate_ms(segment_len: usize) -> (f64, usize) {
         let imports = wasmer::imports! {
             "env" => {
                 "tari_engine" => wasmer::Function::new_typed(&mut store, |_: i32, _: i32, _: i32| -> i32 { 0 }),
-                "tari_debug" => wasmer::Function::new_typed(&mut store, |_: i32, _: i32| {}),
                 "on_panic" => wasmer::Function::new_typed(&mut store, |_: i32, _: i32, _: i32, _: i32| {}),
             }
         };
@@ -202,7 +201,6 @@ fn instantiate_code_ms(code: &[u8]) -> f64 {
         let imports = wasmer::imports! {
             "env" => {
                 "tari_engine" => wasmer::Function::new_typed(&mut store, |_: i32, _: i32, _: i32| -> i32 { 0 }),
-                "tari_debug" => wasmer::Function::new_typed(&mut store, |_: i32, _: i32| {}),
                 "on_panic" => wasmer::Function::new_typed(&mut store, |_: i32, _: i32, _: i32, _: i32| {}),
             }
         };
@@ -322,7 +320,6 @@ fn real_template_ms(path: &str) -> (f64, usize, u64, u64, f64) {
         let imports = wasmer::imports! {
             "env" => {
                 "tari_engine" => wasmer::Function::new_typed(&mut store, |_: i32, _: i32, _: i32| -> i32 { 0 }),
-                "tari_debug" => wasmer::Function::new_typed(&mut store, |_: i32, _: i32| {}),
                 "on_panic" => wasmer::Function::new_typed(&mut store, |_: i32, _: i32, _: i32, _: i32| {}),
             }
         };

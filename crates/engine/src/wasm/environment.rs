@@ -22,7 +22,6 @@
 
 use std::fmt::{Debug, Formatter};
 
-use tari_engine_types::limits;
 use tari_template_abi::{EngineOp, WASM_PTR_SIZE};
 use tari_wasmer_middlewares::metering::{MeteringPoints, get_remaining_points, set_remaining_points};
 use wasmer::{AsStoreMut, AsStoreRef, Instance, Memory, MemoryAccessError, MemoryView, TypedFunction, WasmPtr};
@@ -47,12 +46,18 @@ pub struct WasmEnv<T> {
     state: Option<T>,
     mem_alloc: Option<WasmAllocFn>,
     mem_free: Option<WasmFreeFn>,
-    last_panic: Option<String>,
+    last_panic: Option<TemplatePanic>,
     last_engine_error: Option<WasmExecutionError>,
     invocation_meter: Option<InvocationMeter>,
     in_template_invocation: bool,
     refused_engine_call: Option<EngineOp>,
-    debug_messages_written: usize,
+}
+
+/// A panic a template reported through `on_panic`, with the source location it gave.
+pub(super) struct TemplatePanic {
+    pub message: String,
+    pub line: i32,
+    pub col: i32,
 }
 
 /// Per-invocation view of the Wasmer meter, letting host calls read the in-flight consumption of
@@ -101,7 +106,6 @@ impl<T> WasmEnv<T> {
             invocation_meter: None,
             in_template_invocation: false,
             refused_engine_call: None,
-            debug_messages_written: 0,
         }
     }
 
@@ -114,26 +118,12 @@ impl<T> WasmEnv<T> {
         self.invocation_meter = None;
         self.in_template_invocation = false;
         self.refused_engine_call = None;
-        self.debug_messages_written = 0;
     }
 
     /// Releases the state bound by [`Self::bind_call`]. An idle instance holds none, so a cached
     /// instance keeps no reference to the transaction state that owns the cache.
     pub(super) fn unbind_call(&mut self) -> Option<T> {
         self.state.take()
-    }
-
-    /// Counts one `tari_debug` message against this call's debug budget, reporting whether it
-    /// may be written.
-    ///
-    /// Debug output is validator I/O a template pays almost nothing for — one host call, whatever
-    /// it writes — and it never reaches the transaction result, so it carries its own budget.
-    pub(super) fn allow_debug_message(&mut self) -> bool {
-        if self.debug_messages_written >= limits::ENGINE_LIMITS.max_debug_messages {
-            return false;
-        }
-        self.debug_messages_written += 1;
-        true
     }
 
     /// Marks template code as running inside a function invocation, which is the only context
@@ -259,8 +249,8 @@ impl<T> WasmEnv<T> {
         meter.binding_allowance = binding_allowance;
     }
 
-    pub(super) fn set_last_panic(&mut self, message: String) {
-        self.last_panic = Some(message);
+    pub(super) fn set_last_panic(&mut self, panic: TemplatePanic) {
+        self.last_panic = Some(panic);
     }
 
     pub(super) fn has_last_panic(&self) -> bool {
@@ -284,7 +274,7 @@ impl<T> WasmEnv<T> {
             .ok_or(WasmExecutionError::MissingAbiFunction { function: "tari_free" })
     }
 
-    pub(super) fn take_last_panic_message(&mut self) -> Option<String> {
+    pub(super) fn take_last_panic(&mut self) -> Option<TemplatePanic> {
         self.last_panic.take()
     }
 

@@ -169,14 +169,3 @@ pub unsafe extern "C" fn tari_free(ptr: *mut u8) {
         }
     }
 }
-
-/// Requests the engine to write debug data
-pub fn call_debug(data: String) {
-    let len = data.len();
-    let bytes = data.into_bytes();
-    let ptr = bytes.as_ptr() as *mut u8;
-    unsafe {
-        tari_debug(ptr, len);
-        // free the memory allocated for the debug string
-    }
-}

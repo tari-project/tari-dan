@@ -325,7 +325,6 @@ mod tests {
             let imports = imports! {
                 "env" => {
                     "tari_engine" => Function::new_typed(&mut store, |_: i32, _: i32, _: i32| 0i32),
-                    "tari_debug" => Function::new_typed(&mut store, |_: i32, _: i32| {}),
                     "on_panic" => Function::new_typed(&mut store, |_: i32, _: i32, _: i32, _: i32| {}),
                 }
             };

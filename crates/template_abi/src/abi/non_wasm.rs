@@ -28,12 +28,6 @@ pub unsafe fn tari_engine(_op: i32, _input_ptr: *const u8, _input_len: usize) ->
 
 /// # Safety
 /// This function should not be called
-pub unsafe fn tari_debug(_input_ptr: *const u8, _input_len: usize) {
-    unimplemented!("debug not implemented for non-wasm targets")
-}
-
-/// # Safety
-/// This function should not be called
 pub unsafe fn on_panic(_msg_ptr: *const u8, _msg_len: u32, _line: u32, _column: u32) {
     unimplemented!("on_panic not implemented for non-wasm targets")
 }

@@ -45,8 +45,8 @@ everywhere: derive from data consensus already agrees on (what `random_bytes` an
 here), run a commit-reveal among participants, or defer to an external VRF or oracle.
 
 **There is also no entropy to draw on.** Templates compile to `wasm32-unknown-unknown`, a target
-with no operating system behind it, and the engine gives a template exactly three host functions:
-`tari_engine`, `tari_debug` and `on_panic`. `getrandom` — which every RNG in the Rust ecosystem
+with no operating system behind it, and the engine gives a template exactly two host functions:
+`tari_engine` and `on_panic`. `getrandom` — which every RNG in the Rust ecosystem
 calls for its seed — has no backend available to it, and a template importing anything the engine
 does not provide is rejected when it is published.
 
