@@ -14,7 +14,11 @@ use std::{
 use ootle_byte_type::ToByteType;
 use tari_common_types::types::PrivateKey;
 use tari_consensus::{
-    hotstuff::{MAX_PARKED_BLOCKS_PER_PROPOSER_PER_HEIGHT, MAX_PENDING_REQUESTS_PER_NOTIFIER},
+    hotstuff::{
+        MAX_MISSING_TRANSACTIONS_RESPONSE_BYTES,
+        MAX_PARKED_BLOCKS_PER_PROPOSER_PER_HEIGHT,
+        MAX_PENDING_REQUESTS_PER_NOTIFIER,
+    },
     messages::{
         ForeignProposalNotificationMessage,
         ForeignProposalRequestMessage,
@@ -38,9 +42,17 @@ use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
     StorageError,
-    consensus_models::{Block, BlockCommands, BlockHeader, BookkeepingModel, Command, LocalOnlyAtom},
+    consensus_models::{
+        Block,
+        BlockCommands,
+        BlockHeader,
+        BookkeepingModel,
+        Command,
+        LocalOnlyAtom,
+        TransactionRecord,
+    },
 };
-use tari_ootle_transaction::{Transaction, TransactionId};
+use tari_ootle_transaction::{Transaction, TransactionId, args};
 use tokio::time::sleep;
 
 use crate::support::{
@@ -156,6 +168,86 @@ async fn requests_from_an_unregistered_peer_are_not_served() {
     test.stop();
 
     assert_eq!(replies_to_outsider.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_missing_transactions_response_stays_within_its_byte_budget() {
+    const NUM_TXS: usize = 6;
+    const TX_BYTES: usize = 1024 * 1024;
+
+    setup_logger();
+    let responder = TestAddress::new("1");
+    let requester = TestAddress::new("3");
+    let responses = Arc::new(Mutex::new(Vec::new()));
+    let mut test = Test::builder()
+        .add_committee(0, vec!["1", "2"])
+        .add_committee(1, vec!["3"])
+        .with_message_filter(Box::new({
+            let requester = requester.clone();
+            let responses = responses.clone();
+            move |_from, to, msg| {
+                if let HotstuffMessage::MissingTransactionsResponse(resp) = msg &&
+                    *to == requester
+                {
+                    let bytes = resp.transactions.iter().map(|tx| tx.len()).sum::<usize>();
+                    responses.lock().unwrap().push((resp.transactions.len(), bytes));
+                    return false;
+                }
+                true
+            }
+        }))
+        .start()
+        .await;
+    test.start_epoch(Epoch(1)).await;
+    test.wait_for_all_validators_to_start_consensus().await;
+
+    let validator = test.get_validator(&responder);
+    let mut transaction_ids = HashSet::new();
+    validator
+        .state_store
+        .with_write_tx(|tx| {
+            for seed in 0..NUM_TXS {
+                let transaction = Transaction::builder_localnet(Epoch(1))
+                    .call_function(Default::default(), "big", args![vec![
+                        u8::try_from(seed).unwrap();
+                        TX_BYTES
+                    ]])
+                    .build_and_seal(&PrivateKey::default());
+                transaction_ids.insert(transaction.calculate_id());
+                TransactionRecord::new(transaction).save(tx)?;
+            }
+            Ok::<_, StorageError>(())
+        })
+        .unwrap();
+
+    validator
+        .tx_inbound_message
+        .send((
+            requester,
+            HotstuffMessage::MissingTransactionsRequest(MissingTransactionsRequest {
+                request_id: 0,
+                epoch: Epoch(1),
+                block_id: validator.get_leaf_block().block_id,
+                transactions: transaction_ids,
+            }),
+        ))
+        .await
+        .unwrap();
+
+    sleep(Duration::from_secs(2)).await;
+    test.stop();
+
+    let responses = responses.lock().unwrap();
+    assert_eq!(responses.len(), 1, "expected one response, got {responses:?}");
+    let (num_transactions, bytes) = responses[0];
+    assert!(
+        num_transactions > 0 && num_transactions < NUM_TXS,
+        "the response carried {num_transactions} of {NUM_TXS} transactions"
+    );
+    assert!(
+        bytes <= MAX_MISSING_TRANSACTIONS_RESPONSE_BYTES,
+        "the response carried {bytes} bytes, over the {MAX_MISSING_TRANSACTIONS_RESPONSE_BYTES} byte budget"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

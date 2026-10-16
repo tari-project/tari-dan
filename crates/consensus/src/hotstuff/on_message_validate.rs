@@ -40,6 +40,7 @@ use crate::{
         HotstuffMessage,
         MAX_REQUESTED_TRANSACTIONS,
         MissingTransactionsRequest,
+        MissingTransactionsResponse,
         ProposalMessage,
     },
     tracing::TraceTimer,
@@ -135,25 +136,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
                 self.process_foreign_proposal(epoch_state, from, msg).await
             },
             HotstuffMessage::MissingTransactionsResponse(msg) => {
-                let Some(request) = self.active_missing_transaction_requests.take(msg.request_id, &from) else {
-                    warn!(target: LOG_TARGET, "❓Received missing transactions (req_id = {}) from {} that we did not request. Discarding message", msg.request_id, from);
-                    return Ok(MessageValidationResult::Discard);
-                };
-
-                match request.decode_response(
-                    msg.transactions,
-                    self.config.consensus_constants.max_transaction_size_bytes,
-                ) {
-                    Ok(transactions) => Ok(MessageValidationResult::RequestedTransactions {
-                        from,
-                        block_id: msg.block_id,
-                        transactions,
-                    }),
-                    Err(err) => {
-                        warn!(target: LOG_TARGET, "⚠️Peer {from} sent an invalid response to req_id = {}: {err}. Discarding message", msg.request_id);
-                        Ok(MessageValidationResult::Discard)
-                    },
-                }
+                Ok(self.process_missing_transactions_response(from, msg))
             },
             HotstuffMessage::MissingTransactionsRequest(msg) => {
                 if !self
@@ -195,6 +178,37 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
                 Ok(MessageValidationResult::Ready { from, message: msg })
             },
             msg => Ok(MessageValidationResult::Ready { from, message: msg }),
+        }
+    }
+
+    fn process_missing_transactions_response(
+        &mut self,
+        from: TConsensusSpec::Addr,
+        msg: MissingTransactionsResponse,
+    ) -> MessageValidationResult<TConsensusSpec::Addr> {
+        let Some(request) = self.active_missing_transaction_requests.take(msg.request_id, &from) else {
+            warn!(target: LOG_TARGET, "❓Received missing transactions (req_id = {}) from {} that we did not request. Discarding message", msg.request_id, from);
+            return MessageValidationResult::Discard;
+        };
+
+        match request.decode_response(
+            msg.transactions,
+            self.config.consensus_constants.max_transaction_size_bytes,
+        ) {
+            Ok(transactions) => {
+                let remaining = request.remaining_after(&transactions);
+                MessageValidationResult::RequestedTransactions {
+                    from,
+                    block_id: request.block_id,
+                    epoch: request.epoch,
+                    transactions,
+                    remaining,
+                }
+            },
+            Err(err) => {
+                warn!(target: LOG_TARGET, "⚠️Peer {from} sent an invalid response to req_id = {}: {err}. Discarding message", msg.request_id);
+                MessageValidationResult::Discard
+            },
         }
     }
 
@@ -305,7 +319,13 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             .await?;
         // Only a request that went out holds one of the few slots a response can be matched against.
         self.active_missing_transaction_requests
-            .insert(request_id, to, missing_txs);
+            .insert(PendingMissingTransactionsRequest {
+                request_id,
+                to,
+                block_id,
+                epoch,
+                transactions: missing_txs,
+            });
         Ok(())
     }
 
@@ -842,7 +862,10 @@ pub enum MessageValidationResult<TAddr> {
     RequestedTransactions {
         from: TAddr,
         block_id: BlockId,
+        epoch: Epoch,
         transactions: Vec<Transaction>,
+        /// The requested transactions the response did not carry.
+        remaining: HashSet<TransactionId>,
     },
     ParkedProposal {
         block_id: BlockId,
@@ -863,6 +886,8 @@ struct PendingMissingTransactionsRequest<TAddr> {
     request_id: u32,
     /// The peer the request went to. A response only counts when it comes back from this peer.
     to: TAddr,
+    block_id: BlockId,
+    epoch: Epoch,
     transactions: HashSet<TransactionId>,
 }
 
@@ -904,6 +929,15 @@ impl<TAddr> PendingMissingTransactionsRequest<TAddr> {
         }
         Ok(decoded)
     }
+
+    /// The requested transactions that `returned` does not include.
+    fn remaining_after(&self, returned: &[Transaction]) -> HashSet<TransactionId> {
+        let mut remaining = self.transactions.clone();
+        for transaction in returned {
+            remaining.remove(&transaction.calculate_id());
+        }
+        remaining
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -937,15 +971,11 @@ impl<TAddr: PartialEq> MissingTransactionRequests<TAddr> {
         }
     }
 
-    pub fn insert(&mut self, request_id: u32, to: TAddr, transactions: HashSet<TransactionId>) {
+    pub fn insert(&mut self, request: PendingMissingTransactionsRequest<TAddr>) {
         if self.requests.len() == Self::CAPACITY {
             self.requests.pop_front();
         }
-        self.requests.push_back(PendingMissingTransactionsRequest {
-            request_id,
-            to,
-            transactions,
-        });
+        self.requests.push_back(request);
     }
 
     /// Removes and returns the request with this id that was sent to `from`, if any.
@@ -966,10 +996,24 @@ mod tests {
         [TransactionId::new([n; 32])].into_iter().collect()
     }
 
+    fn pending(
+        request_id: u32,
+        to: &'static str,
+        transactions: HashSet<TransactionId>,
+    ) -> PendingMissingTransactionsRequest<&'static str> {
+        PendingMissingTransactionsRequest {
+            request_id,
+            to,
+            block_id: BlockId::zero(),
+            epoch: Epoch(1),
+            transactions,
+        }
+    }
+
     #[test]
     fn a_response_from_a_peer_we_did_not_ask_is_not_matched() {
         let mut requests = MissingTransactionRequests::new();
-        requests.insert(1, "alice", req(1));
+        requests.insert(pending(1, "alice", req(1)));
 
         assert!(requests.take(1, &"bob").is_none());
         assert!(requests.take(1, &"alice").is_some());
@@ -978,8 +1022,8 @@ mod tests {
     #[test]
     fn the_same_id_to_two_peers_matches_each_peer_once() {
         let mut requests = MissingTransactionRequests::new();
-        requests.insert(1, "alice", req(1));
-        requests.insert(1, "bob", req(2));
+        requests.insert(pending(1, "alice", req(1)));
+        requests.insert(pending(1, "bob", req(2)));
 
         assert_eq!(requests.take(1, &"bob").unwrap().transactions, req(2));
         assert_eq!(requests.take(1, &"alice").unwrap().transactions, req(1));
@@ -990,7 +1034,7 @@ mod tests {
     fn the_oldest_request_is_evicted_once_capacity_is_reached() {
         let mut requests = MissingTransactionRequests::new();
         for i in 0..=MissingTransactionRequests::<&str>::CAPACITY {
-            requests.insert(i as u32, "alice", req(0));
+            requests.insert(pending(i as u32, "alice", req(0)));
         }
 
         assert!(requests.take(0, &"alice").is_none());
@@ -1016,11 +1060,7 @@ mod tests {
     }
 
     fn request_for(transactions: &[&Transaction]) -> PendingMissingTransactionsRequest<&'static str> {
-        PendingMissingTransactionsRequest {
-            request_id: 1,
-            to: "alice",
-            transactions: transactions.iter().map(|t| t.calculate_id()).collect(),
-        }
+        pending(1, "alice", transactions.iter().map(|t| t.calculate_id()).collect())
     }
 
     #[test]
@@ -1034,6 +1074,20 @@ mod tests {
 
         let ids = decoded.iter().map(|t| t.calculate_id()).collect::<Vec<_>>();
         assert_eq!(ids, vec![b.calculate_id(), a.calculate_id()]);
+        assert!(request.remaining_after(&decoded).is_empty());
+    }
+
+    #[test]
+    fn a_partial_response_leaves_the_transactions_it_did_not_carry() {
+        let (a, b, c) = (transaction(1), transaction(2), transaction(3));
+        let request = request_for(&[&a, &b, &c]);
+
+        let decoded = request.decode_response(vec![encoded(&b)], MAX_SIZE).unwrap();
+
+        assert_eq!(
+            request.remaining_after(&decoded),
+            HashSet::from([a.calculate_id(), c.calculate_id()])
+        );
     }
 
     #[test]

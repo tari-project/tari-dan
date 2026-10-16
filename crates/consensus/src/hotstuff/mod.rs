@@ -49,5 +49,6 @@ pub use event::*;
 pub use leader_skip::LeaderSkipSet;
 pub use on_message_validate::MAX_PARKED_BLOCKS_PER_PROPOSER_PER_HEIGHT;
 pub use on_receive_foreign_proposal::MAX_PENDING_REQUESTS_PER_NOTIFIER;
+pub use on_receive_request_missing_transactions::MAX_MISSING_TRANSACTIONS_RESPONSE_BYTES;
 pub use state_machine::*;
 pub use worker::*;
