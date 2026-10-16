@@ -144,8 +144,8 @@ impl ValidatorSetFixture {
         Self::with_signers(
             NETWORK,
             epoch,
-            Signers::new(epoch as u8 * 2, 4),
-            Signers::new(epoch as u8 * 2 + 1, 4),
+            Signers::new((epoch as u8).wrapping_mul(2), 4),
+            Signers::new((epoch as u8).wrapping_mul(2).wrapping_add(1), 4),
         )
     }
 

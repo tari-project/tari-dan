@@ -81,6 +81,8 @@ pub enum ConfigKey {
     RecoveryMaxProbedKeyIndex,
     /// The latest validator set the wallet trusts. type: TrustedValidatorSet
     TrustedValidatorSet,
+    /// When the wallet last brought its trusted validator set up to date, in seconds since the Unix epoch. type: u64
+    ValidatorSetSyncedAt,
 }
 
 impl ConfigKey {
@@ -95,6 +97,7 @@ impl ConfigKey {
             Self::ClaimedAccounts => "claimed_accounts",
             Self::RecoveryMaxProbedKeyIndex => "recovery_max_probed_key_index",
             Self::TrustedValidatorSet => "trusted_validator_set",
+            Self::ValidatorSetSyncedAt => "validator_set_synced_at",
         }
     }
 }

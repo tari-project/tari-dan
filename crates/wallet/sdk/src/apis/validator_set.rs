@@ -1,6 +1,8 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
 use log::*;
 use ootle_network::Network;
 use tari_indexer_client::types::EpochCheckpointEntry;
@@ -33,6 +35,10 @@ const LOG_TARGET: &str = "tari::ootle::wallet_sdk::apis::validator_set";
 /// in every epoch.
 pub const WALK_SHARD: Shard = Shard::first();
 
+/// The shortest the wallet allows that an epoch lasted when it judges whether it could have fallen behind by a claimed
+/// gap: ten base layer blocks at a 30 second average, a quarter of the two minute target.
+const MIN_EPOCH_DURATION: Duration = Duration::from_secs(5 * 60);
+
 /// The most checkpoints one request of a walk asks for, which is the most an indexer serves at once.
 const CHECKPOINTS_PER_REQUEST: u32 = 100;
 
@@ -45,6 +51,8 @@ pub struct ValidatorSetApi<'a, TStore, TNetworkInterface> {
     store: &'a TStore,
     network_interface: &'a TNetworkInterface,
     network: Network,
+    /// Held while walking or re-anchoring, so that one change to the trusted sets completes before the next starts.
+    lock: &'a tokio::sync::Mutex<()>,
 }
 
 impl<'a, TStore, TNetworkInterface> ValidatorSetApi<'a, TStore, TNetworkInterface>
@@ -52,11 +60,17 @@ where
     TStore: WalletStore,
     TNetworkInterface: WalletNetworkInterface,
 {
-    pub fn new(store: &'a TStore, network_interface: &'a TNetworkInterface, network: Network) -> Self {
+    pub fn new(
+        store: &'a TStore,
+        network_interface: &'a TNetworkInterface,
+        network: Network,
+        lock: &'a tokio::sync::Mutex<()>,
+    ) -> Self {
         Self {
             store,
             network_interface,
             network,
+            lock,
         }
     }
 
@@ -75,35 +89,49 @@ where
     }
 
     /// Brings the trusted validator set up to the one the latest checkpoint names. On first use the wallet anchors on
-    /// that set. Later it walks the handovers to it, or re-anchors on it when the trusted set is more than
-    /// [`DEFAULT_MAX_WALK_EPOCHS`] behind.
+    /// that set. Later it walks the handovers to it, however far behind it is.
+    ///
+    /// The wallet re-anchors in place of a walk only when the walk fails, the gap is more than
+    /// [`DEFAULT_MAX_WALK_EPOCHS`], and the wallet has been out of sync, by its own clock, for long enough to explain
+    /// the gap. The gap is the indexer's claim, so a wallet that synced recently never re-anchors on it.
     ///
     /// A walk that fails keeps the sets verified before the failure.
     pub async fn sync(&self) -> Result<TrustedValidatorSet, ValidatorSetApiError> {
+        let _guard = self.lock.lock().await;
         let latest_checkpoint = self.latest_checkpoint().await?;
         let Some(trusted) = self.latest()? else {
             info!(target: LOG_TARGET, "Anchoring on the validator set that the checkpoint of {} names", latest_checkpoint.epoch);
             return self.anchor_on(&latest_checkpoint, ValidatorSetAnchor::FirstUse);
         };
-        match plan_walk(&trusted, latest_checkpoint.epoch, DEFAULT_MAX_WALK_EPOCHS) {
-            WalkPlan::UpToDate => Ok(trusted),
-            WalkPlan::Walk { to_epoch, .. } => self.walk(trusted, to_epoch).await,
-            WalkPlan::Reanchor => {
-                warn!(
-                    target: LOG_TARGET,
-                    "The trusted validator set of {} is too far behind the checkpoint of {} to walk. Re-anchoring on the set it names.",
-                    trusted.epoch(),
-                    latest_checkpoint.epoch
-                );
-                self.anchor_on(&latest_checkpoint, ValidatorSetAnchor::Reanchor)
+        let synced = match plan_walk(&trusted, latest_checkpoint.epoch, DEFAULT_MAX_WALK_EPOCHS) {
+            WalkPlan::UpToDate => trusted,
+            WalkPlan::Walk { to_epoch, .. } => self.walk(trusted, to_epoch).await?,
+            WalkPlan::Reanchor => match self.walk(trusted.clone(), latest_checkpoint.epoch).await {
+                Ok(walked) => walked,
+                Err(err)
+                    if err.is_unwalkable_history() && self.out_of_sync_long_enough(&trusted, &latest_checkpoint)? =>
+                {
+                    warn!(
+                        target: LOG_TARGET,
+                        "The walk from the trusted validator set of {} to the checkpoint of {} failed ({err}). Re-anchoring on the set it names.",
+                        trusted.epoch(),
+                        latest_checkpoint.epoch
+                    );
+                    return self.anchor_on(&latest_checkpoint, ValidatorSetAnchor::Reanchor);
+                },
+                Err(err) => return Err(err),
             },
-        }
+        };
+        self.store
+            .with_write_tx(|tx| tx.config_set(ConfigKey::ValidatorSetSyncedAt.as_key_str(), &unix_now(), false))?;
+        Ok(synced)
     }
 
     /// Anchors anew on the validator set the latest checkpoint names, forgetting every set trusted before. This trusts
     /// the indexer as first use does, and is how the wallet recovers when the network's checkpoints do not walk from
     /// its anchor.
     pub async fn reanchor(&self) -> Result<TrustedValidatorSet, ValidatorSetApiError> {
+        let _guard = self.lock.lock().await;
         let latest_checkpoint = self.latest_checkpoint().await?;
         warn!(target: LOG_TARGET, "Re-anchoring on the validator set that the checkpoint of {} names", latest_checkpoint.epoch);
         self.anchor_on(&latest_checkpoint, ValidatorSetAnchor::Reanchor)
@@ -123,10 +151,10 @@ where
         if latest.as_ref().is_none_or(|latest| latest.epoch() < epoch) {
             latest = Some(self.sync().await?);
         }
-        if let Some(latest) = latest.filter(|latest| latest.epoch() == epoch) {
-            if latest.walk_committee().shard_group() == shard_group {
-                return Ok(Some(latest.walk_committee().clone()));
-            }
+        if let Some(latest) = latest.filter(|latest| latest.epoch() == epoch) &&
+            latest.walk_committee().shard_group() == shard_group
+        {
+            return Ok(Some(latest.walk_committee().clone()));
         }
 
         let Some(validator_set) = self
@@ -159,9 +187,34 @@ where
         self.store.with_write_tx(|tx| {
             tx.trusted_validator_sets_clear()?;
             tx.trusted_validator_sets_insert(&trusted.trusted_hash(), Some(anchor))?;
-            tx.config_set(ConfigKey::TrustedValidatorSet.as_key_str(), &trusted, false)
+            tx.config_set(ConfigKey::TrustedValidatorSet.as_key_str(), &trusted, false)?;
+            tx.config_set(ConfigKey::ValidatorSetSyncedAt.as_key_str(), &unix_now(), false)
         })?;
         Ok(trusted)
+    }
+
+    /// Whether the wallet's clock allows that it fell from `trusted` to `latest_checkpoint` behind: every epoch of the
+    /// gap takes at least [`MIN_EPOCH_DURATION`], and the wallet last synced long enough ago for all of them.
+    fn out_of_sync_long_enough(
+        &self,
+        trusted: &TrustedValidatorSet,
+        latest_checkpoint: &EpochCheckpointEntry,
+    ) -> Result<bool, ValidatorSetApiError> {
+        let Some(synced_at) = self.store.with_read_tx(|tx| {
+            tx.config_get::<u64>(ConfigKey::ValidatorSetSyncedAt.as_key_str())
+                .optional()
+        })?
+        else {
+            return Ok(true);
+        };
+        let out_of_sync = Duration::from_secs(unix_now().saturating_sub(synced_at.value));
+        let gap = latest_checkpoint
+            .epoch
+            .as_u64()
+            .saturating_sub(trusted.epoch().as_u64()) +
+            1;
+        let gap_takes_at_least = MIN_EPOCH_DURATION.saturating_mul(u32::try_from(gap).unwrap_or(u32::MAX));
+        Ok(out_of_sync >= gap_takes_at_least)
     }
 
     /// Walks the handovers from `trusted` to the validator set of the epoch after `to_epoch`.
@@ -221,6 +274,13 @@ where
     }
 }
 
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|since| since.as_secs())
+        .unwrap_or_default()
+}
+
 fn network_error<E: std::error::Error + Send + Sync + 'static>(err: E) -> ValidatorSetApiError {
     ValidatorSetApiError::NetworkInterfaceError(anyhow::Error::new(err))
 }
@@ -235,6 +295,14 @@ pub enum ValidatorSetApiError {
     Unverified(#[from] LightClientError),
     #[error("The indexer served no checkpoint ending {epoch} to walk the validator set handover through")]
     CheckpointNotServed { epoch: Epoch },
+}
+
+impl ValidatorSetApiError {
+    /// Whether the error shows that the indexer's checkpoints do not walk from the trusted set, as opposed to a failure
+    /// to reach the indexer.
+    fn is_unwalkable_history(&self) -> bool {
+        matches!(self, Self::Unverified(_) | Self::CheckpointNotServed { .. })
+    }
 }
 
 impl IsNotFoundError for ValidatorSetApiError {
