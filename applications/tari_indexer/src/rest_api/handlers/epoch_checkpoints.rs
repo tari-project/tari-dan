@@ -70,7 +70,7 @@ pub async fn list_epoch_checkpoints(
     let settled = is_settled_page(&req, &checkpoints);
     let body = Json(ListEpochCheckpointsResponse { checkpoints });
     if settled {
-        Ok(context.apply_immutable_cache_control(body))
+        Ok(context.apply_settled_cache_control(body))
     } else {
         Ok(context.apply_cache_control(body, RECENT_MAX_AGE_SECS))
     }

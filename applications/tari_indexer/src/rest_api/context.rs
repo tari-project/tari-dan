@@ -27,7 +27,7 @@ use crate::{
     network_state_sync::{ConsensusEpoch, ValidatorStatusMonitor},
     notify::Subscriber,
     rest_api::{
-        cache::{HttpCacheConfig, IMMUTABLE},
+        cache::{HttpCacheConfig, SETTLED},
         committee_cache::CommitteeProofCache,
         error::ErrorResponse,
         proofs,
@@ -126,11 +126,11 @@ impl HandlerContext {
         response
     }
 
-    /// Marks `body` as cacheable forever, for a response whose content can no longer change under its URL.
-    pub fn apply_immutable_cache_control(&self, body: impl IntoResponse) -> Response {
+    /// Marks `body` as cacheable for long, for a response whose content can no longer change under its URL.
+    pub fn apply_settled_cache_control(&self, body: impl IntoResponse) -> Response {
         let mut response = body.into_response();
         if self.is_cache_control_enabled() {
-            response.headers_mut().insert(http::header::CACHE_CONTROL, IMMUTABLE);
+            response.headers_mut().insert(http::header::CACHE_CONTROL, SETTLED);
         }
         response
     }

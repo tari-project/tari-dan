@@ -60,7 +60,7 @@ pub async fn get_committee(
     let is_certified = is_certified(certified_hash, &committee);
     let body = Json(GetCommitteeResponse { committee });
     if is_certified {
-        Ok(context.apply_immutable_cache_control(body))
+        Ok(context.apply_settled_cache_control(body))
     } else {
         Ok(context.apply_cache_control(body, 30))
     }
