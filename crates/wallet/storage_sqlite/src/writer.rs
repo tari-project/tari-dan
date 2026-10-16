@@ -3192,6 +3192,7 @@ impl WalletEventStoreWriter for WriteTransaction<'_> {
             WalletEvent::UtxoRecoveryCompleted(payload) => (None, serialize_json(payload)?),
             WalletEvent::UtxoSpent(payload) => (Some(payload.account_address), serialize_json(payload)?),
             WalletEvent::TransactionRequestCreated(payload) => (None, serialize_json(payload)?),
+            WalletEvent::ValidatorSetReanchored(payload) => (None, serialize_json(payload)?),
         };
 
         let maybe_account = maybe_account.map(|addr| addr.to_string());

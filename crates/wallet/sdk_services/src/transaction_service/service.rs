@@ -589,7 +589,8 @@ where
             WalletEvent::UtxoRecovered(_) |
             WalletEvent::UtxoRecoveryCompleted(_) |
             WalletEvent::UtxoSpent(_) |
-            WalletEvent::TransactionRequestCreated(_) => {},
+            WalletEvent::TransactionRequestCreated(_) |
+            WalletEvent::ValidatorSetReanchored(_) => {},
         }
         Ok(())
     }

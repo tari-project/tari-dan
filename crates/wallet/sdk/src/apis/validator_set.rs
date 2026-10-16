@@ -24,9 +24,9 @@ use tari_ootle_light_client::{
 
 use crate::{
     apis::config::ConfigKey,
-    models::{AnchoredValidatorSet, ValidatorSetAnchor},
+    models::{AnchoredValidatorSet, ValidatorSetAnchor, ValidatorSetReanchoredEvent, WalletEvent},
     network::WalletNetworkInterface,
-    storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
+    storage::{WalletEventStoreWriter, WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
 
 const LOG_TARGET: &str = "tari::ootle::wallet_sdk::apis::validator_set";
@@ -200,6 +200,16 @@ where
     ) -> Result<TrustedValidatorSet, ValidatorSetApiError> {
         let trusted = TrustedValidatorSet::anchor_on_first_use(self.network, WALK_SHARD, checkpoint)?;
         self.store.with_write_tx(|tx| {
+            if anchor == ValidatorSetAnchor::Reanchor {
+                let previous = tx
+                    .config_get::<TrustedValidatorSet>(ConfigKey::TrustedValidatorSet.as_key_str())
+                    .optional()?;
+                tx.append_wallet_event(&WalletEvent::ValidatorSetReanchored(ValidatorSetReanchoredEvent {
+                    previous_epoch: previous.map(|previous| previous.value.epoch()),
+                    epoch: trusted.epoch(),
+                    validator_set_hash: *trusted.validator_set_hash(),
+                }))?;
+            }
             tx.trusted_validator_sets_clear()?;
             tx.trusted_validator_sets_insert(&trusted.trusted_hash(), Some(anchor))?;
             tx.config_set(ConfigKey::TrustedValidatorSet.as_key_str(), &trusted, false)?;
