@@ -104,9 +104,13 @@ impl VerifiedCommittee {
     }
 
     /// The quorum threshold $n - f$, where $n$ is the committee's total vote power and $f = (n - 1) / 3$ the faulty
-    /// power it tolerates.
+    /// power it tolerates. A committee without vote power reaches no quorum: [`Self::verify`] never builds one, but
+    /// one deserialized from a store can be one.
     pub fn quorum_threshold(&self) -> VotePower {
         let total = self.total_power();
+        if total.is_zero() {
+            return VotePower::max();
+        }
         total - (total - VotePower::of(1)) / VotePower::of(3)
     }
 
@@ -145,5 +149,23 @@ impl VerifiedCommittee {
         }
         let tip = commit_proof.validate(self.quorum_threshold(), |pk| Ok(self.vote_power(pk)))?;
         Ok(tip)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_committee_without_vote_power_reaches_no_quorum() {
+        let committee = VerifiedCommittee {
+            network: Network::LocalNet,
+            epoch: Epoch(1),
+            num_preshards: NumPreshards::P4,
+            shard_group: ShardGroup::new(1u32, 4u32),
+            validator_set_hash: ValidatorSetHash::from_array([1; 32]),
+            members: vec![],
+        };
+        assert_eq!(committee.quorum_threshold(), VotePower::max());
     }
 }

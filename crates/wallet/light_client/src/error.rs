@@ -48,6 +48,8 @@ pub enum LightClientError {
          no handover"
     )]
     NoNextValidatorSet { epoch: Epoch },
+    #[error("The checkpoint ends {epoch}, which no epoch follows")]
+    NoEpochAfterCheckpoint { epoch: Epoch },
     #[error("The checkpoint for {epoch} came without the next epoch's committee")]
     MissingNextCommittee { epoch: Epoch },
     #[error("The commit proof is from {found}, but the committee it is checked against is of {expected}")]

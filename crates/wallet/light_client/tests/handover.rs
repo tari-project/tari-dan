@@ -216,6 +216,21 @@ fn a_checkpoint_of_another_network_is_rejected() {
 }
 
 #[test]
+fn a_checkpoint_ending_the_last_epoch_is_rejected() {
+    let sets = sets();
+    let entry = checkpoint_entry(CheckpointSpec {
+        epoch: Epoch::max(),
+        ..CheckpointSpec::handover(&sets[0], &sets[1])
+    });
+
+    let err = TrustedValidatorSet::anchor_on_first_use(NETWORK, walk_shard(), &entry).unwrap_err();
+    assert!(
+        matches!(err, LightClientError::NoEpochAfterCheckpoint { epoch } if epoch == Epoch::max()),
+        "{err}"
+    );
+}
+
+#[test]
 fn a_committee_without_vote_power_is_never_trusted() {
     let set = ValidatorSetFixture::with_signers(NETWORK, 2, Signers::new(1, 0), Signers::new(2, 4));
     let err = TrustedValidatorSet::anchor_pinned(NETWORK, walk_shard(), Epoch(2), &set.hash(), &set.committee(low()))

@@ -29,8 +29,10 @@ impl TrustedValidatorSet {
     /// Trusts the validator set that the checkpoint in `entry` names for the next epoch.
     ///
     /// The checkpoint's quorum certificate cannot be checked, since no committee is trusted yet, so this takes the
-    /// indexer at its word on which validator set is the network's. Every later read verifies against that set, so a
-    /// forged anchor holds only while the indexer that served it keeps serving the light client.
+    /// indexer at its word on which validator set is the network's. Every later read verifies against that set. After
+    /// a forged anchor, an honest indexer's checkpoints and committees fail to verify, so a failure walking from a
+    /// first-use anchor cannot tell whether the indexer or the anchor is wrong. Recovering from a forged anchor takes
+    /// an explicit re-anchor by the caller.
     pub fn anchor_on_first_use(
         network: Network,
         walk_shard: Shard,
@@ -43,7 +45,7 @@ impl TrustedValidatorSet {
             .map_err(|source| LightClientError::InvalidCheckpoint { epoch, source })?;
         let next_set = next_validator_set(&checkpoint)?;
         let committee = next_committee(entry, epoch)?;
-        Self::anchor_pinned(network, walk_shard, epoch + Epoch(1), &next_set, committee)
+        Self::anchor_pinned(network, walk_shard, next_epoch(epoch)?, &next_set, committee)
     }
 
     /// Trusts `validator_set_hash` as `epoch`'s validator set, with `committee` proved as the walked shard group's
@@ -104,8 +106,11 @@ impl TrustedValidatorSet {
     /// walked shard group's committee must have signed.
     ///
     /// Walking from epoch N to M is one `advance` per checkpoint of N to M - 1, in order. A checkpoint that fails
-    /// leaves `self` as it was, and the walk stops there: a failed walk proves the indexer wrong, never the trusted
-    /// set.
+    /// leaves `self` as it was, and the walk stops there. A failed walk proves the indexer wrong only as far as the
+    /// anchor is right: from a first-use anchor, the anchor may be the forgery (see [`Self::anchor_on_first_use`]).
+    ///
+    /// The returned set replaces `self` only for the latest epoch. A proof anchored in an earlier epoch verifies with a
+    /// committee of that epoch's set, so a caller that verifies such proofs keeps each set it walks through.
     pub fn advance(&self, entry: &EpochCheckpointEntry) -> Result<Self, LightClientError> {
         let network = self.network();
         let epoch = self.epoch();
@@ -134,7 +139,7 @@ impl TrustedValidatorSet {
 
         let next_set = next_validator_set(&checkpoint)?;
         let committee = next_committee(entry, epoch)?;
-        let committee = verify_walked_committee(network, self.walk_shard, epoch + Epoch(1), &next_set, committee)?;
+        let committee = verify_walked_committee(network, self.walk_shard, next_epoch(epoch)?, &next_set, committee)?;
         Ok(Self {
             walk_shard: self.walk_shard,
             anchor_epoch: self.anchor_epoch,
@@ -168,6 +173,12 @@ fn next_validator_set(checkpoint: &EpochCheckpoint) -> Result<ValidatorSetHash, 
         .ok_or(LightClientError::NoNextValidatorSet {
             epoch: checkpoint.epoch(),
         })
+}
+
+fn next_epoch(epoch: Epoch) -> Result<Epoch, LightClientError> {
+    epoch
+        .checked_add(Epoch(1))
+        .ok_or(LightClientError::NoEpochAfterCheckpoint { epoch })
 }
 
 fn next_committee(entry: &EpochCheckpointEntry, epoch: Epoch) -> Result<&ValidatorSetCommittee, LightClientError> {

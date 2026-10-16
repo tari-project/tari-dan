@@ -299,12 +299,12 @@ fn a_diff_that_differs_from_the_receipt_is_rejected() {
     }
 }
 
-/// A down proof of `id`, up at height 5 and absent at height 9 of its shard group's chain, both in [`EPOCH`].
-fn down_proof(set: &ValidatorSetFixture, id: &SubstateId) -> (Vec<u8>, Vec<u8>) {
+/// A down proof of `id`, up at height 5 of its shard group's chain in `up_set`'s epoch and absent at height 9 in
+/// `down_set`'s, each signed by its set's committee.
+fn down_proof(up_set: &ValidatorSetFixture, down_set: &ValidatorSetFixture, id: &SubstateId) -> (Vec<u8>, Vec<u8>) {
     let versioned_id = VersionedSubstateId::new(id.clone(), SubstateVersion::ZERO);
     let shard = versioned_id.to_shard(NUM_PRESHARDS);
     let shard_group = shard_group_of(shard);
-    let signers = set.signers(shard_group);
     let value_hash = Hash32::from_array([5; 32]);
 
     let mut store = MemoryTreeStore::<StateTreePayload>::new();
@@ -331,12 +331,26 @@ fn down_proof(set: &ValidatorSetFixture, id: &SubstateId) -> (Vec<u8>, Vec<u8>) 
     let proof = SubstateDownProof {
         up: SubstateValueProof::new(up_root, 1, up_tree.get_proof(shard).unwrap().1, up_leaf),
         up_value_hash: value.unwrap().0,
-        up_commit_proof: block_commit_proof(NETWORK, EPOCH, shard_group, 5, up_tree.root(), signers),
+        up_commit_proof: block_commit_proof(
+            NETWORK,
+            up_set.epoch,
+            shard_group,
+            5,
+            up_tree.root(),
+            up_set.signers(shard_group),
+        ),
         down: SubstateValueProof::new(down_root, 2, down_tree.get_proof(shard).unwrap().1, down_leaf),
     };
     (
         tari_bor::serde_codec::to_vec(&proof).unwrap(),
-        block_commit_proof(NETWORK, EPOCH, shard_group, 9, down_tree.root(), signers),
+        block_commit_proof(
+            NETWORK,
+            down_set.epoch,
+            shard_group,
+            9,
+            down_tree.root(),
+            down_set.signers(shard_group),
+        ),
     )
 }
 
@@ -344,7 +358,7 @@ fn down_proof(set: &ValidatorSetFixture, id: &SubstateId) -> (Vec<u8>, Vec<u8>) 
 fn it_verifies_a_down_proof_with_the_committees_of_both_anchors() {
     let (set, trusted) = trusted_set();
     let (id, _) = tombstone(1);
-    let (proof, down_commit_proof) = down_proof(&set, &id);
+    let (proof, down_commit_proof) = down_proof(&set, &set, &id);
 
     let (up_epoch, up_shard_group) = down_proof_up_anchor(&proof).unwrap();
     assert_eq!(up_epoch, EPOCH);
@@ -382,4 +396,35 @@ fn it_verifies_a_down_proof_with_the_committees_of_both_anchors() {
     )
     .unwrap_err();
     assert!(matches!(err, LightClientError::InvalidCommitProof(_)), "{err}");
+}
+
+#[test]
+fn it_verifies_a_down_proof_across_a_handover_with_the_set_kept_for_each_epoch() {
+    let (up_set, kept) = trusted_set();
+    let down_set = ValidatorSetFixture::new(EPOCH.as_u64() + 1);
+    let latest = kept
+        .advance(&checkpoint_entry(CheckpointSpec::handover(&up_set, &down_set)))
+        .unwrap();
+    let (id, _) = tombstone(1);
+    let (proof, down_commit_proof) = down_proof(&up_set, &down_set, &id);
+
+    let (up_epoch, up_shard_group) = down_proof_up_anchor(&proof).unwrap();
+    assert_eq!(up_epoch, EPOCH);
+    let err = latest.verify_committee(&up_set.committee(up_shard_group)).unwrap_err();
+    assert!(
+        matches!(err, LightClientError::CommitteeEpochMismatch { .. }),
+        "only the set of the up anchor's epoch verifies its committee: {err}"
+    );
+
+    let up_committee = kept.verify_committee(&up_set.committee(up_shard_group)).unwrap();
+    let down_committee = latest.verify_committee(&down_set.committee(up_shard_group)).unwrap();
+    verify_down_proof(
+        &id,
+        SubstateVersion::ZERO,
+        &proof,
+        &up_committee,
+        &down_committee,
+        &down_commit_proof,
+    )
+    .unwrap();
 }

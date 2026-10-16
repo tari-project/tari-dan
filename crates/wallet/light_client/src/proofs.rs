@@ -51,7 +51,7 @@ impl VerifiedCommittee {
     }
 
     /// Verifies that `transaction_id` committed with the receipt `proven` carries. A transaction commits only once, so
-    /// a proven receipt stays proven however old its anchor block is.
+    /// a proven receipt stays proven however old its anchor block is, given a committee of that block's epoch.
     pub fn verify_receipt(
         &self,
         transaction_id: TransactionId,
@@ -82,10 +82,11 @@ pub fn down_proof_up_anchor(down_proof: &[u8]) -> Result<(Epoch, ShardGroup), Li
 /// `up_committee` must be the committee of the block the proof's inclusion half is anchored at (see
 /// [`down_proof_up_anchor`]), and `down_committee` that of the block `down_commit_proof` proves.
 ///
-/// An honest node can serve a down proof that proves nothing: one whose exclusion root was committed before V2, or a
-/// global substate's proof with roots of two shard groups. Such a proof fails with the
-/// [`SubstateProofVerifyError`](tari_ootle_storage::SubstateProofVerifyError) that names the case, which leaves the
-/// down unproven without showing the indexer dishonest.
+/// The two anchors are usually in different epochs, each verified with a committee of its own epoch's validator set.
+///
+/// An honest node can serve a down proof that proves nothing: a global substate's proof with roots of two shard
+/// groups. Such a proof fails with the [`SubstateProofVerifyError`](tari_ootle_storage::SubstateProofVerifyError)
+/// that names the case, which leaves the down unproven without showing the indexer dishonest.
 pub fn verify_down_proof(
     substate_id: &SubstateId,
     version: SubstateVersion,
