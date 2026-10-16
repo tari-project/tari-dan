@@ -31,6 +31,7 @@ use tari_indexer_client::{
         IndexerTransactionFinalizedResult,
         ListWatchedSubstatesRequest,
         SubmitTransactionRequest,
+        SubstateState,
         WatchedSubstateItem,
     },
 };
@@ -218,16 +219,17 @@ impl IndexerRestApiNetworkInterface {
         client: &TrackedClient,
         request: impl Future<Output = Result<T, IndexerRestClientError>>,
     ) -> Result<T, IndexerRestApiNetworkInterfaceError> {
-        self.observe_checked(client, request, |_| Ok(())).await
+        self.observe_checked(client, request, |_| Ok::<_, IndexerRestApiNetworkInterfaceError>(()))
+            .await
     }
 
     /// As [`Self::observe`], and refuses an answer that fails `check`. A refused answer counts as the indexer being
     /// unavailable, so an indexer that keeps sending invalid answers is failed over.
-    async fn observe_checked<T>(
+    async fn observe_checked<T, E: Into<IndexerRestApiNetworkInterfaceError>>(
         &self,
         client: &TrackedClient,
         request: impl Future<Output = Result<T, IndexerRestClientError>>,
-        check: impl FnOnce(&T) -> Result<(), SubstateTypeMismatch>,
+        check: impl FnOnce(&T) -> Result<(), E>,
     ) -> Result<T, IndexerRestApiNetworkInterfaceError> {
         let Ok(result) = tokio::time::timeout(self.request_timeout, request).await else {
             self.record_health(&client.endpoint, IndexerHealth::Unavailable);
@@ -296,13 +298,23 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
                     local_search_only,
                     include_proof: false,
                 }),
-                |resp| check_substate_type(substate_id, &resp.substate),
+                |resp| match &resp.state {
+                    SubstateState::Up { substate } => Ok(check_substate_type(substate_id, substate)?),
+                    SubstateState::Down {} => Err(IndexerRestApiNetworkInterfaceError::UnrequestedDownAnswer {
+                        substate_id: substate_id.clone(),
+                        version: resp.version,
+                    }),
+                },
             )
             .await?;
-        Ok(SubstateQueryResult {
-            version: result.version,
-            substate: result.substate,
-        })
+        let version = result.version;
+        let Some(substate) = result.into_substate_value() else {
+            return Err(IndexerRestApiNetworkInterfaceError::UnrequestedDownAnswer {
+                substate_id: substate_id.clone(),
+                version,
+            });
+        };
+        Ok(SubstateQueryResult { version, substate })
     }
 
     async fn get_substates(&self, substate_ids: Vec<SubstateId>) -> Result<HashMap<SubstateId, Substate>, Self::Error> {
@@ -615,6 +627,11 @@ pub enum IndexerRestApiNetworkInterfaceError {
     IndexerTimedOut { endpoint: Url, timeout: Duration },
     #[error("Indexer returned an invalid substate: {0}")]
     SubstateTypeMismatch(#[from] SubstateTypeMismatch),
+    #[error("Indexer answered {substate_id} v{version} as down to a request without proofs")]
+    UnrequestedDownAnswer {
+        substate_id: SubstateId,
+        version: SubstateVersion,
+    },
 }
 
 impl IsNotFoundError for IndexerRestApiNetworkInterfaceError {
@@ -675,7 +692,8 @@ impl TransactionStatusResponseError for IndexerRestApiNetworkInterfaceError {
             },
             IndexerRestApiNetworkInterfaceError::NoIndexerEndpoints |
             IndexerRestApiNetworkInterfaceError::IndexerTimedOut { .. } |
-            IndexerRestApiNetworkInterfaceError::SubstateTypeMismatch(_) => ResponseErrorStatus::InternalError {
+            IndexerRestApiNetworkInterfaceError::SubstateTypeMismatch(_) |
+            IndexerRestApiNetworkInterfaceError::UnrequestedDownAnswer { .. } => ResponseErrorStatus::InternalError {
                 message: self.to_string(),
             },
         }
@@ -990,7 +1008,9 @@ mod tests {
     async fn a_substate_of_another_type_than_requested_is_refused() {
         let body = serde_json::to_string(&GetSubstateResponse {
             version: SubstateVersion::new(1),
-            substate: vault_value(),
+            state: SubstateState::Up {
+                substate: Box::new(vault_value()),
+            },
             verified: true,
             proof: None,
         })
@@ -1066,7 +1086,9 @@ mod tests {
     async fn an_indexer_that_keeps_returning_mistyped_substates_is_failed_over() {
         let body = serde_json::to_string(&GetSubstateResponse {
             version: SubstateVersion::new(1),
-            substate: vault_value(),
+            state: SubstateState::Up {
+                substate: Box::new(vault_value()),
+            },
             verified: true,
             proof: None,
         })
@@ -1079,6 +1101,36 @@ mod tests {
         for _ in 0..FAILOVER_THRESHOLD {
             assert_eq!(network.get_endpoint(), invalid);
             network.query_substate(&component_id(), None, false).await.unwrap_err();
+        }
+
+        assert_eq!(network.get_endpoint(), other);
+    }
+
+    /// Only a request with proofs may be answered down, so an indexer that keeps answering one without is failed over.
+    #[tokio::test]
+    async fn an_indexer_that_keeps_answering_down_without_proofs_is_failed_over() {
+        let body = serde_json::to_string(&GetSubstateResponse {
+            version: SubstateVersion::new(1),
+            state: SubstateState::Down {},
+            verified: true,
+            proof: None,
+        })
+        .unwrap();
+        let invalid = spawn_status_server("200 OK", body).await;
+        let other = spawn_status_server("503 Service Unavailable", "{}").await;
+        let network = IndexerRestApiNetworkInterface::init(vec![invalid.clone()]).unwrap();
+        network.set_endpoints(vec![invalid.clone(), other.clone()]).unwrap();
+
+        for _ in 0..FAILOVER_THRESHOLD {
+            assert_eq!(network.get_endpoint(), invalid);
+            let err = network
+                .query_substate(&component_id(), Some(SubstateVersion::new(1)), false)
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(err, IndexerRestApiNetworkInterfaceError::UnrequestedDownAnswer { .. }),
+                "{err}"
+            );
         }
 
         assert_eq!(network.get_endpoint(), other);

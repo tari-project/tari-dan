@@ -40,6 +40,40 @@ where
     }
 }
 
+pub mod option {
+    use alloc::vec::Vec;
+
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    struct Encode<'a, T>(&'a T);
+
+    impl<T: AsRef<[u8]>> Serialize for Encode<'_, T> {
+        fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+            super::serialize(self.0, s)
+        }
+    }
+
+    struct Decode<T>(T);
+
+    impl<'de, T: TryFrom<Vec<u8>>> Deserialize<'de> for Decode<T> {
+        fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+            super::deserialize(d).map(Decode)
+        }
+    }
+
+    pub fn serialize<S: Serializer, T: AsRef<[u8]>>(v: &Option<T>, s: S) -> Result<S::Ok, S::Error> {
+        v.as_ref().map(Encode).serialize(s)
+    }
+
+    pub fn deserialize<'de, D, T>(d: D) -> Result<Option<T>, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: TryFrom<Vec<u8>>,
+    {
+        Ok(Option::<Decode<T>>::deserialize(d)?.map(|Decode(v)| v))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde::Serialize;
@@ -77,5 +111,37 @@ mod tests {
         // Deserialize from binary
         let deserialized_bin: SampleData = tari_bor::serde_codec::from_slice(&binary).unwrap();
         assert_eq!(original, deserialized_bin);
+    }
+
+    #[derive(Deserialize, Serialize, PartialEq, Debug)]
+    struct OptionalData {
+        #[serde(with = "super::option")]
+        data: Option<Vec<u8>>,
+    }
+
+    #[test]
+    fn an_optional_value_encodes_as_base64_or_null() {
+        for original in [
+            OptionalData {
+                data: Some(vec![4, 5, 6]),
+            },
+            OptionalData { data: None },
+        ] {
+            let json = serde_json::to_value(&original).unwrap();
+            assert_eq!(
+                json["data"],
+                original
+                    .data
+                    .as_ref()
+                    .map_or(serde_json::Value::Null, |_| serde_json::Value::from("BAUG"))
+            );
+            assert_eq!(serde_json::from_value::<OptionalData>(json).unwrap(), original);
+
+            let binary = tari_bor::serde_codec::to_vec(&original).unwrap();
+            assert_eq!(
+                tari_bor::serde_codec::from_slice::<OptionalData>(&binary).unwrap(),
+                original
+            );
+        }
     }
 }

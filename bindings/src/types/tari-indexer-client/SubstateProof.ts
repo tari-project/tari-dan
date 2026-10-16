@@ -32,4 +32,10 @@ export type SubstateProof = {
    * verifier needs it to recompute the leaf.
    */
   value_hash_epoch: Epoch;
+  /**
+   * CBOR-encoded `SubstateDownProof`, present when the substate version is down: an inclusion proof that the
+   * version was committed, anchored at a block of its own, and an exclusion proof under `anchor.state_merkle_root`
+   * that it is no longer in the state tree. `value_proof` is that exclusion proof.
+   */
+  down_proof?: string;
 };

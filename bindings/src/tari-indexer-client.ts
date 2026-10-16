@@ -60,6 +60,7 @@ export * from "./types/tari-indexer-client/ScheduledBurnRate";
 export * from "./types/tari-indexer-client/StreamTransactionEventsRequest";
 export * from "./types/tari-indexer-client/SubstateProof";
 export * from "./types/tari-indexer-client/SubstateProofAnchor";
+export * from "./types/tari-indexer-client/SubstateState";
 export * from "./types/tari-indexer-client/SyncProgress";
 export * from "./types/tari-indexer-client/TemplateCatalogueItem";
 export * from "./types/tari-indexer-client/TransactionEntry";

@@ -10,7 +10,7 @@ use std::{
 use tari_indexer_client::{
     error::IndexerRestClientError,
     rest_api_client::IndexerRestApiClient,
-    types::{GetSubstateRequest, GetSubstatesRequest, GetUtxosRequest, SubmitTransactionRequest},
+    types::{GetSubstateRequest, GetSubstateResponse, GetSubstatesRequest, GetUtxosRequest, SubmitTransactionRequest},
 };
 use tari_ootle_common_types::{
     Epoch,
@@ -116,7 +116,7 @@ impl<Wallet> IndexerProvider<Wallet> {
             .client
             .get_substate(&substate_id.into(), GetSubstateRequest::default())
             .await?;
-        Ok(Substate::new(resp.version, resp.substate))
+        Ok(up_substate(resp)?)
     }
 
     pub async fn get_epoch(&self) -> ProviderResult<Epoch> {
@@ -146,7 +146,7 @@ impl<Wallet> IndexerProvider<Wallet> {
             .get_substate(&substate_id.into(), GetSubstateRequest::default())
             .await
             .optional()?;
-        Ok(resp.map(|r| Substate::new(r.version, r.substate)))
+        Ok(resp.map(up_substate).transpose()?)
     }
 
     /// Fetch a resource by address. The returned [`Resource`] carries its type, optional view key,
@@ -302,6 +302,17 @@ impl<Wallet: NetworkWallet + Send + Sync> Provider for IndexerProvider<Wallet> {
 
         Ok(resp.substates)
     }
+}
+
+/// The live substate a lookup without proofs answers with. The indexer answers such a lookup with a down version only
+/// in breach of its API.
+fn up_substate(resp: GetSubstateResponse) -> Result<Substate, IndexerRestClientError> {
+    let version = resp.version;
+    resp.into_substate_value()
+        .map(|value| Substate::new(version, value))
+        .ok_or_else(|| IndexerRestClientError::InvalidResponse {
+            message: format!("Indexer answered v{version} as down to a request without proofs"),
+        })
 }
 
 impl<Wallet: NetworkWallet + Send + Sync> WalletProvider for IndexerProvider<Wallet> {

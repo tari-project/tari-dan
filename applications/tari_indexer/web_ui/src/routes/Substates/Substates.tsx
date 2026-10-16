@@ -419,10 +419,10 @@ function SubstatesLayout() {
               </Alert>
             )}
 
-            {data && (
+            {data && "up" in data.state && (
               <>
                 <Divider />
-                <SubstateDetails substate={data.substate} version={data.version} verified={data.verified} />
+                <SubstateDetails substate={data.state.up.substate} version={data.version} verified={data.verified} />
               </>
             )}
           </Stack>

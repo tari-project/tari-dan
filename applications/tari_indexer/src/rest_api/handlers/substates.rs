@@ -9,7 +9,13 @@ use axum::{
     extract::{Path, Query},
 };
 use tari_engine_types::substate::SubstateId;
-use tari_indexer_client::types::{GetSubstateRequest, GetSubstateResponse, GetSubstatesRequest, GetSubstatesResponse};
+use tari_indexer_client::types::{
+    GetSubstateRequest,
+    GetSubstateResponse,
+    GetSubstatesRequest,
+    GetSubstatesResponse,
+    SubstateState,
+};
 use tari_indexer_lib::{cached_substate_manager::ProvenSubstate, error::IndexerError};
 use tari_ootle_common_types::{SubstateRequirementRef, optional::IsNotFoundError};
 
@@ -20,7 +26,7 @@ use crate::{
         handlers::HandlerResult,
         proofs::{require_proof_verification, to_substate_proof},
     },
-    substate_manager::{FetchedSubstate, SubstateManagerError},
+    substate_manager::{FetchedSubstate, ProvenLookup, SubstateManagerError},
 };
 
 /// Maps a lookup failure to a status the caller can act on.
@@ -60,11 +66,16 @@ pub(super) fn substate_lookup_error(e: SubstateManagerError) -> ErrorResponse {
         (
             "include_proof" = Option<bool>,
             Query,
-            description = "If true, include the proof the substate was verified with"
+            description = "If true, include the proof the substate was verified with. A spent version named by \
+                           `version` is then answered with its down proof"
         ),
     ),
     responses(
-        (status = 200, description = "Substate details", body = GetSubstateResponse),
+        (
+            status = 200,
+            description = "Substate details, or with include_proof, the proof that the version asked for has been spent",
+            body = GetSubstateResponse
+        ),
         (
             status = BAD_REQUEST,
             description = "A proof was requested together with local_search_only, or from an indexer that does not verify proofs",
@@ -72,7 +83,8 @@ pub(super) fn substate_lookup_error(e: SubstateManagerError) -> ErrorResponse {
         ),
         (
             status = 404,
-            description = "No such substate, or the version asked for has been spent",
+            description = "No such substate, or the version asked for has been spent and no down proof was requested \
+                           or verified",
             body = ErrorResponse
         ),
         (
@@ -110,7 +122,7 @@ pub async fn get_substate(
         }
         require_proof_verification(manager.verifies_substates())?;
     }
-    let maybe_substate = if req.include_proof {
+    let maybe_lookup = if req.include_proof {
         manager
             .fetch_substate_with_proof(requirement)
             .await
@@ -122,10 +134,12 @@ pub async fn get_substate(
             .map(|a| {
                 a.into_iter()
                     .find(|(_, substate)| req.version.is_none_or(|v| substate.version() == v))
-                    .map(|(_, substate)| FetchedSubstate {
-                        substate,
-                        verified: false,
-                        proof: None,
+                    .map(|(_, substate)| {
+                        ProvenLookup::Up(Box::new(FetchedSubstate {
+                            substate,
+                            verified: false,
+                            proof: None,
+                        }))
                     })
             })
             .map_err(substate_lookup_error)?
@@ -134,21 +148,35 @@ pub async fn get_substate(
             .fetch_substate(requirement)
             .await
             .map_err(substate_lookup_error)?
+            .map(|fetched| ProvenLookup::Up(Box::new(fetched)))
     };
 
-    let Some(fetched) = maybe_substate else {
+    let Some(lookup) = maybe_lookup else {
         return Err(ErrorResponse::not_found(format!("Substate {} not found", substate_id)));
     };
-    let proof = fetched.proof.map(to_substate_proof).transpose()?;
-    Ok(Json(GetSubstateResponse {
-        version: fetched.substate.version(),
-        substate: fetched.substate.into_substate_value(),
-        // True when this value was checked against the committee before being accepted. False
-        // for local-only lookups, when verification is disabled, or when no committee member
-        // could supply a proof yet (e.g. nothing committed since an epoch change).
-        verified: fetched.verified,
-        proof,
-    }))
+    to_get_substate_response(lookup).map(Json)
+}
+
+fn to_get_substate_response(lookup: ProvenLookup) -> Result<GetSubstateResponse, ErrorResponse> {
+    match lookup {
+        ProvenLookup::Up(fetched) => Ok(GetSubstateResponse {
+            version: fetched.substate.version(),
+            state: SubstateState::Up {
+                substate: Box::new(fetched.substate.into_substate_value()),
+            },
+            // True when this value was checked against the committee before being accepted. False
+            // for local-only lookups, when verification is disabled, or when no committee member
+            // could supply a proof yet (e.g. nothing committed since an epoch change).
+            verified: fetched.verified,
+            proof: fetched.proof.map(to_substate_proof).transpose()?,
+        }),
+        ProvenLookup::Down { version, proof } => Ok(GetSubstateResponse {
+            version,
+            state: SubstateState::Down {},
+            verified: true,
+            proof: Some(to_substate_proof(proof)?),
+        }),
+    }
 }
 
 #[utoipa::path(
@@ -232,10 +260,16 @@ pub async fn fetch_substates(
 #[cfg(test)]
 mod tests {
     use axum::http::StatusCode;
+    use tari_engine_types::{
+        non_fungible::NonFungibleContainer,
+        substate::{Substate, SubstateValue},
+    };
     use tari_ootle_common_types::SubstateVersion;
     use tari_ootle_storage::StorageError;
+    use tari_validator_node_rpc::client::SubstateProofData;
 
     use super::*;
+    use crate::rest_api::proofs::tests::commit_proof;
 
     fn substate() -> SubstateId {
         format!("component_{:064x}", 1).parse().unwrap()
@@ -253,6 +287,54 @@ mod tests {
         assert_eq!(resp.status, StatusCode::NOT_FOUND);
         // The version the caller named has to survive into the message for it to re-resolve.
         assert!(resp.error.contains("v0"), "{}", resp.error);
+    }
+
+    /// A proven down is an answer about the version asked for, carried with the proof that shows it.
+    #[test]
+    fn a_proven_down_is_served_with_its_down_proof() {
+        let resp = to_get_substate_response(ProvenLookup::Down {
+            version: SubstateVersion::new(3),
+            proof: SubstateProofData {
+                substate_value_proof: vec![1],
+                commit_proof: commit_proof().to_bytes(),
+                proof_epoch: 0,
+                substate_down_proof: Some(vec![4, 5, 6]),
+                destroyed_at_state_version: Some(9),
+            },
+        })
+        .unwrap();
+
+        assert_eq!(resp.version, SubstateVersion::new(3));
+        assert!(matches!(resp.state, SubstateState::Down {}));
+        assert!(resp.verified);
+        assert_eq!(resp.proof.as_ref().unwrap().down_proof, Some(vec![4, 5, 6]));
+
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["state"], serde_json::json!({ "down": {} }));
+        assert_eq!(json["proof"]["down_proof"], "BAUG");
+    }
+
+    #[test]
+    fn a_live_substate_is_served_up_without_a_down_proof() {
+        let resp = to_get_substate_response(ProvenLookup::Up(Box::new(FetchedSubstate {
+            substate: Substate::new(2, SubstateValue::NonFungible(NonFungibleContainer::no_data())),
+            verified: true,
+            proof: Some(SubstateProofData {
+                substate_value_proof: vec![1],
+                commit_proof: commit_proof().to_bytes(),
+                proof_epoch: 0,
+                substate_down_proof: None,
+                destroyed_at_state_version: None,
+            }),
+        })))
+        .unwrap();
+
+        assert_eq!(resp.version, SubstateVersion::new(2));
+        assert!(matches!(resp.state, SubstateState::Up { .. }));
+
+        let json = serde_json::to_value(&resp).unwrap();
+        assert!(json["state"]["up"]["substate"].is_object(), "{json}");
+        assert!(json["proof"].get("down_proof").is_none(), "{json}");
     }
 
     #[test]

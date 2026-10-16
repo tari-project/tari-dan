@@ -108,6 +108,7 @@ fn substate_proof(set: &ValidatorSetFixture, id: &SubstateId, value: &SubstateVa
         ),
         value_proof: tari_bor::serde_codec::to_vec(&value_proof).unwrap(),
         value_hash_epoch: EPOCH,
+        down_proof: None,
     }
 }
 

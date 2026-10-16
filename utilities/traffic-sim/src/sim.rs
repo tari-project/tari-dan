@@ -653,8 +653,8 @@ impl TrafficSim {
                 include_proof: false,
             })
             .await?
-            .substate
-            .into_resource();
+            .into_substate_value()
+            .and_then(|substate| substate.into_resource());
 
         let divisibility = resource.as_ref().map(|r| r.divisibility()).unwrap_or(6);
         let token_symbol = resource
