@@ -79,6 +79,8 @@ pub enum ConfigKey {
     ClaimedAccounts,
     /// The highest account key index that seed recovery checked. type: u64
     RecoveryMaxProbedKeyIndex,
+    /// The latest validator set the wallet trusts. type: TrustedValidatorSet
+    TrustedValidatorSet,
 }
 
 impl ConfigKey {
@@ -92,6 +94,7 @@ impl ConfigKey {
             Self::AdvancedUiFeatures => "advanced_ui_features",
             Self::ClaimedAccounts => "claimed_accounts",
             Self::RecoveryMaxProbedKeyIndex => "recovery_max_probed_key_index",
+            Self::TrustedValidatorSet => "trusted_validator_set",
         }
     }
 }

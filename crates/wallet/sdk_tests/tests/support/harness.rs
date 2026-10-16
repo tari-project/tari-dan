@@ -12,7 +12,7 @@ use tari_engine_types::{
     resource::Resource,
     substate::{Substate, SubstateId},
 };
-use tari_indexer_client::types::WatchedSubstateItem;
+use tari_indexer_client::types::{EpochCheckpointEntry, ValidatorSetCommittee, WatchedSubstateItem};
 use tari_ootle_address::Network;
 use tari_ootle_common_types::{
     Epoch,
@@ -24,6 +24,7 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_transaction::{Transaction, TransactionEnvelope, TransactionId};
 use tari_ootle_wallet_sdk::{
+    IndexerTrust,
     WalletSdk,
     WalletSdkConfig,
     WalletSdkSpec,
@@ -116,8 +117,14 @@ impl<TNetwork: WalletNetworkInterface> TestWithNetwork<TNetwork> {
         test
     }
 
-    /// A wallet with the stealth TARI resource and no accounts.
+    /// A wallet with the stealth TARI resource and no accounts, which takes its indexer at its word.
     pub fn without_accounts(network: TNetwork) -> Self {
+        Self::without_accounts_trusting(network, IndexerTrust::Trust)
+    }
+
+    /// A wallet with the stealth TARI resource and no accounts, which trusts its indexer as far as `indexer_trust`
+    /// says.
+    pub fn without_accounts_trusting(network: TNetwork, indexer_trust: IndexerTrust) -> Self {
         let temp = tempfile::tempdir().unwrap();
         let store = SqliteWalletStore::try_open(temp.path().join("data/wallet.sqlite")).unwrap();
         store.run_migrations().unwrap();
@@ -128,6 +135,7 @@ impl<TNetwork: WalletNetworkInterface> TestWithNetwork<TNetwork> {
             WalletSdkConfig {
                 network: Network::LocalNet,
                 override_keyring_password: Some(SafePassword::from_str("SuuuCh Sekret W0W").unwrap()),
+                indexer_trust,
             },
             EpochBirthday::new(1200.try_into().unwrap(), u64::MAX),
         )
@@ -269,6 +277,7 @@ impl WalletNetworkInterface for CannedTransactionResultInterface {
     async fn query_transaction_result(
         &self,
         _transaction_id: TransactionId,
+        _include_proof: bool,
     ) -> Result<TransactionQueryResult, Self::Error> {
         Ok(self.result.clone())
     }
@@ -305,6 +314,23 @@ impl WalletNetworkInterface for CannedTransactionResultInterface {
         _resource_address: ResourceAddress,
         _tag_and_nonce_pairs: Vec<TagAndPublicNoncePair>,
     ) -> Result<Vec<(UtxoId, Utxo)>, Self::Error> {
+        panic!("CannedTransactionResultInterface called")
+    }
+
+    async fn get_latest_epoch_checkpoint(&self, _shard: Shard) -> Result<EpochCheckpointEntry, Self::Error> {
+        panic!("CannedTransactionResultInterface called")
+    }
+
+    async fn list_epoch_checkpoints(
+        &self,
+        _from_epoch: Epoch,
+        _limit: u32,
+        _shard: Shard,
+    ) -> Result<Vec<EpochCheckpointEntry>, Self::Error> {
+        panic!("CannedTransactionResultInterface called")
+    }
+
+    async fn get_committee(&self, _epoch: Epoch, _shard: Shard) -> Result<ValidatorSetCommittee, Self::Error> {
         panic!("CannedTransactionResultInterface called")
     }
 
@@ -362,6 +388,7 @@ impl WalletNetworkInterface for PanicNetworkInterface {
     async fn query_transaction_result(
         &self,
         _transaction_id: TransactionId,
+        _include_proof: bool,
     ) -> Result<TransactionQueryResult, Self::Error> {
         panic!("PanicNetworkInterface called")
     }
@@ -399,6 +426,23 @@ impl WalletNetworkInterface for PanicNetworkInterface {
         _tag_and_nonce_pairs: Vec<TagAndPublicNoncePair>,
     ) -> Result<Vec<(UtxoId, Utxo)>, Self::Error> {
         panic!("PanicNetworkInterface get_unspent_utxos called")
+    }
+
+    async fn get_latest_epoch_checkpoint(&self, _shard: Shard) -> Result<EpochCheckpointEntry, Self::Error> {
+        panic!("PanicNetworkInterface called")
+    }
+
+    async fn list_epoch_checkpoints(
+        &self,
+        _from_epoch: Epoch,
+        _limit: u32,
+        _shard: Shard,
+    ) -> Result<Vec<EpochCheckpointEntry>, Self::Error> {
+        panic!("PanicNetworkInterface called")
+    }
+
+    async fn get_committee(&self, _epoch: Epoch, _shard: Shard) -> Result<ValidatorSetCommittee, Self::Error> {
+        panic!("PanicNetworkInterface called")
     }
 
     async fn get_current_epoch(&self) -> Result<Epoch, Self::Error> {

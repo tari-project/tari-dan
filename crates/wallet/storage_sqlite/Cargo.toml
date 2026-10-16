@@ -32,6 +32,7 @@ libsqlite3-sys = { workspace = true, features = ["bundled"] }
 ootle_byte_type = { workspace = true }
 tari_ootle_common_types = { workspace = true }
 tari_crypto = { workspace = true }
+tari_ootle_light_client = { workspace = true, features = ["test-fixtures"] }
 
 [package.metadata.cargo-machete]
 ignored = [

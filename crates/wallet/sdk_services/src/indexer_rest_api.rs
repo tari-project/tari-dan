@@ -23,15 +23,20 @@ use tari_indexer_client::{
     protobuf,
     rest_api_client::IndexerRestApiClient,
     types::{
+        EpochCheckpointEntry,
+        GetCommitteeRequest,
+        GetLatestEpochCheckpointRequest,
         GetSubstateRequest,
         GetSubstatesRequest,
         GetTransactionResultRequest,
         GetUtxoUpdatesRequest,
         GetUtxosRequest,
         IndexerTransactionFinalizedResult,
+        ListEpochCheckpointsRequest,
         ListWatchedSubstatesRequest,
         SubmitTransactionRequest,
         SubstateState,
+        ValidatorSetCommittee,
         WatchedSubstateItem,
     },
 };
@@ -404,12 +409,14 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
                 finalized_time: now(),
                 abort_details: None,
             },
+            receipt: None,
         })
     }
 
     async fn query_transaction_result(
         &self,
         transaction_id: TransactionId,
+        include_proof: bool,
     ) -> Result<TransactionQueryResult, Self::Error> {
         let client = self.tracked_client();
         let resp = self
@@ -417,7 +424,7 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
                 &client,
                 client.get_transaction_result(GetTransactionResultRequest {
                     transaction_id,
-                    include_proof: false,
+                    include_proof,
                 }),
                 |resp| match &resp.result {
                     IndexerTransactionFinalizedResult::Finalized {
@@ -432,6 +439,7 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
         Ok(TransactionQueryResult {
             transaction_id,
             result: convert_indexer_result_to_wallet_result(resp.result),
+            receipt: resp.receipt,
         })
     }
 
@@ -593,6 +601,49 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
             .await?;
 
         Ok(resp.substates)
+    }
+
+    async fn get_latest_epoch_checkpoint(&self, shard: Shard) -> Result<EpochCheckpointEntry, Self::Error> {
+        let client = self.tracked_client();
+        let resp = self
+            .observe(
+                &client,
+                client.get_latest_epoch_checkpoint(GetLatestEpochCheckpointRequest {
+                    shard: Some(shard),
+                    include_committees: true,
+                }),
+            )
+            .await?;
+        Ok(resp.checkpoint)
+    }
+
+    async fn list_epoch_checkpoints(
+        &self,
+        from_epoch: Epoch,
+        limit: u32,
+        shard: Shard,
+    ) -> Result<Vec<EpochCheckpointEntry>, Self::Error> {
+        let client = self.tracked_client();
+        let resp = self
+            .observe(
+                &client,
+                client.list_epoch_checkpoints(ListEpochCheckpointsRequest {
+                    from_epoch: Some(from_epoch),
+                    limit: Some(limit),
+                    shard: Some(shard),
+                    include_committees: true,
+                }),
+            )
+            .await?;
+        Ok(resp.checkpoints)
+    }
+
+    async fn get_committee(&self, epoch: Epoch, shard: Shard) -> Result<ValidatorSetCommittee, Self::Error> {
+        let client = self.tracked_client();
+        let resp = self
+            .observe(&client, client.get_committee(GetCommitteeRequest { epoch, shard }))
+            .await?;
+        Ok(resp.committee)
     }
 
     async fn get_current_epoch(&self) -> Result<Epoch, Self::Error> {
@@ -1152,7 +1203,10 @@ mod tests {
         .unwrap();
         let network = network_answering_with(body).await;
 
-        let err = network.query_transaction_result(transaction_id).await.unwrap_err();
+        let err = network
+            .query_transaction_result(transaction_id, false)
+            .await
+            .unwrap_err();
 
         assert!(matches!(
             err,

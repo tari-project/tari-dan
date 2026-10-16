@@ -9,6 +9,7 @@ use std::str::FromStr;
 use axum_extra::headers::{Authorization, authorization::Bearer};
 use tari_ootle_address::Network;
 use tari_ootle_wallet_sdk::{
+    IndexerTrust,
     WalletSdkConfig,
     cipher_seed::CipherSeedRestore,
     models::EpochBirthday,
@@ -55,6 +56,7 @@ impl TestDaemon {
             WalletSdkConfig {
                 network: Network::LocalNet,
                 override_keyring_password: Some(SafePassword::from_str("test wallet password").unwrap()),
+                indexer_trust: IndexerTrust::default(),
             },
             EpochBirthday::far_future(),
         )

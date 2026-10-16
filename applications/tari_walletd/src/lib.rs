@@ -255,6 +255,7 @@ pub fn initialize_wallet_sdk(config: &ApplicationConfig, store: SqliteWalletStor
     let sdk_config = WalletSdkConfig {
         network: config.ootle_wallet_daemon.network,
         override_keyring_password: config.ootle_wallet_daemon.override_keyring_password.clone(),
+        indexer_trust: config.ootle_wallet_daemon.indexer_trust,
     };
     let config_api = ConfigApi::new(&store);
     // Indexer URLs saved through `settings.set` take precedence over the config file.

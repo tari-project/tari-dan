@@ -430,6 +430,7 @@ mod max_fee_limit_tests {
     use tari_ootle_address::Network;
     use tari_ootle_common_types::Epoch;
     use tari_ootle_wallet_sdk::{
+        IndexerTrust,
         WalletSdkConfig,
         cipher_seed::CipherSeedRestore,
         models::{EpochBirthday, KeyBranch, KeyId},
@@ -474,6 +475,7 @@ mod max_fee_limit_tests {
             WalletSdkConfig {
                 network: Network::LocalNet,
                 override_keyring_password: Some(SafePassword::from_str("test wallet password").unwrap()),
+                indexer_trust: IndexerTrust::default(),
             },
             EpochBirthday::far_future(),
         )

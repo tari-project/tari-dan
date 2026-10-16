@@ -5,21 +5,26 @@ use std::collections::{HashMap, HashSet};
 
 use log::*;
 use tari_engine_types::{
+    commit_result::ExecuteResult,
     indexed_value::{IndexedValueError, IndexedWellKnownTypes},
     substate::{SubstateDiff, SubstateId},
 };
+use tari_indexer_client::types::ProvenTransactionReceipt;
 use tari_ootle_common_types::{
     VersionedSubstateIdRef,
     optional::{IsNotFoundError, Optional},
     response_status::{ResponseErrorStatus, TransactionStatusResponseError},
     substate_type::check_diff_substate_types,
 };
+use tari_ootle_light_client::{LightClientError, check_result_matches_receipt};
 use tari_ootle_transaction::{Transaction, TransactionId};
 use tari_template_lib::types::{ComponentAddress, constants::TARI_TOKEN};
 
 use crate::{
+    apis::validator_set::{ValidatorSetApi, ValidatorSetApiError},
     models::{NewAccountData, TransactionStatus, WalletLockId, WalletTransaction, WalletTransactionUpdate},
     network::{TransactionFinalizedResult, WalletNetworkInterface},
+    sdk::IndexerTrust,
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter, WriteableWalletStore},
 };
 
@@ -28,6 +33,8 @@ const LOG_TARGET: &str = "tari::ootle::wallet_sdk::apis::transaction";
 pub struct TransactionApi<'a, TStore, TNetworkInterface> {
     store: &'a TStore,
     network_interface: &'a TNetworkInterface,
+    validator_set_api: ValidatorSetApi<'a, TStore, TNetworkInterface>,
+    indexer_trust: IndexerTrust,
 }
 
 impl<'a, TStore, TNetworkInterface> TransactionApi<'a, TStore, TNetworkInterface>
@@ -36,10 +43,17 @@ where
     TNetworkInterface: WalletNetworkInterface,
     TNetworkInterface::Error: IsNotFoundError + TransactionStatusResponseError,
 {
-    pub fn new(store: &'a TStore, network_interface: &'a TNetworkInterface) -> Self {
+    pub fn new(
+        store: &'a TStore,
+        network_interface: &'a TNetworkInterface,
+        validator_set_api: ValidatorSetApi<'a, TStore, TNetworkInterface>,
+        indexer_trust: IndexerTrust,
+    ) -> Self {
         Self {
             store,
             network_interface,
+            validator_set_api,
+            indexer_trust,
         }
     }
 
@@ -218,6 +232,12 @@ where
         Ok(transactions)
     }
 
+    /// Stores the result of `transaction_id` once the network has finalized it, and commits its changes to the wallet.
+    /// Returns `None` while the transaction is pending.
+    ///
+    /// Under [`IndexerTrust::Verify`] a committed transaction stays pending until the indexer serves a proof of its
+    /// receipt that verifies against a validator set the wallet trusts, and its result must be the one that receipt
+    /// commits.
     #[allow(clippy::too_many_lines)]
     pub async fn check_and_store_finalized_transaction(
         &self,
@@ -232,7 +252,7 @@ where
 
         let maybe_resp = self
             .network_interface
-            .query_transaction_result(transaction_id)
+            .query_transaction_result(transaction_id, self.indexer_trust.is_verify())
             .await
             .optional()?;
 
@@ -271,6 +291,15 @@ where
                         .map_err(|e| TransactionApiError::InvalidTransactionQueryResponse { details: e.to_string() })?;
                 }
 
+                if self.indexer_trust.is_verify() && !transaction.is_dry_run && final_decision.is_commit() {
+                    let verified = self
+                        .verify_committed_result(transaction_id, execution_result.as_deref(), resp.receipt.as_ref())
+                        .await?;
+                    if !verified {
+                        return Ok(None);
+                    }
+                }
+
                 let new_status = if final_decision.is_commit() {
                     match execution_result.as_ref() {
                         Some(execution_result) => {
@@ -285,11 +314,6 @@ where
                 } else {
                     TransactionStatus::Rejected
                 };
-
-                // let qc_resp = self.network_interface
-                //     .fetch_transaction_quorum_certificates(GetTransactionQcsRequest { hash })
-                //     .await
-                //     .map_err(TransactionApiError::ValidatorNodeClientError)?;
 
                 let transaction = self.store.with_write_tx(|tx| {
                     if !transaction.is_dry_run && final_decision.is_commit() {
@@ -348,6 +372,52 @@ where
                 Ok(Some(transaction))
             },
         }
+    }
+
+    /// Verifies that the network committed `execution_result` as the result of `transaction_id`: the indexer's proof of
+    /// the committed receipt verifies against a validator set the wallet trusts, and the result is the one that
+    /// receipt commits. Returns `false` while there is no proof to verify yet.
+    async fn verify_committed_result(
+        &self,
+        transaction_id: TransactionId,
+        execution_result: Option<&ExecuteResult>,
+        proven: Option<&ProvenTransactionReceipt>,
+    ) -> Result<bool, TransactionApiError> {
+        let Some((proven, proof)) = proven.and_then(|proven| proven.proof.as_ref().map(|proof| (proven, proof))) else {
+            info!(
+                target: LOG_TARGET,
+                "Transaction {} committed, but the indexer served no proof of its receipt yet. Will check again later.",
+                transaction_id
+            );
+            return Ok(false);
+        };
+        let Some(committee) = self
+            .validator_set_api
+            .verify_committee(proof.anchor.epoch, proof.anchor.shard_group)
+            .await?
+        else {
+            info!(
+                target: LOG_TARGET,
+                "The receipt of transaction {} is proven in {}, for which the wallet trusts no validator set yet. Will check again later.",
+                transaction_id,
+                proof.anchor.epoch
+            );
+            return Ok(false);
+        };
+        let unverified = |source| TransactionApiError::FinalizationUnverified { transaction_id, source };
+        committee.verify_receipt(transaction_id, proven).map_err(unverified)?;
+        let execution_result =
+            execution_result.ok_or_else(|| TransactionApiError::InvalidTransactionQueryResponse {
+                details: format!("Transaction {transaction_id} committed, but the indexer served no result"),
+            })?;
+        check_result_matches_receipt(
+            committee.network(),
+            transaction_id,
+            &proven.receipt,
+            &execution_result.finalize,
+        )
+        .map_err(unverified)?;
+        Ok(true)
     }
 
     pub fn release_all_locks_for_transaction(&self, transaction_id: TransactionId) -> Result<(), TransactionApiError> {
@@ -618,6 +688,13 @@ pub enum TransactionApiError {
     InvalidTransactionQueryResponse { details: String },
     #[error("Dry run transaction mismatch error: {details}")]
     DryRunMismatchError { details: String },
+    #[error("The indexer's finalization of transaction {transaction_id} does not verify: {source}")]
+    FinalizationUnverified {
+        transaction_id: TransactionId,
+        source: LightClientError,
+    },
+    #[error("Validator set error: {0}")]
+    ValidatorSet(#[from] ValidatorSetApiError),
 }
 
 impl IsNotFoundError for TransactionApiError {

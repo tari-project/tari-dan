@@ -14,6 +14,7 @@ use tari_engine_types::commit_result::FinalizeResult;
 use tari_ootle_common_types::Epoch;
 use tari_ootle_transaction::{Network, Transaction, TransactionBuilder, TransactionId};
 use tari_ootle_wallet_sdk::{
+    IndexerTrust,
     WalletSdk as Sdk,
     WalletSdkConfig,
     cipher_seed::CipherSeedRestore,
@@ -150,6 +151,7 @@ fn initialize_wallet_sdk<P: AsRef<Path>>(db_path: P, indexer_url: Url) -> Result
     let sdk_config = WalletSdkConfig {
         network: Network::LocalNet,
         override_keyring_password: Some(SafePassword::from_str("N3Va g0nn4 gu355").unwrap()),
+        indexer_trust: IndexerTrust::default(),
     };
     let indexer = IndexerRestApiNetworkInterface::new(indexer_url);
     let mut sdk = WalletSdk::initialize_with_local_key_store(store, indexer, sdk_config, EpochBirthday::far_future())?;

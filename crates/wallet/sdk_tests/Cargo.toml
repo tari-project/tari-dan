@@ -27,6 +27,7 @@ tari_template_abi = { workspace = true }
 tari_template_builtin = { workspace = true }
 tari_ootle_address = { workspace = true, features = ["serde"] }
 tari_indexer_client = { workspace = true, default-features = false }
+tari_ootle_light_client = { workspace = true, features = ["test-fixtures"] }
 
 ootle_byte_type = { workspace = true }
 tempfile = { workspace = true }

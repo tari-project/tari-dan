@@ -1954,6 +1954,7 @@ mod balance_change_handler_tests {
     use tari_ootle_address::Network;
     use tari_ootle_common_types::{Epoch, SubstateVersion};
     use tari_ootle_wallet_sdk::{
+        IndexerTrust,
         WalletSdkConfig,
         cipher_seed::CipherSeedRestore,
         models::{BalanceChangeSnapshot, BalanceChangeSource, EpochBirthday, KeyBranch, KeyId},
@@ -1999,6 +2000,7 @@ mod balance_change_handler_tests {
             WalletSdkConfig {
                 network: Network::LocalNet,
                 override_keyring_password: Some(SafePassword::from_str("test wallet password").unwrap()),
+                indexer_trust: IndexerTrust::default(),
             },
             EpochBirthday::far_future(),
         )
@@ -2282,6 +2284,7 @@ mod create_stealth_transfer_statement_handler_tests {
     use tari_ootle_common_types::Epoch;
     use tari_ootle_wallet_crypto::pay_to::PayTo;
     use tari_ootle_wallet_sdk::{
+        IndexerTrust,
         WalletSdkConfig,
         apis::confidential_transfer::UtxoInputSelection,
         cipher_seed::CipherSeedRestore,
@@ -2364,6 +2367,7 @@ mod create_stealth_transfer_statement_handler_tests {
             WalletSdkConfig {
                 network: Network::LocalNet,
                 override_keyring_password: Some(SafePassword::from_str("test wallet password").unwrap()),
+                indexer_trust: IndexerTrust::default(),
             },
             EpochBirthday::far_future(),
         )
@@ -3072,6 +3076,7 @@ mod claim_burn_fee_tests {
     use tari_ootle_common_types::base_layer_hashing::ownership_proof_hasher64;
     use tari_ootle_transaction::Instruction;
     use tari_ootle_wallet_sdk::{
+        IndexerTrust,
         WalletSdkConfig,
         cipher_seed::CipherSeedRestore,
         models::{EpochBirthday, KeyId},
@@ -3103,6 +3108,7 @@ mod claim_burn_fee_tests {
             WalletSdkConfig {
                 network: Network::LocalNet,
                 override_keyring_password: Some(SafePassword::from_str("test wallet password").unwrap()),
+                indexer_trust: IndexerTrust::default(),
             },
             EpochBirthday::far_future(),
         )

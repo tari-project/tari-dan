@@ -4,7 +4,7 @@
 use std::collections::{HashMap, HashSet};
 
 use tari_engine_types::substate::SubstateId;
-use tari_ootle_common_types::{StateVersion, shard::Shard, substate_type::SubstateType};
+use tari_ootle_common_types::{Epoch, StateVersion, shard::Shard, substate_type::SubstateType};
 use tari_ootle_transaction::TransactionId;
 use tari_template_lib::types::{
     ComponentAddress,
@@ -21,6 +21,7 @@ use crate::{
     models::{
         Account,
         AddressBookEntry,
+        AnchoredValidatorSet,
         ApiKey,
         AuthoredTemplateModel,
         BalanceChangePage,
@@ -40,6 +41,7 @@ use crate::{
         TransactionRequestId,
         TransactionRequestModel,
         TransactionStatus,
+        TrustedValidatorSetHash,
         VaultModel,
         WalletLock,
         WalletLockId,
@@ -318,4 +320,10 @@ pub trait WalletStoreReader {
     /// Fetch a single key by id; surfaces both active and revoked rows so
     /// admin tooling can show history.
     fn api_key_get_by_id(&mut self, id: i32) -> Result<ApiKey, WalletStorageError>;
+
+    // Trusted validator sets
+    /// The validator set the wallet trusts for `epoch`.
+    fn trusted_validator_sets_get(&mut self, epoch: Epoch) -> Result<TrustedValidatorSetHash, WalletStorageError>;
+    /// The validator set the wallet's trusted sets descend from, if it has anchored.
+    fn trusted_validator_sets_get_anchor(&mut self) -> Result<Option<AnchoredValidatorSet>, WalletStorageError>;
 }

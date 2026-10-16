@@ -23,12 +23,13 @@ use diesel::{
 use log::{error, warn};
 use serde::de::DeserializeOwned;
 use tari_engine_types::substate::SubstateId;
-use tari_ootle_common_types::{StateVersion, shard::Shard, substate_type::SubstateType};
+use tari_ootle_common_types::{Epoch, StateVersion, shard::Shard, substate_type::SubstateType};
 use tari_ootle_transaction::TransactionId;
 use tari_ootle_wallet_sdk::{
     models::{
         Account,
         AddressBookEntry,
+        AnchoredValidatorSet,
         ApiKey,
         AuthoredTemplateModel,
         BalanceChange,
@@ -50,6 +51,8 @@ use tari_ootle_wallet_sdk::{
         TransactionRequestId,
         TransactionRequestModel,
         TransactionStatus,
+        TrustedValidatorSetHash,
+        ValidatorSetAnchor,
         VaultModel,
         WalletLock,
         WalletLockId,
@@ -1979,6 +1982,51 @@ impl WalletStoreReader for ReadTransaction<'_> {
             .map_err(|e| WalletStorageError::general(OPERATION, e))?;
 
         Ok(map_api_key_row(row))
+    }
+
+    fn trusted_validator_sets_get(&mut self, epoch: Epoch) -> Result<TrustedValidatorSetHash, WalletStorageError> {
+        const OPERATION: &str = "trusted_validator_sets_get";
+        use crate::schema::trusted_validator_sets;
+
+        let validator_set = trusted_validator_sets::table
+            .select(trusted_validator_sets::validator_set)
+            .filter(trusted_validator_sets::epoch.eq(epoch.as_u64() as i64))
+            .first::<String>(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general(OPERATION, e))?
+            .ok_or_else(|| WalletStorageError::NotFound {
+                operation: OPERATION,
+                entity: "trusted_validator_set".to_string(),
+                key: epoch.to_string(),
+            })?;
+        deserialize_json(validator_set)
+    }
+
+    fn trusted_validator_sets_get_anchor(&mut self) -> Result<Option<AnchoredValidatorSet>, WalletStorageError> {
+        const OPERATION: &str = "trusted_validator_sets_get_anchor";
+        use crate::schema::trusted_validator_sets;
+
+        let Some(row) = trusted_validator_sets::table
+            .filter(trusted_validator_sets::anchor.is_not_null())
+            .order(trusted_validator_sets::epoch.desc())
+            .first::<models::TrustedValidatorSet>(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general(OPERATION, e))?
+        else {
+            return Ok(None);
+        };
+        let anchor = row.anchor.as_deref().unwrap_or_default();
+        Ok(Some(AnchoredValidatorSet {
+            validator_set: deserialize_json(&row.validator_set)?,
+            anchor: anchor
+                .parse::<ValidatorSetAnchor>()
+                .map_err(|_| WalletStorageError::DecodingError {
+                    operation: OPERATION,
+                    item: "trusted_validator_set",
+                    details: format!("Failed to parse validator set anchor: {anchor}"),
+                })?,
+            anchored_at: row.created_at,
+        }))
     }
 }
 

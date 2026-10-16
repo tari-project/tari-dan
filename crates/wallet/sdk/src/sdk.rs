@@ -36,6 +36,7 @@ use crate::{
         substate::SubstatesApi,
         template::TemplateApi,
         transaction::TransactionApi,
+        validator_set::ValidatorSetApi,
         viewable_balance::ViewableBalanceApi,
     },
     cipher_seed::{CipherSeedRestore, WalletCipherSeed},
@@ -52,6 +53,25 @@ pub struct WalletSdkConfig {
     pub network: Network,
     /// Encryption password for the wallet database.
     pub override_keyring_password: Option<SafePassword>,
+    pub indexer_trust: IndexerTrust,
+}
+
+/// How far the wallet trusts what its indexer serves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum IndexerTrust {
+    /// Commits a transaction's changes only once a proof shows the network committed them, verified against the
+    /// validator set the wallet walks to from its anchor.
+    #[default]
+    Verify,
+    /// Takes the indexer at its word. For development against indexers that serve no proofs.
+    Trust,
+}
+
+impl IndexerTrust {
+    pub fn is_verify(self) -> bool {
+        matches!(self, Self::Verify)
+    }
 }
 
 pub struct WalletSdk<TSpec: WalletSdkSpec> {
@@ -154,7 +174,16 @@ impl<TSpec: WalletSdkSpec> WalletSdk<TSpec> {
     }
 
     pub fn transaction_api(&self) -> TransactionApi<'_, TSpec::Store, TSpec::NetworkInterface> {
-        TransactionApi::new(&self.store, &self.network_interface)
+        TransactionApi::new(
+            &self.store,
+            &self.network_interface,
+            self.validator_set_api(),
+            self.config.indexer_trust,
+        )
+    }
+
+    pub fn validator_set_api(&self) -> ValidatorSetApi<'_, TSpec::Store, TSpec::NetworkInterface> {
+        ValidatorSetApi::new(&self.store, &self.network_interface, self.config.network)
     }
 
     pub fn substate_api(&self) -> SubstatesApi<'_, TSpec::Store, TSpec::NetworkInterface> {

@@ -76,6 +76,7 @@ fn finalized_result(transaction_id: TransactionId, fee_receipt: FeeReceipt) -> T
             finalized_time: now(),
             abort_details: None,
         },
+        receipt: None,
     }
 }
 

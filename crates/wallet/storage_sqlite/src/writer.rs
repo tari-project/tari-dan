@@ -63,7 +63,9 @@ use tari_ootle_wallet_sdk::{
         TransactionRequestModel,
         TransactionRequestStatus,
         TransactionStatus,
+        TrustedValidatorSetHash,
         UtxoUnspent,
+        ValidatorSetAnchor,
         VaultModel,
         WalletEvent,
         WalletLockId,
@@ -2970,6 +2972,36 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 key: id.to_string(),
             });
         }
+
+        Ok(())
+    }
+
+    fn trusted_validator_sets_insert(
+        &mut self,
+        validator_set: &TrustedValidatorSetHash,
+        anchor: Option<ValidatorSetAnchor>,
+    ) -> Result<(), WalletStorageError> {
+        use crate::schema::trusted_validator_sets;
+
+        diesel::insert_into(trusted_validator_sets::table)
+            .values((
+                trusted_validator_sets::epoch.eq(validator_set.epoch().as_u64() as i64),
+                trusted_validator_sets::validator_set.eq(serialize_json(validator_set)?),
+                trusted_validator_sets::anchor.eq(anchor.map(|anchor| anchor.as_key_str())),
+            ))
+            .on_conflict_do_nothing()
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("trusted_validator_sets_insert", e))?;
+
+        Ok(())
+    }
+
+    fn trusted_validator_sets_clear(&mut self) -> Result<(), WalletStorageError> {
+        use crate::schema::trusted_validator_sets;
+
+        diesel::delete(trusted_validator_sets::table)
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("trusted_validator_sets_clear", e))?;
 
         Ok(())
     }

@@ -21,6 +21,7 @@ tari_template_lib = { workspace = true }
 tari_template_abi = { workspace = true }
 tari_ootle_address = { workspace = true, features = ["serde"] }
 tari_indexer_client = { workspace = true, default-features = false }
+tari_ootle_light_client = { workspace = true }
 ootle_serde = { workspace = true, features = ["std", "cbor"] }
 ootle_byte_type = { workspace = true }
 ootle-network = { workspace = true }

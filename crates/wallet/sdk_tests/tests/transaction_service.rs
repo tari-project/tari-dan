@@ -24,7 +24,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateDiff, SubstateId},
     transaction_receipt::FinalizeOutcome,
 };
-use tari_indexer_client::types::WatchedSubstateItem;
+use tari_indexer_client::types::{EpochCheckpointEntry, ValidatorSetCommittee, WatchedSubstateItem};
 use tari_ootle_common_types::{
     StateVersion,
     SubstateVersion,
@@ -157,6 +157,7 @@ impl WalletNetworkInterface for ScriptedNetwork {
     async fn query_transaction_result(
         &self,
         transaction_id: TransactionId,
+        _include_proof: bool,
     ) -> Result<TransactionQueryResult, Self::Error> {
         self.query_count.fetch_add(1, Ordering::SeqCst);
         let mut results = self.results.lock().unwrap();
@@ -165,7 +166,11 @@ impl WalletNetworkInterface for ScriptedNetwork {
         } else {
             results.front().cloned().expect("no scripted result")
         };
-        Ok(TransactionQueryResult { transaction_id, result })
+        Ok(TransactionQueryResult {
+            transaction_id,
+            result,
+            receipt: None,
+        })
     }
 
     async fn subscribe_transaction_finalized(&self) -> Result<TransactionFinalizedStream<Self::Error>, Self::Error> {
@@ -205,6 +210,23 @@ impl WalletNetworkInterface for ScriptedNetwork {
         _: Vec<TagAndPublicNoncePair>,
     ) -> Result<Vec<(UtxoId, Utxo)>, Self::Error> {
         panic!("ScriptedNetwork::get_unspent_utxos called")
+    }
+
+    async fn get_latest_epoch_checkpoint(&self, _shard: Shard) -> Result<EpochCheckpointEntry, Self::Error> {
+        panic!("ScriptedNetwork called")
+    }
+
+    async fn list_epoch_checkpoints(
+        &self,
+        _from_epoch: Epoch,
+        _limit: u32,
+        _shard: Shard,
+    ) -> Result<Vec<EpochCheckpointEntry>, Self::Error> {
+        panic!("ScriptedNetwork called")
+    }
+
+    async fn get_committee(&self, _epoch: Epoch, _shard: Shard) -> Result<ValidatorSetCommittee, Self::Error> {
+        panic!("ScriptedNetwork called")
     }
 
     async fn get_current_epoch(&self) -> Result<Epoch, Self::Error> {
