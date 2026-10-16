@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
+    collections::HashSet,
     fmt::{Debug, Formatter},
     iter,
     time::{Duration, Instant},
@@ -10,6 +11,7 @@ use std::{
 use log::*;
 use tari_common_types::types::FixedHash;
 use tari_consensus_types::{
+    BlockId,
     HighPc,
     HighTc,
     HighestSeenBlock,
@@ -593,17 +595,12 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             MessageValidationResult::RequestedTransactions {
                 from,
                 block_id,
+                epoch,
                 transactions,
+                remaining,
             } => {
                 let result = self
-                    .on_receive_new_transaction
-                    .process_requested(
-                        epoch_state.epoch(),
-                        from,
-                        block_id,
-                        transactions,
-                        epoch_state.local_committee_info(),
-                    )
+                    .on_requested_transactions(epoch_state, from, block_id, epoch, transactions, remaining)
                     .await;
                 if let Err(e) = log_err("on_receive_new_transaction", result) {
                     return self.handle_hotstuff_error(current_height, epoch_state, None, e).await;
@@ -661,6 +658,36 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 self.handle_hotstuff_error(current_height, epoch_state, None, err).await
             },
         }
+    }
+
+    /// Processes the transactions a peer returned for a missing-transactions request and asks the same peer for the
+    /// rest. A response is bounded in bytes, so the peer may hold more of the request than it sent. Each follow-up
+    /// asks for strictly fewer transactions, and a response that returns nothing ends the exchange.
+    async fn on_requested_transactions(
+        &mut self,
+        epoch_state: &EpochState<TConsensusSpec::Addr>,
+        from: TConsensusSpec::Addr,
+        block_id: BlockId,
+        epoch: Epoch,
+        transactions: Vec<Transaction>,
+        remaining: HashSet<TransactionId>,
+    ) -> Result<(), HotStuffError> {
+        let made_progress = !transactions.is_empty();
+        self.on_receive_new_transaction
+            .process_requested(
+                epoch_state.epoch(),
+                from.clone(),
+                block_id,
+                transactions,
+                epoch_state.local_committee_info(),
+            )
+            .await?;
+        if made_progress && !remaining.is_empty() {
+            self.on_message_validate
+                .request_missing_transactions(from, block_id, epoch, remaining)
+                .await?;
+        }
+        Ok(())
     }
 
     async fn on_new_transaction(
@@ -1448,10 +1475,10 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                     .handle(from, current_height, epoch_state, msg)
                     .await,
             ),
-            HotstuffMessage::MissingTransactionsRequest(msg) => log_err(
-                "on_receive_request_missing_transactions",
-                self.on_receive_request_missing_txs.handle(from, msg).await,
-            ),
+            HotstuffMessage::MissingTransactionsRequest(msg) => {
+                self.on_receive_request_missing_txs.handle(from, msg);
+                Ok(())
+            },
             // Validation decodes a response and hands its transactions over as `RequestedTransactions`, so a
             // response is never dispatched as a message.
             HotstuffMessage::MissingTransactionsResponse(msg) => {

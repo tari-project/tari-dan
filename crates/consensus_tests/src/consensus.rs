@@ -11,7 +11,7 @@
 use std::{
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::Duration,
 };
@@ -485,6 +485,83 @@ async fn node_requests_missing_transaction_from_local_leader() {
 
     test.stop();
     test.assert_all_validators_committed(&tx_ids[0]);
+    test.assert_clean_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn node_requests_missing_transactions_over_several_responses() {
+    const NUM_TXS: usize = 4;
+    const TX_BYTES: usize = 1024 * 1024;
+
+    setup_logger();
+    let num_responses = Arc::new(AtomicUsize::new(0));
+    let mut test = Test::builder()
+        .add_committee(0, vec!["1", "2"])
+        // Every transaction fits in one block, so the block's missing transactions span several responses
+        .modify_consensus_constants(|c| {
+            c.max_block_weight = 100_000_000;
+            c.max_block_validation_weight = 100_000_000;
+        })
+        .with_message_filter(Box::new({
+            let num_responses = num_responses.clone();
+            move |_from, _to, msg| {
+                if matches!(msg, HotstuffMessage::MissingTransactionsResponse(_)) {
+                    num_responses.fetch_add(1, Ordering::SeqCst);
+                }
+                true
+            }
+        }))
+        .start()
+        .await;
+    // Only the next leader "2" holds the transactions, so "1" has to request them all from it
+    let mut tx_ids = Vec::with_capacity(NUM_TXS);
+    for seed in 0..NUM_TXS {
+        let inputs = test.create_substates_on_vns(TestVnDestination::All, 1);
+        let transaction = build_transaction_from(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(Default::default(), "big", args![vec![
+                    u8::try_from(seed).unwrap();
+                    TX_BYTES
+                ]])
+                .with_inputs(inputs.iter().cloned().map(Into::into))
+                .build_and_seal(&PrivateKey::default()),
+        );
+        tx_ids.push(*transaction.id());
+        test.create_execution_at_destination_for_transaction(
+            TestVnDestination::All,
+            &transaction,
+            Decision::Commit,
+            5,
+            inputs
+                .into_iter()
+                .map(|input| (input.substate_id().clone(), SubstateLockType::Write))
+                .collect(),
+            vec![],
+        );
+        test.send_transaction_to_destination(TestVnDestination::Address(TestAddress::new("2")), transaction)
+            .await;
+    }
+    test.start_epoch(Epoch(1)).await;
+    loop {
+        let (_, _, _, committed_height) = test.on_block_committed().await;
+
+        if test.is_transaction_pool_empty() {
+            break;
+        }
+        if committed_height >= NodeHeight(10) {
+            test.dump_pool_info();
+            panic!("Not all transaction committed after {} blocks", committed_height);
+        }
+    }
+
+    test.stop();
+    for tx_id in &tx_ids {
+        test.assert_all_validators_committed(tx_id);
+    }
+    assert!(
+        num_responses.load(Ordering::SeqCst) > 1,
+        "expected the missing transactions to arrive over several responses"
+    );
     test.assert_clean_shutdown().await;
 }
 
