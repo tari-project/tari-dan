@@ -111,9 +111,12 @@ pub fn verify_down_proof(
     Ok(())
 }
 
-/// Checks that `result` is the result of the transaction whose verified receipt is `receipt`: it commits what the
-/// receipt's outcome says, with the receipt's events and fees, and its diff matches the receipt as
+/// Checks that `result` is the result of the transaction whose verified receipt is `receipt`: it is `transaction_id`'s,
+/// commits what the receipt's outcome says, with the receipt's events and fees, and its diff matches the receipt as
 /// [`check_diff_matches_receipt`] checks.
+///
+/// The receipt does not commit to the result's `logs` or `total_fees_required`, so those stay as the indexer served
+/// them.
 pub fn check_result_matches_receipt(
     network: Network,
     transaction_id: TransactionId,
@@ -121,6 +124,12 @@ pub fn check_result_matches_receipt(
     result: &FinalizeResult,
 ) -> Result<(), LightClientError> {
     let mismatch = |details: String| LightClientError::ResultDoesNotMatchReceipt { details };
+    if result.transaction_hash.into_array() != transaction_id.into_array() {
+        return Err(mismatch(format!(
+            "the result is of transaction {}, not {transaction_id}",
+            result.transaction_hash
+        )));
+    }
     let diff = match (&result.result, receipt.outcome()) {
         (TransactionResult::Accept(diff), FinalizeOutcome::Commit) |
         (TransactionResult::AcceptFeeRejectRest(diff, _), FinalizeOutcome::FeeIntentCommit) => diff,

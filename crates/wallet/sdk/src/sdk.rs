@@ -80,6 +80,8 @@ pub struct WalletSdk<TSpec: WalletSdkSpec> {
     key_store: TSpec::KeyStore,
     config: WalletSdkConfig,
     epoch_birthday: EpochBirthday,
+    /// Held while the wallet walks or re-anchors its trusted validator set, shared by every clone of the SDK.
+    validator_set_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl<TSpec: WalletSdkSpec> WalletSdk<TSpec> {
@@ -98,6 +100,7 @@ impl<TSpec: WalletSdkSpec> WalletSdk<TSpec> {
             key_store,
             config,
             epoch_birthday,
+            validator_set_lock: Arc::default(),
         })
     }
 
@@ -183,7 +186,12 @@ impl<TSpec: WalletSdkSpec> WalletSdk<TSpec> {
     }
 
     pub fn validator_set_api(&self) -> ValidatorSetApi<'_, TSpec::Store, TSpec::NetworkInterface> {
-        ValidatorSetApi::new(&self.store, &self.network_interface, self.config.network)
+        ValidatorSetApi::new(
+            &self.store,
+            &self.network_interface,
+            self.config.network,
+            &self.validator_set_lock,
+        )
     }
 
     pub fn substate_api(&self) -> SubstatesApi<'_, TSpec::Store, TSpec::NetworkInterface> {
@@ -303,6 +311,7 @@ where TSpec: WalletSdkSpec<KeyStore = LocalKeyStore>
             key_store: LocalKeyStore::new(cipher_seed),
             config,
             epoch_birthday,
+            validator_set_lock: Arc::default(),
         })
     }
 
@@ -401,6 +410,7 @@ where
             key_store: self.key_store.clone(),
             config: self.config.clone(),
             epoch_birthday: self.epoch_birthday,
+            validator_set_lock: self.validator_set_lock.clone(),
         }
     }
 }

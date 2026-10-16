@@ -4,7 +4,7 @@
 mod support;
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     sync::{
         Arc,
         Mutex,
@@ -92,6 +92,8 @@ struct ScriptedNetwork {
     query_count: Arc<AtomicUsize>,
     subscribe_count: Arc<AtomicUsize>,
     notifications: Arc<Mutex<Option<mpsc::UnboundedReceiver<TransactionFinalizedNotification>>>>,
+    /// Transactions whose result query fails.
+    failing: Arc<Mutex<HashSet<TransactionId>>>,
 }
 
 impl ScriptedNetwork {
@@ -104,6 +106,7 @@ impl ScriptedNetwork {
             query_count: Arc::new(AtomicUsize::new(0)),
             subscribe_count: Arc::new(AtomicUsize::new(0)),
             notifications: Arc::new(Mutex::new(Some(rx))),
+            failing: Arc::new(Mutex::new(HashSet::new())),
         };
         (network, tx)
     }
@@ -116,6 +119,11 @@ impl ScriptedNetwork {
     /// tells it the service has noticed the stream end and fallen back to polling.
     fn subscribe_count(&self) -> usize {
         self.subscribe_count.load(Ordering::SeqCst)
+    }
+
+    /// Makes every result query for `transaction_id` fail from now on.
+    fn fail_queries_for(&self, transaction_id: TransactionId) {
+        self.failing.lock().unwrap().insert(transaction_id);
     }
 
     /// Makes `result` the answer to every query from now on.
@@ -160,6 +168,9 @@ impl WalletNetworkInterface for ScriptedNetwork {
         _include_proof: bool,
     ) -> Result<TransactionQueryResult, Self::Error> {
         self.query_count.fetch_add(1, Ordering::SeqCst);
+        if self.failing.lock().unwrap().contains(&transaction_id) {
+            return Err(ScriptedError("the result query failed"));
+        }
         let mut results = self.results.lock().unwrap();
         let result = if results.len() > 1 {
             results.pop_front().unwrap()
@@ -244,7 +255,11 @@ fn now() -> PrimitiveDateTime {
 }
 
 fn build_transaction() -> Transaction {
-    Transaction::builder_localnet(Epoch(100))
+    build_transaction_valid_to(Epoch(100))
+}
+
+fn build_transaction_valid_to(max_epoch: Epoch) -> Transaction {
+    Transaction::builder_localnet(max_epoch)
         .allocate_component_address("component")
         .put_last_instruction_output_on_workspace("bucket")
         .call_method("component", "new", args!["bucket"])
@@ -455,6 +470,30 @@ async fn every_pending_transaction_is_polled_while_the_stream_is_down() {
     );
 
     running.handle.submit_transaction(transaction).await.unwrap();
+
+    let status = wait_for_finalized(&mut running.events, transaction_id).await;
+    assert_eq!(status, Some(TransactionStatus::Accepted));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_transaction_that_fails_to_check_does_not_hold_up_the_others() {
+    let transaction = build_transaction();
+    let transaction_id = transaction.calculate_id();
+    let failing = build_transaction_valid_to(Epoch(101));
+    let (network, notifications) = ScriptedNetwork::new(vec![TransactionFinalizedResult::Pending]);
+    network.fail_queries_for(failing.calculate_id());
+    let mut running = start(fast_config(), network.clone()).await;
+    drop(notifications);
+    assert!(
+        wait_until(|| network.subscribe_count() >= 2).await,
+        "service never re-subscribed after the stream ended"
+    );
+
+    running.handle.submit_transaction(transaction).await.unwrap();
+    // The poll checks the newest pending transaction first, so the failing one goes ahead of the other.
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    running.handle.submit_transaction(failing).await.unwrap();
+    network.set_result(committed(transaction_id));
 
     let status = wait_for_finalized(&mut running.events, transaction_id).await;
     assert_eq!(status, Some(TransactionStatus::Accepted));

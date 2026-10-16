@@ -493,7 +493,10 @@ where
                 target: LOG_TARGET,
                 "Requesting result for transaction {tx_id}",
             );
-            Self::check_pending_transaction(wallet_sdk, notify, tx_id).await?;
+            // One transaction that fails to check leaves it pending for the next poll, and the rest are still checked.
+            if let Err(err) = Self::check_pending_transaction(wallet_sdk, notify, tx_id).await {
+                error!(target: LOG_TARGET, "Error checking pending transaction {tx_id}: {err}");
+            }
         }
         Ok(())
     }

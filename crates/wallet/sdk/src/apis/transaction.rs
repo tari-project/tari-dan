@@ -102,6 +102,14 @@ where
             }));
         }
 
+        // A wallet anchored before it submits never sees its own receipts proven in an epoch before its anchor.
+        if self.indexer_trust.is_verify() &&
+            self.validator_set_api.latest()?.is_none() &&
+            let Err(err) = self.validator_set_api.sync().await
+        {
+            warn!(target: LOG_TARGET, "Failed to anchor the trusted validator set before submitting transaction {transaction_id}: {err}");
+        }
+
         // Re-submission needs the full transaction (blob payloads); the WalletTransaction
         // returned above is the pruned API view.
         let full = self.store.with_read_tx(|tx| tx.transactions_get_full(transaction_id))?;
@@ -345,13 +353,16 @@ where
 
 
                     // Make sure that any locked outputs are either set to spent or released, depending on if the
-                    // transaction was finalized or rejected. Always release for dry runs.
+                    // transaction was finalized or rejected. Always release for dry runs. The decision says whether
+                    // the transaction spent its inputs: an abort releases them even when the execution before it
+                    // accepted a diff.
                     if transaction.is_dry_run {
                         self.release_all_locks_for_transaction_internal(tx, transaction_id)?;
                     } else {
                         let maybe_diff = execution_result
                             .as_ref()
-                            .and_then(|e| e.finalize.result.any_accept());
+                            .and_then(|e| e.finalize.result.any_accept())
+                            .filter(|_| final_decision.is_commit());
                         match maybe_diff {
                             Some(diff) => {
                                 if let Some(lock_id) = tx.locks_get_by_transaction_id(transaction_id).optional()? {

@@ -299,7 +299,11 @@ fn a_result_that_differs_from_the_receipt_is_rejected() {
     let transaction_id = TransactionId::new([9; 32]);
     let (diff, receipt, result) = committed(transaction_id);
 
-    let cases: [(&str, fn(&mut FinalizeResult, &SubstateDiff)); 5] = [
+    type Change = fn(&mut FinalizeResult, &SubstateDiff);
+    let cases: [(&str, Change); 6] = [
+        ("another transaction's", |result, _| {
+            result.transaction_hash = Hash32::from_array([8; 32])
+        }),
         ("a rejection", |result, _| {
             result.result = TransactionResult::Reject(rejection())
         }),

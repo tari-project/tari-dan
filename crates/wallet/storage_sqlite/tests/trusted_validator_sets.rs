@@ -9,7 +9,7 @@ use tari_ootle_light_client::{
 };
 use tari_ootle_wallet_sdk::{
     models::ValidatorSetAnchor,
-    storage::{CommittableStore, WalletStoreReader, WalletStoreWriter, WriteableWalletStore},
+    storage::{CommittableStore, ReadableWalletStore, WalletStoreReader, WalletStoreWriter, WriteableWalletStore},
 };
 use tari_ootle_wallet_storage_sqlite::SqliteWalletStore;
 
@@ -44,8 +44,9 @@ fn it_keeps_each_trusted_set_and_the_anchor_they_descend_from() {
         .unwrap();
     tx.trusted_validator_sets_insert(&walked, None).unwrap();
     tx.commit().unwrap();
+    drop(tx);
 
-    let mut tx = db.create_write_tx().unwrap();
+    let mut tx = db.create_read_tx().unwrap();
     assert_eq!(tx.trusted_validator_sets_get(Epoch(2)).unwrap(), anchored);
     assert_eq!(tx.trusted_validator_sets_get(Epoch(3)).unwrap(), walked);
     assert!(tx.trusted_validator_sets_get(Epoch(4)).optional().unwrap().is_none());
@@ -63,8 +64,9 @@ fn a_set_recorded_for_an_epoch_stays_as_it_is() {
     tx.trusted_validator_sets_insert(&walked, Some(ValidatorSetAnchor::Reanchor))
         .unwrap();
     tx.commit().unwrap();
+    drop(tx);
 
-    let mut tx = db.create_write_tx().unwrap();
+    let mut tx = db.create_read_tx().unwrap();
     assert_eq!(tx.trusted_validator_sets_get(Epoch(3)).unwrap(), walked);
     assert!(tx.trusted_validator_sets_get_anchor().unwrap().is_none());
 }
@@ -81,8 +83,9 @@ fn clearing_forgets_every_trusted_set() {
     tx.trusted_validator_sets_insert(&walked, Some(ValidatorSetAnchor::Reanchor))
         .unwrap();
     tx.commit().unwrap();
+    drop(tx);
 
-    let mut tx = db.create_write_tx().unwrap();
+    let mut tx = db.create_read_tx().unwrap();
     assert!(tx.trusted_validator_sets_get(Epoch(2)).optional().unwrap().is_none());
     let anchor = tx.trusted_validator_sets_get_anchor().unwrap().unwrap();
     assert_eq!(anchor.validator_set, walked);
