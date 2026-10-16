@@ -60,17 +60,14 @@ impl EpochEndDrain {
 
     /// The pool records a block in `epoch` may propose a command for under this drain.
     pub fn proposal_filter(&self, epoch: Epoch, local_shard_group: ShardGroup) -> ProposalFilter {
-        let filter = ProposalFilter::new(epoch);
-        let filter = if self.is_active() {
-            filter.with_cross_shard_held_back(local_shard_group)
-        } else {
-            filter
-        };
-        if self.aborts_waiting_prepared() {
-            filter.with_waiting_prepared_aborted()
-        } else {
-            filter
+        let mut filter = ProposalFilter::new(epoch);
+        if self.is_active() {
+            filter = filter.with_cross_shard_held_back(local_shard_group);
         }
+        if self.aborts_waiting_prepared() {
+            filter = filter.with_waiting_prepared_aborted();
+        }
+        filter
     }
 
     /// True if `EndEpoch` may not be proposed while a pooled transaction is in `stage`.
