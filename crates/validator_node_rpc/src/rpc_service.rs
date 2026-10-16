@@ -25,11 +25,7 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
         req: Request<proto::GetTransactionResultRequest>,
     ) -> Result<Response<proto::GetTransactionResultResponse>, RpcStatus>;
 
-    #[rpc(method = 4)]
-    async fn sync_blocks(
-        &self,
-        request: Request<proto::SyncBlocksRequest>,
-    ) -> Result<Streaming<proto::SyncBlocksResponse>, RpcStatus>;
+    // Method 4 is retired and must not be reused.
 
     #[rpc(method = 5)]
     async fn get_checkpoints(

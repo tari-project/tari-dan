@@ -30,7 +30,11 @@ tokio = { workspace = true, default-features = false, features = ["sync", "time"
 
 [dev-dependencies]
 tari_template_lib_types = { workspace = true }
-tokio = { workspace = true, default-features = false, features = ["macros", "rt", "test-util", "time"] }
+
+libp2p = { workspace = true }
+libp2p-substream = { workspace = true }
+tokio = { workspace = true, default-features = false, features = ["io-util", "macros", "rt", "test-util", "time"] }
+tokio-util = { workspace = true, features = ["compat"] }
 
 [build-dependencies]
 proto_builder = { workspace = true }

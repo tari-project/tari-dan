@@ -176,44 +176,6 @@ message SubstateDestroy {
   uint64 version = 2;
 }
 
-message SyncBlocksRequest {
-  // Optional (empty for None). Must be provided if the epoch is not provided
-  bytes start_block_id = 1;
-  // Optional - If start_block_id is provided, this is ignored. Must be provided if start_block_id is not provided. 
-  // In which case, start block is implicitly the first block of the epoch.
-  tari.ootle.common.Epoch epoch = 2;
-  // If true, QCs will be streamed.
-  bool stream_qcs = 3;
-  // Weather to stream all substates, only transaction receipts or do not stream any substates
-  StreamSubstateSelection stream_substates = 4;
-  // If true, transactions in the block will be streamed
-  bool stream_transactions = 5;
-}
-
-// Clippy complains about too many bools and prefers an enum
-enum StreamSubstateSelection {
-  No = 0;
-  AllSubstates = 1;
-  TransactionReceiptsOnly = 2;
-}
-
-message SyncBlocksResponse {
-  oneof sync_data {
-    tari.ootle.consensus.Block block = 1;
-    QuorumCertificates quorum_certificates = 2;
-    uint32 substate_count = 3;
-    SubstateUpdate substate_update = 4;
-    uint32 transaction_count = 5;
-    tari.ootle.transaction.Transaction transaction = 6;
-    uint32 transaction_receipt_count = 7;
-    SubstateCreate transaction_receipt = 8;
-  }
-}
-
-message QuorumCertificates {
-  repeated tari.ootle.consensus.QuorumCertificate quorum_certificates = 1;
-}
-
 message GetCheckpointsRequest {
   tari.ootle.common.Epoch from_epoch = 1;
   uint32 num_to_return = 2;

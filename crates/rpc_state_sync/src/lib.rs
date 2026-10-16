@@ -8,7 +8,6 @@ mod shard_sync;
 mod state_sync;
 mod stats;
 mod version_proofs;
-// mod manager_old;
 
 pub use error::*;
 pub use state_sync::*;

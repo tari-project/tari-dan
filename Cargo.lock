@@ -13298,6 +13298,8 @@ version = "0.46.1"
 dependencies = [
  "anyhow",
  "futures 0.3.34",
+ "libp2p",
+ "libp2p-substream",
  "minicbor",
  "prost 0.14.3",
  "proto_builder",
@@ -13315,6 +13317,7 @@ dependencies = [
  "tari_template_lib_types",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-util 0.7.18",
 ]
 
 [[package]]
