@@ -35,7 +35,13 @@ use crate::{
     NUM_PRESHARDS,
     handlers::{
         HandlerContext,
-        helpers::{get_account_or_default, get_account_with_inputs, invalid_params, wait_for_result},
+        helpers::{
+            ensure_signing_key,
+            get_account_or_default,
+            get_account_with_inputs,
+            invalid_params,
+            wait_for_result,
+        },
     },
 };
 
@@ -57,7 +63,10 @@ pub async fn handle_get_validator_fees(
             })?;
             sdk.key_manager_api().get_public_key(account_key_id)?
         },
-        AccountOrKeyId::KeyId(key_id) => sdk.key_manager_api().get_public_key(key_id)?,
+        AccountOrKeyId::KeyId(key_id) => {
+            ensure_signing_key("account_or_key", &key_id)?;
+            sdk.key_manager_api().get_public_key(key_id)?
+        },
     };
     let claim_public_key = claim_key.public_key().to_byte_type();
 
@@ -387,4 +396,31 @@ async fn build_self_stealth_statement(
     )?;
 
     Ok((statement, pool_amounts))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::handlers::test_support::TestDaemon;
+
+    #[tokio::test]
+    async fn fees_are_looked_up_only_for_a_signing_key() {
+        let daemon = TestDaemon::start().await;
+        let reader = daemon.api_key("reader", "validators:read");
+
+        for branch in [
+            KeyBranch::ConfidentialMask,
+            KeyBranch::StealthMask,
+            KeyBranch::ViewOnlyKey,
+            KeyBranch::ElgamalEncryptionViewKey,
+        ] {
+            let err = handle_get_validator_fees(&daemon.context, Some(&reader), GetValidatorFeesRequest {
+                account_or_key: AccountOrKeyId::KeyId(KeyId::derived(branch, 0)),
+                shard_group: None,
+            })
+            .await
+            .unwrap_err();
+            assert!(err.to_string().contains("account_or_key"), "{err}");
+        }
+    }
 }

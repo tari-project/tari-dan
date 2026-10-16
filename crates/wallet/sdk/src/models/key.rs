@@ -47,6 +47,19 @@ impl KeyBranch {
             Self::ViewOnlyKey => "view_only_key",
         }
     }
+
+    /// Whether keys in this branch blind output commitments. A mask's public key unblinds the
+    /// commitments made with it, so it must never leave the wallet.
+    pub const fn is_mask(&self) -> bool {
+        matches!(self, Self::StealthMask | Self::ConfidentialMask)
+    }
+
+    /// Whether keys in this branch may produce signatures that leave the wallet. Mask and view branches
+    /// protect the wallet's outputs and never sign. Nonce keys sign as the throw-away authorizer of a
+    /// stealth transfer's revealed funds.
+    pub const fn is_signing_branch(&self) -> bool {
+        matches!(self, Self::Account | Self::Transaction | Self::Nonce)
+    }
 }
 
 impl AsRef<str> for KeyBranch {
@@ -389,6 +402,14 @@ impl KeyId {
         match self {
             Self::Derived { key_branch, .. } => Some(*key_branch),
             Self::Imported { .. } => None,
+        }
+    }
+
+    /// Whether this key may produce signatures that leave the wallet. See [`KeyBranch::is_signing_branch`].
+    pub fn is_signing_key(&self) -> bool {
+        match self {
+            Self::Derived { key_branch, .. } => key_branch.is_signing_branch(),
+            Self::Imported { .. } => true,
         }
     }
 }
