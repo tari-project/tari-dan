@@ -14,9 +14,8 @@ pub struct ExecutableManager {
     config: Vec<ExecutableConfig>,
     always_compile: bool,
     prepared: Vec<Executable>,
-    /// Instance types whose executable config changed since they were prepared, mapped to whether their compile
-    /// settings changed. These are prepared again the next time an instance of that type starts.
-    stale: HashMap<InstanceType, bool>,
+    /// The config each prepared executable was resolved from.
+    prepared_from: HashMap<InstanceType, ExecutableConfig>,
 }
 
 impl ExecutableManager {
@@ -25,24 +24,27 @@ impl ExecutableManager {
             config,
             always_compile,
             prepared: Vec::new(),
-            stale: HashMap::new(),
+            prepared_from: HashMap::new(),
         }
     }
 
     pub async fn prepare_all(&mut self) -> anyhow::Result<Executables<'_>> {
         log::info!("Compiling {} executables", self.config.len());
         self.prepared.clear();
-        self.stale.clear();
+        self.prepared_from.clear();
 
+        let always_compile = self.always_compile;
         let mut tasks = self
             .config
             .iter()
             .filter(|exec| exec.get_executable_path().is_some())
-            .map(|exec| prepare(exec, self.always_compile))
+            .map(|exec| async move { prepare(exec, always_compile).await.map(|e| (e, exec)) })
             .collect::<FuturesUnordered<_>>();
 
-        while let Some(executable) = tasks.next().await {
-            self.prepared.push(executable?);
+        while let Some(result) = tasks.next().await {
+            let (executable, exec) = result?;
+            self.prepared_from.insert(exec.instance_type, exec.clone());
+            self.prepared.push(executable);
         }
 
         Ok(Executables {
@@ -50,27 +52,22 @@ impl ExecutableManager {
         })
     }
 
-    /// Replaces the executable config with one reloaded from the config file. Executables whose config changed are
-    /// prepared again (and rebuilt if their compile settings changed) the next time an instance of that type starts.
-    /// Returns the instance types whose executable config changed.
+    /// Replaces the executable config with one reloaded from the config file. Returns the instance types whose
+    /// prepared executable no longer matches the config; they are prepared again the next time an instance of that
+    /// type starts.
     pub fn apply_config_update(&mut self, config: Vec<ExecutableConfig>, always_compile: bool) -> Vec<InstanceType> {
-        let mut changed = Vec::new();
-        for new in &config {
-            let old = self.config.iter().find(|e| e.instance_type == new.instance_type);
-            if old == Some(new) {
-                continue;
-            }
-            let compile_changed = new.compile.is_some() && old.is_none_or(|old| old.compile != new.compile);
-            log::info!(
-                "📝 Executable config changed for {} (compile_changed={}). Restart its instances to apply.",
-                new.instance_type,
-                compile_changed
-            );
-            *self.stale.entry(new.instance_type).or_default() |= compile_changed;
-            changed.push(new.instance_type);
-        }
         self.config = config;
         self.always_compile = always_compile;
+
+        let changed = self
+            .prepared_from
+            .iter()
+            .filter(|(instance_type, prepared_from)| self.find_config(**instance_type) != Some(*prepared_from))
+            .map(|(instance_type, _)| *instance_type)
+            .collect::<Vec<_>>();
+        for instance_type in &changed {
+            log::info!("📝 Executable config changed for {instance_type}. Restart its instances to apply.");
+        }
         changed
     }
 
@@ -79,15 +76,13 @@ impl ExecutableManager {
     }
 
     pub async fn compile_executable_if_required(&mut self, instance_type: InstanceType) -> anyhow::Result<&Executable> {
-        let stale = self.stale.get(&instance_type).copied();
-        if self.always_compile || stale.is_some() {
+        if let Some(force_compile) = self.reprepare(instance_type) {
             let exec = self
-                .config
-                .iter()
-                .find(|e| e.instance_type == instance_type)
+                .find_config(instance_type)
+                .cloned()
                 .ok_or_else(|| anyhow!("No executable config found for instance type '{}'", instance_type))?;
-            let executable = prepare(exec, self.always_compile || stale == Some(true)).await?;
-            self.stale.remove(&instance_type);
+            let executable = prepare(&exec, force_compile).await?;
+            self.prepared_from.insert(instance_type, exec);
             match self.prepared.iter_mut().find(|e| e.instance_type == instance_type) {
                 Some(prepared) => *prepared = executable,
                 None => self.prepared.push(executable),
@@ -96,6 +91,26 @@ impl ExecutableManager {
 
         self.get_executable(instance_type)
             .ok_or_else(|| anyhow!("No executable found for instance type '{}'", instance_type))
+    }
+
+    /// Returns `Some(force_compile)` if the executable for `instance_type` must be prepared again before an instance
+    /// of that type starts: always under `always_compile`, otherwise when the config differs from the one it was
+    /// prepared from. A changed compile config forces a rebuild even if the binary exists.
+    fn reprepare(&self, instance_type: InstanceType) -> Option<bool> {
+        let current = self.find_config(instance_type);
+        let prepared_from = self.prepared_from.get(&instance_type);
+        if !self.always_compile && current == prepared_from {
+            return None;
+        }
+        let compile_changed = current.is_some_and(|current| {
+            current.compile.is_some() &&
+                prepared_from.is_some_and(|prepared_from| prepared_from.compile != current.compile)
+        });
+        Some(self.always_compile || compile_changed)
+    }
+
+    fn find_config(&self, instance_type: InstanceType) -> Option<&ExecutableConfig> {
+        self.config.iter().find(|e| e.instance_type == instance_type)
     }
 }
 
@@ -198,36 +213,40 @@ mod tests {
     use super::*;
     use crate::config::CompileConfig;
 
-    fn exec_at(instance_type: InstanceType, path: PathBuf) -> ExecutableConfig {
+    fn exec_at(path: PathBuf) -> ExecutableConfig {
         ExecutableConfig {
-            instance_type,
+            instance_type: InstanceType::TariValidatorNode,
             execuable_path: Some(path),
             compile: None,
         }
+    }
+
+    fn with_features(mut exec: ExecutableConfig, features: &[&str]) -> ExecutableConfig {
+        exec.compile = Some(CompileConfig {
+            working_dir: None,
+            package_name: "tari_validator_node".to_string(),
+            target_dir: None,
+            features: features.iter().map(|f| f.to_string()).collect(),
+            envs: vec![],
+        });
+        exec
+    }
+
+    async fn prepared_manager(exec: ExecutableConfig) -> ExecutableManager {
+        let mut manager = ExecutableManager::new(vec![exec], false);
+        manager.prepare_all().await.unwrap();
+        manager
     }
 
     #[tokio::test]
     async fn a_reloaded_executable_is_prepared_again_on_next_start() {
         let old_path = env::current_exe().unwrap();
         let new_path = old_path.parent().unwrap().to_path_buf();
-        let mut manager = ExecutableManager::new(
-            vec![
-                exec_at(InstanceType::TariValidatorNode, old_path.clone()),
-                exec_at(InstanceType::TariIndexer, old_path.clone()),
-            ],
-            false,
-        );
-        manager.prepare_all().await.unwrap();
+        let mut manager = prepared_manager(exec_at(old_path.clone())).await;
 
-        let changed = manager.apply_config_update(
-            vec![
-                exec_at(InstanceType::TariValidatorNode, new_path.clone()),
-                exec_at(InstanceType::TariIndexer, old_path.clone()),
-            ],
-            false,
-        );
+        let changed = manager.apply_config_update(vec![exec_at(new_path.clone())], false);
         assert_eq!(changed, vec![InstanceType::TariValidatorNode]);
-        assert_eq!(manager.stale.get(&InstanceType::TariValidatorNode), Some(&false));
+        assert_eq!(manager.reprepare(InstanceType::TariValidatorNode), Some(false));
         assert_eq!(
             manager.get_executable(InstanceType::TariValidatorNode).unwrap().path,
             old_path
@@ -238,32 +257,52 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(executable.path, new_path);
-        assert!(manager.stale.is_empty());
+        assert_eq!(manager.reprepare(InstanceType::TariValidatorNode), None);
+        assert!(manager.apply_config_update(vec![exec_at(new_path)], false).is_empty());
     }
 
-    #[test]
-    fn a_compile_settings_change_forces_a_rebuild() {
-        let compile = CompileConfig {
-            working_dir: None,
-            package_name: "tari_validator_node".to_string(),
-            target_dir: None,
-            features: vec![],
-            envs: vec![],
-        };
-        let exec = ExecutableConfig {
-            instance_type: InstanceType::TariValidatorNode,
-            execuable_path: None,
-            compile: Some(compile.clone()),
-        };
-        let mut manager = ExecutableManager::new(vec![exec.clone()], false);
+    #[tokio::test]
+    async fn a_compile_settings_change_forces_a_rebuild() {
+        let exec = exec_at(env::current_exe().unwrap());
+        let mut manager = prepared_manager(with_features(exec.clone(), &[])).await;
 
-        let mut rebuilt = exec;
-        rebuilt.compile = Some(CompileConfig {
-            features: vec!["mimalloc".to_string()],
-            ..compile
-        });
-        let changed = manager.apply_config_update(vec![rebuilt], false);
+        manager.apply_config_update(vec![with_features(exec, &["mimalloc"])], false);
+        assert_eq!(manager.reprepare(InstanceType::TariValidatorNode), Some(true));
+    }
+
+    #[tokio::test]
+    async fn only_the_latest_reload_decides_how_an_executable_is_prepared() {
+        let old_path = env::current_exe().unwrap();
+        let exec = exec_at(old_path.clone());
+        let mut manager = prepared_manager(with_features(exec.clone(), &[])).await;
+
+        manager.apply_config_update(vec![with_features(exec.clone(), &["mimalloc"])], false);
+        let changed = manager.apply_config_update(vec![with_features(exec.clone(), &[])], false);
+        assert!(changed.is_empty());
+        assert_eq!(manager.reprepare(InstanceType::TariValidatorNode), None);
+
+        let new_path = old_path.parent().unwrap().to_path_buf();
+        manager.apply_config_update(vec![with_features(exec, &["mimalloc"])], false);
+        manager.apply_config_update(vec![exec_at(new_path.clone())], false);
+        assert_eq!(manager.reprepare(InstanceType::TariValidatorNode), Some(false));
+        let executable = manager
+            .compile_executable_if_required(InstanceType::TariValidatorNode)
+            .await
+            .unwrap();
+        assert_eq!(executable.path, new_path);
+    }
+
+    #[tokio::test]
+    async fn a_removed_executable_is_reported_as_changed() {
+        let mut manager = prepared_manager(exec_at(env::current_exe().unwrap())).await;
+
+        let changed = manager.apply_config_update(vec![], false);
         assert_eq!(changed, vec![InstanceType::TariValidatorNode]);
-        assert_eq!(manager.stale.get(&InstanceType::TariValidatorNode), Some(&true));
+        assert!(
+            manager
+                .compile_executable_if_required(InstanceType::TariValidatorNode)
+                .await
+                .is_err()
+        );
     }
 }

@@ -3,7 +3,7 @@
 
 use std::{
     collections::HashMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     pin::pin,
     time::{Duration, Instant, SystemTime},
 };
@@ -413,19 +413,13 @@ impl ProcessManager {
         self.config_last_modified = Some(current_mtime);
 
         info!("📝 Config file changed, reloading...");
-        let mut config = match Config::load_from_file(&self.config_path).await {
+        let config = match load_config(&self.config_path, self.cli_overrides.as_ref()).await {
             Ok(config) => config,
             Err(err) => {
                 log::error!("Failed to reload config file: {err}");
                 return;
             },
         };
-        if let Some(overrides) = &self.cli_overrides &&
-            let Err(err) = overrides.apply(&mut config)
-        {
-            log::error!("Failed to apply CLI overrides to reloaded config: {err}");
-            return;
-        }
 
         let mut global_settings = config.settings.clone();
         if let Some(public_ip) = config.public_ip {
@@ -949,5 +943,79 @@ impl ProcessManager {
         }
 
         Ok(())
+    }
+}
+
+/// Loads the config file with the CLI overrides the swarm was started with.
+async fn load_config(path: &Path, cli_overrides: Option<&Overrides>) -> anyhow::Result<Config> {
+    let mut config = Config::load_from_file(path).await?;
+    if let Some(overrides) = cli_overrides {
+        overrides.apply(&mut config).context("cli overrides")?;
+    }
+    Ok(config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn no_compile() -> Overrides {
+        Overrides {
+            webui_listen_address: None,
+            no_compile: true,
+            binaries_root: None,
+            start_port: None,
+            skip_registration: false,
+            wallet_daemon_auth: None,
+            wallet_seed_words: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn a_reload_under_no_compile_keeps_the_compile_config_stripped() {
+        let path = std::env::temp_dir().join(format!("tari_swarm_reload_test_{}.toml", std::process::id()));
+        tokio::fs::write(
+            &path,
+            format!(
+                r#"
+                base_dir = "."
+                start_port = 12000
+                network = "localnet"
+                force_compile = true
+                instances = []
+
+                [webserver]
+                bind_address = "127.0.0.1:8080"
+
+                [[executables]]
+                instance_type = "TariValidatorNode"
+                execuable_path = {:?}
+
+                [executables.compile]
+                package_name = "tari_validator_node"
+                "#,
+                std::env::current_exe().unwrap()
+            ),
+        )
+        .await
+        .unwrap();
+
+        let started = load_config(&path, Some(&no_compile())).await.unwrap();
+        assert!(!started.processes.force_compile);
+        let mut executables = ExecutableManager::new(started.processes.executables, started.processes.force_compile);
+        executables.prepare_all().await.unwrap();
+
+        let reloaded = load_config(&path, Some(&no_compile())).await.unwrap();
+        let changed = executables.apply_config_update(reloaded.processes.executables, reloaded.processes.force_compile);
+        assert!(changed.is_empty());
+
+        let reloaded_without_overrides = load_config(&path, None).await.unwrap();
+        let changed = executables.apply_config_update(
+            reloaded_without_overrides.processes.executables,
+            reloaded_without_overrides.processes.force_compile,
+        );
+        assert_eq!(changed, vec![InstanceType::TariValidatorNode]);
+
+        tokio::fs::remove_file(&path).await.unwrap();
     }
 }
