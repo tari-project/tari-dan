@@ -568,7 +568,13 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             return Ok(());
         }
 
-        new_transactions.resequence_known_transactions(tx, epoch_state.epoch(), ids, epoch_state.local_committee_info())
+        new_transactions.resequence_known_transactions(
+            tx,
+            epoch_state.epoch(),
+            ids,
+            epoch_state.local_committee_info(),
+        )?;
+        Ok(())
     }
 
     fn get_missing_transactions<TTx: StateStoreReadTransaction>(

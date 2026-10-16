@@ -10,7 +10,7 @@ use crate::support::{
     epoch_manager::TestEpochManager,
     messaging_impls::{TestInboundMessaging, TestOutboundMessaging},
     signing_service::TestVoteSignatureService,
-    sync::AlwaysSyncedSyncManager,
+    sync::TestSyncManager,
 };
 
 pub type TestStore = tari_state_store_rocksdb::RocksDbStateStore<TestAddress>;
@@ -27,7 +27,7 @@ impl ConsensusSpec for TestConsensusSpec {
     type OutboundMessaging = TestOutboundMessaging;
     type SignerService = TestVoteSignatureService;
     type StateStore = TestStore;
-    type SyncManager = AlwaysSyncedSyncManager;
+    type SyncManager = TestSyncManager;
     type TransactionExecutor = TestBlockTransactionProcessor;
     type TransactionValidator = TestBlockTransactionProcessor;
 }

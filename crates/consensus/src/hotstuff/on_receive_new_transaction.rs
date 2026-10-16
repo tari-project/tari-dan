@@ -159,13 +159,15 @@ where TConsensusSpec: ConsensusSpec
     /// Safety comes from [`Self::validate_new_transaction`], which refuses to sequence an id that has
     /// already committed - by its finalized decision or by its receipt existing in state - so this can
     /// never resurrect a transaction the synced state has finalised.
+    ///
+    /// Returns the number of transactions put back in the pool.
     pub fn resequence_known_transactions<I: IntoIterator<Item = TransactionId>>(
         &self,
         tx: &mut <<TConsensusSpec as ConsensusSpec>::StateStore as StateStore>::WriteTransaction<'_>,
         current_epoch: Epoch,
         transaction_ids: I,
         local_committee_info: &CommitteeInfo,
-    ) -> Result<(), HotStuffError> {
+    ) -> Result<usize, HotStuffError> {
         let mut unpooled = Vec::new();
         for id in transaction_ids {
             // Cheap membership check first: on the hot path almost every id is already pooled, and
@@ -182,7 +184,7 @@ where TConsensusSpec: ConsensusSpec
             unpooled.push(id);
         }
         if unpooled.is_empty() {
-            return Ok(());
+            return Ok(0);
         }
 
         let (recs, _) = TransactionRecord::get_any(&**tx, unpooled.iter())?;
@@ -203,7 +205,7 @@ where TConsensusSpec: ConsensusSpec
 
         let num_sequenced = batch.iter().filter(|data| data.must_sequence).count();
         if num_sequenced == 0 {
-            return Ok(());
+            return Ok(0);
         }
 
         info!(
@@ -220,7 +222,7 @@ where TConsensusSpec: ConsensusSpec
                 .map(|data| (&data.transaction, data.decision, true)),
         )?;
 
-        Ok(())
+        Ok(num_sequenced)
     }
 
     fn validate_new_transaction(

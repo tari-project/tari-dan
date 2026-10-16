@@ -38,6 +38,9 @@ where
         &self,
         context: &mut ConsensusWorkerContext<TSpec>,
     ) -> Result<ConsensusStateEvent, HotStuffError> {
+        // Read from the pre-sync state, which tells which epoch the pool was built in.
+        let at_epoch_end = context.hotstuff.new_transactions_at_epoch_end()?;
+
         context.state_sync.sync(self.target_epoch).await?;
 
         // State sync only rewrites the state store, not the consensus transaction pool. Drop any pool
@@ -45,10 +48,23 @@ where
         // state has already finalised (the rest of the committee removed them on commit, so they can
         // never gather a QC again - this wedges the network). A still-pending transaction is restored
         // to the pool from the record we kept, when a proposal for it arrives
-        // (`OnReceiveNewTransaction::resequence_known_transactions`).
-        let cleared = context.hotstuff.clear_transaction_pool()?;
-        if cleared > 0 {
-            info!(target: LOG_TARGET, "🧹 Cleared {cleared} transaction(s) from the pool after state sync");
+        // (`OnReceiveNewTransaction::resequence_known_transactions`). The transactions this node held
+        // unprepared at the end of the epoch it synced past are restored straight away: no proposal will
+        // bring them back, because every member of the new shard group might have dropped them.
+        let cleared = context.hotstuff.clear_transaction_pool(at_epoch_end).await?;
+        if cleared.num_removed > 0 {
+            info!(
+                target: LOG_TARGET,
+                "🧹 Cleared {} transaction(s) from the pool after state sync",
+                cleared.num_removed
+            );
+        }
+        if cleared.num_resequenced > 0 {
+            info!(
+                target: LOG_TARGET,
+                "🎱 Sequenced {} transaction(s) held at the end of the previous epoch again",
+                cleared.num_resequenced
+            );
         }
 
         Ok(ConsensusStateEvent::SyncComplete)
