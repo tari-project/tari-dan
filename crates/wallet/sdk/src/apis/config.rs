@@ -83,6 +83,9 @@ pub enum ConfigKey {
     TrustedValidatorSet,
     /// When the wallet last brought its trusted validator set up to date, in seconds since the Unix epoch. type: u64
     ValidatorSetSyncedAt,
+    /// Since when every walk of the validator set handover has failed, in seconds since the Unix epoch, or `None` while
+    /// the walk succeeds. type: Option<u64>
+    ValidatorSetWalkFailingSince,
 }
 
 impl ConfigKey {
@@ -98,6 +101,7 @@ impl ConfigKey {
             Self::RecoveryMaxProbedKeyIndex => "recovery_max_probed_key_index",
             Self::TrustedValidatorSet => "trusted_validator_set",
             Self::ValidatorSetSyncedAt => "validator_set_synced_at",
+            Self::ValidatorSetWalkFailingSince => "validator_set_walk_failing_since",
         }
     }
 }

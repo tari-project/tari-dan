@@ -393,6 +393,7 @@ fn fast_config() -> TransactionServiceConfig {
         post_submit_check_delay: Duration::from_millis(20),
         silent_transaction_timeout: Duration::from_secs(60),
         stream_reconnect_backoff: Duration::from_millis(20),
+        validator_set_sync_interval: Duration::from_secs(60 * 60),
     }
 }
 

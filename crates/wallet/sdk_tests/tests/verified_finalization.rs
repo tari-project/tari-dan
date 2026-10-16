@@ -54,6 +54,11 @@ use tari_ootle_wallet_sdk::{
     },
     storage::{ReadableWalletStore, TagAndPublicNoncePair, WalletStoreReader, WalletStoreWriter, WriteableWalletStore},
 };
+use tari_ootle_wallet_sdk_services::{
+    notify::Notify,
+    transaction_service::{TransactionService, TransactionServiceConfig},
+};
+use tari_shutdown::Shutdown;
 use tari_template_abi::TemplateDef;
 use tari_template_lib::types::{Hash32, ResourceAddress, TemplateAddress, UtxoId};
 use time::{OffsetDateTime, PrimitiveDateTime};
@@ -106,6 +111,10 @@ impl ProvingNetwork {
 
     fn set_latest(&self, latest: usize) {
         self.state.lock().unwrap().latest = latest;
+    }
+
+    fn replace_checkpoint(&self, index: usize, checkpoint: EpochCheckpointEntry) {
+        self.state.lock().unwrap().checkpoints[index] = checkpoint;
     }
 
     fn walk_requests(&self) -> usize {
@@ -658,4 +667,94 @@ async fn the_wallet_anchors_before_its_first_submission() {
     let anchor = test.sdk().validator_set_api().anchor().unwrap().unwrap();
     assert_eq!(anchor.anchor, ValidatorSetAnchor::FirstUse);
     assert_eq!(anchor.validator_set.epoch(), Epoch(3));
+}
+
+#[tokio::test]
+async fn a_walk_that_keeps_failing_for_a_day_reanchors() {
+    let sets = sets();
+    let network = ProvingNetwork::new(&sets, 0);
+    let transaction = build_transaction();
+    let test = wallet(network.clone(), &transaction);
+    let validator_set_api = test.sdk().validator_set_api();
+    validator_set_api.sync().await.unwrap();
+
+    // The next checkpoint is signed by a committee outside the trusted set, so no walk connects.
+    let impostors = Signers::new(0xee, 4);
+    network.replace_checkpoint(
+        1,
+        checkpoint_entry(CheckpointSpec {
+            signers: &impostors,
+            ..CheckpointSpec::handover(&sets[1], &sets[2])
+        }),
+    );
+    network.set_latest(1);
+    let err = validator_set_api.sync().await.unwrap_err();
+    assert!(matches!(err, ValidatorSetApiError::Unverified(_)), "{err}");
+    assert_eq!(
+        validator_set_api.anchor().unwrap().unwrap().anchor,
+        ValidatorSetAnchor::FirstUse,
+        "a walk that just started failing is no reason to re-anchor"
+    );
+
+    let a_day_ago = SystemTime::now().duration_since(UNIX_EPOCH).unwrap() - Duration::from_secs(25 * 60 * 60);
+    test.store()
+        .with_write_tx(|tx| {
+            tx.config_set(
+                ConfigKey::ValidatorSetWalkFailingSince.as_key_str(),
+                &Some(a_day_ago.as_secs()),
+                false,
+            )
+        })
+        .unwrap();
+    let trusted = validator_set_api.sync().await.unwrap();
+    assert_eq!(trusted.epoch(), Epoch(3));
+    let anchor = validator_set_api.anchor().unwrap().unwrap();
+    assert_eq!(anchor.anchor, ValidatorSetAnchor::Reanchor);
+    assert_eq!(anchor.validator_set.epoch(), Epoch(3));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_transaction_service_keeps_the_trusted_validator_set_up_to_date() {
+    let sets = sets();
+    let network = ProvingNetwork::new(&sets, 1);
+    // No transaction to submit, so nothing but the periodic sync anchors.
+    let test = TestWithNetwork::without_accounts_trusting(network, IndexerTrust::Verify);
+    let config = TransactionServiceConfig {
+        validator_set_sync_interval: Duration::from_millis(20),
+        ..TransactionServiceConfig::default()
+    };
+    let shutdown = Shutdown::new();
+    let (service, _handle) =
+        TransactionService::with_config(config, Notify::new(16), test.sdk().clone(), shutdown.to_signal());
+    tokio::spawn(service.run());
+
+    let anchored = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let Some(anchor) = test.sdk().validator_set_api().anchor().unwrap() {
+                break anchor;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the service never synced the trusted validator set");
+    assert_eq!(anchored.validator_set.epoch(), Epoch(3));
+}
+
+#[tokio::test]
+async fn a_wallet_out_of_sync_for_less_than_the_gap_takes_does_not_reanchor() {
+    let far = 600;
+    let (_, network) = broken_history(far);
+    let transaction = build_transaction();
+    let test = wallet(network.clone(), &transaction);
+    let validator_set_api = test.sdk().validator_set_api();
+    validator_set_api.sync().await.unwrap();
+
+    // 600 epochs take at least 150 hours at 15 minutes an epoch.
+    network.set_latest(2);
+    last_synced(&test, Duration::from_secs(72 * 60 * 60));
+    let err = validator_set_api.sync().await.unwrap_err();
+    assert!(matches!(err, ValidatorSetApiError::Unverified(_)), "{err}");
+    let anchor = validator_set_api.anchor().unwrap().unwrap();
+    assert_eq!(anchor.anchor, ValidatorSetAnchor::FirstUse);
 }
