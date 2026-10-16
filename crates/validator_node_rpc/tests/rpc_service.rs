@@ -25,7 +25,8 @@ use tari_validator_node_rpc::rpc_service::{ValidatorNodeRpcServer, ValidatorNode
 use tokio::{sync::mpsc, task};
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
-/// Answers every method with an error, so a request only succeeds in reaching it or not.
+/// Answers every method with a General error, so an UnsupportedMethod status can only come from the generated
+/// dispatcher.
 struct UnservedService;
 
 fn unserved<T>() -> Result<T, RpcStatus> {
