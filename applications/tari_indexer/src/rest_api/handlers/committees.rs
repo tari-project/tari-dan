@@ -2,14 +2,14 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use axum::{Extension, Json, extract::Query, response::Response};
-use tari_indexer_client::types::{GetCommitteeRequest, GetCommitteeResponse};
+use tari_indexer_client::types::{GetCommitteeRequest, GetCommitteeResponse, ValidatorSetCommittee};
 use tari_ootle_common_types::{Epoch, ValidatorSetHash, shard::Shard};
 
 use crate::rest_api::{
     context::HandlerContext,
     error::ErrorResponse,
     handlers::HandlerResult,
-    proofs::{committee_for_shard, committee_proved_against, num_preshards},
+    proofs::{committee_for_shard, committee_proved_against},
 };
 
 #[utoipa::path(
@@ -40,19 +40,15 @@ pub async fn get_committee(
     }
     let certified_hash = certified_validator_set_hash(&context, req.epoch, req.shard).await?;
     let committee = match &certified_hash {
-        Some(hash) => {
-            committee_proved_against(
-                context.committee_proofs(),
+        Some(hash) => committee_proved_against(&context, req.epoch, hash, req.shard).await?,
+        None => {
+            committee_for_shard(
                 context.epoch_manager(),
+                context.num_preshards().await?,
                 req.epoch,
-                hash,
                 req.shard,
             )
             .await?
-        },
-        None => {
-            let num_preshards = num_preshards(context.epoch_manager()).await?;
-            committee_for_shard(context.epoch_manager(), num_preshards, req.epoch, req.shard).await?
         },
     };
     let Some(committee) = committee else {
@@ -61,13 +57,18 @@ pub async fn get_committee(
             req.epoch
         )));
     };
-    let is_certified = certified_hash == Some(committee.validator_set_hash);
+    let is_certified = is_certified(certified_hash, &committee);
     let body = Json(GetCommitteeResponse { committee });
     if is_certified {
         Ok(context.apply_immutable_cache_control(body))
     } else {
         Ok(context.apply_cache_control(body, 30))
     }
+}
+
+/// Whether `committee` proves against the validator set hash a stored checkpoint certifies, which fixes it for good.
+fn is_certified(certified_hash: Option<ValidatorSetHash>, committee: &ValidatorSetCommittee) -> bool {
+    certified_hash == Some(committee.validator_set_hash)
 }
 
 /// The validator set hash of `epoch` that the stored checkpoint of the epoch before it names. Every shard group's
@@ -89,4 +90,29 @@ async fn certified_validator_set_hash(
         .first()
         .filter(|checkpoint| checkpoint.epoch() == prev_epoch)
         .and_then(|checkpoint| checkpoint.next_epoch_validator_set_hash()))
+}
+
+#[cfg(test)]
+mod tests {
+    use tari_ootle_common_types::ShardGroup;
+
+    use super::*;
+
+    fn committee(hash: u8) -> ValidatorSetCommittee {
+        ValidatorSetCommittee {
+            epoch: Epoch(5),
+            shard_group: ShardGroup::new(0u32, 255u32),
+            validator_set_hash: ValidatorSetHash::from_array([hash; 32]),
+            members: vec![],
+            proof: vec![],
+        }
+    }
+
+    #[test]
+    fn only_a_committee_proving_against_the_certified_hash_is_certified() {
+        let certified = Some(ValidatorSetHash::from_array([1; 32]));
+        assert!(is_certified(certified, &committee(1)));
+        assert!(!is_certified(certified, &committee(2)));
+        assert!(!is_certified(None, &committee(1)));
+    }
 }

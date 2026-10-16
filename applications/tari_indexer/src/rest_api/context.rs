@@ -11,13 +11,14 @@ use ootle_byte_type::ToByteType;
 use tari_epoch_manager::service::EpochManagerHandle;
 use tari_indexer_client::event::{IndexerEvent, TransactionEvent};
 use tari_networking::NetworkingHandle;
+use tari_ootle_common_types::NumPreshards;
 use tari_ootle_p2p::{PeerAddress, TariMessagingSpec};
 use tari_ootle_storage::global::GlobalDb;
 use tari_ootle_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_ootle_transaction::Network;
 use tari_template_lib_types::{TemplateAddress, crypto::RistrettoPublicKeyBytes};
 use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
-use tokio::sync::broadcast;
+use tokio::sync::{OnceCell, broadcast};
 
 use crate::{
     bootstrap::Services,
@@ -28,6 +29,8 @@ use crate::{
     rest_api::{
         cache::{HttpCacheConfig, IMMUTABLE},
         committee_cache::CommitteeProofCache,
+        error::ErrorResponse,
+        proofs,
     },
     storage_sqlite::SqliteIndexerStore,
     store::ReadOnlyStore,
@@ -64,6 +67,7 @@ impl HandlerContext {
                 validator_status: services.validator_status.clone(),
                 consensus_epoch: services.consensus_epoch.clone(),
                 committee_proofs: CommitteeProofCache::new(COMMITTEE_PROOF_CACHE_BYTES),
+                num_preshards: OnceCell::new(),
             }),
         }
     }
@@ -160,6 +164,15 @@ impl HandlerContext {
     pub fn committee_proofs(&self) -> &CommitteeProofCache {
         &self.inner.committee_proofs
     }
+
+    /// The network's number of preshards, read from the epoch manager once; it is fixed for the network's life.
+    pub async fn num_preshards(&self) -> Result<NumPreshards, ErrorResponse> {
+        self.inner
+            .num_preshards
+            .get_or_try_init(|| proofs::num_preshards(self.epoch_manager()))
+            .await
+            .copied()
+    }
 }
 
 struct InnerContext {
@@ -181,4 +194,5 @@ struct InnerContext {
     validator_status: ValidatorStatusMonitor,
     consensus_epoch: ConsensusEpoch,
     committee_proofs: CommitteeProofCache,
+    num_preshards: OnceCell<NumPreshards>,
 }

@@ -23,8 +23,9 @@ const DEFAULT_LIMIT: u32 = 20;
 /// A checkpoint carries its commit proof and the shard tree summary of its shard group, several KB of CBOR, so the
 /// page size bounds the response size. A wallet's catch-up, at most about 500 checkpoints, takes five pages.
 const MAX_LIMIT: u32 = 100;
-/// A response that a new checkpoint can change is cached briefly, so that a proxy serves the wallets that poll for the
-/// next checkpoint, at the cost of seeing it up to this many seconds late.
+/// The `max-age` of a response that a new checkpoint can change, so that a proxy serves the wallets that poll for the
+/// next checkpoint. A client sees a new checkpoint up to this many seconds late; a shared proxy holds it for about half
+/// as long (`s-maxage`).
 const RECENT_MAX_AGE_SECS: u32 = 10;
 
 #[utoipa::path(
@@ -52,8 +53,7 @@ pub async fn list_epoch_checkpoints(
     Extension(context): Extension<HandlerContext>,
     axum::extract::Query(req): axum::extract::Query<ListEpochCheckpointsRequest>,
 ) -> HandlerResult<Response> {
-    let from_epoch = req.from_epoch.unwrap_or(Epoch(0));
-    let limit = req.limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT);
+    let (from_epoch, limit) = page_bounds(&req);
     let committee_shard = committee_shard(req.include_committees, req.shard)?;
 
     let stored = context
@@ -67,7 +67,7 @@ pub async fn list_epoch_checkpoints(
         checkpoints.push(checkpoint_entry(&context, checkpoint, committee_shard).await?);
     }
 
-    let settled = req.shard.is_some() && is_settled_page(from_epoch, limit, committee_shard.is_some(), &checkpoints);
+    let settled = is_settled_page(&req, &checkpoints);
     let body = Json(ListEpochCheckpointsResponse { checkpoints });
     if settled {
         Ok(context.apply_immutable_cache_control(body))
@@ -133,32 +133,34 @@ async fn checkpoint_entry(
 ) -> Result<EpochCheckpointEntry, ErrorResponse> {
     let next_epoch_committee = match (committee_shard, checkpoint.next_epoch_validator_set_hash()) {
         (Some(shard), Some(validator_set_hash)) => {
-            committee_proved_against(
-                context.committee_proofs(),
-                context.epoch_manager(),
-                checkpoint.epoch() + Epoch(1),
-                &validator_set_hash,
-                shard,
-            )
-            .await?
+            committee_proved_against(context, checkpoint.epoch() + Epoch(1), &validator_set_hash, shard).await?
         },
         _ => None,
     };
     to_checkpoint_entry(checkpoint, next_epoch_committee)
 }
 
-/// Whether a page of one shard's checkpoints, listed from `from_epoch` with `limit`, can no longer change. Stored
-/// checkpoints are never replaced, and each epoch has at most one for the shard group containing a shard, so a full
-/// page of consecutive epochs from `from_epoch` has no gap for a later checkpoint to fill. With committees, each
-/// checkpoint that names a next-epoch set must also carry the committee that proves against it, since a missing or
-/// mismatched one is filled in or corrected once this indexer holds the set.
-fn is_settled_page(from_epoch: Epoch, limit: u32, with_committees: bool, checkpoints: &[EpochCheckpointEntry]) -> bool {
+/// The first epoch and the clamped page size that `req` lists.
+fn page_bounds(req: &ListEpochCheckpointsRequest) -> (Epoch, u32) {
+    (
+        req.from_epoch.unwrap_or(Epoch(0)),
+        req.limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT),
+    )
+}
+
+/// Whether `checkpoints`, the page that `req` lists, can no longer change. Only a page of one shard's checkpoints can
+/// be: stored checkpoints are never replaced, and each epoch has at most one for the shard group containing a shard,
+/// so a full page of consecutive epochs from `from_epoch` has no gap for a later checkpoint to fill. With committees,
+/// each checkpoint that names a next-epoch set must also carry the committee that proves against it, since a missing
+/// or mismatched one is filled in or corrected once this indexer holds the set.
+fn is_settled_page(req: &ListEpochCheckpointsRequest, checkpoints: &[EpochCheckpointEntry]) -> bool {
+    let (from_epoch, limit) = page_bounds(req);
     let is_full = limit > 0 && checkpoints.len() == limit as usize;
     let is_consecutive = checkpoints
         .iter()
         .enumerate()
         .all(|(i, entry)| entry.epoch.as_u64() == from_epoch.as_u64() + i as u64);
-    let has_committees = !with_committees ||
+    let has_committees = !req.include_committees ||
         checkpoints.iter().all(
             |entry| match (&entry.next_epoch_validator_set_hash, &entry.next_epoch_committee) {
                 (None, _) => true,
@@ -166,7 +168,7 @@ fn is_settled_page(from_epoch: Epoch, limit: u32, with_committees: bool, checkpo
                 (Some(_), None) => false,
             },
         );
-    is_full && is_consecutive && has_committees
+    req.shard.is_some() && is_full && is_consecutive && has_committees
 }
 
 #[cfg(test)]
@@ -193,6 +195,20 @@ mod tests {
         }
     }
 
+    fn req(
+        from_epoch: u64,
+        limit: Option<u32>,
+        shard: Option<u32>,
+        include_committees: bool,
+    ) -> ListEpochCheckpointsRequest {
+        ListEpochCheckpointsRequest {
+            from_epoch: Some(Epoch(from_epoch)),
+            limit,
+            shard: shard.map(Shard::from),
+            include_committees,
+        }
+    }
+
     #[test]
     fn a_full_page_of_consecutive_epochs_is_settled() {
         let page = [
@@ -200,25 +216,49 @@ mod tests {
             entry(5, None, None),
             entry(6, Some(2), Some(2)),
         ];
-        assert!(is_settled_page(Epoch(4), 3, true, &page));
+        assert!(is_settled_page(&req(4, Some(3), Some(0), true), &page));
+    }
+
+    #[test]
+    fn a_page_of_every_shard_is_not_settled() {
+        let page = [entry(4, None, None), entry(5, None, None)];
+        assert!(!is_settled_page(&req(4, Some(2), None, false), &page));
+    }
+
+    #[test]
+    fn a_page_is_full_at_the_clamped_limit() {
+        let page = (0..u64::from(MAX_LIMIT))
+            .map(|i| entry(4 + i, None, None))
+            .collect::<Vec<_>>();
+        assert!(is_settled_page(&req(4, Some(MAX_LIMIT + 50), Some(0), false), &page));
+        let default_page = (0..u64::from(DEFAULT_LIMIT))
+            .map(|i| entry(4 + i, None, None))
+            .collect::<Vec<_>>();
+        assert!(is_settled_page(&req(4, None, Some(0), false), &default_page));
     }
 
     #[test]
     fn a_page_that_a_later_checkpoint_can_change_is_not_settled() {
         let page = [entry(4, None, None), entry(5, None, None)];
-        assert!(!is_settled_page(Epoch(4), 3, false, &page), "short page");
-        assert!(!is_settled_page(Epoch(3), 2, false, &page), "gap at the start");
+        assert!(!is_settled_page(&req(4, Some(3), Some(0), false), &page), "short page");
+        assert!(
+            !is_settled_page(&req(3, Some(2), Some(0), false), &page),
+            "gap at the start"
+        );
         let gapped = [entry(4, None, None), entry(6, None, None)];
-        assert!(!is_settled_page(Epoch(4), 2, false, &gapped), "gap inside");
-        assert!(!is_settled_page(Epoch(4), 0, false, &[]), "empty page");
+        assert!(
+            !is_settled_page(&req(4, Some(2), Some(0), false), &gapped),
+            "gap inside"
+        );
+        assert!(!is_settled_page(&req(4, Some(0), Some(0), false), &[]), "empty page");
     }
 
     #[test]
     fn a_page_missing_a_committee_it_can_still_gain_is_not_settled() {
         let missing = [entry(4, Some(1), None)];
-        assert!(!is_settled_page(Epoch(4), 1, true, &missing));
-        assert!(is_settled_page(Epoch(4), 1, false, &missing));
+        assert!(!is_settled_page(&req(4, Some(1), Some(0), true), &missing));
+        assert!(is_settled_page(&req(4, Some(1), Some(0), false), &missing));
         let mismatched = [entry(4, Some(1), Some(2))];
-        assert!(!is_settled_page(Epoch(4), 1, true, &mismatched));
+        assert!(!is_settled_page(&req(4, Some(1), Some(0), true), &mismatched));
     }
 }

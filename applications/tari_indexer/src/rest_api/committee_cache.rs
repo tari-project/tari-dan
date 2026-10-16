@@ -7,7 +7,7 @@ use tari_indexer_client::types::ValidatorSetCommittee;
 use tari_ootle_common_types::{Epoch, ValidatorSetHash, shard::Shard};
 
 /// The committees of an epoch's shard groups, as proved against one validator set hash.
-type EpochCommittees = Arc<Vec<ValidatorSetCommittee>>;
+type EpochCommittees = Arc<Vec<Arc<ValidatorSetCommittee>>>;
 
 /// Committee proofs keyed by the epoch and the validator set hash they prove against. A validator set hash commits to
 /// every committee of its epoch, so an entry never goes stale: a set the epoch manager reassigns has a different hash
@@ -23,7 +23,10 @@ impl CommitteeProofCache {
     pub fn new(max_bytes: u64) -> Self {
         let cache = mini_moka::sync::Cache::builder()
             .weigher(|_, committees: &EpochCommittees| {
-                let bytes = committees.iter().map(committee_size).sum::<usize>();
+                let bytes = committees
+                    .iter()
+                    .map(|committee| committee_size(committee))
+                    .sum::<usize>();
                 u32::try_from(bytes).unwrap_or(u32::MAX)
             })
             .max_capacity(max_bytes)
@@ -42,10 +45,11 @@ impl CommitteeProofCache {
             .get(&(epoch, *validator_set_hash))?
             .iter()
             .find(|committee| committee.shard_group.contains(&shard))
-            .cloned()
+            .map(|committee| committee.as_ref().clone())
     }
 
-    /// Adds `committee` to the committees of its epoch and validator set hash.
+    /// Adds `committee` to the committees of its epoch and validator set hash. Concurrent inserts for one epoch may
+    /// keep only one of their committees; a later miss proves the dropped one again.
     pub fn insert(&self, committee: ValidatorSetCommittee) {
         let key = (committee.epoch, committee.validator_set_hash);
         let mut committees = self
@@ -59,7 +63,7 @@ impl CommitteeProofCache {
         {
             return;
         }
-        committees.push(committee);
+        committees.push(Arc::new(committee));
         self.cache.insert(key, Arc::new(committees));
     }
 }
