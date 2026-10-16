@@ -83,6 +83,38 @@ mod spend_scripts {
             emit_event("spend_script_test", Metadata::new());
         }
 
+        /// Attempts to allocate a component address. The read-only sandbox refuses `allocate_address_invoke`, so this
+        /// always aborts the spend.
+        pub fn try_allocate_address(_ctx: SpendContext) {
+            let _allocation = CallerContext::allocate_component_address(None);
+        }
+
+        /// Attempts to create a proof of the transaction signer. The read-only sandbox refuses the new proof, so this
+        /// always aborts the spend.
+        pub fn try_get_signer_proof(_ctx: SpendContext) {
+            let _proof = CallerContext::get_main_signer_proof();
+        }
+
+        /// Attempts to create a proof of `component`'s owner. The read-only sandbox refuses the new proof, so this
+        /// always aborts the spend.
+        pub fn try_get_owner_proof(component: ComponentAddress, _ctx: SpendContext) {
+            let _proof = ComponentManager::get(component).get_owner_proof();
+        }
+
+        /// Attempts to mint `resource`. For a resource that does not track supply the mint writes nothing, and the
+        /// read-only sandbox refuses the new bucket, so this always aborts the spend.
+        pub fn try_mint(resource: ResourceAddress, _ctx: SpendContext) {
+            let _bucket = ResourceManager::get(resource).mint_fungible(1u32);
+        }
+
+        /// Creates a fungible resource that anyone may mint and that does not track supply.
+        pub fn create_untracked_mintable_resource() -> Bucket {
+            ResourceBuilder::public_fungible()
+                .mintable(rule!(allow_all), LOCKED)
+                .disable_total_supply_tracking()
+                .initial_supply(1u32)
+        }
+
         /// Attempts a cross-template call. `call_invoke` is on the read-only deny-list (and cross-template calls are
         /// disabled at the frame level), so this always aborts the spend before the target runs.
         pub fn try_cross_template_call(template: TemplateAddress, _ctx: SpendContext) {

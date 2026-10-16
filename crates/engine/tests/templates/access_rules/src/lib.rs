@@ -133,6 +133,32 @@ mod access_rules_template {
             .create()
         }
 
+        /// As `with_auth_hook`, but `badges` holds a fungible resource that anyone may mint and that does not track
+        /// supply, so minting it creates a bucket without writing to the resource.
+        pub fn with_untracked_badges_auth_hook(hook: FunctionName) -> Component<AccessRulesTest> {
+            let badges = ResourceBuilder::public_fungible()
+                .mintable(rule!(allow_all), LOCKED)
+                .disable_total_supply_tracking()
+                .initial_supply(1u32);
+
+            let address_alloc = CallerContext::allocate_component_address(None);
+
+            let tokens = ResourceBuilder::public_fungible()
+                .with_authorization_hook(address_alloc.get_address(), hook)
+                .initial_supply(1000u32);
+
+            Component::new(Self {
+                value: 0,
+                tokens: Vault::from_bucket(tokens),
+                badges: Vault::from_bucket(badges),
+                allowed: true,
+                attack_component: None,
+            })
+            .with_address_allocation(address_alloc)
+            .with_access_rules(ComponentAccessRules::new().default(rule!(allow_all)))
+            .create()
+        }
+
         /// As `with_auth_hook`, but the hook may be replaced or removed by whoever satisfies `updater`.
         pub fn with_updatable_auth_hook(
             allowed: bool,
@@ -380,6 +406,17 @@ mod access_rules_template {
         /// component state, so the engine refuses the vault creation.
         pub fn hook_creates_vault(&self, _action: ResourceAuthAction, _caller: AuthHookCaller) {
             let _vault = Vault::new_empty(self.tokens.resource_address());
+        }
+
+        /// Attempts to allocate a component address, which the hook frame refuses.
+        pub fn hook_allocates_address(&self, _action: ResourceAuthAction, _caller: AuthHookCaller) {
+            let _allocation = CallerContext::allocate_component_address(None);
+        }
+
+        /// Attempts to mint the `badges` resource, which the hook frame refuses. Requires the component to have
+        /// been created by `with_untracked_badges_auth_hook`.
+        pub fn hook_mints_untracked_badges(&self, _action: ResourceAuthAction, _caller: AuthHookCaller) {
+            let _bucket = ResourceManager::get(self.badges.resource_address()).mint_fungible(1u32);
         }
 
         /// Reads the resource the hook guards. A resource action that write-locks the resource must release that
