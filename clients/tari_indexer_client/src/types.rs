@@ -79,17 +79,44 @@ pub struct GetSubstateRequest {
 pub struct GetSubstateResponse {
     #[cfg_attr(feature = "utoipa", schema(value_type = u64))]
     pub version: SubstateVersion,
-    #[cfg_attr(feature = "utoipa", schema(value_type = Object))]
-    pub substate: SubstateValue,
-    /// True when the indexer verified this substate's value against the shard group committee (via a
-    /// merkle proof). False when proofs are disabled, or when no committee member could supply a
-    /// proof yet (e.g. nothing committed since an epoch change) and the value was served unverified.
+    /// What the shard group holds for `version`. Only a request with `include_proof` that names the version is
+    /// answered with [`SubstateState::Down`], and only when the indexer verified a down proof for it; any other down
+    /// is a 404.
+    pub state: SubstateState,
+    /// True when the indexer verified this answer against the shard group committee (via a merkle
+    /// proof). False when proofs are disabled, or when no committee member could supply a proof yet
+    /// (e.g. nothing committed since an epoch change) and the value was served unverified.
     pub verified: bool,
-    /// The proof the indexer verified this substate with. Present only when `include_proof` was set
-    /// and a committee member could prove the substate.
+    /// The proof the indexer verified this answer with. Present only when `include_proof` was set
+    /// and a committee member could prove the answer. A down answer always carries one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub proof: Option<SubstateProof>,
+}
+
+impl GetSubstateResponse {
+    /// The substate's value, or `None` when `version` is down.
+    pub fn into_substate_value(self) -> Option<SubstateValue> {
+        match self.state {
+            SubstateState::Up { substate } => Some(*substate),
+            SubstateState::Down {} => None,
+        }
+    }
+}
+
+/// What the shard group holds for a substate version.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+pub enum SubstateState {
+    /// The version is live, holding `substate`.
+    Up {
+        #[cfg_attr(feature = "utoipa", schema(value_type = Object))]
+        substate: Box<SubstateValue>,
+    },
+    /// The version was live and has been spent. The proof's `down_proof` shows both.
+    Down {},
 }
 
 /// Proof that a substate value was committed by its shard group.
@@ -122,6 +149,32 @@ pub struct SubstateProof {
     /// verifier needs it to recompute the leaf.
     #[cfg_attr(feature = "utoipa", schema(value_type = u64))]
     pub value_hash_epoch: Epoch,
+    /// CBOR-encoded `SubstateDownProof`, present when the substate version is down: an inclusion proof that the
+    /// version was committed, anchored at a block of its own, and an exclusion proof under `anchor.state_merkle_root`
+    /// that it is no longer in the state tree. `value_proof` is that exclusion proof.
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "base64_option")]
+    #[cfg_attr(feature = "ts", ts(optional, type = "string"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>, format = Byte))]
+    pub down_proof: Option<Vec<u8>>,
+}
+
+/// `ootle_serde::base64` for an optional byte buffer.
+mod base64_option {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Serialize)]
+    struct Encode<'a>(#[serde(with = "ootle_serde::base64")] &'a Vec<u8>);
+
+    #[derive(Deserialize)]
+    struct Decode(#[serde(with = "ootle_serde::base64")] Vec<u8>);
+
+    pub fn serialize<S: Serializer>(bytes: &Option<Vec<u8>>, s: S) -> Result<S::Ok, S::Error> {
+        bytes.as_ref().map(Encode).serialize(s)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Vec<u8>>, D::Error> {
+        Ok(Option::<Decode>::deserialize(d)?.map(|Decode(bytes)| bytes))
+    }
 }
 
 /// The committed block a [`SubstateProof`] is anchored at.

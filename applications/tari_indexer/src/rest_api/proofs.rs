@@ -48,6 +48,7 @@ pub fn to_substate_proof(proof: SubstateProofData) -> Result<SubstateProof, Erro
         commit_proof: proof.commit_proof,
         value_proof: proof.substate_value_proof,
         value_hash_epoch: Epoch(proof.proof_epoch),
+        down_proof: proof.substate_down_proof,
     })
 }
 
@@ -126,7 +127,7 @@ pub fn to_checkpoint_entry(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use tari_common_types::types::{CompressedPublicKey, FixedHash};
     use tari_crypto::ristretto::RistrettoSecretKey;
     use tari_ootle_common_types::ShardGroup;
@@ -134,7 +135,7 @@ mod tests {
 
     use super::*;
 
-    fn commit_proof() -> CommittedBlockProof {
+    pub(crate) fn commit_proof() -> CommittedBlockProof {
         CommittedBlockProof::new(SidechainBlockCommitProof {
             header: SidechainBlockHeader {
                 network: 0,
@@ -183,6 +184,22 @@ mod tests {
         assert_eq!(proof.commit_proof, commit_proof.to_bytes());
         assert_eq!(proof.value_proof, vec![1, 2, 3]);
         assert_eq!(proof.value_hash_epoch, Epoch(2));
+        assert_eq!(proof.down_proof, None);
+    }
+
+    #[test]
+    fn a_down_proof_passes_through() {
+        let proof = to_substate_proof(SubstateProofData {
+            substate_value_proof: vec![1, 2, 3],
+            commit_proof: commit_proof().to_bytes(),
+            proof_epoch: 2,
+            substate_down_proof: Some(vec![4, 5, 6]),
+            destroyed_at_state_version: Some(9),
+        })
+        .unwrap();
+
+        assert_eq!(proof.down_proof, Some(vec![4, 5, 6]));
+        assert_eq!(proof.value_proof, vec![1, 2, 3]);
     }
 
     #[test]

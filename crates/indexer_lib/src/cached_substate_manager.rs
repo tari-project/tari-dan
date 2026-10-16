@@ -323,12 +323,13 @@ where
         self.fetch_and_cache_substate(substate_id, specific_version).await
     }
 
-    /// Like [`Self::get_substate`], but a live result comes with the proof it was verified with. A
-    /// cached head is served with the proof held for it; one with no proof held is fetched from the
-    /// committee again, and cached with its proof.
+    /// Like [`Self::get_substate`], but the result comes with the proof it was verified with: a live result with its
+    /// value proof, and a down one with its down proof when the read names its version. A cached head is served with
+    /// the proof held for it; one with no proof held is fetched from the committee again, and cached with its proof.
+    /// The cache holds no down proofs, so a read naming a version below the cached head is fetched from the committee.
     ///
-    /// The proof is `None` when proof verification is off, for a result that is not live, and when no
-    /// committee member could prove the result.
+    /// The proof is `None` when proof verification is off, for a nonexistent substate, for a down head read, and when
+    /// no committee member could prove the result.
     pub async fn get_substate_with_proof(
         &self,
         substate_id: &SubstateId,
@@ -336,12 +337,15 @@ where
     ) -> Result<SubstateLookupResult, IndexerError> {
         debug!(target: LOG_TARGET, "get_substate_with_proof: {}v{}", substate_id, specific_version.display());
         if let Some(mut lookup_result) = self.read_fresh_cache_entry(substate_id, specific_version).await? {
-            let SubstateResult::Up { substate } = &lookup_result.result else {
-                return Ok(lookup_result);
-            };
-            lookup_result.proof = self.substate_cache.read_proof(substate_id, substate.version()).await?;
-            if lookup_result.proof.is_some() {
-                return Ok(lookup_result);
+            match &lookup_result.result {
+                SubstateResult::Up { substate } => {
+                    lookup_result.proof = self.substate_cache.read_proof(substate_id, substate.version()).await?;
+                    if lookup_result.proof.is_some() {
+                        return Ok(lookup_result);
+                    }
+                },
+                SubstateResult::Down { .. } if specific_version.is_some() => {},
+                SubstateResult::Down { .. } | SubstateResult::DoesNotExist => return Ok(lookup_result),
             }
         }
         #[cfg(feature = "metrics")]
@@ -2152,6 +2156,52 @@ mod tests {
         .unwrap();
         assert!(matches!(lookup.result, SubstateResult::Down { .. }));
         assert!(lookup.verified);
+    }
+
+    /// A cached head above the version a proven read names says the version is down, but holds no proof of it, so the
+    /// read is answered by the committee's down proof.
+    #[tokio::test]
+    async fn a_proven_read_of_a_version_below_the_cached_head_carries_its_down_proof() {
+        let keys = (1..=4)
+            .map(tari_ootle_common_types::crypto::create_key_pair_from_seed)
+            .collect::<Vec<_>>();
+        let (id, manager) = signed_down_proof_setup(&keys, HashSet::new());
+        let head = SubstateResult::Up {
+            substate: Box::new(Substate::new(
+                1,
+                SubstateValue::NonFungible(NonFungibleContainer::no_data()),
+            )),
+        };
+        manager
+            .substate_cache
+            .write(
+                &id,
+                SubstateCacheEntryRef {
+                    version: head.version(),
+                    substate_result: &head,
+                    cached_at: SystemTime::now()
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
+                    verified: true,
+                    proof: None,
+                },
+                FetchWatermark::new(0),
+            )
+            .await
+            .unwrap();
+
+        let lookup = tokio::time::timeout(
+            Duration::from_secs(10),
+            manager.get_substate_with_proof(&id, Some(SubstateVersion::ZERO)),
+        )
+        .await
+        .expect("the committee answers the read")
+        .unwrap();
+
+        assert!(matches!(lookup.result, SubstateResult::Down { version } if version == SubstateVersion::ZERO));
+        assert!(lookup.verified);
+        assert!(lookup.proof.unwrap().substate_down_proof.is_some());
     }
 
     /// A commit proof validated once is not validated again: repeated versioned reads of a destroyed version ask the

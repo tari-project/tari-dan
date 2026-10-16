@@ -45,10 +45,11 @@ function Resources() {
   });
 
   const resource = useMemo(() => {
-    if (!substateData?.substate || !("Resource" in substateData.substate)) {
+    const substate = substateData && "up" in substateData.state ? substateData.state.up.substate : null;
+    if (!substate || !("Resource" in substate)) {
       return null;
     }
-    return substateData.substate.Resource;
+    return substate.Resource;
   }, [substateData]);
 
   return (

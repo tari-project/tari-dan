@@ -42,6 +42,7 @@ use crate::{
         rate_limit::RequestCost,
     },
     store::EventQuery,
+    substate_manager::ProvenLookup,
     transaction_manager::error::TransactionManagerError,
 };
 
@@ -330,13 +331,20 @@ async fn get_proven_receipt(
     transaction_id: TransactionId,
 ) -> HandlerResult<Option<ProvenTransactionReceipt>> {
     let receipt_id = SubstateId::TransactionReceipt(transaction_id.into_receipt_address());
-    let Some(fetched) = context
+    let fetched = match context
         .substate_manager()
         .fetch_substate_with_proof(SubstateRequirementRef::unversioned(&receipt_id))
         .await
         .map_err(substate_lookup_error)?
-    else {
-        return Ok(None);
+    {
+        Some(ProvenLookup::Up(fetched)) => *fetched,
+        // A down proof answers only a lookup that names its version.
+        Some(ProvenLookup::Down { version, .. }) => {
+            return Err(ErrorResponse::internal_error(format!(
+                "Unversioned lookup of {receipt_id} was answered with a down proof of v{version}"
+            )));
+        },
+        None => return Ok(None),
     };
     let version = fetched.substate.version();
     let receipt = fetched

@@ -635,7 +635,7 @@
           {
             "name": "include_proof",
             "in": "query",
-            "description": "If true, include the proof the substate was verified with",
+            "description": "If true, include the proof the substate was verified with. A spent version named by `version` is then answered with its down proof",
             "required": false,
             "schema": {
               "type": "boolean"
@@ -644,7 +644,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Substate details",
+            "description": "Substate details, or with include_proof, the proof that the version asked for has been spent",
             "content": {
               "application/json": {
                 "schema": {
@@ -664,7 +664,7 @@
             }
           },
           "404": {
-            "description": "No such substate, or the version asked for has been spent",
+            "description": "No such substate, or the version asked for has been spent and no down proof was requested or verified",
             "content": {
               "application/json": {
                 "schema": {
@@ -1861,7 +1861,7 @@
         "type": "object",
         "required": [
           "version",
-          "substate",
+          "state",
           "verified"
         ],
         "properties": {
@@ -1872,16 +1872,17 @@
               },
               {
                 "$ref": "#/components/schemas/SubstateProof",
-                "description": "The proof the indexer verified this substate with. Present only when `include_proof` was set\nand a committee member could prove the substate."
+                "description": "The proof the indexer verified this answer with. Present only when `include_proof` was set\nand a committee member could prove the answer. A down answer always carries one."
               }
             ]
           },
-          "substate": {
-            "type": "object"
+          "state": {
+            "$ref": "#/components/schemas/SubstateState",
+            "description": "What the shard group holds for `version`. Only a request with `include_proof` that names the version is\nanswered with [`SubstateState::Down`], and only when the indexer verified a down proof for it; any other down\nis a 404."
           },
           "verified": {
             "type": "boolean",
-            "description": "True when the indexer verified this substate's value against the shard group committee (via a\nmerkle proof). False when proofs are disabled, or when no committee member could supply a\nproof yet (e.g. nothing committed since an epoch change) and the value was served unverified."
+            "description": "True when the indexer verified this answer against the shard group committee (via a merkle\nproof). False when proofs are disabled, or when no committee member could supply a proof yet\n(e.g. nothing committed since an epoch change) and the value was served unverified."
           },
           "version": {
             "type": "integer",
@@ -2320,6 +2321,14 @@
             "format": "byte",
             "description": "CBOR-encoded `SidechainBlockCommitProof`: the anchor block's header and the chain of quorum\ncertificates that committed it."
           },
+          "down_proof": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "byte",
+            "description": "CBOR-encoded `SubstateDownProof`, present when the substate version is down: an inclusion proof that the\nversion was committed, anchored at a block of its own, and an exclusion proof under `anchor.state_merkle_root`\nthat it is no longer in the state tree. `value_proof` is that exclusion proof."
+          },
           "value_hash_epoch": {
             "type": "integer",
             "format": "int64",
@@ -2365,6 +2374,45 @@
             "description": "The shard group state root the block header commits."
           }
         }
+      },
+      "SubstateState": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "The version is live, holding `substate`.",
+            "required": [
+              "up"
+            ],
+            "properties": {
+              "up": {
+                "type": "object",
+                "description": "The version is live, holding `substate`.",
+                "required": [
+                  "substate"
+                ],
+                "properties": {
+                  "substate": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The version was live and has been spent. The proof's `down_proof` shows both.",
+            "required": [
+              "down"
+            ],
+            "properties": {
+              "down": {
+                "type": "object",
+                "description": "The version was live and has been spent. The proof's `down_proof` shows both."
+              }
+            }
+          }
+        ],
+        "description": "What the shard group holds for a substate version."
       },
       "SyncProgress": {
         "type": "object",

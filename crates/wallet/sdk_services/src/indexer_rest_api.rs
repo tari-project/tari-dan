@@ -31,6 +31,7 @@ use tari_indexer_client::{
         IndexerTransactionFinalizedResult,
         ListWatchedSubstatesRequest,
         SubmitTransactionRequest,
+        SubstateState,
         WatchedSubstateItem,
     },
 };
@@ -296,13 +297,20 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
                     local_search_only,
                     include_proof: false,
                 }),
-                |resp| check_substate_type(substate_id, &resp.substate),
+                |resp| match &resp.state {
+                    SubstateState::Up { substate } => check_substate_type(substate_id, substate),
+                    SubstateState::Down {} => Ok(()),
+                },
             )
             .await?;
-        Ok(SubstateQueryResult {
-            version: result.version,
-            substate: result.substate,
-        })
+        let version = result.version;
+        let Some(substate) = result.into_substate_value() else {
+            return Err(IndexerRestClientError::InvalidResponse {
+                message: format!("Indexer answered {substate_id} v{version} as down to a request without proofs"),
+            }
+            .into());
+        };
+        Ok(SubstateQueryResult { version, substate })
     }
 
     async fn get_substates(&self, substate_ids: Vec<SubstateId>) -> Result<HashMap<SubstateId, Substate>, Self::Error> {
@@ -990,7 +998,9 @@ mod tests {
     async fn a_substate_of_another_type_than_requested_is_refused() {
         let body = serde_json::to_string(&GetSubstateResponse {
             version: SubstateVersion::new(1),
-            substate: vault_value(),
+            state: SubstateState::Up {
+                substate: Box::new(vault_value()),
+            },
             verified: true,
             proof: None,
         })
@@ -1066,7 +1076,9 @@ mod tests {
     async fn an_indexer_that_keeps_returning_mistyped_substates_is_failed_over() {
         let body = serde_json::to_string(&GetSubstateResponse {
             version: SubstateVersion::new(1),
-            substate: vault_value(),
+            state: SubstateState::Up {
+                substate: Box::new(vault_value()),
+            },
             verified: true,
             proof: None,
         })
