@@ -21,11 +21,14 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
 use std::{
+    collections::HashSet,
     convert::{TryFrom, TryInto},
     num::NonZeroUsize,
+    sync::Arc,
 };
 
 use log::*;
+use prost::Message;
 use tari_bor::encode;
 use tari_consensus::hotstuff::commit_proofs::generate_block_commit_proof;
 use tari_consensus_types::{BlockId, HighPc, ProposalCertificate};
@@ -89,7 +92,10 @@ use tari_ootle_transaction::TransactionId;
 use tari_rpc_framework::{Request, Response, RpcStatus, Streaming};
 use tari_state_tree::SubstateValueProof;
 use tari_validator_node_rpc::{STATE_SYNC_MAX_BATCH_SIZE, rpc_service::ValidatorNodeRpcService};
-use tokio::{sync::mpsc, task};
+use tokio::{
+    sync::{OwnedSemaphorePermit, Semaphore, mpsc},
+    task,
+};
 
 use crate::{
     consensus::ConsensusHandle,
@@ -120,6 +126,8 @@ pub struct ValidatorNodeRpcServiceImpl<TStateStore> {
     max_transaction_size_bytes: usize,
     /// The epochs of history the state store keeps before epoch GC prunes it, destroyed substates' values included.
     epoch_history_length: u64,
+    /// Permits for the batch responses held in memory at once; see [`MAX_BUFFERED_BATCH_RESPONSES`].
+    batch_responses: Arc<Semaphore>,
 }
 
 impl<TStateStore: StateStore> ValidatorNodeRpcServiceImpl<TStateStore> {
@@ -138,6 +146,7 @@ impl<TStateStore: StateStore> ValidatorNodeRpcServiceImpl<TStateStore> {
             consensus,
             max_transaction_size_bytes,
             epoch_history_length,
+            batch_responses: Arc::new(Semaphore::new(MAX_BUFFERED_BATCH_RESPONSES)),
         }
     }
 
@@ -294,6 +303,43 @@ struct BatchProofContext {
     epoch: Epoch,
     num_preshards: NumPreshards,
     include_proofs: bool,
+    /// The most bytes of anchor and substate messages one response may carry.
+    max_response_bytes: usize,
+}
+
+/// A batch response is read whole before any of it is streamed, and stays in memory until the peer
+/// has read it, so it is bounded in bytes as well as in substates. A single substate of up to the
+/// engine's size limit always fits.
+const MAX_BATCH_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
+
+/// How many batch responses the node holds at once, from the store read until the peer's stream is
+/// dropped. Together with [`MAX_BATCH_RESPONSE_BYTES`] this bounds the memory batch responses can
+/// take, however many sessions peers open.
+const MAX_BUFFERED_BATCH_RESPONSES: usize = 32;
+
+/// Streams `responses` to the peer, holding `permit` until the peer's stream is dropped.
+fn stream_batch_response(
+    responses: Vec<batch_response::Response>,
+    permit: OwnedSemaphorePermit,
+) -> Streaming<GetSubstatesBatchResponse> {
+    let (sender, receiver) = mpsc::channel(responses.len().max(1));
+    task::spawn(async move {
+        let _permit = permit;
+        for resp in responses {
+            if sender
+                .send(Ok(GetSubstatesBatchResponse { response: Some(resp) }))
+                .await
+                .is_err()
+            {
+                warn!(target: LOG_TARGET, "Receiver dropped the stream, stopping substate batch response stream");
+                return;
+            }
+        }
+        // The channel buffers the whole response, so the last send returns before the peer has read
+        // it. The memory is only released once the stream is dropped.
+        sender.closed().await;
+    });
+    Streaming::new(receiver)
 }
 
 /// Reads the head version of each of `ids` and, when proofs were asked for, a single anchor followed
@@ -303,6 +349,10 @@ struct BatchProofContext {
 /// shard-group root. The anchor comes first so a client can establish that root before it has to
 /// verify anything against it; `missing` comes last, once the ids that were found are known.
 ///
+/// Substates are answered in request order until the next one would take the response past
+/// `ctx.max_response_bytes`; that one and every id after it are reported as missing without being
+/// read. The first substate is always answered, so every substate can be served by some batch.
+///
 /// A substate whose shard has no committed state cannot be proved against the anchor. It is reported
 /// as missing rather than failing the batch, so the ids that can be answered still are; the client
 /// refetches whatever it did not get.
@@ -311,16 +361,14 @@ fn read_substate_batch<TTx: StateStoreReadTransaction>(
     ids: &[SubstateId],
     ctx: BatchProofContext,
 ) -> Result<Vec<batch_response::Response>, StorageError> {
-    let (substates, missing) = SubstateRecord::get_any_max_version(tx, ids)?;
-    let mut missing = missing.into_iter().map(|id| id.to_bytes()).collect::<Vec<_>>();
-
+    let mut missing = Vec::new();
     let mut generator = None;
-    let mut messages = Vec::with_capacity(substates.len() + 2);
+    let mut messages = Vec::with_capacity(ids.len() + 2);
+    let mut response_bytes = 0usize;
     if ctx.include_proofs &&
         let Some(commit_proof) = latest_commit_proof(tx, ctx.epoch)?
     {
         let shard_group = proof_shard_group(&commit_proof)?;
-        messages.push(batch_response::Response::CommitProof(commit_proof.to_bytes()));
         generator = Some(SubstateProofGenerator::new(
             tx,
             shard_group,
@@ -329,9 +377,27 @@ fn read_substate_batch<TTx: StateStoreReadTransaction>(
                 reason: format!("commit proof: {e}"),
             })?,
         )?);
+        let commit_proof = commit_proof.to_bytes();
+        response_bytes = commit_proof.len();
+        messages.push(batch_response::Response::CommitProof(commit_proof));
     }
 
-    for substate in substates {
+    let mut seen = HashSet::with_capacity(ids.len());
+    let mut answered_any = false;
+    let mut is_full = false;
+    for id in ids {
+        if !seen.insert(id) {
+            continue;
+        }
+        if is_full {
+            missing.push(id.to_bytes());
+            continue;
+        }
+        let Some(substate) = tx.substates_get_any_max_version([id])?.pop() else {
+            missing.push(id.to_bytes());
+            continue;
+        };
+
         let mut value_proof = Vec::new();
         if let Some(generator) = generator.as_mut() {
             let Some(proof) = generator.generate(&substate.to_versioned_substate_id())? else {
@@ -348,10 +414,16 @@ fn read_substate_batch<TTx: StateStoreReadTransaction>(
             })?;
         }
 
-        messages.push(batch_response::Response::Substate(proven_substate(
-            &substate,
-            value_proof,
-        )));
+        let entry = proven_substate(&substate, value_proof);
+        let entry_bytes = entry.encoded_len();
+        if answered_any && response_bytes.saturating_add(entry_bytes) > ctx.max_response_bytes {
+            is_full = true;
+            missing.push(id.to_bytes());
+            continue;
+        }
+        response_bytes = response_bytes.saturating_add(entry_bytes);
+        answered_any = true;
+        messages.push(batch_response::Response::Substate(entry));
     }
 
     if !missing.is_empty() {
@@ -919,8 +991,8 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
         // building the tree over them - plus a leaf traversal per substate. Measured on a 256-shard
         // group (see the `proof_cost` test), that is ~220us fixed against ~4us per substate, so a
         // request answering 50 costs ~450us where 50 single-substate requests cost ~11ms. A lower cap
-        // would therefore make a flood *more* expensive to serve, not less; what 50 bounds is the
-        // response, which the responder holds in memory before streaming.
+        // would therefore make a flood *more* expensive to serve, not less. `MAX_BATCH_RESPONSE_BYTES`
+        // bounds the response's size.
         const MAX_REQUESTS: usize = 50;
         let req = req.into_message();
 
@@ -964,7 +1036,17 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
             )));
         }
 
-        let (sender, receiver) = mpsc::channel(req.substate_ids.len() + 2);
+        // A peer that does not read its response holds the permit, so a full node refuses rather than
+        // queueing; the client asks another member of the committee.
+        let Ok(permit) = self.batch_responses.clone().try_acquire_owned() else {
+            debug!(
+                target: LOG_TARGET,
+                "Refusing a substate batch request: {MAX_BUFFERED_BATCH_RESPONSES} batch responses are already held",
+            );
+            return Err(RpcStatus::unavailable(
+                "This node is serving too many substate batches; retry later or ask another member",
+            ));
+        };
 
         let store = self.state_store.clone();
         // The epoch to look for a committed block at. Before consensus starts this is zero, which
@@ -980,6 +1062,7 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
                     epoch: consensus_epoch,
                     num_preshards,
                     include_proofs,
+                    max_response_bytes: MAX_BATCH_RESPONSE_BYTES,
                 })
             })
         })
@@ -987,38 +1070,35 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
         .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
         .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
-        task::spawn(async move {
-            for resp in responses {
-                if sender
-                    .send(Ok(GetSubstatesBatchResponse { response: Some(resp) }))
-                    .await
-                    .is_err()
-                {
-                    warn!(target: LOG_TARGET, "Receiver dropped the stream, stopping substate batch response stream");
-                    break;
-                }
-            }
-        });
-
-        Ok(Streaming::new(receiver))
+        Ok(stream_batch_response(responses, permit))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use tari_engine_types::{
         non_fungible::NonFungibleContainer,
+        published_template::{PublishedTemplate, PublishedTemplateAddress},
         substate::{SubstateId, SubstateValue, hash_substate},
     };
-    use tari_ootle_common_types::{SubstateVersion, VersionedSubstateId};
+    use tari_ootle_common_types::{SubstateVersion, VersionedSubstateId, shard::Shard};
     use tari_ootle_storage::{
         StateStoreWriteTransaction,
-        consensus_models::{SubstateCreated, SubstateDestroyed, SubstateDownProofRecord},
+        consensus_models::{
+            SubstateCreated,
+            SubstateDestroyed,
+            SubstateDownProofRecord,
+            SubstateTransition,
+            SubstateUpdateBatch,
+            SubstateValueOrHash,
+        },
     };
     use tari_ootle_transaction::Network;
     use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
     use tari_state_tree::{KeyedProofTree, LeafKey, SubstateDownProof, TreeHash};
-    use tari_template_lib_types::{ComponentAddress, ObjectKey};
+    use tari_template_lib_types::{ComponentAddress, Hash32, ObjectKey, crypto::RistrettoPublicKeyBytes};
 
     use super::*;
 
@@ -1169,6 +1249,162 @@ mod tests {
         let entry = proven_substate(&substate(true), vec![1]);
         assert!(entry.substate_down_proof.is_empty());
         assert!(entry.substate.unwrap().destroyed.is_some());
+    }
+
+    fn template_record(seed: u8, binary_len: usize) -> SubstateRecord {
+        let id = SubstateId::Template(PublishedTemplateAddress::from(Hash32::from_array([seed; 32])));
+        let template = PublishedTemplate {
+            template_name: "batch".try_into().unwrap(),
+            author: RistrettoPublicKeyBytes::default(),
+            binary: vec![seed; binary_len].try_into().unwrap(),
+            at_epoch: 0,
+            metadata_hash: None,
+        };
+        SubstateRecord::new(
+            Network::LocalNet,
+            id,
+            SubstateVersion::ZERO,
+            SubstateValue::Template(template),
+            SubstateCreated {
+                at_epoch: Epoch::zero(),
+                in_shard: Shard::global(),
+                at_state_version: 1,
+            },
+        )
+    }
+
+    /// A batch of large substates is answered only up to the response byte budget; the rest are named as missing so
+    /// the client refetches them, and every requested id is accounted for exactly once.
+    #[test]
+    fn a_batch_response_is_bounded_by_its_byte_budget() {
+        const NUM_IDS: u8 = 50;
+        const VALUE_BYTES: usize = 512 * 1024;
+
+        let dir = tempfile::tempdir().unwrap();
+        let store = RocksDbStateStore::<String>::open(dir.path().join("db"), DatabaseOptions::default()).unwrap();
+        let records = (0..NUM_IDS)
+            .map(|seed| template_record(seed, VALUE_BYTES))
+            .collect::<Vec<_>>();
+        let mut batch = SubstateUpdateBatch::new(Network::LocalNet, Epoch::zero());
+        let transitions = batch.with_transition(Shard::global(), 1);
+        for record in &records {
+            transitions.push(SubstateTransition::Up {
+                id: record.substate_id().clone(),
+                version: SubstateVersion::ZERO,
+                substate_or_hash: SubstateValueOrHash::Value(Box::new(record.substate_value().unwrap().clone())),
+            });
+        }
+        store.with_write_tx(|tx| tx.substates_commit_batch(batch)).unwrap();
+
+        // Repeating an id does not repeat its answer.
+        let ids = records
+            .iter()
+            .chain(records.iter())
+            .map(|record| record.substate_id().clone())
+            .collect::<Vec<_>>();
+        let tx = store.create_read_tx().unwrap();
+        let messages = read_substate_batch(&tx, &ids, BatchProofContext {
+            epoch: Epoch(1),
+            num_preshards: NUM_PRESHARDS,
+            include_proofs: false,
+            max_response_bytes: MAX_BATCH_RESPONSE_BYTES,
+        })
+        .unwrap();
+
+        let response_bytes = messages
+            .iter()
+            .map(|response| {
+                GetSubstatesBatchResponse {
+                    response: Some(response.clone()),
+                }
+                .encoded_len()
+            })
+            .sum::<usize>();
+        assert!(
+            response_bytes <= MAX_BATCH_RESPONSE_BYTES,
+            "the response is {response_bytes} bytes, over the {MAX_BATCH_RESPONSE_BYTES} byte budget"
+        );
+
+        let mut accounted = Vec::new();
+        let mut answered = 0;
+        for message in messages {
+            match message {
+                batch_response::Response::Substate(proven) => {
+                    answered += 1;
+                    accounted.push(proven.substate.unwrap().substate_id);
+                },
+                batch_response::Response::Missing(missing) => accounted.extend(missing.substate_ids),
+                batch_response::Response::CommitProof(_) => panic!("no proofs were asked for"),
+            }
+        }
+        assert!(answered > 0, "a batch answers as much as fits");
+        assert!(answered < usize::from(NUM_IDS), "the batch does not fit the budget");
+        accounted.sort();
+        let mut expected = records
+            .iter()
+            .map(|record| record.substate_id().to_bytes())
+            .collect::<Vec<_>>();
+        expected.sort();
+        assert_eq!(accounted, expected);
+    }
+
+    /// A substate larger than the budget is still served when it is the first in the batch, so no substate is
+    /// unservable through the batch path.
+    #[test]
+    fn a_batch_always_answers_its_first_substate() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RocksDbStateStore::<String>::open(dir.path().join("db"), DatabaseOptions::default()).unwrap();
+        let records = [template_record(1, 1024), template_record(2, 1024)];
+        let mut batch = SubstateUpdateBatch::new(Network::LocalNet, Epoch::zero());
+        let transitions = batch.with_transition(Shard::global(), 1);
+        for record in &records {
+            transitions.push(SubstateTransition::Up {
+                id: record.substate_id().clone(),
+                version: SubstateVersion::ZERO,
+                substate_or_hash: SubstateValueOrHash::Value(Box::new(record.substate_value().unwrap().clone())),
+            });
+        }
+        store.with_write_tx(|tx| tx.substates_commit_batch(batch)).unwrap();
+
+        let ids = records
+            .iter()
+            .map(|record| record.substate_id().clone())
+            .collect::<Vec<_>>();
+        let tx = store.create_read_tx().unwrap();
+        let messages = read_substate_batch(&tx, &ids, BatchProofContext {
+            epoch: Epoch(1),
+            num_preshards: NUM_PRESHARDS,
+            include_proofs: false,
+            max_response_bytes: 1,
+        })
+        .unwrap();
+        assert_eq!(messages.len(), 2);
+        let batch_response::Response::Substate(first) = &messages[0] else {
+            panic!("the first substate is answered");
+        };
+        assert_eq!(first.substate.as_ref().unwrap().substate_id, ids[0].to_bytes());
+        let batch_response::Response::Missing(missing) = &messages[1] else {
+            panic!("the rest are named as missing");
+        };
+        assert_eq!(missing.substate_ids, vec![ids[1].to_bytes()]);
+    }
+
+    /// A buffered batch response holds its permit until the peer's stream is dropped, so the limit counts responses
+    /// that are still waiting to be read and not only those being read from the store.
+    #[tokio::test]
+    async fn a_batch_response_holds_its_permit_until_the_stream_is_dropped() {
+        let permits = Arc::new(Semaphore::new(1));
+        let permit = permits.clone().try_acquire_owned().unwrap();
+        let responses = vec![batch_response::Response::CommitProof(vec![1]); 3];
+        let stream = stream_batch_response(responses, permit);
+
+        tokio::task::yield_now().await;
+        assert_eq!(permits.available_permits(), 0);
+        drop(stream);
+        let _permit = tokio::time::timeout(Duration::from_secs(5), permits.acquire())
+            .await
+            .expect("the permit is released once the stream is dropped")
+            .unwrap();
     }
 
     #[test]
