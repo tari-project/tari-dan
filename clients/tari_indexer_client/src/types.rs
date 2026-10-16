@@ -152,29 +152,14 @@ pub struct SubstateProof {
     /// CBOR-encoded `SubstateDownProof`, present when the substate version is down: an inclusion proof that the
     /// version was committed, anchored at a block of its own, and an exclusion proof under `anchor.state_merkle_root`
     /// that it is no longer in the state tree. `value_proof` is that exclusion proof.
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "base64_option")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "ootle_serde::base64::option"
+    )]
     #[cfg_attr(feature = "ts", ts(optional, type = "string"))]
     #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>, format = Byte))]
     pub down_proof: Option<Vec<u8>>,
-}
-
-/// `ootle_serde::base64` for an optional byte buffer.
-mod base64_option {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-    #[derive(Serialize)]
-    struct Encode<'a>(#[serde(with = "ootle_serde::base64")] &'a Vec<u8>);
-
-    #[derive(Deserialize)]
-    struct Decode(#[serde(with = "ootle_serde::base64")] Vec<u8>);
-
-    pub fn serialize<S: Serializer>(bytes: &Option<Vec<u8>>, s: S) -> Result<S::Ok, S::Error> {
-        bytes.as_ref().map(Encode).serialize(s)
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Vec<u8>>, D::Error> {
-        Ok(Option::<Decode>::deserialize(d)?.map(|Decode(bytes)| bytes))
-    }
 }
 
 /// The committed block a [`SubstateProof`] is anchored at.
