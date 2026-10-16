@@ -50,7 +50,7 @@ where
         // to the pool from the record we kept, when a proposal for it arrives
         // (`OnReceiveNewTransaction::resequence_known_transactions`). The transactions this node held
         // unprepared at the end of the epoch it synced past are restored straight away: no proposal will
-        // bring them back, because no member of the new shard group may still hold them in its pool.
+        // bring them back, because every member of the new shard group might have dropped them.
         let cleared = context.hotstuff.clear_transaction_pool(at_epoch_end).await?;
         if cleared.num_removed > 0 {
             info!(

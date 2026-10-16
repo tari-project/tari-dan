@@ -1236,14 +1236,19 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         Ok(())
     }
 
-    /// The transactions in the `New` stage of the pool, if this node has committed the end of its leaf's epoch and has
-    /// not opened the next epoch.
+    /// The transactions in the `New` stage of the pool that no shard group has prepared, if this node has committed the
+    /// end of its leaf's epoch and has not opened the next epoch.
     ///
     /// A validator whose shard group moves at an epoch boundary stops there and state-syncs its new shard group, and
     /// [`Self::clear_transaction_pool`] then drops its pool. A transaction still `New` at that point has taken no locks
-    /// and has not been prepared by this node's shard group. This includes every cross-shard transaction that the
+    /// and has not been prepared by this node's shard group. This includes the cross-shard transactions that the
     /// [`EpochEndDrain`] held back. Nothing else holds them for the new shard group, so they are sequenced again once
     /// the sync completes.
+    ///
+    /// A transaction whose evidence shows a foreign shard group has prepared it is left out. That group still has it
+    /// in `LocalPrepared`, and its own drain aborts it, because this shard group never sends the LocalPrepare it is
+    /// waiting for. Sequenced again, the transaction would start over with no record of that, and the shard group
+    /// taking over the foreign shards, which holds it as finalized, would ignore its LocalPrepare.
     pub fn new_transactions_at_epoch_end(&self) -> Result<Option<NewTransactionsAtEpochEnd>, HotStuffError> {
         self.state_store.with_read_tx(|tx| {
             let checkpoint_epoch = EpochCheckpoint::get_last_checkpoint(tx)
@@ -1257,7 +1262,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 .transaction_pool
                 .get_all(tx, usize::MAX)?
                 .into_iter()
-                .filter(|rec| rec.committed_stage().is_new())
+                .filter(|rec| rec.committed_stage().is_new() && !rec.evidence().some_shard_groups_prepared())
                 .map(|rec| *rec.id())
                 .collect();
             Ok::<_, HotStuffError>(Some(NewTransactionsAtEpochEnd { epoch, transaction_ids }))
