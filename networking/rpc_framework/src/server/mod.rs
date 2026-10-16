@@ -855,10 +855,12 @@ where
             })
             .map(|resp| Bytes::from(resp.encode_to_vec()));
 
-        let mut deadline_at = Instant::now() + deadline;
+        // The idle budget is measured from the last message because `now + deadline` may lie beyond what an `Instant`
+        // can represent.
+        let mut last_message_at = Instant::now();
 
         loop {
-            let idle_budget = deadline_at.saturating_duration_since(Instant::now());
+            let idle_budget = deadline.saturating_sub(last_message_at.elapsed());
             let wait = keepalive_interval.map_or(idle_budget, |interval| cmp::min(interval, idle_budget));
 
             let next_item = log_timing(
@@ -895,13 +897,13 @@ where
                     if !self.send_stream_frame(request_id, msg).await? {
                         break;
                     }
-                    deadline_at = Instant::now() + deadline;
+                    last_message_at = Instant::now();
                 },
                 Ok(None) => {
                     debug!(target: LOG_TARGET, "{} Request complete", self.logging_context_string,);
                     break;
                 },
-                Err(_) if keepalive_interval.is_some() && Instant::now() < deadline_at => {
+                Err(_) if keepalive_interval.is_some() && last_message_at.elapsed() < deadline => {
                     trace!(
                         target: LOG_TARGET,
                         "({}) Sending keepalive for request #{}", self.logging_context_string, request_id
@@ -1227,6 +1229,59 @@ mod keepalive_tests {
         feeder.await.unwrap();
 
         assert_eq!(responses.iter().filter(|r| !r.is_keepalive()).count(), 4);
+    }
+
+    fn answering_session(
+        config: RpcServerBuilder,
+        framed: CanonicalFraming<TestSubstream>,
+    ) -> ActivePeerRpcService<impl Service<Request<Bytes>, Response = Response<Body>, Error = RpcStatus>, TestSubstream>
+    {
+        let service = tower::service_fn(|_: Request<Bytes>| {
+            futures::future::ready(Ok::<_, RpcStatus>(Response::new(Body::single(Bytes::from_static(
+                b"pong",
+            )))))
+        });
+        ActivePeerRpcService::new(
+            config,
+            StreamProtocol::new("/test/deadline/1.0"),
+            PeerId::random(),
+            service,
+            framed,
+        )
+    }
+
+    async fn serve_one_request_with_deadline(config: RpcServerBuilder, deadline_secs: u64) -> proto::RpcResponse {
+        let (server_framed, mut client_framed) = framed_pair();
+        let mut service = answering_session(config, server_framed);
+        let request = proto::RpcRequest {
+            request_id: 1,
+            method: 1,
+            deadline: deadline_secs,
+            ..Default::default()
+        };
+        service.handle_request(request.encode_to_vec().into()).await.unwrap();
+        drop(service);
+
+        let responses = collect_responses(&mut client_framed).await;
+        assert_eq!(responses.len(), 1, "expected a single response, got {responses:?}");
+        responses.into_iter().next().unwrap()
+    }
+
+    #[tokio::test]
+    async fn the_longest_deadline_a_client_can_ask_for_is_served() {
+        let response = serve_one_request_with_deadline(RpcServerBuilder::default(), u64::MAX).await;
+        assert_eq!(response.status, RpcStatus::ok().as_code());
+        assert_eq!(response.payload, b"pong");
+    }
+
+    #[tokio::test]
+    async fn the_longest_deadline_a_client_can_ask_for_is_served_without_a_ceiling() {
+        let config = RpcServerBuilder::default().with_maximum_client_deadline(Duration::MAX);
+        for deadline_secs in [1u64 << 63, u64::MAX] {
+            let response = serve_one_request_with_deadline(config.clone(), deadline_secs).await;
+            assert_eq!(response.status, RpcStatus::ok().as_code());
+            assert_eq!(response.payload, b"pong");
+        }
     }
 
     #[test]
