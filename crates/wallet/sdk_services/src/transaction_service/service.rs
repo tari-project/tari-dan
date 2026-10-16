@@ -370,10 +370,7 @@ where
         Ok(true)
     }
 
-    /// Queries the result of a transaction the network reports as finalized and this wallet is waiting on.
-    ///
-    /// The check runs under the poll permit and re-reads the transaction's status once it holds it, so a poll that
-    /// resolved the transaction in the meantime is not reported a second time.
+    /// Brings the trusted validator set up to date in the background, when the wallet verifies its indexer.
     fn on_validator_set_sync(&self) {
         if !self.wallet_sdk.sdk_config().indexer_trust.is_verify() {
             return;
@@ -386,6 +383,10 @@ where
         });
     }
 
+    /// Queries the result of a transaction the network reports as finalized and this wallet is waiting on.
+    ///
+    /// The check runs under the poll permit and re-reads the transaction's status once it holds it, so a poll that
+    /// resolved the transaction in the meantime is not reported a second time.
     fn on_transaction_finalized(&self, notification: TransactionFinalizedNotification) {
         let tx_id = notification.transaction_id;
         let wallet_sdk = self.wallet_sdk.clone();

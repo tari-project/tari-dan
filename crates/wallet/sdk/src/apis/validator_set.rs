@@ -102,8 +102,9 @@ where
     /// - the gap is more than [`DEFAULT_MAX_WALK_EPOCHS`], and the wallet has been out of sync long enough to fall that
     ///   far behind.
     ///
-    /// The gap and the failing walk are both the indexer's to claim, so a wallet that synced recently never re-anchors
-    /// on them. A walk that fails keeps the sets verified before the failure.
+    /// A wallet that synced recently never re-anchors on a claimed gap. A walk that keeps failing for a day re-anchors
+    /// however recently the wallet synced, so an indexer that keeps the walk failing that long chooses the new anchor,
+    /// as it does on first use. A walk that fails keeps the sets verified before the failure.
     pub async fn sync(&self) -> Result<TrustedValidatorSet, ValidatorSetApiError> {
         let _guard = self.lock.lock().await;
         let latest_checkpoint = self.latest_checkpoint().await?;
