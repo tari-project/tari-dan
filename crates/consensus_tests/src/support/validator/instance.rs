@@ -26,6 +26,7 @@ use crate::support::{
     ValidatorBuilder,
     address::TestAddress,
     epoch_manager::TestEpochManager,
+    sync::TestSyncManager,
 };
 
 pub struct ValidatorChannels {
@@ -42,7 +43,7 @@ pub struct ValidatorChannels {
 
 pub struct Validator {
     pub address: TestAddress,
-    pub _shard_address: SubstateAddress,
+    pub shard_address: SubstateAddress,
     pub shard_group: ShardGroup,
     pub num_committees: u32,
 
@@ -52,6 +53,7 @@ pub struct Validator {
     pub epoch_manager: TestEpochManager,
     pub events: broadcast::Receiver<HotstuffEvent>,
     pub current_state_machine_state: watch::Receiver<ConsensusCurrentState>,
+    pub sync_manager: TestSyncManager,
     /// Delivers an inbound message directly, bypassing the test network, so a test can impersonate any sender.
     pub tx_inbound_message: mpsc::Sender<(TestAddress, HotstuffMessage)>,
     /// Delivers an inbound message that failed to decode, as a peer sending garbage would produce.

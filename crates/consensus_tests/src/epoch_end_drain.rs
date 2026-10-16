@@ -5,10 +5,10 @@
 
 use std::time::{Duration, Instant};
 
-use tari_consensus::messages::HotstuffMessage;
+use tari_consensus::{hotstuff::ConsensusCurrentState, messages::HotstuffMessage};
 use tari_consensus_types::Decision;
 use tari_engine_types::commit_result::AbortReason;
-use tari_ootle_common_types::{Epoch, optional::Optional};
+use tari_ootle_common_types::{Epoch, SubstateVersion, VersionedSubstateId, optional::Optional};
 use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
@@ -16,7 +16,15 @@ use tari_ootle_storage::{
 };
 use tari_ootle_transaction::TransactionId;
 
-use crate::support::{Test, TestAddress, logging::setup_logger};
+use crate::support::{
+    TEST_NUM_PRESHARDS,
+    Test,
+    TestAddress,
+    TestVnDestination,
+    build_transaction,
+    helpers::random_substate_in_shard_group,
+    logging::setup_logger,
+};
 
 fn is_committee_1(addr: &TestAddress) -> bool {
     addr == "3" || addr == "4"
@@ -136,6 +144,109 @@ async fn cross_shard_transaction_is_finalized_before_an_epoch_end_that_changes_t
         assert_eq!(
             result.num_locks, 0,
             "{addr} ended epoch 1 holding locks for {transaction_id}: {result:?}"
+        );
+    }
+
+    test.stop();
+}
+
+/// A cross-shard transaction submitted while the drain holds new cross-shard transactions back is still `New` when
+/// the epoch ends. Every validator then moves to a new shard group and goes through `Syncing`, which drops its pool.
+/// The validators whose new shard group holds one of the transaction's inputs must have it back in their pools for
+/// that group.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transaction_held_back_by_the_drain_is_sequenced_again_after_the_sync() {
+    const NEXT_NUM_COMMITTEES: u32 = 4;
+    setup_logger();
+    let mut test = Test::builder()
+        .modify_config(|cfg| {
+            // Leaves time to submit the transaction once the next epoch is known and before EndEpoch is proposed.
+            cfg.epoch_end_grace_period = Duration::from_secs(3);
+        })
+        .modify_consensus_constants(|c| {
+            c.pacemaker_block_time = Duration::from_secs(1);
+        })
+        .with_test_timeout(Duration::from_secs(60))
+        .add_committee(0, vec!["1", "2"])
+        .add_committee(1, vec!["3", "4"])
+        .start()
+        .await;
+
+    test.start_epoch(Epoch(1)).await;
+    test.wait_for_all_validators_to_start_consensus().await;
+
+    let addresses = ["1", "2", "3", "4"];
+    let next_shard_group = |test: &Test, addr: &str| {
+        test.get_validator(&TestAddress::new(addr))
+            .shard_address
+            .to_shard_group(TEST_NUM_PRESHARDS, NEXT_NUM_COMMITTEES)
+    };
+    // One input in the next shard group of "1" and one in that of "3": a cross-shard transaction between the current
+    // committees, which each of those validators holds an input of after the split.
+    let inputs = ["1", "3"].map(|addr| {
+        VersionedSubstateId::new(
+            random_substate_in_shard_group(next_shard_group(&test, addr), TEST_NUM_PRESHARDS),
+            SubstateVersion::ZERO,
+        )
+    });
+    let transaction = build_transaction(inputs.iter().cloned().map(Into::into).collect());
+    let transaction_id = *transaction.id();
+
+    test.get_validator(&TestAddress::new("1"))
+        .epoch_manager
+        .set_epoch_num_committees(Epoch(2), NEXT_NUM_COMMITTEES)
+        .await;
+    test.start_epoch(Epoch(2)).await;
+    // The drain starts once a validator has seen the next epoch.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    test.send_transaction_to_destination(TestVnDestination::All, transaction)
+        .await;
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    for addr in addresses {
+        loop {
+            if let Some(rec) = pool_record(&test, addr, &transaction_id) {
+                assert_eq!(
+                    rec.committed_stage(),
+                    TransactionPoolStage::New,
+                    "{addr} did not hold {transaction_id} back"
+                );
+                break;
+            }
+            assert!(Instant::now() < deadline, "{addr} did not pool {transaction_id}");
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
+    // A validator whose shard group moves state-syncs the new group.
+    for addr in addresses {
+        test.get_validator(&TestAddress::new(addr))
+            .sync_manager
+            .report_behind_on_next_check();
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(30);
+    for addr in addresses {
+        let vn = test.get_validator(&TestAddress::new(addr));
+        while vn.sync_manager.num_syncs() == 0 || vn.current_state_machine_state() == ConsensusCurrentState::Syncing {
+            assert!(
+                Instant::now() < deadline,
+                "{addr} did not sync after the end of epoch 1"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
+    for addr in addresses {
+        let next_shard_group = next_shard_group(&test, addr);
+        let holds_an_input = inputs
+            .iter()
+            .any(|input| next_shard_group.contains(&input.to_shard(TEST_NUM_PRESHARDS)));
+        assert_eq!(
+            pool_record(&test, addr, &transaction_id).is_some(),
+            holds_an_input,
+            "{addr} (next shard group {next_shard_group}) pooled {transaction_id} after the sync: expected \
+             {holds_an_input}"
         );
     }
 

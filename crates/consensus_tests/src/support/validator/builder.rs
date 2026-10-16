@@ -50,7 +50,7 @@ use crate::support::{
     executions_store::TestExecutionSpecStore,
     messaging_impls::{NetworkSendObserver, SendObserver, TestInboundMessaging, TestOutboundMessaging},
     signing_service::TestVoteSignatureService,
-    sync::AlwaysSyncedSyncManager,
+    sync::TestSyncManager,
 };
 
 pub struct ValidatorBuilder {
@@ -228,10 +228,11 @@ impl ValidatorBuilder {
         let current_view = worker.pacemaker().current_view().clone();
 
         let (tx_current_state, rx_current_state) = watch::channel(ConsensusCurrentState::default());
+        let sync_manager = TestSyncManager::default();
         let context = ConsensusWorkerContext {
             epoch_manager: epoch_manager.clone(),
             hotstuff: worker,
-            state_sync: AlwaysSyncedSyncManager,
+            state_sync: sync_manager.clone(),
             tx_current_state: tx_current_state.clone(),
         };
 
@@ -253,7 +254,7 @@ impl ValidatorBuilder {
         let validator = Validator {
             address: self.address.clone(),
 
-            _shard_address: self.shard_address,
+            shard_address: self.shard_address,
             shard_group: self.shard_group,
             num_committees: self.num_committees,
             transaction_executor,
@@ -262,6 +263,7 @@ impl ValidatorBuilder {
             epoch_manager,
             events: tx_events.subscribe(),
             current_state_machine_state: rx_current_state,
+            sync_manager,
             tx_inbound_message,
             tx_malformed_message,
             handle,

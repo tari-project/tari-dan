@@ -95,6 +95,19 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::worker";
 
+/// See [`HotstuffWorker::new_transactions_at_epoch_end`].
+#[derive(Debug, Clone)]
+pub struct NewTransactionsAtEpochEnd {
+    epoch: Epoch,
+    transaction_ids: Vec<TransactionId>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ClearedTransactionPool {
+    pub num_removed: usize,
+    pub num_resequenced: usize,
+}
+
 /// Reason the hotstuff worker loop exited cleanly (i.e. returned Ok).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkerExitReason {
@@ -1223,7 +1236,35 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         Ok(())
     }
 
-    /// Remove all records from the transaction pool, returning the number removed.
+    /// The transactions in the `New` stage of the pool, if this node has committed the end of its leaf's epoch and has
+    /// not opened the next epoch.
+    ///
+    /// A validator whose shard group moves at an epoch boundary stops there and state-syncs its new shard group, and
+    /// [`Self::clear_transaction_pool`] then drops its pool. A transaction still `New` at that point has taken no locks
+    /// and has not been prepared by this node's shard group. This includes every cross-shard transaction that the
+    /// [`EpochEndDrain`] held back. Nothing else holds them for the new shard group, so they are sequenced again once
+    /// the sync completes.
+    pub fn new_transactions_at_epoch_end(&self) -> Result<Option<NewTransactionsAtEpochEnd>, HotStuffError> {
+        self.state_store.with_read_tx(|tx| {
+            let checkpoint_epoch = EpochCheckpoint::get_last_checkpoint(tx)
+                .optional()?
+                .map(|checkpoint| checkpoint.epoch());
+            let leaf_epoch = LeafBlock::get_any(tx).optional()?.map(|leaf| leaf.epoch());
+            let Some(epoch) = checkpoint_epoch.filter(|epoch| Some(*epoch) == leaf_epoch) else {
+                return Ok(None);
+            };
+            let transaction_ids = self
+                .transaction_pool
+                .get_all(tx, usize::MAX)?
+                .into_iter()
+                .filter(|rec| rec.committed_stage().is_new())
+                .map(|rec| *rec.id())
+                .collect();
+            Ok::<_, HotStuffError>(Some(NewTransactionsAtEpochEnd { epoch, transaction_ids }))
+        })
+    }
+
+    /// Remove all records from the transaction pool, then sequence `at_epoch_end` again for the epoch after it.
     ///
     /// Called after a state sync. State sync only rewrites the state store, not the (persisted)
     /// consensus transaction pool, so the pool can be left holding transactions the freshly-synced
@@ -1231,14 +1272,50 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     /// committee finalised and removed it, so it can never gather a QC again and every block carrying
     /// it is rejected (`TransactionNotInPool`). Clearing lets the node rebuild its pool from fresh
     /// mempool/consensus activity against the synced state.
+    ///
+    /// `at_epoch_end` (see [`Self::new_transactions_at_epoch_end`]) is sequenced again only if the synced state is the
+    /// end of the same epoch. A sync that skipped past it may have skipped their finalization too. Each is validated
+    /// as if it had just arrived, against this node's shard group in the next epoch.
     // TODO: the transaction pool only holds pending (derived) state and should not be persisted at
     //       all — that would remove this whole class of pool-vs-state-store divergence.
-    pub fn clear_transaction_pool(&self) -> Result<usize, HotStuffError> {
+    pub async fn clear_transaction_pool(
+        &self,
+        at_epoch_end: Option<NewTransactionsAtEpochEnd>,
+    ) -> Result<ClearedTransactionPool, HotStuffError> {
+        let mut resequence = None;
+        if let Some(at_epoch_end) = at_epoch_end {
+            let synced_epoch = self
+                .state_store
+                .with_read_tx(|tx| EpochCheckpoint::get_last_checkpoint(tx).optional())?
+                .map(|checkpoint| checkpoint.epoch());
+            if synced_epoch == Some(at_epoch_end.epoch) {
+                let next_epoch = at_epoch_end.epoch + Epoch(1);
+                if let Some(committee_info) = self
+                    .epoch_manager
+                    .get_local_committee_info(next_epoch)
+                    .await
+                    .optional()?
+                {
+                    resequence = Some((next_epoch, committee_info, at_epoch_end.transaction_ids));
+                }
+            }
+        }
+
         self.state_store.with_write_tx(|tx| {
             let recs = self.transaction_pool.get_all(&**tx, usize::MAX)?;
             let ids = recs.iter().map(|rec| rec.id());
             let removed = self.transaction_pool.remove_all(tx, ids)?;
-            Ok::<_, HotStuffError>(removed.len())
+            let num_resequenced = match resequence {
+                Some((epoch, committee_info, ids)) => {
+                    self.on_receive_new_transaction
+                        .resequence_known_transactions(tx, epoch, ids, &committee_info)?
+                },
+                None => 0,
+            };
+            Ok::<_, HotStuffError>(ClearedTransactionPool {
+                num_removed: removed.len(),
+                num_resequenced,
+            })
         })
     }
 
