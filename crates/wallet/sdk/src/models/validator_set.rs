@@ -44,3 +44,16 @@ pub struct AnchoredValidatorSet {
     pub anchor: ValidatorSetAnchor,
     pub anchored_at: PrimitiveDateTime,
 }
+
+/// Where the wallet's trust in the network's validator sets stands.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValidatorSetStatus {
+    /// The latest validator set the wallet trusts.
+    pub latest: TrustedValidatorSetHash,
+    /// The validator set every trusted set descends from, and how the wallet came to trust it.
+    pub anchor: AnchoredValidatorSet,
+    /// When the wallet last brought its trusted set up to date, in seconds since the Unix epoch.
+    pub synced_at: Option<u64>,
+    /// Since when the walk has failed on every sync, in seconds since the Unix epoch.
+    pub walk_failing_since: Option<u64>,
+}

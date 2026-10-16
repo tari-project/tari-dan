@@ -207,6 +207,8 @@ use crate::{
         TransactionSubmitResponse,
         TransactionWaitResultRequest,
         TransactionWaitResultResponse,
+        ValidatorSetGetStatusRequest,
+        ValidatorSetGetStatusResponse,
         WalletGetInfoRequest,
         WalletGetInfoResponse,
         WebauthnAlreadyRegisteredRequest,
@@ -261,6 +263,12 @@ impl WalletDaemonClient {
     /// Returns general information about the wallet, including the wallet's public key and network.
     pub async fn get_wallet_info(&mut self) -> Result<WalletGetInfoResponse, WalletDaemonClientError> {
         self.send_request("wallet.get_info", &WalletGetInfoRequest {}).await
+    }
+
+    /// The validator sets the wallet verifies the network's proofs against.
+    pub async fn get_validator_set_status(&mut self) -> Result<ValidatorSetGetStatusResponse, WalletDaemonClientError> {
+        self.send_request("validator_set.get_status", &ValidatorSetGetStatusRequest {})
+            .await
     }
 
     /// Derives the next key for the given [`KeyBranch`].

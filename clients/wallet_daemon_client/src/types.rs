@@ -38,6 +38,7 @@ use tari_ootle_common_types::{
     ShardGroup,
     SubstateAddress,
     SubstateVersion,
+    ValidatorSetHash,
     shard::Shard,
     substate_type::SubstateType,
 };
@@ -50,6 +51,7 @@ use tari_ootle_transaction::{
     UnsignedTransaction,
 };
 use tari_ootle_wallet_sdk::{
+    IndexerTrust,
     apis::{
         confidential_transfer::UtxoInputSelection,
         stealth_transfer::{BadgeUsage, TransferFeeParams, TransferOutput},
@@ -74,6 +76,7 @@ use tari_ootle_wallet_sdk::{
         StealthUtxoSpendKeyId,
         TransactionRequestId,
         TransactionStatus,
+        ValidatorSetAnchor,
         WalletLockId,
         WalletTransaction,
     },
@@ -1724,6 +1727,46 @@ pub struct WalletGetInfoResponse {
     pub version: String,
     pub network: String,
     pub network_byte: u8,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
+pub struct ValidatorSetGetStatusRequest {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
+pub struct ValidatorSetGetStatusResponse {
+    /// Whether the wallet verifies what its indexer serves against the validator sets it trusts.
+    #[cfg_attr(feature = "ts", ts(type = "\"verify\" | \"trust\""))]
+    pub indexer_trust: IndexerTrust,
+    /// `None` until the wallet first anchors on a validator set.
+    pub trusted: Option<TrustedValidatorSetInfo>,
+}
+
+/// The validator sets the wallet trusts.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
+pub struct TrustedValidatorSetInfo {
+    /// The epoch of the latest validator set the wallet trusts.
+    pub epoch: Epoch,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub validator_set_hash: ValidatorSetHash,
+    /// The epoch of the validator set every trusted set descends from.
+    pub anchor_epoch: Epoch,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub anchor_validator_set_hash: ValidatorSetHash,
+    /// How the wallet came to trust its anchor. On `Reanchor` the wallet took its indexer's word for the anchor again,
+    /// as it does on first use, in place of walking to it from its earlier anchor.
+    #[cfg_attr(feature = "ts", ts(type = "\"FirstUse\" | \"Reanchor\""))]
+    pub anchor: ValidatorSetAnchor,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub anchored_at: PrimitiveDateTime,
+    /// When the wallet last brought its trusted set up to date, in seconds since the Unix epoch.
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+    pub synced_at: Option<u64>,
+    /// Since when the walk to the latest checkpoint has failed on every sync, in seconds since the Unix epoch.
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+    pub walk_failing_since: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
