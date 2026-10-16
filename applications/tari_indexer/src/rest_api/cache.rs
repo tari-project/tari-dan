@@ -9,6 +9,8 @@ use axum::{
 };
 
 const NO_STORE: HeaderValue = HeaderValue::from_static("no-store");
+/// For a response whose content can no longer change under its URL.
+pub const IMMUTABLE: HeaderValue = HeaderValue::from_static("public, max-age=31536000, immutable");
 
 /// Marks every response that did not choose a caching policy of its own as uncacheable, at every layer
 /// - browser, proxy and CDN.

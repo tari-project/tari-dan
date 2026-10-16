@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 mod cache;
+mod committee_cache;
 mod context;
 mod encoder;
 mod error;

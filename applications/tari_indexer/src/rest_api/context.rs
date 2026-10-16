@@ -25,12 +25,18 @@ use crate::{
     dry_run::processor::DryRunTransactionProcessor,
     network_state_sync::{ConsensusEpoch, ValidatorStatusMonitor},
     notify::Subscriber,
-    rest_api::cache::HttpCacheConfig,
+    rest_api::{
+        cache::{HttpCacheConfig, IMMUTABLE},
+        committee_cache::CommitteeProofCache,
+    },
     storage_sqlite::SqliteIndexerStore,
     store::ReadOnlyStore,
     substate_manager::SubstateManager,
     transaction_manager::TransactionManager,
 };
+
+/// Holds the committees of several hundred epochs at a few KB per committee.
+const COMMITTEE_PROOF_CACHE_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Clone)]
 pub struct HandlerContext {
@@ -57,6 +63,7 @@ impl HandlerContext {
                 watched_templates: services.watched_templates.clone(),
                 validator_status: services.validator_status.clone(),
                 consensus_epoch: services.consensus_epoch.clone(),
+                committee_proofs: CommitteeProofCache::new(COMMITTEE_PROOF_CACHE_BYTES),
             }),
         }
     }
@@ -115,6 +122,15 @@ impl HandlerContext {
         response
     }
 
+    /// Marks `body` as cacheable forever, for a response whose content can no longer change under its URL.
+    pub fn apply_immutable_cache_control(&self, body: impl IntoResponse) -> Response {
+        let mut response = body.into_response();
+        if self.is_cache_control_enabled() {
+            response.headers_mut().insert(http::header::CACHE_CONTROL, IMMUTABLE);
+        }
+        response
+    }
+
     pub fn apply_custom_cache_control(&self, headers: &mut http::HeaderMap, config: &HttpCacheConfig) {
         if self.is_cache_control_enabled() {
             config.apply(headers);
@@ -140,6 +156,10 @@ impl HandlerContext {
     pub fn consensus_epoch(&self) -> &ConsensusEpoch {
         &self.inner.consensus_epoch
     }
+
+    pub fn committee_proofs(&self) -> &CommitteeProofCache {
+        &self.inner.committee_proofs
+    }
 }
 
 struct InnerContext {
@@ -160,4 +180,5 @@ struct InnerContext {
     watched_templates: Arc<HashSet<TemplateAddress>>,
     validator_status: ValidatorStatusMonitor,
     consensus_epoch: ConsensusEpoch,
+    committee_proofs: CommitteeProofCache,
 }

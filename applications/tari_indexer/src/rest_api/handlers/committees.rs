@@ -3,12 +3,13 @@
 
 use axum::{Extension, Json, extract::Query, response::Response};
 use tari_indexer_client::types::{GetCommitteeRequest, GetCommitteeResponse};
+use tari_ootle_common_types::{Epoch, ValidatorSetHash, shard::Shard};
 
 use crate::rest_api::{
     context::HandlerContext,
     error::ErrorResponse,
     handlers::HandlerResult,
-    proofs::{committee_for_shard, num_preshards},
+    proofs::{committee_for_shard, committee_proved_against, num_preshards},
 };
 
 #[utoipa::path(
@@ -37,13 +38,55 @@ pub async fn get_committee(
             req.epoch
         )));
     }
-    let num_preshards = num_preshards(context.epoch_manager()).await?;
-    let Some(committee) = committee_for_shard(context.epoch_manager(), num_preshards, req.epoch, req.shard).await?
-    else {
+    let certified_hash = certified_validator_set_hash(&context, req.epoch, req.shard).await?;
+    let committee = match &certified_hash {
+        Some(hash) => {
+            committee_proved_against(
+                context.committee_proofs(),
+                context.epoch_manager(),
+                req.epoch,
+                hash,
+                req.shard,
+            )
+            .await?
+        },
+        None => {
+            let num_preshards = num_preshards(context.epoch_manager()).await?;
+            committee_for_shard(context.epoch_manager(), num_preshards, req.epoch, req.shard).await?
+        },
+    };
+    let Some(committee) = committee else {
         return Err(ErrorResponse::not_found(format!(
             "This indexer holds no validator set for {}",
             req.epoch
         )));
     };
-    Ok(context.apply_cache_control(Json(GetCommitteeResponse { committee }), 30))
+    let is_certified = certified_hash == Some(committee.validator_set_hash);
+    let body = Json(GetCommitteeResponse { committee });
+    if is_certified {
+        Ok(context.apply_immutable_cache_control(body))
+    } else {
+        Ok(context.apply_cache_control(body, 30))
+    }
+}
+
+/// The validator set hash of `epoch` that the stored checkpoint of the epoch before it names. Every shard group's
+/// checkpoint names the same hash, so `shard` only selects which one to read.
+async fn certified_validator_set_hash(
+    context: &HandlerContext,
+    epoch: Epoch,
+    shard: Shard,
+) -> Result<Option<ValidatorSetHash>, ErrorResponse> {
+    let Some(prev_epoch) = epoch.as_u64().checked_sub(1).map(Epoch) else {
+        return Ok(None);
+    };
+    let checkpoints = context
+        .read_only_store()
+        .epoch_checkpoint_get_all(prev_epoch, Some(shard), 1)
+        .await
+        .map_err(ErrorResponse::anyhow)?;
+    Ok(checkpoints
+        .first()
+        .filter(|checkpoint| checkpoint.epoch() == prev_epoch)
+        .and_then(|checkpoint| checkpoint.next_epoch_validator_set_hash()))
 }
