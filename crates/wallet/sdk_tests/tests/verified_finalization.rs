@@ -688,6 +688,7 @@ async fn a_walk_that_keeps_failing_for_a_day_reanchors() {
         }),
     );
     network.set_latest(1);
+    last_synced(&test, Duration::from_secs(60 * 60));
     let synced_at = validator_set_api.status().unwrap().unwrap().synced_at;
     let err = validator_set_api.sync().await.unwrap_err();
     assert!(matches!(err, ValidatorSetApiError::Unverified(_)), "{err}");
