@@ -34,6 +34,8 @@ use tari_ootle_storage::{
         Command,
         Evidence,
         LockConflict,
+        ProposalFilter,
+        TransactionPoolRecord,
         TransactionPoolStage,
         TransactionPoolStatusUpdate,
         TransactionRecord,
@@ -133,7 +135,7 @@ mod confirm_all_transitions {
         let mut num_ready = 0;
         tx.transaction_pool_for_each_ready(
             &block_id,
-            Epoch(0),
+            &ProposalFilter::new(Epoch(0)),
             &TransactionId::default(),
             usize::MAX,
             usize::MAX,
@@ -216,11 +218,11 @@ mod confirm_all_transitions {
         tx.transaction_pool_add_pending_update(&block1.as_leaf(), &TransactionPoolStatusUpdate::new(rec, true))
             .unwrap();
 
-        let count_offered = |epoch| {
+        let count_offered = |filter: ProposalFilter| {
             let mut num = 0;
             tx.transaction_pool_for_each_ready(
                 block1.id(),
-                epoch,
+                &filter,
                 &TransactionId::default(),
                 usize::MAX,
                 usize::MAX,
@@ -229,9 +231,25 @@ mod confirm_all_transitions {
             .unwrap();
             num
         };
-        assert_eq!(count_offered(Epoch(1)), 0);
-        assert_eq!(count_offered(Epoch(2)), 0);
-        assert_eq!(count_offered(Epoch(3)), 1);
+        assert_eq!(count_offered(ProposalFilter::new(Epoch(1))), 0);
+        assert_eq!(count_offered(ProposalFilter::new(Epoch(2))), 0);
+        assert_eq!(count_offered(ProposalFilter::new(Epoch(3))), 1);
+        assert_eq!(
+            count_offered(ProposalFilter::new(Epoch(1)).with_waiting_prepared_aborted()),
+            1
+        );
+
+        // The committed record is still `New`; only the pending update in block1 moves it to LocalPrepared.
+        let is_local_prepared = |rec: &TransactionPoolRecord| rec.current_stage().is_local_prepared();
+        assert!(!tx.transaction_pool_any(false, is_local_prepared).unwrap());
+        assert!(
+            tx.transaction_pool_any_in_chain(block1.id(), is_local_prepared)
+                .unwrap()
+        );
+        assert!(
+            !tx.transaction_pool_any_in_chain(zero_block.id(), is_local_prepared)
+                .unwrap()
+        );
 
         tx.rollback().unwrap();
     }
@@ -917,7 +935,7 @@ mod get_batch_for_next_block {
                 usize::MAX,
                 heavy_turn,
                 block_id,
-                Epoch(0),
+                &ProposalFilter::new(Epoch(0)),
             )
             .unwrap()
     }
@@ -939,9 +957,14 @@ mod get_batch_for_next_block {
         max_reads: usize,
     ) -> Vec<TransactionId> {
         let mut visited = Vec::new();
-        tx.transaction_pool_for_each_ready(block_id, Epoch(0), &start_id, max_records, max_reads, |rec| {
-            visited.push(*rec.id())
-        })
+        tx.transaction_pool_for_each_ready(
+            block_id,
+            &ProposalFilter::new(Epoch(0)),
+            &start_id,
+            max_records,
+            max_reads,
+            |rec| visited.push(*rec.id()),
+        )
         .unwrap();
         visited
     }

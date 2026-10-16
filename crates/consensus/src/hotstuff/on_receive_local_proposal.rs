@@ -396,6 +396,22 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         // instead, which names the value it is missing.
         let can_propose_epoch_end = em_epoch > current_epoch || local_next_epoch.epoch_hash.is_some();
 
+        // Before an end of epoch that changes the number of committees, a leader aborts transactions still waiting in
+        // LocalPrepared, and the end-of-epoch block may not leave any there. Only looked up for a block that carries
+        // such an abort or ends the epoch. A node that knows the next epoch's validator set has assigned its
+        // committees, so it can tell their number; that covers every node able to vote for an EndEpoch, including one
+        // whose oracle has not yet advanced past `current_epoch`.
+        let has_local_accept_abort = valid_block
+            .block()
+            .commands()
+            .iter()
+            .any(|cmd| cmd.local_accept().is_some_and(|atom| atom.decision.is_abort()));
+        let knows_next_epoch_committees = em_epoch > current_epoch || local_next_epoch.validator_set_hash.is_some();
+        let next_epoch_changes_layout = (has_local_accept_abort || is_epoch_end) &&
+            knows_next_epoch_committees &&
+            self.epoch_manager.get_num_committees(current_epoch + Epoch(1)).await? !=
+                local_committee_info.num_committees();
+
         let mut on_ready_to_vote_on_local_block = self.on_ready_to_vote_on_local_block.clone();
 
         // Reusing the change set allocated memory (pointers in the Vec types are passed onto the thread stack).
@@ -419,6 +435,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     &proposer_claim_public_key_bytes,
                     can_propose_epoch_end,
                     local_next_epoch,
+                    next_epoch_changes_layout,
                     &mut change_set,
                 )?;
 

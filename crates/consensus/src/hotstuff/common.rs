@@ -555,6 +555,30 @@ pub fn abort_if_local_prepared_expired(
         epoch,
         tx_rec.max_epoch(),
     );
+    Some(abort_local_prepared(tx_rec))
+}
+
+/// Moves `tx_rec` to ABORT if it is in `LocalPrepared` with a COMMIT decision, ahead of an end of epoch that changes
+/// the number of committees (see [`EpochEndDrain`](crate::hotstuff::EpochEndDrain)). Returns the abort execution the
+/// block must record.
+///
+/// CONSENSUS RULE: a replica accepts this abort, when the leader proposes it, in a block it evaluates while its own
+/// oracle reports such a next epoch. The abort is safe for the reason given at
+/// [`TransactionPoolRecord::is_local_prepared_expired_at`]: the local shard group has not sent its LocalAccept.
+pub fn abort_local_prepared_for_epoch_end(tx_rec: &mut TransactionPoolRecord) -> Option<TransactionExecution> {
+    if !tx_rec.current_stage().is_local_prepared() || !tx_rec.current_decision().is_commit() {
+        return None;
+    }
+
+    info!(
+        target: LOG_TARGET,
+        "⏰ Transaction {} is still in LocalPrepared at an end of epoch that changes the committees. Aborting.",
+        tx_rec.id(),
+    );
+    Some(abort_local_prepared(tx_rec))
+}
+
+fn abort_local_prepared(tx_rec: &mut TransactionPoolRecord) -> TransactionExecution {
     let execution = TransactionExecution::abort(tx_rec.id(), RejectReason::Abort {
         reason: AbortReason::EpochExpired,
     });
@@ -563,7 +587,7 @@ pub fn abort_if_local_prepared_expired(
         .set_transaction_fee(0)
         .set_exhaust_burn(0)
         .no_leader_fee();
-    Some(execution)
+    execution
 }
 
 /// Records the prepare/accept evidence for the commands in `new_leaf_block` and its not-yet-justified ancestors,

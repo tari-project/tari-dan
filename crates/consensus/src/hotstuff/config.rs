@@ -19,5 +19,9 @@ pub struct HotstuffConfig {
     pub state_tree_cleanup_interval: Duration,
     pub epoch_gc_interval: Duration,
     pub epoch_end_grace_period: Duration,
+    /// How long a leader drains cross-shard transactions before an end of epoch that changes the number of
+    /// committees (see [`EpochEndDrain`](crate::hotstuff::EpochEndDrain)). It must cover a healthy round trip with a
+    /// foreign shard group, so that only transactions whose foreign shard group fails to deliver are aborted.
+    pub epoch_end_drain_period: Duration,
     pub catch_up_request_timeout: Duration,
 }

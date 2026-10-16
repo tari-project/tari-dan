@@ -271,6 +271,17 @@ impl TestEpochManager {
         self
     }
 
+    /// Makes `get_num_committees(epoch)` report `num_committees`. Every other lookup keeps the `add_committees`
+    /// layout, so this models a committee-count change for the code that detects one, up to the end of the epoch
+    /// before it.
+    pub async fn set_epoch_num_committees(&self, epoch: Epoch, num_committees: u32) -> &Self {
+        self.state_lock()
+            .await
+            .epoch_num_committees
+            .insert(epoch, num_committees);
+        self
+    }
+
     pub async fn set_claim_keys(&self, dest: TestVnDestination, claim_key: RistrettoPublicKey) -> &Self {
         let mut state = self.state_lock().await;
         let num_committees = state.committees.len() as u32;
@@ -416,8 +427,14 @@ impl EpochManagerReader for TestEpochManager {
         unimplemented!()
     }
 
-    async fn get_num_committees(&self, _epoch: Epoch) -> Result<u32, EpochManagerError> {
-        Ok(self.inner.lock().await.committees.len() as u32)
+    async fn get_num_committees(&self, epoch: Epoch) -> Result<u32, EpochManagerError> {
+        let state = self.inner.lock().await;
+        let num_committees = state
+            .epoch_num_committees
+            .get(&epoch)
+            .copied()
+            .unwrap_or(state.committees.len() as u32);
+        Ok(num_committees)
     }
 
     async fn get_committee_info_by_validator_address(
@@ -635,6 +652,8 @@ pub struct TestEpochManagerState {
     /// for the lookups that read them.
     #[allow(clippy::type_complexity)]
     pub epoch_committees: HashMap<Epoch, HashMap<ShardGroup, Arc<Committee<TestAddress>>>>,
+    /// Committee counts reported by `get_num_committees`. See `TestEpochManager::set_epoch_num_committees`.
+    pub epoch_num_committees: HashMap<Epoch, u32>,
     pub address_shard: HashMap<TestAddress, ShardGroup>,
 }
 
@@ -653,6 +672,7 @@ impl Default for TestEpochManagerState {
             validator_nodes: HashMap::new(),
             committees: HashMap::new(),
             epoch_committees: HashMap::new(),
+            epoch_num_committees: HashMap::new(),
             address_shard: HashMap::new(),
         }
     }

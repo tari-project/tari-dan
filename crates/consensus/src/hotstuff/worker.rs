@@ -63,6 +63,7 @@ use super::{
 };
 use crate::{
     hotstuff::{
+        epoch_end_drain::EpochEndDrain,
         epoch_gc::EpochGc,
         epoch_state::EpochState,
         error::HotStuffError,
@@ -130,6 +131,8 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
 
     /// Epoch to switch to (Epoch, activated_at)
     next_epoch: Option<(Epoch, Instant)>,
+    /// Whether the end of the given epoch changes the number of committees. Cached for the epoch being ended.
+    next_epoch_changes_layout: Option<(Epoch, bool)>,
     epoch_manager: TConsensusSpec::EpochManager,
     pacemaker_worker: Option<PaceMaker>,
     pacemaker: PaceMakerHandle,
@@ -269,6 +272,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             transaction_pool,
 
             next_epoch: None,
+            next_epoch_changes_layout: None,
             pacemaker: pacemaker.clone_handle(),
             pacemaker_worker: Some(pacemaker),
             hooks,
@@ -1077,20 +1081,27 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             epoch_state.local_committee_info().shard_group()
         );
 
-        let propose_now = self.state_store.with_read_tx(|tx| {
+        let epoch_end_drain = self.epoch_end_drain(epoch_state).await?;
+        let (propose_now, is_epoch_end_held) = self.state_store.with_read_tx(|tx| {
             let highest_block = HighestSeenBlock::get(tx, epoch_state.epoch())?;
             // Propose quickly if there are UTXOs to mint or transactions to propose
             let propose_now = ForeignProposalRecord::has_unconfirmed(tx, epoch_state.epoch())? ||
                 self.transaction_pool.has_ready_or_pending_transaction_updates(
                     tx,
                     highest_block.block_id(),
-                    epoch_state.epoch(),
+                    &epoch_end_drain
+                        .proposal_filter(epoch_state.epoch(), epoch_state.local_committee_info().shard_group()),
                 )?;
+            let is_epoch_end_held = epoch_end_drain.is_active() &&
+                self.transaction_pool
+                    .any_in_chain(tx, highest_block.block_id(), |rec| {
+                        epoch_end_drain.holds_epoch_end_for(rec.current_stage())
+                    })?;
 
-            Ok::<_, HotStuffError>(propose_now)
+            Ok::<_, HotStuffError>((propose_now, is_epoch_end_held))
         })?;
 
-        let propose_epoch_end = self.can_propose_epoch_end(epoch_state);
+        let propose_epoch_end = self.can_propose_epoch_end(epoch_state) && !is_epoch_end_held;
         // Propose quickly if we should end the epoch (i.e base layer epoch > pacemaker epoch)
         if !propose_now && !propose_epoch_end {
             info!(target: LOG_TARGET, "[on_beat] No transactions to propose. Waiting for a timeout.");
@@ -1393,6 +1404,8 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             );
         }
 
+        let epoch_end_drain = self.epoch_end_drain(epoch_state).await?;
+
         self.on_propose
             .handle(
                 epoch_state,
@@ -1402,10 +1415,49 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 dummy_block,
                 propose_high_tc,
                 propose_epoch_end,
+                epoch_end_drain,
             )
             .await?;
 
         Ok(())
+    }
+
+    /// The drain of cross-shard transactions this node applies when proposing in `epoch_state`'s epoch. See
+    /// [`EpochEndDrain`].
+    async fn epoch_end_drain(
+        &mut self,
+        epoch_state: &EpochState<TConsensusSpec::Addr>,
+    ) -> Result<EpochEndDrain, HotStuffError> {
+        let epoch = epoch_state.epoch();
+        let Some((_, known_at)) = self.next_epoch.filter(|(e, _)| *e > epoch) else {
+            return Ok(EpochEndDrain::Inactive);
+        };
+
+        let changes_layout = match self.next_epoch_changes_layout {
+            Some((ending, changes_layout)) if ending == epoch => changes_layout,
+            _ => {
+                let next_num_committees = self.epoch_manager.get_num_committees(epoch + Epoch(1)).await?;
+                let changes_layout = next_num_committees != epoch_state.local_committee_info().num_committees();
+                if changes_layout {
+                    info!(
+                        target: LOG_TARGET,
+                        "🌊 The number of committees changes from {} to {next_num_committees} at the end of {epoch}. \
+                         Draining cross-shard transactions before proposing EndEpoch.",
+                        epoch_state.local_committee_info().num_committees(),
+                    );
+                }
+                self.next_epoch_changes_layout = Some((epoch, changes_layout));
+                changes_layout
+            },
+        };
+
+        if !changes_layout {
+            return Ok(EpochEndDrain::Inactive);
+        }
+        Ok(EpochEndDrain::after(
+            Instant::now().saturating_duration_since(known_at),
+            self.config.epoch_end_drain_period,
+        ))
     }
 
     async fn dispatch_hotstuff_message(

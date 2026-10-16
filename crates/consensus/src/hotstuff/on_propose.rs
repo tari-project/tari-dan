@@ -46,6 +46,7 @@ use tari_ootle_storage::{
         LockedEpoch,
         MultiShardAtom,
         PendingShardStateTreeDiff,
+        ProposalFilter,
         TransactionExecution,
         TransactionPool,
         TransactionPoolRecord,
@@ -59,8 +60,10 @@ use tokio::task;
 
 use crate::{
     hotstuff::{
+        EpochEndDrain,
         HotstuffConfig,
         abort_if_local_prepared_expired,
+        abort_local_prepared_for_epoch_end,
         apply_leader_fee_to_substate_store,
         block_change_set::ProposedBlockChangeSet,
         calculate_state_merkle_root,
@@ -170,6 +173,7 @@ where TConsensusSpec: ConsensusSpec
         dummy_block: Option<LeafBlock>,
         propose_high_tc: Option<TimeoutCertificate>,
         propose_epoch_end: bool,
+        epoch_end_drain: EpochEndDrain,
     ) -> Result<(), HotStuffError> {
         let epoch = epoch_state.epoch();
         let local_committee_info = *epoch_state.local_committee_info();
@@ -205,6 +209,7 @@ where TConsensusSpec: ConsensusSpec
                     &local_claim_public_key,
                     propose_high_tc,
                     next_epoch_commitment,
+                    epoch_end_drain,
                 )?;
 
                 let NextBlock {
@@ -407,9 +412,28 @@ where TConsensusSpec: ConsensusSpec
         propose_high_tc: Option<TimeoutCertificate>,
         // `Some` if we are proposing an end-of-epoch block; carries what it commits the next epoch to.
         end_epoch: Option<NextEpochCommitment>,
+        epoch_end_drain: EpochEndDrain,
     ) -> Result<NextBlock, HotStuffError> {
         let high_qc_id = high_qc_certificate.calculate_id();
         let justify_block = Block::get_justified_block(tx, &high_qc_certificate, epoch)?;
+        let end_epoch = match end_epoch {
+            Some(commitment) if epoch_end_drain.is_active() => {
+                let is_draining = self.transaction_pool.any_in_chain(tx, justify_block.id(), |rec| {
+                    epoch_end_drain.holds_epoch_end_for(rec.current_stage())
+                })?;
+                if is_draining {
+                    info!(
+                        target: LOG_TARGET,
+                        "🌊 Not proposing EndEpoch for {epoch}: cross-shard transactions are still in flight \
+                         ({epoch_end_drain:?})",
+                    );
+                    None
+                } else {
+                    Some(commitment)
+                }
+            },
+            end_epoch => end_epoch,
+        };
         let parent_block = dummy_block.unwrap_or_else(|| justify_block.as_leaf());
         let highest_seen_block = Block::get(tx, highest_seen_block.block_id())?;
         // The epoch end is read on the chain the candidate extends, which is the justify block's. A block that
@@ -441,10 +465,11 @@ where TConsensusSpec: ConsensusSpec
 
         let mut executed_transactions = HashMap::new();
 
+        let proposal_filter = epoch_end_drain.proposal_filter(epoch, local_committee_info.shard_group());
         let batch = if should_not_propose_commands {
             ProposalBatch::default()
         } else {
-            self.fetch_next_proposal_batch(tx, state_anchor_leaf, epoch, next_height)?
+            self.fetch_next_proposal_batch(tx, state_anchor_leaf, next_height, &proposal_filter)?
         };
         debug!(target: LOG_TARGET, "🌿 PROPOSE: {} (justify: {}) {batch}", highest_seen_block.height(), justify_block.height());
 
@@ -580,7 +605,21 @@ where TConsensusSpec: ConsensusSpec
             // justified block, and to propose a transaction that a foreign proposal in this block has just
             // moved to ABORT with the decision that move implies.
             change_set.apply_transaction_update(&mut transaction);
-            let expired_abort = abort_if_local_prepared_expired(&mut transaction, epoch);
+            if proposal_filter.holds_back(&transaction) {
+                debug!(
+                    target: LOG_TARGET,
+                    "🌊 PROPOSE: holding back cross-shard transaction {} until the next epoch",
+                    transaction.id(),
+                );
+                continue;
+            }
+            let expired_abort = abort_if_local_prepared_expired(&mut transaction, epoch).or_else(|| {
+                let is_waiting = proposal_filter.aborts_waiting_prepared() &&
+                    !transaction.is_ready_for_pending_stage(local_committee_info.shard_group());
+                is_waiting
+                    .then(|| abort_local_prepared_for_epoch_end(&mut transaction))
+                    .flatten()
+            });
             // Replicas withhold their vote unless the updated record is ready to leave its stage, so readiness is
             // judged on the same record here.
             if !transaction.is_ready_for_pending_stage(local_committee_info.shard_group()) {
@@ -773,8 +812,8 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &TTx,
         state_anchor_leaf: LeafBlock,
-        epoch: Epoch,
         next_height: NodeHeight,
+        proposal_filter: &ProposalFilter,
     ) -> Result<ProposalBatch, HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "fetch_next_proposal_batch");
         // A block is budgeted by total command weight (`max_block_weight`), not a flat command count.
@@ -849,7 +888,7 @@ where TConsensusSpec: ConsensusSpec
                     max_candidates.saturating_mul(PROPOSAL_READS_PER_CANDIDATE),
                     heavy_turn,
                     state_anchor_leaf.block_id(),
-                    epoch,
+                    proposal_filter,
                 )
             })
             .transpose()?

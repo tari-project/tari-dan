@@ -128,13 +128,13 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         Ok(recs)
     }
 
-    /// Fetch transactions ready to propose in a block in `epoch`, bounded by a weight budget and a hard command
-    /// count cap. See [`select_proposal_batch`] for how records are chosen.
+    /// Fetch transactions that `filter` accepts, bounded by a weight budget and a hard command count cap. See
+    /// [`select_proposal_batch`] for how records are chosen.
     ///
-    /// The candidates are the ready records that follow a random transaction id, wrapping around. At most
-    /// `max_candidates` ready records are sampled and at most `max_reads` pool records are read, ready or not, so the
-    /// cost of a call is bounded however large the pool is. When the pool holds more than that window, each call
-    /// samples a different, uniformly placed part of it.
+    /// The candidates are the accepted records that follow a random transaction id, wrapping around. At most
+    /// `max_candidates` accepted records are sampled and at most `max_reads` pool records are read, accepted or not,
+    /// so the cost of a call is bounded however large the pool is. When the pool holds more than that window, each
+    /// call samples a different, uniformly placed part of it.
     #[expect(clippy::too_many_arguments)]
     pub fn get_batch_for_next_block(
         &self,
@@ -145,7 +145,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         max_reads: usize,
         heavy_turn: bool,
         block_id: &BlockId,
-        epoch: Epoch,
+        filter: &ProposalFilter,
     ) -> Result<Vec<TransactionPoolRecord>, TransactionPoolError> {
         if weight_budget == 0 || max_count == 0 || max_candidates == 0 || max_reads == 0 {
             return Ok(Vec::new());
@@ -153,17 +153,32 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         let mut rng = rand::rng();
         let start_id = TransactionId::new(rng.random());
         let mut sample = ProposalSample::new(weight_budget, max_count, heavy_turn);
-        tx.transaction_pool_for_each_ready(block_id, epoch, &start_id, max_candidates, max_reads, |rec| {
+        tx.transaction_pool_for_each_ready(block_id, filter, &start_id, max_candidates, max_reads, |rec| {
             sample.offer(rec, &mut rng)
         })?;
         Ok(sample.into_batch(&mut rng))
+    }
+
+    /// True if any pool record, with the pending updates in the chain ending at `block_id` applied, satisfies
+    /// `predicate`.
+    pub fn any_in_chain<F>(
+        &self,
+        tx: &impl StateStoreReadTransaction,
+        block_id: &BlockId,
+        predicate: F,
+    ) -> Result<bool, TransactionPoolError>
+    where
+        F: FnMut(&TransactionPoolRecord) -> bool,
+    {
+        let found = tx.transaction_pool_any_in_chain(block_id, predicate)?;
+        Ok(found)
     }
 
     pub fn has_ready_or_pending_transaction_updates(
         &self,
         tx: &impl StateStoreReadTransaction,
         block_id: &BlockId,
-        epoch: Epoch,
+        filter: &ProposalFilter,
     ) -> Result<bool, TransactionPoolError> {
         // Check if any pending transactions have state updates that need to be applied
         if tx.transaction_pool_has_pending_state_updates(block_id)? {
@@ -182,7 +197,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         // needs further proposals until it is.
         let mut reason = None;
         let found = tx.transaction_pool_any(true, |rec| {
-            if rec.is_ready_to_propose_in(epoch) {
+            if filter.accepts(rec) {
                 reason = Some("ready to propose");
                 return true;
             }
@@ -233,6 +248,63 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         tx_ids: I,
     ) -> Result<Vec<TransactionPoolRecord>, TransactionPoolError> {
         TransactionPoolRecord::remove_all(tx, tx_ids)
+    }
+}
+
+/// Which pool records a block may propose a command for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProposalFilter {
+    epoch: Epoch,
+    abort_waiting_prepared: bool,
+    hold_back_cross_shard_for: Option<ShardGroup>,
+}
+
+impl ProposalFilter {
+    /// Accepts, for a block in `epoch`, records that are ready and records that block must abort (see
+    /// [`TransactionPoolRecord::is_local_prepared_expired_at`]).
+    pub fn new(epoch: Epoch) -> Self {
+        Self {
+            epoch,
+            abort_waiting_prepared: false,
+            hold_back_cross_shard_for: None,
+        }
+    }
+
+    /// Also accepts transactions [waiting in `LocalPrepared`](TransactionPoolRecord::is_waiting_in_local_prepared),
+    /// for the proposer to abort them.
+    pub fn with_waiting_prepared_aborted(mut self) -> Self {
+        self.abort_waiting_prepared = true;
+        self
+    }
+
+    /// Withholds cross-shard transactions that `local_shard_group` has not prepared (see
+    /// [`TransactionPoolRecord::is_unprepared_cross_shard`]).
+    pub fn with_cross_shard_held_back(mut self, local_shard_group: ShardGroup) -> Self {
+        self.hold_back_cross_shard_for = Some(local_shard_group);
+        self
+    }
+
+    pub fn epoch(&self) -> Epoch {
+        self.epoch
+    }
+
+    pub fn aborts_waiting_prepared(&self) -> bool {
+        self.abort_waiting_prepared
+    }
+
+    pub fn holds_back(&self, rec: &TransactionPoolRecord) -> bool {
+        self.hold_back_cross_shard_for
+            .is_some_and(|local_shard_group| rec.is_unprepared_cross_shard(local_shard_group))
+    }
+
+    /// True if a block may propose `rec`'s next command.
+    pub fn accepts(&self, rec: &TransactionPoolRecord) -> bool {
+        if self.holds_back(rec) {
+            return false;
+        }
+        rec.is_ready() ||
+            rec.is_local_prepared_expired_at(self.epoch) ||
+            (self.abort_waiting_prepared && rec.is_waiting_in_local_prepared())
     }
 }
 
@@ -674,9 +746,19 @@ impl TransactionPoolRecord {
             epoch.as_u64() > self.max_epoch.as_u64().saturating_add(LOCAL_PREPARED_GRACE_EPOCHS)
     }
 
-    /// True if a block in `epoch` may propose this transaction's next command.
-    pub fn is_ready_to_propose_in(&self, epoch: Epoch) -> bool {
-        self.is_ready || self.is_local_prepared_expired_at(epoch)
+    /// True if this transaction is in `LocalPrepared` with a COMMIT decision and is not ready to send its LocalAccept,
+    /// i.e. it is waiting on other shard groups.
+    pub fn is_waiting_in_local_prepared(&self) -> bool {
+        self.current_stage().is_local_prepared() && self.current_decision().is_commit() && !self.is_ready
+    }
+
+    /// True if this is a cross-shard transaction with a COMMIT decision that `local_shard_group` holds inputs of and
+    /// has not prepared, i.e. proposing it would send `LocalPrepare`.
+    pub fn is_unprepared_cross_shard(&self, local_shard_group: ShardGroup) -> bool {
+        self.current_stage().is_new() &&
+            self.current_decision().is_commit() &&
+            self.evidence.num_shard_groups() > 1 &&
+            self.evidence.has_inputs(local_shard_group)
     }
 
     pub fn current_local_decision(&self) -> Decision {
@@ -1306,9 +1388,68 @@ mod tests {
 
             assert!(!rec.is_local_prepared_expired_at(Epoch(1)));
             assert!(!rec.is_local_prepared_expired_at(Epoch(2)));
-            assert!(!rec.is_ready_to_propose_in(Epoch(2)));
+            assert!(!ProposalFilter::new(Epoch(2)).accepts(&rec));
             assert!(rec.is_local_prepared_expired_at(Epoch(3)));
-            assert!(rec.is_ready_to_propose_in(Epoch(3)));
+            assert!(ProposalFilter::new(Epoch(3)).accepts(&rec));
+        }
+
+        #[test]
+        fn a_waiting_prepared_transaction_is_proposable_for_abort_on_request() {
+            let mut rec = record_with_weight_and_stage(1, TransactionPoolStage::LocalPrepared);
+            rec.is_ready = false;
+            assert!(rec.is_waiting_in_local_prepared());
+            assert!(!ProposalFilter::new(Epoch(1)).accepts(&rec));
+            assert!(
+                ProposalFilter::new(Epoch(1))
+                    .with_waiting_prepared_aborted()
+                    .accepts(&rec)
+            );
+
+            rec.set_local_decision(Decision::Abort(AbortReason::ExecutionFailure));
+            assert!(!rec.is_waiting_in_local_prepared());
+
+            let mut rec = record_with_weight_and_stage(1, TransactionPoolStage::New);
+            rec.is_ready = false;
+            assert!(
+                !ProposalFilter::new(Epoch(1))
+                    .with_waiting_prepared_aborted()
+                    .accepts(&rec)
+            );
+        }
+
+        #[test]
+        fn an_unprepared_cross_shard_transaction_is_held_back_on_request() {
+            use tari_template_lib_types::ComponentAddress;
+
+            let input_group = ShardGroup::new(0, 127);
+            let output_group = ShardGroup::new(128, 255);
+            let mut rec = record_with_weight_and_stage(1, TransactionPoolStage::New);
+            rec.evidence_mut()
+                .add_shard_group(input_group)
+                .insert_unpledged_input(ComponentAddress::from_array([1; 32]).into());
+            rec.evidence_mut()
+                .add_shard_group(output_group)
+                .insert_output(ComponentAddress::from_array([2; 32]).into(), SubstateVersion::ZERO);
+
+            assert!(ProposalFilter::new(Epoch(1)).accepts(&rec));
+            assert!(
+                !ProposalFilter::new(Epoch(1))
+                    .with_cross_shard_held_back(input_group)
+                    .accepts(&rec)
+            );
+            // The output-only shard group accepts outputs, which does not prepare anything.
+            assert!(
+                ProposalFilter::new(Epoch(1))
+                    .with_cross_shard_held_back(output_group)
+                    .accepts(&rec)
+            );
+
+            rec.set_local_decision(Decision::Abort(AbortReason::ExecutionFailure));
+            assert!(
+                ProposalFilter::new(Epoch(1))
+                    .with_cross_shard_held_back(input_group)
+                    .accepts(&rec)
+            );
         }
 
         #[test]

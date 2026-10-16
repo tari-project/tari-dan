@@ -743,6 +743,7 @@ impl TestBuilder {
                 state_tree_cleanup_interval: Duration::from_secs(1000),
                 epoch_gc_interval: Duration::from_secs(1000),
                 epoch_end_grace_period: Duration::from_secs(1),
+                epoch_end_drain_period: Duration::from_secs(5),
                 catch_up_request_timeout: Duration::from_secs(15),
             },
         }

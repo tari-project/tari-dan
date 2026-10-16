@@ -80,6 +80,7 @@ pub async fn spawn(
         // NOTE: This value should be greater than the epoch oracle's scanning interval to avoid leader failure by race
         // condition.
         epoch_end_grace_period: Duration::from_secs(10),
+        epoch_end_drain_period: Duration::from_secs(60),
         catch_up_request_timeout: Duration::from_secs(20),
     };
 

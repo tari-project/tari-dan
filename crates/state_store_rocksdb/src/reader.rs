@@ -76,6 +76,7 @@ use tari_ootle_storage::{
         LivenessCounters,
         LockedSubstateValue,
         PendingShardStateTreeDiff,
+        ProposalFilter,
         StateVersionProof,
         StateVersionTransitions,
         SubstateChange,
@@ -253,6 +254,27 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'a, R: RocksRea
         }
 
         Ok(block_ids)
+    }
+
+    /// The latest pending transaction pool update for each transaction in the pending chain ending at `block_id`. Merge
+    /// one into its pool record to read the record's state at that block.
+    fn transaction_pool_updates_in_chain(
+        &self,
+        block_id: &BlockId,
+    ) -> Result<
+        HashMap<TransactionId, transaction_pool_state_update::TransactionPoolStateUpdateData>,
+        RocksDbStorageError,
+    > {
+        let query = self.db().cf(transaction_pool_state_update::ByBlockIdQuery)?;
+        let mut updates = HashMap::new();
+        // Oldest first so the latest update wins per transaction.
+        for block_id in self.get_pending_chain_ordered(block_id)?.into_iter().rev() {
+            for result in query.query_prefix_range_iterator(Ordering::default(), &block_id) {
+                let ((_, tx_id), update) = result?;
+                updates.insert(tx_id, update);
+            }
+        }
+        Ok(updates)
     }
 
     /// Every transaction that has a lock conflict recorded against it in any block.
@@ -1308,19 +1330,10 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         // Overlay each record's latest pending update by walking the pending chain back from the leaf block, so
         // callers see its effective state at the tip. With no leaf block yet (e.g. freshly state-synced, before
         // joining consensus) there is no pending chain and nothing to overlay.
-        let mut updates = HashMap::new();
-        if let Some(leaf_block) = self.leaf_block_get_any().optional()? {
-            let pending_chain = self.get_pending_chain_ordered(leaf_block.block_id())?;
-            let query = self.db().cf(transaction_pool_state_update::ByBlockIdQuery)?;
-            // Oldest first so the tip's update wins per transaction.
-            for block_id in pending_chain.into_iter().rev() {
-                let iter = query.query_prefix_range_iterator(Ordering::default(), &block_id);
-                for result in iter {
-                    let ((_, tx_id), update) = result?;
-                    updates.insert(tx_id, update);
-                }
-            }
-        }
+        let mut updates = match self.leaf_block_get_any().optional()? {
+            Some(leaf_block) => self.transaction_pool_updates_in_chain(leaf_block.block_id())?,
+            None => HashMap::new(),
+        };
 
         let iter = cf.value_iterator(Ordering::Ascending, OPERATION);
         let mut transactions = Vec::new();
@@ -1340,7 +1353,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
     fn transaction_pool_for_each_ready<F>(
         &self,
         block_id: &BlockId,
-        epoch: Epoch,
+        filter: &ProposalFilter,
         start_id: &TransactionId,
         max_records: usize,
         max_reads: usize,
@@ -1357,23 +1370,8 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         }
 
         let cf = self.db().cf(TransactionPoolCf)?;
-
-        let query = self.db().cf(transaction_pool_state_update::ByBlockIdQuery)?;
         let lock_conflicted = self.lock_conflicted_transaction_ids()?;
-
-        let pending_chain = self.get_pending_chain_ordered(block_id)?;
-
-        let mut updates = HashMap::new();
-        for block_id in pending_chain.into_iter().rev() {
-            let iter = query.query_prefix_range_iterator(Ordering::default(), &block_id);
-            for result in iter {
-                let ((_, tx_id), update) = result?;
-                if lock_conflicted.contains(&tx_id) {
-                    continue;
-                }
-                updates.insert(tx_id, update);
-            }
-        }
+        let mut updates = self.transaction_pool_updates_in_chain(block_id)?;
 
         let iter = cf
             .table_range_value_iterator(Ordering::Ascending, Some(start_id), None, OPERATION)
@@ -1392,7 +1390,7 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
             if let Some(update) = updates.remove(tx.id()) {
                 update.merge_into(&mut tx);
             }
-            if tx.is_ready_to_propose_in(epoch) {
+            if filter.accepts(&tx) {
                 f(tx);
                 num_offered += 1;
                 if num_offered == max_records {
@@ -1462,6 +1460,25 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
         for result in cf.value_iterator(Ordering::default(), OPERATION) {
             let rec = result?;
             if !lock_conflicted.contains(rec.id()) && predicate(&rec) {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
+    }
+
+    fn transaction_pool_any_in_chain<F>(&self, block_id: &BlockId, mut predicate: F) -> Result<bool, StorageError>
+    where F: FnMut(&TransactionPoolRecord) -> bool {
+        const OPERATION: &str = "transaction_pool_any_in_chain";
+
+        let mut updates = self.transaction_pool_updates_in_chain(block_id)?;
+        let cf = self.db().cf(TransactionPoolCf)?;
+        for result in cf.value_iterator(Ordering::default(), OPERATION) {
+            let mut rec = result?;
+            if let Some(update) = updates.remove(rec.id()) {
+                update.merge_into(&mut rec);
+            }
+            if predicate(&rec) {
                 return Ok(true);
             }
         }
