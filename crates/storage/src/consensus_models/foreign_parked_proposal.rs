@@ -13,7 +13,7 @@ use crate::{
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
-    consensus_models::{BlockPledge, CommandsCommitProof, ForeignProposal},
+    consensus_models::{BlockHeaderMetadata, BlockPledge, CommandsCommitProof, ForeignProposal},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, CborLen)]
@@ -24,15 +24,22 @@ pub struct ForeignParkedProposal {
     commit_proof: CommandsCommitProof,
     #[n(2)]
     block_pledge: BlockPledge,
+    #[n(3)]
+    block_metadata: BlockHeaderMetadata,
 }
 
 impl ForeignParkedProposal {
-    pub fn new(commit_proof: CommandsCommitProof, block_pledge: BlockPledge) -> Self {
+    pub fn new(
+        commit_proof: CommandsCommitProof,
+        block_pledge: BlockPledge,
+        block_metadata: BlockHeaderMetadata,
+    ) -> Self {
         let block_id = commit_proof.calculate_block_id();
         Self {
             block_id: block_id.into(),
             commit_proof,
             block_pledge,
+            block_metadata,
         }
     }
 
@@ -41,7 +48,7 @@ impl ForeignParkedProposal {
     }
 
     pub fn into_proposal(self) -> ForeignProposal {
-        ForeignProposal::new(self.commit_proof, self.block_pledge)
+        ForeignProposal::new(self.commit_proof, self.block_pledge, self.block_metadata)
     }
 
     pub fn block_id(&self) -> &BlockId {

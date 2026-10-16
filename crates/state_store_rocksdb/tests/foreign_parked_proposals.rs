@@ -38,8 +38,8 @@ fn run_test(db: impl StateStore) {
     let blocks = tx.foreign_parked_blocks_remove_all_by_transaction(&tx_1).unwrap();
     assert!(blocks.is_empty());
 
-    let (commit_proof, block_pledge) = fp.into_proposal().into_parts();
-    let parked = ForeignParkedProposal::new(commit_proof, block_pledge);
+    let (commit_proof, block_pledge, block_metadata) = fp.into_proposal().into_parts();
+    let parked = ForeignParkedProposal::new(commit_proof, block_pledge, block_metadata);
     parked.insert(&mut tx).unwrap();
     parked.add_missing_transactions(&mut tx, &[tx_1, tx_2, tx_3]).unwrap();
 
@@ -89,10 +89,10 @@ fn park<TTx: StateStoreWriteTransaction>(
     epoch: Epoch,
     missing: &[TransactionId],
 ) -> BlockId {
-    let (commit_proof, block_pledge) = create_foreign_proposal(*parent.id(), epoch)
+    let (commit_proof, block_pledge, block_metadata) = create_foreign_proposal(*parent.id(), epoch)
         .into_proposal()
         .into_parts();
-    let parked = ForeignParkedProposal::new(commit_proof, block_pledge);
+    let parked = ForeignParkedProposal::new(commit_proof, block_pledge, block_metadata);
     parked.insert(tx).unwrap();
     parked.add_missing_transactions(tx, missing).unwrap();
     *parked.block_id()

@@ -8,8 +8,10 @@
 //! leader proposing the end-of-epoch block that opens the next epoch, and once by every replica
 //! voting on that block. Between those two points it is a header field, never a substate read.
 //!
-//! Every node resolves the same value because the answer depends only on the epoch and on the
-//! governance component, which lives on the global shard and so is held by every shard group.
+//! The rate an epoch opens at governs the transactions a shard group settles on its own. A
+//! transaction that spans shard groups settles at the rate named by the block it is pinned to,
+//! which a foreign proposal carries in its proven block metadata, so shard groups need not agree on
+//! the rate an epoch opened at for every group to settle that transaction alike.
 
 use log::*;
 use tari_engine_types::{
@@ -25,12 +27,17 @@ use crate::hotstuff::HotStuffError;
 
 const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::exhaust_burn_rate";
 
-/// The exhaust burn rate `epoch` runs at.
+/// The exhaust burn rate `epoch` opens at for this shard group.
 ///
-/// Reads committed state rather than anything pending, which is sound because a council transaction
-/// cannot name an activation epoch less than `MIN_BURN_RATE_ACTIVATION_LEAD_EPOCHS` ahead of the
-/// epoch it executes in. The end-of-epoch block of epoch `N` resolves the rate for `N + 1`, so every
-/// change that can reach `N + 1` was committed in `N - 1` at the latest.
+/// Reads committed state rather than anything pending. A council transaction cannot name an
+/// activation epoch less than `MIN_BURN_RATE_ACTIVATION_LEAD_EPOCHS` ahead of the epoch it executes
+/// in: the template measures the lead time from the transaction's pinned epoch, and consensus aborts
+/// a governance call executing in any other epoch. The end-of-epoch block of epoch `N` resolves the
+/// rate for `N + 1`, so every change that can reach `N + 1` executed in `N - 1` at the latest.
+///
+/// Each shard group commits a change on its own schedule, so two groups can open the same epoch at
+/// different rates. That governs only the transactions each group settles on its own: a transaction
+/// spanning groups settles at the rate its pinning block names.
 pub fn resolve_epoch_exhaust_burn_rate<TTx: StateStoreReadTransaction>(
     tx: &TTx,
     network: Network,

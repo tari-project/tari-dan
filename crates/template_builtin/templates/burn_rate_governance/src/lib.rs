@@ -58,8 +58,9 @@ mod template {
                  {current_epoch} may activate at is {earliest}"
             );
 
-            // A foreign proposal from the previous epoch can still reach a shard group after this
-            // commits, and resolves its rate from this schedule, so the entry in force there stays.
+            // Consensus reads this schedule only to open an epoch: the end-of-epoch block resolves the
+            // next one, and a node starting consensus resolves the epoch it starts in. Neither opens an
+            // epoch before the one this call executes in, so every entry they can still ask for survives.
             prune_before(&mut self.schedule, current_epoch.saturating_sub(1));
             schedule_change(&mut self.schedule, BurnRateChange {
                 activation_epoch,

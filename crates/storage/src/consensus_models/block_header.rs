@@ -737,6 +737,13 @@ impl BlockHeaderMetadata {
         self.extra_data
             .get_validator_set_hash(&ExtraFieldKey::NextEpochValidatorSetHash)
     }
+
+    /// The exhaust burn rate the block names for its epoch, or `None` if it names none or one above the ceiling.
+    pub fn try_exhaust_burn_rate(&self) -> Option<ExhaustBurnRate> {
+        self.extra_data
+            .get_bps(&ExtraFieldKey::ExhaustBurnRate)
+            .and_then(ExhaustBurnRate::try_new)
+    }
 }
 
 #[derive(Debug, BorshSerialize)]

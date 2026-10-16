@@ -15,8 +15,8 @@ pub struct ForeignProposalMessage {
 
 impl From<ForeignProposalMessage> for ForeignParkedProposal {
     fn from(msg: ForeignProposalMessage) -> Self {
-        let (commit_proof, block_pledge) = msg.proposal.into_parts();
-        ForeignParkedProposal::new(commit_proof, block_pledge)
+        let (commit_proof, block_pledge, block_metadata) = msg.proposal.into_parts();
+        ForeignParkedProposal::new(commit_proof, block_pledge, block_metadata)
     }
 }
 

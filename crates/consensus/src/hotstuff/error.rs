@@ -315,6 +315,18 @@ pub enum ProposalValidationError {
         details: anyhow::Error,
     },
 
+    #[error(
+        "Foreign proposal for block {block_id} from {shard_group} carries block metadata that does not hash to the \
+         metadata hash its proven header commits to"
+    )]
+    ForeignBlockMetadataNotProven { block_id: BlockId, shard_group: ShardGroup },
+
+    #[error(
+        "Foreign proposal for block {block_id} from {shard_group} names no exhaust burn rate its transactions can \
+         settle at"
+    )]
+    ForeignBlockNamesNoExhaustBurnRate { block_id: BlockId, shard_group: ShardGroup },
+
     #[error("Foreign proposal commit proof error: {0}")]
     ForeignProposalCommitProofError(#[from] ForeignProposalCommitProofError),
 

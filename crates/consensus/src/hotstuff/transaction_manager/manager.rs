@@ -134,6 +134,18 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         None
     }
 
+    /// The abort `transaction` earns for executing in a block of `block_epoch` while pinned to
+    /// `pinned_epoch`, or `None` if it may execute.
+    fn execution_abort_reason(
+        &self,
+        transaction: &Transaction,
+        pinned_epoch: Epoch,
+        block_epoch: Epoch,
+    ) -> Option<AbortReason> {
+        self.window_abort_reason(pinned_epoch, transaction.max_epoch())
+            .or_else(|| burn_rate_governance_abort_reason(transaction, pinned_epoch, block_epoch))
+    }
+
     pub fn prepare<TTx: StateStoreReadTransaction>(
         &self,
         store: &mut PendingSubstateStore<TTx>,
@@ -320,16 +332,17 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
     pub fn execute(
         &self,
         execution_epoch: LockedEpoch,
+        block_epoch: Epoch,
         pledged_transaction: PledgedTransaction,
     ) -> Result<TransactionExecution, BlockTransactionExecutorError> {
-        let max_epoch = pledged_transaction.transaction.transaction().max_epoch();
-        if let Some(reason) = self.window_abort_reason(execution_epoch.epoch(), max_epoch) {
+        let transaction = pledged_transaction.transaction.transaction();
+        if let Some(reason) = self.execution_abort_reason(transaction, execution_epoch.epoch(), block_epoch) {
             warn!(
                 target: LOG_TARGET,
-                "⏰ Transaction {} is outside its validity window ({reason}): execution epoch {} against max_epoch {}",
+                "⏰ Transaction {} cannot execute in a block of {block_epoch} ({reason}): pinned to {}, max_epoch {}",
                 pledged_transaction.transaction.id(),
                 execution_epoch,
-                max_epoch,
+                transaction.max_epoch(),
             );
             return Ok(TransactionExecution::abort(
                 pledged_transaction.transaction.id(),
@@ -367,14 +380,16 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         block: &LeafBlock,
         execution_locked_epoch: LockedEpoch,
     ) -> Result<TransactionExecution, BlockTransactionExecutorError> {
-        let max_epoch = transaction.transaction().max_epoch();
-        if let Some(reason) = self.window_abort_reason(execution_locked_epoch.epoch(), max_epoch) {
+        if let Some(reason) =
+            self.execution_abort_reason(transaction.transaction(), execution_locked_epoch.epoch(), block.epoch)
+        {
             warn!(
                 target: LOG_TARGET,
-                "⏰ Transaction {} is outside its validity window ({reason}): execution epoch {} against max_epoch {}",
+                "⏰ Transaction {} cannot execute in a block of {} ({reason}): pinned to {}, max_epoch {}",
                 transaction.id(),
+                block.epoch,
                 execution_locked_epoch.epoch(),
-                max_epoch,
+                transaction.transaction().max_epoch(),
             );
             return Ok(TransactionExecution::abort(transaction.id(), RejectReason::Abort {
                 reason,
@@ -838,29 +853,155 @@ fn declared_lock_intent(decl: &InputDeclarationRef<'_>, version: SubstateVersion
     }
 }
 
+/// The abort a transaction declaring the burn rate governance component earns for executing in a
+/// later epoch than the one it was pinned to, or `None` if it may execute.
+///
+/// The template holds an activation to a lead time measured from `Consensus::current_epoch()`, which
+/// is the pinned epoch. Consensus resolves an epoch's rate from committed state on the premise that
+/// the lead time runs from the epoch the call actually executes in, so the two epochs must be the
+/// same. Every shard group holds the component and executes the call, and an abort from any one of
+/// them aborts it everywhere.
+fn burn_rate_governance_abort_reason(
+    transaction: &Transaction,
+    pinned_epoch: Epoch,
+    block_epoch: Epoch,
+) -> Option<AbortReason> {
+    if block_epoch == pinned_epoch {
+        return None;
+    }
+    transaction
+        .all_inputs_substate_ids_iter()
+        .any(|id| id.is_burn_rate_governance())
+        .then_some(AbortReason::GovernanceCallAfterPinnedEpoch)
+}
+
 #[cfg(test)]
 mod tests {
+    use tari_common_types::types::PrivateKey;
+    use tari_consensus_types::BlockId;
     use tari_engine_types::{
         non_fungible::NonFungibleContainer,
         substate::{SubstateId, SubstateValue},
     };
     use tari_ootle_common_types::{
         InputDeclarationRef,
+        NumPreshards,
+        ShardGroup,
         SubstateLockType,
         SubstateRequirement,
         SubstateVersion,
         VersionedSubstateId,
     };
-    use tari_ootle_storage::consensus_models::SubstatePledge;
-    use tari_ootle_transaction::TransactionId;
+    use tari_ootle_storage::consensus_models::{LockedEpoch, SubstatePledge, TransactionRecord};
+    use tari_ootle_transaction::{Transaction, TransactionId};
+    use tari_state_store_rocksdb::RocksDbStateStore;
     use tari_template_lib_types::{
         ComponentAddress,
         ObjectKey,
-        constants::{PUBLIC_IDENTITY_RESOURCE_ADDRESS, STEALTH_TARI_RESOURCE_ADDRESS},
+        constants::{
+            BURN_RATE_GOVERNANCE_COMPONENT_ADDRESS,
+            PUBLIC_IDENTITY_RESOURCE_ADDRESS,
+            STEALTH_TARI_RESOURCE_ADDRESS,
+        },
     };
 
-    use super::{declared_lock_intent, resolve_foreign_input_pledges};
-    use crate::traits::BlockTransactionExecutorError;
+    use super::*;
+
+    /// Stands in for the engine: any transaction that reaches it fails, so a test can tell an
+    /// execution from an abort consensus decided before executing.
+    struct RefusingExecutor;
+
+    impl BlockTransactionExecutor<RocksDbStateStore<String>> for RefusingExecutor {
+        fn execute(
+            &self,
+            _transaction: &Transaction,
+            _locked_epoch: LockedEpoch,
+            _resolved_inputs: &HashMap<SubstateRequirement, Substate>,
+        ) -> Result<TransactionExecution, BlockTransactionExecutorError> {
+            Err(BlockTransactionExecutorError::ExecutionThreadFailure(
+                "reached the engine".to_string(),
+            ))
+        }
+    }
+
+    fn manager() -> ConsensusTransactionManager<RefusingExecutor, RocksDbStateStore<String>> {
+        ConsensusTransactionManager::new(RefusingExecutor, 2160, usize::MAX)
+    }
+
+    fn calling(component: ComponentAddress) -> PledgedTransaction {
+        let transaction = Transaction::builder_localnet(Epoch(100))
+            .add_input(SubstateRequirement::unversioned(component))
+            .build_and_seal(&PrivateKey::from(1u64));
+        PledgedTransaction {
+            transaction: TransactionRecord::new(transaction),
+            foreign_pledges: Vec::new(),
+            local_pledges: Vec::new(),
+        }
+    }
+
+    fn pinned_to(epoch: u64) -> LockedEpoch {
+        LockedEpoch::new(Epoch(epoch), Default::default(), Default::default())
+    }
+
+    #[test]
+    fn a_governance_call_executing_after_its_pinned_epoch_aborts() {
+        let execution = manager()
+            .execute(pinned_to(5), Epoch(6), calling(BURN_RATE_GOVERNANCE_COMPONENT_ADDRESS))
+            .expect("aborts before reaching the engine");
+        assert_eq!(
+            execution.decision().abort_reason(),
+            Some(AbortReason::GovernanceCallAfterPinnedEpoch)
+        );
+    }
+
+    #[test]
+    fn a_governance_call_prepared_after_its_pinned_epoch_aborts() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RocksDbStateStore::<String>::open(dir.path().join("db"), Default::default()).unwrap();
+        let block = LeafBlock {
+            block_id: BlockId::zero(),
+            height: Default::default(),
+            epoch: Epoch(6),
+            shard_group: ShardGroup::all_shards(NumPreshards::P256),
+        };
+        let pledged = calling(BURN_RATE_GOVERNANCE_COMPONENT_ADDRESS);
+
+        let execution = store
+            .with_read_tx(|tx| {
+                let mut substate_store = PendingSubstateStore::init(tx, block, NumPreshards::P256)?;
+                manager().execute_or_fetch(
+                    &mut substate_store,
+                    &pledged.transaction,
+                    &HashMap::new(),
+                    &block,
+                    pinned_to(5),
+                )
+            })
+            .expect("aborts before reaching the engine");
+        assert_eq!(
+            execution.decision().abort_reason(),
+            Some(AbortReason::GovernanceCallAfterPinnedEpoch)
+        );
+    }
+
+    #[test]
+    fn a_governance_call_executing_in_its_pinned_epoch_executes() {
+        let result = manager().execute(pinned_to(5), Epoch(5), calling(BURN_RATE_GOVERNANCE_COMPONENT_ADDRESS));
+        assert!(matches!(
+            result,
+            Err(BlockTransactionExecutorError::ExecutionThreadFailure(_))
+        ));
+    }
+
+    #[test]
+    fn an_ordinary_call_executing_after_its_pinned_epoch_executes() {
+        let component = ComponentAddress::new(ObjectKey::from_array([1; 32]));
+        let result = manager().execute(pinned_to(5), Epoch(6), calling(component));
+        assert!(matches!(
+            result,
+            Err(BlockTransactionExecutorError::ExecutionThreadFailure(_))
+        ));
+    }
 
     fn lock_type(decl: InputDeclarationRef<'_>) -> SubstateLockType {
         declared_lock_intent(&decl, SubstateVersion::ZERO).lock_type()

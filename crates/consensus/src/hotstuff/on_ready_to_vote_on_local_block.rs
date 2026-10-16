@@ -1760,7 +1760,6 @@ where TConsensusSpec: ConsensusSpec
 
         if let Err(err) = process_foreign_block(
             tx,
-            self.config.network,
             fp.proposal(),
             local_committee_info,
             substate_store,
@@ -1812,7 +1811,7 @@ where TConsensusSpec: ConsensusSpec
 
         let execution = self
             .transaction_manager
-            .execute(locked_epoch, pledged)
+            .execute(locked_epoch, block.epoch, pledged)
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
 
         Ok(execution.for_block(block, transaction_id))

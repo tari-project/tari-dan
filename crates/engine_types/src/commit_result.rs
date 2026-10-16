@@ -656,6 +656,10 @@ pub enum AbortReason {
     /// groups involved, so no block could deliver them.
     #[n(10)]
     InputPledgeTooLarge,
+    /// The transaction calls the burn rate governance component and reached execution in a later
+    /// epoch than the one it was pinned to. The council can resubmit it.
+    #[n(11)]
+    GovernanceCallAfterPinnedEpoch,
 }
 
 impl Display for AbortReason {

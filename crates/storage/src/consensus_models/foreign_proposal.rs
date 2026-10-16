@@ -19,7 +19,7 @@ use tari_ootle_transaction::TransactionId;
 use tari_sidechain::QuorumCertificate;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
-use super::{BlockPledge, Command, CommandOrHash, CommandsCommitProof, LockedEpoch};
+use super::{BlockHeaderMetadata, BlockPledge, Command, CommandOrHash, CommandsCommitProof, LockedEpoch};
 use crate::{StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
 
 /// How many epochs either side of the local epoch a foreign proposal may come from. Prepare and accept rounds may
@@ -369,13 +369,22 @@ pub struct ForeignProposal {
     commit_proof: CommandsCommitProof,
     #[n(1)]
     block_pledge: BlockPledge,
+    /// The preimage of the metadata hash in the proven header, which a validator checks against that hash before
+    /// reading anything from it.
+    #[n(2)]
+    block_metadata: BlockHeaderMetadata,
 }
 
 impl ForeignProposal {
-    pub fn new(commit_proof: CommandsCommitProof, block_pledge: BlockPledge) -> Self {
+    pub fn new(
+        commit_proof: CommandsCommitProof,
+        block_pledge: BlockPledge,
+        block_metadata: BlockHeaderMetadata,
+    ) -> Self {
         Self {
             commit_proof,
             block_pledge,
+            block_metadata,
         }
     }
 
@@ -397,6 +406,21 @@ impl ForeignProposal {
 
     pub fn block_pledge(&self) -> &BlockPledge {
         &self.block_pledge
+    }
+
+    pub fn block_metadata(&self) -> &BlockHeaderMetadata {
+        &self.block_metadata
+    }
+
+    /// Whether [`Self::block_metadata`] is the preimage of the metadata hash in the proven header.
+    pub fn is_block_metadata_proven(&self) -> bool {
+        self.block_metadata.calculate_hash() == self.commit_proof.sidechain_block_commit_proof().header.metadata_hash
+    }
+
+    /// The exhaust burn rate the proposing block names for its epoch, which every transaction this proposal pins
+    /// settles at. Validation rejects a proposal whose proven metadata names none.
+    pub fn exhaust_burn_rate(&self) -> Option<ExhaustBurnRate> {
+        self.block_metadata.try_exhaust_burn_rate()
     }
 
     pub fn get_justify_qc(&self) -> Option<&QuorumCertificate> {
@@ -424,12 +448,8 @@ impl ForeignProposal {
         &self.commit_proof.sidechain_block_commit_proof().header().epoch_hash
     }
 
-    /// The execution context this proposal pins a transaction to.
-    ///
-    /// `exhaust_burn_rate` is supplied rather than read off the proposal: a foreign proposal is
-    /// proved against the layer-1 shaped header, which carries the block's metadata hash and not the
-    /// extra data the rate lives in. The caller resolves it for [`Self::epoch`] from the governance
-    /// schedule, which keeps the rate of every epoch a foreign proposal can still carry.
+    /// The execution context this proposal pins a transaction to, at the `exhaust_burn_rate` the proposing block
+    /// names (see [`Self::exhaust_burn_rate`]).
     pub fn to_locked_epoch(&self, exhaust_burn_rate: ExhaustBurnRate) -> LockedEpoch {
         LockedEpoch::new(self.epoch(), self.epoch_hash().into_array().into(), exhaust_burn_rate)
     }
@@ -511,8 +531,8 @@ impl ForeignProposal {
         self.commands().iter().filter_map(|cmd| cmd.command())
     }
 
-    pub fn into_parts(self) -> (CommandsCommitProof, BlockPledge) {
-        (self.commit_proof, self.block_pledge)
+    pub fn into_parts(self) -> (CommandsCommitProof, BlockPledge, BlockHeaderMetadata) {
+        (self.commit_proof, self.block_pledge, self.block_metadata)
     }
 }
 
