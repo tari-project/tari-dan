@@ -12225,6 +12225,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "tari_ootle_light_client"
+version = "0.1.0"
+dependencies = [
+ "indexmap 2.14.2",
+ "ootle-network",
+ "serde",
+ "tari_bor",
+ "tari_common_types",
+ "tari_crypto",
+ "tari_engine_types",
+ "tari_indexer_client",
+ "tari_ootle_common_types",
+ "tari_ootle_storage",
+ "tari_ootle_transaction",
+ "tari_sidechain",
+ "tari_state_tree",
+ "tari_template_lib_types",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "tari_ootle_p2p"
 version = "0.46.1"
 dependencies = [

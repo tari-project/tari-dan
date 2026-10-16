@@ -1,6 +1,6 @@
 [package]
 name = "tari_ootle_storage"
-publish = false
+description = "Consensus models, state store traits and proof verification for Tari Ootle"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
