@@ -220,7 +220,8 @@ pub async fn fetch_substates(
     if include_proofs {
         if cached_only {
             return Err(ErrorResponse::bad_request(
-                "include_proofs cannot be combined with cached_only: the proofs are fetched from the committee",
+                "include_proofs cannot be combined with cached_only: a proof the indexer does not hold is fetched \
+                 from the committee",
             ));
         }
         require_proof_verification(context.substate_manager().verifies_substates())?;
