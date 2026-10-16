@@ -1,7 +1,11 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    sync::Mutex,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use log::*;
 use ootle_network::Network;
@@ -9,6 +13,7 @@ use tari_indexer_client::types::EpochCheckpointEntry;
 use tari_ootle_common_types::{
     Epoch,
     ShardGroup,
+    ValidatorSetHash,
     optional::{IsNotFoundError, Optional},
     shard::Shard,
 };
@@ -47,6 +52,43 @@ const REANCHOR_AFTER_FAILING_FOR: Duration = Duration::from_secs(24 * 60 * 60);
 /// The most checkpoints one request of a walk asks for, which is the most an indexer serves at once.
 const CHECKPOINTS_PER_REQUEST: u32 = 100;
 
+/// The most committees [`ValidatorSetShared`] keeps verified at once.
+const MAX_CACHED_COMMITTEES: usize = 256;
+
+/// What every clone of the SDK shares about the validator sets it trusts.
+#[derive(Default)]
+pub struct ValidatorSetShared {
+    /// Held while walking or re-anchoring, so that one change to the trusted sets completes before the next starts.
+    lock: tokio::sync::Mutex<()>,
+    /// Committees verified against the trusted validator set of their epoch, by epoch and shard group. An entry is
+    /// used only while the set it was verified against is the one the wallet trusts for its epoch.
+    committees: Mutex<HashMap<(Epoch, ShardGroup), VerifiedCommittee>>,
+}
+
+impl ValidatorSetShared {
+    fn cached_committee(
+        &self,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+        validator_set_hash: &ValidatorSetHash,
+    ) -> Option<VerifiedCommittee> {
+        self.committees
+            .lock()
+            .unwrap()
+            .get(&(epoch, shard_group))
+            .filter(|committee| committee.validator_set_hash() == validator_set_hash)
+            .cloned()
+    }
+
+    fn cache_committee(&self, committee: VerifiedCommittee) {
+        let mut committees = self.committees.lock().unwrap();
+        if committees.len() >= MAX_CACHED_COMMITTEES {
+            committees.clear();
+        }
+        committees.insert((committee.epoch(), committee.shard_group()), committee);
+    }
+}
+
 /// Keeps the wallet's trust in the network's validator sets: it anchors on a validator set, walks the end-of-epoch
 /// handovers from it, and verifies committees against the sets it trusts.
 ///
@@ -56,8 +98,7 @@ pub struct ValidatorSetApi<'a, TStore, TNetworkInterface> {
     store: &'a TStore,
     network_interface: &'a TNetworkInterface,
     network: Network,
-    /// Held while walking or re-anchoring, so that one change to the trusted sets completes before the next starts.
-    lock: &'a tokio::sync::Mutex<()>,
+    shared: &'a ValidatorSetShared,
 }
 
 impl<'a, TStore, TNetworkInterface> ValidatorSetApi<'a, TStore, TNetworkInterface>
@@ -69,13 +110,13 @@ where
         store: &'a TStore,
         network_interface: &'a TNetworkInterface,
         network: Network,
-        lock: &'a tokio::sync::Mutex<()>,
+        shared: &'a ValidatorSetShared,
     ) -> Self {
         Self {
             store,
             network_interface,
             network,
-            lock,
+            shared,
         }
     }
 
@@ -106,7 +147,7 @@ where
     /// however recently the wallet synced, so an indexer that keeps the walk failing that long chooses the new anchor,
     /// as it does on first use. A walk that fails keeps the sets verified before the failure.
     pub async fn sync(&self) -> Result<TrustedValidatorSet, ValidatorSetApiError> {
-        let _guard = self.lock.lock().await;
+        let _guard = self.shared.lock.lock().await;
         let latest_checkpoint = self.latest_checkpoint().await?;
         let Some(trusted) = self.latest()? else {
             info!(target: LOG_TARGET, "Anchoring on the validator set that the checkpoint of {} names", latest_checkpoint.epoch);
@@ -146,7 +187,7 @@ where
     /// the indexer as first use does, and is how the wallet recovers when the network's checkpoints do not walk from
     /// its anchor.
     pub async fn reanchor(&self) -> Result<TrustedValidatorSet, ValidatorSetApiError> {
-        let _guard = self.lock.lock().await;
+        let _guard = self.shared.lock.lock().await;
         let latest_checkpoint = self.latest_checkpoint().await?;
         warn!(target: LOG_TARGET, "Re-anchoring on the validator set that the checkpoint of {} names", latest_checkpoint.epoch);
         self.anchor_on(&latest_checkpoint, ValidatorSetAnchor::Reanchor)
@@ -178,12 +219,20 @@ where
         else {
             return Ok(None);
         };
+        if let Some(committee) = self
+            .shared
+            .cached_committee(epoch, shard_group, validator_set.validator_set_hash())
+        {
+            return Ok(Some(committee));
+        }
         let committee = self
             .network_interface
             .get_committee(epoch, shard_group.start())
             .await
             .map_err(network_error)?;
-        Ok(Some(validator_set.verify_committee(&committee)?))
+        let committee = validator_set.verify_committee(&committee)?;
+        self.shared.cache_committee(committee.clone());
+        Ok(Some(committee))
     }
 
     async fn latest_checkpoint(&self) -> Result<EpochCheckpointEntry, ValidatorSetApiError> {

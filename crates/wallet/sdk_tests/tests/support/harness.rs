@@ -40,6 +40,7 @@ use tari_ootle_wallet_sdk::{
         WalletLockId,
     },
     network::{
+        FetchedSubstates,
         SubstateQueryResult,
         TransactionFinalizedStream,
         TransactionQueryResult,
@@ -246,11 +247,12 @@ impl WalletNetworkInterface for CannedTransactionResultInterface {
         _address: &SubstateId,
         _version: Option<SubstateVersion>,
         _local_search_only: bool,
+        _include_proof: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
         panic!("CannedTransactionResultInterface called")
     }
 
-    async fn get_substates(&self, _: Vec<SubstateId>) -> Result<HashMap<SubstateId, Substate>, Self::Error> {
+    async fn get_substates(&self, _: Vec<SubstateId>, _: bool) -> Result<FetchedSubstates, Self::Error> {
         panic!("CannedTransactionResultInterface called")
     }
 
@@ -356,11 +358,12 @@ impl WalletNetworkInterface for PanicNetworkInterface {
         _address: &SubstateId,
         _version: Option<SubstateVersion>,
         _local_search_only: bool,
+        _include_proof: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
         panic!("PanicNetworkInterface called")
     }
 
-    async fn get_substates(&self, _: Vec<SubstateId>) -> Result<HashMap<SubstateId, Substate>, Self::Error> {
+    async fn get_substates(&self, _: Vec<SubstateId>, _: bool) -> Result<FetchedSubstates, Self::Error> {
         panic!("PanicNetworkInterface called")
     }
 

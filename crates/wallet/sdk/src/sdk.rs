@@ -36,7 +36,7 @@ use crate::{
         substate::SubstatesApi,
         template::TemplateApi,
         transaction::TransactionApi,
-        validator_set::ValidatorSetApi,
+        validator_set::{ValidatorSetApi, ValidatorSetShared},
         viewable_balance::ViewableBalanceApi,
     },
     cipher_seed::{CipherSeedRestore, WalletCipherSeed},
@@ -60,8 +60,8 @@ pub struct WalletSdkConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum IndexerTrust {
-    /// Commits a transaction's changes only once a proof shows the network committed them, verified against the
-    /// validator set the wallet walks to from its anchor.
+    /// Commits a transaction's changes only once a proof shows the network committed them, and reads a substate only
+    /// with a proof of its recent state, each verified against the validator sets the wallet walks to from its anchor.
     #[default]
     Verify,
     /// Takes the indexer at its word. For development against indexers that serve no proofs.
@@ -80,8 +80,7 @@ pub struct WalletSdk<TSpec: WalletSdkSpec> {
     key_store: TSpec::KeyStore,
     config: WalletSdkConfig,
     epoch_birthday: EpochBirthday,
-    /// Held while the wallet walks or re-anchors its trusted validator set, shared by every clone of the SDK.
-    validator_set_lock: Arc<tokio::sync::Mutex<()>>,
+    validator_sets: Arc<ValidatorSetShared>,
 }
 
 impl<TSpec: WalletSdkSpec> WalletSdk<TSpec> {
@@ -100,7 +99,7 @@ impl<TSpec: WalletSdkSpec> WalletSdk<TSpec> {
             key_store,
             config,
             epoch_birthday,
-            validator_set_lock: Arc::default(),
+            validator_sets: Arc::default(),
         })
     }
 
@@ -190,12 +189,17 @@ impl<TSpec: WalletSdkSpec> WalletSdk<TSpec> {
             &self.store,
             &self.network_interface,
             self.config.network,
-            &self.validator_set_lock,
+            &self.validator_sets,
         )
     }
 
     pub fn substate_api(&self) -> SubstatesApi<'_, TSpec::Store, TSpec::NetworkInterface> {
-        SubstatesApi::new(&self.store, &self.network_interface)
+        SubstatesApi::new(
+            &self.store,
+            &self.network_interface,
+            self.validator_set_api(),
+            self.config.indexer_trust,
+        )
     }
 
     pub fn accounts_api(&self) -> AccountsApi<'_, TSpec> {
@@ -311,7 +315,7 @@ where TSpec: WalletSdkSpec<KeyStore = LocalKeyStore>
             key_store: LocalKeyStore::new(cipher_seed),
             config,
             epoch_birthday,
-            validator_set_lock: Arc::default(),
+            validator_sets: Arc::default(),
         })
     }
 
@@ -410,7 +414,7 @@ where
             key_store: self.key_store.clone(),
             config: self.config.clone(),
             epoch_birthday: self.epoch_birthday,
-            validator_set_lock: self.validator_set_lock.clone(),
+            validator_sets: self.validator_sets.clone(),
         }
     }
 }

@@ -5,7 +5,9 @@
 #![allow(unused_imports)]
 
 mod harness;
+mod proving_network;
 mod utils;
 
 pub use harness::*;
+pub use proving_network::*;
 pub use utils::*;

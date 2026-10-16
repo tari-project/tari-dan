@@ -2,7 +2,6 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    collections::HashMap,
     ops::Deref,
     sync::{Arc, Mutex},
     time::Duration,
@@ -12,11 +11,7 @@ use anyhow::anyhow;
 use futures::{StreamExt, TryStreamExt};
 use log::warn;
 use reqwest::{IntoUrl, StatusCode, Url};
-use tari_engine_types::{
-    Utxo,
-    commit_result::ExecuteResult,
-    substate::{Substate, SubstateId},
-};
+use tari_engine_types::{Utxo, commit_result::ExecuteResult, substate::SubstateId};
 use tari_indexer_client::{
     error::IndexerRestClientError,
     event::{IndexerEvent, TransactionFinalizedEvent},
@@ -55,6 +50,7 @@ use tari_ootle_transaction::{Transaction, TransactionEnvelope, TransactionId};
 use tari_ootle_wallet_sdk::{
     models::{EndOfShard, StartOfShard, UtxoBurnt, UtxoSpent, UtxoUnspent, UtxoUpdatePayload, WalletUtxoUpdate},
     network::{
+        FetchedSubstates,
         SubstateQueryResult,
         TransactionFinalizedNotification,
         TransactionFinalizedResult,
@@ -293,6 +289,7 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
         substate_id: &SubstateId,
         version: Option<SubstateVersion>,
         local_search_only: bool,
+        include_proof: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
         let client = self.tracked_client();
         let result = self
@@ -301,10 +298,12 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
                 client.get_substate(substate_id, GetSubstateRequest {
                     version,
                     local_search_only,
-                    include_proof: false,
+                    include_proof,
                 }),
                 |resp| match &resp.state {
                     SubstateState::Up { substate } => Ok(check_substate_type(substate_id, substate)?),
+                    // Only a request with proofs that names the version is answered as down.
+                    SubstateState::Down {} if include_proof && version.is_some() => Ok(()),
                     SubstateState::Down {} => Err(IndexerRestApiNetworkInterfaceError::UnrequestedDownAnswer {
                         substate_id: substate_id.clone(),
                         version: resp.version,
@@ -313,23 +312,32 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
             )
             .await?;
         let version = result.version;
+        let proof = result.proof.clone();
         let Some(substate) = result.into_substate_value() else {
-            return Err(IndexerRestApiNetworkInterfaceError::UnrequestedDownAnswer {
+            return Err(IndexerRestApiNetworkInterfaceError::SubstateVersionDown {
                 substate_id: substate_id.clone(),
                 version,
             });
         };
-        Ok(SubstateQueryResult { version, substate })
+        Ok(SubstateQueryResult {
+            version,
+            substate,
+            proof,
+        })
     }
 
-    async fn get_substates(&self, substate_ids: Vec<SubstateId>) -> Result<HashMap<SubstateId, Substate>, Self::Error> {
+    async fn get_substates(
+        &self,
+        substate_ids: Vec<SubstateId>,
+        include_proofs: bool,
+    ) -> Result<FetchedSubstates, Self::Error> {
         // The indexer's substates/fetch endpoint accepts at most this many IDs per request, so larger
         // requests are split into sequential batches. Substates the indexer cannot find are omitted from
         // the result, not an error.
         const MAX_IDS_PER_REQUEST: usize = 20;
 
         let client = self.tracked_client();
-        let mut substates = HashMap::with_capacity(substate_ids.len());
+        let mut fetched = FetchedSubstates::default();
         for chunk in substate_ids.chunks(MAX_IDS_PER_REQUEST) {
             let requests = chunk.to_vec().try_into().map_err(|_| {
                 IndexerRestApiNetworkInterfaceError::IndexerClientError(IndexerRestClientError::RequestInvariant {
@@ -342,7 +350,7 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
                     client.fetch_substates(GetSubstatesRequest {
                         requests,
                         cached_only: false,
-                        include_proofs: false,
+                        include_proofs,
                     }),
                     |resp| {
                         resp.substates
@@ -351,10 +359,11 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
                     },
                 )
                 .await?;
-            substates.extend(resp.substates);
+            fetched.substates.extend(resp.substates);
+            fetched.proofs.extend(resp.proofs);
         }
 
-        Ok(substates)
+        Ok(fetched)
     }
 
     async fn submit_transaction(&self, transaction: Transaction) -> Result<TransactionId, Self::Error> {
@@ -683,12 +692,18 @@ pub enum IndexerRestApiNetworkInterfaceError {
         substate_id: SubstateId,
         version: SubstateVersion,
     },
+    #[error("Substate {substate_id} v{version} is down")]
+    SubstateVersionDown {
+        substate_id: SubstateId,
+        version: SubstateVersion,
+    },
 }
 
 impl IsNotFoundError for IndexerRestApiNetworkInterfaceError {
     fn is_not_found_error(&self) -> bool {
         match self {
             IndexerRestApiNetworkInterfaceError::IndexerClientError(err) => err.is_not_found_error(),
+            IndexerRestApiNetworkInterfaceError::SubstateVersionDown { .. } => true,
             _ => false,
         }
     }
@@ -747,6 +762,9 @@ impl TransactionStatusResponseError for IndexerRestApiNetworkInterfaceError {
             IndexerRestApiNetworkInterfaceError::UnrequestedDownAnswer { .. } => ResponseErrorStatus::InternalError {
                 message: self.to_string(),
             },
+            IndexerRestApiNetworkInterfaceError::SubstateVersionDown { .. } => ResponseErrorStatus::NotFound {
+                message: self.to_string(),
+            },
         }
     }
 
@@ -795,13 +813,15 @@ fn now() -> PrimitiveDateTime {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use tari_consensus_types::Decision;
     use tari_crypto::ristretto::RistrettoSecretKey;
     use tari_engine_types::{
         commit_result::{FinalizeResult, TransactionResult},
         fees::FeeReceipt,
         resource_container::ResourceContainer,
-        substate::{SubstateDiff, SubstateValue},
+        substate::{Substate, SubstateDiff, SubstateValue},
         vault::Vault,
     };
     use tari_indexer_client::types::{
@@ -1068,7 +1088,10 @@ mod tests {
         .unwrap();
         let network = network_answering_with(body).await;
 
-        let err = network.query_substate(&component_id(), None, false).await.unwrap_err();
+        let err = network
+            .query_substate(&component_id(), None, false, false)
+            .await
+            .unwrap_err();
 
         assert!(matches!(
             err,
@@ -1085,7 +1108,7 @@ mod tests {
         .unwrap();
         let network = network_answering_with(body).await;
 
-        let err = network.get_substates(vec![component_id()]).await.unwrap_err();
+        let err = network.get_substates(vec![component_id()], false).await.unwrap_err();
 
         assert!(matches!(
             err,
@@ -1151,7 +1174,10 @@ mod tests {
 
         for _ in 0..FAILOVER_THRESHOLD {
             assert_eq!(network.get_endpoint(), invalid);
-            network.query_substate(&component_id(), None, false).await.unwrap_err();
+            network
+                .query_substate(&component_id(), None, false, false)
+                .await
+                .unwrap_err();
         }
 
         assert_eq!(network.get_endpoint(), other);
@@ -1175,7 +1201,7 @@ mod tests {
         for _ in 0..FAILOVER_THRESHOLD {
             assert_eq!(network.get_endpoint(), invalid);
             let err = network
-                .query_substate(&component_id(), Some(SubstateVersion::new(1)), false)
+                .query_substate(&component_id(), Some(SubstateVersion::new(1)), false, false)
                 .await
                 .unwrap_err();
             assert!(
@@ -1185,6 +1211,31 @@ mod tests {
         }
 
         assert_eq!(network.get_endpoint(), other);
+    }
+
+    #[tokio::test]
+    async fn a_down_answer_to_a_proven_request_for_a_version_is_not_found() {
+        let body = serde_json::to_string(&GetSubstateResponse {
+            version: SubstateVersion::new(1),
+            state: SubstateState::Down {},
+            verified: true,
+            proof: None,
+        })
+        .unwrap();
+        let answering = spawn_status_server("200 OK", body).await;
+        let other = spawn_status_server("503 Service Unavailable", "{}").await;
+        let network = IndexerRestApiNetworkInterface::init(vec![answering.clone()]).unwrap();
+        network.set_endpoints(vec![answering.clone(), other]).unwrap();
+
+        for _ in 0..FAILOVER_THRESHOLD {
+            let err = network
+                .query_substate(&component_id(), Some(SubstateVersion::new(1)), false, true)
+                .await
+                .unwrap_err();
+            assert!(err.is_not_found_error(), "{err}");
+        }
+
+        assert_eq!(network.get_endpoint(), answering, "a down answer is a valid one");
     }
 
     #[tokio::test]

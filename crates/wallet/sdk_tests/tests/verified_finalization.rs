@@ -6,258 +6,43 @@
 
 mod support;
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use futures::StreamExt;
 use tari_consensus_types::Decision;
 use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_engine_types::{
-    Utxo,
     commit_result::{ExecuteResult, FinalizeResult, TransactionResult},
     fees::FeeReceipt,
     substate::{Substate, SubstateDiff, SubstateId, SubstateValue},
     transaction_receipt::{DiffSummary, FinalizeOutcome, TransactionReceipt},
 };
-use tari_indexer_client::types::{
-    EpochCheckpointEntry,
-    ProvenTransactionReceipt,
-    ValidatorSetCommittee,
-    WatchedSubstateItem,
-};
-use tari_ootle_common_types::{Epoch, StateVersion, SubstateVersion, shard::Shard};
+use tari_indexer_client::types::ProvenTransactionReceipt;
+use tari_ootle_common_types::{Epoch, SubstateVersion};
 use tari_ootle_light_client::test_fixtures::{
     CheckpointSpec,
     NETWORK,
     Signers,
     ValidatorSetFixture,
     checkpoint_entry,
-    high,
-    low,
     substate_proof,
 };
-use tari_ootle_transaction::{Transaction, TransactionEnvelope, TransactionId, args};
+use tari_ootle_transaction::{Transaction, TransactionId, args};
 use tari_ootle_wallet_sdk::{
     IndexerTrust,
     apis::{config::ConfigKey, transaction::TransactionApiError, validator_set::ValidatorSetApiError},
     models::{TransactionStatus, ValidatorSetAnchor},
-    network::{
-        SubstateQueryResult,
-        TransactionFinalizedResult,
-        TransactionFinalizedStream,
-        TransactionQueryResult,
-        UtxoUpdateStream,
-        WalletNetworkInterface,
-    },
-    storage::{ReadableWalletStore, TagAndPublicNoncePair, WalletStoreReader, WalletStoreWriter, WriteableWalletStore},
+    network::{TransactionFinalizedResult, TransactionQueryResult},
+    storage::{ReadableWalletStore, WalletStoreReader, WalletStoreWriter, WriteableWalletStore},
 };
 use tari_ootle_wallet_sdk_services::{
     notify::Notify,
     transaction_service::{TransactionService, TransactionServiceConfig},
 };
 use tari_shutdown::Shutdown;
-use tari_template_abi::TemplateDef;
-use tari_template_lib::types::{Hash32, ResourceAddress, TemplateAddress, UtxoId};
+use tari_template_lib::types::Hash32;
 use time::{OffsetDateTime, PrimitiveDateTime};
 
-use crate::support::{PanicError, Test, TestWithNetwork};
-
-/// An indexer that serves a chain of signed end-of-epoch checkpoints, the committees of every epoch's validator set,
-/// and one transaction result.
-#[derive(Clone)]
-struct ProvingNetwork {
-    state: Arc<Mutex<ProvingNetworkState>>,
-}
-
-struct ProvingNetworkState {
-    /// Ascending by the epoch each ends.
-    checkpoints: Vec<EpochCheckpointEntry>,
-    /// The index in `checkpoints` of the latest one.
-    latest: usize,
-    committees: HashMap<Epoch, (ValidatorSetCommittee, ValidatorSetCommittee)>,
-    result: Option<TransactionQueryResult>,
-    /// Whether the indexer serves the latest checkpoint but none of the ones before it.
-    withholds_walk: bool,
-    /// Requests for a page of checkpoints to walk through.
-    walk_requests: usize,
-}
-
-impl ProvingNetwork {
-    /// Serves the handovers between consecutive `sets`, with the latest checkpoint the one ending `sets[latest]`'s
-    /// epoch.
-    fn new(sets: &[ValidatorSetFixture], latest: usize) -> Self {
-        let checkpoints = sets
-            .windows(2)
-            .map(|window| checkpoint_entry(CheckpointSpec::handover(&window[0], &window[1])))
-            .collect();
-        let committees = sets
-            .iter()
-            .map(|set| (set.epoch, (set.committee(low()), set.committee(high()))))
-            .collect();
-        Self {
-            state: Arc::new(Mutex::new(ProvingNetworkState {
-                checkpoints,
-                latest,
-                committees,
-                result: None,
-                withholds_walk: false,
-                walk_requests: 0,
-            })),
-        }
-    }
-
-    fn set_latest(&self, latest: usize) {
-        self.state.lock().unwrap().latest = latest;
-    }
-
-    fn replace_checkpoint(&self, index: usize, checkpoint: EpochCheckpointEntry) {
-        self.state.lock().unwrap().checkpoints[index] = checkpoint;
-    }
-
-    fn walk_requests(&self) -> usize {
-        self.state.lock().unwrap().walk_requests
-    }
-
-    fn withhold_walk(&self) {
-        self.state.lock().unwrap().withholds_walk = true;
-    }
-
-    fn set_result(&self, result: TransactionQueryResult) {
-        self.state.lock().unwrap().result = Some(result);
-    }
-}
-
-impl WalletNetworkInterface for ProvingNetwork {
-    type Error = PanicError;
-
-    async fn query_substate(
-        &self,
-        _address: &SubstateId,
-        _version: Option<SubstateVersion>,
-        _local_search_only: bool,
-    ) -> Result<SubstateQueryResult, Self::Error> {
-        panic!("ProvingNetwork called")
-    }
-
-    async fn get_substates(&self, _: Vec<SubstateId>) -> Result<HashMap<SubstateId, Substate>, Self::Error> {
-        panic!("ProvingNetwork called")
-    }
-
-    async fn submit_transaction(&self, transaction: Transaction) -> Result<TransactionId, Self::Error> {
-        Ok(transaction.calculate_id())
-    }
-
-    async fn submit_transaction_envelope(
-        &self,
-        _transaction: TransactionEnvelope,
-    ) -> Result<TransactionId, Self::Error> {
-        panic!("ProvingNetwork called")
-    }
-
-    async fn submit_dry_run_transaction(
-        &self,
-        _transaction: Transaction,
-    ) -> Result<TransactionQueryResult, Self::Error> {
-        panic!("ProvingNetwork called")
-    }
-
-    async fn query_transaction_result(
-        &self,
-        _transaction_id: TransactionId,
-        include_proof: bool,
-    ) -> Result<TransactionQueryResult, Self::Error> {
-        assert!(include_proof, "a verifying wallet asks for the proof");
-        Ok(self
-            .state
-            .lock()
-            .unwrap()
-            .result
-            .clone()
-            .expect("no transaction result"))
-    }
-
-    async fn subscribe_transaction_finalized(&self) -> Result<TransactionFinalizedStream<Self::Error>, Self::Error> {
-        Ok(futures::stream::pending().boxed())
-    }
-
-    async fn fetch_template_definition(&self, _template_address: TemplateAddress) -> Result<TemplateDef, Self::Error> {
-        panic!("ProvingNetwork called")
-    }
-
-    async fn stream_stealth_utxo_updates(
-        &self,
-        _from_epoch: Epoch,
-        _resource_address: ResourceAddress,
-        _shard_state_versions: Vec<(Shard, StateVersion)>,
-        _unspent_only: bool,
-    ) -> Result<UtxoUpdateStream<Self::Error>, Self::Error> {
-        panic!("ProvingNetwork called")
-    }
-
-    async fn list_watched_substates(
-        &self,
-        _template_address: Option<TemplateAddress>,
-        _limit: Option<u64>,
-        _offset: Option<u64>,
-    ) -> Result<Vec<WatchedSubstateItem>, Self::Error> {
-        panic!("ProvingNetwork called")
-    }
-
-    async fn get_unspent_utxos(
-        &self,
-        _resource_address: ResourceAddress,
-        _tag_and_nonce_pairs: Vec<TagAndPublicNoncePair>,
-    ) -> Result<Vec<(UtxoId, Utxo)>, Self::Error> {
-        panic!("ProvingNetwork called")
-    }
-
-    async fn get_latest_epoch_checkpoint(&self, _shard: Shard) -> Result<EpochCheckpointEntry, Self::Error> {
-        let state = self.state.lock().unwrap();
-        Ok(state.checkpoints[state.latest].clone())
-    }
-
-    async fn list_epoch_checkpoints(
-        &self,
-        from_epoch: Epoch,
-        limit: u32,
-        _shard: Shard,
-    ) -> Result<Vec<EpochCheckpointEntry>, Self::Error> {
-        // Lets a concurrent walk run while this request is in flight.
-        tokio::task::yield_now().await;
-        let mut state = self.state.lock().unwrap();
-        state.walk_requests += 1;
-        if state.withholds_walk {
-            return Ok(vec![]);
-        }
-        Ok(state.checkpoints[..=state.latest]
-            .iter()
-            .filter(|checkpoint| checkpoint.epoch >= from_epoch)
-            .take(limit as usize)
-            .cloned()
-            .collect())
-    }
-
-    async fn get_committee(&self, epoch: Epoch, shard: Shard) -> Result<ValidatorSetCommittee, Self::Error> {
-        let state = self.state.lock().unwrap();
-        let (low, high) = state.committees.get(&epoch).expect("no validator set for the epoch");
-        Ok(if low.shard_group.contains(&shard) {
-            low.clone()
-        } else {
-            high.clone()
-        })
-    }
-
-    async fn get_current_epoch(&self) -> Result<Epoch, Self::Error> {
-        panic!("ProvingNetwork called")
-    }
-
-    async fn wait_until_ready(&self) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
+use crate::support::{ProvingNetwork, Test, TestWithNetwork};
 
 fn now() -> PrimitiveDateTime {
     let now = OffsetDateTime::now_utc();

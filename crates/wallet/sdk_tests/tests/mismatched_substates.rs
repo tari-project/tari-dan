@@ -6,7 +6,7 @@
 
 mod support;
 
-use std::{collections::HashMap, time::Duration};
+use std::time::Duration;
 
 use futures::StreamExt;
 use tari_consensus_types::Decision;
@@ -27,6 +27,7 @@ use tari_ootle_transaction::{Transaction, TransactionEnvelope, TransactionId, ar
 use tari_ootle_wallet_sdk::{
     models::TransactionStatus,
     network::{
+        FetchedSubstates,
         SubstateQueryResult,
         TransactionFinalizedResult,
         TransactionFinalizedStream,
@@ -206,14 +207,16 @@ impl WalletNetworkInterface for FixedSubstateNetwork {
         _address: &SubstateId,
         _version: Option<SubstateVersion>,
         _local_search_only: bool,
+        _include_proof: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
         Ok(SubstateQueryResult {
             version: SubstateVersion::new(1),
             substate: self.substate.clone(),
+            proof: None,
         })
     }
 
-    async fn get_substates(&self, _: Vec<SubstateId>) -> Result<HashMap<SubstateId, Substate>, Self::Error> {
+    async fn get_substates(&self, _: Vec<SubstateId>, _: bool) -> Result<FetchedSubstates, Self::Error> {
         panic!("FixedSubstateNetwork called")
     }
 

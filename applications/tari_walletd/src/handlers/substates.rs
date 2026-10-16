@@ -4,7 +4,6 @@
 use axum_extra::headers::authorization::Bearer;
 use tari_engine_types::substate::Substate;
 use tari_ootle_common_types::optional::Optional;
-use tari_ootle_wallet_sdk::network::WalletNetworkInterface;
 use tari_ootle_walletd_client::{
     permissions::{Permission, ReadOnly},
     types::{
@@ -29,12 +28,8 @@ pub async fn handle_get(
     let record = sdk.substate_api().get_substate(&req.substate_id).optional()?;
 
     let substate = sdk
-        .get_network_interface()
-        .query_substate(
-            &req.substate_id,
-            record.as_ref().map(|r| r.substate_id.version()),
-            false,
-        )
+        .substate_api()
+        .fetch_substate_from_network(&req.substate_id, record.as_ref().map(|r| r.substate_id.version()))
         .await
         .optional()?;
 
@@ -50,7 +45,7 @@ pub async fn handle_get(
             module_name: record.module_name,
             template_address: record.template_address,
         }),
-        substate_from_remote: substate.map(|s| Substate::new(s.version, s.substate)),
+        substate_from_remote: substate.map(|s| Substate::new(s.id.version(), s.substate)),
     })
 }
 
