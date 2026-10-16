@@ -1,12 +1,9 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-mod support;
-
 use ootle_network::Network;
-use support::*;
 use tari_ootle_common_types::{Epoch, ValidatorSetHash};
-use tari_ootle_light_client::{LightClientError, TrustedValidatorSet, WalkPlan, plan_walk};
+use tari_ootle_light_client::{LightClientError, TrustedValidatorSet, WalkPlan, plan_walk, test_fixtures::*};
 
 /// Validator sets of epochs 1 to 4, each with fresh committees.
 fn sets() -> Vec<ValidatorSetFixture> {
@@ -83,6 +80,27 @@ fn it_verifies_any_committee_of_the_trusted_set() {
     assert_eq!(high_committee.shard_group(), high());
 
     let err = trusted.verify_committee(&sets[2].committee(high())).unwrap_err();
+    assert!(matches!(err, LightClientError::CommitteeEpochMismatch { .. }), "{err}");
+}
+
+#[test]
+fn a_trusted_hash_verifies_the_committees_of_its_epoch_after_the_walk_moves_on() {
+    let sets = sets();
+    let trusted = anchored(&sets);
+    let kept = trusted.trusted_hash();
+    let latest = trusted
+        .advance(&checkpoint_entry(CheckpointSpec::handover(&sets[1], &sets[2])))
+        .unwrap();
+
+    assert_eq!(kept.epoch(), Epoch(2));
+    assert_eq!(*kept.validator_set_hash(), sets[1].hash());
+    let high_committee = kept.verify_committee(&sets[1].committee(high())).unwrap();
+    assert_eq!(high_committee.epoch(), Epoch(2));
+    assert_eq!(high_committee.shard_group(), high());
+
+    let err = latest.verify_committee(&sets[1].committee(high())).unwrap_err();
+    assert!(matches!(err, LightClientError::CommitteeEpochMismatch { .. }), "{err}");
+    let err = kept.verify_committee(&sets[2].committee(high())).unwrap_err();
     assert!(matches!(err, LightClientError::CommitteeEpochMismatch { .. }), "{err}");
 }
 

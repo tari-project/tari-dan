@@ -1,41 +1,39 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-mod support;
-
 use ootle_network::Network;
-use support::*;
 use tari_engine_types::{
-    ProtocolVersion,
     SubstateVersion,
+    commit_result::{ExecutionFailureCode, FinalizeResult, RejectReason, TransactionResult},
     confidential::ClaimedOutputTombstone,
+    events::Event,
     fees::FeeReceipt,
-    substate::{Substate, SubstateDiff, SubstateId, SubstateValue, hash_substate},
+    substate::{Substate, SubstateDiff, SubstateId, SubstateValue},
     transaction_receipt::{DiffSummary, FinalizeOutcome, TransactionReceipt},
 };
-use tari_indexer_client::types::{ProvenTransactionReceipt, SubstateProof, SubstateProofAnchor};
-use tari_ootle_common_types::{Epoch, ShardGroup, VersionedSubstateId, shard::Shard};
+use tari_indexer_client::types::{ProvenTransactionReceipt, SubstateProof};
+use tari_ootle_common_types::{Epoch, VersionedSubstateId};
 use tari_ootle_light_client::{
     LightClientError,
     TrustedValidatorSet,
     VerifiedCommittee,
     check_diff_matches_receipt,
+    check_result_matches_receipt,
     down_proof_up_anchor,
+    test_fixtures::*,
     verify_down_proof,
 };
 use tari_ootle_transaction::TransactionId;
 use tari_state_tree::{
     SPARSE_MERKLE_PLACEHOLDER_HASH,
-    ShardGroupRootTree,
     SpreadPrefixStateTree,
     StateTreePayload,
     SubstateDownProof,
     SubstateTreeChange,
     SubstateValueProof,
-    TreeHash,
     memory_store::MemoryTreeStore,
 };
-use tari_template_lib_types::{ClaimedOutputTombstoneAddress, Hash32};
+use tari_template_lib_types::{ClaimedOutputTombstoneAddress, Hash32, Metadata};
 
 const EPOCH: Epoch = Epoch(2);
 
@@ -44,10 +42,6 @@ fn trusted_set() -> (ValidatorSetFixture, TrustedValidatorSet) {
     let trusted =
         TrustedValidatorSet::anchor_pinned(NETWORK, walk_shard(), EPOCH, &set.hash(), &set.committee(low())).unwrap();
     (set, trusted)
-}
-
-fn shard_group_of(shard: Shard) -> ShardGroup {
-    if low().contains(&shard) { low() } else { high() }
 }
 
 fn tombstone(seed: u8) -> (SubstateId, SubstateValue) {
@@ -69,57 +63,6 @@ fn receipt(diff_summary: DiffSummary) -> TransactionReceipt {
     }
 }
 
-/// A substate proof of `id` at version 0 holding `value`, anchored at a block of its shard group that `set`'s
-/// committee signed.
-fn substate_proof(set: &ValidatorSetFixture, id: &SubstateId, value: &SubstateValue) -> SubstateProof {
-    let versioned_id = VersionedSubstateId::new(id.clone(), SubstateVersion::ZERO);
-    let shard = versioned_id.to_shard(NUM_PRESHARDS);
-    let shard_group = shard_group_of(shard);
-    let value_hash = hash_substate(NETWORK, value, SubstateVersion::ZERO, EPOCH);
-
-    let mut store = MemoryTreeStore::<StateTreePayload>::new();
-    let shard_root = SpreadPrefixStateTree::new(&mut store)
-        .put_substate_changes(None, 1, vec![SubstateTreeChange::Up {
-            id: versioned_id.clone(),
-            value_hash,
-        }])
-        .unwrap();
-    let group_tree = group_tree(shard, shard_root, 1);
-    let (_, _, leaf_proof) = SpreadPrefixStateTree::new(&mut store)
-        .get_proof(1, &versioned_id)
-        .unwrap();
-    let value_proof = SubstateValueProof::new(shard_root, 1, group_tree.get_proof(shard).unwrap().1, leaf_proof);
-
-    SubstateProof {
-        anchor: SubstateProofAnchor {
-            epoch: EPOCH,
-            shard_group,
-            height: 5,
-            block_id: Default::default(),
-            state_merkle_root: Default::default(),
-        },
-        commit_proof: block_commit_proof(
-            NETWORK,
-            EPOCH,
-            shard_group,
-            5,
-            group_tree.root(),
-            set.signers(shard_group),
-        ),
-        value_proof: tari_bor::serde_codec::to_vec(&value_proof).unwrap(),
-        value_hash_epoch: EPOCH,
-        down_proof: None,
-    }
-}
-
-fn group_tree(shard: Shard, shard_root: TreeHash, version: u64) -> ShardGroupRootTree {
-    ShardGroupRootTree::build(ProtocolVersion::at(NETWORK, EPOCH), [
-        (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0),
-        (shard, shard_root, version),
-    ])
-    .unwrap()
-}
-
 fn committee_for(trusted: &TrustedValidatorSet, set: &ValidatorSetFixture, proof: &SubstateProof) -> VerifiedCommittee {
     trusted
         .verify_committee(&set.committee(proof.anchor.shard_group))
@@ -130,7 +73,7 @@ fn committee_for(trusted: &TrustedValidatorSet, set: &ValidatorSetFixture, proof
 fn it_verifies_a_substate_against_its_shard_groups_committee() {
     let (set, trusted) = trusted_set();
     let (id, value) = tombstone(1);
-    let proof = substate_proof(&set, &id, &value);
+    let proof = substate_proof(&set, &id, SubstateVersion::ZERO, &value);
     let committee = committee_for(&trusted, &set, &proof);
 
     let tip = committee
@@ -144,7 +87,7 @@ fn it_verifies_a_substate_against_its_shard_groups_committee() {
 fn a_substate_with_another_value_is_rejected() {
     let (set, trusted) = trusted_set();
     let (id, value) = tombstone(1);
-    let proof = substate_proof(&set, &id, &value);
+    let proof = substate_proof(&set, &id, SubstateVersion::ZERO, &value);
     let committee = committee_for(&trusted, &set, &proof);
 
     let (_, other_value) = tombstone(2);
@@ -158,7 +101,7 @@ fn a_substate_with_another_value_is_rejected() {
 fn a_substate_proof_checked_against_another_shard_groups_committee_is_rejected() {
     let (set, trusted) = trusted_set();
     let (id, value) = tombstone(1);
-    let proof = substate_proof(&set, &id, &value);
+    let proof = substate_proof(&set, &id, SubstateVersion::ZERO, &value);
     let other_group = if proof.anchor.shard_group == low() {
         high()
     } else {
@@ -220,7 +163,12 @@ fn it_verifies_a_committed_receipt() {
     let transaction_id = TransactionId::new([9; 32]);
     let receipt = receipt(DiffSummary::default());
     let receipt_id = SubstateId::TransactionReceipt(transaction_id.into_receipt_address());
-    let proof = substate_proof(&set, &receipt_id, &SubstateValue::from(receipt.clone()));
+    let proof = substate_proof(
+        &set,
+        &receipt_id,
+        SubstateVersion::ZERO,
+        &SubstateValue::from(receipt.clone()),
+    );
     let committee = committee_for(&trusted, &set, &proof);
 
     let mut proven = ProvenTransactionReceipt {
@@ -300,6 +248,88 @@ fn a_diff_that_differs_from_the_receipt_is_rejected() {
     }
 }
 
+/// A committed transaction's diff, the receipt it committed and its result, with an event and fees in both.
+fn committed(transaction_id: TransactionId) -> (SubstateDiff, TransactionReceipt, FinalizeResult) {
+    let diff = diff_of(&[tombstone(1)], &[(tombstone(3).0, 4)]);
+    let mut receipt = receipt(DiffSummary::from_diff(NETWORK, &diff, EPOCH));
+    receipt.events = Box::new([event("std.vault.deposit")]);
+    receipt.fee_receipt = FeeReceipt::builder()
+        .with_total_fee_payment(800)
+        .with_total_fees_paid(500)
+        .build();
+    let result = FinalizeResult::new(
+        Hash32::from_array(transaction_id.into_array()),
+        vec![],
+        receipt.events.to_vec(),
+        TransactionResult::Accept(diff.clone()),
+        receipt.fee_receipt.clone(),
+    );
+    (diff, receipt, result)
+}
+
+fn event(topic: &str) -> Event {
+    Event::new(
+        None,
+        Hash32::from_array([3; 32]),
+        topic.to_string(),
+        Metadata::default(),
+    )
+}
+
+fn rejection() -> RejectReason {
+    RejectReason::ExecutionFailure {
+        code: ExecutionFailureCode::TemplateError,
+        message: "failed".to_string(),
+    }
+}
+
+#[test]
+fn a_result_matches_the_receipt_committed_with_it() {
+    let transaction_id = TransactionId::new([9; 32]);
+    let (diff, mut receipt, mut result) = committed(transaction_id);
+    check_result_matches_receipt(NETWORK, transaction_id, &receipt, &result).unwrap();
+
+    receipt.outcome = FinalizeOutcome::FeeIntentCommit;
+    result.result = TransactionResult::AcceptFeeRejectRest(diff, rejection());
+    check_result_matches_receipt(NETWORK, transaction_id, &receipt, &result).unwrap();
+}
+
+#[test]
+fn a_result_that_differs_from_the_receipt_is_rejected() {
+    let transaction_id = TransactionId::new([9; 32]);
+    let (diff, receipt, result) = committed(transaction_id);
+
+    let cases: [(&str, fn(&mut FinalizeResult, &SubstateDiff)); 5] = [
+        ("a rejection", |result, _| {
+            result.result = TransactionResult::Reject(rejection())
+        }),
+        ("only the fee intent committing", |result, diff| {
+            result.result = TransactionResult::AcceptFeeRejectRest(diff.clone(), rejection())
+        }),
+        ("other events", |result, _| {
+            result.events = vec![event("std.vault.withdraw")]
+        }),
+        ("other fees", |result, _| {
+            result.fee_receipt = FeeReceipt::builder().with_total_fees_paid(1).build()
+        }),
+        ("another diff", |result, _| {
+            result.result = TransactionResult::Accept(diff_of(&[tombstone(2)], &[(tombstone(3).0, 4)]))
+        }),
+    ];
+    for (case, change) in cases {
+        let mut changed = result.clone();
+        change(&mut changed, &diff);
+        let err = check_result_matches_receipt(NETWORK, transaction_id, &receipt, &changed).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                LightClientError::ResultDoesNotMatchReceipt { .. } | LightClientError::DiffDoesNotMatchReceipt { .. }
+            ),
+            "{case}: {err}"
+        );
+    }
+}
+
 /// A down proof of `id`, up at height 5 of its shard group's chain in `up_set`'s epoch and absent at height 9 in
 /// `down_set`'s, each signed by its set's committee.
 fn down_proof(up_set: &ValidatorSetFixture, down_set: &ValidatorSetFixture, id: &SubstateId) -> (Vec<u8>, Vec<u8>) {
@@ -320,8 +350,8 @@ fn down_proof(up_set: &ValidatorSetFixture, down_set: &ValidatorSetFixture, id: 
             id: versioned_id.clone(),
         }])
         .unwrap();
-    let up_tree = group_tree(shard, up_root, 1);
-    let down_tree = group_tree(shard, down_root, 2);
+    let up_tree = shard_group_root_tree(NETWORK, EPOCH, shard, up_root, 1);
+    let down_tree = shard_group_root_tree(NETWORK, EPOCH, shard, down_root, 2);
     let (_, value, up_leaf) = SpreadPrefixStateTree::new(&mut store)
         .get_proof(1, &versioned_id)
         .unwrap();

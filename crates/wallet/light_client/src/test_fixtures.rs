@@ -1,17 +1,26 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-//! Signed fixtures: validator sets with real committee proofs, and end-of-epoch checkpoints and block commit proofs
-//! that a committee's keys sign over a 3-chain of quorum certificates.
-
-#![allow(dead_code)]
+//! Signed fixtures for tests: validator sets with real committee proofs, end-of-epoch checkpoints and block commit
+//! proofs that a committee's keys sign over a 3-chain of quorum certificates, and substate proofs anchored at those
+//! blocks.
 
 use indexmap::IndexMap;
 use ootle_network::Network;
 use tari_common_types::types::{CompressedPublicKey, FixedHash, PrivateKey};
 use tari_crypto::{keys::SecretKey, tari_utilities::ByteArray};
-use tari_engine_types::ProtocolVersion;
-use tari_indexer_client::types::{EpochCheckpointEntry, ValidatorSetCommittee, ValidatorSetCommitteeMember};
+use tari_engine_types::{
+    ProtocolVersion,
+    SubstateVersion,
+    substate::{SubstateId, SubstateValue, hash_substate},
+};
+use tari_indexer_client::types::{
+    EpochCheckpointEntry,
+    SubstateProof,
+    SubstateProofAnchor,
+    ValidatorSetCommittee,
+    ValidatorSetCommitteeMember,
+};
 use tari_ootle_common_types::{
     Epoch,
     ExtraData,
@@ -19,6 +28,7 @@ use tari_ootle_common_types::{
     NumPreshards,
     ShardGroup,
     ValidatorSetHash,
+    VersionedSubstateId,
     VotePower,
     committee::{Committee, CommitteeMember},
     shard::Shard,
@@ -43,7 +53,19 @@ use tari_sidechain::{
     ValidatorBlockSignature,
     ValidatorQcSignature,
 };
-use tari_state_tree::{TreeHash, ValidatorSetTree, compute_merkle_root_for_hashes, compute_proof_for_hashes};
+use tari_state_tree::{
+    SPARSE_MERKLE_PLACEHOLDER_HASH,
+    ShardGroupRootTree,
+    SpreadPrefixStateTree,
+    StateTreePayload,
+    SubstateTreeChange,
+    SubstateValueProof,
+    TreeHash,
+    ValidatorSetTree,
+    compute_merkle_root_for_hashes,
+    compute_proof_for_hashes,
+    memory_store::MemoryTreeStore,
+};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 pub const NETWORK: Network = Network::LocalNet;
@@ -60,6 +82,11 @@ pub fn high() -> ShardGroup {
 
 pub fn walk_shard() -> Shard {
     Shard::first()
+}
+
+/// The shard group of [`low`] and [`high`] that holds `shard`.
+pub fn shard_group_of(shard: Shard) -> ShardGroup {
+    if low().contains(&shard) { low() } else { high() }
 }
 
 /// A committee's signing keys.
@@ -326,4 +353,67 @@ fn sign(header: SidechainBlockHeader, signers: &Signers) -> SidechainBlockCommit
         CommitProofElement::QuorumCertificate(certify(header.calculate_hash(), header.parent_id, header.height)),
     ];
     SidechainBlockCommitProof { header, proof_elements }
+}
+
+/// A proof that `id` at `version` holds `value`, anchored at a block of its shard group in `set`'s epoch that the shard
+/// group's committee signed.
+pub fn substate_proof(
+    set: &ValidatorSetFixture,
+    id: &SubstateId,
+    version: SubstateVersion,
+    value: &SubstateValue,
+) -> SubstateProof {
+    let versioned_id = VersionedSubstateId::new(id.clone(), version);
+    let shard = versioned_id.to_shard(NUM_PRESHARDS);
+    let shard_group = shard_group_of(shard);
+    let value_hash = hash_substate(set.network, value, version, set.epoch);
+
+    let mut store = MemoryTreeStore::<StateTreePayload>::new();
+    let shard_root = SpreadPrefixStateTree::new(&mut store)
+        .put_substate_changes(None, 1, vec![SubstateTreeChange::Up {
+            id: versioned_id.clone(),
+            value_hash,
+        }])
+        .unwrap();
+    let group_tree = shard_group_root_tree(set.network, set.epoch, shard, shard_root, 1);
+    let (_, _, leaf_proof) = SpreadPrefixStateTree::new(&mut store)
+        .get_proof(1, &versioned_id)
+        .unwrap();
+    let value_proof = SubstateValueProof::new(shard_root, 1, group_tree.get_proof(shard).unwrap().1, leaf_proof);
+
+    SubstateProof {
+        anchor: SubstateProofAnchor {
+            epoch: set.epoch,
+            shard_group,
+            height: 5,
+            block_id: Default::default(),
+            state_merkle_root: Default::default(),
+        },
+        commit_proof: block_commit_proof(
+            set.network,
+            set.epoch,
+            shard_group,
+            5,
+            group_tree.root(),
+            set.signers(shard_group),
+        ),
+        value_proof: tari_bor::serde_codec::to_vec(&value_proof).unwrap(),
+        value_hash_epoch: set.epoch,
+        down_proof: None,
+    }
+}
+
+/// The root tree of a shard group whose only non-empty shard is `shard`, with root `shard_root` at `version`.
+pub fn shard_group_root_tree(
+    network: Network,
+    epoch: Epoch,
+    shard: Shard,
+    shard_root: TreeHash,
+    version: u64,
+) -> ShardGroupRootTree {
+    ShardGroupRootTree::build(ProtocolVersion::at(network, epoch), [
+        (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0),
+        (shard, shard_root, version),
+    ])
+    .unwrap()
 }

@@ -99,7 +99,16 @@ impl TrustedValidatorSet {
 
     /// Verifies `committee` as one of this validator set's committees, of any shard group.
     pub fn verify_committee(&self, committee: &ValidatorSetCommittee) -> Result<VerifiedCommittee, LightClientError> {
-        VerifiedCommittee::verify(self.network(), self.epoch(), self.validator_set_hash(), committee)
+        self.trusted_hash().verify_committee(committee)
+    }
+
+    /// This validator set by hash, which verifies its committees as [`Self::verify_committee`] does.
+    pub fn trusted_hash(&self) -> TrustedValidatorSetHash {
+        TrustedValidatorSetHash {
+            network: self.network(),
+            epoch: self.epoch(),
+            validator_set_hash: *self.validator_set_hash(),
+        }
     }
 
     /// Moves the trust to the next epoch's validator set through the end-of-epoch checkpoint in `entry`, which the
@@ -145,6 +154,37 @@ impl TrustedValidatorSet {
             anchor_epoch: self.anchor_epoch,
             committee,
         })
+    }
+}
+
+/// A validator set the light client trusts, by hash. It verifies any committee of its epoch, and is small enough to
+/// keep for every epoch walked, so that proofs anchored in earlier epochs stay verifiable.
+///
+/// The light client builds one only from a [`TrustedValidatorSet`]. Deserializing one trusts the store it is read from
+/// as much as the light client that wrote it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TrustedValidatorSetHash {
+    network: Network,
+    epoch: Epoch,
+    validator_set_hash: ValidatorSetHash,
+}
+
+impl TrustedValidatorSetHash {
+    pub fn network(&self) -> Network {
+        self.network
+    }
+
+    pub fn epoch(&self) -> Epoch {
+        self.epoch
+    }
+
+    pub fn validator_set_hash(&self) -> &ValidatorSetHash {
+        &self.validator_set_hash
+    }
+
+    /// Verifies `committee` as one of this validator set's committees, of any shard group.
+    pub fn verify_committee(&self, committee: &ValidatorSetCommittee) -> Result<VerifiedCommittee, LightClientError> {
+        VerifiedCommittee::verify(self.network, self.epoch, &self.validator_set_hash, committee)
     }
 }
 

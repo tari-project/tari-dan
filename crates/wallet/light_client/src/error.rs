@@ -62,6 +62,8 @@ pub enum LightClientError {
     InvalidSubstateProof(#[from] SubstateProofVerifyError),
     #[error("The indexer served the receipt of transaction {transaction_id} without a proof")]
     MissingReceiptProof { transaction_id: String },
+    #[error("The transaction result does not match the proven receipt: {details}")]
+    ResultDoesNotMatchReceipt { details: String },
     #[error("The substate diff does not match the proven receipt: {details}")]
     DiffDoesNotMatchReceipt { details: String },
 }

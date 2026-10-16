@@ -6,8 +6,9 @@ use std::collections::{BTreeSet, HashSet};
 use ootle_network::Network;
 use tari_engine_types::{
     SubstateVersion,
+    commit_result::{FinalizeResult, TransactionResult},
     substate::{SubstateDiff, SubstateId, SubstateValue, hash_substate},
-    transaction_receipt::TransactionReceipt,
+    transaction_receipt::{FinalizeOutcome, TransactionReceipt},
 };
 use tari_indexer_client::types::{ProvenTransactionReceipt, SubstateProof};
 use tari_ootle_common_types::{Epoch, ShardGroup};
@@ -108,6 +109,37 @@ pub fn verify_down_proof(
         &DownProofAnchor::from(down_tip),
     )?;
     Ok(())
+}
+
+/// Checks that `result` is the result of the transaction whose verified receipt is `receipt`: it commits what the
+/// receipt's outcome says, with the receipt's events and fees, and its diff matches the receipt as
+/// [`check_diff_matches_receipt`] checks.
+pub fn check_result_matches_receipt(
+    network: Network,
+    transaction_id: TransactionId,
+    receipt: &TransactionReceipt,
+    result: &FinalizeResult,
+) -> Result<(), LightClientError> {
+    let mismatch = |details: String| LightClientError::ResultDoesNotMatchReceipt { details };
+    let diff = match (&result.result, receipt.outcome()) {
+        (TransactionResult::Accept(diff), FinalizeOutcome::Commit) |
+        (TransactionResult::AcceptFeeRejectRest(diff, _), FinalizeOutcome::FeeIntentCommit) => diff,
+        (TransactionResult::Reject(_), _) => {
+            return Err(mismatch("the result rejects a transaction that committed".to_string()));
+        },
+        (_, outcome) => {
+            return Err(mismatch(format!(
+                "the result commits a different part of the transaction than the receipt's {outcome:?}"
+            )));
+        },
+    };
+    if result.events.as_slice() != receipt.events() {
+        return Err(mismatch("the result's events are not the receipt's".to_string()));
+    }
+    if result.fee_receipt != *receipt.fee_receipt() {
+        return Err(mismatch("the result's fee receipt is not the receipt's".to_string()));
+    }
+    check_diff_matches_receipt(network, transaction_id, receipt, diff)
 }
 
 /// Checks that `diff` is the diff of the transaction whose verified receipt is `receipt`: it ups exactly the substate
