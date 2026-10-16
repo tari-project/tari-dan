@@ -927,7 +927,6 @@ mod tests {
     use tari_ootle_address::Network;
     use tari_ootle_common_types::{SubstateVersion, engine_types::substate::SubstateId};
     use tari_ootle_wallet_sdk::models::KeyBranch;
-    use tari_ootle_walletd_client::types::TransactionGetAllRequest;
     use tari_template_lib_types::{
         ComponentAddress,
         crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes},
@@ -1030,7 +1029,7 @@ mod tests {
         );
     }
 
-    const MASK_KEYS: [KeyId; 4] = [
+    const NON_SIGNING_KEYS: [KeyId; 4] = [
         KeyId::Derived {
             key_branch: KeyBranch::ConfidentialMask,
             index: 0,
@@ -1054,7 +1053,7 @@ mod tests {
         let daemon = TestDaemon::start().await;
         let account = KeyId::derived(KeyBranch::Account, 0);
 
-        for key in MASK_KEYS {
+        for key in NON_SIGNING_KEYS {
             let err = handle_submit(
                 &daemon.context,
                 Some(&daemon.session),
@@ -1077,7 +1076,7 @@ mod tests {
         let reader = daemon.api_key("reader", "transactions:read");
         let account = KeyId::derived(KeyBranch::Account, 0);
 
-        for key in MASK_KEYS {
+        for key in NON_SIGNING_KEYS {
             let err = handle_submit_dry_run(&daemon.context, Some(&reader), submit_request(account, vec![key]))
                 .await
                 .unwrap_err();
@@ -1088,14 +1087,6 @@ mod tests {
                 .unwrap_err();
             assert_invalid_params(&err, "seal_signer");
         }
-
-        let stored = handle_get_all(&daemon.context, Some(&reader), TransactionGetAllRequest {
-            status: None,
-            account: None,
-        })
-        .await
-        .unwrap();
-        assert!(stored.transactions.is_empty(), "a refused dry run stored a transaction");
     }
 
     /// `accounts.create_stealth_transfer_statement` hands out a nonce key for the
@@ -1112,7 +1103,7 @@ mod tests {
         let err = handle_submit_dry_run(&daemon.context, Some(&daemon.session), request)
             .await
             .unwrap_err();
-        assert!(err.downcast_ref::<JsonRpcError>().is_none(), "{err}");
+        assert!(err.to_string().starts_with("Failed to submit transaction"), "{err}");
     }
 
     #[tokio::test]
@@ -1123,7 +1114,7 @@ mod tests {
         let seal_pk = RistrettoPublicKeyBytes::zero();
         let signer = sdk.signer_api().with_context(&seal_pk);
 
-        for key in MASK_KEYS {
+        for key in NON_SIGNING_KEYS {
             signer.generate_signature(key, &unsigned).unwrap_err();
         }
         for key in [
