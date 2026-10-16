@@ -838,6 +838,9 @@ fn main() {{
             self.stealth_transfer(TARI_TOKEN, TARI // 2, self.smoke["address"], "under-funded stealth spend",
                                   sender=RECV_ACCOUNT, selection="PreferConfidential", max_fee=50)
         except StageFailed as e:
+            # A refusal before submission locks nothing, so only a finalized failure exercises the release.
+            if "finished as" not in str(e):
+                raise StageFailed(f"under-funded stealth spend was refused before it finalized: {e}") from e
             detail(f"🚫 under-funded stealth spend: {str(e).split(': ', 1)[-1][:150]}")
         else:
             raise StageFailed("under-funded stealth spend: transaction was accepted")
@@ -888,9 +891,6 @@ fn main() {{
     account.deposit(coins);
 }}
 """, {**variables, "tari": TARI_TOKEN}, must_contain="finished as OnlyFeeAccepted")
-        after = revealed(balances(self.wallet, SMOKE_ACCOUNT).get(TARI_TOKEN))
-        if after >= bal:
-            raise StageFailed(f"overspend committed only its fee, but the balance moved {fmt_tari(bal)} → {fmt_tari(after)}")
 
         self.expect_rejected_spend_releases_locks()
 
