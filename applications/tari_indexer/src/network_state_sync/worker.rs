@@ -353,15 +353,19 @@ impl NetworkWideStateSync {
 
     /// Syncs `shard_group`'s checkpoints up to the epoch before `epoch`, from wherever it left off.
     /// Nothing to do once they are recorded, so this is run before every stream the group opens.
+    ///
+    /// Returns whether the group's checkpoints reach the epoch before `epoch`. They fall short when
+    /// the committee has not yet completed that epoch: consensus ends an epoch some time after the
+    /// base layer moves past it.
     async fn sync_group_checkpoints(
         &self,
         shard_group: ShardGroup,
         pool: &mut ValidatorCommitteeRpcPool,
         epoch: Epoch,
         progress: &SharedSyncProgress,
-    ) -> Result<(), NetworkStateSyncError> {
+    ) -> Result<bool, NetworkStateSyncError> {
         let Some(prev_epoch) = epoch.checked_sub(Epoch(1)) else {
-            return Ok(());
+            return Ok(true);
         };
         let from_epoch = progress
             .lock()
@@ -370,7 +374,7 @@ impl NetworkWideStateSync {
             .unwrap_or_else(Epoch::zero);
         if from_epoch >= prev_epoch {
             debug!(target: LOG_TARGET, "🌍️ No checkpoints to sync for shard group {shard_group} from epoch {from_epoch}");
-            return Ok(());
+            return Ok(true);
         }
         info!(target: LOG_TARGET, "🌍️ Syncing checkpoints from {from_epoch} for shard group {shard_group}");
         // Perform sync operations using the pool and checkpoint
@@ -415,7 +419,7 @@ impl NetworkWideStateSync {
             self.store
                 .with_write_tx(move |tx| tx.key_value_set(Key::SyncProgress, sync_progress_snapshot))
                 .await?;
-            return Ok(());
+            return Ok(true);
         }
 
         info!(target: LOG_TARGET, "🌍️ Found {} checkpoints for shard group {shard_group} from epoch {from_epoch}", checkpoints.len());
@@ -451,7 +455,8 @@ impl NetworkWideStateSync {
                 })
                 .await?;
         }
-        Ok(())
+        let reached = progress.lock().await.checkpoint_epoch(shard_group);
+        Ok(reached.is_some_and(|reached| reached >= prev_epoch))
     }
 
     /// Follows every shard group's tip at once, each on its own stream, until cancelled. Returns
@@ -553,18 +558,25 @@ impl NetworkWideStateSync {
     ) -> Result<(), NetworkStateSyncError> {
         while !cancel.is_cancelled() {
             let current_epoch = *epoch.borrow_and_update();
-            if let Err(err) = self
+            let checkpoints_reached_epoch = match self
                 .sync_group_checkpoints(shard_group, &mut pool, current_epoch, &progress)
                 .await
             {
-                if !err.is_peer_fault() {
-                    return Err(err);
-                }
-                warn!(target: LOG_TARGET, "⚠️ Checkpoint sync for shard group {} failed: {}", shard_group, err);
-                self.pause(shard_group, "checkpoint sync failed", &cancel, &mut epoch)
-                    .await;
-                continue;
-            }
+                Ok(reached) => reached,
+                Err(err) => {
+                    if !err.is_peer_fault() {
+                        return Err(err);
+                    }
+                    warn!(target: LOG_TARGET, "⚠️ Checkpoint sync for shard group {} failed: {}", shard_group, err);
+                    self.pause(shard_group, "checkpoint sync failed", &cancel, &mut epoch)
+                        .await;
+                    continue;
+                },
+            };
+            // Wallets verify the validator set of an epoch through the checkpoint that ends the epoch
+            // before it, so a missing checkpoint is fetched again after the work interval.
+            let checkpoints_due_at =
+                (!checkpoints_reached_epoch).then(|| time::Instant::now() + self.config.work_interval);
             let mut session = match pool.new_stream_session().await {
                 Ok(s) => s,
                 Err(e) => {
@@ -604,7 +616,15 @@ impl NetworkWideStateSync {
             // indexer resolved its committees at has moved on - costs this shard group a retry and
             // no more.
             match self
-                .sync_shard_group_state(shards, &progress, shard_group, &mut session, &cancel, &mut epoch)
+                .sync_shard_group_state(
+                    shards,
+                    &progress,
+                    shard_group,
+                    &mut session,
+                    &cancel,
+                    &mut epoch,
+                    checkpoints_due_at,
+                )
                 .await
             {
                 Ok(StreamEnd::Cancelled) => return Ok(()),
@@ -613,6 +633,9 @@ impl NetworkWideStateSync {
                 },
                 Ok(StreamEnd::EpochAdvanced) => {
                     info!(target: LOG_TARGET, "🌍️ Epoch advanced to {}. Reopening state sync for shard group {shard_group}", *epoch.borrow());
+                },
+                Ok(StreamEnd::CheckpointsDue) => {
+                    info!(target: LOG_TARGET, "🌍️ Shard group {shard_group} has no checkpoint for the epoch before {current_epoch} yet. Syncing checkpoints again");
                 },
                 Ok(StreamEnd::Final) => {
                     self.pause(
@@ -664,6 +687,7 @@ impl NetworkWideStateSync {
     /// hold only substates since destroyed. A shard whose live substates all fall outside the value
     /// filter delivers nothing to the head fetch, so its first sync replays its whole history as ids
     /// and hashes.
+    #[expect(clippy::too_many_arguments)]
     async fn sync_shard_group_state(
         &mut self,
         shards: impl Iterator<Item = Shard>,
@@ -672,6 +696,7 @@ impl NetworkWideStateSync {
         session: &mut ValidatorRpcSession,
         cancel: &CancellationToken,
         epoch: &mut watch::Receiver<Epoch>,
+        checkpoints_due_at: Option<time::Instant>,
     ) -> Result<StreamEnd, NetworkStateSyncError> {
         let value_filters = SubstateValueFilterFlags::UTXO |
             SubstateValueFilterFlags::VALIDATOR_FEE_POOL |
@@ -700,9 +725,13 @@ impl NetworkWideStateSync {
                     session,
                     cancel,
                     epoch,
+                    checkpoints_due_at,
                 )
                 .await?;
-            if matches!(end, StreamEnd::Cancelled | StreamEnd::EpochAdvanced) {
+            if matches!(
+                end,
+                StreamEnd::Cancelled | StreamEnd::EpochAdvanced | StreamEnd::CheckpointsDue
+            ) {
                 return Ok(end);
             }
         }
@@ -724,6 +753,7 @@ impl NetworkWideStateSync {
             session,
             cancel,
             epoch,
+            checkpoints_due_at,
         )
         .await
     }
@@ -779,6 +809,7 @@ impl NetworkWideStateSync {
         session: &mut ValidatorRpcSession,
         cancel: &CancellationToken,
         epoch: &mut watch::Receiver<Epoch>,
+        checkpoints_due_at: Option<time::Instant>,
     ) -> Result<StreamEnd, NetworkStateSyncError> {
         let mut order = StreamOrder::new(
             &cursors,
@@ -827,6 +858,9 @@ impl NetworkWideStateSync {
                 biased;
                 _ = cancel.cancelled() => return Ok(StreamEnd::Cancelled),
                 Ok(()) = epoch.changed() => return Ok(StreamEnd::EpochAdvanced),
+                () = time::sleep_until(checkpoints_due_at.unwrap_or_else(time::Instant::now)), if checkpoints_due_at.is_some() => {
+                    return Ok(StreamEnd::CheckpointsDue);
+                },
                 next = stream.next() => match next {
                     Some(result) => result,
                     None => break,
@@ -1024,6 +1058,9 @@ enum StreamEnd {
     /// The epoch moved while the stream was open. The group syncs the new checkpoints and reopens
     /// from a committee member at the new epoch.
     EpochAdvanced,
+    /// The group's checkpoint for the epoch before the current one was missing when the stream
+    /// opened, and the work interval has passed. The group syncs checkpoints again and reopens.
+    CheckpointsDue,
     /// The plan is being wound down.
     Cancelled,
 }
