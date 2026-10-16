@@ -28,7 +28,6 @@ use std::{
 };
 
 use log::*;
-use prost::Message;
 use tari_bor::encode;
 use tari_consensus::hotstuff::commit_proofs::generate_block_commit_proof;
 use tari_consensus_types::{BlockId, HighPc, ProposalCertificate};
@@ -303,7 +302,8 @@ struct BatchProofContext {
     epoch: Epoch,
     num_preshards: NumPreshards,
     include_proofs: bool,
-    /// The most bytes of anchor and substate messages one response may carry.
+    /// The most encoded bytes the anchor and substate frames of one response may take. The missing list
+    /// is bounded by the request's id count instead.
     max_response_bytes: usize,
 }
 
@@ -317,14 +317,14 @@ const MAX_BATCH_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 /// take, however many sessions peers open.
 const MAX_BUFFERED_BATCH_RESPONSES: usize = 32;
 
-/// Streams `responses` to the peer, holding `permit` until the peer's stream is dropped.
+/// Streams `responses` to the peer. The stream holds `permit` until the server has finished sending
+/// the response and drops it.
 fn stream_batch_response(
     responses: Vec<batch_response::Response>,
     permit: OwnedSemaphorePermit,
 ) -> Streaming<GetSubstatesBatchResponse> {
     let (sender, receiver) = mpsc::channel(responses.len().max(1));
     task::spawn(async move {
-        let _permit = permit;
         for resp in responses {
             if sender
                 .send(Ok(GetSubstatesBatchResponse { response: Some(resp) }))
@@ -335,11 +335,8 @@ fn stream_batch_response(
                 return;
             }
         }
-        // The channel buffers the whole response, so the last send returns before the peer has read
-        // it. The memory is only released once the stream is dropped.
-        sender.closed().await;
     });
-    Streaming::new(receiver)
+    Streaming::new(receiver).with_guard(permit)
 }
 
 /// Reads the head version of each of `ids` and, when proofs were asked for, a single anchor followed
@@ -377,9 +374,9 @@ fn read_substate_batch<TTx: StateStoreReadTransaction>(
                 reason: format!("commit proof: {e}"),
             })?,
         )?);
-        let commit_proof = commit_proof.to_bytes();
-        response_bytes = commit_proof.len();
-        messages.push(batch_response::Response::CommitProof(commit_proof));
+        let frame = batch_response::Response::CommitProof(commit_proof.to_bytes());
+        response_bytes = frame.encoded_len();
+        messages.push(frame);
     }
 
     let mut seen = HashSet::with_capacity(ids.len());
@@ -414,16 +411,16 @@ fn read_substate_batch<TTx: StateStoreReadTransaction>(
             })?;
         }
 
-        let entry = proven_substate(&substate, value_proof);
-        let entry_bytes = entry.encoded_len();
-        if answered_any && response_bytes.saturating_add(entry_bytes) > ctx.max_response_bytes {
+        let frame = batch_response::Response::Substate(proven_substate(&substate, value_proof));
+        let frame_bytes = frame.encoded_len();
+        if answered_any && response_bytes.saturating_add(frame_bytes) > ctx.max_response_bytes {
             is_full = true;
             missing.push(id.to_bytes());
             continue;
         }
-        response_bytes = response_bytes.saturating_add(entry_bytes);
+        response_bytes = response_bytes.saturating_add(frame_bytes);
         answered_any = true;
-        messages.push(batch_response::Response::Substate(entry));
+        messages.push(frame);
     }
 
     if !missing.is_empty() {
@@ -1078,6 +1075,8 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
 mod tests {
     use std::time::Duration;
 
+    use futures::StreamExt;
+    use prost::Message;
     use tari_engine_types::{
         non_fungible::NonFungibleContainer,
         published_template::{PublishedTemplate, PublishedTemplateAddress},
@@ -1313,6 +1312,7 @@ mod tests {
 
         let response_bytes = messages
             .iter()
+            .filter(|response| !matches!(response, batch_response::Response::Missing(_)))
             .map(|response| {
                 GetSubstatesBatchResponse {
                     response: Some(response.clone()),
@@ -1389,22 +1389,29 @@ mod tests {
         assert_eq!(missing.substate_ids, vec![ids[1].to_bytes()]);
     }
 
-    /// A buffered batch response holds its permit until the peer's stream is dropped, so the limit counts responses
-    /// that are still waiting to be read and not only those being read from the store.
+    /// A batch response stream ends after its last response, and holds its permit until the stream is dropped, so the
+    /// limit counts every response still buffered for a peer.
     #[tokio::test]
-    async fn a_batch_response_holds_its_permit_until_the_stream_is_dropped() {
+    async fn a_batch_response_ends_and_holds_its_permit_until_the_stream_is_dropped() {
         let permits = Arc::new(Semaphore::new(1));
         let permit = permits.clone().try_acquire_owned().unwrap();
         let responses = vec![batch_response::Response::CommitProof(vec![1]); 3];
-        let stream = stream_batch_response(responses, permit);
+        let mut stream = stream_batch_response(responses, permit);
 
-        tokio::task::yield_now().await;
+        let frames = tokio::time::timeout(Duration::from_secs(5), async {
+            let mut frames = 0;
+            while let Some(frame) = stream.next().await {
+                frame.unwrap();
+                frames += 1;
+            }
+            frames
+        })
+        .await
+        .expect("the stream ends once every response is sent");
+        assert_eq!(frames, 3);
         assert_eq!(permits.available_permits(), 0);
         drop(stream);
-        let _permit = tokio::time::timeout(Duration::from_secs(5), permits.acquire())
-            .await
-            .expect("the permit is released once the stream is dropped")
-            .unwrap();
+        assert_eq!(permits.available_permits(), 1);
     }
 
     #[test]

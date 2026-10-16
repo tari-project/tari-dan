@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{fmt, marker::PhantomData, pin::Pin};
+use std::{any::Any, fmt, marker::PhantomData, pin::Pin};
 
 use bytes::{Bytes, BytesMut};
 use futures::{
@@ -201,18 +201,28 @@ impl Buf for BodyBytes {
 #[derive(Debug)]
 pub struct Streaming<T> {
     inner: mpsc::Receiver<Result<T, RpcStatus>>,
+    guard: Option<Box<dyn Any + Send + Sync>>,
 }
 
 impl<T> Streaming<T> {
     pub fn new(inner: mpsc::Receiver<Result<T, RpcStatus>>) -> Self {
-        Self { inner }
+        Self { inner, guard: None }
     }
 
     pub fn empty() -> Self {
         let (_, rx) = mpsc::channel(1);
-        Self { inner: rx }
+        Self::new(rx)
     }
 
+    /// Holds `guard` until this stream is dropped, which the server does once it has finished sending the response.
+    /// A resource that backs the response, such as a permit for the memory its buffered items take, lives exactly as
+    /// long as the response does.
+    pub fn with_guard<G: Send + Sync + 'static>(mut self, guard: G) -> Self {
+        self.guard = Some(Box::new(guard));
+        self
+    }
+
+    /// The receiver this stream reads from. The guard, if any, is dropped.
     pub fn into_inner(self) -> mpsc::Receiver<Result<T, RpcStatus>> {
         self.inner
     }
