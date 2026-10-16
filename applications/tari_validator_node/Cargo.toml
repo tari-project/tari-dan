@@ -14,6 +14,7 @@ metrics = ["prometheus-client", "tari_networking/metrics"]
 # Note: must be compiled with RUSTFLAGS='--cfg rust_unstable' to use
 tokio_debug = ["console-subscriber"]
 web_ui = []
+mimalloc = ["dep:mimalloc"]
 
 [dependencies]
 tari_common = { workspace = true }
@@ -71,6 +72,7 @@ log4rs = { workspace = true, features = [
     "size_trigger",
     "fixed_window_roller",
 ] }
+mimalloc = { workspace = true, optional = true }
 mime_guess = { workspace = true }
 prometheus-client = { workspace = true, optional = true }
 rand = { workspace = true }

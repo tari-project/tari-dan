@@ -76,6 +76,7 @@ log4rs = { workspace = true, features = [
     "size_trigger",
     "fixed_window_roller",
 ] }
+mimalloc = { workspace = true, optional = true }
 mime_guess = { workspace = true }
 mediatype = "0.20.0"
 mini-moka = { workspace = true }
@@ -119,3 +120,4 @@ ignored = [
 default = ["web_ui", "metrics"]
 web_ui = ["include_dir"]
 metrics = ["prometheus-client", "tari_networking/metrics", "tari_indexer_lib/metrics"]
+mimalloc = ["dep:mimalloc"]

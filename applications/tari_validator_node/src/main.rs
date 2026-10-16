@@ -35,6 +35,10 @@ use crate::cli::Cli;
 
 const LOG_TARGET: &str = "tari::validator_node::app";
 
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[cfg(feature = "tokio_debug")]
 const DEBUG_PORT: u16 = console_subscriber::Server::DEFAULT_PORT;
 

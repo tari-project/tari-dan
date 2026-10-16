@@ -34,6 +34,10 @@ use tracing_subscriber::{Layer, filter, fmt, layer::SubscriberExt, util::Subscri
 
 const LOG_TARGET: &str = "tari::indexer::app";
 
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[tokio::main]
 async fn main() {
     // Setup a panic hook which prints the default rust panic message but also exits the process. This makes a panic in
