@@ -86,6 +86,15 @@ impl ProvingNetwork {
         }
     }
 
+    /// Serves `set`'s committees for its epoch in place of the ones served before.
+    pub fn replace_committees(&self, set: &ValidatorSetFixture) {
+        self.state
+            .lock()
+            .unwrap()
+            .committees
+            .insert(set.epoch, (set.committee(low()), set.committee(high())));
+    }
+
     pub fn set_latest(&self, latest: usize) {
         self.state.lock().unwrap().latest = latest;
     }

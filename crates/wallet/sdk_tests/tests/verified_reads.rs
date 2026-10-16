@@ -12,8 +12,12 @@ use tari_engine_types::{
 };
 use tari_ootle_common_types::{Epoch, SubstateVersion, VersionedSubstateId};
 use tari_ootle_light_client::test_fixtures::{
+    CheckpointSpec,
+    NETWORK,
     NUM_PRESHARDS,
+    Signers,
     ValidatorSetFixture,
+    checkpoint_entry,
     high,
     shard_group_of,
     substate_proof,
@@ -205,18 +209,23 @@ async fn a_trusting_wallet_reads_without_proofs() {
     assert_eq!(tombstone_value(&read.substate), tombstone_value(&value));
 }
 
-#[tokio::test]
-async fn a_committee_is_fetched_once_for_the_reads_it_proves() {
-    let (sets, network, test) = walked_wallet(IndexerTrust::Verify).await;
-    // The wallet walks the low shard group, so only a committee of the high one is fetched.
+/// `n` substates of the high shard group. The wallet walks the low one, so a committee of the high one is fetched.
+fn high_substates(n: usize) -> Vec<(SubstateId, SubstateValue)> {
     let substates = (1..=u8::MAX)
         .map(substate)
         .filter(|(id, _)| {
             shard_group_of(VersionedSubstateId::new(id.clone(), VERSION).to_shard(NUM_PRESHARDS)) == high()
         })
-        .take(2)
+        .take(n)
         .collect::<Vec<_>>();
-    assert_eq!(substates.len(), 2);
+    assert_eq!(substates.len(), n);
+    substates
+}
+
+#[tokio::test]
+async fn a_committee_is_fetched_once_for_the_reads_it_proves() {
+    let (sets, network, test) = walked_wallet(IndexerTrust::Verify).await;
+    let substates = high_substates(2);
     for (id, value) in &substates {
         let proof = substate_proof(&sets[4], id, VERSION, value);
         network.serve_substate(id.clone(), VERSION, value.clone(), Some(proof));
@@ -231,4 +240,56 @@ async fn a_committee_is_fetched_once_for_the_reads_it_proves() {
             .unwrap();
     }
     assert_eq!(network.committee_requests() - before, 1);
+}
+
+#[tokio::test]
+async fn a_reanchor_verifies_reads_with_the_new_sets_committees() {
+    let (sets, network, test) = walked_wallet(IndexerTrust::Verify).await;
+    let [(old_id, old_value), (new_id, new_value)] = high_substates(2).try_into().unwrap();
+    let old_proof = substate_proof(&sets[4], &old_id, VERSION, &old_value);
+    network.serve_substate(old_id.clone(), VERSION, old_value, Some(old_proof));
+    test.sdk()
+        .substate_api()
+        .fetch_substate_from_network(&old_id, None)
+        .await
+        .unwrap();
+
+    // The indexer now serves a different validator set for epoch 5, which the wallet re-anchors on.
+    let other = ValidatorSetFixture::with_signers(NETWORK, 5, Signers::new(0xa0, 4), Signers::new(0xa1, 4));
+    network.replace_checkpoint(3, checkpoint_entry(CheckpointSpec::handover(&sets[3], &other)));
+    network.replace_committees(&other);
+    let trusted = test.sdk().validator_set_api().reanchor().await.unwrap();
+    assert_eq!(trusted.validator_set_hash(), &other.hash());
+
+    let err = read_error(&test, &old_id).await;
+    assert!(matches!(err, SubstateApiError::SubstateUnverified { .. }), "{err}");
+    let new_proof = substate_proof(&other, &new_id, VERSION, &new_value);
+    network.serve_substate(new_id.clone(), VERSION, new_value, Some(new_proof));
+    test.sdk()
+        .substate_api()
+        .fetch_substate_from_network(&new_id, None)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_substate_older_than_the_version_asked_for_is_refused() {
+    let (sets, network, test) = walked_wallet(IndexerTrust::Verify).await;
+    let (id, value) = substate(1);
+    let proof = substate_proof(&sets[4], &id, VERSION, &value);
+    network.serve_substate(id.clone(), VERSION, value, Some(proof));
+
+    let err = match test
+        .sdk()
+        .substate_api()
+        .fetch_substate_from_network(&id, Some(VERSION.next()))
+        .await
+    {
+        Ok(_) => panic!("an older version was read"),
+        Err(err) => err,
+    };
+    assert!(
+        matches!(err, SubstateApiError::SubstateOlderThanRequested { .. }),
+        "{err}"
+    );
 }
