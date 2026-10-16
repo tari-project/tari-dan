@@ -9,6 +9,7 @@ use tari_crypto::{
     keys::{PublicKey as _, SecretKey as _},
     ristretto::{RistrettoPublicKey, RistrettoSchnorr, RistrettoSecretKey},
 };
+use tari_engine::runtime::RuntimeError;
 use tari_engine_types::{
     crypto::covenant_balance_proof_native_points,
     limits::{self, STEALTH_LIMITS},
@@ -784,6 +785,77 @@ fn sandbox_denies_cross_template_call() {
     );
     assert_reject_reason(&reason, "Spend script rejected the spend");
     assert_reject_reason(&reason, "call_invoke");
+}
+
+#[test]
+fn sandbox_denies_address_allocation() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let script_template = test.get_template_address(SCRIPT_TEMPLATE);
+    let (resx, mint) = mint_utxo(
+        &mut test,
+        script_condition(script_template, "try_allocate_address", vec![]),
+    );
+
+    let transfer = spend_into(&mint, key_path(test.to_public_key_bytes()));
+    let reason = test.execute_expect_failure(
+        Transaction::builder_localnet(Epoch(1))
+            .stealth_transfer(resx, transfer.statement)
+            .finish()
+            .seal(test.secret_key()),
+        vec![],
+    );
+    assert_reject_reason(&reason, "Spend script rejected the spend");
+    assert_reject_reason(&reason, RuntimeError::ForbiddenInReadOnlyContext {
+        operation: "allocate_address_invoke",
+    });
+}
+
+#[test]
+fn sandbox_denies_signer_proof() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let script_template = test.get_template_address(SCRIPT_TEMPLATE);
+    let (resx, mint) = mint_utxo(
+        &mut test,
+        script_condition(script_template, "try_get_signer_proof", vec![]),
+    );
+
+    let transfer = spend_into(&mint, key_path(test.to_public_key_bytes()));
+    let reason = test.execute_expect_failure(
+        Transaction::builder_localnet(Epoch(1))
+            .stealth_transfer(resx, transfer.statement)
+            .finish()
+            .seal(test.secret_key()),
+        vec![],
+    );
+    assert_reject_reason(&reason, "Spend script rejected the spend");
+    assert_reject_reason(&reason, RuntimeError::ForbiddenInReadOnlyContext {
+        operation: "new_proof",
+    });
+}
+
+#[test]
+fn sandbox_denies_component_owner_proof() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let script_template = test.get_template_address(SCRIPT_TEMPLATE);
+    // The account is owned by `owner_key`, which signs the spend, so its owner badge is in the predicate's scope.
+    let (account, _owner_proof, owner_key) = test.create_empty_account();
+    let (resx, mint) = mint_utxo(
+        &mut test,
+        script_condition(script_template, "try_get_owner_proof", vec![encode_arg(&account)]),
+    );
+
+    let transfer = spend_into(&mint, key_path(test.to_public_key_bytes()));
+    let reason = test.execute_expect_failure(
+        Transaction::builder_localnet(Epoch(1))
+            .stealth_transfer(resx, transfer.statement)
+            .finish()
+            .seal(&owner_key),
+        vec![],
+    );
+    assert_reject_reason(&reason, "Spend script rejected the spend");
+    assert_reject_reason(&reason, RuntimeError::ForbiddenInReadOnlyContext {
+        operation: "new_proof",
+    });
 }
 
 // -------------------------------- Compute budget -------------------------------- //

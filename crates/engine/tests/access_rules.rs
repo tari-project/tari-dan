@@ -2101,6 +2101,41 @@ mod resource_access_rules {
         assert_reject_reason(result, "attempted in a resource auth hook");
     }
 
+    #[test]
+    fn it_disallows_hook_that_allocates_an_address() {
+        let mut test = TemplateTest::new(CRATE_PATH, ["tests/templates/access_rules"]);
+
+        let (_owner_account, owner_proof, owner_key) = test.create_empty_account();
+        let (user_account, user_proof, user_key) = test.create_empty_account();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(access_rules_template, "with_auth_hook", args![
+                    true,
+                    "hook_allocates_address"
+                ])
+                .build_and_seal(&owner_key),
+            vec![owner_proof.clone()],
+        );
+
+        let component_address = test.return_values()[0].decoded::<ComponentAddress>().unwrap();
+
+        let result = test.execute_expect_failure(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(component_address, "take_tokens", args![10])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(user_account, "deposit", args![Workspace("tokens")])
+                .build_and_seal(&user_key),
+            vec![user_proof.clone()],
+        );
+
+        assert_reject_reason(result, RuntimeError::ForbiddenInAuthHookContext {
+            operation: "allocate_address_invoke",
+        });
+    }
+
     /// Mint takes the resource's write lock. The hook guards that resource and may legitimately read it, so the
     /// lock must not be held across the hook call.
     #[test]

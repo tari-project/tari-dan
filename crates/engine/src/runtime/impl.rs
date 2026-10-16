@@ -271,7 +271,8 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
 
     /// Layer (b) of the frame sandbox: deny the effectful or non-deterministic host ops that are NOT mediated by the
     /// write-lock chokepoint (layer (a) in `WorkingState::try_lock` / `new_substate`, which neutralises every state
-    /// write). Together they make a spend-script predicate provably side-effect-free and deterministic,
+    /// write, and `WorkingState::check_create_allowed`, which refuses new buckets, proofs and address allocations).
+    /// Together they make a spend-script predicate provably side-effect-free and deterministic,
     /// and confine a resource auth hook to its own component state.
     ///
     /// Events are permitted in both modes: an event is an output of execution that no later code can observe, and it
@@ -282,6 +283,8 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
     /// while template WASM is executing — instruction-level operations such as `pay_fee` and `publish_template` have
     /// no `EngineOp`, run only at the top level, and so can never execute in a restricted context. `call_invoke` is
     /// also blocked at the frame level (`allow_cross_template_calls == false`) and listed here for defence in depth.
+    /// `allocate_address_invoke` is also refused by `WorkingState::new_address_allocation`; listing it here refuses
+    /// the op before it draws an address from the id provider.
     fn enforce_frame_restrictions(&self, function: &'static str) -> Result<(), RuntimeError> {
         const FORBIDDEN_IN_READ_ONLY: &[&str] = &[
             "call_invoke",
@@ -289,8 +292,14 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
             "generate_uuid",
             "proof_invoke",
             "bucket_invoke",
+            "allocate_address_invoke",
         ];
-        const FORBIDDEN_IN_OWN_COMPONENT: &[&str] = &["call_invoke", "proof_invoke", "bucket_invoke"];
+        const FORBIDDEN_IN_OWN_COMPONENT: &[&str] = &[
+            "call_invoke",
+            "proof_invoke",
+            "bucket_invoke",
+            "allocate_address_invoke",
+        ];
 
         match self.tracker.current_frame_write_mode() {
             FrameWriteMode::Full => Ok(()),

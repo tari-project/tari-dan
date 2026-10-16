@@ -382,6 +382,11 @@ mod access_rules_template {
             let _vault = Vault::new_empty(self.tokens.resource_address());
         }
 
+        /// Attempts to allocate a component address, which the hook frame refuses.
+        pub fn hook_allocates_address(&self, _action: ResourceAuthAction, _caller: AuthHookCaller) {
+            let _allocation = CallerContext::allocate_component_address(None);
+        }
+
         /// Reads the resource the hook guards. A resource action that write-locks the resource must release that
         /// lock across the hook call, or this read is refused.
         pub fn hook_reads_own_resource(&self, action: ResourceAuthAction, _caller: AuthHookCaller) {

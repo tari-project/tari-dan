@@ -1220,7 +1220,18 @@ impl<TStore: StateReader> WorkingState<TStore> {
         Ok(resource_container)
     }
 
+    /// Buckets, proofs and address allocations are transaction-scoped engine state that no write lock guards. A
+    /// restricted frame can neither deposit, drop nor consume them, so it may not create them either.
+    fn check_create_allowed(&self, operation: &'static str) -> Result<(), RuntimeError> {
+        match self.current_frame_write_mode() {
+            FrameWriteMode::Full => Ok(()),
+            FrameWriteMode::OwnComponent => Err(RuntimeError::ForbiddenInAuthHookContext { operation }),
+            FrameWriteMode::ReadOnly => Err(RuntimeError::ForbiddenInReadOnlyContext { operation }),
+        }
+    }
+
     pub fn new_bucket(&mut self, bucket_id: BucketId, resource: ResourceContainer) -> Result<(), RuntimeError> {
+        self.check_create_allowed("new_bucket")?;
         debug!(
             target: LOG_TARGET,
             "New bucket {} for resource {} {:?}", bucket_id, resource.resource_address(), resource.resource_type()
@@ -1245,6 +1256,7 @@ impl<TStore: StateReader> WorkingState<TStore> {
     }
 
     pub fn new_proof(&mut self, proof_id: ProofId, locked_funds: LockedResource) -> Result<(), RuntimeError> {
+        self.check_create_allowed("new_proof")?;
         debug!(target: LOG_TARGET, "New proof {}", proof_id);
         if self.proofs.insert(proof_id, Proof::new(locked_funds)).is_some() {
             return Err(RuntimeError::DuplicateProof { proof_id });
@@ -1258,6 +1270,7 @@ impl<TStore: StateReader> WorkingState<TStore> {
         &mut self,
         address: T,
     ) -> Result<AddressAllocationId, RuntimeError> {
+        self.check_create_allowed("new_address_allocation")?;
         let id = self.address_allocation_id;
         self.address_allocation_id = self
             .address_allocation_id
