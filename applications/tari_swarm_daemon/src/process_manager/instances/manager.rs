@@ -563,6 +563,13 @@ impl InstanceManager {
         self.config = new_instance_configs.to_vec();
     }
 
+    /// Marks every instance of `instance_type` as config dirty so that the user knows to restart them.
+    pub fn mark_config_dirty(&mut self, instance_type: InstanceType) {
+        self.instances_mut()
+            .filter(|inst| inst.instance_type() == instance_type)
+            .for_each(|inst| inst.set_config_dirty(true));
+    }
+
     fn next_instance_id(&mut self) -> InstanceId {
         let id = self.instance_id;
         self.instance_id += 1;

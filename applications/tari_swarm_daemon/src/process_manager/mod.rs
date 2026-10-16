@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use tokio::task;
 
-use crate::config::Config;
+use crate::{cli::Overrides, config::Config};
 
 mod crash_report;
 mod executables;
@@ -24,9 +24,10 @@ pub use processes::*;
 pub fn spawn(
     config: &Config,
     config_path: PathBuf,
+    cli_overrides: Option<Overrides>,
     shutdown: tari_shutdown::ShutdownSignal,
 ) -> (task::JoinHandle<anyhow::Result<()>>, ProcessManagerHandle) {
-    let (manager, handle) = manager::ProcessManager::new(config, config_path, shutdown);
+    let (manager, handle) = manager::ProcessManager::new(config, config_path, cli_overrides, shutdown);
     let task_handle = tokio::spawn(manager.start());
     (task_handle, handle)
 }

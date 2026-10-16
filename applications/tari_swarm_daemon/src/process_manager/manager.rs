@@ -24,6 +24,7 @@ use tari_validator_node_client::types::AddPeerRequest;
 use tokio::{sync::mpsc, time, time::sleep};
 
 use crate::{
+    cli::Overrides,
     config::{Config, InstanceType},
     layer_one_transactions::LayerOneTransactionService,
     process_definitions::CONSENSUS_CONSTANTS_FILE_NAME,
@@ -55,10 +56,16 @@ pub struct ProcessManager {
     base_dir: PathBuf,
     config_path: PathBuf,
     config_last_modified: Option<SystemTime>,
+    cli_overrides: Option<Overrides>,
 }
 
 impl ProcessManager {
-    pub fn new(config: &Config, config_path: PathBuf, shutdown_signal: ShutdownSignal) -> (Self, ProcessManagerHandle) {
+    pub fn new(
+        config: &Config,
+        config_path: PathBuf,
+        cli_overrides: Option<Overrides>,
+        shutdown_signal: ShutdownSignal,
+    ) -> (Self, ProcessManagerHandle) {
         let (tx_request, rx_request) = mpsc::channel(1);
 
         let mut global_settings = config.settings.clone();
@@ -88,6 +95,7 @@ impl ProcessManager {
             base_dir: config.base_dir.clone(),
             config_path,
             config_last_modified,
+            cli_overrides,
         };
         (this, ProcessManagerHandle::new(tx_request))
     }
@@ -405,13 +413,19 @@ impl ProcessManager {
         self.config_last_modified = Some(current_mtime);
 
         info!("📝 Config file changed, reloading...");
-        let config = match Config::load_from_file(&self.config_path).await {
+        let mut config = match Config::load_from_file(&self.config_path).await {
             Ok(config) => config,
             Err(err) => {
                 log::error!("Failed to reload config file: {err}");
                 return;
             },
         };
+        if let Some(overrides) = &self.cli_overrides &&
+            let Err(err) = overrides.apply(&mut config)
+        {
+            log::error!("Failed to apply CLI overrides to reloaded config: {err}");
+            return;
+        }
 
         let mut global_settings = config.settings.clone();
         if let Some(public_ip) = config.public_ip {
@@ -420,6 +434,13 @@ impl ProcessManager {
 
         self.instance_manager
             .apply_config_update(global_settings, &config.processes.instances);
+
+        let changed_executables = self
+            .executable_manager
+            .apply_config_update(config.processes.executables, config.processes.force_compile);
+        for instance_type in changed_executables {
+            self.instance_manager.mark_config_dirty(instance_type);
+        }
     }
 
     async fn create_layer_one_transaction_service(&self) -> anyhow::Result<Option<LayerOneTransactionService>> {
