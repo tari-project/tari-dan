@@ -30,12 +30,11 @@ use std::{
 use log::*;
 use tari_bor::encode;
 use tari_consensus::hotstuff::commit_proofs::generate_block_commit_proof;
-use tari_consensus_types::{BlockId, HighPc, ProposalCertificate};
+use tari_consensus_types::{HighPc, ProposalCertificate};
 use tari_engine_types::substate::SubstateId;
 use tari_epoch_manager::{EpochManagerReader, service::EpochManagerHandle};
 use tari_ootle_common_types::{
     Epoch,
-    NodeHeight,
     NumPreshards,
     ShardGroup,
     SubstateRequirement,
@@ -64,8 +63,6 @@ use tari_ootle_p2p::{
         GetTransactionResultResponse,
         PayloadResultStatus,
         SubstateStatus,
-        SyncBlocksRequest,
-        SyncBlocksResponse,
         SyncStateRequest,
         SyncStateResponse,
         get_substates_batch_response as batch_response,
@@ -101,7 +98,6 @@ use crate::{
     p2p::{
         rpc::{
             CONSENSUS_NOT_RUNNING,
-            block_sync_task::BlockSyncTask,
             state_sync_task::{
                 HeldHistory,
                 ShardCursor,
@@ -179,14 +175,6 @@ impl<TStateStore: StateStore> ValidatorNodeRpcServiceImpl<TStateStore> {
             .optional()
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
             .map(|info| info.shard_group()))
-    }
-
-    fn check_consensus_state(&self) -> Result<(), RpcStatus> {
-        if self.consensus.can_serve_committed_state() {
-            Ok(())
-        } else {
-            Err(RpcStatus::unavailable(CONSENSUS_NOT_RUNNING))
-        }
     }
 
     /// Attaches a commit proof and a substate value proof for `substate` to `resp`, anchored to the
@@ -651,81 +639,6 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
         }))
     }
 
-    async fn sync_blocks(
-        &self,
-        request: Request<SyncBlocksRequest>,
-    ) -> Result<Streaming<SyncBlocksResponse>, RpcStatus> {
-        self.check_consensus_state()?;
-        let req = request.into_message();
-        let store = self.state_store.clone();
-
-        if proto::rpc::StreamSubstateSelection::try_from(req.stream_substates).is_err() {
-            return Err(RpcStatus::bad_request("StreamSubstateSelection is invalid"));
-        }
-
-        let current_epoch = self
-            .epoch_manager
-            .current_epoch()
-            .await
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-
-        let start_block_id = Some(req.start_block_id.as_slice())
-            .filter(|i| !i.is_empty())
-            .map(BlockId::try_from)
-            .transpose()
-            .map_err(|e| RpcStatus::bad_request(format!("Invalid encoded block id: {}", e)))?;
-
-        let start_block_id = {
-            let tx = store
-                .create_read_tx()
-                .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-
-            match start_block_id {
-                Some(id) => {
-                    if !Block::record_exists(&tx, &id).map_err(RpcStatus::log_internal_error(LOG_TARGET))? {
-                        return Err(RpcStatus::not_found(format!("start_block_id {id} not found",)));
-                    }
-                    id
-                },
-                None => {
-                    let epoch = req
-                        .epoch
-                        .map(Epoch::from)
-                        .map(|end| end.min(current_epoch))
-                        .unwrap_or(current_epoch);
-
-                    let mut block_ids = Block::get_ids_by_epoch_and_height(&tx, epoch, NodeHeight::zero())
-                        .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-
-                    let Some(block_id) = block_ids.pop() else {
-                        return Err(RpcStatus::not_found(format!(
-                            "Block not found with epoch={epoch},height=0"
-                        )));
-                    };
-                    if !block_ids.is_empty() {
-                        return Err(RpcStatus::conflict(format!(
-                            "Multiple applicable blocks for epoch={} and height=0",
-                            current_epoch
-                        )));
-                    }
-
-                    block_id
-                },
-            }
-        };
-
-        let committee_info = self
-            .epoch_manager
-            .get_local_committee_info(current_epoch)
-            .await
-            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
-
-        let (sender, receiver) = mpsc::channel(10);
-        task::spawn(BlockSyncTask::new(store, start_block_id, None, sender, committee_info.num_preshards()).run(req));
-
-        Ok(Streaming::new(receiver))
-    }
-
     async fn get_checkpoints(
         &self,
         request: Request<GetCheckpointsRequest>,
@@ -1077,6 +990,7 @@ mod tests {
 
     use futures::StreamExt;
     use prost::Message;
+    use tari_consensus_types::BlockId;
     use tari_engine_types::{
         non_fungible::NonFungibleContainer,
         published_template::{PublishedTemplate, PublishedTemplateAddress},
