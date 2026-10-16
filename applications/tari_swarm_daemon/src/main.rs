@@ -205,7 +205,11 @@ fn get_base_config(cli: &Cli) -> anyhow::Result<Config> {
 async fn start(cli: &Cli) -> anyhow::Result<()> {
     let config_path = cli.get_config_path();
     let mut config = Config::load_with_cli(cli).await.context("failed to load config")?;
-    if let Commands::Start(ref overrides) = cli.command {
+    let cli_overrides = match cli.command {
+        Commands::Start(ref overrides) => Some(overrides.clone()),
+        _ => None,
+    };
+    if let Some(ref overrides) = cli_overrides {
         overrides.apply(&mut config).context("cli overrides")?;
     }
     let lock_file = config.base_dir.join("tari_swarm.pid");
@@ -230,7 +234,8 @@ async fn start(cli: &Cli) -> anyhow::Result<()> {
 
     let shutdown = Shutdown::new();
     let signal = shutdown.to_signal().select(exit_signal().context("exit_signal")?);
-    let (task_handle, pm_handle) = process_manager::spawn(&config, config_path.clone(), shutdown.to_signal());
+    let (task_handle, pm_handle) =
+        process_manager::spawn(&config, config_path.clone(), cli_overrides, shutdown.to_signal());
     let webserver = webserver::spawn(config, shutdown.to_signal(), pm_handle.clone());
 
     tokio::select! {

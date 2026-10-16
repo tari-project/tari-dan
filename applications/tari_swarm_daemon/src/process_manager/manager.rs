@@ -3,7 +3,7 @@
 
 use std::{
     collections::HashMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     pin::pin,
     time::{Duration, Instant, SystemTime},
 };
@@ -24,6 +24,7 @@ use tari_validator_node_client::types::AddPeerRequest;
 use tokio::{sync::mpsc, time, time::sleep};
 
 use crate::{
+    cli::Overrides,
     config::{Config, InstanceType},
     layer_one_transactions::LayerOneTransactionService,
     process_definitions::CONSENSUS_CONSTANTS_FILE_NAME,
@@ -55,10 +56,16 @@ pub struct ProcessManager {
     base_dir: PathBuf,
     config_path: PathBuf,
     config_last_modified: Option<SystemTime>,
+    cli_overrides: Option<Overrides>,
 }
 
 impl ProcessManager {
-    pub fn new(config: &Config, config_path: PathBuf, shutdown_signal: ShutdownSignal) -> (Self, ProcessManagerHandle) {
+    pub fn new(
+        config: &Config,
+        config_path: PathBuf,
+        cli_overrides: Option<Overrides>,
+        shutdown_signal: ShutdownSignal,
+    ) -> (Self, ProcessManagerHandle) {
         let (tx_request, rx_request) = mpsc::channel(1);
 
         let mut global_settings = config.settings.clone();
@@ -88,6 +95,7 @@ impl ProcessManager {
             base_dir: config.base_dir.clone(),
             config_path,
             config_last_modified,
+            cli_overrides,
         };
         (this, ProcessManagerHandle::new(tx_request))
     }
@@ -405,7 +413,7 @@ impl ProcessManager {
         self.config_last_modified = Some(current_mtime);
 
         info!("📝 Config file changed, reloading...");
-        let config = match Config::load_from_file(&self.config_path).await {
+        let config = match load_config(&self.config_path, self.cli_overrides.as_ref()).await {
             Ok(config) => config,
             Err(err) => {
                 log::error!("Failed to reload config file: {err}");
@@ -420,6 +428,13 @@ impl ProcessManager {
 
         self.instance_manager
             .apply_config_update(global_settings, &config.processes.instances);
+
+        let changed_executables = self
+            .executable_manager
+            .apply_config_update(config.processes.executables, config.processes.force_compile);
+        for instance_type in changed_executables {
+            self.instance_manager.mark_config_dirty(instance_type);
+        }
     }
 
     async fn create_layer_one_transaction_service(&self) -> anyhow::Result<Option<LayerOneTransactionService>> {
@@ -928,5 +943,79 @@ impl ProcessManager {
         }
 
         Ok(())
+    }
+}
+
+/// Loads the config file with the CLI overrides the swarm was started with.
+async fn load_config(path: &Path, cli_overrides: Option<&Overrides>) -> anyhow::Result<Config> {
+    let mut config = Config::load_from_file(path).await?;
+    if let Some(overrides) = cli_overrides {
+        overrides.apply(&mut config).context("cli overrides")?;
+    }
+    Ok(config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn no_compile() -> Overrides {
+        Overrides {
+            webui_listen_address: None,
+            no_compile: true,
+            binaries_root: None,
+            start_port: None,
+            skip_registration: false,
+            wallet_daemon_auth: None,
+            wallet_seed_words: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn a_reload_under_no_compile_keeps_the_compile_config_stripped() {
+        let path = std::env::temp_dir().join(format!("tari_swarm_reload_test_{}.toml", std::process::id()));
+        tokio::fs::write(
+            &path,
+            format!(
+                r#"
+                base_dir = "."
+                start_port = 12000
+                network = "localnet"
+                force_compile = true
+                instances = []
+
+                [webserver]
+                bind_address = "127.0.0.1:8080"
+
+                [[executables]]
+                instance_type = "TariValidatorNode"
+                execuable_path = {:?}
+
+                [executables.compile]
+                package_name = "tari_validator_node"
+                "#,
+                std::env::current_exe().unwrap()
+            ),
+        )
+        .await
+        .unwrap();
+
+        let started = load_config(&path, Some(&no_compile())).await.unwrap();
+        assert!(!started.processes.force_compile);
+        let mut executables = ExecutableManager::new(started.processes.executables, started.processes.force_compile);
+        executables.prepare_all().await.unwrap();
+
+        let reloaded = load_config(&path, Some(&no_compile())).await.unwrap();
+        let changed = executables.apply_config_update(reloaded.processes.executables, reloaded.processes.force_compile);
+        assert!(changed.is_empty());
+
+        let reloaded_without_overrides = load_config(&path, None).await.unwrap();
+        let changed = executables.apply_config_update(
+            reloaded_without_overrides.processes.executables,
+            reloaded_without_overrides.processes.force_compile,
+        );
+        assert_eq!(changed, vec![InstanceType::TariValidatorNode]);
+
+        tokio::fs::remove_file(&path).await.unwrap();
     }
 }
