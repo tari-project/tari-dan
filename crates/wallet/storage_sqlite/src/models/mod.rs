@@ -16,6 +16,8 @@ mod transaction;
 
 mod transaction_request;
 
+mod trusted_validator_set;
+
 mod vault;
 
 mod authored_template;
@@ -42,6 +44,7 @@ pub use stealth_output::*;
 pub use substate::Substate;
 pub use transaction::*;
 pub use transaction_request::*;
+pub use trusted_validator_set::*;
 pub use utxo_process_queue::*;
 pub use vault::Vault;
 pub use webauthn_registrations::*;

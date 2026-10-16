@@ -181,7 +181,16 @@ impl FeeReceiptBuilder {
 }
 
 #[derive(
-    Debug, Clone, minicbor::Encode, minicbor::Decode, minicbor::CborLen, Serialize, Deserialize, borsh::BorshSerialize,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    minicbor::Encode,
+    minicbor::Decode,
+    minicbor::CborLen,
+    Serialize,
+    Deserialize,
+    borsh::BorshSerialize,
 )]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct FeeReceipt {
@@ -404,6 +413,8 @@ impl FeeSource {
     Serialize,
     Deserialize,
     Default,
+    PartialEq,
+    Eq,
     borsh::BorshSerialize,
 )]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]

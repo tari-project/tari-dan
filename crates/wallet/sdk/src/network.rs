@@ -13,7 +13,12 @@ use tari_engine_types::{
     substate::{Substate, SubstateId, SubstateValue},
     transaction_receipt::FinalizeOutcome,
 };
-use tari_indexer_client::types::WatchedSubstateItem;
+use tari_indexer_client::types::{
+    EpochCheckpointEntry,
+    ProvenTransactionReceipt,
+    ValidatorSetCommittee,
+    WatchedSubstateItem,
+};
 use tari_ootle_common_types::{
     Epoch,
     StateVersion,
@@ -80,9 +85,12 @@ pub trait WalletNetworkInterface {
         transaction: Transaction,
     ) -> impl Future<Output = Result<TransactionQueryResult, Self::Error>> + Send;
 
+    /// Queries the result of a transaction. With `include_proof`, a committed transaction's result carries its receipt
+    /// and the proof that the receipt was committed.
     fn query_transaction_result(
         &self,
         transaction_id: TransactionId,
+        include_proof: bool,
     ) -> impl Future<Output = Result<TransactionQueryResult, Self::Error>> + Send;
 
     /// Subscribes to finalization notifications for every transaction the network commits from this point on.
@@ -116,6 +124,30 @@ pub trait WalletNetworkInterface {
         limit: Option<u64>,
         offset: Option<u64>,
     ) -> impl Future<Output = Result<Vec<WatchedSubstateItem>, Self::Error>> + Send;
+    /// The latest end-of-epoch checkpoint of the shard group that holds `shard`, with the next epoch's committee of
+    /// that shard group and its proof.
+    fn get_latest_epoch_checkpoint(
+        &self,
+        shard: Shard,
+    ) -> impl Future<Output = Result<EpochCheckpointEntry, Self::Error>> + Send;
+
+    /// Up to `limit` end-of-epoch checkpoints of the shard group that holds `shard`, from `from_epoch` in ascending
+    /// epoch order, each with the next epoch's committee of that shard group and its proof.
+    fn list_epoch_checkpoints(
+        &self,
+        from_epoch: Epoch,
+        limit: u32,
+        shard: Shard,
+    ) -> impl Future<Output = Result<Vec<EpochCheckpointEntry>, Self::Error>> + Send;
+
+    /// The committee of the shard group that holds `shard` in `epoch`, with its proof against that epoch's validator
+    /// set.
+    fn get_committee(
+        &self,
+        epoch: Epoch,
+        shard: Shard,
+    ) -> impl Future<Output = Result<ValidatorSetCommittee, Self::Error>> + Send;
+
     /// The epoch the network executes transactions in.
     fn get_current_epoch(&self) -> impl Future<Output = Result<Epoch, Self::Error>> + Send;
 
@@ -132,6 +164,9 @@ pub struct SubstateQueryResult {
 pub struct TransactionQueryResult {
     pub result: TransactionFinalizedResult,
     pub transaction_id: TransactionId,
+    /// The committed receipt and its proof, when the query asked for a proof and the transaction committed.
+    #[serde(default)]
+    pub receipt: Option<ProvenTransactionReceipt>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

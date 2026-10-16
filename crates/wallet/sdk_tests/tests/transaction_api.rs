@@ -5,20 +5,24 @@ mod support;
 
 use std::time::Duration;
 
+use ootle_byte_type::ToByteType;
 use tari_consensus_types::Decision;
 use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_engine_types::{
     Epoch,
     commit_result::{AbortReason, ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
+    crypto::commit_amount,
     fees::{FeeBreakdown, FeeReceipt, FeeSource},
-    substate::SubstateDiff,
+    substate::{SubstateDiff, SubstateId},
 };
+use tari_ootle_common_types::SubstateVersion;
 use tari_ootle_transaction::{Transaction, TransactionId, args};
 use tari_ootle_wallet_sdk::{
     models::TransactionStatus,
     network::{TransactionFinalizedResult, TransactionQueryResult},
     storage::{WalletStoreWriter, WriteableWalletStore},
 };
+use tari_template_lib::types::{ConfidentialOutputAddress, constants::STEALTH_TARI_RESOURCE_ADDRESS};
 use time::{OffsetDateTime, PrimitiveDateTime};
 
 use crate::support::{CannedTransactionResultInterface, Test, TestWithNetwork};
@@ -76,6 +80,7 @@ fn finalized_result(transaction_id: TransactionId, fee_receipt: FeeReceipt) -> T
             finalized_time: now(),
             abort_details: None,
         },
+        receipt: None,
     }
 }
 
@@ -141,4 +146,64 @@ async fn final_fee_is_zero_for_a_rejected_transaction() {
 
     assert_eq!(finalized.status, TransactionStatus::Rejected);
     assert_eq!(finalized.final_fee, Some(0));
+}
+
+#[tokio::test]
+async fn an_abort_releases_the_locked_outputs_whatever_its_execution_accepted() {
+    let transaction = build_transaction();
+    let transaction_id = transaction.calculate_id();
+
+    // The execution before the abort decision accepted a diff that spends both outputs the transaction locks.
+    let mut spends = SubstateDiff::new();
+    for amount in [25u64, 49] {
+        let commitment = commit_amount(&Default::default(), amount.into())
+            .unwrap()
+            .to_byte_type();
+        spends.down(
+            SubstateId::ConfidentialOutput(ConfidentialOutputAddress::new(
+                STEALTH_TARI_RESOURCE_ADDRESS,
+                commitment,
+            )),
+            SubstateVersion::ZERO,
+        );
+    }
+    let mut query_result = finalized_result(transaction_id, FeeReceipt::default());
+    let TransactionFinalizedResult::Finalized {
+        final_decision,
+        execution_result,
+        ..
+    } = &mut query_result.result
+    else {
+        unreachable!()
+    };
+    *final_decision = Decision::Abort(AbortReason::InsufficientFeesPaid);
+    execution_result.as_mut().unwrap().finalize.result = TransactionResult::Accept(spends);
+
+    let test = TestWithNetwork::with_network(CannedTransactionResultInterface::new(query_result));
+    test.add_unspent_output(25u64);
+    test.add_unspent_output(49u64);
+    test.store()
+        .with_write_tx(|tx| tx.transactions_insert(&transaction, None, &[Test::test_account_address()], false))
+        .unwrap();
+    let lock_id = test.new_lock().keep_locked();
+    test.sdk()
+        .confidential_outputs_api()
+        .lock_outputs_by_amount(lock_id, &Test::test_vault_address(), 50u64)
+        .unwrap();
+    test.sdk()
+        .transaction_api()
+        .locks_set_transaction_id(lock_id, transaction_id)
+        .unwrap();
+    assert_eq!(test.get_unspent_balance(), 0);
+
+    let finalized = test
+        .sdk()
+        .transaction_api()
+        .check_and_store_finalized_transaction(transaction_id)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(finalized.status, TransactionStatus::Rejected);
+    assert_eq!(test.get_unspent_balance(), 74, "both outputs are released, not spent");
 }

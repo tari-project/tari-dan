@@ -20,4 +20,5 @@ pub mod substate;
 pub mod swap_pool;
 pub mod template;
 pub mod transaction;
+pub mod validator_set;
 pub mod viewable_balance;

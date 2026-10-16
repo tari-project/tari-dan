@@ -21,7 +21,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateDiff, SubstateId, SubstateValue},
     vault::Vault,
 };
-use tari_indexer_client::types::WatchedSubstateItem;
+use tari_indexer_client::types::{EpochCheckpointEntry, ValidatorSetCommittee, WatchedSubstateItem};
 use tari_ootle_common_types::{StateVersion, SubstateVersion, shard::Shard};
 use tari_ootle_transaction::{Transaction, TransactionEnvelope, TransactionId, args};
 use tari_ootle_wallet_sdk::{
@@ -120,6 +120,7 @@ fn committed_result(transaction_id: TransactionId, diff: SubstateDiff) -> Transa
             finalized_time: now(),
             abort_details: None,
         },
+        receipt: None,
     }
 }
 
@@ -237,6 +238,7 @@ impl WalletNetworkInterface for FixedSubstateNetwork {
     async fn query_transaction_result(
         &self,
         _transaction_id: TransactionId,
+        _include_proof: bool,
     ) -> Result<TransactionQueryResult, Self::Error> {
         panic!("FixedSubstateNetwork called")
     }
@@ -273,6 +275,27 @@ impl WalletNetworkInterface for FixedSubstateNetwork {
         _resource_address: ResourceAddress,
         _tag_and_nonce_pairs: Vec<TagAndPublicNoncePair>,
     ) -> Result<Vec<(UtxoId, Utxo)>, Self::Error> {
+        panic!("FixedSubstateNetwork called")
+    }
+
+    async fn get_latest_epoch_checkpoint(&self, _shard: Shard) -> Result<EpochCheckpointEntry, Self::Error> {
+        panic!("FixedSubstateNetwork called")
+    }
+
+    async fn list_epoch_checkpoints(
+        &self,
+        _from_epoch: tari_ootle_common_types::Epoch,
+        _limit: u32,
+        _shard: Shard,
+    ) -> Result<Vec<EpochCheckpointEntry>, Self::Error> {
+        panic!("FixedSubstateNetwork called")
+    }
+
+    async fn get_committee(
+        &self,
+        _epoch: tari_ootle_common_types::Epoch,
+        _shard: Shard,
+    ) -> Result<ValidatorSetCommittee, Self::Error> {
         panic!("FixedSubstateNetwork called")
     }
 

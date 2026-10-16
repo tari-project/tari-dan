@@ -34,6 +34,7 @@ use serde::{Deserialize, Deserializer, Serialize, de};
 use tari_common::{ConfigurationError, DefaultConfigLoader, SubConfigPath, configuration::CommonConfig};
 use tari_crypto::tari_utilities::SafePassword;
 use tari_ootle_address::Network;
+use tari_ootle_wallet_sdk::IndexerTrust;
 use url::Url;
 
 #[derive(Debug, Clone)]
@@ -79,6 +80,11 @@ pub struct WalletDaemonConfig {
     /// comma-separated URLs.
     #[serde(rename = "indexer_api_url", deserialize_with = "deserialize_indexer_urls")]
     pub indexer_api_urls: Vec<Url>,
+    /// How far the wallet trusts its indexer. `verify` (the default) commits a transaction's changes only once a proof
+    /// of them verifies against the network's validator sets, and needs indexers that verify substate proofs. `trust`
+    /// takes the indexer at its word, for development only.
+    #[serde(default)]
+    pub indexer_trust: IndexerTrust,
     /// Expiration duration of the JWT token
     #[serde(with = "humantime_serde")]
     #[serde(default = "return_default_jwt_expiry")]
@@ -257,6 +263,7 @@ impl Default for WalletDaemonConfig {
                     .parse()
                     .expect("failed to parse default indexer_api_url"),
             ],
+            indexer_trust: IndexerTrust::default(),
             jwt_expiry: return_default_jwt_expiry(),
             transaction_request_ttl: return_default_transaction_request_ttl(),
             signing_request_ttl: return_default_signing_request_ttl(),

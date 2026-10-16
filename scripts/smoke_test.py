@@ -16,9 +16,11 @@ Stages (default order; select with --only / --skip):
   negative      🚫 Low fee, overspend, unauthorised withdraw and orphaned resource must all fail
   multi_wallet  👥 Stealth transfer to a second wallet daemon (skipped unless one is running)
   claim_burn    🔥 Burn tTARI on the base layer and wait for the wallet daemon to auto-claim it
-  epoch         ⏳ Mine into the next epoch and keep flooding until consensus crosses it (opt-in: --epoch)
+  epoch         ⏳ Mine into the next epoch, flood until consensus crosses it, then a wallet transfer
+                   must finalize promptly in the new epoch (opt-in: --epoch)
   fees          💸 Fee report, compared with the previous run's fees
-  health        🩺 Validators are running, agree on the epoch, and advanced during the run
+  health        🩺 Validators are running, agree on the epoch, and advanced during the run; the indexer
+                   serves the checkpoint wallets need for the current epoch
 
 Every wallet transaction is also looked up on the indexer: its result must be a committed accept and
 the substates it wrote must be served by the indexer.
@@ -58,6 +60,12 @@ SMOKE_ACCOUNT = "smoketest"
 RECV_ACCOUNT = "smoketest-recv"
 FEE_DRIFT_WARN = 0.20
 HEIGHT_SPREAD_WARN = 5
+# How long the indexer may take to serve the checkpoint that ends the epoch before consensus's epoch.
+# Consensus ends an epoch some time after the base layer moves past it, and the indexer asks again
+# every work interval (30s by default) until the committee serves it.
+CHECKPOINT_LAG_GRACE = 150
+# The shard whose checkpoints wallets walk the validator set handover through.
+WALK_SHARD = 1
 # A stealth transfer's fee is not refunded, so this is what each one costs.
 STEALTH_MAX_FEE = 20_000
 # The recipient accumulates many small outputs across runs, and each input adds verification cost.
@@ -422,8 +430,8 @@ class SmokeTest:
             self.overcharges.setdefault(op, []).append(overcharge)
         return paid, finalize
 
-    def wait(self, tx_id, op):
-        result = self.wallet.wait(tx_id)
+    def wait(self, tx_id, op, timeout_secs=120):
+        result = self.wallet.wait(tx_id, timeout_secs)
         paid, finalize = self.indexer_check(tx_id, op)
         return result, paid, finalize
 
@@ -443,7 +451,7 @@ class SmokeTest:
         return self.wait(res["transaction_id"], op)
 
     def stealth_transfer(self, resource, amount, dest, label, sender=SMOKE_ACCOUNT, wallet=None,
-                         selection="PreferRevealed", max_fee=STEALTH_MAX_FEE):
+                         selection="PreferRevealed", max_fee=STEALTH_MAX_FEE, timeout_secs=120):
         res = (wallet or self.wallet).call("accounts.stealth_transfer", {
             "owner_account": {"Name": sender},
             "fee_params": {"input_selection": selection, "pay_fee_with_swap": None},
@@ -459,7 +467,7 @@ class SmokeTest:
             "max_fee": max_fee,
             "dry_run": False,
         })
-        _, paid, _ = self.wait(res["transaction_id"], "stealth_transfer")
+        _, paid, _ = self.wait(res["transaction_id"], "stealth_transfer", timeout_secs)
         detail(f"🥷 {label} → {short(dest)} · fee {paid} µT")
 
     def ensure_template(self):
@@ -556,7 +564,19 @@ class SmokeTest:
                 raise StageFailed(f"consensus epoch still {epoch} after {self.args.epoch_timeout}s")
         # One more batch entirely inside the new epoch.
         self.flood(self.args.flood, quiet=True)
-        return f"consensus epoch {start_epoch} → {epoch}, {batches + 1} batches of {self.args.flood} all committed"
+        # The flood bypasses the wallet. A wallet verifies a receipt proven in the new epoch against the
+        # validator set that the previous epoch's checkpoint names, so this transfer finalizes only once
+        # it can walk to that set.
+        started = time.monotonic()
+        try:
+            self.stealth_transfer(TARI_TOKEN, TARI, self.recv["address"], f"{fmt_tari(TARI)} in epoch {epoch}",
+                                  timeout_secs=self.args.epoch_finality)
+        except StageFailed as e:
+            raise StageFailed(f"a wallet transfer in the new epoch {epoch} did not finalize: {e} "
+                              f"(indexer checkpoint epoch {self.indexer_checkpoint_epoch()})") from e
+        finality = time.monotonic() - started
+        return (f"consensus epoch {start_epoch} → {epoch}, {batches + 1} batches of {self.args.flood} all committed, "
+                f"wallet transfer finalized in {finality:.1f}s")
 
     # ---- templates
 
@@ -797,6 +817,44 @@ fn main() {{
             return
         raise StageFailed(f"{label}: transaction was accepted")
 
+    def locked_utxos(self, account):
+        locked = set()
+        for status in ("LockedForSpend", "LockedUnconfirmed"):
+            res = self.wallet.call("stealth_utxos.list", {
+                "resource_address": TARI_TOKEN,
+                "account_address": account["account"]["component_address"],
+                "filter_by_status": status,
+            })
+            locked |= {u["address"] for u in res["utxos"]}
+        return locked
+
+    def expect_rejected_spend_releases_locks(self):
+        """A stealth spend that does not commit hands the outputs it locked back to the wallet."""
+        if total(balances(self.wallet, RECV_ACCOUNT).get(TARI_TOKEN)) < 2 * TARI:
+            info("🥷 recipient has too little tTARI, sending some first…")
+            self.stealth_transfer(TARI_TOKEN, 3 * TARI, self.recv["address"], fmt_tari(3 * TARI))
+        before = self.locked_utxos(self.recv)
+        try:
+            self.stealth_transfer(TARI_TOKEN, TARI // 2, self.smoke["address"], "under-funded stealth spend",
+                                  sender=RECV_ACCOUNT, selection="PreferConfidential", max_fee=50)
+        except StageFailed as e:
+            # A refusal before submission locks nothing, so only a finalized failure exercises the release.
+            if "finished as" not in str(e):
+                raise StageFailed(f"under-funded stealth spend was refused before it finalized: {e}") from e
+            detail(f"🚫 under-funded stealth spend: {str(e).split(': ', 1)[-1][:150]}")
+        else:
+            raise StageFailed("under-funded stealth spend: transaction was accepted")
+        still_locked = self.locked_utxos(self.recv) - before
+        if still_locked:
+            raise StageFailed(f"under-funded stealth spend left {len(still_locked)} output(s) locked: "
+                              f"{', '.join(short(u) for u in sorted(still_locked))}")
+
+    def indexer_checkpoint_epoch(self):
+        status, body = http_get(f"{self.indexer_url}/epoch-checkpoints/latest?shard={WALK_SHARD}")
+        if status != 200:
+            raise StageFailed(f"indexer serves no latest checkpoint (HTTP {status})")
+        return body["checkpoint"]["epoch"]
+
     def ensure_on_chain(self, name, account):
         """The account's component address, after claiming faucet coins into the account if the network does not
         hold its component yet. Receiving stealth transfers leaves an account without one."""
@@ -832,7 +890,9 @@ fn main() {{
     let coins = account.withdraw(var!["tari"], {bal + TARI});
     account.deposit(coins);
 }}
-""", {**variables, "tari": TARI_TOKEN})
+""", {**variables, "tari": TARI_TOKEN}, must_contain="finished as OnlyFeeAccepted")
+
+        self.expect_rejected_spend_releases_locks()
 
         victim = self.ensure_on_chain(RECV_ACCOUNT, self.recv)
         self.expect_failure("withdraw from another key's account", f"""
@@ -854,7 +914,7 @@ fn main() {{
     SmokeToken::create_orphan("ORPHAN");
 }}
 """, variables, must_contain="orphaned substate")
-        return "all 4 invalid transactions failed"
+        return "all 5 invalid transactions failed"
 
     # ---- multi wallet
 
@@ -1005,9 +1065,21 @@ fn main() {{
         for group, heights in groups.items():
             if max(heights) - min(heights) > HEIGHT_SPREAD_WARN:
                 problems.append(f"shard group {group} heights spread {min(heights)}..{max(heights)}")
+        # Wallets verify receipts of an epoch against the validator set the previous epoch's checkpoint names.
+        needed = min(s["epoch"] for s in now.values()) - 1
+        deadline = time.monotonic() + CHECKPOINT_LAG_GRACE
+        checkpoint = self.indexer_checkpoint_epoch()
+        while checkpoint < needed and time.monotonic() < deadline:
+            time.sleep(5)
+            checkpoint = self.indexer_checkpoint_epoch()
+        detail(f"{'indexer':<20} checkpoint epoch {checkpoint}")
+        if checkpoint < needed:
+            problems.append(f"indexer serves checkpoints to epoch {checkpoint} after {CHECKPOINT_LAG_GRACE}s, "
+                            f"wallets need epoch {needed}")
         if problems:
             raise StageFailed("; ".join(problems))
-        return f"{len(now)} validators running in epoch {epochs.pop()} and advancing"
+        return (f"{len(now)} validators running in epoch {epochs.pop()} and advancing, "
+                f"indexer checkpoint epoch {checkpoint}")
 
 
 # ----------------------------------------------------------------------------------------------- main
@@ -1033,6 +1105,8 @@ def main():
     p.add_argument("--burn-timeout", type=int, default=600, help="seconds to wait for a burn to be claimed")
     p.add_argument("--epoch", action="store_true", help="also run the epoch stage")
     p.add_argument("--epoch-timeout", type=int, default=1800, help="seconds to wait for an epoch change")
+    p.add_argument("--epoch-finality", type=int, default=120,
+                   help="seconds a wallet transfer in the new epoch may take to finalize (default 120)")
     p.add_argument("--epoch-mine", type=int, default=12,
                    help="base-layer blocks the swarm mines at the start of the epoch stage (0 to not mine)")
     p.add_argument("--only", help=f"comma-separated subset of: {','.join(STAGES)}")

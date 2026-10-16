@@ -285,7 +285,8 @@ where
             WalletEvent::AuthLoginRequest(_) |
             WalletEvent::UtxoRecoveryStarted(_) |
             WalletEvent::UtxoRecoveryCompleted(_) |
-            WalletEvent::TransactionRequestCreated(_) => {},
+            WalletEvent::TransactionRequestCreated(_) |
+            WalletEvent::ValidatorSetReanchored(_) => {},
         }
         Ok(())
     }

@@ -7,7 +7,7 @@ pub mod apis;
 pub mod models;
 mod sdk;
 
-pub use sdk::{WalletSdk, WalletSdkConfig};
+pub use sdk::{IndexerTrust, WalletSdk, WalletSdkConfig};
 pub use spec::*;
 pub use tari_common_types::seeds::cipher_seed::CipherSeed;
 

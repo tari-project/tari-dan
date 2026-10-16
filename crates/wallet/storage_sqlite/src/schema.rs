@@ -281,6 +281,15 @@ diesel::table! {
 }
 
 diesel::table! {
+    trusted_validator_sets (epoch) {
+        epoch -> BigInt,
+        validator_set -> Text,
+        anchor -> Nullable<Text>,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     utxo_process_queue (id) {
         id -> Integer,
         account_id -> Integer,
@@ -392,6 +401,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     transaction_accounts,
     transaction_requests,
     transactions,
+    trusted_validator_sets,
     utxo_process_queue,
     vault_locks,
     vaults,

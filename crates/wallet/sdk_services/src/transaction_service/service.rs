@@ -57,6 +57,10 @@ pub struct TransactionServiceConfig {
     /// Delay before re-subscribing to the finalization stream after it drops. While disconnected every poll
     /// queries every pending transaction.
     pub stream_reconnect_backoff: Duration,
+    /// Interval at which a wallet that verifies its indexer brings its trusted validator set up to date. Syncing while
+    /// online keeps the wallet's record of when it last synced honest, which decides whether an indexer's claim that
+    /// the wallet fell far behind is believable.
+    pub validator_set_sync_interval: Duration,
 }
 
 impl Default for TransactionServiceConfig {
@@ -66,6 +70,7 @@ impl Default for TransactionServiceConfig {
             post_submit_check_delay: Duration::from_millis(750),
             silent_transaction_timeout: Duration::from_secs(10),
             stream_reconnect_backoff: Duration::from_secs(5),
+            validator_set_sync_interval: Duration::from_secs(10 * 60),
         }
     }
 }
@@ -157,6 +162,8 @@ where
         let mut events_subscription = self.notify.subscribe();
         let mut poll_interval = time::interval(self.config.poll_interval);
         poll_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        let mut validator_set_sync_interval = time::interval(self.config.validator_set_sync_interval);
+        validator_set_sync_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         let mut rx_watch_events = FinalizedWatch::spawn(
             self.wallet_sdk.get_network_interface().clone(),
             self.config.stream_reconnect_backoff,
@@ -223,6 +230,10 @@ where
                             );
                         },
                     }
+                }
+
+                _ = validator_set_sync_interval.tick() => {
+                    self.on_validator_set_sync();
                 }
 
                 _ = poll_interval.tick() => {
@@ -359,6 +370,19 @@ where
         Ok(true)
     }
 
+    /// Brings the trusted validator set up to date in the background, when the wallet verifies its indexer.
+    fn on_validator_set_sync(&self) {
+        if !self.wallet_sdk.sdk_config().indexer_trust.is_verify() {
+            return;
+        }
+        let wallet_sdk = self.wallet_sdk.clone();
+        tokio::spawn(async move {
+            if let Err(err) = wallet_sdk.validator_set_api().sync().await {
+                warn!(target: LOG_TARGET, "Failed to bring the trusted validator set up to date: {err}");
+            }
+        });
+    }
+
     /// Queries the result of a transaction the network reports as finalized and this wallet is waiting on.
     ///
     /// The check runs under the poll permit and re-reads the transaction's status once it holds it, so a poll that
@@ -493,7 +517,10 @@ where
                 target: LOG_TARGET,
                 "Requesting result for transaction {tx_id}",
             );
-            Self::check_pending_transaction(wallet_sdk, notify, tx_id).await?;
+            // One transaction that fails to check leaves it pending for the next poll, and the rest are still checked.
+            if let Err(err) = Self::check_pending_transaction(wallet_sdk, notify, tx_id).await {
+                error!(target: LOG_TARGET, "Error checking pending transaction {tx_id}: {err}");
+            }
         }
         Ok(())
     }
@@ -562,7 +589,8 @@ where
             WalletEvent::UtxoRecovered(_) |
             WalletEvent::UtxoRecoveryCompleted(_) |
             WalletEvent::UtxoSpent(_) |
-            WalletEvent::TransactionRequestCreated(_) => {},
+            WalletEvent::TransactionRequestCreated(_) |
+            WalletEvent::ValidatorSetReanchored(_) => {},
         }
         Ok(())
     }

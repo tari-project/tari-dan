@@ -4,6 +4,7 @@
 use std::fmt::Display;
 
 use tari_engine_types::{SubstateVersion, commit_result::FinalizeResult};
+use tari_ootle_common_types::{Epoch, ValidatorSetHash};
 use tari_ootle_transaction::TransactionId;
 use tari_template_lib::types::{ComponentAddress, UtxoAddress};
 
@@ -22,6 +23,7 @@ pub enum WalletEvent {
     UtxoRecoveryCompleted(UtxoRecoveryCompletedEvent),
     UtxoSpent(UtxoSpentEvent),
     TransactionRequestCreated(TransactionRequestCreatedEvent),
+    ValidatorSetReanchored(ValidatorSetReanchoredEvent),
 }
 
 impl WalletEvent {
@@ -170,6 +172,17 @@ pub struct TransactionRequestCreatedEvent {
     pub requested_by: Option<String>,
 }
 
+/// The wallet re-anchored: it now trusts a validator set that no handover from the set it trusted before vouches for.
+/// It trusts the indexer for that set as it did on first use.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ValidatorSetReanchoredEvent {
+    /// The epoch of the latest validator set the wallet trusted before.
+    pub previous_epoch: Option<Epoch>,
+    /// The epoch of the validator set the wallet anchored on.
+    pub epoch: Epoch,
+    pub validator_set_hash: ValidatorSetHash,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum WalletEventType {
     TransactionRequestCreated,
@@ -183,6 +196,7 @@ pub enum WalletEventType {
     UtxoRecovered,
     UtxoRecoveryCompleted,
     UtxoSpent,
+    ValidatorSetReanchored,
 }
 
 impl Display for WalletEventType {
@@ -199,6 +213,7 @@ impl Display for WalletEventType {
             WalletEventType::UtxoRecoveryCompleted => "UtxoRecoveryCompleted",
             WalletEventType::UtxoSpent => "UtxoSpent",
             WalletEventType::TransactionRequestCreated => "TransactionRequestCreated",
+            WalletEventType::ValidatorSetReanchored => "ValidatorSetReanchored",
         };
         write!(f, "{}", s)
     }
@@ -218,6 +233,7 @@ impl From<&WalletEvent> for WalletEventType {
             WalletEvent::UtxoRecoveryCompleted(_) => Self::UtxoRecoveryCompleted,
             WalletEvent::UtxoSpent(_) => Self::UtxoSpent,
             WalletEvent::TransactionRequestCreated(_) => Self::TransactionRequestCreated,
+            WalletEvent::ValidatorSetReanchored(_) => Self::ValidatorSetReanchored,
         }
     }
 }

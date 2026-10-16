@@ -21,7 +21,7 @@ use tari_engine_types::{
     Utxo,
     substate::{Substate, SubstateId},
 };
-use tari_indexer_client::types::WatchedSubstateItem;
+use tari_indexer_client::types::{EpochCheckpointEntry, ValidatorSetCommittee, WatchedSubstateItem};
 use tari_ootle_common_types::{
     StateVersion,
     SubstateVersion,
@@ -140,7 +140,7 @@ impl WalletNetworkInterface for OneUtxoNetwork {
         panic!("OneUtxoNetwork::submit_dry_run_transaction called")
     }
 
-    async fn query_transaction_result(&self, _: TransactionId) -> Result<TransactionQueryResult, Self::Error> {
+    async fn query_transaction_result(&self, _: TransactionId, _: bool) -> Result<TransactionQueryResult, Self::Error> {
         panic!("OneUtxoNetwork::query_transaction_result called")
     }
 
@@ -193,6 +193,23 @@ impl WalletNetworkInterface for OneUtxoNetwork {
         _: Vec<TagAndPublicNoncePair>,
     ) -> Result<Vec<(UtxoId, Utxo)>, Self::Error> {
         panic!("OneUtxoNetwork::get_unspent_utxos called")
+    }
+
+    async fn get_latest_epoch_checkpoint(&self, _shard: Shard) -> Result<EpochCheckpointEntry, Self::Error> {
+        panic!("OneUtxoNetwork called")
+    }
+
+    async fn list_epoch_checkpoints(
+        &self,
+        _from_epoch: Epoch,
+        _limit: u32,
+        _shard: Shard,
+    ) -> Result<Vec<EpochCheckpointEntry>, Self::Error> {
+        panic!("OneUtxoNetwork called")
+    }
+
+    async fn get_committee(&self, _epoch: Epoch, _shard: Shard) -> Result<ValidatorSetCommittee, Self::Error> {
+        panic!("OneUtxoNetwork called")
     }
 
     async fn get_current_epoch(&self) -> Result<Epoch, Self::Error> {

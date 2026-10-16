@@ -47,7 +47,9 @@ use crate::{
         TransactionRequestId,
         TransactionRequestModel,
         TransactionRequestStatus,
+        TrustedValidatorSetHash,
         UtxoUnspent,
+        ValidatorSetAnchor,
         VaultModel,
         WalletEvent,
         WalletLockId,
@@ -398,6 +400,17 @@ pub trait WalletStoreWriter: CommittableStore {
     /// the admin UI can still show the historical `last_used_at` for
     /// already-revoked credentials.
     fn api_key_revoke(&mut self, id: i32) -> Result<(), WalletStorageError>;
+
+    // Trusted validator sets
+    /// Records that the wallet trusts `validator_set` for its epoch, through `anchor` or, when `None`, a handover. A
+    /// set already recorded for that epoch stays as it is.
+    fn trusted_validator_sets_insert(
+        &mut self,
+        validator_set: &TrustedValidatorSetHash,
+        anchor: Option<ValidatorSetAnchor>,
+    ) -> Result<(), WalletStorageError>;
+    /// Forgets every trusted validator set, ahead of anchoring anew.
+    fn trusted_validator_sets_clear(&mut self) -> Result<(), WalletStorageError>;
 }
 
 pub trait WalletEventStoreWriter {

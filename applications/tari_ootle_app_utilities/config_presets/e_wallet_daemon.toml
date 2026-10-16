@@ -19,6 +19,11 @@
 # exempt. (default = 100000000, i.e. 100 TARI)
 # max_fee_limit = 100000000
 
+# How far the wallet trusts its indexer. "verify" commits a transaction's changes only once a proof of them verifies
+# against the network's validator sets, and needs an indexer with verify_substate_proofs enabled. "trust" takes the
+# indexer at its word, for development only. (default = "verify")
+# indexer_trust = "verify"
+
 [localnet.ootle_wallet_daemon]
 # Indexer API URLs. The wallet picks one at random at startup and moves to the next if it stops responding.
 # (default: ["http://127.0.0.1:18300"])
