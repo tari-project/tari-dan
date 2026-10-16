@@ -23,6 +23,7 @@ pub(crate) mod test_support;
 pub mod transaction;
 pub mod transaction_requests;
 pub mod validator;
+pub mod validator_set;
 pub(crate) mod value_lookup;
 pub mod wallet;
 pub mod web_ui;

@@ -1759,8 +1759,9 @@ pub struct TrustedValidatorSetInfo {
     /// as it does on first use, in place of walking to it from its earlier anchor.
     #[cfg_attr(feature = "ts", ts(type = "\"FirstUse\" | \"Reanchor\""))]
     pub anchor: ValidatorSetAnchor,
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
-    pub anchored_at: PrimitiveDateTime,
+    /// When the wallet anchored, in seconds since the Unix epoch.
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub anchored_at: i64,
     /// When the wallet last brought its trusted set up to date, in seconds since the Unix epoch.
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub synced_at: Option<u64>,

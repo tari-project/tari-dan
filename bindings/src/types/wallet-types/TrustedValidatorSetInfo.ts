@@ -20,7 +20,10 @@ export type TrustedValidatorSetInfo = {
    * as it does on first use, in place of walking to it from its earlier anchor.
    */
   anchor: "FirstUse" | "Reanchor";
-  anchored_at: string;
+  /**
+   * When the wallet anchored, in seconds since the Unix epoch.
+   */
+  anchored_at: number;
   /**
    * When the wallet last brought its trusted set up to date, in seconds since the Unix epoch.
    */
