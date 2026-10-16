@@ -1349,6 +1349,8 @@ mod tests {
         /// Answered on a proven read as down at the given version, with the given proof.
         down_with_proof: HashMap<SubstateId, (SubstateVersion, SubstateProofData)>,
         batch_requests: AtomicUsize,
+        /// Every id requested in a batch, in request order.
+        batched_ids: Mutex<Vec<SubstateId>>,
         single_requests: AtomicUsize,
         /// Single reads of these fail.
         failing_single_reads: HashSet<SubstateId>,
@@ -1437,6 +1439,11 @@ mod tests {
             _include_proofs: bool,
         ) -> Result<SubstateBatch, ValidatorNodeRpcClientError> {
             self.0.batch_requests.fetch_add(1, Ordering::Relaxed);
+            self.0
+                .batched_ids
+                .lock()
+                .unwrap()
+                .extend(substate_ids.iter().map(|&id| id.clone()));
             if let Some(batch) = &self.0.proven_batch {
                 return Ok(batch.clone());
             }
@@ -2705,7 +2712,43 @@ mod tests {
         let found = manager.fetch_and_cache_substates(&ids).await.unwrap();
 
         assert_eq!(found.len(), ids.len());
-        assert_eq!(network.batch_requests.load(Ordering::Relaxed), 1);
+        assert_eq!(*network.batched_ids.lock().unwrap(), vec![ids[2].clone()]);
+    }
+
+    /// Fresh cached down and nonexistent heads settle their ids as not live, with no committee call.
+    #[tokio::test]
+    async fn cached_down_and_absent_heads_are_left_out_from_the_cache() {
+        let ids = (0..2).map(component_id).collect::<Vec<_>>();
+        let (manager, network) = manager(FakeNetwork {
+            live: live(&ids),
+            ..Default::default()
+        });
+        let manager = manager.with_substate_proof_verification(true);
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let down = SubstateVersion::new(1);
+        manager.substate_cache.0.lock().unwrap().extend([
+            (ids[0].clone(), SubstateCacheEntry {
+                version: Some(down),
+                substate_result: SubstateResult::Down { version: down },
+                cached_at: now,
+                verified: true,
+            }),
+            (ids[1].clone(), SubstateCacheEntry {
+                version: None,
+                substate_result: SubstateResult::DoesNotExist,
+                cached_at: now,
+                verified: false,
+            }),
+        ]);
+
+        let found = manager.fetch_and_cache_substates(&ids).await.unwrap();
+
+        assert!(found.is_empty(), "{:?}", found.keys().collect::<Vec<_>>());
+        assert_eq!(network.batch_requests.load(Ordering::Relaxed), 0);
+        assert_eq!(network.single_requests.load(Ordering::Relaxed), 0);
     }
 
     /// While verification is on, a cached up head is served only with a proof, so one held without a proof is
