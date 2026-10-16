@@ -109,7 +109,6 @@ use crate::{
                 TipAuthority,
                 ensure_epoch_reached,
                 ensure_history_values_held,
-                reserve_scan,
             },
         },
         services::mempool::MempoolHandle,
@@ -117,9 +116,14 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::ootle::p2p::rpc";
-/// The most `sync_state` streams scanning history at once. A scan reads every version in its range whatever its value
-/// filters let through, so its cost to this node is set by the range alone.
-const MAX_CONCURRENT_STATE_SYNC_SCANS: usize = 32;
+
+/// The most state version reads `sync_state` streams run at once. A read is synchronous and occupies a runtime worker,
+/// one per core, so state sync reads take at most half of them and leave the rest to consensus.
+fn max_concurrent_state_sync_reads() -> usize {
+    std::thread::available_parallelism()
+        .map_or(1, |cores| cores.get() / 2)
+        .max(1)
+}
 
 pub struct ValidatorNodeRpcServiceImpl<TStateStore> {
     epoch_manager: EpochManagerHandle<PeerAddress>,
@@ -131,7 +135,7 @@ pub struct ValidatorNodeRpcServiceImpl<TStateStore> {
     epoch_history_length: u64,
     /// Permits for the batch responses held in memory at once; see [`MAX_BUFFERED_BATCH_RESPONSES`].
     batch_responses: Arc<Semaphore>,
-    state_sync_scans: Arc<Semaphore>,
+    state_sync_reads: Arc<Semaphore>,
 }
 
 impl<TStateStore: StateStore> ValidatorNodeRpcServiceImpl<TStateStore> {
@@ -151,7 +155,7 @@ impl<TStateStore: StateStore> ValidatorNodeRpcServiceImpl<TStateStore> {
             max_transaction_size_bytes,
             epoch_history_length,
             batch_responses: Arc::new(Semaphore::new(MAX_BUFFERED_BATCH_RESPONSES)),
-            state_sync_scans: Arc::new(Semaphore::new(MAX_CONCURRENT_STATE_SYNC_SCANS)),
+            state_sync_reads: Arc::new(Semaphore::new(max_concurrent_state_sync_reads())),
         }
     }
 
@@ -885,8 +889,6 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
             ));
         }
 
-        let scan_permit = reserve_scan(&self.state_sync_scans)?;
-
         debug!(
             target: LOG_TARGET,
             "🌍 peer initiated sync with this node for {} shard(s) ({} to {}) to {} (values: {:?}, follow: {})",
@@ -913,8 +915,8 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
                     .expect("STATE_SYNC_MAX_BATCH_SIZE is not zero"),
                 value_filter_flags,
                 req.include_version_proofs,
+                self.state_sync_reads.clone(),
             )
-            .with_scan_permit(scan_permit)
             .run(),
         );
 
