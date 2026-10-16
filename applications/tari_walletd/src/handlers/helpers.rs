@@ -16,7 +16,7 @@ use tari_ootle_wallet_sdk::{
     WalletSdk,
     WalletSdkSpec,
     apis::accounts::{AccountsApi, AccountsApiError},
-    models::{AccountWithAddress, DerivedKeyIndex, TransactionFinalizedEvent, WalletEvent},
+    models::{AccountWithAddress, DerivedKeyIndex, KeyId, TransactionFinalizedEvent, WalletEvent},
 };
 use tari_ootle_walletd_client::{ComponentAddressOrName, types::ClaimBurnProofContents};
 use tari_sidechain::CompleteClaimBurnProof;
@@ -157,6 +157,28 @@ pub(super) fn invalid_params<T: Display>(field: &str, details: Option<T>) -> any
         serde_json::Value::Null,
     )
     .into()
+}
+
+/// Refuses a caller-named key unless it may sign (see [`KeyId::is_signing_key`]). The key manager
+/// refuses the same keys when signing; checking here names the offending request field.
+pub(super) fn ensure_signing_key(field: &str, key_id: &KeyId) -> Result<(), anyhow::Error> {
+    if key_id.is_signing_key() {
+        return Ok(());
+    }
+    Err(invalid_params(
+        field,
+        Some(format!(
+            "{key_id} is not a signing key: only account, transaction, nonce and imported keys sign"
+        )),
+    ))
+}
+
+/// [`ensure_signing_key`] for a transaction's `seal_signer` and each of its `other_signers`.
+pub(super) fn ensure_transaction_signers(seal_signer: &KeyId, other_signers: &[KeyId]) -> Result<(), anyhow::Error> {
+    ensure_signing_key("seal_signer", seal_signer)?;
+    other_signers
+        .iter()
+        .try_for_each(|key_id| ensure_signing_key("other_signers", key_id))
 }
 
 pub(super) fn application_error<T: Display>(code: ApplicationErrorCode, details: T) -> anyhow::Error {

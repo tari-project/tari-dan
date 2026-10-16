@@ -52,7 +52,7 @@ use tari_ootle_walletd_client::{
 
 use super::context::HandlerContext;
 use crate::handlers::{
-    helpers::{invalid_params, invalid_request},
+    helpers::{ensure_transaction_signers, invalid_params, invalid_request},
     transaction::submit_inner_for_request,
 };
 
@@ -82,6 +82,7 @@ pub async fn handle_create(
     req.transaction
         .validate_blob_references()
         .map_err(|e| invalid_params("transaction.blobs", Some(e.to_string())))?;
+    ensure_transaction_signers(&req.seal_signer, &req.other_signers)?;
 
     // The transaction is stored verbatim: the request path neither detects
     // inputs nor touches any field, so a caller who has already collected
@@ -695,5 +696,40 @@ mod tests {
             .unwrap();
 
         assert_eq!(get_lock(&daemon, lock_id).timeout_at, None);
+    }
+
+    #[tokio::test]
+    async fn a_request_cannot_name_a_mask_or_view_key_as_a_signer() {
+        let daemon = TestDaemon::start().await;
+        let tool = daemon.api_key("htlc-swap-tool", "transaction_requests:create");
+
+        for branch in [
+            KeyBranch::ConfidentialMask,
+            KeyBranch::StealthMask,
+            KeyBranch::ViewOnlyKey,
+            KeyBranch::ElgamalEncryptionViewKey,
+        ] {
+            let mut req = create_request(vec![], 60 * 60);
+            req.other_signers = vec![KeyId::derived(branch, 0)];
+            let err = handle_create(&daemon.context, Some(&tool), req).await.unwrap_err();
+            assert!(err.to_string().contains("other_signers"), "{err}");
+
+            let mut req = create_request(vec![], 60 * 60);
+            req.seal_signer = KeyId::derived(branch, 0);
+            let err = handle_create(&daemon.context, Some(&tool), req).await.unwrap_err();
+            assert!(err.to_string().contains("seal_signer"), "{err}");
+        }
+
+        let stored = daemon
+            .context
+            .wallet_sdk()
+            .store()
+            .with_read_tx(|tx| tx.transaction_requests_list())
+            .unwrap();
+        assert!(stored.is_empty(), "a refused request was stored");
+
+        let mut req = create_request(vec![], 60 * 60);
+        req.other_signers = vec![KeyId::derived(KeyBranch::Nonce, 0)];
+        handle_create(&daemon.context, Some(&tool), req).await.unwrap();
     }
 }

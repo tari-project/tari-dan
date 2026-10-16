@@ -19,7 +19,7 @@ use tari_ootle_walletd_client::{
     },
 };
 
-use super::context::HandlerContext;
+use super::{context::HandlerContext, helpers::invalid_params};
 
 pub async fn handle_create(
     context: &HandlerContext,
@@ -28,6 +28,7 @@ pub async fn handle_create(
 ) -> Result<KeysCreateResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     context.authorize(token, &[Permission::Keys(Crud::Create)])?;
+    ensure_not_mask_branch(req.branch)?;
     let key_manager = sdk.key_manager_api();
     let key = req
         .specific_index
@@ -63,6 +64,7 @@ pub async fn handle_list(
 ) -> Result<KeysListResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     context.authorize(token, &[Permission::Keys(Crud::Read)])?;
+    ensure_not_mask_branch(req.branch)?;
     let keys = sdk.key_manager_api().get_all_derived_keys(req.branch)?;
     Ok(KeysListResponse {
         keys: keys
@@ -86,4 +88,54 @@ pub async fn handle_set_active(
     Ok(KeysSetActiveResponse {
         public_key: key.to_public_key().to_byte_type(),
     })
+}
+
+/// Mask public keys unblind the wallet's output commitments, so the key API never serves them.
+fn ensure_not_mask_branch(branch: KeyBranch) -> Result<(), anyhow::Error> {
+    if branch.is_mask() {
+        return Err(invalid_params(
+            "branch",
+            Some(format!("{branch} keys never leave the wallet")),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::handlers::test_support::TestDaemon;
+
+    #[tokio::test]
+    async fn mask_branch_public_keys_are_not_served() {
+        let daemon = TestDaemon::start().await;
+        let session = Some(&daemon.session);
+
+        for branch in [KeyBranch::ConfidentialMask, KeyBranch::StealthMask] {
+            let err = handle_list(&daemon.context, session, KeysListRequest { branch })
+                .await
+                .unwrap_err();
+            assert!(err.to_string().contains("branch"), "{err}");
+
+            for specific_index in [None, Some(0)] {
+                let err = handle_create(&daemon.context, session, KeysCreateRequest { branch, specific_index })
+                    .await
+                    .unwrap_err();
+                assert!(err.to_string().contains("branch"), "{err}");
+            }
+        }
+
+        handle_create(&daemon.context, session, KeysCreateRequest {
+            branch: KeyBranch::Account,
+            specific_index: None,
+        })
+        .await
+        .unwrap();
+        let listed = handle_list(&daemon.context, session, KeysListRequest {
+            branch: KeyBranch::Account,
+        })
+        .await
+        .unwrap();
+        assert!(!listed.keys.is_empty());
+    }
 }

@@ -375,6 +375,9 @@ impl<'a, TSpec: WalletSdkSpec> KeyManagerApi<'a, TSpec> {
         T: Signable<C>,
         T::Signature: From<SignatureOutput>,
     {
+        if !key_id.is_signing_key() {
+            return Err(KeyManagerApiError::NotASigningKey { key_id });
+        }
         match &key_id {
             // Use the key store implementation to sign with derived keys
             KeyId::Derived { key_branch, index } => {
@@ -439,6 +442,8 @@ pub enum KeyManagerApiError {
     ReadOnlyMode,
     #[error("Invalid key id: {details}")]
     InvalidKeyId { details: String },
+    #[error("Key {key_id} is not a signing key: only account, transaction, nonce and imported keys sign")]
+    NotASigningKey { key_id: KeyId },
     #[error("Cipher error: {0}")]
     CipherError(#[from] CipherError),
 }

@@ -55,6 +55,8 @@ use crate::{
     WalletSdk,
     handlers::helpers::{
         OrJrpcNotFound,
+        ensure_signing_key,
+        ensure_transaction_signers,
         get_account,
         get_account_or_default,
         invalid_params,
@@ -152,6 +154,7 @@ async fn submit_inner(
     req.transaction
         .validate_blob_references()
         .map_err(|e| invalid_params("transaction.blobs", Some(e.to_string())))?;
+    ensure_transaction_signers(&req.seal_signer, &req.other_signers)?;
     reject_detect_inputs_with_signatures(req.detect_inputs, &req.signatures)?;
     let detected_inputs = if req.detect_inputs {
         // If we are not overriding inputs, we will use inputs that we know about in the local substate id db
@@ -423,6 +426,7 @@ async fn submit_dry_run_inner(
     req.transaction
         .validate_blob_references()
         .map_err(|e| invalid_params("transaction.blobs", Some(e.to_string())))?;
+    ensure_transaction_signers(&req.seal_signer, &req.other_signers)?;
     reject_detect_inputs_with_signatures(req.detect_inputs, &req.signatures)?;
 
     let detected_inputs = if req.detect_inputs {
@@ -517,6 +521,10 @@ pub async fn handle_submit_manifest(
     })?;
 
     let seal_signer_key_id = req.seal_signer_key_id.unwrap_or(default_owner_key_id);
+    ensure_signing_key("seal_signer_key_id", &seal_signer_key_id)?;
+    req.signing_key_ids
+        .iter()
+        .try_for_each(|key_id| ensure_signing_key("signing_key_ids", key_id))?;
 
     // Fee of zero is never valid
     let fee_amount = req.max_fee.max(1);
@@ -916,13 +924,16 @@ fn resolve_metadata_hash(
 
 #[cfg(test)]
 mod tests {
+    use tari_ootle_address::Network;
     use tari_ootle_common_types::{SubstateVersion, engine_types::substate::SubstateId};
+    use tari_ootle_wallet_sdk::models::KeyBranch;
     use tari_template_lib_types::{
         ComponentAddress,
         crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes},
     };
 
     use super::*;
+    use crate::handlers::test_support::TestDaemon;
 
     fn component(byte: u8) -> SubstateId {
         SubstateId::Component(ComponentAddress::from_array([byte; 32]))
@@ -990,5 +1001,128 @@ mod tests {
 
         assert_eq!(decl.version(), None);
         assert!(decl.is_read());
+    }
+
+    fn submit_request(seal_signer: KeyId, other_signers: Vec<KeyId>) -> TransactionSubmitRequest {
+        TransactionSubmitRequest {
+            transaction: UnsignedTransaction::new(Network::LocalNet.as_byte(), Epoch(100)),
+            seal_signer,
+            other_signers,
+            signatures: vec![],
+            detect_inputs: false,
+            detect_inputs_use_unversioned: true,
+            lock_ids: vec![],
+        }
+    }
+
+    fn assert_invalid_params(err: &anyhow::Error, field: &str) {
+        let rpc = err
+            .downcast_ref::<JsonRpcError>()
+            .unwrap_or_else(|| panic!("expected a JsonRpcError, got: {err}"));
+        assert!(
+            matches!(rpc.error_reason(), JsonRpcErrorReason::InvalidParams),
+            "expected InvalidParams, got: {rpc}"
+        );
+        assert!(
+            rpc.to_string().contains(field),
+            "expected `{field}` to be named, got: {rpc}"
+        );
+    }
+
+    const NON_SIGNING_KEYS: [KeyId; 4] = [
+        KeyId::Derived {
+            key_branch: KeyBranch::ConfidentialMask,
+            index: 0,
+        },
+        KeyId::Derived {
+            key_branch: KeyBranch::StealthMask,
+            index: 0,
+        },
+        KeyId::Derived {
+            key_branch: KeyBranch::ViewOnlyKey,
+            index: 0,
+        },
+        KeyId::Derived {
+            key_branch: KeyBranch::ElgamalEncryptionViewKey,
+            index: 0,
+        },
+    ];
+
+    #[tokio::test]
+    async fn submit_refuses_to_sign_with_mask_and_view_keys() {
+        let daemon = TestDaemon::start().await;
+        let account = KeyId::derived(KeyBranch::Account, 0);
+
+        for key in NON_SIGNING_KEYS {
+            let err = handle_submit(
+                &daemon.context,
+                Some(&daemon.session),
+                submit_request(account, vec![key]),
+            )
+            .await
+            .unwrap_err();
+            assert_invalid_params(&err, "other_signers");
+
+            let err = handle_submit(&daemon.context, Some(&daemon.session), submit_request(key, vec![]))
+                .await
+                .unwrap_err();
+            assert_invalid_params(&err, "seal_signer");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_dry_run_refuses_to_sign_with_mask_and_view_keys() {
+        let daemon = TestDaemon::start().await;
+        let reader = daemon.api_key("reader", "transactions:read");
+        let account = KeyId::derived(KeyBranch::Account, 0);
+
+        for key in NON_SIGNING_KEYS {
+            let err = handle_submit_dry_run(&daemon.context, Some(&reader), submit_request(account, vec![key]))
+                .await
+                .unwrap_err();
+            assert_invalid_params(&err, "other_signers");
+
+            let err = handle_submit_dry_run(&daemon.context, Some(&reader), submit_request(key, vec![]))
+                .await
+                .unwrap_err();
+            assert_invalid_params(&err, "seal_signer");
+        }
+    }
+
+    /// `accounts.create_stealth_transfer_statement` hands out a nonce key for the
+    /// caller to pass back as a co-signer.
+    #[tokio::test]
+    async fn a_nonce_key_still_co_signs() {
+        let daemon = TestDaemon::start().await;
+        let request = submit_request(KeyId::derived(KeyBranch::Account, 0), vec![KeyId::derived(
+            KeyBranch::Nonce,
+            0,
+        )]);
+
+        // The test daemon has no transaction service, so the dry run fails after signing.
+        let err = handle_submit_dry_run(&daemon.context, Some(&daemon.session), request)
+            .await
+            .unwrap_err();
+        assert!(err.to_string().starts_with("Failed to submit transaction"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn the_signer_api_refuses_mask_and_view_keys() {
+        let daemon = TestDaemon::start().await;
+        let sdk = daemon.context.wallet_sdk();
+        let unsigned = UnsignedTransaction::new(Network::LocalNet.as_byte(), Epoch(100));
+        let seal_pk = RistrettoPublicKeyBytes::zero();
+        let signer = sdk.signer_api().with_context(&seal_pk);
+
+        for key in NON_SIGNING_KEYS {
+            signer.generate_signature(key, &unsigned).unwrap_err();
+        }
+        for key in [
+            KeyId::derived(KeyBranch::Account, 0),
+            KeyId::derived(KeyBranch::Transaction, 0),
+            KeyId::derived(KeyBranch::Nonce, 0),
+        ] {
+            signer.generate_signature(key, &unsigned).unwrap();
+        }
     }
 }

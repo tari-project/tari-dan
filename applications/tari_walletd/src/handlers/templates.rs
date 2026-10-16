@@ -25,7 +25,10 @@ use tari_ootle_walletd_client::{
 use tari_template_lib_types::crypto::Scalar32Bytes;
 use tari_utilities::ByteArray;
 
-use crate::handlers::{HandlerContext, helpers::not_found};
+use crate::handlers::{
+    HandlerContext,
+    helpers::{ensure_signing_key, not_found},
+};
 
 pub async fn handle_get(
     context: &HandlerContext,
@@ -82,6 +85,8 @@ pub async fn handle_sign_metadata(
 ) -> Result<SignTemplateMetadataResponse, anyhow::Error> {
     context.authorize(token, &[Permission::Templates(Crud::Create)])?;
 
+    ensure_signing_key("key_id", &req.key_id)?;
+
     let sdk = context.wallet_sdk();
     let key = sdk.key_manager_api().get_key(req.key_id)?;
     let author_public_key = RistrettoPublicKey::from_secret_key(&key.secret);
@@ -113,4 +118,48 @@ pub async fn handle_sign_metadata(
         metadata_cbor,
         metadata_hash,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use tari_ootle_template_metadata::TemplateMetadata;
+    use tari_ootle_wallet_sdk::models::{KeyBranch, KeyId};
+    use tari_template_lib_types::TemplateAddress;
+
+    use super::*;
+    use crate::handlers::test_support::TestDaemon;
+
+    fn sign_request(key_id: KeyId) -> SignTemplateMetadataRequest {
+        SignTemplateMetadataRequest {
+            key_id,
+            template_address: TemplateAddress::from_array([0x11; 32]),
+            metadata: TemplateMetadata::new("template".to_string(), "1.0.0".to_string()),
+        }
+    }
+
+    #[tokio::test]
+    async fn metadata_is_signed_only_with_a_signing_key() {
+        let daemon = TestDaemon::start().await;
+        let author = daemon.api_key("author", "templates:create");
+
+        for branch in [
+            KeyBranch::ConfidentialMask,
+            KeyBranch::StealthMask,
+            KeyBranch::ViewOnlyKey,
+            KeyBranch::ElgamalEncryptionViewKey,
+        ] {
+            let err = handle_sign_metadata(&daemon.context, Some(&author), sign_request(KeyId::derived(branch, 0)))
+                .await
+                .unwrap_err();
+            assert!(err.to_string().contains("key_id"), "{err}");
+        }
+
+        handle_sign_metadata(
+            &daemon.context,
+            Some(&author),
+            sign_request(KeyId::derived(KeyBranch::Account, 0)),
+        )
+        .await
+        .unwrap();
+    }
 }

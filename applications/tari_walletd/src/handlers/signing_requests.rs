@@ -342,14 +342,11 @@ fn requester_of(auth: AuthIdentity) -> SigningRequester {
     }
 }
 
-/// Keys whose signatures may authorize a transaction. Mask, nonce and view
-/// branches derive secrets that protect outputs; a signature or public key
-/// under them must never leave the wallet.
+/// Keys a signing request may name. A nonce key signs only as the throw-away
+/// authorizer of a stealth statement's revealed funds, in a transaction walletd
+/// seals itself, so a co-signature for another party never needs one.
 fn is_signing_key(key_id: &KeyId) -> bool {
-    match key_id {
-        KeyId::Imported { .. } => true,
-        KeyId::Derived { key_branch, .. } => matches!(key_branch, KeyBranch::Account | KeyBranch::Transaction),
-    }
+    key_id.is_signing_key() && key_id.derived_branch() != Some(KeyBranch::Nonce)
 }
 
 /// The first 8 bytes of the authorization message, as shown to the approver.
