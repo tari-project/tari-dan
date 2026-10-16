@@ -11,13 +11,14 @@ use ootle_byte_type::ToByteType;
 use tari_epoch_manager::service::EpochManagerHandle;
 use tari_indexer_client::event::{IndexerEvent, TransactionEvent};
 use tari_networking::NetworkingHandle;
+use tari_ootle_common_types::NumPreshards;
 use tari_ootle_p2p::{PeerAddress, TariMessagingSpec};
 use tari_ootle_storage::global::GlobalDb;
 use tari_ootle_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_ootle_transaction::Network;
 use tari_template_lib_types::{TemplateAddress, crypto::RistrettoPublicKeyBytes};
 use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
-use tokio::sync::broadcast;
+use tokio::sync::{OnceCell, broadcast};
 
 use crate::{
     bootstrap::Services,
@@ -25,12 +26,20 @@ use crate::{
     dry_run::processor::DryRunTransactionProcessor,
     network_state_sync::{ConsensusEpoch, ValidatorStatusMonitor},
     notify::Subscriber,
-    rest_api::cache::HttpCacheConfig,
+    rest_api::{
+        cache::{HttpCacheConfig, SETTLED},
+        committee_cache::CommitteeProofCache,
+        error::ErrorResponse,
+        proofs,
+    },
     storage_sqlite::SqliteIndexerStore,
     store::ReadOnlyStore,
     substate_manager::SubstateManager,
     transaction_manager::TransactionManager,
 };
+
+/// Holds the committees of several hundred epochs at a few KB per committee.
+const COMMITTEE_PROOF_CACHE_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Clone)]
 pub struct HandlerContext {
@@ -57,6 +66,8 @@ impl HandlerContext {
                 watched_templates: services.watched_templates.clone(),
                 validator_status: services.validator_status.clone(),
                 consensus_epoch: services.consensus_epoch.clone(),
+                committee_proofs: CommitteeProofCache::new(COMMITTEE_PROOF_CACHE_BYTES),
+                num_preshards: OnceCell::new(),
             }),
         }
     }
@@ -115,6 +126,15 @@ impl HandlerContext {
         response
     }
 
+    /// Marks `body` as cacheable for long, for a response whose content can no longer change under its URL.
+    pub fn apply_settled_cache_control(&self, body: impl IntoResponse) -> Response {
+        let mut response = body.into_response();
+        if self.is_cache_control_enabled() {
+            response.headers_mut().insert(http::header::CACHE_CONTROL, SETTLED);
+        }
+        response
+    }
+
     pub fn apply_custom_cache_control(&self, headers: &mut http::HeaderMap, config: &HttpCacheConfig) {
         if self.is_cache_control_enabled() {
             config.apply(headers);
@@ -140,6 +160,19 @@ impl HandlerContext {
     pub fn consensus_epoch(&self) -> &ConsensusEpoch {
         &self.inner.consensus_epoch
     }
+
+    pub fn committee_proofs(&self) -> &CommitteeProofCache {
+        &self.inner.committee_proofs
+    }
+
+    /// The network's number of preshards, read from the epoch manager once; it is fixed for the network's life.
+    pub async fn num_preshards(&self) -> Result<NumPreshards, ErrorResponse> {
+        self.inner
+            .num_preshards
+            .get_or_try_init(|| proofs::num_preshards(self.epoch_manager()))
+            .await
+            .copied()
+    }
 }
 
 struct InnerContext {
@@ -160,4 +193,6 @@ struct InnerContext {
     watched_templates: Arc<HashSet<TemplateAddress>>,
     validator_status: ValidatorStatusMonitor,
     consensus_epoch: ConsensusEpoch,
+    committee_proofs: CommitteeProofCache,
+    num_preshards: OnceCell<NumPreshards>,
 }

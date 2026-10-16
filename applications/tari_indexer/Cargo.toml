@@ -78,6 +78,7 @@ log4rs = { workspace = true, features = [
 ] }
 mime_guess = { workspace = true }
 mediatype = "0.20.0"
+mini-moka = { workspace = true }
 serde = { workspace = true, features = ["default", "derive"] }
 serde_json = { workspace = true }
 serde_with = { workspace = true, features = ["indexmap_2"] }

@@ -9,14 +9,14 @@ use tari_indexer_client::types::{
     ValidatorSetCommittee,
     ValidatorSetCommitteeMember,
 };
-use tari_ootle_common_types::{Epoch, NumPreshards, optional::Optional, shard::Shard};
+use tari_ootle_common_types::{Epoch, NumPreshards, ValidatorSetHash, optional::Optional, shard::Shard};
 use tari_ootle_p2p::PeerAddress;
 use tari_ootle_storage::consensus_models::{CommittedBlockProof, EpochCheckpoint};
 use tari_state_tree::ValidatorSetCommitteeProof;
 use tari_template_lib_types::Hash32;
 use tari_validator_node_rpc::client::SubstateProofData;
 
-use crate::rest_api::error::ErrorResponse;
+use crate::rest_api::{context::HandlerContext, error::ErrorResponse};
 
 /// Rejects a request for proofs from an indexer that does not verify them, and so never holds one.
 pub fn require_proof_verification(verifies_substates: bool) -> Result<(), ErrorResponse> {
@@ -87,6 +87,29 @@ pub async fn committee_for_shard(
         .optional()
         .map_err(ErrorResponse::anyhow)?;
     Ok(proof.as_ref().map(to_validator_set_committee))
+}
+
+/// `epoch`'s committee for the shard group that contains `shard`, for a client that checks it against
+/// `validator_set_hash`. The committee comes from the cache when it holds one; otherwise from the epoch manager, and
+/// the cache keeps it only if it proves against `validator_set_hash`. A committee that proves against another hash is
+/// still returned, uncached, and the client rejects it.
+pub async fn committee_proved_against(
+    context: &HandlerContext,
+    epoch: Epoch,
+    validator_set_hash: &ValidatorSetHash,
+    shard: Shard,
+) -> Result<Option<ValidatorSetCommittee>, ErrorResponse> {
+    if let Some(committee) = context.committee_proofs().get(epoch, validator_set_hash, shard) {
+        return Ok(Some(committee));
+    }
+    let committee = committee_for_shard(context.epoch_manager(), context.num_preshards().await?, epoch, shard).await?;
+    if let Some(committee) = committee
+        .as_ref()
+        .filter(|committee| committee.validator_set_hash == *validator_set_hash)
+    {
+        context.committee_proofs().insert(committee.clone());
+    }
+    Ok(committee)
 }
 
 /// The client form of a committee proof, with the members and set hash read out of it.
