@@ -9,7 +9,11 @@ use log::*;
 use ootle_byte_type::{FromByteType, ToByteType};
 use serde_json::json;
 use tari_crypto::{commitment::HomomorphicCommitmentFactory, keys::PublicKey as _, ristretto::RistrettoPublicKey};
-use tari_engine_types::{crypto::get_commitment_factory, substate::SubstateId};
+use tari_engine_types::{
+    confidential::MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE,
+    crypto::get_commitment_factory,
+    substate::SubstateId,
+};
 use tari_ootle_common_types::{displayable::Displayable, optional::Optional};
 use tari_ootle_wallet_crypto::OutputWitness;
 use tari_ootle_wallet_sdk::{
@@ -162,7 +166,7 @@ pub async fn handle_create_transfer_proof(
         amount: confidential_amount,
         mask: output_mask.key,
         sender_public_nonce: public_nonce,
-        minimum_value_promise: 0,
+        minimum_value_promise: MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE,
         encrypted_data,
         resource_view_key: resource_view_key.clone(),
     };
@@ -204,7 +208,7 @@ pub async fn handle_create_transfer_proof(
             mask: change_mask.key,
             sender_public_nonce: public_nonce,
             encrypted_data,
-            minimum_value_promise: 0,
+            minimum_value_promise: MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE,
             resource_view_key,
         })
     } else {
@@ -307,6 +311,15 @@ pub async fn handle_create_output_proof(
     let sdk = context.wallet_sdk();
     context.authorize(token, &[Permission::Confidential(Crud::Create, None)])?;
 
+    if req.amount < MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE {
+        return Err(invalid_params(
+            "amount",
+            Some(format!(
+                "A confidential output must hold at least {MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE}"
+            )),
+        ));
+    }
+
     let destination_view_key: RistrettoPublicKey = req
         .destination_address
         .view_only_key()
@@ -331,7 +344,7 @@ pub async fn handle_create_output_proof(
         amount: req.amount,
         mask: output_mask.key,
         sender_public_nonce: public_nonce,
-        minimum_value_promise: 0,
+        minimum_value_promise: MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE,
         encrypted_data,
         resource_view_key,
     };

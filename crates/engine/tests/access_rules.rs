@@ -1152,6 +1152,109 @@ mod resource_access_rules {
         );
     }
 
+    /// A resource rule requires possession. A confidential commitment stands in for the resource only because it is
+    /// proven to carry value, so a withdraw cannot mint a commitment to zero that passes the rule.
+    #[test]
+    fn a_zero_value_commitment_cannot_satisfy_a_resource_rule() {
+        use tari_ootle_common_types::substate_type::SubstateType;
+        use tari_ootle_transaction::TransactionBuilder;
+        use tari_template_lib::types::EncryptedData;
+        use tari_template_test_tooling::{
+            crypto::{RistrettoSecretKey, SecretKey},
+            support::{
+                confidential::{generate_confidential_output_statement, generate_withdraw_proof},
+                value_proof::value_proofs_for_commitment,
+            },
+            wallet_crypto::{OutputWitness, confidential::create_withdraw_proof},
+        };
+
+        let mut test = TemplateTest::new(CRATE_PATH, [
+            "tests/templates/access_rules",
+            "tests/templates/confidential/faucet",
+        ]);
+
+        let (supply, supply_mask, _) = generate_confidential_output_statement(100, None);
+        let faucet: ComponentAddress = test.call_function(
+            "ConfidentialFaucet",
+            "mint",
+            args![supply, value_proofs_for_commitment(100u64, &supply_mask)],
+            vec![],
+        );
+        let badge = test
+            .get_previous_output_address(SubstateType::Resource)
+            .as_resource_address()
+            .unwrap();
+
+        let (owner_proof, _, owner_key) = test.create_owner_proof();
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_function(access_rules_template, "with_configured_rules", args![
+                    OwnerRule::None,
+                    ComponentAccessRules::new().default(AccessRule::AllowAll),
+                    ResourceAccessRules::new().withdrawable(rule!(resource(badge)), UpdateRule::Locked),
+                    AccessRule::DenyAll,
+                ])
+                .build_and_seal(&owner_key),
+            vec![owner_proof],
+        );
+        let gate = test.return_values()[0].decoded::<ComponentAddress>().unwrap();
+
+        let take_tokens_with_badge = |builder: TransactionBuilder, account: ComponentAddress| {
+            builder
+                .call_method(account, "deposit", args![Workspace("badge")])
+                .call_method(account, "create_proof_for_resource", args![badge])
+                .put_last_instruction_output_on_workspace("proof")
+                .call_method(gate, "take_tokens_using_proof", args![Workspace("proof"), 10])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(account, "deposit", args![Workspace("tokens")])
+                .drop_all_proofs_in_workspace()
+        };
+
+        // A commitment holding part of the supply satisfies the rule.
+        let (holder_account, holder_proof, holder_key) = test.create_empty_account();
+        let withdraw = generate_withdraw_proof(&supply_mask, 1, Some(99), Amount::zero());
+        test.execute_expect_success(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(faucet, "take_free_coins", args![withdraw.proof])
+                .put_last_instruction_output_on_workspace("badge")
+                .then(|builder| take_tokens_with_badge(builder, holder_account))
+                .build_and_seal(&holder_key),
+            vec![holder_proof],
+        );
+
+        // A commitment to zero, created from no inputs, carries none of the resource.
+        let (attacker_account, attacker_proof, attacker_key) = test.create_empty_account();
+        let zero_output = OutputWitness {
+            amount: 0,
+            mask: RistrettoSecretKey::random(&mut rand::rng()),
+            sender_public_nonce: Default::default(),
+            minimum_value_promise: 0,
+            encrypted_data: EncryptedData::try_from(vec![0; EncryptedData::min_size()]).unwrap(),
+            resource_view_key: None,
+        };
+        let zero_proof = create_withdraw_proof(
+            &[],
+            Amount::zero(),
+            Some(&zero_output),
+            Amount::zero(),
+            None,
+            Amount::zero(),
+        )
+        .unwrap();
+        let reason = test.execute_expect_failure(
+            Transaction::builder_localnet(Epoch(1))
+                .call_method(faucet, "take_free_coins", args![zero_proof])
+                .put_last_instruction_output_on_workspace("badge")
+                .then(|builder| take_tokens_with_badge(builder, attacker_account))
+                .build_and_seal(&attacker_key),
+            vec![attacker_proof],
+        );
+        assert_reject_reason(reason, ResourceError::InvalidConfidentialProof {
+            details: "A confidential output must promise a minimum value of at least 1".to_string(),
+        });
+    }
+
     /// A resource's withdraw and deposit rules are evaluated in the account's own frame, and a `Proof` argument
     /// is how a badge reaches a frame. The account holds the transaction's signer badge and nothing else of its
     /// own, so a rule naming some other badge is satisfied only by handing that badge in.

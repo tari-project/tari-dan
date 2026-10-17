@@ -5,7 +5,7 @@ use tari_crypto::{
     keys::SecretKey,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey, pedersen::PedersenCommitment},
 };
-use tari_engine_types::crypto::commit_amount;
+use tari_engine_types::{confidential::MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE, crypto::commit_amount};
 use tari_ootle_wallet_crypto::{MaskAndValue, OutputWitness, confidential};
 use tari_template_lib::types::{
     Amount,
@@ -51,7 +51,7 @@ fn generate_confidential_proof_internal(
         amount: output_amount,
         mask: mask.clone(),
         sender_public_nonce: Default::default(),
-        minimum_value_promise: 0,
+        minimum_value_promise: MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE,
         encrypted_data: EncryptedData::try_from(vec![0; EncryptedData::min_size()]).unwrap(),
         resource_view_key: view_key.clone(),
     };
@@ -61,7 +61,7 @@ fn generate_confidential_proof_internal(
         amount,
         mask: change_mask.clone(),
         sender_public_nonce: Default::default(),
-        minimum_value_promise: 0,
+        minimum_value_promise: MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE,
         encrypted_data: EncryptedData::try_from(vec![0; EncryptedData::min_size()]).unwrap(),
         resource_view_key: view_key,
     });
@@ -182,19 +182,19 @@ fn generate_withdraw_proof_internal(
     };
     let change_mask = change_amount.map(|_| RistrettoSecretKey::random(&mut rng));
 
-    let output_proof = OutputWitness {
+    let output_proof = (output_amount > 0).then(|| OutputWitness {
         amount: output_amount,
         mask: output_mask.clone(),
         sender_public_nonce: Default::default(),
-        minimum_value_promise: 0,
+        minimum_value_promise: MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE,
         encrypted_data: EncryptedData::try_from(vec![0; EncryptedData::min_size()]).unwrap(),
         resource_view_key: view_key.clone(),
-    };
+    });
     let change_proof = change_amount.map(|amount| OutputWitness {
         amount,
         mask: change_mask.clone().unwrap(),
         sender_public_nonce: Default::default(),
-        minimum_value_promise: 0,
+        minimum_value_promise: MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE,
         encrypted_data: EncryptedData::try_from(vec![0; EncryptedData::min_size()]).unwrap(),
         resource_view_key: view_key,
     });
@@ -208,7 +208,7 @@ fn generate_withdraw_proof_internal(
             })
             .collect::<Vec<_>>(),
         input_revealed_amount,
-        Some(&output_proof),
+        output_proof.as_ref(),
         revealed_output_amount,
         change_proof.as_ref(),
         Amount::zero(),

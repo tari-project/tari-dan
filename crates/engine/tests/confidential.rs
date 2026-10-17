@@ -138,7 +138,7 @@ fn minting_a_commitment_without_a_value_proof_is_rejected() {
 
 #[test]
 fn mint_more_later() {
-    let (confidential_proof, _mask, value_proofs) = mint_statement(0, None);
+    let (confidential_proof, _mask, value_proofs) = mint_statement(1, None);
     let (mut template_test, faucet, _faucet_resx) = setup(confidential_proof, value_proofs, None);
 
     let (confidential_proof, mask, value_proofs) = mint_statement(100, None);
