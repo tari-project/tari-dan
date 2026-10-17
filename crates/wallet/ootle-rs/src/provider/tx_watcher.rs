@@ -47,6 +47,10 @@ use crate::{
 const MIN_RESULT_POLL_INTERVAL: Duration = Duration::from_millis(500);
 const MAX_RESULT_POLL_INTERVAL: Duration = Duration::from_secs(4);
 
+/// How often the watcher drops watches that nothing waits on any more, so that it pauses the event stream soon after
+/// the last one goes.
+const ABANDONED_WATCH_CHECK_INTERVAL: Duration = Duration::from_secs(1);
+
 pub struct TransactionWatcher {
     stream: BoxStream<'static, Result<sse::Event, EventStreamError>>,
     span: tracing::Span,
@@ -73,13 +77,30 @@ impl TransactionWatcher {
         TransactionWatcherHandle::new(tx_requests)
     }
 
-    /// Returns the next time a transaction watch request is set to be reaped, or if there are none, a time far in the
-    /// future i.e. don't wake up.
+    /// Returns the next time a transaction watch request is set to be reaped, or checked for being abandoned. With no
+    /// watch pending, a time far in the future i.e. don't wake up.
     fn next_reap_time(&self) -> Instant {
-        self.reap_times
+        let now = Instant::now();
+        let next_reap = self
+            .reap_times
             .first_key_value()
             .map(|(instant, _)| *instant)
-            .unwrap_or(Instant::now() + Duration::from_secs(60_000))
+            .unwrap_or(now + Duration::from_secs(60_000));
+        if self.pending_requests.is_empty() {
+            return next_reap;
+        }
+        next_reap.min(now + ABANDONED_WATCH_CHECK_INTERVAL)
+    }
+
+    /// Drops the watches whose waiter has gone, such as a watch answered by asking the indexer directly.
+    fn drop_abandoned_watches(&mut self) {
+        self.pending_requests.retain(|tx_id, request| {
+            let waited_on = !request.reply.is_closed();
+            if !waited_on {
+                tracing::debug!("Dropping the watch of tx_id {tx_id}, which nothing waits on");
+            }
+            waited_on
+        });
     }
 
     async fn run(mut self, mut rx_requests: mpsc::Receiver<TxWatchRequest>) {
@@ -103,6 +124,7 @@ impl TransactionWatcher {
             }
 
             self.reap_timeouts();
+            self.drop_abandoned_watches();
         }
     }
 
@@ -675,7 +697,7 @@ mod tests {
     use crate::provider::{
         IndexerTrust,
         test_indexer::{TestIndexer, committed_result},
-        tx_stream::EventStream,
+        tx_stream::{EventStream, PauseWaiter},
     };
 
     const TRANSACTION_ID: TransactionId = TransactionId::new([7; 32]);
@@ -687,14 +709,24 @@ mod tests {
 
     /// [`TRANSACTION_ID`], pending on `indexer`. The returned client must outlive the watch.
     fn pending(indexer: &TestIndexer, indexer_trust: IndexerTrust) -> (Arc<IndexerRestApiClient>, PendingTransaction) {
+        let (client, pending, _) = watched(indexer, indexer_trust);
+        (client, pending)
+    }
+
+    /// [`pending`], with a waiter on the pause of the watcher's event stream.
+    fn watched(
+        indexer: &TestIndexer,
+        indexer_trust: IndexerTrust,
+    ) -> (Arc<IndexerRestApiClient>, PendingTransaction, PauseWaiter) {
         let client = Arc::new(tari_indexer_client::connect_rest(indexer.url()).unwrap());
         let verifier = Arc::new(IndexerVerifier::new(Arc::downgrade(&client), NETWORK, indexer_trust));
         let paused = Paused::default();
+        let pause_waiter = paused.waiter();
         let events = EventStream::new(Arc::downgrade(&client), paused.waiter());
         let watcher = TransactionWatcher::new(Box::pin(events.into_stream()), paused).spawn();
         let pending = PendingTransaction::new(watcher, Arc::downgrade(&client), verifier, TRANSACTION_ID)
             .with_timeout(Duration::from_secs(2));
-        (client, pending)
+        (client, pending, pause_waiter)
     }
 
     /// An indexer whose latest checkpoint names the set of epoch 5, which committed [`TRANSACTION_ID`] with `result`,
@@ -826,5 +858,17 @@ mod tests {
             matches!(err, PendingTransactionError::TransactionRejected { .. }),
             "{err}"
         );
+    }
+
+    #[tokio::test]
+    async fn the_event_stream_pauses_once_a_watch_is_answered_by_asking_the_indexer() {
+        let indexer = indexer_that_finalized(|_| {}).await;
+        let (_client, pending, mut pause_waiter) = watched(&indexer, IndexerTrust::Verify);
+        let pending = pending.with_timeout(Duration::from_secs(60));
+
+        pending.get_receipt().await.unwrap();
+        tokio::time::timeout(Duration::from_secs(3), pause_waiter.wait_paused())
+            .await
+            .expect("the event stream stays unpaused for the answered watch");
     }
 }
