@@ -3,7 +3,11 @@
 
 use ootle_byte_type::ToByteType;
 use tari_crypto::{keys::SecretKey, ristretto::RistrettoSecretKey};
-use tari_engine_types::{crypto::commit_u64_amount, resource_container::ResourceContainer};
+use tari_engine_types::{
+    confidential::MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE,
+    crypto::commit_u64_amount,
+    resource_container::ResourceContainer,
+};
 use tari_ootle_wallet_crypto::{MaskAndValue, OutputWitness, WalletCryptoError, confidential::create_withdraw_proof};
 use tari_template_lib_types::{Amount, EncryptedData, ResourceAddress};
 
@@ -16,7 +20,7 @@ fn witness(amount: u64) -> OutputWitness {
         amount,
         mask: random_mask(),
         sender_public_nonce: Default::default(),
-        minimum_value_promise: 0,
+        minimum_value_promise: MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE,
         encrypted_data: EncryptedData::try_from(vec![0; EncryptedData::min_size()]).unwrap(),
         resource_view_key: None,
     }

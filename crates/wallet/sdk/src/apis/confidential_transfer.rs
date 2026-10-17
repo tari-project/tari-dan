@@ -7,6 +7,7 @@ use log::*;
 use ootle_byte_type::{FromByteType, ToByteType};
 use tari_bor::{Deserialize, Serialize};
 use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey};
+use tari_engine_types::confidential::MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE;
 use tari_ootle_address::OotleAddress;
 use tari_ootle_common_types::{
     Epoch,
@@ -521,7 +522,7 @@ where TSpec: WalletSdkSpec
             mask: mask.key,
             sender_public_nonce: public_nonce,
             encrypted_data,
-            minimum_value_promise: 0,
+            minimum_value_promise: MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE,
             resource_view_key,
         })
     }

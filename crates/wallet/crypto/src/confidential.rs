@@ -187,17 +187,20 @@ mod tests {
 
     use super::*;
 
+    fn witness(amount: u64, minimum_value_promise: u64) -> OutputWitness {
+        OutputWitness {
+            amount,
+            minimum_value_promise,
+            mask: RistrettoSecretKey::random(&mut rand::rng()),
+            sender_public_nonce: Default::default(),
+            encrypted_data: EncryptedData::try_from(vec![0; EncryptedData::min_size()]).unwrap(),
+            resource_view_key: None,
+        }
+    }
+
     fn create_valid_proof(amount: u64, minimum_value_promise: u64) -> ConfidentialOutputStatement {
-        let mask = RistrettoSecretKey::random(&mut rand::rng());
         create_output_statement(
-            Some(&OutputWitness {
-                amount,
-                minimum_value_promise,
-                mask,
-                sender_public_nonce: Default::default(),
-                encrypted_data: EncryptedData::try_from(vec![0; EncryptedData::min_size()]).unwrap(),
-                resource_view_key: None,
-            }),
+            Some(&witness(amount, minimum_value_promise)),
             Default::default(),
             None,
             Default::default(),
@@ -207,8 +210,34 @@ mod tests {
 
     #[test]
     fn it_is_valid_if_proof_is_valid() {
-        let proof = create_valid_proof(100, 0);
+        let proof = create_valid_proof(100, 1);
         validate_confidential_statement(&proof, None).unwrap();
+    }
+
+    /// A range proof with a zero minimum value promise also proves a commitment to zero, so it cannot show the output
+    /// holds any of the resource.
+    #[test]
+    fn it_is_invalid_if_an_output_promises_no_minimum_value() {
+        let zero_change = create_output_statement(
+            Some(&witness(100, 1)),
+            Default::default(),
+            Some(&witness(0, 0)),
+            Default::default(),
+        )
+        .unwrap();
+
+        for proof in [create_valid_proof(100, 0), zero_change] {
+            let err = validate_confidential_statement(&proof, None).unwrap_err();
+            assert!(
+                err.to_string().contains("must promise a minimum value of at least 1"),
+                "unexpected error: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn it_cannot_prove_a_zero_value_output_with_a_minimum_value_promise() {
+        create_output_statement(Some(&witness(0, 1)), Default::default(), None, Default::default()).unwrap_err();
     }
 
     #[test]
