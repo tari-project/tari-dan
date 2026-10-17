@@ -15,6 +15,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 ootle-wasm-core = { path = "../core", version = "0.46.0" }
 wasm-bindgen = "0.2"
+js-sys = "0.3"
 # getrandom is pulled in transitively via `rand` and `tari_bulletproofs_plus`. The wasm32-unknown-unknown
 # target requires explicit feature opt-in for both major versions used in the graph.
 #
@@ -32,6 +33,9 @@ debug = ["console_error_panic_hook"]
 [dependencies.console_error_panic_hook]
 version = "0.1"
 optional = true
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
 
 [package.metadata.cargo-machete]
 ignored = [
