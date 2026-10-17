@@ -392,6 +392,7 @@ jobs:
         run: rustup target add wasm32-unknown-unknown
 
       - name: cargo test cucumber
+        timeout-minutes: 150
         run: cargo test --profile ci-build --package integration_tests --test cucumber
 
       - name: target dir size
