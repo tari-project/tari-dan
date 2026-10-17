@@ -411,18 +411,7 @@ impl NetworkWideStateSync {
             restore_stripped_preimages(pool, served_by, shard_group, from_epoch, &mut checkpoints).await;
         }
 
-        if checkpoints.is_empty() {
-            info!(target: LOG_TARGET, "🌍️ No checkpoints found for shard group {shard_group} from epoch {from_epoch} (prev_epoch {prev_epoch})");
-            let mut progress = progress.lock().await;
-            progress.record_checkpoint(shard_group, prev_epoch);
-            let sync_progress_snapshot = progress.clone();
-            self.store
-                .with_write_tx(move |tx| tx.key_value_set(Key::SyncProgress, sync_progress_snapshot))
-                .await?;
-            return Ok(true);
-        }
-
-        info!(target: LOG_TARGET, "🌍️ Found {} checkpoints for shard group {shard_group} from epoch {from_epoch}", checkpoints.len());
+        info!(target: LOG_TARGET, "🌍️ Found {} checkpoints for shard group {shard_group} from epoch {from_epoch} (prev_epoch {prev_epoch})", checkpoints.len());
 
         for checkpoint in checkpoints {
             info!(target: LOG_TARGET, "🌍️ Validating checkpoint for shard group {shard_group}: {}", checkpoint.header().calculate_hash());
