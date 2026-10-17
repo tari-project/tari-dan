@@ -6,6 +6,7 @@ use std::{
     sync::Arc,
 };
 
+use tari_indexer_client::types::MAX_SUBSTATES_PER_FETCH;
 use tari_ootle_common_types::{
     InputDeclaration,
     engine_types::{
@@ -341,7 +342,7 @@ impl TransactionInputResolver {
         &mut self,
         substates_to_cache: &mut Vec<SubstateId>,
     ) -> Result<(), TransactionInputResolverError> {
-        for batch in substates_to_cache.chunks(20) {
+        for batch in substates_to_cache.chunks(MAX_SUBSTATES_PER_FETCH) {
             let substates = self.verifier.fetch_substates(batch).await?;
 
             self.cache.extend(

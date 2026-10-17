@@ -14,6 +14,7 @@ use tari_indexer_client::types::{
     GetSubstateResponse,
     GetSubstatesRequest,
     GetSubstatesResponse,
+    MAX_SUBSTATES_PER_FETCH,
     SubstateState,
 };
 use tari_indexer_lib::{cached_substate_manager::ProvenSubstate, error::IndexerError};
@@ -203,17 +204,15 @@ pub async fn fetch_substates(
     Extension(context): Extension<HandlerContext>,
     Json(req): Json<GetSubstatesRequest>,
 ) -> HandlerResult<Json<GetSubstatesResponse>> {
-    const MAX_REQUESTS: usize = 20;
-
     let GetSubstatesRequest {
         requests,
         cached_only,
         include_proofs,
     } = req;
 
-    if requests.len() > MAX_REQUESTS {
+    if requests.len() > MAX_SUBSTATES_PER_FETCH {
         return Err(ErrorResponse::bad_request(format!(
-            "Cannot request more than {MAX_REQUESTS} substates at once"
+            "Cannot request more than {MAX_SUBSTATES_PER_FETCH} substates at once"
         )));
     }
 

@@ -8,6 +8,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use serde::{Deserialize, Serialize};
 use tari_indexer_client::{
     error::IndexerRestClientError,
     rest_api_client::IndexerRestApiClient,
@@ -18,6 +19,7 @@ use tari_indexer_client::{
         GetSubstateRequest,
         GetSubstatesRequest,
         ListEpochCheckpointsRequest,
+        MAX_SUBSTATES_PER_FETCH,
         ProvenTransactionReceipt,
         SubstateProof,
         SubstateState,
@@ -83,12 +85,24 @@ pub enum IndexerTrust {
     /// The indexer must run with `verify_substate_proofs` enabled.
     ///
     /// The provider trusts the validator set that the indexer's latest checkpoint names on first use, unless given one
-    /// with [`IndexerProvider::trust_validator_set`](crate::provider::IndexerProvider::trust_validator_set), and walks
-    /// the signed end-of-epoch handovers from it.
+    /// with [`IndexerProvider::restore_validator_set`](crate::provider::IndexerProvider::restore_validator_set), and
+    /// walks the signed end-of-epoch handovers from it.
     #[default]
     Verify,
     /// The indexer's answers are taken at its word. For development against an indexer that does not verify proofs.
     Trust,
+}
+
+/// A provider's trust in the network's validator sets, saved so that a later provider walks on from it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SavedValidatorSet {
+    /// The latest validator set the provider trusts.
+    pub validator_set: TrustedValidatorSet,
+    /// When the provider last brought the set up to date. An indexer's claim that the provider fell more than
+    /// [`DEFAULT_MAX_WALK_EPOCHS`] behind is believed only once this is long enough ago for the gap to have passed.
+    pub synced_at: SystemTime,
+    /// When the walk from the set started failing on every sync, if it is failing.
+    pub walk_failing_since: Option<SystemTime>,
 }
 
 /// Verifies the indexer's answers against the validator sets the provider trusts.
@@ -200,20 +214,43 @@ impl IndexerVerifier {
         self.client.upgrade().ok_or(VerifyError::ClientDropped)
     }
 
-    /// The latest validator set the provider trusts, or `None` before it first anchors.
-    pub(crate) async fn trusted_validator_set(&self) -> Option<TrustedValidatorSet> {
-        self.state.lock().await.latest.clone()
+    /// The provider's trust in the network's validator sets, or `None` before it first anchors.
+    pub(crate) async fn saved_validator_set(&self) -> Option<SavedValidatorSet> {
+        let state = self.state.lock().await;
+        let (validator_set, synced_at) = state.latest.clone().zip(state.synced_at)?;
+        Some(SavedValidatorSet {
+            validator_set,
+            synced_at,
+            walk_failing_since: state.walk_failing_since,
+        })
     }
 
-    /// Trusts `validator_set` in place of every set trusted before.
-    pub(crate) async fn trust_validator_set(&self, validator_set: TrustedValidatorSet) -> Result<(), VerifyError> {
-        if validator_set.network() != self.network {
+    /// Trusts `saved` in place of every set trusted before.
+    pub(crate) async fn restore_validator_set(&self, saved: SavedValidatorSet) -> Result<(), VerifyError> {
+        let network = saved.validator_set.network();
+        if network != self.network {
             return Err(VerifyError::ValidatorSetOfAnotherNetwork {
-                network: validator_set.network(),
+                network,
                 expected: self.network,
             });
         }
-        self.state.lock().await.anchor(validator_set);
+        let mut state = self.state.lock().await;
+        state.anchor(saved.validator_set);
+        state.synced_at = Some(saved.synced_at);
+        state.walk_failing_since = saved.walk_failing_since;
+        Ok(())
+    }
+
+    /// Anchors on the validator set the latest checkpoint names unless the provider already trusts one. A transaction
+    /// submitted after this commits in an epoch whose validator set the provider trusts or walks to.
+    pub(crate) async fn anchor_if_untrusted(&self) -> Result<(), VerifyError> {
+        if !self.is_verifying() {
+            return Ok(());
+        }
+        let mut state = self.state.lock().await;
+        if state.latest.is_none() {
+            self.sync_locked(&mut state).await?;
+        }
         Ok(())
     }
 
@@ -400,7 +437,8 @@ impl IndexerVerifier {
 
     /// Verifies that the network committed `result` as the result of `transaction_id`: the indexer's proof of the
     /// committed receipt verifies against a validator set the provider trusts, and the result is the one that receipt
-    /// commits. Returns `false` while there is no proof to verify yet.
+    /// commits. Returns `false` while there is no proof to verify yet, and fails for a proof anchored before the
+    /// provider's anchor, which no later sync makes verifiable.
     pub(crate) async fn verify_committed_result(
         &self,
         transaction_id: TransactionId,
@@ -413,8 +451,20 @@ impl IndexerVerifier {
         };
         let committee = {
             let mut state = self.state.lock().await;
-            self.verify_committee(&mut state, proof.anchor.epoch, proof.anchor.shard_group)
-                .await?
+            let committee = self
+                .verify_committee(&mut state, proof.anchor.epoch, proof.anchor.shard_group)
+                .await?;
+            if committee.is_none() &&
+                let Some(&anchor_epoch) = state.sets.keys().next() &&
+                proof.anchor.epoch < anchor_epoch
+            {
+                return Err(VerifyError::ReceiptProvenBeforeAnchor {
+                    transaction_id,
+                    epoch: proof.anchor.epoch,
+                    anchor_epoch,
+                });
+            }
+            committee
         };
         let Some(committee) = committee else {
             info!(
@@ -462,14 +512,18 @@ impl IndexerVerifier {
         &self,
         substate_ids: &[SubstateId],
     ) -> Result<HashMap<SubstateId, Substate>, VerifyError> {
-        let requests = substate_ids.to_vec().try_into().map_err(|_| {
+        let invalid_count = || {
             VerifyError::IndexerClientError(IndexerRestClientError::RequestInvariant {
                 details: format!(
-                    "a substate fetch takes between 1 and 50 substates, not {}",
+                    "a substate fetch takes between 1 and {MAX_SUBSTATES_PER_FETCH} substates, not {}",
                     substate_ids.len()
                 ),
             })
-        })?;
+        };
+        if substate_ids.len() > MAX_SUBSTATES_PER_FETCH {
+            return Err(invalid_count());
+        }
+        let requests = substate_ids.to_vec().try_into().map_err(|_| invalid_count())?;
         let resp = self
             .client()?
             .fetch_substates(GetSubstatesRequest {
@@ -550,6 +604,15 @@ pub enum VerifyError {
         substate_id: SubstateId,
         anchor_epoch: Epoch,
         latest_trusted_epoch: Epoch,
+    },
+    #[error(
+        "The indexer proved that transaction {transaction_id} committed at a block of {epoch}, before {anchor_epoch} \
+         whose validator set this provider anchored on"
+    )]
+    ReceiptProvenBeforeAnchor {
+        transaction_id: TransactionId,
+        epoch: Epoch,
+        anchor_epoch: Epoch,
     },
     #[error("The indexer's proof that transaction {transaction_id} committed does not verify: {source}")]
     FinalizationUnverified {
@@ -680,7 +743,7 @@ mod tests {
         indexer.serve_substate(id.clone(), VERSION, value, Some(proof));
 
         provider.fetch_substate(id).await.unwrap();
-        let trusted = provider.trusted_validator_set().await.unwrap();
+        let trusted = provider.saved_validator_set().await.unwrap().validator_set;
         assert_eq!(trusted.epoch(), Epoch(5));
         assert_eq!(trusted.anchor_epoch(), Epoch(5));
     }
@@ -785,7 +848,7 @@ mod tests {
 
         let read = provider.fetch_substate(id).await.unwrap();
         assert_eq!(tombstone_value(read.substate_value()), tombstone_value(&value));
-        assert!(provider.trusted_validator_set().await.is_none());
+        assert!(provider.saved_validator_set().await.is_none());
     }
 
     #[tokio::test]
@@ -821,19 +884,22 @@ mod tests {
     #[tokio::test]
     async fn a_saved_validator_set_is_walked_on_from() {
         let (_, indexer, provider) = walked_provider(IndexerTrust::Verify).await;
-        let saved = provider.trusted_validator_set().await.unwrap();
+        let saved = provider.saved_validator_set().await.unwrap();
         let other = ValidatorSetFixture::with_signers(NETWORK, 6, Signers::new(0xa0, 4), Signers::new(0xa1, 4));
         indexer.push_checkpoint(forged_handover(&other));
         indexer.set_latest(4);
 
         let restarted = indexer.provider(IndexerTrust::Verify);
-        restarted.trust_validator_set(saved.clone()).await.unwrap();
+        restarted.restore_validator_set(saved.clone()).await.unwrap();
         let err = restarted.sync_validator_set().await.unwrap_err();
         assert!(
             matches!(err, ProviderError::Unverified(VerifyError::ValidatorSetUnverified(_))),
             "{err}"
         );
-        assert_eq!(restarted.trusted_validator_set().await, Some(saved));
+        assert_eq!(
+            restarted.saved_validator_set().await.unwrap().validator_set,
+            saved.validator_set
+        );
 
         let anchored_anew = indexer.provider(IndexerTrust::Verify);
         let trusted = anchored_anew.sync_validator_set().await.unwrap();
@@ -843,11 +909,11 @@ mod tests {
     #[tokio::test]
     async fn a_validator_set_of_another_network_is_not_trusted() {
         let (_, indexer, provider) = walked_provider(IndexerTrust::Verify).await;
-        let saved = provider.trusted_validator_set().await.unwrap();
+        let saved = provider.saved_validator_set().await.unwrap();
         let client = tari_indexer_client::connect_rest(indexer.url()).unwrap();
         let other = IndexerProvider::new(client, NoWallet, Network::MainNet);
 
-        let err = other.trust_validator_set(saved).await.unwrap_err();
+        let err = other.restore_validator_set(saved).await.unwrap_err();
         assert!(
             matches!(
                 err,
@@ -865,7 +931,10 @@ mod tests {
         indexer.set_latest(4);
 
         provider.sync_validator_set().await.unwrap_err();
-        assert_eq!(provider.trusted_validator_set().await.unwrap().epoch(), Epoch(5));
+        assert_eq!(
+            provider.saved_validator_set().await.unwrap().validator_set.epoch(),
+            Epoch(5)
+        );
 
         provider.verifier().state.lock().await.walk_failing_since =
             Some(SystemTime::now() - REANCHOR_AFTER_FAILING_FOR);
@@ -873,5 +942,46 @@ mod tests {
         assert_eq!(trusted.epoch(), Epoch(6));
         assert_eq!(trusted.anchor_epoch(), Epoch(6));
         assert_eq!(trusted.validator_set_hash(), &other.hash());
+    }
+
+    /// A provider restored from the set of epoch 5 as last synced at `synced_at`, whose indexer claims a latest
+    /// checkpoint far enough ahead to re-anchor on and serves nothing to walk to it. Returns the set that checkpoint
+    /// names.
+    async fn restored_with_claimed_gap(synced_at: SystemTime) -> (ValidatorSetFixture, IndexerProvider<NoWallet>) {
+        let (_, indexer, provider) = walked_provider(IndexerTrust::Verify).await;
+        let mut saved = provider.saved_validator_set().await.unwrap();
+        saved.synced_at = synced_at;
+        let claimed_epoch = 5 + DEFAULT_MAX_WALK_EPOCHS;
+        let claimed =
+            ValidatorSetFixture::with_signers(NETWORK, claimed_epoch, Signers::new(0xc0, 4), Signers::new(0xc1, 4));
+        let named =
+            ValidatorSetFixture::with_signers(NETWORK, claimed_epoch + 1, Signers::new(0xd0, 4), Signers::new(0xd1, 4));
+        indexer.push_checkpoint(checkpoint_entry(CheckpointSpec::handover(&claimed, &named)));
+        indexer.set_latest(4);
+
+        let restarted = indexer.provider(IndexerTrust::Verify);
+        restarted.restore_validator_set(saved).await.unwrap();
+        (named, restarted)
+    }
+
+    #[tokio::test]
+    async fn a_restored_validator_set_synced_recently_is_not_reanchored_on_a_claimed_gap() {
+        let (_, restarted) = restored_with_claimed_gap(SystemTime::now()).await;
+
+        restarted.sync_validator_set().await.unwrap_err();
+        assert_eq!(
+            restarted.saved_validator_set().await.unwrap().validator_set.epoch(),
+            Epoch(5)
+        );
+    }
+
+    #[tokio::test]
+    async fn a_restored_validator_set_out_of_sync_for_the_claimed_gap_reanchors() {
+        let gap_takes = MIN_EPOCH_DURATION.saturating_mul(u32::try_from(DEFAULT_MAX_WALK_EPOCHS + 1).unwrap());
+        let (named, restarted) = restored_with_claimed_gap(SystemTime::now() - gap_takes).await;
+
+        let trusted = restarted.sync_validator_set().await.unwrap();
+        assert_eq!(trusted.validator_set_hash(), &named.hash());
+        assert_eq!(trusted.anchor_epoch(), trusted.epoch());
     }
 }

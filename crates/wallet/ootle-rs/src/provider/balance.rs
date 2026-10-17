@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use ootle_byte_type::ConvertFromByteType;
 use tari_crypto::ristretto::RistrettoSecretKey;
+use tari_indexer_client::types::MAX_SUBSTATES_PER_FETCH;
 use tari_ootle_common_types::engine_types::{
     Utxo,
     crypto::{ElgamalVerifiableBalance, ValueLookup},
@@ -14,9 +15,6 @@ use tari_ootle_common_types::engine_types::{
 use tari_template_lib_types::{Amount, ComponentAddress, ResourceAddress, UtxoAddress, UtxoId, VaultId};
 
 use crate::provider::{ProviderError, ProviderResult, indexer::IndexerProvider};
-
-/// The most substates the indexer serves in one fetch.
-const MAX_SUBSTATES_PER_FETCH: usize = 50;
 
 /// Balance information for a single vault
 #[derive(Debug, Clone)]

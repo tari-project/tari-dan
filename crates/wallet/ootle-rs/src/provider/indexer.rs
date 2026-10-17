@@ -29,7 +29,7 @@ use tari_template_lib_types::{
     UtxoId,
     crypto::{RistrettoPublicKeyBytes, UtxoTag},
 };
-use tracing::debug;
+use tracing::{debug, warn};
 use url::Url;
 
 use crate::{
@@ -50,7 +50,7 @@ use crate::{
         input_resolver::TransactionInputResolver,
         tx_stream::{EventStream, Paused},
         tx_watcher::TransactionWatcherHandle,
-        verifier::{IndexerTrust, IndexerVerifier},
+        verifier::{IndexerTrust, IndexerVerifier, SavedValidatorSet},
     },
     wallet::NetworkWallet,
 };
@@ -95,17 +95,17 @@ impl<Wallet> IndexerProvider<Wallet> {
         self.verifier.trust()
     }
 
-    /// The latest validator set this provider trusts, or `None` before it first anchors. An application that saves it
-    /// and passes it to [`trust_validator_set`](Self::trust_validator_set) on its next run walks on from it, where it
-    /// would otherwise trust its indexer anew.
-    pub async fn trusted_validator_set(&self) -> Option<TrustedValidatorSet> {
-        self.verifier.trusted_validator_set().await
+    /// This provider's trust in the network's validator sets, or `None` before it first anchors. An application that
+    /// saves it and passes it to [`restore_validator_set`](Self::restore_validator_set) on its next run walks on from
+    /// it, where it would otherwise trust its indexer anew.
+    pub async fn saved_validator_set(&self) -> Option<SavedValidatorSet> {
+        self.verifier.saved_validator_set().await
     }
 
-    /// Trusts `validator_set`, such as one an earlier run saved, in place of the validator sets trusted before. The
-    /// next verification walks the end-of-epoch handovers on from it.
-    pub async fn trust_validator_set(&self, validator_set: TrustedValidatorSet) -> ProviderResult<()> {
-        Ok(self.verifier.trust_validator_set(validator_set).await?)
+    /// Trusts `saved`, such as an earlier run's trust, in place of the validator sets trusted before. The next
+    /// verification walks the end-of-epoch handovers on from it.
+    pub async fn restore_validator_set(&self, saved: SavedValidatorSet) -> ProviderResult<()> {
+        Ok(self.verifier.restore_validator_set(saved).await?)
     }
 
     /// Brings the trusted validator set up to the one the indexer's latest checkpoint names, anchoring on that set on
@@ -269,6 +269,9 @@ impl<Wallet: NetworkWallet + Send + Sync> IndexerProvider<Wallet> {
     ) -> ProviderResult<PendingTransaction> {
         // Start the tx watcher if not already started
         let watcher = self.get_tx_watcher().clone();
+        if let Err(err) = self.verifier.anchor_if_untrusted().await {
+            warn!("Failed to anchor the trusted validator set before submitting a transaction: {err}");
+        }
 
         let resp = self
             .client

@@ -46,5 +46,5 @@ pub use tari_ootle_light_client::TrustedValidatorSet;
 pub use traits::*;
 pub use tx_watcher::*;
 pub use utxo_watcher::*;
-pub use verifier::{IndexerTrust, VerifyError};
+pub use verifier::{IndexerTrust, SavedValidatorSet, VerifyError};
 pub use want_input::*;

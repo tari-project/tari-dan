@@ -116,7 +116,7 @@ impl TransactionWatcher {
                     .reply
                     .send(Err(PendingTransactionError::Timeout { tx_id }))
                     .inspect_err(|_| {
-                        tracing::error!("Failed to send timeout notification for tx_id: {}", tx_id);
+                        tracing::debug!("The watch of tx_id {} was dropped before it timed out", tx_id);
                     });
             }
         }
@@ -172,8 +172,8 @@ impl TransactionWatcher {
                 );
 
                 watch.reply.send(Ok(event_data.outcome)).unwrap_or_else(|_| {
-                    tracing::error!(
-                        "Failed to send transaction outcome for tx_id: {}",
+                    tracing::debug!(
+                        "The watch of tx_id {} was dropped before it finalized",
                         event_data.transaction_id
                     );
                 });
@@ -217,6 +217,24 @@ pub enum PendingTransactionError {
 impl PendingTransactionError {
     pub fn is_timeout(&self) -> bool {
         matches!(self, PendingTransactionError::Timeout { .. })
+    }
+
+    /// Whether the error is a failed request to the indexer, which a later request may not repeat.
+    fn is_indexer_unreachable(&self) -> bool {
+        matches!(
+            self,
+            Self::IndexerClientError(_) |
+                Self::Unverified(VerifyError::IndexerClientError(_) | VerifyError::CheckpointNotServed { .. })
+        )
+    }
+}
+
+/// The outcome of a transaction whose result committed.
+fn committed_outcome(result: TransactionResult) -> TransactionOutcome {
+    match result {
+        TransactionResult::Accept(_) => TransactionOutcome::Commit,
+        TransactionResult::AcceptFeeRejectRest(_, reason) => TransactionOutcome::OnlyFeeCommit(reason),
+        TransactionResult::Reject(reason) => TransactionOutcome::Reject(reason),
     }
 }
 
@@ -312,17 +330,21 @@ impl PendingTransaction {
         Ok(self.wait_verified().await?.outcome)
     }
 
-    /// Waits for the indexer's finalization hint, then asks the indexer for the verified outcome until it has one or
-    /// the timeout passes.
+    /// Asks the indexer for the verified outcome, and while it has none, waits for the indexer's finalization hint and
+    /// asks again until it has one or the timeout passes.
     async fn wait_verified(&self) -> Result<Finalized, PendingTransactionError> {
         let deadline = Instant::now().checked_add(self.default_timeout);
-        match self.register(self.default_timeout).await?.await {
+        let hint = self.register(self.default_timeout).await?;
+        if let Some(finalized) = self.poll_verified_finalization().await? {
+            return Ok(finalized);
+        }
+        match hint.await {
             Ok(_) | Err(PendingTransactionError::Timeout { .. }) => {},
             Err(err) => return Err(err),
         }
         let mut interval = MIN_RESULT_POLL_INTERVAL;
         loop {
-            if let Some(finalized) = self.try_verified_finalization().await? {
+            if let Some(finalized) = self.poll_verified_finalization().await? {
                 return Ok(finalized);
             }
             if deadline.is_some_and(|deadline| Instant::now() + interval > deadline) {
@@ -330,6 +352,21 @@ impl PendingTransaction {
             }
             sleep(interval).await;
             interval = (interval * 2).min(MAX_RESULT_POLL_INTERVAL);
+        }
+    }
+
+    /// [`try_verified_finalization`](Self::try_verified_finalization), with a failure to reach the indexer taken as no
+    /// outcome yet, so that the next poll asks again.
+    async fn poll_verified_finalization(&self) -> Result<Option<Finalized>, PendingTransactionError> {
+        match self.try_verified_finalization().await {
+            Err(err) if err.is_indexer_unreachable() => {
+                tracing::warn!(
+                    "Failed to ask the indexer for the outcome of transaction {}: {err}",
+                    self.tx_id
+                );
+                Ok(None)
+            },
+            result => result,
         }
     }
 
@@ -382,13 +419,8 @@ impl PendingTransaction {
             .receipt
             .map(|proven| proven.receipt)
             .ok_or(PendingTransactionError::ReceiptNotFound { tx_id: self.tx_id })?;
-        let outcome = match execution_result.finalize.result {
-            TransactionResult::Accept(_) => TransactionOutcome::Commit,
-            TransactionResult::AcceptFeeRejectRest(_, reason) => TransactionOutcome::OnlyFeeCommit(reason),
-            TransactionResult::Reject(reason) => TransactionOutcome::Reject(reason),
-        };
         Ok(Some(Finalized {
-            outcome,
+            outcome: committed_outcome(execution_result.finalize.result),
             receipt: Some(receipt),
         }))
     }
@@ -435,10 +467,11 @@ impl PendingTransaction {
                         ))
                     },
                     Ok(Some(IndexerTransactionFinalizedResult::Finalized {
+                        final_decision,
                         execution_result,
                         abort_details,
                         ..
-                    })) => self.outcome_from_finalized(execution_result, abort_details),
+                    })) => self.outcome_from_finalized(final_decision.is_commit(), execution_result, abort_details),
                     Ok(Some(IndexerTransactionFinalizedResult::Rejected { details, .. })) => {
                         Err(PendingTransactionError::TransactionRejected {
                             tx_id: self.tx_id,
@@ -463,10 +496,11 @@ impl PendingTransaction {
                         Err(PendingTransactionError::Timeout { tx_id: self.tx_id })
                     },
                     Ok(Some(IndexerTransactionFinalizedResult::Finalized {
+                        final_decision,
                         execution_result,
                         abort_details,
                         ..
-                    })) => self.outcome_from_finalized(execution_result, abort_details),
+                    })) => self.outcome_from_finalized(final_decision.is_commit(), execution_result, abort_details),
                     Ok(Some(IndexerTransactionFinalizedResult::Rejected { details, .. })) => {
                         Err(PendingTransactionError::TransactionRejected {
                             tx_id: self.tx_id,
@@ -489,23 +523,14 @@ impl PendingTransaction {
 
     fn outcome_from_finalized(
         &self,
+        committed: bool,
         execution_result: Option<Box<ExecuteResult>>,
         abort_details: Option<String>,
     ) -> Result<TransactionOutcome, PendingTransactionError> {
-        if let Some(result) = execution_result {
-            return match result.finalize.result {
-                TransactionResult::Accept(_) => Ok(TransactionOutcome::Commit),
-                TransactionResult::AcceptFeeRejectRest(_, reason) => Ok(TransactionOutcome::OnlyFeeCommit(reason)),
-                TransactionResult::Reject(reason) => Ok(TransactionOutcome::Reject(reason)),
-            };
+        match execution_result {
+            Some(result) if committed => Ok(committed_outcome(result.finalize.result)),
+            execution_result => self.abort_outcome(execution_result.as_deref(), abort_details),
         }
-
-        // Any commit case would have been handled above, so this is a rejection
-        let reason = abort_details.unwrap_or_else(|| "Unknown".to_string());
-        Err(PendingTransactionError::TransactionRejected {
-            tx_id: self.tx_id,
-            reason,
-        })
     }
 
     async fn try_get_transaction_result(
@@ -545,10 +570,7 @@ impl PendingTransaction {
         if !self.verifier.is_verifying() {
             return self.get_receipt_trusting().await;
         }
-        let finalized = match self.try_verified_finalization().await? {
-            Some(finalized) => finalized,
-            None => self.wait_verified().await?,
-        };
+        let finalized = self.wait_verified().await?;
         finalized
             .receipt
             .ok_or_else(|| PendingTransactionError::TransactionRejected {
@@ -641,8 +663,12 @@ impl PendingTransactionOutcome {
 
 #[cfg(test)]
 mod tests {
+    use tari_consensus_types::Decision;
     use tari_indexer_client::types::GetTransactionResultResponse;
-    use tari_ootle_common_types::{Epoch, engine_types::fees::FeeReceipt};
+    use tari_ootle_common_types::{
+        Epoch,
+        engine_types::{commit_result::AbortReason, fees::FeeReceipt},
+    };
     use tari_ootle_light_client::test_fixtures::{NETWORK, ValidatorSetFixture};
 
     use super::*;
@@ -674,12 +700,19 @@ mod tests {
     /// An indexer whose latest checkpoint names the set of epoch 5, which committed [`TRANSACTION_ID`] with `result`,
     /// and announces the commit.
     async fn indexer_that_committed(edit: impl FnOnce(&mut GetTransactionResultResponse)) -> TestIndexer {
+        let indexer = indexer_that_finalized(edit).await;
+        indexer.hint_commit(TRANSACTION_ID);
+        indexer
+    }
+
+    /// An indexer whose latest checkpoint names the set of epoch 5, which committed [`TRANSACTION_ID`] with `result`,
+    /// and announces nothing.
+    async fn indexer_that_finalized(edit: impl FnOnce(&mut GetTransactionResultResponse)) -> TestIndexer {
         let sets = sets();
         let indexer = TestIndexer::spawn(&sets, 3).await;
         let mut result = committed_result(TRANSACTION_ID, &sets[4]);
         edit(&mut result);
         indexer.set_result(TRANSACTION_ID, result);
-        indexer.hint_commit(TRANSACTION_ID);
         indexer
     }
 
@@ -736,5 +769,62 @@ mod tests {
         let (_client, pending) = pending(&indexer, IndexerTrust::Trust);
 
         assert!(pending.watch().await.unwrap().is_commit());
+    }
+
+    #[tokio::test]
+    async fn a_failed_request_for_the_result_is_asked_again() {
+        let indexer = indexer_that_committed(|_| {}).await;
+        indexer.fail_result_requests(1);
+        let (_client, pending) = pending(&indexer, IndexerTrust::Verify);
+
+        assert!(pending.watch().await.unwrap().is_commit());
+    }
+
+    #[tokio::test]
+    async fn a_transaction_finalized_before_the_watch_is_reported_without_waiting_for_the_announcement() {
+        let indexer = indexer_that_finalized(|_| {}).await;
+        let (_client, pending) = pending(&indexer, IndexerTrust::Verify);
+
+        let started = Instant::now();
+        assert!(pending.watch().await.unwrap().is_commit());
+        assert!(started.elapsed() < Duration::from_secs(1), "{:?}", started.elapsed());
+    }
+
+    #[tokio::test]
+    async fn a_receipt_proven_before_the_anchor_is_refused() {
+        let sets = sets();
+        let indexer = indexer_that_committed(|result| *result = committed_result(TRANSACTION_ID, &sets[3])).await;
+        let (_client, pending) = pending(&indexer, IndexerTrust::Verify);
+
+        let err = pending.watch().await.unwrap_err();
+        assert!(
+            matches!(
+                err,
+                PendingTransactionError::Unverified(VerifyError::ReceiptProvenBeforeAnchor {
+                    epoch: Epoch(4),
+                    anchor_epoch: Epoch(5),
+                    ..
+                })
+            ),
+            "{err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_trusting_provider_reports_an_abort_whose_execution_accepted_as_rejected() {
+        let indexer = indexer_that_finalized(|result| {
+            let IndexerTransactionFinalizedResult::Finalized { final_decision, .. } = &mut result.result else {
+                panic!("not a finalized result");
+            };
+            *final_decision = Decision::Abort(AbortReason::LockInputsFailed);
+        })
+        .await;
+        let (_client, pending) = pending(&indexer, IndexerTrust::Trust);
+
+        let err = pending.watch().await.unwrap_err();
+        assert!(
+            matches!(err, PendingTransactionError::TransactionRejected { .. }),
+            "{err}"
+        );
     }
 }

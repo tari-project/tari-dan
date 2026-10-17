@@ -91,6 +91,8 @@ struct TestIndexerState {
     /// The finalization events every event stream starts with.
     hints: Vec<TransactionFinalizedEvent>,
     committee_requests: usize,
+    /// How many of the next transaction result requests fail.
+    failing_result_requests: usize,
 }
 
 struct ServedSubstate {
@@ -119,6 +121,7 @@ impl TestIndexer {
             results: HashMap::new(),
             hints: Vec::new(),
             committee_requests: 0,
+            failing_result_requests: 0,
         }));
         let router = Router::new()
             .route("/epoch-checkpoints/latest", get(latest_checkpoint))
@@ -176,6 +179,11 @@ impl TestIndexer {
 
     pub(crate) fn set_result(&self, transaction_id: TransactionId, result: GetTransactionResultResponse) {
         self.state.lock().unwrap().results.insert(transaction_id, result);
+    }
+
+    /// Fails the next `n` transaction result requests.
+    pub(crate) fn fail_result_requests(&self, n: usize) {
+        self.state.lock().unwrap().failing_result_requests = n;
     }
 
     /// Announces that `transaction_id` committed on every event stream.
@@ -267,7 +275,11 @@ async fn transaction_result(
     Path(id): Path<String>,
     Query(query): Query<GetTransactionResultQuery>,
 ) -> Response {
-    let state = state.lock().unwrap();
+    let mut state = state.lock().unwrap();
+    if state.failing_result_requests > 0 {
+        state.failing_result_requests -= 1;
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    }
     let Some(result) = state
         .results
         .iter()
