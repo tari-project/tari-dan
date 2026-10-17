@@ -311,15 +311,6 @@ pub async fn handle_create_output_proof(
     let sdk = context.wallet_sdk();
     context.authorize(token, &[Permission::Confidential(Crud::Create, None)])?;
 
-    if req.amount < MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE {
-        return Err(invalid_params(
-            "amount",
-            Some(format!(
-                "A confidential output must hold at least {MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE}"
-            )),
-        ));
-    }
-
     let destination_view_key: RistrettoPublicKey = req
         .destination_address
         .view_only_key()
