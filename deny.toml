@@ -51,13 +51,21 @@ It reaches the graph because `integration_tests` runs those binaries to stand up
 `tari_p2p` does with it is verify detached signatures on release hash files against maintainer
 public keys, which performs no private-key operation and so offers no timing oracle. Revisit if
 `rsa` publishes a fix or the L1 drops `pgp`.""" },
-    { crate = "zip@3.0.0", reason = """
-Yanked, not vulnerable: zip's maintainers withdrew every release below 9.0.3 when 9.0.3 shipped,
-with no advisory against this version. Absent from every binary this project ships: it is a build
-dependency of `utoipa-swagger-ui`, which unpacks the bundled Swagger UI assets for `tari_indexer`
-and the L1's `minotari_node`. No `utoipa-swagger-ui` release accepts a non-yanked zip (9.0.2 needs
-`^3.0`, 10.0.1 needs `^8.6`). Remove once `utoipa-swagger-ui` accepts zip 9 and both dependents
-move to it.""" },
+    # zip 3.0.0 is a build dependency of `utoipa-swagger-ui`, which unpacks the Swagger UI assets for
+    # `tari_indexer` and the L1's `minotari_node`. It is absent from every binary this project ships.
+    # No `utoipa-swagger-ui` release accepts a patched zip (9.0.2 needs `^3.0`, 10.0.1 needs `^8.6`).
+    # Remove these three once `utoipa-swagger-ui` accepts zip 9 and both dependents move to it.
+    { id = "RUSTSEC-2026-0367", reason = """
+zip keeps SUID/SGID bits on files it extracts. Unreachable: `utoipa-swagger-ui`'s build script never
+calls zip's extract APIs, and the archive it unpacks is a pinned Swagger UI release fetched over HTTPS
+by an unprivileged build.""" },
+    { id = "RUSTSEC-2026-0368", reason = """
+`ZipArchive::extract` creates symlinks pointing outside the destination. Unreachable:
+`utoipa-swagger-ui`'s build script walks entries with `by_index` and `enclosed_name`, writes regular
+files itself and never creates symlinks or calls `extract`.""" },
+    { id = "RUSTSEC-2026-0369", reason = """
+`ZipStreamReader::extract` and `ZipArchive::extract` apply permissions through symlinks. Unreachable:
+`utoipa-swagger-ui`'s build script calls neither and creates no symlinks.""" },
 ]
 
 [licenses]
