@@ -219,6 +219,39 @@ jobs:
       - name: cargo machete
         run: cargo machete
 
+  ootle-wasm:
+    # The ootle-wasm boundary tests are wasm32-only and run under Node through the generated JS glue, so
+    # the nextest shards never execute them.
+    name: ootle-wasm tests
+    runs-on: [ ubuntu-latest ]
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: toolchain
+        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f  # master (no version tag)
+        with:
+          toolchain: ${{ env.rust_toolchain }}
+          targets: wasm32-unknown-unknown
+
+      - uses: ./.github/actions/rust-cache
+        with:
+          save-if: ${{ github.ref == 'refs/heads/development' }}
+
+      - name: Use Node.js from .nvmrc
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@v2.87.27
+        with:
+          tool: wasm-pack@0.15.0
+
+      - name: wasm-pack test
+        run: wasm-pack test --node crates/ootle_wasm/wasm
+
   licenses:
     name: file licenses
     runs-on: [ ubuntu-latest ]

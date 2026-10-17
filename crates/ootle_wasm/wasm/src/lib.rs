@@ -1,7 +1,16 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use js_sys::BigInt;
 use wasm_bindgen::prelude::*;
+
+/// Converts a JS `bigint` amount argument to a `u64`, rejecting any value outside `[0, 2^64 - 1]`.
+///
+/// Exports take amounts as `BigInt` because wasm-bindgen passes a `u64` parameter as a wasm `i64`, which
+/// the JS engine fills by reducing the caller's `bigint` modulo 2^64 before Rust ever sees it.
+fn u64_arg(name: &str, value: BigInt) -> Result<u64, JsError> {
+    u64::try_from(value).map_err(|_| JsError::new(&format!("{name} must be an integer in [0, 2^64 - 1]")))
+}
 
 /// Called automatically when the WASM module is instantiated. Do not call directly.
 #[wasm_bindgen(start)]
@@ -230,12 +239,12 @@ pub fn parse_ootle_address(address: &str) -> Result<ParsedOotleAddress, JsError>
 #[wasm_bindgen(js_name = "generateStealthOutputsStatement")]
 pub fn generate_stealth_outputs_statement(
     witnesses_json: &str,
-    revealed_output_amount_microtari: u64,
+    revealed_output_amount_microtari: BigInt,
     revealed_receiver: &[u8],
 ) -> Result<StealthOutputsResult, JsError> {
     let result = ootle_wasm_core::stealth::outputs::generate_stealth_outputs_statement(
         witnesses_json,
-        revealed_output_amount_microtari,
+        u64_arg("revealed_output_amount_microtari", revealed_output_amount_microtari)?,
         revealed_receiver,
     )
     .map_err(|e| JsError::new(&e.to_string()))?;
@@ -284,24 +293,24 @@ pub fn create_stealth_output_witness(
     network: u8,
     destination_account_public_key: &[u8],
     destination_view_public_key: &[u8],
-    amount: u64,
+    amount: BigInt,
     resource_address: &str,
     resource_view_key: Option<Vec<u8>>,
     memo_json: Option<String>,
     pay_to_json: Option<String>,
-    minimum_value_promise: u64,
+    minimum_value_promise: BigInt,
 ) -> Result<String, JsError> {
     ootle_wasm_core::stealth::outputs::create_stealth_output_witness(
         ootle_wasm_core::stealth::outputs::CreateStealthOutputWitnessParams {
             network,
             destination_account_public_key,
             destination_view_public_key,
-            amount,
+            amount: u64_arg("amount", amount)?,
             resource_address,
             resource_view_key: resource_view_key.as_deref(),
             memo_json: memo_json.as_deref(),
             pay_to_json: pay_to_json.as_deref(),
-            minimum_value_promise,
+            minimum_value_promise: u64_arg("minimum_value_promise", minimum_value_promise)?,
         },
     )
     .map_err(|e| JsError::new(&e.to_string()))
@@ -317,10 +326,13 @@ pub fn create_stealth_output_witness(
 #[wasm_bindgen(js_name = "buildStealthInputsStatement")]
 pub fn build_stealth_inputs_statement(
     input_commitments: &[u8],
-    revealed_amount_microtari: u64,
+    revealed_amount_microtari: BigInt,
 ) -> Result<String, JsError> {
-    ootle_wasm_core::stealth::inputs::build_stealth_inputs_statement(input_commitments, revealed_amount_microtari)
-        .map_err(|e| JsError::new(&e.to_string()))
+    ootle_wasm_core::stealth::inputs::build_stealth_inputs_statement(
+        input_commitments,
+        u64_arg("revealed_amount_microtari", revealed_amount_microtari)?,
+    )
+    .map_err(|e| JsError::new(&e.to_string()))
 }
 
 /// Build a `StealthInputsStatement` JSON from a JSON array of per-input `{commitment, witness}` pairs
@@ -337,10 +349,13 @@ pub fn build_stealth_inputs_statement(
 #[wasm_bindgen(js_name = "buildStealthInputsStatementFromInputs")]
 pub fn build_stealth_inputs_statement_from_inputs(
     inputs_json: &str,
-    revealed_amount_microtari: u64,
+    revealed_amount_microtari: BigInt,
 ) -> Result<String, JsError> {
-    ootle_wasm_core::stealth::inputs::build_stealth_inputs_statement_from_inputs(inputs_json, revealed_amount_microtari)
-        .map_err(|e| JsError::new(&e.to_string()))
+    ootle_wasm_core::stealth::inputs::build_stealth_inputs_statement_from_inputs(
+        inputs_json,
+        u64_arg("revealed_amount_microtari", revealed_amount_microtari)?,
+    )
+    .map_err(|e| JsError::new(&e.to_string()))
 }
 
 /// Build a script-path `SpendWitness` revealing `leaf` from the committed `conditions` set, optionally
@@ -382,16 +397,16 @@ pub fn build_script_path_witness(conditions_json: &str, leaf_json: &str, data: &
 #[wasm_bindgen(js_name = "buildStealthTransferStatement")]
 pub fn build_stealth_transfer_statement(
     input_witnesses_json: &str,
-    revealed_input_amount_microtari: u64,
+    revealed_input_amount_microtari: BigInt,
     output_witnesses_json: &str,
-    revealed_output_amount_microtari: u64,
+    revealed_output_amount_microtari: BigInt,
     revealed_receiver: &[u8],
 ) -> Result<String, JsError> {
     ootle_wasm_core::stealth::transfer::build_stealth_transfer_statement(
         input_witnesses_json,
-        revealed_input_amount_microtari,
+        u64_arg("revealed_input_amount_microtari", revealed_input_amount_microtari)?,
         output_witnesses_json,
-        revealed_output_amount_microtari,
+        u64_arg("revealed_output_amount_microtari", revealed_output_amount_microtari)?,
         revealed_receiver,
     )
     .map_err(|e| JsError::new(&e.to_string()))
@@ -542,13 +557,13 @@ pub fn encrypted_data_dh_kdf_aead(private_key: &[u8], public_key: &[u8]) -> Resu
 #[wasm_bindgen(js_name = "generateElgamalViewableBalanceProof")]
 pub fn generate_elgamal_viewable_balance_proof(
     mask: &[u8],
-    amount: u64,
+    amount: BigInt,
     commitment: &[u8],
     view_public_key: &[u8],
 ) -> Result<String, JsError> {
     ootle_wasm_core::stealth::viewable_balance::generate_elgamal_viewable_balance_proof(
         mask,
-        amount,
+        u64_arg("amount", amount)?,
         commitment,
         view_public_key,
     )
@@ -570,16 +585,16 @@ pub fn decrypt_elgamal_viewable_balance(
     commitment: &[u8],
     view_public_key: &[u8],
     view_secret_key: &[u8],
-    min_value: u64,
-    max_value: u64,
+    min_value: BigInt,
+    max_value: BigInt,
 ) -> Result<Option<u64>, JsError> {
     ootle_wasm_core::stealth::viewable_balance::decrypt_elgamal_viewable_balance(
         proof_json,
         commitment,
         view_public_key,
         view_secret_key,
-        min_value,
-        max_value,
+        u64_arg("min_value", min_value)?,
+        u64_arg("max_value", max_value)?,
     )
     .map_err(|e| JsError::new(&e.to_string()))
 }
