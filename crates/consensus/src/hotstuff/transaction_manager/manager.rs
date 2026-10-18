@@ -228,6 +228,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                 local_versions,
                 non_local_inputs,
                 block,
+                execution_epoch.clone(),
             ),
             ResolvedTransactionInputs::OnlyForeignInputs { non_local_inputs } => self
                 .prepare_multishard_output_only_transaction(
@@ -610,6 +611,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         local_versions: IndexMap<InputDeclarationRef<'_>, SubstateVersion>,
         non_local_inputs: IndexSet<InputDeclarationRef<'_>>,
         block: LeafBlock,
+        execution_locked_epoch: LockedEpoch,
     ) -> Result<PreparedTransaction, BlockTransactionExecutorError> {
         // CASE: Multishard transaction, some inputs are local, some are foreign
 
@@ -620,6 +622,24 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
             local_versions.len(),
             non_local_inputs.len()
         );
+
+        // Without every input this shard group cannot execute, so the window is checked here, before any input is
+        // locked. The LocalPrepared timeout is measured from max_epoch, so it only bounds how long locks are held if
+        // max_epoch is within the window. The other shard groups receive and adopt the abort.
+        let max_epoch = transaction.transaction().max_epoch();
+        if let Some(reason) = self.window_abort_reason(execution_locked_epoch.epoch(), max_epoch) {
+            warn!(
+                target: LOG_TARGET,
+                "⏰ PREPARE: Transaction {} is outside its validity window ({reason}): pinned to {}, max_epoch {max_epoch}",
+                transaction.id(),
+                execution_locked_epoch,
+            );
+            let execution = TransactionExecution::abort(transaction.id(), RejectReason::Abort { reason });
+            return Ok(PreparedTransaction::new_multishard_executed(
+                execution,
+                LockStatus::default(),
+            ));
+        }
 
         match self.fetch_execution(store, transaction.id(), &block)? {
             Some(exec) => self.prepare_multishard_from_execution(store, local_committee_info, *transaction.id(), exec),
@@ -891,9 +911,11 @@ mod tests {
         SubstateRequirement,
         SubstateVersion,
         VersionedSubstateId,
+        VotePower,
+        shard::Shard,
     };
-    use tari_ootle_storage::consensus_models::{LockedEpoch, SubstatePledge, TransactionRecord};
-    use tari_ootle_transaction::{Transaction, TransactionId};
+    use tari_ootle_storage::consensus_models::{Block, LockedEpoch, SubstateChange, SubstatePledge, TransactionRecord};
+    use tari_ootle_transaction::{Network, Transaction, TransactionId};
     use tari_state_store_rocksdb::RocksDbStateStore;
     use tari_template_lib_types::{
         ComponentAddress,
@@ -906,6 +928,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::traits::WriteableSubstateStore;
 
     /// Stands in for the engine: any transaction that reaches it fails, so a test can tell an
     /// execution from an abort consensus decided before executing.
@@ -1073,5 +1096,92 @@ mod tests {
         assert_eq!(resolved.len(), 1);
         assert!(resolved.contains_key(&input));
         assert!(!resolved.contains_key(&output));
+    }
+
+    fn shard_of(id: &SubstateId) -> Shard {
+        VersionedSubstateIdRef::new(id, SubstateVersion::ZERO).to_shard(NumPreshards::P256)
+    }
+
+    /// Prepares, pinned to epoch 1, a transaction with one input in this shard group and one in
+    /// another. Returns the prepared decision and whether the local input was locked.
+    fn prepare_cross_shard(max_epoch: Epoch) -> (Decision, bool) {
+        let local = component_id(1);
+        let local_shard = shard_of(&local);
+        let foreign = (2..=u8::MAX)
+            .map(component_id)
+            .find(|id| shard_of(id) != local_shard)
+            .unwrap();
+        let committee = CommitteeInfo::new(
+            NumPreshards::P256,
+            1,
+            2,
+            ShardGroup::new(local_shard, local_shard),
+            Epoch(1),
+            VotePower::of(1),
+        );
+        let transaction = TransactionRecord::new(
+            Transaction::builder_localnet(max_epoch)
+                .add_input(SubstateRequirement::unversioned(local.clone()))
+                .add_input(SubstateRequirement::unversioned(foreign))
+                .build_and_seal(&PrivateKey::from(1u64)),
+        );
+
+        let dir = tempfile::tempdir().unwrap();
+        let db = RocksDbStateStore::<String>::open(dir.path().join("db"), Default::default()).unwrap();
+        let zero = Block::zero_block(Network::LocalNet, NumPreshards::P256);
+        db.with_write_tx(|tx| zero.insert(tx)).unwrap();
+        let block = zero.as_leaf();
+        db.with_read_tx(|tx| {
+            let mut store = PendingSubstateStore::init(tx, block, NumPreshards::P256)?;
+            // The builder also declares the fee resource, which may share the local shard
+            for input in transaction.transaction().all_inputs_iter() {
+                if committee.includes_substate_id(input.substate_id()) {
+                    store.put(SubstateChange::Up {
+                        id: input.substate_id().clone(),
+                        shard: local_shard,
+                        substate: Box::new(Substate::new(SubstateVersion::ZERO, NonFungibleContainer::no_data())),
+                    })?;
+                }
+            }
+            let manager = manager();
+            let ResolvedTransactionInputs::LocalAndForeignInputs {
+                local_versions,
+                non_local_inputs,
+            } = manager.resolve_inputs(&mut store, &transaction, &committee)?
+            else {
+                panic!("expected local and foreign inputs");
+            };
+            let PreparedTransaction::MultiShard(prepared) = manager.prepare_multishard_involved_transaction(
+                &mut store,
+                &committee,
+                &transaction,
+                local_versions,
+                non_local_inputs,
+                block,
+                pinned_to(1),
+            )?
+            else {
+                panic!("expected a multishard preparation");
+            };
+            Ok::<_, BlockTransactionExecutorError>((
+                prepared.current_decision(),
+                store.new_locks().contains_key(&local),
+            ))
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn a_cross_shard_transaction_outside_its_window_aborts_without_locking() {
+        let (decision, is_locked) = prepare_cross_shard(Epoch(u64::MAX));
+        assert_eq!(decision.abort_reason(), Some(AbortReason::ValidityWindowTooLong));
+        assert!(!is_locked);
+    }
+
+    #[test]
+    fn a_cross_shard_transaction_inside_its_window_locks_its_local_input() {
+        let (decision, is_locked) = prepare_cross_shard(Epoch(2));
+        assert!(decision.is_commit());
+        assert!(is_locked);
     }
 }
