@@ -100,6 +100,7 @@ windows-native-keyring-store = { workspace = true }
 # assert against the real network ceiling rather than drifting from a hand-copied number.
 tari_consensus = { workspace = true }
 tari_utilities = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
 
 [package.metadata.cargo-machete]
 ignored = [
