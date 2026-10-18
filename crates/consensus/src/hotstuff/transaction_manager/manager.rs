@@ -623,14 +623,19 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
             non_local_inputs.len()
         );
 
-        // Without every input this shard group cannot execute, so the window is checked here, before any input is
-        // locked. The LocalPrepared timeout is measured from max_epoch, so it only bounds how long locks are held if
-        // max_epoch is within the window. The other shard groups receive and adopt the abort.
+        // Without every input this shard group cannot execute, so a window that is too long is rejected here, before
+        // any input is locked. The LocalPrepared timeout is measured from max_epoch, so it only bounds how long locks
+        // are held if max_epoch is within the window. The other shard groups receive and adopt the abort.
+        // An expired max_epoch is left to execution: this group's pin may still be lowered by another group's, and
+        // execution judges expiry at the final pin. Its locks are bounded by the LocalPrepared timeout meanwhile.
+        // A window too long at this pin is too long at any lower pin, so that verdict cannot change.
         let max_epoch = transaction.transaction().max_epoch();
-        if let Some(reason) = self.window_abort_reason(execution_locked_epoch.epoch(), max_epoch) {
+        if let Some(reason @ AbortReason::ValidityWindowTooLong) =
+            self.window_abort_reason(execution_locked_epoch.epoch(), max_epoch)
+        {
             warn!(
                 target: LOG_TARGET,
-                "⏰ PREPARE: Transaction {} is outside its validity window ({reason}): pinned to {}, max_epoch {max_epoch}",
+                "⏰ PREPARE: Transaction {} declares a validity window that is too long: pinned to {}, max_epoch {max_epoch}",
                 transaction.id(),
                 execution_locked_epoch,
             );
@@ -1176,6 +1181,13 @@ mod tests {
         let (decision, is_locked) = prepare_cross_shard(Epoch(u64::MAX));
         assert_eq!(decision.abort_reason(), Some(AbortReason::ValidityWindowTooLong));
         assert!(!is_locked);
+    }
+
+    #[test]
+    fn a_cross_shard_transaction_expired_at_this_pin_still_locks_its_local_input() {
+        let (decision, is_locked) = prepare_cross_shard(Epoch(0));
+        assert!(decision.is_commit());
+        assert!(is_locked);
     }
 
     #[test]
