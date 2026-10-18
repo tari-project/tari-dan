@@ -12,7 +12,19 @@ use tari_template_abi::rust::{
 
 use crate::{ComponentAddress, NonFungibleAddress, ResourceAddress, TemplateAddress, crypto::RistrettoPublicKeyBytes};
 
-/// Represents the types of possible access control rules over a component method or resource
+/// Represents the types of possible access control rules over a component method or resource.
+///
+/// # Owner Bypass
+/// Per-method component access rules and per-action resource access rules constrain **non-owners**.
+/// If a caller satisfies the stored component or resource owner rule ([`crate::SubstateOwnerRule`]), the engine skips
+/// the access-rule check even when the rule is [`AccessRule::DenyAll`] (a resource's auth hook, if configured, still
+/// runs for the owner).
+///
+/// The single carve-out is **recall** on resources ([`ResourceAuthAction::Recall`]), which always checks its
+/// explicit access rule regardless of ownership.
+///
+/// Because builders default to [`crate::OwnerRule::OwnedBySigner`], making a resource or component immutable against
+/// its creator requires configuring `.with_owner_rule(OwnerRule::None)` (see [`crate::OwnerRule::None`]).
 #[derive(Debug, Clone, Encode, Decode, CborLen, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize))]
@@ -21,7 +33,10 @@ pub enum AccessRule {
     /// AccessRule always passes
     #[n(0)]
     AllowAll,
-    /// AccessRule always fails
+    /// AccessRule always fails for non-owners.
+    ///
+    /// The owner of a component or resource still bypasses this rule (except for [`ResourceAuthAction::Recall`]); see
+    /// [`AccessRule`]'s [Owner Bypass](AccessRule#owner-bypass) section and [`crate::OwnerRule::None`].
     #[n(1)]
     DenyAll,
     /// AccessRule that requires a specific condition to be met
@@ -758,7 +773,10 @@ impl ResourceAccessRules {
         }
     }
 
-    /// Update the access rules so no one can perform any action on the resource after its creation
+    /// Update the access rules so non-owners cannot perform any action on the resource after its creation.
+    ///
+    /// The resource owner still bypasses these rules (except for [`ResourceAuthAction::Recall`]); see [`AccessRule`]'s
+    /// [Owner Bypass](AccessRule#owner-bypass) section and [`crate::OwnerRule::None`].
     pub fn deny_all() -> Self {
         Self {
             mint: AccessRule::DenyAll,
