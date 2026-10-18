@@ -12,7 +12,14 @@ use tari_engine_types::{
     substate::{Substate, SubstateId, SubstateValue},
 };
 use tari_indexer_client::types::{EpochCheckpointEntry, SubstateProof, ValidatorSetCommittee, WatchedSubstateItem};
-use tari_ootle_common_types::{Epoch, StateVersion, SubstateVersion, shard::Shard};
+use tari_ootle_common_types::{
+    Epoch,
+    StateVersion,
+    SubstateVersion,
+    optional::IsNotFoundError,
+    response_status::{ResponseErrorStatus, TransactionStatusResponseError},
+    shard::Shard,
+};
 use tari_ootle_light_client::test_fixtures::{CheckpointSpec, ValidatorSetFixture, checkpoint_entry, high, low};
 use tari_ootle_transaction::{Transaction, TransactionEnvelope, TransactionId};
 use tari_ootle_wallet_sdk::{
@@ -29,8 +36,6 @@ use tari_ootle_wallet_sdk::{
 use tari_template_abi::TemplateDef;
 use tari_template_lib::types::{ResourceAddress, TemplateAddress, UtxoId};
 
-use super::PanicError;
-
 /// An indexer that serves a chain of signed end-of-epoch checkpoints, the committees of every epoch's validator set,
 /// one transaction result, and the substates it is given to serve.
 #[derive(Clone)]
@@ -41,8 +46,8 @@ pub struct ProvingNetwork {
 struct ProvingNetworkState {
     /// Ascending by the epoch each ends.
     checkpoints: Vec<EpochCheckpointEntry>,
-    /// The index in `checkpoints` of the latest one.
-    latest: usize,
+    /// The index in `checkpoints` of the latest one, or `None` while the network has ended no epoch.
+    latest: Option<usize>,
     committees: HashMap<Epoch, (ValidatorSetCommittee, ValidatorSetCommittee)>,
     result: Option<TransactionQueryResult>,
     /// Whether the indexer serves the latest checkpoint but none of the ones before it.
@@ -52,6 +57,8 @@ struct ProvingNetworkState {
     substates: HashMap<SubstateId, ServedSubstate>,
     /// Requests for a committee.
     committee_requests: usize,
+    /// Transactions submitted to the network.
+    submissions: usize,
 }
 
 struct ServedSubstate {
@@ -75,13 +82,14 @@ impl ProvingNetwork {
         Self {
             state: Arc::new(Mutex::new(ProvingNetworkState {
                 checkpoints,
-                latest,
+                latest: Some(latest),
                 committees,
                 result: None,
                 withholds_walk: false,
                 walk_requests: 0,
                 substates: HashMap::new(),
                 committee_requests: 0,
+                submissions: 0,
             })),
         }
     }
@@ -96,7 +104,16 @@ impl ProvingNetwork {
     }
 
     pub fn set_latest(&self, latest: usize) {
-        self.state.lock().unwrap().latest = latest;
+        self.state.lock().unwrap().latest = Some(latest);
+    }
+
+    /// Serves no checkpoint, as in a network's first epoch.
+    pub fn withhold_checkpoints(&self) {
+        self.state.lock().unwrap().latest = None;
+    }
+
+    pub fn submissions(&self) -> usize {
+        self.state.lock().unwrap().submissions
     }
 
     pub fn replace_checkpoint(&self, index: usize, checkpoint: EpochCheckpointEntry) {
@@ -136,7 +153,7 @@ impl ProvingNetwork {
 }
 
 impl WalletNetworkInterface for ProvingNetwork {
-    type Error = PanicError;
+    type Error = NoCheckpoint;
 
     async fn query_substate(
         &self,
@@ -179,6 +196,7 @@ impl WalletNetworkInterface for ProvingNetwork {
     }
 
     async fn submit_transaction(&self, transaction: Transaction) -> Result<TransactionId, Self::Error> {
+        self.state.lock().unwrap().submissions += 1;
         Ok(transaction.calculate_id())
     }
 
@@ -248,7 +266,8 @@ impl WalletNetworkInterface for ProvingNetwork {
 
     async fn get_latest_epoch_checkpoint(&self, _shard: Shard) -> Result<EpochCheckpointEntry, Self::Error> {
         let state = self.state.lock().unwrap();
-        Ok(state.checkpoints[state.latest].clone())
+        let latest = state.latest.ok_or(NoCheckpoint)?;
+        Ok(state.checkpoints[latest].clone())
     }
 
     async fn list_epoch_checkpoints(
@@ -261,10 +280,10 @@ impl WalletNetworkInterface for ProvingNetwork {
         tokio::task::yield_now().await;
         let mut state = self.state.lock().unwrap();
         state.walk_requests += 1;
-        if state.withholds_walk {
+        let Some(latest) = state.latest.filter(|_| !state.withholds_walk) else {
             return Ok(vec![]);
-        }
-        Ok(state.checkpoints[..=state.latest]
+        };
+        Ok(state.checkpoints[..=latest]
             .iter()
             .filter(|checkpoint| checkpoint.epoch >= from_epoch)
             .take(limit as usize)
@@ -289,5 +308,28 @@ impl WalletNetworkInterface for ProvingNetwork {
 
     async fn wait_until_ready(&self) -> Result<(), Self::Error> {
         Ok(())
+    }
+}
+
+/// The indexer has no end-of-epoch checkpoint to serve.
+#[derive(Debug, thiserror::Error)]
+#[error("No epoch checkpoint found")]
+pub struct NoCheckpoint;
+
+impl IsNotFoundError for NoCheckpoint {
+    fn is_not_found_error(&self) -> bool {
+        true
+    }
+}
+
+impl TransactionStatusResponseError for NoCheckpoint {
+    fn get_status(&self) -> ResponseErrorStatus {
+        ResponseErrorStatus::NotFound {
+            message: self.to_string(),
+        }
+    }
+
+    fn get_error_message(&self) -> String {
+        self.to_string()
     }
 }

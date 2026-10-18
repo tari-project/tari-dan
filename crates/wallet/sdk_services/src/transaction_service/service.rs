@@ -13,6 +13,7 @@ use tari_ootle_transaction::{Transaction, TransactionId};
 use tari_ootle_wallet_sdk::{
     WalletSdk,
     WalletSdkSpec,
+    apis::transaction::Submission,
     models::{
         TransactionContext,
         TransactionContextKind,
@@ -325,21 +326,20 @@ where
             transaction_api.locks_set_transaction_id(lock_id, transaction_id)?;
         }
 
-        if transaction_api.submit_transaction(transaction_id).await? {
-            self.notify.notify(TransactionSubmittedEvent {
+        match transaction_api.submit_transaction(transaction_id).await? {
+            Submission::Submitted => self.notify.notify(TransactionSubmittedEvent {
                 transaction_id,
                 context,
-            });
-            Ok(transaction_id)
-        } else {
-            self.notify.notify(TransactionInvalidEvent {
+            }),
+            Submission::Rejected => self.notify.notify(TransactionInvalidEvent {
                 transaction_id,
                 status: TransactionStatus::InvalidTransaction,
                 finalize: None,
                 final_fee: None,
-            });
-            Ok(transaction_id)
+            }),
+            Submission::Deferred => {},
         }
+        Ok(transaction_id)
     }
 
     /// Starts a poll, returning `false` without polling if one is already in progress.
@@ -463,23 +463,24 @@ where
                 transaction.id,
             );
             let transaction_id = transaction.id;
-            if transaction_api.submit_transaction(transaction_id).await? {
+            match transaction_api.submit_transaction(transaction_id).await? {
                 // Only NewAccountData is persisted in the DB, so only that context is recoverable on
                 // resubmit. Other context variants (e.g. ClaimBurn) are in-memory only — if the daemon
                 // restarts, that context is lost and the caller must retry.
-                notify.notify(TransactionSubmittedEvent {
+                Submission::Submitted => notify.notify(TransactionSubmittedEvent {
                     transaction_id,
                     context: transaction
                         .new_account_info
                         .map(|data| TransactionContext::default().with_kind(TransactionContextKind::NewAccount(data))),
-                });
-            } else {
-                notify.notify(TransactionInvalidEvent {
+                }),
+                Submission::Rejected => notify.notify(TransactionInvalidEvent {
                     transaction_id,
                     status: TransactionStatus::InvalidTransaction,
                     finalize: None,
                     final_fee: None,
-                });
+                }),
+                // The rest wait on the same validator set.
+                Submission::Deferred => break,
             }
         }
         Ok(())

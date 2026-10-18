@@ -86,8 +86,7 @@ where
     /// If the submission is successful, the transaction status is updated to `Pending`.
     /// If the transaction is rejected, the status is updated to `InvalidTransaction` and the
     /// rejection reason is stored.
-    /// Returns `Ok(true)` if the transaction was successfully submitted, `Ok(false)` if it was rejected
-    pub async fn submit_transaction(&self, transaction_id: TransactionId) -> Result<bool, TransactionApiError> {
+    pub async fn submit_transaction(&self, transaction_id: TransactionId) -> Result<Submission, TransactionApiError> {
         let transaction = self.store.with_read_tx(|tx| tx.transactions_get(transaction_id))?;
         if transaction.is_dry_run {
             return Err(TransactionApiError::DryRunMismatchError {
@@ -102,12 +101,14 @@ where
             }));
         }
 
-        // A wallet anchored before it submits never sees its own receipts proven in an epoch before its anchor.
+        // A receipt proven in an epoch before the wallet's anchor never verifies, so a verifying wallet submits only
+        // once it has an anchor.
         if self.indexer_trust.is_verify() &&
             self.validator_set_api.latest()?.is_none() &&
             let Err(err) = self.validator_set_api.sync().await
         {
-            warn!(target: LOG_TARGET, "Failed to anchor the trusted validator set before submitting transaction {transaction_id}: {err}");
+            warn!(target: LOG_TARGET, "Transaction {transaction_id} waits to be submitted until the wallet trusts a validator set: {err}");
+            return Ok(Submission::Deferred);
         }
 
         // Re-submission needs the full transaction (blob payloads); the WalletTransaction
@@ -134,14 +135,14 @@ where
                                     .with_invalid_reason(&message),
                             )
                         })?;
-                        Ok(false)
+                        Ok(Submission::Rejected)
                     },
                     _ => Err(err.into()),
                 };
             },
         }
 
-        Ok(true)
+        Ok(Submission::Submitted)
     }
 
     /// Executes `transaction` as a dry run and records what it cost.
@@ -679,6 +680,18 @@ where
 
         Ok(())
     }
+}
+
+/// What [`TransactionApi::submit_transaction`] did with a transaction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Submission {
+    /// The network accepted the transaction, which is now `Pending`.
+    Submitted,
+    /// The network refused the transaction, which is now `InvalidTransaction`.
+    Rejected,
+    /// The wallet verifies results and trusts no validator set yet, so the transaction stays `New` for a later
+    /// submission.
+    Deferred,
 }
 
 #[derive(Debug, thiserror::Error)]
