@@ -356,7 +356,8 @@ impl NetworkWideStateSync {
     ///
     /// Returns whether the group's checkpoints reach the epoch before `epoch`. They fall short when
     /// the committee has not yet completed that epoch: consensus ends an epoch some time after the
-    /// base layer moves past it.
+    /// base layer moves past it. They fall short for all of `epoch` when the epoch before it has no
+    /// checkpoint at all, as in a network's first epoch or after an epoch consensus never ran.
     async fn sync_group_checkpoints(
         &self,
         shard_group: ShardGroup,
@@ -411,18 +412,12 @@ impl NetworkWideStateSync {
             restore_stripped_preimages(pool, served_by, shard_group, from_epoch, &mut checkpoints).await;
         }
 
-        if checkpoints.is_empty() {
-            info!(target: LOG_TARGET, "🌍️ No checkpoints found for shard group {shard_group} from epoch {from_epoch} (prev_epoch {prev_epoch})");
-            let mut progress = progress.lock().await;
-            progress.record_checkpoint(shard_group, prev_epoch);
-            let sync_progress_snapshot = progress.clone();
-            self.store
-                .with_write_tx(move |tx| tx.key_value_set(Key::SyncProgress, sync_progress_snapshot))
-                .await?;
-            return Ok(true);
-        }
-
-        info!(target: LOG_TARGET, "🌍️ Found {} checkpoints for shard group {shard_group} from epoch {from_epoch}", checkpoints.len());
+        let level = if checkpoints.is_empty() {
+            Level::Debug
+        } else {
+            Level::Info
+        };
+        log!(target: LOG_TARGET, level, "🌍️ Found {} checkpoints for shard group {shard_group} from epoch {from_epoch} (prev_epoch {prev_epoch})", checkpoints.len());
 
         for checkpoint in checkpoints {
             info!(target: LOG_TARGET, "🌍️ Validating checkpoint for shard group {shard_group}: {}", checkpoint.header().calculate_hash());
