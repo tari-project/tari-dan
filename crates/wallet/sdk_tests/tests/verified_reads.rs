@@ -165,12 +165,40 @@ async fn a_substate_proven_before_the_anchor_is_refused() {
 
     let err = read_error(&test, &id).await;
     assert!(
-        matches!(err, SubstateApiError::SubstateProvenOutsideTrustedSets {
+        matches!(err, SubstateApiError::SubstateProvenBeforeAnchor {
             epoch: Epoch(3),
+            anchor_epoch: Epoch(4),
             ..
         }),
         "{err}"
     );
+}
+
+#[tokio::test]
+async fn a_substate_proven_past_the_served_checkpoints_is_refused_until_they_are_served() {
+    let sets = sets();
+    // The wallet anchors on the set of epoch 4, which the latest checkpoint names.
+    let network = ProvingNetwork::new(&sets, 2);
+    let test = TestWithNetwork::without_accounts_trusting(network.clone(), IndexerTrust::Verify);
+    let (id, value) = substate(1);
+    let proof = substate_proof(&sets[4], &id, VERSION, &value);
+    network.serve_substate(id.clone(), VERSION, value, Some(proof));
+
+    let err = read_error(&test, &id).await;
+    assert!(
+        matches!(err, SubstateApiError::SubstateProvenPastServedCheckpoints {
+            epoch: Epoch(5),
+            ..
+        }),
+        "{err}"
+    );
+
+    network.set_latest(3);
+    test.sdk()
+        .substate_api()
+        .fetch_substate_from_network(&id, None)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
