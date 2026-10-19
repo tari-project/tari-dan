@@ -675,6 +675,114 @@ mod tests {
         }
     }
 
+    /// Listing, fetching and marking a UTXO spent each address a few of one resource's rows by key.
+    /// Each must seek to those rows, so that its cost does not grow with the resource's history or
+    /// the table's.
+    #[tokio::test]
+    async fn utxo_lookups_by_key_seek_to_their_rows() {
+        use diesel::ExpressionMethods;
+        use tari_template_lib_types::{
+            UtxoId,
+            crypto::{RistrettoPublicKeyBytes, UtxoTag},
+        };
+
+        use crate::storage_sqlite::{
+            reader::{unspent_utxos_by_tag_and_nonce_query, utxos_list_query},
+            schema::utxos,
+        };
+
+        let (_dir, store) = temp_store().await;
+        let resource = utxo_resource();
+        let assert_seeks = |read: &str, plan: String, key: &str| {
+            assert!(
+                plan.lines()
+                    .all(|step| !step.starts_with("SCAN ") || step.contains("CONSTANT ROW")),
+                "{read} scans the table: {plan}"
+            );
+            assert!(!plan.contains("TEMP B-TREE"), "{read} sorts outside the index: {plan}");
+            assert!(plan.contains(key), "{read} does not search on {key}: {plan}");
+        };
+
+        let first_page = utxos_list_query(&resource, None, 10);
+        assert_seeks(
+            "first list page",
+            query_plan(&store, sql_of(&first_page)).await,
+            "utxos_resource_unspent_idx (resource_address=?)",
+        );
+        let next_page = utxos_list_query(&resource, Some(UtxoId::from_array([1; 32])), 10);
+        let plan = query_plan(&store, sql_of(&next_page)).await;
+        assert_seeks("next list page", plan.clone(), "rowid>?");
+        assert_seeks("list cursor", plan, "resource_address=? AND commitment=?");
+
+        let nonce = RistrettoPublicKeyBytes::from_bytes(&[1; 32]).unwrap();
+        let fetch = unspent_utxos_by_tag_and_nonce_query(&resource, &[(UtxoTag::from(0u32), nonce)]);
+        assert_seeks(
+            "fetch by tag and nonce",
+            query_plan(&store, sql_of(&fetch)).await,
+            "resource_address=? AND public_nonce=?",
+        );
+
+        let mark_spent = diesel::update(utxos::table)
+            .filter(utxos::resource_address.eq(resource.to_string()))
+            .filter(utxos::commitment.eq(UtxoId::from_array([1; 32]).to_commitment_hex_string()))
+            .set(utxos::is_spent.eq(true));
+        assert_seeks(
+            "mark spent",
+            query_plan(&store, sql_of(&mark_spent)).await,
+            "resource_address=? AND commitment=?",
+        );
+    }
+
+    #[tokio::test]
+    async fn listing_pages_through_unspent_utxos_and_fetch_finds_them_by_key() {
+        use tari_template_lib_types::{
+            UtxoId,
+            crypto::{RistrettoPublicKeyBytes, UtxoTag},
+        };
+
+        let (_dir, store) = store_with_utxos(&[(10, 4)]).await;
+        store
+            .with_write_tx(|tx| tx.batch_insert_utxo_updates(Epoch(1), [spent_at(2, 20)]))
+            .await
+            .unwrap();
+        let list = |from: Option<u8>| {
+            let store = store.clone();
+            async move {
+                store
+                    .with_read_tx(move |tx| {
+                        tx.utxos_list(&utxo_resource(), from.map(|seq| UtxoId::from_array([seq; 32])), 2)
+                    })
+                    .await
+                    .unwrap()
+                    .into_iter()
+                    .map(|(id, _)| id)
+                    .collect::<Vec<_>>()
+            }
+        };
+
+        assert_eq!(list(None).await, [
+            UtxoId::from_array([1; 32]),
+            UtxoId::from_array([3; 32])
+        ]);
+        assert_eq!(list(Some(3)).await, [UtxoId::from_array([4; 32])]);
+
+        let fetch = |seq: u8| {
+            let store = store.clone();
+            async move {
+                let pair = (
+                    UtxoTag::from(0u32),
+                    RistrettoPublicKeyBytes::from_bytes(&[seq; 32]).unwrap(),
+                );
+                store
+                    .with_read_tx(move |tx| tx.utxos_get_unspent_by_public_nonce_and_tag(&utxo_resource(), &[pair]))
+                    .await
+                    .unwrap()
+            }
+        };
+        assert_eq!(fetch(3).await.len(), 1);
+        assert!(fetch(2).await.is_empty(), "a spent UTXO is not fetched");
+    }
+
     async fn temp_store() -> (tempfile::TempDir, SqliteIndexerStore) {
         let dir = tempfile::tempdir().unwrap();
         let store = SqliteIndexerStore::try_create(dir.path().join("indexer.db")).unwrap();

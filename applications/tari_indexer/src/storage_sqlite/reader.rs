@@ -220,6 +220,75 @@ pub(super) fn utxo_updates_query<'a>(
         .into_boxed()
 }
 
+/// Restricts `utxos` to unspent, unburnt rows. The terms are SQL literals because SQLite uses a
+/// partial index only when the query's own `WHERE` repeats the index's condition verbatim.
+fn is_unspent_utxo() -> diesel::expression::SqlLiteral<sql_types::Bool> {
+    dsl::sql::<sql_types::Bool>(r#""utxos"."is_spent" = false AND "utxos"."is_burnt" = false"#)
+}
+
+/// Up to `limit` unspent UTXOs of `resource_address` in insertion order, after `from_id` when given.
+pub(super) fn utxos_list_query<'a>(
+    resource_address: &ResourceAddress,
+    from_id: Option<UtxoId>,
+    limit: u32,
+) -> crate::storage_sqlite::schema::utxos::BoxedQuery<'a, diesel::sqlite::Sqlite> {
+    use crate::storage_sqlite::schema::utxos;
+
+    let mut query = utxos::table
+        .filter(utxos::resource_address.eq(resource_address.to_string()))
+        .filter(is_unspent_utxo())
+        .into_boxed();
+
+    if let Some(from_id) = from_id {
+        let uxo = alias!(utxos as uxo);
+        let subquery = uxo
+            .select(uxo.field(utxos::id))
+            .filter(uxo.field(utxos::resource_address).eq(resource_address.to_string()))
+            .filter(uxo.field(utxos::commitment).eq(from_id.to_commitment_hex_string()))
+            .limit(1)
+            .single_value()
+            .assume_not_null();
+        query = query.filter(utxos::id.gt(subquery));
+    }
+
+    query.limit(i64::from(limit)).order_by(utxos::id.asc())
+}
+
+/// The unspent UTXOs of `resource_address` matching any of `tag_and_nonce_pairs`.
+pub(super) fn unspent_utxos_by_tag_and_nonce_query<'a>(
+    resource_address: &ResourceAddress,
+    tag_and_nonce_pairs: &[(UtxoTag, RistrettoPublicKeyBytes)],
+) -> crate::storage_sqlite::schema::utxos::BoxedQuery<'a, diesel::sqlite::Sqlite> {
+    use crate::storage_sqlite::schema::utxos;
+
+    // Diesel does not support tuple IN queries, so we have to use raw SQL here (https://github.com/diesel-rs/diesel/issues/3222#issuecomment-2088239186)
+    // The row value follows the column order of the unique (resource_address, public_nonce,
+    // utxo_tag) index, which lets SQLite seek that index for each pair.
+    let mut tag_and_nonce_query = String::with_capacity(29 + tag_and_nonce_pairs.len() * 50);
+    tag_and_nonce_query.push_str("(public_nonce,utxo_tag) IN (");
+    for (i, (tag, nonce)) in tag_and_nonce_pairs.iter().enumerate() {
+        // SQLINJECTION not possible as we control the types
+        write!(
+            &mut tag_and_nonce_query,
+            "('{}',{})",
+            serialize_hex(nonce),
+            tag.value() as i32
+        )
+        .expect("write to string is infallible");
+
+        if i < tag_and_nonce_pairs.len() - 1 {
+            tag_and_nonce_query.push(',');
+        }
+    }
+    tag_and_nonce_query.push(')');
+
+    utxos::table
+        .filter(utxos::resource_address.eq(resource_address.to_string()))
+        .filter(dsl::sql::<sql_types::Bool>(&tag_and_nonce_query))
+        .filter(is_unspent_utxo())
+        .into_boxed()
+}
+
 fn decode_event_row(row: EventRecord) -> Result<(i64, TransactionId, Event), StorageError> {
     let substate_id = row
         .substate_id
@@ -814,28 +883,8 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         limit: u32,
     ) -> Result<Vec<(UtxoId, Utxo)>, StorageError> {
         const OPERATION: &str = "utxos_list";
-        use crate::storage_sqlite::schema::utxos;
 
-        let mut query = utxos::table
-            .filter(utxos::resource_address.eq(resource_address.to_string()))
-            .filter(utxos::is_spent.eq(false))
-            .filter(utxos::is_burnt.eq(false))
-            .into_boxed();
-
-        if let Some(from_id) = from_id {
-            let uxo = alias!(utxos as uxo);
-            let subquery = uxo
-                .select(uxo.field(utxos::id))
-                .filter(uxo.field(utxos::commitment).eq(from_id.to_commitment_hex_string()))
-                .limit(1)
-                .single_value()
-                .assume_not_null();
-            query = query.filter(utxos::id.gt(subquery));
-        }
-
-        let rows = query
-            .limit(i64::from(limit))
-            .order_by(utxos::id.asc())
+        let rows = utxos_list_query(resource_address, from_id, limit)
             .load_iter::<models::UtxoRecord, _>(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("{OPERATION}: {}", e),
@@ -859,32 +908,8 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         tag_and_nonce_pairs: &[(UtxoTag, RistrettoPublicKeyBytes)],
     ) -> Result<Vec<(UtxoId, Utxo)>, StorageError> {
         const OPERATION: &str = "utxos_get_unspent_by_public_nonce_and_tag";
-        use crate::storage_sqlite::schema::utxos;
 
-        // Diesel does not support tuple IN queries, so we have to use raw SQL here (https://github.com/diesel-rs/diesel/issues/3222#issuecomment-2088239186)
-        let mut tag_and_nonce_query = String::with_capacity(29 + tag_and_nonce_pairs.len() * 50);
-        tag_and_nonce_query.push_str("(utxo_tag,public_nonce) IN (");
-        for (i, (tag, nonce)) in tag_and_nonce_pairs.iter().enumerate() {
-            // SQLINJECTION not possible as we control the types
-            write!(
-                &mut tag_and_nonce_query,
-                "({},'{}')",
-                tag.value() as i32,
-                serialize_hex(nonce)
-            )
-            .expect("write to string is infallible");
-
-            if i < tag_and_nonce_pairs.len() - 1 {
-                tag_and_nonce_query.push(',');
-            }
-        }
-        tag_and_nonce_query.push(')');
-
-        let rows = utxos::table
-            .filter(utxos::resource_address.eq(resource_address.to_string()))
-            .filter(dsl::sql::<sql_types::Bool>(&tag_and_nonce_query))
-            .filter(utxos::is_spent.eq(false))
-            .filter(utxos::is_burnt.eq(false))
+        let rows = unspent_utxos_by_tag_and_nonce_query(resource_address, tag_and_nonce_pairs)
             .load_iter::<models::UtxoRecord, _>(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("{OPERATION}: {}", e),
