@@ -144,13 +144,6 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
             .validator_nodes_get_random_committee_member_from_shard_group(self.tx, epoch, shard_group, excluding)
     }
 
-    pub fn get_committees(
-        &mut self,
-        epoch: Epoch,
-    ) -> Result<HashMap<ShardGroup, Committee<TGlobalDbAdapter::Addr>>, TGlobalDbAdapter::Error> {
-        self.backend.validator_nodes_get_committees_for_epoch(self.tx, epoch)
-    }
-
     /// Removes every committee assignment for `epoch`.
     pub fn clear_committees(&mut self, epoch: Epoch) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend.validator_nodes_clear_committees(self.tx, epoch)

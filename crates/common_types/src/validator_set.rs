@@ -319,9 +319,9 @@ mod tests {
     #[test]
     fn it_rejects_members_out_of_public_key_order() {
         let shard_group = ShardGroup::new(0u32, 3u32);
-        let err = committee(&[("a", 2, 1), ("b", 1, 1)])
-            .calculate_validator_set_leaf_hash(&shard_group)
-            .unwrap_err();
+        let members = [(pk(2), VotePower::of(1)), (pk(1), VotePower::of(1))];
+        let err =
+            hash_validator_set_committee(&shard_group, members.iter().map(|(key, power)| (key, *power))).unwrap_err();
 
         assert_eq!(err, ValidatorSetError::CommitteeNotSorted {
             shard_group,

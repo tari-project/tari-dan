@@ -10,8 +10,9 @@ use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{Epoch, NumPreshards, ShardGroup, SubstateAddress, VersionedSubstateIdRef, VotePower};
 
-/// A committee's members in ascending public key order. Positions are protocol-visible: leader rotation indexes into
-/// them, and the validator set commits to committees in this order.
+/// A committee's members in ascending public key order, each public key at most once. Positions are protocol-visible:
+/// leader rotation indexes into them, and the validator set commits to committees in this order. Committee assignment
+/// keeps one registration per public key, and `hash_validator_set_committee` rejects a committee that repeats one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default, Hash)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Committee<TAddr> {
@@ -42,7 +43,7 @@ impl<TAddr: PartialEq> Committee<TAddr> {
         Self::new(vec![])
     }
 
-    /// Orders `members` by public key. The sort is stable, so members sharing a key keep their given order.
+    /// Orders `members` by public key. `members` must not repeat a public key.
     pub fn new(mut members: Vec<CommitteeMember<TAddr>>) -> Self {
         members.sort_by_key(|member| member.public_key);
         Self { members }
@@ -98,6 +99,7 @@ impl<TAddr: PartialEq> Committee<TAddr> {
             .map(|index| self.members[index].vote_power)
     }
 
+    /// The position of the member with `public_key`, which is unique because a committee lists each public key once.
     pub fn index_of_public_key(&self, public_key: &RistrettoPublicKeyBytes) -> Option<usize> {
         self.members
             .binary_search_by(|member| member.public_key.cmp(public_key))
@@ -321,10 +323,10 @@ mod tests {
 
     fn create_committee(size: usize) -> Committee<u32> {
         Committee::new(
-            (0..size as u32)
+            (0..size as u8)
                 .map(|c| CommitteeMember {
-                    address: c,
-                    public_key: RistrettoPublicKeyBytes::default(),
+                    address: u32::from(c),
+                    public_key: RistrettoPublicKeyBytes::from_bytes(&[c; 32]).unwrap(),
                     vote_power: VotePower::of(1),
                 })
                 .collect(),

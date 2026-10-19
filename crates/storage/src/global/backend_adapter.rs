@@ -142,12 +142,6 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         excluding: HashSet<Self::Addr>,
     ) -> Result<ValidatorNode<Self::Addr>, Self::Error>;
 
-    fn validator_nodes_get_committees_for_epoch(
-        &self,
-        tx: &mut Self::DbTransaction<'_>,
-        epoch: Epoch,
-    ) -> Result<HashMap<ShardGroup, Committee<Self::Addr>>, Self::Error>;
-
     /// Upserts the epoch hash for `epoch`. Overwrites an existing row so the epoch manager can apply
     /// an oracle hash correction for an epoch it has already persisted (only done while the epoch is
     /// unlocked; locked epochs are guarded in `EpochManagerService::activate_epoch`).
