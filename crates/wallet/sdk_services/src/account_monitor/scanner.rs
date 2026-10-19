@@ -629,6 +629,9 @@ where TSpec: WalletSdkSpec
         });
 
         let mut updated_accounts = HashSet::new();
+        // Accounts the diff shows holding a vault that is neither in the diff nor known to the wallet. The diff cannot
+        // bring these up to date, so they are refreshed from the network.
+        let mut accounts_to_refresh = HashSet::new();
         // Find and process all new/existing vaults
         for (account_address, value, account_version) in accounts {
             // If we know about this account, mark it as on-chain (if it isn't already)
@@ -675,6 +678,10 @@ where TSpec: WalletSdkSpec
                             BalanceChangeSource::Transaction { transaction_id: tx_id },
                         )
                         .await?;
+                } else {
+                    if !accounts_api.has_vault(vault_id)? {
+                        accounts_to_refresh.insert(account_address);
+                    }
                 }
             }
 
@@ -800,6 +807,24 @@ where TSpec: WalletSdkSpec
                     account_address,
                     version,
                 });
+            }
+        }
+
+        for account_address in accounts_to_refresh {
+            info!(
+                target: LOG_TARGET,
+                "🏦 Transaction {} shows account {} holding a vault this wallet does not know. Refreshing the account.",
+                tx_id,
+                account_address
+            );
+            if let Err(err) = self
+                .refresh_account_with_source(account_address, BalanceChangeSource::Scan)
+                .await
+            {
+                warn!(
+                    target: LOG_TARGET,
+                    "🏦 Failed to refresh account {} after transaction {}: {}", account_address, tx_id, err
+                );
             }
         }
 
