@@ -59,6 +59,10 @@ struct ProvingNetworkState {
     committee_requests: usize,
     /// Transactions submitted to the network.
     submissions: usize,
+    /// Requests for a single substate.
+    substate_queries: usize,
+    /// Requests for a batch of substates.
+    substate_fetches: usize,
 }
 
 struct ServedSubstate {
@@ -90,6 +94,8 @@ impl ProvingNetwork {
                 substates: HashMap::new(),
                 committee_requests: 0,
                 submissions: 0,
+                substate_queries: 0,
+                substate_fetches: 0,
             })),
         }
     }
@@ -122,6 +128,14 @@ impl ProvingNetwork {
 
     pub fn committee_requests(&self) -> usize {
         self.state.lock().unwrap().committee_requests
+    }
+
+    pub fn substate_queries(&self) -> usize {
+        self.state.lock().unwrap().substate_queries
+    }
+
+    pub fn substate_fetches(&self) -> usize {
+        self.state.lock().unwrap().substate_fetches
     }
 
     pub fn walk_requests(&self) -> usize {
@@ -162,7 +176,8 @@ impl WalletNetworkInterface for ProvingNetwork {
         _local_search_only: bool,
         include_proof: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
-        let state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap();
+        state.substate_queries += 1;
         let served = state
             .substates
             .get(address)
@@ -179,7 +194,8 @@ impl WalletNetworkInterface for ProvingNetwork {
         substate_ids: Vec<SubstateId>,
         include_proofs: bool,
     ) -> Result<FetchedSubstates, Self::Error> {
-        let state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap();
+        state.substate_fetches += 1;
         let mut fetched = FetchedSubstates::default();
         for id in substate_ids {
             let Some(served) = state.substates.get(&id) else {

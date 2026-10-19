@@ -29,6 +29,7 @@ use tari_indexer_client::{
         IndexerTransactionFinalizedResult,
         ListEpochCheckpointsRequest,
         ListWatchedSubstatesRequest,
+        MAX_SUBSTATES_PER_FETCH,
         SubmitTransactionRequest,
         SubstateState,
         ValidatorSetCommittee,
@@ -331,14 +332,12 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
         substate_ids: Vec<SubstateId>,
         include_proofs: bool,
     ) -> Result<FetchedSubstates, Self::Error> {
-        // The indexer's substates/fetch endpoint accepts at most this many IDs per request, so larger
-        // requests are split into sequential batches. Substates the indexer cannot find are omitted from
+        // The indexer's substates/fetch endpoint accepts at most MAX_SUBSTATES_PER_FETCH IDs per request, so
+        // larger requests are split into sequential batches. Substates the indexer cannot find are omitted from
         // the result, not an error.
-        const MAX_IDS_PER_REQUEST: usize = 20;
-
         let client = self.tracked_client();
         let mut fetched = FetchedSubstates::default();
-        for chunk in substate_ids.chunks(MAX_IDS_PER_REQUEST) {
+        for chunk in substate_ids.chunks(MAX_SUBSTATES_PER_FETCH) {
             let requests = chunk.to_vec().try_into().map_err(|_| {
                 IndexerRestApiNetworkInterfaceError::IndexerClientError(IndexerRestClientError::RequestInvariant {
                     details: "Too many substate IDs requested".to_string(),
