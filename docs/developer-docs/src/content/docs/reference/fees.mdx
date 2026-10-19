@@ -345,17 +345,17 @@ Three consequences follow, and each shows up as a rule elsewhere on this page:
 
 ## What a transaction is charged for
 
-Rates below are the current testnet values (mainnet placeholders are identical and still to be
-finalised).
+Every network, mainnet included, currently runs on the same fee table; the mainnet rates are still
+to be finalised.
 
-| Source | When | Testnet rate |
+| Source | When | Rate |
 |---|---|---|
 | `Initial` | runtime init | 0 |
 | `TransactionWeight` | runtime init | 1 µT per weight unit |
 | `RuntimeCall` | every engine host call | 1 µT, plus 1 µT per 64 bytes of a log message |
 | `TemplateLoad` | first load of each template | 10 µT per 3 KB |
 | `Storage` | finalisation | 1 µT per byte |
-| `SubstateCreate` | finalisation | 25 µT per new substate |
+| `SubstateCreate` | finalisation | 250 µT per new substate |
 | `TemplatePublish` | finalisation | 250,000 µT flat; first 96 KiB at the storage rate; 100 µT × units² per KiB beyond |
 | `WasmExecution` | finalisation | 1 µT per 1000 metering points |
 | `NativeExecution` | finalisation | 1 µT per 1000 point-equivalents |
