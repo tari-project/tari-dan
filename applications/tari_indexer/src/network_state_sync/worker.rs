@@ -377,8 +377,72 @@ impl NetworkWideStateSync {
             debug!(target: LOG_TARGET, "🌍️ No checkpoints to sync for shard group {shard_group} from epoch {from_epoch}");
             return Ok(true);
         }
+        if is_backfill(from_epoch, prev_epoch) {
+            self.sync_head_checkpoint(shard_group, pool, prev_epoch).await?;
+        }
         info!(target: LOG_TARGET, "🌍️ Syncing checkpoints from {from_epoch} for shard group {shard_group}");
-        // Perform sync operations using the pool and checkpoint
+        let checkpoints = self
+            .fetch_group_checkpoints(shard_group, pool, from_epoch, prev_epoch)
+            .await?;
+
+        let level = if checkpoints.is_empty() {
+            Level::Debug
+        } else {
+            Level::Info
+        };
+        log!(target: LOG_TARGET, level, "🌍️ Found {} checkpoints for shard group {shard_group} from epoch {from_epoch} (prev_epoch {prev_epoch})", checkpoints.len());
+
+        for checkpoint in checkpoints {
+            require_header_metadata(&self.store, &checkpoint).await?;
+            self.store_checkpoint(shard_group, checkpoint, prev_epoch, Some(progress))
+                .await?;
+        }
+        let reached = progress.lock().await.checkpoint_epoch(shard_group);
+        Ok(reached.is_some_and(|reached| reached >= prev_epoch))
+    }
+
+    /// Syncs `shard_group`'s checkpoint of `prev_epoch` ahead of the backfill that leads up to it.
+    ///
+    /// A wallet verifies the indexer's reads at the current epoch only through this checkpoint, which hands over to the
+    /// current epoch's validator set, so serving it first makes reads verifiable while older epochs are still being
+    /// backfilled. The backfill's progress stays where it is. A checkpoint without its header metadata preimage is
+    /// left to the backfill, which judges it against the checkpoints before it.
+    async fn sync_head_checkpoint(
+        &self,
+        shard_group: ShardGroup,
+        pool: &mut ValidatorCommitteeRpcPool,
+        prev_epoch: Epoch,
+    ) -> Result<(), NetworkStateSyncError> {
+        let stored = self
+            .store
+            .with_read_tx(move |tx| tx.epoch_checkpoint_exists(shard_group, prev_epoch))
+            .await?;
+        if stored {
+            return Ok(());
+        }
+        info!(target: LOG_TARGET, "🌍️ Syncing the checkpoint of {prev_epoch} for shard group {shard_group} ahead of the backfill");
+        let checkpoints = self
+            .fetch_group_checkpoints(shard_group, pool, prev_epoch, prev_epoch)
+            .await?;
+        for checkpoint in checkpoints {
+            if checkpoint.header_metadata().is_none() {
+                debug!(target: LOG_TARGET, "🌍️ The checkpoint of {prev_epoch} for shard group {shard_group} carries no header metadata preimage; leaving it to the backfill");
+                continue;
+            }
+            self.store_checkpoint(shard_group, checkpoint, prev_epoch, None).await?;
+        }
+        Ok(())
+    }
+
+    /// `shard_group`'s checkpoints from `from_epoch` to `prev_epoch`, from a committee member whose committed tip
+    /// verifies, with any header metadata preimage it stripped restored from another member where one has it.
+    async fn fetch_group_checkpoints(
+        &self,
+        shard_group: ShardGroup,
+        pool: &mut ValidatorCommitteeRpcPool,
+        from_epoch: Epoch,
+        prev_epoch: Epoch,
+    ) -> Result<Vec<EpochCheckpoint>, NetworkStateSyncError> {
         let validator_status = self.validator_status.clone();
         let consensus_epoch = self.consensus_epoch.clone();
         let (served_by, mut checkpoints) = pool
@@ -411,47 +475,56 @@ impl NetworkWideStateSync {
         {
             restore_stripped_preimages(pool, served_by, shard_group, from_epoch, &mut checkpoints).await;
         }
+        Ok(checkpoints)
+    }
 
-        let level = if checkpoints.is_empty() {
-            Level::Debug
-        } else {
-            Level::Info
+    /// Verifies `checkpoint` and stores it, advancing `shard_group`'s checkpoint progress to its epoch when `progress`
+    /// is given.
+    async fn store_checkpoint(
+        &self,
+        shard_group: ShardGroup,
+        checkpoint: EpochCheckpoint,
+        prev_epoch: Epoch,
+        progress: Option<&SharedSyncProgress>,
+    ) -> Result<(), NetworkStateSyncError> {
+        info!(target: LOG_TARGET, "🌍️ Validating checkpoint for shard group {shard_group}: {}", checkpoint.header().calculate_hash());
+
+        let checkpoint_shard_group =
+            checkpoint
+                .checked_shard_group()
+                .map_err(|e| NetworkStateSyncError::InvalidCheckpoint {
+                    details: format!("Checkpoint for shard group {} is not valid: {}", shard_group, e),
+                })?;
+
+        verify_checkpoint(&self.epoch_manager, &checkpoint, checkpoint_shard_group, prev_epoch).await?;
+
+        info!(target: LOG_TARGET, "🌍️ Inserting checkpoint for {}, shard group {}", checkpoint.epoch(), checkpoint_shard_group);
+
+        let xtr_exhausted = checkpoint_exhaust_burn(&checkpoint)?;
+        self.stats.increment_checkpoints();
+        let checkpoint_epoch = checkpoint.epoch();
+        // The progress lock is held until the snapshot is written, as `SharedSyncProgress` requires.
+        let mut progress = match progress {
+            Some(progress) => Some(progress.lock().await),
+            None => None,
         };
-        log!(target: LOG_TARGET, level, "🌍️ Found {} checkpoints for shard group {shard_group} from epoch {from_epoch} (prev_epoch {prev_epoch})", checkpoints.len());
-
-        for checkpoint in checkpoints {
-            info!(target: LOG_TARGET, "🌍️ Validating checkpoint for shard group {shard_group}: {}", checkpoint.header().calculate_hash());
-
-            let checkpoint_shard_group =
-                checkpoint
-                    .checked_shard_group()
-                    .map_err(|e| NetworkStateSyncError::InvalidCheckpoint {
-                        details: format!("Checkpoint for shard group {} is not valid: {}", shard_group, e),
-                    })?;
-
-            verify_checkpoint(&self.epoch_manager, &checkpoint, checkpoint_shard_group, prev_epoch).await?;
-            require_header_metadata(&self.store, &checkpoint).await?;
-
-            info!(target: LOG_TARGET, "🌍️ Inserting checkpoint for {}, shard group {}", checkpoint.epoch(), checkpoint_shard_group);
-
-            let xtr_exhausted = checkpoint_exhaust_burn(&checkpoint)?;
-            self.stats.increment_checkpoints();
-            let checkpoint_epoch = checkpoint.epoch();
-            let mut progress = progress.lock().await;
+        let sync_progress_snapshot = progress.as_deref_mut().map(|progress| {
             progress.record_checkpoint(shard_group, checkpoint_epoch);
-            let sync_progress_snapshot = progress.clone();
-            self.store
-                .with_write_tx(move |tx| {
-                    if !tx.epoch_checkpoint_exists(checkpoint_shard_group, checkpoint_epoch)? {
-                        tx.insert_or_ignore_epoch_checkpoint(&checkpoint)?;
-                        add_to_total(tx, Key::TariAccumulatedExhaustBurn, xtr_exhausted)?;
-                    }
-                    tx.key_value_set(Key::SyncProgress, sync_progress_snapshot)
-                })
-                .await?;
-        }
-        let reached = progress.lock().await.checkpoint_epoch(shard_group);
-        Ok(reached.is_some_and(|reached| reached >= prev_epoch))
+            progress.clone()
+        });
+        self.store
+            .with_write_tx(move |tx| {
+                if !tx.epoch_checkpoint_exists(checkpoint_shard_group, checkpoint_epoch)? {
+                    tx.insert_or_ignore_epoch_checkpoint(&checkpoint)?;
+                    add_to_total(tx, Key::TariAccumulatedExhaustBurn, xtr_exhausted)?;
+                }
+                if let Some(snapshot) = sync_progress_snapshot {
+                    tx.key_value_set(Key::SyncProgress, snapshot)?;
+                }
+                Ok::<_, StorageError>(())
+            })
+            .await?;
+        Ok(())
     }
 
     /// Follows every shard group's tip at once, each on its own stream, until cancelled. Returns
@@ -1413,6 +1486,12 @@ async fn require_header_metadata(
     Ok(())
 }
 
+/// Whether a checkpoint sync from `from_epoch` backfills epochs before `prev_epoch`, whose checkpoint is then synced
+/// first.
+fn is_backfill(from_epoch: Epoch, prev_epoch: Epoch) -> bool {
+    from_epoch.as_u64() + 1 < prev_epoch.as_u64()
+}
+
 /// Keeps the checkpoints a sync from `from_epoch` can use: those from `from_epoch` up to `prev_epoch`.
 /// Later ones are for an epoch that has not ended for this indexer, and earlier ones were already
 /// synced.
@@ -1924,6 +2003,14 @@ mod tests {
                 matches!(result, Err(NetworkStateSyncError::InvalidCheckpoint { .. })),
                 "{result:?}"
             );
+        }
+
+        #[test]
+        fn the_previous_epochs_checkpoint_is_synced_first_only_when_earlier_ones_are_missing() {
+            assert!(is_backfill(Epoch(0), Epoch(250)));
+            assert!(is_backfill(Epoch(248), Epoch(250)));
+            assert!(!is_backfill(Epoch(249), Epoch(250)));
+            assert!(!is_backfill(Epoch(250), Epoch(250)));
         }
 
         #[test]
