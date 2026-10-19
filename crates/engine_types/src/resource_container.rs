@@ -517,6 +517,15 @@ impl ResourceContainer {
                 }
                 *revealed_amount -= validated_proof.input_revealed_amount;
 
+                // Revealed change always returns to the container, so the balance proof — not a sufficiency check —
+                // is what constrains it. Only the sum can fail here.
+                *revealed_amount = revealed_amount
+                    .checked_add(validated_proof.change_revealed_amount)
+                    .ok_or(ResourceError::BalanceOverflow {
+                        operate: "withdraw_confidential change",
+                        amount: validated_proof.change_revealed_amount,
+                    })?;
+
                 let mut created_outputs = Vec::new();
 
                 if let Some(change) = validated_proof.change_output {
@@ -526,15 +535,6 @@ impl ResourceContainer {
                             "Confidential withdraw contained duplicate commitment in change commitment".to_string(),
                         ));
                     }
-
-                    // The change's revealed amount returns to the container, so the balance proof — not a
-                    // sufficiency check — is what constrains it. Only the sum can fail here.
-                    *revealed_amount = revealed_amount
-                        .checked_add(validated_proof.change_revealed_amount)
-                        .ok_or(ResourceError::BalanceOverflow {
-                            operate: "withdraw_confidential change",
-                            amount: validated_proof.change_revealed_amount,
-                        })?;
                     created_outputs.push((change_commitment, change.into_output_body()));
                 }
 

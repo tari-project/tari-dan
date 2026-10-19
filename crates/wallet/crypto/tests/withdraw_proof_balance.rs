@@ -69,6 +69,34 @@ fn it_rejects_change_that_omits_the_revealed_output() {
 }
 
 #[test]
+fn it_returns_revealed_change_to_the_source_without_a_change_output() {
+    let input_mask = random_mask();
+    let input = MaskAndValue::new(1_000, input_mask.clone());
+
+    let proof = create_withdraw_proof(
+        &[input],
+        Amount::from(50u64),
+        Some(&witness(400)),
+        Amount::zero(),
+        None,
+        Amount::from(650u64),
+    )
+    .unwrap();
+
+    let input_commitment = commit_u64_amount(&input_mask, 1_000).to_byte_type();
+    let resource_address =
+        ResourceAddress::from_hex("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef").unwrap();
+    let mut container = ResourceContainer::confidential(resource_address, [input_commitment], Amount::from(200u64));
+    let (output, effects) = container.withdraw_confidential(proof, None).unwrap();
+
+    assert_eq!(effects.spent_commitments, vec![input_commitment]);
+    assert_eq!(effects.created_outputs.len(), 1);
+    assert_eq!(output.unlocked_amount(), Amount::zero());
+    // 200 - 50 input revealed + 650 revealed change
+    assert_eq!(container.unlocked_amount(), Amount::from(800u64));
+}
+
+#[test]
 fn it_rejects_outputs_less_than_inputs() {
     let input = MaskAndValue::new(1_000, random_mask());
 

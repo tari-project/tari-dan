@@ -168,10 +168,13 @@ pub(crate) fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Pede
 #[cfg(test)]
 mod tests {
     use tari_crypto::{keys::PublicKey, ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
-    use tari_template_lib::types::crypto::{BalanceProofSignature, RistrettoPublicKeyBytes, Scalar32Bytes};
+    use tari_template_lib::types::{
+        constants::STEALTH_TARI_RESOURCE_ADDRESS,
+        crypto::{BalanceProofSignature, RistrettoPublicKeyBytes, Scalar32Bytes},
+    };
 
     use super::*;
-    use crate::limits::NativeExecutionPoints;
+    use crate::{limits::NativeExecutionPoints, resource_container::ResourceContainer};
 
     /// A revealed withdraw carrying a decodable, non-zero balance proof: no inputs and no
     /// confidential outputs, but not revealed-only.
@@ -213,5 +216,19 @@ mod tests {
             ),
             "unexpected error: {err:?}"
         );
+    }
+
+    #[test]
+    fn revealed_only_withdraw_returns_revealed_change_to_the_source() {
+        let mut proof = ConfidentialWithdrawProof::revealed_withdraw(100u64);
+        proof.output_proof.output_revealed_amount = Amount::new(40);
+        proof.output_proof.change_revealed_amount = Amount::new(60);
+        assert!(proof.is_revealed_only());
+
+        let mut source = ResourceContainer::confidential(STEALTH_TARI_RESOURCE_ADDRESS, None, Amount::new(150));
+        let (output, _) = source.withdraw_confidential(proof, None).unwrap();
+
+        assert_eq!(output.unlocked_amount(), Amount::new(40));
+        assert_eq!(source.unlocked_amount(), Amount::new(110));
     }
 }
