@@ -340,6 +340,10 @@ impl WalletNetworkInterface for CannedTransactionResultInterface {
         panic!("CannedTransactionResultInterface called")
     }
 
+    async fn get_consensus_epoch(&self) -> Result<Option<Epoch>, Self::Error> {
+        panic!("CannedTransactionResultInterface called")
+    }
+
     async fn wait_until_ready(&self) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -449,6 +453,10 @@ impl WalletNetworkInterface for PanicNetworkInterface {
     }
 
     async fn get_current_epoch(&self) -> Result<Epoch, Self::Error> {
+        panic!("PanicNetworkInterface called")
+    }
+
+    async fn get_consensus_epoch(&self) -> Result<Option<Epoch>, Self::Error> {
         panic!("PanicNetworkInterface called")
     }
 

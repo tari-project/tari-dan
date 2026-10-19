@@ -158,6 +158,10 @@ pub trait WalletNetworkInterface {
     /// The epoch the network executes transactions in.
     fn get_current_epoch(&self) -> impl Future<Output = Result<Epoch, Self::Error>> + Send;
 
+    /// The epoch the validators execute transactions in, as the indexer has observed from their committed blocks, or
+    /// `None` before it has observed every committee.
+    fn get_consensus_epoch(&self) -> impl Future<Output = Result<Option<Epoch>, Self::Error>> + Send;
+
     fn wait_until_ready(&self) -> impl Future<Output = Result<(), Self::Error>> + Send;
 }
 

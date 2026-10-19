@@ -33,7 +33,7 @@ use tari_ootle_common_types::{
         commit_result::FinalizeResult,
         substate::{Substate, SubstateId, SubstateValue},
     },
-    optional::IsNotFoundError,
+    optional::{IsNotFoundError, Optional},
     shard::Shard,
 };
 use tari_ootle_light_client::{
@@ -84,9 +84,10 @@ pub enum IndexerTrust {
     /// Every substate read and every committed transaction is verified against a validator set the provider trusts.
     /// The indexer must run with `verify_substate_proofs` enabled.
     ///
-    /// The provider trusts the validator set that the indexer's latest checkpoint names on first use, unless given one
-    /// with [`IndexerProvider::restore_validator_set`](crate::provider::IndexerProvider::restore_validator_set), and
-    /// walks the signed end-of-epoch handovers from it.
+    /// The provider trusts the validator set that the indexer's latest checkpoint names on first use, or the consensus
+    /// epoch's set before the network's first checkpoint, unless given one with
+    /// [`IndexerProvider::restore_validator_set`](crate::provider::IndexerProvider::restore_validator_set), and walks
+    /// the signed end-of-epoch handovers from it.
     #[default]
     Verify,
     /// The indexer's answers are taken at its word. For development against an indexer that does not verify proofs.
@@ -241,8 +242,9 @@ impl IndexerVerifier {
         Ok(())
     }
 
-    /// Anchors on the validator set the latest checkpoint names unless the provider already trusts one. A transaction
-    /// submitted after this commits in an epoch whose validator set the provider trusts or walks to.
+    /// Anchors on the validator set the latest checkpoint names, or the consensus epoch's set before the network's
+    /// first checkpoint, unless the provider already trusts one. A transaction submitted after this commits in an
+    /// epoch whose validator set the provider trusts or walks to.
     pub(crate) async fn anchor_if_untrusted(&self) -> Result<(), VerifyError> {
         if !self.is_verifying() {
             return Ok(());
@@ -256,6 +258,9 @@ impl IndexerVerifier {
 
     /// Brings the trusted validator set up to the one the latest checkpoint names. On first use the provider anchors
     /// on that set. Later it walks the handovers to it, however far behind it is.
+    ///
+    /// Before the network's first end-of-epoch checkpoint, the provider anchors on the current epoch's validator set
+    /// itself (see [`Self::anchor_on_current_epoch`]), and an anchored provider is up to date.
     ///
     /// When the walk fails because the indexer's checkpoints do not connect to the trusted set, the provider
     /// re-anchors on the set the latest checkpoint names in place of the walk, but only once its own clock vouches for
@@ -275,8 +280,18 @@ impl IndexerVerifier {
                 shard: Some(WALK_SHARD),
                 include_committees: true,
             })
-            .await?
-            .checkpoint;
+            .await
+            .optional()?
+            .map(|resp| resp.checkpoint);
+        let Some(latest_checkpoint) = latest_checkpoint else {
+            return match state.latest.clone() {
+                Some(trusted) => {
+                    state.record_synced();
+                    Ok(trusted)
+                },
+                None => self.anchor_on_current_epoch(&client, state).await,
+            };
+        };
         let Some(trusted) = state.latest.clone() else {
             info!(target: LOG_TARGET, "Anchoring on the validator set that the checkpoint of {} names", latest_checkpoint.epoch);
             return self.anchor_on(state, &latest_checkpoint);
@@ -317,6 +332,45 @@ impl IndexerVerifier {
         checkpoint: &EpochCheckpointEntry,
     ) -> Result<TrustedValidatorSet, VerifyError> {
         let trusted = TrustedValidatorSet::anchor_on_first_use(self.network, WALK_SHARD, checkpoint)?;
+        state.anchor(trusted.clone());
+        state.record_synced();
+        Ok(trusted)
+    }
+
+    /// Anchors on the validator set of the epoch the network's consensus is in, with the walked shard group's committee
+    /// in it, for a network that has not ended an epoch yet and so has no checkpoint to anchor on.
+    ///
+    /// The epoch is the one the indexer observed the validators execute in, so that every receipt proven after the
+    /// anchor is proven in an epoch whose validator set the wallet trusts.
+    ///
+    /// This takes the indexer at its word on the validator set, as anchoring on a first-use checkpoint does, whose
+    /// quorum certificate no trusted committee can check either. The first end-of-epoch checkpoint must carry a quorum
+    /// of the anchored committee's signatures for the walk to pass it.
+    async fn anchor_on_current_epoch(
+        &self,
+        client: &IndexerRestApiClient,
+        state: &mut TrustState,
+    ) -> Result<TrustedValidatorSet, VerifyError> {
+        let epoch = client
+            .get_epoch_manager_stats()
+            .await?
+            .consensus_epoch
+            .ok_or(VerifyError::ConsensusEpochUnobserved)?;
+        let committee = client
+            .get_committee(GetCommitteeRequest {
+                epoch,
+                shard: WALK_SHARD,
+            })
+            .await?
+            .committee;
+        info!(target: LOG_TARGET, "The network has no checkpoint yet. Anchoring on the validator set of {epoch}");
+        let trusted = TrustedValidatorSet::anchor_pinned(
+            self.network,
+            WALK_SHARD,
+            epoch,
+            &committee.validator_set_hash,
+            &committee,
+        )?;
         state.anchor(trusted.clone());
         state.record_synced();
         Ok(trusted)
@@ -596,6 +650,11 @@ pub enum VerifyError {
     ValidatorSetUnverified(#[from] LightClientError),
     #[error("The indexer served no checkpoint ending {epoch} to walk the validator set handover through")]
     CheckpointNotServed { epoch: Epoch },
+    #[error(
+        "The network has no checkpoint yet, and the indexer has not observed which epoch the validators are in, so \
+         the provider has no validator set to anchor on. Retry shortly."
+    )]
+    ConsensusEpochUnobserved,
     #[error("The validator set to trust is of the {network} network, but this provider is for {expected}")]
     ValidatorSetOfAnotherNetwork { network: Network, expected: Network },
     #[error(
@@ -772,6 +831,50 @@ mod tests {
         let trusted = provider.saved_validator_set().await.unwrap().validator_set;
         assert_eq!(trusted.epoch(), Epoch(5));
         assert_eq!(trusted.anchor_epoch(), Epoch(5));
+    }
+
+    #[tokio::test]
+    async fn before_the_first_checkpoint_the_first_read_anchors_on_the_current_epochs_set() {
+        let sets = sets();
+        let indexer = TestIndexer::spawn_before_first_checkpoint(&sets).await;
+        let provider = indexer.provider(IndexerTrust::Verify);
+        let (id, value) = substate(1);
+        let proof = substate_proof(&sets[0], &id, VERSION, &value);
+        indexer.serve_substate(id.clone(), VERSION, value, Some(proof));
+
+        provider.fetch_substate(id).await.unwrap();
+        let trusted = provider.saved_validator_set().await.unwrap().validator_set;
+        assert_eq!(trusted.epoch(), Epoch(1));
+        assert_eq!(trusted.anchor_epoch(), Epoch(1));
+    }
+
+    #[tokio::test]
+    async fn before_the_first_checkpoint_the_provider_anchors_only_once_the_consensus_epoch_is_observed() {
+        let sets = sets();
+        let indexer = TestIndexer::spawn_before_first_checkpoint(&sets).await;
+        indexer.set_observes_consensus_epoch(false);
+        let provider = indexer.provider(IndexerTrust::Verify);
+
+        let err = provider.verifier().sync().await.unwrap_err();
+        assert!(matches!(err, VerifyError::ConsensusEpochUnobserved), "{err}");
+        assert!(provider.saved_validator_set().await.is_none());
+
+        indexer.set_observes_consensus_epoch(true);
+        assert_eq!(provider.sync_validator_set().await.unwrap().epoch(), Epoch(1));
+    }
+
+    #[tokio::test]
+    async fn a_set_anchored_before_the_first_checkpoint_walks_through_it() {
+        let sets = sets();
+        let indexer = TestIndexer::spawn_before_first_checkpoint(&sets).await;
+        let provider = indexer.provider(IndexerTrust::Verify);
+        assert_eq!(provider.sync_validator_set().await.unwrap().epoch(), Epoch(1));
+        assert_eq!(provider.sync_validator_set().await.unwrap().epoch(), Epoch(1));
+
+        indexer.set_latest(0);
+        let walked = provider.sync_validator_set().await.unwrap();
+        assert_eq!(walked.epoch(), Epoch(2));
+        assert_eq!(walked.anchor_epoch(), Epoch(1));
     }
 
     #[tokio::test]

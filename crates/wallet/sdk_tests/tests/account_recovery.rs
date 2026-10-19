@@ -213,6 +213,10 @@ impl WalletNetworkInterface for OneUtxoNetwork {
         panic!("OneUtxoNetwork::get_current_epoch called")
     }
 
+    async fn get_consensus_epoch(&self) -> Result<Option<Epoch>, Self::Error> {
+        panic!("OneUtxoNetwork::get_consensus_epoch called")
+    }
+
     async fn wait_until_ready(&self) -> Result<(), Self::Error> {
         Ok(())
     }

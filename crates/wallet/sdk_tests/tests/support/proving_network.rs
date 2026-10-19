@@ -48,6 +48,12 @@ struct ProvingNetworkState {
     checkpoints: Vec<EpochCheckpointEntry>,
     /// The index in `checkpoints` of the latest one, or `None` while the network has ended no epoch.
     latest: Option<usize>,
+    /// The epoch of the first validator set.
+    first_epoch: Epoch,
+    /// Whether the indexer fails every request about the validator sets, as when it cannot be reached.
+    unreachable: bool,
+    /// Whether the indexer has observed the epoch the validators execute in.
+    observes_consensus_epoch: bool,
     committees: HashMap<Epoch, (ValidatorSetCommittee, ValidatorSetCommittee)>,
     result: Option<TransactionQueryResult>,
     /// Whether the indexer serves the latest checkpoint but none of the ones before it.
@@ -89,6 +95,9 @@ impl ProvingNetwork {
             state: Arc::new(Mutex::new(ProvingNetworkState {
                 checkpoints,
                 latest: Some(latest),
+                first_epoch: sets[0].epoch,
+                unreachable: false,
+                observes_consensus_epoch: true,
                 committees,
                 result: None,
                 withholds_walk: false,
@@ -119,6 +128,21 @@ impl ProvingNetwork {
     /// Serves no checkpoint, as in a network's first epoch.
     pub fn withhold_checkpoints(&self) {
         self.state.lock().unwrap().latest = None;
+    }
+
+    /// Fails every request about the validator sets until [`Self::reconnect`].
+    pub fn disconnect(&self) {
+        self.state.lock().unwrap().unreachable = true;
+    }
+
+    pub fn reconnect(&self) {
+        self.state.lock().unwrap().unreachable = false;
+    }
+
+    /// Sets whether the indexer has observed the epoch the validators execute in, which it has not before it sees a
+    /// block from every committee.
+    pub fn set_observes_consensus_epoch(&self, observes: bool) {
+        self.state.lock().unwrap().observes_consensus_epoch = observes;
     }
 
     pub fn submissions(&self) -> usize {
@@ -175,7 +199,7 @@ impl ProvingNetwork {
 }
 
 impl WalletNetworkInterface for ProvingNetwork {
-    type Error = NoCheckpoint;
+    type Error = ProvingNetworkError;
 
     async fn query_substate(
         &self,
@@ -290,7 +314,10 @@ impl WalletNetworkInterface for ProvingNetwork {
 
     async fn get_latest_epoch_checkpoint(&self, _shard: Shard) -> Result<EpochCheckpointEntry, Self::Error> {
         let state = self.state.lock().unwrap();
-        let latest = state.latest.ok_or(NoCheckpoint)?;
+        if state.unreachable {
+            return Err(ProvingNetworkError::Unreachable);
+        }
+        let latest = state.latest.ok_or(ProvingNetworkError::NoCheckpoint)?;
         Ok(state.checkpoints[latest].clone())
     }
 
@@ -303,6 +330,9 @@ impl WalletNetworkInterface for ProvingNetwork {
         // Lets a concurrent walk run while this request is in flight.
         tokio::task::yield_now().await;
         let mut state = self.state.lock().unwrap();
+        if state.unreachable {
+            return Err(ProvingNetworkError::Unreachable);
+        }
         state.walk_requests += 1;
         let Some(latest) = state.latest.filter(|_| !state.withholds_walk) else {
             return Ok(vec![]);
@@ -317,6 +347,9 @@ impl WalletNetworkInterface for ProvingNetwork {
 
     async fn get_committee(&self, epoch: Epoch, shard: Shard) -> Result<ValidatorSetCommittee, Self::Error> {
         let mut state = self.state.lock().unwrap();
+        if state.unreachable {
+            return Err(ProvingNetworkError::Unreachable);
+        }
         state.committee_requests += 1;
         let (low, high) = state.committees.get(&epoch).expect("no validator set for the epoch");
         Ok(if low.shard_group.contains(&shard) {
@@ -330,26 +363,48 @@ impl WalletNetworkInterface for ProvingNetwork {
         panic!("ProvingNetwork called")
     }
 
+    /// The epoch after the latest checkpoint's, or the first validator set's before any.
+    async fn get_consensus_epoch(&self) -> Result<Option<Epoch>, Self::Error> {
+        let state = self.state.lock().unwrap();
+        if state.unreachable {
+            return Err(ProvingNetworkError::Unreachable);
+        }
+        if !state.observes_consensus_epoch {
+            return Ok(None);
+        }
+        Ok(Some(state.latest.map_or(state.first_epoch, |latest| {
+            state.checkpoints[latest].epoch + Epoch(1)
+        })))
+    }
+
     async fn wait_until_ready(&self) -> Result<(), Self::Error> {
         Ok(())
     }
 }
 
-/// The indexer has no end-of-epoch checkpoint to serve.
 #[derive(Debug, thiserror::Error)]
-#[error("No epoch checkpoint found")]
-pub struct NoCheckpoint;
+pub enum ProvingNetworkError {
+    #[error("No epoch checkpoint found")]
+    NoCheckpoint,
+    #[error("The indexer cannot be reached")]
+    Unreachable,
+}
 
-impl IsNotFoundError for NoCheckpoint {
+impl IsNotFoundError for ProvingNetworkError {
     fn is_not_found_error(&self) -> bool {
-        true
+        matches!(self, Self::NoCheckpoint)
     }
 }
 
-impl TransactionStatusResponseError for NoCheckpoint {
+impl TransactionStatusResponseError for ProvingNetworkError {
     fn get_status(&self) -> ResponseErrorStatus {
-        ResponseErrorStatus::NotFound {
-            message: self.to_string(),
+        match self {
+            Self::NoCheckpoint => ResponseErrorStatus::NotFound {
+                message: self.to_string(),
+            },
+            Self::Unreachable => ResponseErrorStatus::InternalError {
+                message: self.to_string(),
+            },
         }
     }
 

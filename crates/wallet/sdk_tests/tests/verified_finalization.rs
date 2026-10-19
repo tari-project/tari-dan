@@ -511,10 +511,83 @@ async fn the_wallet_anchors_before_its_first_submission() {
 }
 
 #[tokio::test]
+async fn before_the_first_checkpoint_the_wallet_anchors_on_the_current_epochs_set() {
+    let sets = sets();
+    let network = ProvingNetwork::new(&sets, 0);
+    network.withhold_checkpoints();
+    let transaction = build_transaction();
+    let transaction_id = transaction.calculate_id();
+    let test = wallet(network.clone(), &transaction);
+
+    let submission = test
+        .sdk()
+        .transaction_api()
+        .submit_transaction(transaction_id)
+        .await
+        .unwrap();
+    assert_eq!(submission, Submission::Submitted);
+    let anchor = test.sdk().validator_set_api().anchor().unwrap().unwrap();
+    assert_eq!(anchor.anchor, ValidatorSetAnchor::FirstUse);
+    assert_eq!(anchor.validator_set.epoch(), Epoch(1));
+    assert_eq!(*anchor.validator_set.validator_set_hash(), sets[0].hash());
+
+    network.set_result(committed_result(transaction_id, &sets[0]));
+    let finalized = test
+        .sdk()
+        .transaction_api()
+        .check_and_store_finalized_transaction(transaction_id)
+        .await
+        .unwrap()
+        .expect("the transaction is finalized");
+    assert_eq!(finalized.status, TransactionStatus::Accepted);
+}
+
+#[tokio::test]
+async fn before_the_first_checkpoint_a_wallet_holds_back_until_the_consensus_epoch_is_observed() {
+    let sets = sets();
+    let network = ProvingNetwork::new(&sets, 0);
+    network.withhold_checkpoints();
+    network.set_observes_consensus_epoch(false);
+    let transaction = build_transaction();
+    let transaction_id = transaction.calculate_id();
+    let test = wallet(network.clone(), &transaction);
+    let transaction_api = test.sdk().transaction_api();
+
+    let err = test.sdk().validator_set_api().sync().await.unwrap_err();
+    assert!(matches!(err, ValidatorSetApiError::ConsensusEpochUnobserved), "{err}");
+    let submission = transaction_api.submit_transaction(transaction_id).await.unwrap();
+    assert_eq!(submission, Submission::Deferred);
+    assert_eq!(network.submissions(), 0);
+
+    network.set_observes_consensus_epoch(true);
+    let submission = transaction_api.submit_transaction(transaction_id).await.unwrap();
+    assert_eq!(submission, Submission::Submitted);
+    let anchor = test.sdk().validator_set_api().anchor().unwrap().unwrap();
+    assert_eq!(anchor.validator_set.epoch(), Epoch(1));
+}
+
+#[tokio::test]
+async fn a_set_anchored_before_the_first_checkpoint_walks_through_it() {
+    let sets = sets();
+    let network = ProvingNetwork::new(&sets, 0);
+    network.withhold_checkpoints();
+    let transaction = build_transaction();
+    let test = wallet(network.clone(), &transaction);
+    let validator_set_api = test.sdk().validator_set_api();
+    assert_eq!(validator_set_api.sync().await.unwrap().epoch(), Epoch(1));
+    assert_eq!(validator_set_api.sync().await.unwrap().epoch(), Epoch(1));
+
+    network.set_latest(0);
+    assert_eq!(validator_set_api.sync().await.unwrap().epoch(), Epoch(2));
+    let anchor = validator_set_api.anchor().unwrap().unwrap();
+    assert_eq!(anchor.validator_set.epoch(), Epoch(1));
+}
+
+#[tokio::test]
 async fn a_wallet_that_cannot_anchor_holds_its_transaction_back() {
     let sets = sets();
     let network = ProvingNetwork::new(&sets, 1);
-    network.withhold_checkpoints();
+    network.disconnect();
     let transaction = build_transaction();
     let transaction_id = transaction.calculate_id();
     let test = wallet(network.clone(), &transaction);
@@ -536,7 +609,7 @@ async fn a_wallet_that_cannot_anchor_holds_its_transaction_back() {
 async fn the_transaction_service_submits_a_held_back_transaction_once_the_wallet_anchors() {
     let sets = sets();
     let network = ProvingNetwork::new(&sets, 1);
-    network.withhold_checkpoints();
+    network.disconnect();
     let test = TestWithNetwork::without_accounts_trusting(network.clone(), IndexerTrust::Verify);
     let config = TransactionServiceConfig {
         poll_interval: Duration::from_millis(20),
@@ -558,7 +631,7 @@ async fn the_transaction_service_submits_a_held_back_transaction_once_the_wallet
     let held = test.sdk().transaction_api().get(transaction_id).unwrap();
     assert_eq!(held.status, TransactionStatus::New);
 
-    network.set_latest(1);
+    network.reconnect();
     tokio::time::timeout(Duration::from_secs(10), async {
         while network.submissions() == 0 {
             tokio::time::sleep(Duration::from_millis(20)).await;
@@ -575,7 +648,7 @@ async fn the_transaction_service_submits_a_held_back_transaction_once_the_wallet
 async fn a_held_back_transaction_is_announced_with_the_context_it_was_submitted_with() {
     let sets = sets();
     let network = ProvingNetwork::new(&sets, 1);
-    network.withhold_checkpoints();
+    network.disconnect();
     let test = TestWithNetwork::without_accounts_trusting(network.clone(), IndexerTrust::Verify);
     let config = TransactionServiceConfig {
         poll_interval: Duration::from_millis(20),
@@ -602,7 +675,7 @@ async fn a_held_back_transaction_is_announced_with_the_context_it_was_submitted_
         .unwrap();
     assert_eq!(network.submissions(), 0);
 
-    network.set_latest(1);
+    network.reconnect();
     let submitted = tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             if let WalletEvent::TransactionSubmitted(event) = events.recv().await.unwrap() {
