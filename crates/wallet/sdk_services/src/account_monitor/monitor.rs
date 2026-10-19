@@ -40,6 +40,13 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::ootle::wallet_services::account_monitor";
 
+/// How often every account is refreshed from the network. Finalized transactions update the accounts they touch as
+/// they arrive, so this poll only catches changes the wallet sees no transaction for, such as a deposit made by
+/// another wallet.
+const DEFAULT_PERIODIC_SCAN_INTERVAL: Duration = Duration::from_secs(10 * 60);
+/// How often a stealth UTXO scan is requested for every account's associated stealth resources.
+const DEFAULT_UTXO_SCAN_INTERVAL: Duration = Duration::from_secs(60);
+
 pub struct AccountMonitor<TSpec: WalletSdkSpec> {
     notify_subscription: broadcast::Receiver<WalletEvent>,
     wallet_sdk: WalletSdk<TSpec>,
@@ -47,6 +54,7 @@ pub struct AccountMonitor<TSpec: WalletSdkSpec> {
     pending_accounts: HashMap<TransactionId, NewAccountData>,
     utxo_scanner_handle: UtxoScannerHandle,
     periodic_scan_interval: Duration,
+    utxo_scan_interval: Duration,
     enable_periodic_scanning_of_utxos: bool,
     scanner: AccountScanner<TSpec>,
     shutdown_signal: ShutdownSignal,
@@ -71,7 +79,8 @@ where
                 wallet_sdk: wallet_sdk.clone(),
                 request_rx,
                 pending_accounts: HashMap::new(),
-                periodic_scan_interval: Duration::from_secs(60),
+                periodic_scan_interval: DEFAULT_PERIODIC_SCAN_INTERVAL,
+                utxo_scan_interval: DEFAULT_UTXO_SCAN_INTERVAL,
                 utxo_scanner_handle,
                 enable_periodic_scanning_of_utxos: true,
                 scanner: AccountScanner::new(notify, wallet_sdk),
@@ -86,6 +95,11 @@ where
         self
     }
 
+    pub fn with_utxo_scan_interval(mut self, interval: Duration) -> Self {
+        self.utxo_scan_interval = interval;
+        self
+    }
+
     pub fn disable_periodic_scanning_of_utxos(mut self) -> Self {
         self.enable_periodic_scanning_of_utxos = false;
         self
@@ -95,6 +109,8 @@ where
         info!(target: LOG_TARGET, "🏦 Account monitor started");
         let mut poll_interval = time::interval(self.periodic_scan_interval);
         poll_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let mut utxo_scan_interval = time::interval(self.utxo_scan_interval);
+        utxo_scan_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         loop {
             tokio::select! {
@@ -106,6 +122,10 @@ where
                 _ = poll_interval.tick() => {
                     trace!(target: LOG_TARGET, "Polling for transactions");
                     self.on_poll().await;
+                }
+
+                _ = utxo_scan_interval.tick(), if self.enable_periodic_scanning_of_utxos => {
+                    self.on_utxo_scan_tick();
                 }
 
                 Some(req) = self.request_rx.recv() => {
@@ -169,6 +189,29 @@ where
         }
     }
 
+    fn on_utxo_scan_tick(&self) {
+        if let Err(err) = self.request_all_stealth_utxo_scans() {
+            error!(target: LOG_TARGET, "Error requesting UTXO scans for all accounts: {}", err);
+        }
+    }
+
+    fn request_all_stealth_utxo_scans(&self) -> Result<(), AccountMonitorError> {
+        let accounts_api = self.wallet_sdk.accounts_api();
+        const PAGE_SIZE: usize = 10;
+        let mut offset = 0;
+        loop {
+            let accounts = accounts_api.get_many(offset, PAGE_SIZE)?;
+            for account in &accounts {
+                self.refresh_stealth_utxos(*account.component_address())?;
+            }
+            offset += accounts.len();
+            if accounts.len() < PAGE_SIZE {
+                break;
+            }
+        }
+        Ok(())
+    }
+
     async fn refresh_all_accounts(&self) -> Result<(), AccountMonitorError> {
         let accounts_api = self.wallet_sdk.accounts_api();
         const PAGE_SIZE: usize = 10;
@@ -180,9 +223,6 @@ where
             }
             for account in &accounts {
                 let is_updated = self.scanner.refresh_account(*account.component_address()).await?;
-                if self.enable_periodic_scanning_of_utxos {
-                    self.refresh_stealth_utxos(*account.component_address()).await?;
-                }
 
                 if is_updated {
                     info!(
@@ -216,7 +256,7 @@ where
             .refresh_account_with_source(account_address, source)
             .await?;
         if scan_for_utxos {
-            self.refresh_stealth_utxos(account_address).await?;
+            self.refresh_stealth_utxos(account_address)?;
         }
         if is_updated {
             info!(
@@ -232,7 +272,7 @@ where
         Ok(is_updated)
     }
 
-    async fn refresh_stealth_utxos(&self, account_address: ComponentAddress) -> Result<(), AccountMonitorError> {
+    fn refresh_stealth_utxos(&self, account_address: ComponentAddress) -> Result<(), AccountMonitorError> {
         let associated_resources = self
             .wallet_sdk
             .accounts_api()
