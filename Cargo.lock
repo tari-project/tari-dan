@@ -12568,6 +12568,7 @@ dependencies = [
  "futures 0.3.34",
  "ootle_byte_type",
  "rand 0.10.1",
+ "tari_bor",
  "tari_consensus_types",
  "tari_crypto",
  "tari_engine_types",

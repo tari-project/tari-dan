@@ -398,14 +398,13 @@ where
         // A proof anchored before the latest trusted set walks nowhere, so it is judged before its committee is
         // fetched.
         self.check_fresh(substate_id, anchor_epoch)?;
-        let committee = self
+        let Some(committee) = self
             .validator_set_api
             .verify_committee(anchor_epoch, proof.anchor.shard_group)
             .await?
-            .ok_or_else(|| SubstateApiError::SubstateProvenOutsideTrustedSets {
-                substate_id: substate_id.clone(),
-                epoch: anchor_epoch,
-            })?;
+        else {
+            return Err(self.untrusted_anchor_error(substate_id, anchor_epoch)?);
+        };
         committee
             .verify_substate(substate_id, version, Some(value), proof)
             .map_err(|source| SubstateApiError::SubstateUnverified {
@@ -415,6 +414,28 @@ where
         // Verifying the committee walks to the set of the anchor's epoch when that is past the latest trusted set, and
         // the walk can go further.
         self.check_fresh(substate_id, anchor_epoch)
+    }
+
+    /// The error for a proof anchored at `anchor_epoch`, for which the wallet trusts no validator set even after
+    /// syncing.
+    fn untrusted_anchor_error(
+        &self,
+        substate_id: &SubstateId,
+        anchor_epoch: Epoch,
+    ) -> Result<SubstateApiError, SubstateApiError> {
+        if let Some(anchor) = self.validator_set_api.anchor()? &&
+            anchor_epoch < anchor.validator_set.epoch()
+        {
+            return Ok(SubstateApiError::SubstateProvenBeforeAnchor {
+                substate_id: substate_id.clone(),
+                epoch: anchor_epoch,
+                anchor_epoch: anchor.validator_set.epoch(),
+            });
+        }
+        Ok(SubstateApiError::SubstateProvenPastServedCheckpoints {
+            substate_id: substate_id.clone(),
+            epoch: anchor_epoch,
+        })
     }
 
     fn check_fresh(&self, substate_id: &SubstateId, anchor_epoch: Epoch) -> Result<(), SubstateApiError> {
@@ -503,9 +524,19 @@ pub enum SubstateApiError {
     #[error("The indexer served substate {substate_id} without a proof. Retry, or use another indexer.")]
     SubstateUnproven { substate_id: SubstateId },
     #[error(
-        "The indexer proved substate {substate_id} at a block of {epoch}, for which the wallet trusts no validator set"
+        "The indexer proved substate {substate_id} at a block of {epoch}, but has not yet served the checkpoint that \
+         hands over to that epoch's validator set. Retry shortly, once the indexer serves it."
     )]
-    SubstateProvenOutsideTrustedSets { substate_id: SubstateId, epoch: Epoch },
+    SubstateProvenPastServedCheckpoints { substate_id: SubstateId, epoch: Epoch },
+    #[error(
+        "The indexer proved substate {substate_id} at a block of {epoch}, before {anchor_epoch} whose validator set \
+         the wallet anchored on. Retry, or use another indexer."
+    )]
+    SubstateProvenBeforeAnchor {
+        substate_id: SubstateId,
+        epoch: Epoch,
+        anchor_epoch: Epoch,
+    },
     #[error(
         "The indexer proved substate {substate_id} at a block of {anchor_epoch}, too long before \
          {latest_trusted_epoch} to show its current state. Retry, or use another indexer."
