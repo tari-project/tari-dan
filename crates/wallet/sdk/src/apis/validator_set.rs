@@ -354,7 +354,11 @@ where
                 .await
                 .map_err(network_error)?;
             let mut walked = Vec::with_capacity(checkpoints.len());
-            for checkpoint in checkpoints.iter().take_while(|checkpoint| checkpoint.epoch <= to_epoch) {
+            for checkpoint in &checkpoints {
+                // A checkpoint past the trusted set's epoch follows one the indexer has not served yet.
+                if checkpoint.epoch > to_epoch || checkpoint.epoch > trusted.epoch() {
+                    break;
+                }
                 match trusted.advance(checkpoint) {
                     Ok(next) => {
                         trusted = next;

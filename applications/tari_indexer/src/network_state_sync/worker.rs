@@ -368,37 +368,48 @@ impl NetworkWideStateSync {
         let Some(prev_epoch) = epoch.checked_sub(Epoch(1)) else {
             return Ok(true);
         };
-        let from_epoch = progress
-            .lock()
-            .await
-            .checkpoint_epoch(shard_group)
-            .unwrap_or_else(Epoch::zero);
+        let checkpoint_epoch = || async { progress.lock().await.checkpoint_epoch(shard_group) };
+        let mut from_epoch = checkpoint_epoch().await.unwrap_or_else(Epoch::zero);
         if from_epoch >= prev_epoch {
             debug!(target: LOG_TARGET, "🌍️ No checkpoints to sync for shard group {shard_group} from epoch {from_epoch}");
             return Ok(true);
         }
         if is_backfill(from_epoch, prev_epoch) {
-            self.sync_head_checkpoint(shard_group, pool, prev_epoch).await?;
+            match self.sync_head_checkpoint(shard_group, pool, prev_epoch).await {
+                Ok(()) => {},
+                Err(err) if err.is_peer_fault() => {
+                    warn!(target: LOG_TARGET, "⚠️ Syncing the checkpoint of {prev_epoch} for shard group {shard_group} ahead of the backfill failed: {err}");
+                },
+                Err(err) => return Err(err),
+            }
         }
-        info!(target: LOG_TARGET, "🌍️ Syncing checkpoints from {from_epoch} for shard group {shard_group}");
-        let checkpoints = self
-            .fetch_group_checkpoints(shard_group, pool, from_epoch, prev_epoch)
-            .await?;
-
-        let level = if checkpoints.is_empty() {
-            Level::Debug
-        } else {
-            Level::Info
-        };
-        log!(target: LOG_TARGET, level, "🌍️ Found {} checkpoints for shard group {shard_group} from epoch {from_epoch} (prev_epoch {prev_epoch})", checkpoints.len());
-
-        for checkpoint in checkpoints {
-            require_header_metadata(&self.store, &checkpoint).await?;
-            self.store_checkpoint(shard_group, checkpoint, prev_epoch, Some(progress))
+        // Each page is fetched as soon as the one before it is stored, so a wallet walking from an older set waits
+        // only as long as the pages take to verify.
+        loop {
+            info!(target: LOG_TARGET, "🌍️ Syncing checkpoints from {from_epoch} for shard group {shard_group}");
+            let checkpoints = self
+                .fetch_group_checkpoints(shard_group, pool, from_epoch, prev_epoch)
                 .await?;
+
+            let level = if checkpoints.is_empty() {
+                Level::Debug
+            } else {
+                Level::Info
+            };
+            log!(target: LOG_TARGET, level, "🌍️ Found {} checkpoints for shard group {shard_group} from epoch {from_epoch} (prev_epoch {prev_epoch})", checkpoints.len());
+
+            for checkpoint in checkpoints {
+                require_header_metadata(&self.store, &checkpoint).await?;
+                self.store_checkpoint(shard_group, checkpoint, prev_epoch, Some(progress))
+                    .await?;
+            }
+            let reached = checkpoint_epoch().await;
+            match reached {
+                Some(reached) if reached >= prev_epoch => return Ok(true),
+                Some(reached) if reached > from_epoch => from_epoch = reached,
+                _ => return Ok(false),
+            }
         }
-        let reached = progress.lock().await.checkpoint_epoch(shard_group);
-        Ok(reached.is_some_and(|reached| reached >= prev_epoch))
     }
 
     /// Syncs `shard_group`'s checkpoint of `prev_epoch` ahead of the backfill that leads up to it.
@@ -413,10 +424,14 @@ impl NetworkWideStateSync {
         pool: &mut ValidatorCommitteeRpcPool,
         prev_epoch: Epoch,
     ) -> Result<(), NetworkStateSyncError> {
+        // The checkpoint of `prev_epoch` is of that epoch's shard groups, which differ from `shard_group` when the
+        // number of committees changed, so it is found by the shard the group starts at.
         let stored = self
             .store
-            .with_read_tx(move |tx| tx.epoch_checkpoint_exists(shard_group, prev_epoch))
-            .await?;
+            .with_read_tx(move |tx| tx.epoch_checkpoint_get_all(prev_epoch, Some(shard_group.start()), 1))
+            .await?
+            .first()
+            .is_some_and(|checkpoint| checkpoint.epoch() == prev_epoch);
         if stored {
             return Ok(());
         }
@@ -514,14 +529,13 @@ impl NetworkWideStateSync {
         });
         self.store
             .with_write_tx(move |tx| {
-                if !tx.epoch_checkpoint_exists(checkpoint_shard_group, checkpoint_epoch)? {
-                    tx.insert_or_ignore_epoch_checkpoint(&checkpoint)?;
-                    add_to_total(tx, Key::TariAccumulatedExhaustBurn, xtr_exhausted)?;
-                }
-                if let Some(snapshot) = sync_progress_snapshot {
-                    tx.key_value_set(Key::SyncProgress, snapshot)?;
-                }
-                Ok::<_, StorageError>(())
+                write_checkpoint(
+                    tx,
+                    &checkpoint,
+                    checkpoint_shard_group,
+                    xtr_exhausted,
+                    sync_progress_snapshot,
+                )
             })
             .await?;
         Ok(())
@@ -1486,6 +1500,25 @@ async fn require_header_metadata(
     Ok(())
 }
 
+/// Stores `checkpoint` of `shard_group`, adding `xtr_exhausted` to the accumulated exhaust burn the first time it is
+/// stored, and `progress` when given.
+fn write_checkpoint(
+    tx: &mut SqliteStoreWriteTransaction<'_>,
+    checkpoint: &EpochCheckpoint,
+    shard_group: ShardGroup,
+    xtr_exhausted: Amount,
+    progress: Option<SyncProgress>,
+) -> Result<(), StorageError> {
+    if !tx.epoch_checkpoint_exists(shard_group, checkpoint.epoch())? {
+        tx.insert_or_ignore_epoch_checkpoint(checkpoint)?;
+        add_to_total(tx, Key::TariAccumulatedExhaustBurn, xtr_exhausted)?;
+    }
+    if let Some(progress) = progress {
+        tx.key_value_set(Key::SyncProgress, progress)?;
+    }
+    Ok(())
+}
+
 /// Whether a checkpoint sync from `from_epoch` backfills epochs before `prev_epoch`, whose checkpoint is then synced
 /// first.
 fn is_backfill(from_epoch: Epoch, prev_epoch: Epoch) -> bool {
@@ -2003,6 +2036,48 @@ mod tests {
                 matches!(result, Err(NetworkStateSyncError::InvalidCheckpoint { .. })),
                 "{result:?}"
             );
+        }
+
+        /// The head checkpoint is stored ahead of the backfill without moving its progress, and the backfill that
+        /// reaches it later records its progress without counting its exhaust burn a second time.
+        #[tokio::test]
+        async fn a_head_checkpoint_stored_ahead_of_the_backfill_is_counted_once() {
+            use crate::store::IndexerStore;
+
+            let dir = tempfile::tempdir().unwrap();
+            let store = SqliteIndexerStore::try_create(dir.path().join("indexer.db")).unwrap();
+            let head = checkpoint(250, 7);
+            let shard_group = head.checked_shard_group().unwrap();
+            let burn = checkpoint_exhaust_burn(&head).unwrap();
+
+            let ahead = head.clone();
+            store
+                .with_write_tx(move |tx| write_checkpoint(tx, &ahead, shard_group, burn, None))
+                .await
+                .unwrap();
+            let progress = store
+                .with_read_tx(|tx| tx.key_value_get_value::<_, SyncProgress>(Key::SyncProgress))
+                .await
+                .optional()
+                .unwrap();
+            assert!(progress.is_none());
+
+            let mut backfilled = SyncProgress::default();
+            backfilled.record_checkpoint(shard_group, Epoch(250));
+            store
+                .with_write_tx(move |tx| write_checkpoint(tx, &head, shard_group, burn, Some(backfilled)))
+                .await
+                .unwrap();
+            let progress = store
+                .with_read_tx(|tx| tx.key_value_get_value::<_, SyncProgress>(Key::SyncProgress))
+                .await
+                .unwrap();
+            assert_eq!(progress.checkpoint_epoch(shard_group), Some(Epoch(250)));
+            let total = store
+                .with_read_tx(|tx| tx.key_value_get_value::<_, Amount>(Key::TariAccumulatedExhaustBurn))
+                .await
+                .unwrap();
+            assert_eq!(total, Amount::from(7u64));
         }
 
         #[test]

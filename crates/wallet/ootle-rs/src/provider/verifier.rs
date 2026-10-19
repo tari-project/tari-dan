@@ -345,7 +345,11 @@ impl IndexerVerifier {
                 .await?
                 .checkpoints;
             let from_epoch = trusted.epoch();
-            for checkpoint in checkpoints.iter().take_while(|checkpoint| checkpoint.epoch <= to_epoch) {
+            for checkpoint in &checkpoints {
+                // A checkpoint past the trusted set's epoch follows one the indexer has not served yet.
+                if checkpoint.epoch > to_epoch || checkpoint.epoch > trusted.epoch() {
+                    break;
+                }
                 trusted = trusted.advance(checkpoint)?;
                 state.trust(trusted.clone());
             }
@@ -861,6 +865,26 @@ mod tests {
 
         indexer.set_latest(3);
         provider.fetch_substate(id).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_walk_stops_at_a_checkpoint_the_indexer_has_not_served_yet() {
+        let sets = sets();
+        let indexer = TestIndexer::spawn(&sets, 0).await;
+        let provider = indexer.provider(IndexerTrust::Verify);
+        assert_eq!(provider.sync_validator_set().await.unwrap().epoch(), Epoch(2));
+
+        // An indexer backfilling its checkpoints has the latest one but not yet the one ending epoch 3.
+        indexer.set_latest(3);
+        indexer.leave_unserved(Epoch(3));
+        let err = provider.sync_validator_set().await.unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ProviderError::Unverified(VerifyError::CheckpointNotServed { epoch }) if epoch == Epoch(3)
+            ),
+            "{err}"
+        );
     }
 
     #[tokio::test]

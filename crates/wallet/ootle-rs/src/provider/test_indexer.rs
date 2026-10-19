@@ -85,6 +85,8 @@ struct TestIndexerState {
     checkpoints: Vec<EpochCheckpointEntry>,
     /// The index in `checkpoints` of the latest one.
     latest: usize,
+    /// The epoch whose checkpoint the indexer has not stored yet, as during a backfill.
+    unserved: Option<Epoch>,
     committees: HashMap<Epoch, (ValidatorSetCommittee, ValidatorSetCommittee)>,
     substates: HashMap<SubstateId, ServedSubstate>,
     results: HashMap<TransactionId, GetTransactionResultResponse>,
@@ -116,6 +118,7 @@ impl TestIndexer {
         let state = Arc::new(Mutex::new(TestIndexerState {
             checkpoints,
             latest,
+            unserved: None,
             committees,
             substates: HashMap::new(),
             results: HashMap::new(),
@@ -152,6 +155,11 @@ impl TestIndexer {
     /// Serves `checkpoint` after the last one served before.
     pub(crate) fn push_checkpoint(&self, checkpoint: EpochCheckpointEntry) {
         self.state.lock().unwrap().checkpoints.push(checkpoint);
+    }
+
+    /// Leaves the checkpoint of `epoch` out of the pages of checkpoints the indexer lists.
+    pub(crate) fn leave_unserved(&self, epoch: Epoch) {
+        self.state.lock().unwrap().unserved = Some(epoch);
     }
 
     pub(crate) fn set_latest(&self, latest: usize) {
@@ -213,7 +221,7 @@ async fn list_checkpoints(
     Json(ListEpochCheckpointsResponse {
         checkpoints: state.checkpoints[..=state.latest]
             .iter()
-            .filter(|checkpoint| checkpoint.epoch >= from_epoch)
+            .filter(|checkpoint| checkpoint.epoch >= from_epoch && Some(checkpoint.epoch) != state.unserved)
             .take(req.limit.unwrap_or(20) as usize)
             .cloned()
             .collect(),
