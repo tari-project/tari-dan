@@ -207,12 +207,103 @@ pub struct GetSubstatesRequest {
 pub struct GetSubstatesResponse {
     #[cfg_attr(feature = "utoipa", schema(value_type = HashMap<String, Object>))]
     pub substates: HashMap<SubstateId, Substate>,
-    /// The proof each substate was verified with, when `include_proofs` was set. A substate no
-    /// committee member could prove has no entry.
+    /// The proof each substate was verified with, when `include_proofs` was set, less the commit proof of the block
+    /// it is anchored at, which is in `commit_proofs`. A substate no committee member could prove has no entry.
     #[serde(default)]
-    #[cfg_attr(feature = "utoipa", schema(value_type = HashMap<String, SubstateProof>))]
-    pub proofs: HashMap<SubstateId, SubstateProof>,
+    #[cfg_attr(feature = "utoipa", schema(value_type = HashMap<String, BatchedSubstateProof>))]
+    pub proofs: HashMap<SubstateId, BatchedSubstateProof>,
+    /// The commit proof of each block a proof in `proofs` is anchored at, by block id. Proofs anchored at the same
+    /// block share it.
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(type = "{ [block_id in string]?: string }"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = HashMap<String, String>))]
+    pub commit_proofs: HashMap<Hash32, CommitProofBytes>,
 }
+
+impl GetSubstatesResponse {
+    /// A response serving `substates` with `proofs`, each anchor block's commit proof served once.
+    pub fn new(
+        substates: HashMap<SubstateId, Substate>,
+        proofs: impl IntoIterator<Item = (SubstateId, SubstateProof)>,
+    ) -> Self {
+        let mut commit_proofs = HashMap::new();
+        let proofs = proofs
+            .into_iter()
+            .map(|(id, proof)| {
+                commit_proofs
+                    .entry(proof.anchor.block_id)
+                    .or_insert(CommitProofBytes(proof.commit_proof));
+                (id, BatchedSubstateProof {
+                    anchor: proof.anchor,
+                    value_proof: proof.value_proof,
+                    value_hash_epoch: proof.value_hash_epoch,
+                    down_proof: proof.down_proof,
+                })
+            })
+            .collect();
+        Self {
+            substates,
+            proofs,
+            commit_proofs,
+        }
+    }
+
+    /// The substates, and each proof whole with the commit proof of its anchor block. A proof whose anchor block has
+    /// no commit proof in the response is left out, so its substate reads as unproven.
+    pub fn into_proven(self) -> (HashMap<SubstateId, Substate>, HashMap<SubstateId, SubstateProof>) {
+        let Self {
+            substates,
+            proofs,
+            commit_proofs,
+        } = self;
+        let proofs = proofs
+            .into_iter()
+            .filter_map(|(id, proof)| {
+                let commit_proof = commit_proofs.get(&proof.anchor.block_id)?;
+                Some((id, SubstateProof {
+                    anchor: proof.anchor,
+                    commit_proof: commit_proof.0.clone(),
+                    value_proof: proof.value_proof,
+                    value_hash_epoch: proof.value_hash_epoch,
+                    down_proof: proof.down_proof,
+                }))
+            })
+            .collect();
+        (substates, proofs)
+    }
+}
+
+/// A [`SubstateProof`] served in a [`GetSubstatesResponse`], whose commit proof the response serves once for every
+/// proof anchored at the same block.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+pub struct BatchedSubstateProof {
+    /// The committed block the proof is anchored at. The response's `commit_proofs` holds its commit proof under
+    /// `anchor.block_id`.
+    pub anchor: SubstateProofAnchor,
+    /// CBOR-encoded `SubstateValueProof`, as in [`SubstateProof::value_proof`].
+    #[serde(with = "ootle_serde::base64")]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = String, format = Byte))]
+    pub value_proof: Vec<u8>,
+    #[cfg_attr(feature = "utoipa", schema(value_type = u64))]
+    pub value_hash_epoch: Epoch,
+    /// CBOR-encoded `SubstateDownProof`, as in [`SubstateProof::down_proof`].
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "ootle_serde::base64::option"
+    )]
+    #[cfg_attr(feature = "ts", ts(optional, type = "string"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>, format = Byte))]
+    pub down_proof: Option<Vec<u8>>,
+}
+
+/// CBOR-encoded `SidechainBlockCommitProof`: a block's header and the chain of quorum certificates that committed it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct CommitProofBytes(#[serde(with = "ootle_serde::base64")] pub Vec<u8>);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
@@ -1323,4 +1414,80 @@ pub struct WatchedTemplateItem {
     #[cfg_attr(feature = "utoipa", schema(value_type = String))]
     pub template_address: TemplateAddress,
     pub template_name: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use tari_engine_types::{confidential::ClaimedOutputTombstone, substate::SubstateValue};
+    use tari_template_lib_types::ClaimedOutputTombstoneAddress;
+
+    use super::*;
+
+    fn substate_id(seed: u8) -> SubstateId {
+        SubstateId::ClaimedOutputTombstone(ClaimedOutputTombstoneAddress::from_bytes(&[seed; 32]).unwrap())
+    }
+
+    fn substate() -> Substate {
+        Substate::new(
+            0,
+            SubstateValue::ClaimedOutputTombstone(ClaimedOutputTombstone { value: 1 }),
+        )
+    }
+
+    fn proof(block: u8, seed: u8) -> SubstateProof {
+        SubstateProof {
+            anchor: SubstateProofAnchor {
+                epoch: Epoch(3),
+                shard_group: ShardGroup::new(0u32, 255u32),
+                height: 7,
+                block_id: Hash32::from_array([block; 32]),
+                state_merkle_root: Hash32::from_array([block; 32]),
+            },
+            commit_proof: vec![block; 64],
+            value_proof: vec![seed; 8],
+            value_hash_epoch: Epoch(2),
+            down_proof: seed.is_multiple_of(2).then(|| vec![seed; 4]),
+        }
+    }
+
+    #[test]
+    fn proofs_anchored_at_one_block_share_its_commit_proof() {
+        let ids = [substate_id(1), substate_id(2), substate_id(3)];
+        let substates = ids.iter().map(|id| (id.clone(), substate())).collect();
+        let proofs = [
+            (ids[0].clone(), proof(10, 1)),
+            (ids[1].clone(), proof(10, 2)),
+            (ids[2].clone(), proof(11, 3)),
+        ];
+
+        let resp = GetSubstatesResponse::new(substates, proofs.clone());
+        assert_eq!(resp.commit_proofs.len(), 2);
+
+        let json = serde_json::to_string(&resp).unwrap();
+        let (substates, served) = serde_json::from_str::<GetSubstatesResponse>(&json)
+            .unwrap()
+            .into_proven();
+        assert_eq!(substates.len(), 3);
+        assert_eq!(served.len(), 3);
+        for (id, proof) in proofs {
+            let served = &served[&id];
+            assert_eq!(served.anchor.block_id, proof.anchor.block_id);
+            assert_eq!(served.commit_proof, proof.commit_proof);
+            assert_eq!(served.value_proof, proof.value_proof);
+            assert_eq!(served.value_hash_epoch, proof.value_hash_epoch);
+            assert_eq!(served.down_proof, proof.down_proof);
+        }
+    }
+
+    #[test]
+    fn a_proof_whose_commit_proof_is_not_served_is_left_out() {
+        let id = substate_id(1);
+        let substates = [(id.clone(), substate())].into();
+        let mut resp = GetSubstatesResponse::new(substates, [(id.clone(), proof(10, 1))]);
+        resp.commit_proofs.clear();
+
+        let (substates, proofs) = resp.into_proven();
+        assert!(substates.contains_key(&id));
+        assert!(proofs.is_empty());
+    }
 }

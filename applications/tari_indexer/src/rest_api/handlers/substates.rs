@@ -233,10 +233,7 @@ pub async fn fetch_substates(
             .await
             .map_err(|e| ErrorResponse::internal_error(format!("Error getting substate: {}", e)))?;
 
-        return Ok(Json(GetSubstatesResponse {
-            substates,
-            proofs: HashMap::new(),
-        }));
+        return Ok(Json(GetSubstatesResponse::new(substates, [])));
     }
 
     let fetched = context
@@ -246,15 +243,15 @@ pub async fn fetch_substates(
         .map_err(substate_lookup_error)?;
 
     let mut substates = HashMap::with_capacity(fetched.len());
-    let mut proofs = HashMap::new();
+    let mut proofs = Vec::new();
     for (id, ProvenSubstate { substate, proof }) in fetched {
         if include_proofs && let Some(proof) = proof {
-            proofs.insert(id.clone(), to_substate_proof(proof)?);
+            proofs.push((id.clone(), to_substate_proof(proof)?));
         }
         substates.insert(id, substate);
     }
 
-    Ok(Json(GetSubstatesResponse { substates, proofs }))
+    Ok(Json(GetSubstatesResponse::new(substates, proofs)))
 }
 
 #[cfg(test)]

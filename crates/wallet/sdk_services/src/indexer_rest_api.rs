@@ -358,8 +358,9 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
                     },
                 )
                 .await?;
-            fetched.substates.extend(resp.substates);
-            fetched.proofs.extend(resp.proofs);
+            let (substates, proofs) = resp.into_proven();
+            fetched.substates.extend(substates);
+            fetched.proofs.extend(proofs);
         }
 
         Ok(fetched)
@@ -1100,10 +1101,10 @@ mod tests {
 
     #[tokio::test]
     async fn fetched_substates_with_a_mistyped_value_are_refused() {
-        let body = serde_json::to_string(&GetSubstatesResponse {
-            substates: HashMap::from([(component_id(), Substate::new(1, vault_value()))]),
-            proofs: HashMap::new(),
-        })
+        let body = serde_json::to_string(&GetSubstatesResponse::new(
+            HashMap::from([(component_id(), Substate::new(1, vault_value()))]),
+            [],
+        ))
         .unwrap();
         let network = network_answering_with(body).await;
 
