@@ -422,6 +422,26 @@ async fn a_walk_the_indexer_withholds_fails_and_keeps_the_trusted_set() {
 }
 
 #[tokio::test]
+async fn a_walk_stops_at_a_checkpoint_the_indexer_has_not_served_yet() {
+    let sets = (1..=5).map(ValidatorSetFixture::new).collect::<Vec<_>>();
+    let network = ProvingNetwork::new(&sets, 0);
+    let transaction = build_transaction();
+    let test = wallet(network.clone(), &transaction);
+    let validator_set_api = test.sdk().validator_set_api();
+    validator_set_api.sync().await.unwrap();
+
+    // An indexer backfilling its checkpoints has the latest one but not yet the one ending epoch 3.
+    network.set_latest(3);
+    network.leave_unserved(Epoch(3));
+    let err = validator_set_api.sync().await.unwrap_err();
+    assert!(
+        matches!(err, ValidatorSetApiError::CheckpointNotServed { epoch } if epoch == Epoch(3)),
+        "{err}"
+    );
+    assert_eq!(validator_set_api.latest().unwrap().unwrap().epoch(), Epoch(3));
+}
+
+#[tokio::test]
 async fn concurrent_syncs_walk_once() {
     let sets = sets();
     let network = ProvingNetwork::new(&sets, 0);

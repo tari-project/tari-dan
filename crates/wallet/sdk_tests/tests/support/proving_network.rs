@@ -52,6 +52,8 @@ struct ProvingNetworkState {
     result: Option<TransactionQueryResult>,
     /// Whether the indexer serves the latest checkpoint but none of the ones before it.
     withholds_walk: bool,
+    /// The epoch whose checkpoint the indexer has not stored yet, as during a backfill.
+    unserved: Option<Epoch>,
     /// Requests for a page of checkpoints to walk through.
     walk_requests: usize,
     substates: HashMap<SubstateId, ServedSubstate>,
@@ -90,6 +92,7 @@ impl ProvingNetwork {
                 committees,
                 result: None,
                 withholds_walk: false,
+                unserved: None,
                 walk_requests: 0,
                 substates: HashMap::new(),
                 committee_requests: 0,
@@ -144,6 +147,11 @@ impl ProvingNetwork {
 
     pub fn withhold_walk(&self) {
         self.state.lock().unwrap().withholds_walk = true;
+    }
+
+    /// Leaves the checkpoint of `epoch` out of the pages of checkpoints the indexer lists.
+    pub fn leave_unserved(&self, epoch: Epoch) {
+        self.state.lock().unwrap().unserved = Some(epoch);
     }
 
     /// Serves `id` at `version` holding `value`, with `proof` to requests for proofs.
@@ -301,7 +309,7 @@ impl WalletNetworkInterface for ProvingNetwork {
         };
         Ok(state.checkpoints[..=latest]
             .iter()
-            .filter(|checkpoint| checkpoint.epoch >= from_epoch)
+            .filter(|checkpoint| checkpoint.epoch >= from_epoch && Some(checkpoint.epoch) != state.unserved)
             .take(limit as usize)
             .cloned()
             .collect())

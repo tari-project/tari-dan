@@ -2910,6 +2910,25 @@ mod tests {
         assert!(carried_before(3).await.unwrap());
     }
 
+    /// The checkpoint of the previous epoch is stored ahead of the backfill, which then still accepts earlier
+    /// checkpoints that lack their preimage.
+    #[tokio::test]
+    async fn a_head_checkpoint_stored_ahead_of_the_backfill_requires_no_preimage_before_it() {
+        use crate::store::{IndexerStoreReadTransaction, IndexerStoreWriteTransaction};
+
+        let (_dir, store) = temp_store().await;
+        let all = ShardGroup::new(1u32, 255u32);
+        store
+            .with_write_tx(move |tx| tx.insert_or_ignore_epoch_checkpoint(&epoch_checkpoint(250, all, true)))
+            .await
+            .unwrap();
+
+        let carried_before =
+            |epoch| store.with_read_tx(move |tx| tx.epoch_checkpoint_with_header_metadata_exists_before(Epoch(epoch)));
+        assert!(!carried_before(100).await.unwrap());
+        assert!(!carried_before(250).await.unwrap());
+    }
+
     /// An indexer upgrading in place selects the checkpoints it stored before their shard range and preimage were
     /// recorded.
     #[tokio::test]
