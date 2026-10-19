@@ -303,9 +303,9 @@ fn proof_shard_group(commit_proof: &CommittedBlockProof) -> Result<ShardGroup, S
 
 /// What the responder needs to prove a batch of substates against its own committed state.
 struct BatchProofContext {
-    anchor_at: ReadAnchorAt,
+    /// Where the batch's proofs are anchored. `None` when no proofs were asked for.
+    anchor_at: Option<ReadAnchorAt>,
     num_preshards: NumPreshards,
-    include_proofs: bool,
     /// The most encoded bytes the anchor and substate frames of one response may take. The missing list
     /// is bounded by the request's id count instead.
     max_response_bytes: usize,
@@ -366,8 +366,8 @@ fn read_substate_batch<TTx: StateStoreReadTransaction>(
     let mut generator = None;
     let mut messages = Vec::with_capacity(ids.len() + 2);
     let mut response_bytes = 0usize;
-    if ctx.include_proofs &&
-        let Some(commit_proof) = read_anchor(tx, ctx.anchor_at)?
+    if let Some(anchor_at) = ctx.anchor_at &&
+        let Some(commit_proof) = read_anchor(tx, anchor_at)?
     {
         let shard_group = proof_shard_group(&commit_proof)?;
         generator = Some(SubstateProofGenerator::new(
@@ -499,10 +499,11 @@ struct ReadAnchorAt {
 /// commits, and every epoch commits its end block, so a shard group with no traffic still has an anchor. The indexer
 /// and the wallet accept an anchor from the epoch before the current one.
 ///
-/// The end block's proof is read from the epoch checkpoint saved when it committed, which epoch GC keeps after it
-/// prunes the block itself. The checkpoint is looked up by the node's shard group in the current epoch: a node whose
-/// shard group changed at the epoch boundary holds the state of other shards than the end block's root commits, and
-/// has no checkpoint for its new group. `None` when there is no anchor.
+/// The end block's proof is read from that epoch's checkpoint, which epoch GC keeps after it prunes the block itself.
+/// The checkpoint is looked up by the node's shard group in the current epoch. A node saves the checkpoint of a group
+/// only once its state for that group is the state the checkpoint's root commits, from committing the end block or
+/// from syncing to the checkpoint, so the lookup finds an anchor exactly when the node's state matches one. `None` when
+/// there is no anchor.
 fn read_anchor<TTx: StateStoreReadTransaction>(
     tx: &TTx,
     anchor_at: ReadAnchorAt,
@@ -1017,9 +1018,12 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
         };
 
         let store = self.state_store.clone();
-        let anchor_at = self.read_anchor_at().await?;
+        let anchor_at = if req.include_proofs {
+            Some(self.read_anchor_at().await?)
+        } else {
+            None
+        };
         let num_preshards = local_committee_info.num_preshards();
-        let include_proofs = req.include_proofs;
         let responses = task::spawn_blocking(move || {
             // TODO: we should use a snapshot - will need to refactor the state store to support this, by abstracting
             // the .cf(X) call and implementing read only transaction for all implementors of this trait
@@ -1027,7 +1031,6 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
                 read_substate_batch(tx, &ids, BatchProofContext {
                     anchor_at,
                     num_preshards,
-                    include_proofs,
                     max_response_bytes: MAX_BATCH_RESPONSE_BYTES,
                 })
             })
@@ -1280,12 +1283,8 @@ mod tests {
             .collect::<Vec<_>>();
         let tx = store.create_read_tx().unwrap();
         let messages = read_substate_batch(&tx, &ids, BatchProofContext {
-            anchor_at: ReadAnchorAt {
-                epoch: Epoch(1),
-                shard_group: None,
-            },
+            anchor_at: None,
             num_preshards: NUM_PRESHARDS,
-            include_proofs: false,
             max_response_bytes: MAX_BATCH_RESPONSE_BYTES,
         })
         .unwrap();
@@ -1352,12 +1351,8 @@ mod tests {
             .collect::<Vec<_>>();
         let tx = store.create_read_tx().unwrap();
         let messages = read_substate_batch(&tx, &ids, BatchProofContext {
-            anchor_at: ReadAnchorAt {
-                epoch: Epoch(1),
-                shard_group: None,
-            },
+            anchor_at: None,
             num_preshards: NUM_PRESHARDS,
-            include_proofs: false,
             max_response_bytes: 1,
         })
         .unwrap();
