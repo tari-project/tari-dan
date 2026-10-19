@@ -107,10 +107,10 @@ where TSpec: WalletSdkSpec
             shard_state_versions.len(),
         );
 
-        let unspent_count = self
+        let live_output_count = self
             .sdk
             .stealth_outputs_api()
-            .count_unspent_outputs_for_account(self.account.component_address(), self.resource_address)?;
+            .count_unspent_or_locked_outputs_for_account(self.account.component_address(), self.resource_address)?;
 
         let stream = self
             .sdk
@@ -121,9 +121,10 @@ where TSpec: WalletSdkSpec
                 // NOTE that this will request shards in a random order (HashMap). This is good to avoid always
                 // starting with the same shard.
                 shard_state_versions.into_iter().collect(),
-                // Optimisation: If we do not have any unspent outputs, we only need to sync unspent updates (we
-                // already know all outputs are spent)
-                unspent_count == 0,
+                // Optimisation: with no unspent or locked outputs there is no spend left for the wallet to
+                // learn of, so only unspent updates are needed. The indexer moves the cursor past the spent
+                // updates this skips, so they are not delivered on a later pass either.
+                live_output_count == 0,
             )
             .await
             .map_err(|e| StealthScannerApiError::NetworkInterfaceError(e.into()))?;

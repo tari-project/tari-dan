@@ -612,13 +612,23 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
         Ok(balance)
     }
 
-    pub fn count_unspent_outputs_for_account(
+    /// Counts the account's outputs that are unspent or locked by a pending transaction. A spend of
+    /// any of them may still have to reach the wallet through the UTXO scanner.
+    pub fn count_unspent_or_locked_outputs_for_account(
         &self,
         account_address: &ComponentAddress,
         resource_address: &ResourceAddress,
     ) -> Result<u64, StealthOutputsApiError> {
         let count = self.store.with_read_tx(|tx| {
-            tx.stealth_outputs_count_by_status(account_address, resource_address, OutputStatus::Unspent)
+            let mut count = 0;
+            for status in [
+                OutputStatus::Unspent,
+                OutputStatus::LockedForSpend,
+                OutputStatus::LockedUnconfirmed,
+            ] {
+                count += tx.stealth_outputs_count_by_status(account_address, resource_address, status)?;
+            }
+            Ok::<_, StealthOutputsApiError>(count)
         })?;
         Ok(count)
     }
