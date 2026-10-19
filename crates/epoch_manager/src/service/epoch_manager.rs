@@ -34,6 +34,7 @@ use tari_ootle_common_types::{
     DerivableFromPublicKey,
     Epoch,
     NodeAddressable,
+    ProtocolVersion,
     ShardGroup,
     SubstateAddress,
     ValidatorSetHash,
@@ -154,6 +155,7 @@ where TSpec: EpochManagerSpec
         num_committees: u32,
     ) -> Result<ValidatorSetHash, EpochManagerError> {
         let mut validator_nodes = self.global_db.validator_nodes(tx);
+        let version = ProtocolVersion::at(self.config.network, epoch);
         let leaves = self
             .config
             .num_preshards
@@ -161,7 +163,7 @@ where TSpec: EpochManagerSpec
             .map(|shard_group| {
                 let committee = validator_nodes.get_committee_for_shard_group(epoch, shard_group, usize::MAX)?;
                 let leaf_hash = committee
-                    .calculate_validator_set_leaf_hash(&shard_group)
+                    .calculate_validator_set_leaf_hash(version, &shard_group)
                     .map_err(|source| EpochManagerError::InvalidValidatorSetCommittee {
                         epoch,
                         shard_group,
@@ -752,7 +754,12 @@ mod tests {
             committees.iter().map(|(shard_group, committee)| {
                 (
                     *shard_group,
-                    committee.calculate_validator_set_leaf_hash(shard_group).unwrap(),
+                    committee
+                        .calculate_validator_set_leaf_hash(
+                            ProtocolVersion::at(Network::LocalNet, Epoch(2)),
+                            shard_group,
+                        )
+                        .unwrap(),
                 )
             }),
         )

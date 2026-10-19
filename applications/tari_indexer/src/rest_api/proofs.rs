@@ -230,6 +230,7 @@ pub(crate) mod tests {
         use ootle_network::Network;
         use tari_ootle_common_types::{
             NumPreshards,
+            ProtocolVersion,
             VotePower,
             committee::{Committee, CommitteeMember},
         };
@@ -249,7 +250,9 @@ pub(crate) mod tests {
         );
         let tree = ValidatorSetTree::build(Network::LocalNet, Epoch(5), NumPreshards::try_from(4u32).unwrap(), [(
             shard_group,
-            committee.calculate_validator_set_leaf_hash(&shard_group).unwrap(),
+            committee
+                .calculate_validator_set_leaf_hash(ProtocolVersion::at(Network::LocalNet, Epoch(5)), &shard_group)
+                .unwrap(),
         )])
         .unwrap();
         let proof = tree.committee_proof(&shard_group, &committee).unwrap();

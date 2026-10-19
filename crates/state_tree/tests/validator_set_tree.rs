@@ -4,7 +4,10 @@
 use ootle_network::Network;
 use tari_ootle_common_types::{
     Epoch,
+    KeyScheme,
+    MemberKey,
     NumPreshards,
+    ProtocolVersion,
     ShardGroup,
     ValidatorSetError,
     ValidatorSetHash,
@@ -24,11 +27,11 @@ use tari_state_tree::{
 use tari_template_lib_types::{Hash32, crypto::RistrettoPublicKeyBytes};
 
 /// The [`ValidatorSetHash`] of [`sample_tree`].
-const SAMPLE_SET_HASH: &str = "bfdcf97b147fa328cda0fabb01a5b2c4863f450bd085c59c7f41b38d7b9b881e";
+const SAMPLE_SET_HASH: &str = "1f915922abbb3cce8ca5c6d9db34b9e25bed268659b3939df13c30ec1bfa199c";
 /// The committee root of [`sample_tree`].
-const SAMPLE_COMMITTEE_ROOT: &str = "5c3ffb14ccdf1af74a643c0c7aa2c5c5a0f9de74b55c9b04e14bcec2cf49d81e";
+const SAMPLE_COMMITTEE_ROOT: &str = "2763f1021063012ebea6d23e79531e0c3bece2d4fc1a245a2a6721d214f40484";
 /// The CBOR encoding of the Merkle proof for shard group 0-1 of [`sample_tree`].
-const SAMPLE_PROOF_CBOR: &str = "8282582085e0fbe3f7469cf36076378d541a98ff75229484bceda9bbde30a821f5fb0be95820cdea39abface15bb1cf7dc2b56011a04aa220fb7acd6f21dd387bb22533f7c1e8182008258205207a5c228122830b01276579c669167430ce311fdd5448360324677db7a99be58202dfd535a9c0bedfa396db656d5533885a85f10ea4cfeded3494e12571c8e750c";
+const SAMPLE_PROOF_CBOR: &str = "8282582085e0fbe3f7469cf36076378d541a98ff75229484bceda9bbde30a821f5fb0be95820743200bf74caecc66785c955f53e3735baabe786b7485e0ab5817cf0e49ef0b68182008258205207a5c228122830b01276579c669167430ce311fdd5448360324677db7a99be5820495e2e5ab642e329b2bc5ff59ceebb0af8b0b74c2b0df51603f0ff63ae3c6d9e";
 
 fn pk(byte: u8) -> RistrettoPublicKeyBytes {
     RistrettoPublicKeyBytes::from_bytes(&[byte; 32]).unwrap()
@@ -70,7 +73,9 @@ fn high_committee() -> Committee<u8> {
 fn leaf(shard_group: ShardGroup, committee: &Committee<u8>) -> (ShardGroup, Hash32) {
     (
         shard_group,
-        committee.calculate_validator_set_leaf_hash(&shard_group).unwrap(),
+        committee
+            .calculate_validator_set_leaf_hash(ProtocolVersion::at(Network::LocalNet, Epoch(7)), &shard_group)
+            .unwrap(),
     )
 }
 
@@ -88,6 +93,7 @@ fn members(committee: &Committee<u8>) -> Vec<ValidatorSetMember> {
         .map(|member| ValidatorSetMember {
             public_key: member.public_key,
             vote_power: member.vote_power,
+            additional_keys: Vec::new(),
         })
         .collect()
 }
@@ -255,6 +261,38 @@ fn a_proof_with_a_changed_member_fails() {
             "a forged committee must not verify"
         );
     }
+}
+
+#[test]
+fn a_proof_with_an_added_member_key_fails() {
+    let tree = sample_tree();
+    let mut proof = tree.committee_proof(&low(), &low_committee()).unwrap();
+    proof.members[0].additional_keys.push(MemberKey {
+        scheme: KeyScheme::from_u16(1),
+        key: vec![1; 48],
+    });
+    assert!(matches!(
+        proof.verify(&tree.hash()),
+        Err(ValidatorSetProofError::CommitteeNotInSet { .. })
+    ));
+}
+
+#[test]
+fn a_proof_with_member_keys_out_of_order_fails() {
+    let tree = sample_tree();
+    let mut proof = tree.committee_proof(&low(), &low_committee()).unwrap();
+    proof.members[0].additional_keys = [2, 1]
+        .map(|scheme| MemberKey {
+            scheme: KeyScheme::from_u16(scheme),
+            key: vec![1; 48],
+        })
+        .to_vec();
+    assert!(matches!(
+        proof.verify(&tree.hash()),
+        Err(ValidatorSetProofError::MalformedCommittee(
+            ValidatorSetError::KeysNotSorted { .. }
+        ))
+    ));
 }
 
 #[test]
