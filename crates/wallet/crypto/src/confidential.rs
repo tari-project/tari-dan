@@ -89,6 +89,12 @@ fn check_withdraw_balance(
     change_statement: Option<&OutputWitness>,
     change_revealed_amount: Amount,
 ) -> Result<(), WalletCryptoError> {
+    if change_statement.is_none() && !change_revealed_amount.is_zero() {
+        return Err(WalletCryptoError::InvalidArgument {
+            name: "change_revealed_amount",
+            details: format!("revealed change of {change_revealed_amount} requires a change output"),
+        });
+    }
     let overflow = || WalletCryptoError::InvalidArgument {
         name: "amounts",
         details: "withdraw amounts overflow".to_string(),
