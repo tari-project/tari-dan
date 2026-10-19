@@ -1468,6 +1468,39 @@
   },
   "components": {
     "schemas": {
+      "BatchedSubstateProof": {
+        "type": "object",
+        "description": "A [`SubstateProof`] served in a [`GetSubstatesResponse`], whose commit proof the response serves once for every\nproof anchored at the same block.",
+        "required": [
+          "anchor",
+          "value_proof",
+          "value_hash_epoch"
+        ],
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/SubstateProofAnchor",
+            "description": "The committed block the proof is anchored at. The response's `commit_proofs` holds its commit proof under\n`anchor.block_id`."
+          },
+          "down_proof": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "byte",
+            "description": "CBOR-encoded `SubstateDownProof`, as in [`SubstateProof::down_proof`]."
+          },
+          "value_hash_epoch": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "value_proof": {
+            "type": "string",
+            "format": "byte",
+            "description": "CBOR-encoded `SubstateValueProof`, as in [`SubstateProof::value_proof`]."
+          }
+        }
+      },
       "Connection": {
         "type": "object",
         "required": [
@@ -1897,11 +1930,21 @@
           "substates"
         ],
         "properties": {
+          "commit_proofs": {
+            "type": "object",
+            "description": "The commit proof of each block a proof in `proofs` is anchored at, by block id. Proofs anchored at the same\nblock share it.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
           "proofs": {
             "type": "object",
-            "description": "The proof each substate was verified with, when `include_proofs` was set. A substate no\ncommittee member could prove has no entry.",
+            "description": "The proof each substate was verified with, when `include_proofs` was set, less the commit proof of the block\nit is anchored at, which is in `commit_proofs`. A substate no committee member could prove has no entry.",
             "additionalProperties": {
-              "$ref": "#/components/schemas/SubstateProof"
+              "$ref": "#/components/schemas/BatchedSubstateProof"
             },
             "propertyNames": {
               "type": "string"
