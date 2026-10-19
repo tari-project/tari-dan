@@ -207,15 +207,17 @@ impl RpcServerBuilder {
     }
 
     /// Sets the longest deadline the server honours. A client asking for a longer one is served this
-    /// one, so that a single request cannot hold its session for an unbounded span.
+    /// one, so that a single request cannot make its session wait an unbounded span for the service
+    /// to produce its response or the next item of it.
     pub fn with_maximum_client_deadline(mut self, deadline: Duration) -> Self {
         self.maximum_client_deadline = deadline;
         self
     }
 
     /// Sets how long a session may wait for its next request before the server closes it and
-    /// releases its slot. Only the gap between requests counts: a request being served is bounded by
-    /// its deadline and the write timeout instead.
+    /// releases its slot. Only the gap between requests counts. While a request is served, its
+    /// deadline bounds each wait for the service and the write timeout each stalled write; neither
+    /// caps how long the whole request takes.
     pub fn with_idle_session_timeout(mut self, timeout: Duration) -> Self {
         self.idle_session_timeout = timeout;
         self
@@ -224,7 +226,9 @@ impl RpcServerBuilder {
     /// Sets how long a write to a session may go without the client taking any of it before the server closes the
     /// session and releases its slot. A client that stops reading fills the transport's flow-control window, after
     /// which nothing more can be written to it, so this bounds how long such a client holds its session whatever
-    /// the server was sending.
+    /// the server was sending. Any write that goes ahead, however small, restarts the timeout: this bounds a stall,
+    /// not the time taken to serve a request, so a client that keeps taking some of a response is served for as
+    /// long as the response lasts.
     pub fn with_write_timeout(mut self, timeout: Duration) -> Self {
         self.write_timeout = timeout;
         self

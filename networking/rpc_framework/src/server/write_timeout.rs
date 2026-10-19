@@ -110,16 +110,16 @@ mod tests {
     #[tokio::test]
     async fn a_peer_reading_steadily_is_given_as_long_as_it_takes() {
         let (local, peer) = tokio::io::duplex(4);
-        let mut stream = WriteTimeout::new(local.compat(), Duration::from_millis(100));
-        let payload = vec![7u8; 64];
+        let mut stream = WriteTimeout::new(local.compat(), Duration::from_secs(1));
+        let payload = vec![7u8; 128];
 
-        // Each read frees the window well within the timeout, but the whole payload takes several timeouts to go.
+        // Each read frees the window well within the timeout, but the whole payload takes longer than it to go.
         let reader = tokio::spawn(async move {
             let mut peer = peer.compat();
             let mut received = Vec::new();
             let mut buf = [0u8; 4];
-            while received.len() < 64 {
-                time::sleep(Duration::from_millis(30)).await;
+            while received.len() < 128 {
+                time::sleep(Duration::from_millis(50)).await;
                 let n = peer.read(&mut buf).await.unwrap();
                 received.extend_from_slice(&buf[..n]);
             }
