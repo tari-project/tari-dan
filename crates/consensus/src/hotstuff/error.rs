@@ -14,7 +14,7 @@ use tari_ootle_storage::{
     },
 };
 use tari_ootle_transaction::TransactionId;
-use tari_sidechain::FixedHash;
+use tari_sidechain::{FixedHash, QcSignaturesError};
 use tari_state_tree::StateTreeError;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::task::JoinError;
@@ -242,6 +242,13 @@ pub enum ProposalValidationError {
     InvalidSignature { block_id: BlockId, height: NodeHeight },
     #[error("QC has invalid signature: {qc}")]
     QcInvalidSignature { qc: QcId },
+    #[error("QC {qc} carries malformed signatures: {source}")]
+    QcMalformedSignatures { qc: QcId, source: QcSignaturesError },
+    #[error("QC {qc} is signed under a scheme that protocol version {protocol_version} does not accept")]
+    QcSignatureSchemeNotAccepted {
+        qc: QcId,
+        protocol_version: ProtocolVersion,
+    },
     #[error("QC has duplicate signature: {qc} by {validator}")]
     QcDuplicateSignature {
         qc: QcId,

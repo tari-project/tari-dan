@@ -5,17 +5,20 @@ use anyhow::anyhow;
 use minicbor::{CborLen, Decode, Encode};
 use ootle_network::Network;
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::CompressedPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_engine_types::{ProtocolVersion, UnknownProtocolVersionError};
 use tari_ootle_common_types::{ShardGroup, VotePower};
-use tari_sidechain::{CommitProofElement, FixedHash, SidechainBlockCommitProof, SidechainProofValidationError};
+use tari_sidechain::{
+    CommitProofElement,
+    FixedHash,
+    SidechainBlockCommitProof,
+    SidechainProofValidationError,
+    SigningCommittee,
+};
 use tari_state_tree::{StateTreeError, TreeHash, compute_merkle_root_for_hashes};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::consensus_models::{Command, command::command_leaf};
-
-pub type CheckVnFunc<'a> = dyn Fn(&RistrettoPublicKeyBytes) -> Result<VotePower, SidechainProofValidationError> + 'a;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode, CborLen)]
 pub enum CommandsCommitProof {
@@ -78,14 +81,15 @@ impl CommandsCommitProof {
         }
     }
 
+    /// Validates the proof against `committee`, the committee expected to have signed its certificates.
     pub fn validate_committed(
         &self,
         network: Network,
         quorum_threshold: VotePower,
-        check_vn: &CheckVnFunc<'_>,
+        committee: &dyn SigningCommittee,
     ) -> Result<(), ForeignProposalCommitProofError> {
         match self {
-            Self::V1(proof) => proof.validate_committed(network, quorum_threshold, check_vn),
+            Self::V1(proof) => proof.validate_committed(network, quorum_threshold, committee),
         }
     }
 }
@@ -116,17 +120,11 @@ impl CommandsCommitProofV1 {
         &self,
         network: Network,
         quorum_threshold: VotePower,
-        check_vn: &CheckVnFunc<'_>,
+        committee: &dyn SigningCommittee,
     ) -> Result<(), ForeignProposalCommitProofError> {
         self.validate_command_merkle_root()?;
-        self.commit_proof.validate_committed(
-            network.as_byte(),
-            quorum_threshold.value(),
-            &|pk: &CompressedPublicKey| {
-                check_vn(&RistrettoPublicKeyBytes::from_bytes(pk.as_bytes()).expect("already checked"))
-                    .map(|v| v.value())
-            },
-        )?;
+        self.commit_proof
+            .validate_committed(network.as_byte(), quorum_threshold.value(), committee)?;
         Ok(())
     }
 
@@ -225,18 +223,9 @@ impl CommandsCommitProofV1 {
         for (i, elem) in self.commit_proof.proof_elements.iter().enumerate() {
             match elem {
                 CommitProofElement::QuorumCertificate(qc) => {
-                    if qc.signatures.is_empty() {
+                    if qc.signatures.num_signatures() == 0 {
                         return Err(ForeignProposalCommitProofError::Invalid(anyhow::anyhow!(
                             "QuorumCertificate at index {i} has no signatures"
-                        )));
-                    }
-                    if qc
-                        .signatures
-                        .iter()
-                        .any(|s| s.public_key.as_bytes().len() != RistrettoPublicKeyBytes::length())
-                    {
-                        return Err(ForeignProposalCommitProofError::Invalid(anyhow::anyhow!(
-                            "QuorumCertificate at index {i} has invalid public key"
                         )));
                     }
                 },
@@ -347,7 +336,7 @@ mod tests {
     use tari_engine_types::{SubstateVersion, substate::SubstateId};
     use tari_ootle_common_types::SubstateLockType;
     use tari_ootle_transaction::TransactionId;
-    use tari_sidechain::{SidechainBlockHeader, ValidatorBlockSignature};
+    use tari_sidechain::{CompressedPublicKey, SidechainBlockHeader, ValidatorBlockSignature};
     use tari_template_lib_types::{ComponentAddress, ObjectKey};
 
     use super::*;

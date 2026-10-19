@@ -6,6 +6,7 @@ use std::{cmp, fmt::Display, ops::RangeInclusive};
 use rand::seq::IndexedRandom;
 use serde::{Deserialize, Serialize};
 use tari_engine_types::{SubstateVersion, substate::SubstateId};
+use tari_sidechain::SigningCommittee;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{Epoch, NumPreshards, ShardGroup, SubstateAddress, VersionedSubstateIdRef, VotePower};
@@ -167,6 +168,18 @@ impl<TAddr: PartialEq> Committee<TAddr> {
 
     pub fn into_public_keys(self) -> impl Iterator<Item = RistrettoPublicKeyBytes> {
         self.members.into_iter().map(|m| m.public_key)
+    }
+}
+
+impl<TAddr: PartialEq> SigningCommittee for Committee<TAddr> {
+    fn len(&self) -> usize {
+        self.members.len()
+    }
+
+    fn member(&self, index: usize) -> Option<(&[u8], u64)> {
+        self.members
+            .get(index)
+            .map(|member| (member.public_key.as_bytes(), member.vote_power.value()))
     }
 }
 

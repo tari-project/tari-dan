@@ -379,9 +379,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
     ) -> Result<(), RpcStateSyncError> {
         let quorum_threshold = committee.quorum_threshold();
         checkpoint
-            .validate(self.network, epoch, quorum_threshold, |pk| {
-                Ok(committee.get_power_by_public_key(pk).unwrap_or_else(VotePower::zero))
-            })
+            .validate(self.network, epoch, quorum_threshold, committee)
             .map_err(|err| RpcStateSyncError::InvalidResponse(anyhow!("Checkpoint is not valid: {err}",)))?;
 
         info!(

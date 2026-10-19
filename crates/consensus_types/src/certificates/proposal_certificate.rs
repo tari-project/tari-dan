@@ -7,12 +7,11 @@ use borsh::BorshSerialize;
 use minicbor::{CborLen, Decode, Encode};
 use serde::{Deserialize, Serialize};
 use tari_ootle_common_types::{Epoch, NodeHeight, ShardGroup, hashing::quorum_certificate_id_hasher};
-use tari_sidechain::{FixedHash, QuorumDecision};
+use tari_sidechain::{FixedHash, QcSignatures, QuorumDecision, SignerBitmap};
 
 use crate::{
     bookkeeping::{HighPc, LeafBlock},
     ids::{BlockId, PcId},
-    validator_signature::ValidatorSignatureBytes,
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize, BorshSerialize, Encode, Decode, CborLen)]
@@ -33,8 +32,14 @@ pub struct ProposalCertificate {
     epoch: Epoch,
     #[n(4)]
     shard_group: ShardGroup,
+    #[cfg_attr(
+        feature = "ts",
+        ts(type = "{ Schnorr: { signers: string, signatures: Array<{ public_nonce: string, signature: string }> } }")
+    )]
+    // QcSignatures is from tari_sidechain (external) — bridge through serde.
     #[n(5)]
-    signatures: Vec<ValidatorSignatureBytes>,
+    #[cbor(with = "tari_bor::adapters::serde_bridge")]
+    signatures: QcSignatures,
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     // QuorumDecision is from tari_sidechain (external) — bridge through serde.
     #[n(6)]
@@ -49,7 +54,7 @@ impl ProposalCertificate {
         height: NodeHeight,
         epoch: Epoch,
         shard_group: ShardGroup,
-        signatures: Vec<ValidatorSignatureBytes>,
+        signatures: QcSignatures,
         decision: QuorumDecision,
     ) -> Self {
         Self {
@@ -70,8 +75,17 @@ impl ProposalCertificate {
             height: NodeHeight::zero(),
             epoch,
             shard_group,
-            signatures: vec![],
+            signatures: Self::genesis_signatures(),
             decision: QuorumDecision::Accept,
+        }
+    }
+
+    /// The signatures of the certificate that justifies an epoch's zero block, which every node derives without a
+    /// vote: no signers, for a committee of no members.
+    pub fn genesis_signatures() -> QcSignatures {
+        QcSignatures::Schnorr {
+            signers: SignerBitmap::default(),
+            signatures: vec![],
         }
     }
 
@@ -102,7 +116,7 @@ impl ProposalCertificate {
         self.shard_group
     }
 
-    pub fn signatures(&self) -> &[ValidatorSignatureBytes] {
+    pub fn signatures(&self) -> &QcSignatures {
         &self.signatures
     }
 
@@ -154,7 +168,7 @@ impl Display for ProposalCertificate {
             self.calculate_block_id(),
             self.calculate_id(),
             self.epoch,
-            self.signatures.len()
+            self.signatures.num_signatures()
         )
     }
 }

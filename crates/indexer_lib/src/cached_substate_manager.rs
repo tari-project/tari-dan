@@ -45,7 +45,6 @@ use tari_ootle_common_types::{
     SubstateRequirementRef,
     SubstateVersion,
     ToSubstateAddress,
-    VotePower,
     committee::Committee,
     displayable::Displayable,
     optional::Optional,
@@ -1325,9 +1324,7 @@ where
             .await?;
 
         let verified_tip = commit_proof
-            .validate(self.network, committee.quorum_threshold(), |pk| {
-                Ok(committee.get_power_by_public_key(pk).unwrap_or_else(VotePower::zero))
-            })
+            .validate(self.network, committee.quorum_threshold(), &*committee)
             .map_err(|e| IndexerError::SubstateProofVerificationFailed { details: e.to_string() })?;
         debug!(
             target: LOG_TARGET,
@@ -1397,6 +1394,7 @@ mod tests {
     use tari_epoch_manager::{EpochManagerError, EpochManagerEvent};
     use tari_ootle_common_types::{
         ValidatorSetHash,
+        VotePower,
         committee::{CommitteeInfo, CommitteeMember},
     };
     use tari_ootle_storage::global::models::ValidatorNode;
@@ -1904,11 +1902,13 @@ mod tests {
         .to_bytes()
     }
 
-    /// A commit proof of `root` at `height`, its block committed by a 3-chain of certificates each signed by `signers`.
+    /// A commit proof of `root` at `height`, its block committed by a 3-chain of certificates each signed by `signers`,
+    /// members of `committee`.
     fn signed_commit_proof(
         shard_group: ShardGroup,
         height: u64,
         root: tari_state_tree::TreeHash,
+        committee: &Committee<String>,
         signers: &[tari_crypto::ristretto::RistrettoSecretKey],
     ) -> Vec<u8> {
         use tari_common_types::types::CompressedPublicKey;
@@ -1921,13 +1921,23 @@ mod tests {
         use tari_sidechain::{
             CommitProofElement,
             ProposalVoteMessage,
+            QcSignatures,
             QuorumCertificate,
             QuorumDecision,
+            SignerBitmap,
             ValidatorBlockSignature,
-            ValidatorQcSignature,
         };
 
         let header = test_header(shard_group, height, root);
+        let mut signers = signers
+            .iter()
+            .map(|secret| {
+                let public_key = RistrettoPublicKey::from_secret_key(secret);
+                let public_key = RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap();
+                (committee.index_of_public_key(&public_key).unwrap(), secret)
+            })
+            .collect::<Vec<_>>();
+        signers.sort_by_key(|(index, _)| *index);
         let sign = |secret: &RistrettoSecretKey, message: FixedHash| {
             // A nonce unique to the signer and message.
             let mut nonce = [0u8; 64];
@@ -1936,16 +1946,10 @@ mod tests {
             let nonce = RistrettoSecretKey::from_uniform_bytes(&nonce).unwrap();
             let signature =
                 ValidatorSchnorrSignature::sign_with_nonce_and_message(secret, nonce, message.as_slice()).unwrap();
-            ValidatorQcSignature {
-                public_key: CompressedPublicKey::from_canonical_bytes(
-                    RistrettoPublicKey::from_secret_key(secret).as_bytes(),
-                )
-                .unwrap(),
-                signature: ValidatorBlockSignature::new(
-                    CompressedPublicKey::from_canonical_bytes(signature.get_public_nonce().as_bytes()).unwrap(),
-                    signature.get_signature().clone(),
-                ),
-            }
+            ValidatorBlockSignature::new(
+                CompressedPublicKey::from_canonical_bytes(signature.get_public_nonce().as_bytes()).unwrap(),
+                signature.get_signature().clone(),
+            )
         };
         let certify = |parent_id: FixedHash, header_hash: FixedHash, qc_height: u64| {
             let mut qc = QuorumCertificate {
@@ -1954,7 +1958,10 @@ mod tests {
                 protocol_version: header.protocol_version,
                 epoch: header.epoch,
                 height: qc_height,
-                signatures: vec![],
+                signatures: QcSignatures::Schnorr {
+                    signers: SignerBitmap::default(),
+                    signatures: vec![],
+                },
                 decision: QuorumDecision::Accept,
             };
             let block_id = qc.calculate_justified_block();
@@ -1966,7 +1973,10 @@ mod tests {
                 qc_height,
             )
             .calculate_hash();
-            qc.signatures = signers.iter().map(|secret| sign(secret, message)).collect();
+            qc.signatures = QcSignatures::Schnorr {
+                signers: SignerBitmap::from_indices(committee.len(), signers.iter().map(|(index, _)| *index)).unwrap(),
+                signatures: signers.iter().map(|(_, secret)| sign(secret, message)).collect(),
+            };
             qc
         };
         // The proof walks the chain from its tip back to the committed block: each certificate justifies the parent
@@ -2120,12 +2130,13 @@ mod tests {
 
     /// A global substate up at `R1` and down at `R2`, with `R1`'s commit proof naming `up_group`.
     fn global_down_proof(up_group: ShardGroup) -> (SubstateId, Vec<u8>, DownProofAnchor, tari_state_tree::TreeHash) {
-        global_down_proof_signed_by(up_group, &[])
+        global_down_proof_signed_by(up_group, &Committee::empty(), &[])
     }
 
     /// [`global_down_proof`] with `R1`'s commit proof signed by `signers`, or unsigned if there are none.
     fn global_down_proof_signed_by(
         up_group: ShardGroup,
+        committee: &Committee<String>,
         signers: &[tari_crypto::ristretto::RistrettoSecretKey],
     ) -> (SubstateId, Vec<u8>, DownProofAnchor, tari_state_tree::TreeHash) {
         use tari_engine_types::published_template::PublishedTemplateAddress;
@@ -2164,7 +2175,7 @@ mod tests {
         let up_commit_proof = if signers.is_empty() {
             unsigned_commit_proof(up_group, 2, r1.root())
         } else {
-            signed_commit_proof(up_group, 2, r1.root(), signers)
+            signed_commit_proof(up_group, 2, r1.root(), committee, signers)
         };
         let up_root = DownProofAnchor::from(unvalidated_tip(
             &CommittedBlockProof::from_bytes(&up_commit_proof).unwrap(),
@@ -2253,13 +2264,13 @@ mod tests {
             .map(|(secret, _)| secret.clone())
             .collect::<Vec<_>>();
 
-        let (id, proof, _, r2_root) = global_down_proof_signed_by(group(1, 2), &signers);
+        let (id, proof, _, r2_root) = global_down_proof_signed_by(group(1, 2), &committee, &signers);
         let (mut manager, _) = manager(FakeNetwork {
             down_with_proof: [(
                 id.clone(),
                 (SubstateVersion::ZERO, SubstateProofData {
                     substate_value_proof: vec![],
-                    commit_proof: signed_commit_proof(group(1, 2), 4, r2_root, &signers),
+                    commit_proof: signed_commit_proof(group(1, 2), 4, r2_root, &committee, &signers),
                     proof_epoch: 0,
                     substate_down_proof: Some(proof),
                     destroyed_at_state_version: Some(2),
@@ -3206,7 +3217,7 @@ mod tests {
 
         let id = component_id(1);
         let (substate, value_proof, root) = proven_up(&id);
-        let commit_proof = signed_commit_proof(all_shards(), anchor_height, root, &signers);
+        let commit_proof = signed_commit_proof(all_shards(), anchor_height, root, &committee, &signers);
         let (mut manager, _) = manager(FakeNetwork {
             up_with_proof: [(
                 id.clone(),

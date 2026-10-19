@@ -9,13 +9,17 @@ use indexmap::IndexMap;
 use minicbor::{CborLen, Decode, Encode};
 use ootle_network::Network;
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::CompressedPublicKey;
-use tari_crypto::tari_utilities::ByteArray;
 use tari_engine_types::ProtocolVersion;
 use tari_ootle_common_types::{Epoch, ShardGroup, ValidatorSetHash, VotePower, shard::Shard};
-use tari_sidechain::{CommandCommitProof, FixedHash, SidechainBlockHeader, SidechainProofValidationError, ToCommand};
+use tari_sidechain::{
+    CommandCommitProof,
+    FixedHash,
+    SidechainBlockHeader,
+    SidechainProofValidationError,
+    SigningCommittee,
+    ToCommand,
+};
 use tari_state_tree::{SPARSE_MERKLE_PLACEHOLDER_HASH, StateTreeError, TreeHash, Version, compute_shard_group_root};
-use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{
     StateStoreReadTransaction,
@@ -158,7 +162,7 @@ impl EpochCheckpoint {
         network: Network,
         epoch: Epoch,
         quorum_threshold: VotePower,
-        check_vn: impl Fn(&RistrettoPublicKeyBytes) -> Result<VotePower, SidechainProofValidationError>,
+        committee: &dyn SigningCommittee,
     ) -> Result<(), EpochCheckpointValidationError> {
         if self.epoch() != epoch {
             return Err(EpochCheckpointValidationError::InvalidEpochCheckpoint(anyhow!(
@@ -171,17 +175,8 @@ impl EpochCheckpoint {
         self.validate_well_formed()?;
 
         // Validate the proof
-        self.proof.validate_committed(
-            network.as_byte(),
-            quorum_threshold.value(),
-            &|pk: &CompressedPublicKey| {
-                let pk_bytes = RistrettoPublicKeyBytes::from_bytes(pk.as_bytes())
-                    // Should not be possible - however, since CompressedPublicKey currently represented using a Vec<u8>
-                    // it is possible, in theory, to have a CompressedPublicKey that is any size.
-                    .map_err(SidechainProofValidationError::internal_error)?;
-                check_vn(&pk_bytes).map(|power| power.value())
-            },
-        )?;
+        self.proof
+            .validate_committed(network.as_byte(), quorum_threshold.value(), committee)?;
 
         Ok(())
     }

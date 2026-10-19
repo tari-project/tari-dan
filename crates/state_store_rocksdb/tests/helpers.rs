@@ -384,7 +384,7 @@ pub fn create_qc(block: &LeafBlock) -> ProposalCertificate {
         block.height(),
         block.epoch(),
         ShardGroup::all_shards(num_preshards()),
-        vec![],
+        ProposalCertificate::genesis_signatures(),
         QuorumDecision::Accept,
     )
 }
@@ -450,7 +450,7 @@ pub fn create_foreign_proposal(parent_id: BlockId, epoch: Epoch) -> ForeignPropo
         NodeHeight(1),
         epoch,
         shard_group,
-        vec![],
+        ProposalCertificate::genesis_signatures(),
         QuorumDecision::Accept,
     );
 
@@ -503,7 +503,7 @@ pub fn create_foreign_proposal(parent_id: BlockId, epoch: Epoch) -> ForeignPropo
                 epoch: foreign_block.epoch().as_u64(),
                 height: foreign_block.height().as_u64(),
                 protocol_version: foreign_block.header().protocol_version().as_u32(),
-                signatures: vec![],
+                signatures: ProposalCertificate::genesis_signatures(),
                 decision: QuorumDecision::Accept,
             },
         )],

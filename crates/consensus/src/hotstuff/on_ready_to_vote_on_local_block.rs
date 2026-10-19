@@ -7,7 +7,13 @@ use log::*;
 use tari_consensus_types::{BlockId, Decision, LastVoted, LeafBlock, PcId, ProposalCertificate};
 use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_engine_types::commit_result::{AbortReason, RejectReason};
-use tari_ootle_common_types::{Epoch, ShardGroup, ValidatorSetHash, committee::CommitteeInfo, optional::Optional};
+use tari_ootle_common_types::{
+    Epoch,
+    ShardGroup,
+    ValidatorSetHash,
+    committee::{Committee, CommitteeInfo},
+    optional::Optional,
+};
 use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
@@ -128,6 +134,7 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         valid_block: &ValidBlock,
         local_committee_info: &CommitteeInfo,
+        local_committee: &Committee<TConsensusSpec::Addr>,
         proposer_claim_public_key_bytes: &RistrettoPublicKeyBytes,
         can_propose_epoch_end: bool,
         // Used to ratify what an end-of-epoch block commits the next epoch to before voting. Where this node does
@@ -164,7 +171,7 @@ where TConsensusSpec: ConsensusSpec
             tx,
             |tx, _prev_locked, block, _justify_qc| self.on_lock_block(tx, block),
             |tx, mut commit_block| {
-                let committed = self.on_commit(tx, block_qc, &block_qc_id, &commit_block)?;
+                let committed = self.on_commit(tx, local_committee, block_qc, &block_qc_id, &commit_block)?;
                 // NOTE: update the commit QC in the local copy so that foreign proposals can obtain the commit QC
                 // on_commit already sets the persisted commit_qc for the block
                 commit_block.set_commit_qc(block_qc_id);
@@ -1849,11 +1856,12 @@ where TConsensusSpec: ConsensusSpec
     fn on_commit(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        local_committee: &Committee<TConsensusSpec::Addr>,
         commit_qc: &ProposalCertificate,
         commit_qc_id: &PcId,
         block: &Block,
     ) -> Result<Vec<TransactionPoolRecord>, HotStuffError> {
-        let committed_transactions = self.finalize_block(tx, commit_qc, commit_qc_id, block)?;
+        let committed_transactions = self.finalize_block(tx, local_committee, commit_qc, commit_qc_id, block)?;
         debug!(
             target: LOG_TARGET,
             "✅ COMMIT block {}",
@@ -1904,6 +1912,7 @@ where TConsensusSpec: ConsensusSpec
     fn finalize_block(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        local_committee: &Committee<TConsensusSpec::Addr>,
         commit_qc: &ProposalCertificate,
         commit_qc_id: &PcId,
         block: &Block,
@@ -1995,15 +2004,37 @@ where TConsensusSpec: ConsensusSpec
             );
         }
 
+        // A committed block and its justify are in the epoch of the local committee that signed the justify.
+        let justify = block.justify();
+        if justify.epoch() != block.epoch() {
+            return Err(HotStuffError::InvariantError(format!(
+                "Committed block {block} is justified by a certificate from epoch {}",
+                justify.epoch()
+            )));
+        }
+        let signers = justify
+            .signatures()
+            .signers()
+            .iter()
+            .map(|index| {
+                local_committee
+                    .get(index)
+                    .map(|member| &member.public_key)
+                    .ok_or_else(|| {
+                        HotStuffError::InvariantError(format!(
+                            "Justify of committed block {block} names signer {index}, but the local committee has {} \
+                             members",
+                            local_committee.len()
+                        ))
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         let thresholds = self.config.consensus_constants.liveness_thresholds();
         tx.validator_epoch_stats_updates(
-            block.justify().epoch(),
+            justify.epoch(),
             block.height(),
-            block
-                .justify()
-                .signatures()
-                .iter()
-                .map(|s| s.public_key())
+            signers
+                .into_iter()
                 .map(|pk| ValidatorStatsUpdate::new(pk, thresholds).record_vote()),
         )?;
         block.clear_leader_failure_count(tx, thresholds)?;
@@ -2322,7 +2353,7 @@ mod tests {
                     parent.height(),
                     parent.epoch(),
                     ShardGroup::all_shards(NUM_PRESHARDS),
-                    vec![],
+                    ProposalCertificate::genesis_signatures(),
                     QuorumDecision::Accept,
                 );
                 let header = BlockHeader::create_unsigned(

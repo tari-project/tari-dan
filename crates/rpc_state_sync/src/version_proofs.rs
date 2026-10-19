@@ -4,7 +4,7 @@
 use anyhow::anyhow;
 use ootle_network::Network;
 use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
-use tari_ootle_common_types::{Epoch, ShardGroup, VotePower, optional::Optional};
+use tari_ootle_common_types::{Epoch, ShardGroup, optional::Optional};
 use tari_ootle_p2p::PeerAddress;
 use tari_ootle_storage::consensus_models::{CommittedBlockProof, STATE_VERSION_PROOF_INTERVAL};
 use tari_state_tree::Version;
@@ -59,9 +59,7 @@ where TEpochManager: EpochManagerReader<Addr = PeerAddress> + Sync
                 .await,
         )?;
         commit_proof
-            .validate(self.network, committee.quorum_threshold(), |pk| {
-                Ok(committee.get_power_by_public_key(pk).unwrap_or_else(VotePower::zero))
-            })
+            .validate(self.network, committee.quorum_threshold(), &*committee)
             .map_err(|e| RpcStateSyncError::InvalidResponse(anyhow!("Invalid commit proof: {e}")))?;
         Ok(())
     }

@@ -403,7 +403,7 @@ impl<TConsensusSpec: ConsensusSpec> MessageBuffer<TConsensusSpec> {
                     "Received valid 2f+1 QC for {} ({} signatures) while consensus view is still in {}: network \
                      rolled over without us — escalating to state sync.",
                     qc_epoch,
-                    qc.signatures().len(),
+                    qc.signatures().num_signatures(),
                     current_epoch,
                 );
                 warn!(target: LOG_TARGET, "🚨 {reason}");
@@ -757,7 +757,7 @@ mod tests {
                 NodeHeight(height),
                 Epoch(epoch),
                 shard_group,
-                vec![],
+                ProposalCertificate::genesis_signatures(),
                 QuorumDecision::Accept,
             )
         }

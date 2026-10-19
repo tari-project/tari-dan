@@ -25,15 +25,7 @@ use tari_epoch_manager::{
 };
 use tari_indexer_client::event::{IndexerEvent, NewEpochEvent, TransactionEvent, TransactionFinalizedEvent};
 use tari_networking::NetworkingHandle;
-use tari_ootle_common_types::{
-    Epoch,
-    ShardGroup,
-    StateVersion,
-    ValidatorSetHash,
-    VotePower,
-    optional::Optional,
-    shard::Shard,
-};
+use tari_ootle_common_types::{Epoch, ShardGroup, StateVersion, ValidatorSetHash, optional::Optional, shard::Shard};
 use tari_ootle_p2p::{PeerAddress, TariMessagingSpec, proto::rpc};
 use tari_ootle_storage::{
     StorageError,
@@ -1455,9 +1447,7 @@ async fn verify_checkpoint<TEpochManager: EpochManagerReader>(
         });
     };
     checkpoint
-        .validate(network, epoch, committee.quorum_threshold(), |pk| {
-            Ok(committee.get_power_by_public_key(pk).unwrap_or_else(VotePower::zero))
-        })
+        .validate(network, epoch, committee.quorum_threshold(), &*committee)
         .map_err(|e| NetworkStateSyncError::InvalidCheckpoint {
             details: format!("Checkpoint for {epoch}, shard group {shard_group} is not valid: {e}"),
         })?;
@@ -2377,6 +2367,7 @@ mod tests {
         use tari_epoch_manager::EpochManagerError;
         use tari_ootle_common_types::{
             SubstateAddress,
+            VotePower,
             committee::{Committee, CommitteeInfo, CommitteeMember},
         };
         use tari_ootle_storage::{

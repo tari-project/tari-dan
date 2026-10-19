@@ -421,6 +421,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             .unwrap_or_else(|| ProposedBlockChangeSet::new(valid_block.block().as_leaf()));
 
         let store = self.store.clone();
+        let committee = local_committee.clone();
 
         let (process_result, mut change_set) = task::spawn_blocking(move || {
             store.with_write_tx(|tx| {
@@ -428,6 +429,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     tx,
                     &valid_block,
                     &local_committee_info,
+                    &committee,
                     &proposer_claim_public_key_bytes,
                     can_propose_epoch_end,
                     local_next_epoch,

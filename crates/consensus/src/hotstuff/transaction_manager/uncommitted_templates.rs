@@ -146,7 +146,7 @@ mod tests {
             parent.height(),
             parent.epoch(),
             ShardGroup::all_shards(NumPreshards::P256),
-            vec![],
+            ProposalCertificate::genesis_signatures(),
             QuorumDecision::Accept,
         );
         Block::create(

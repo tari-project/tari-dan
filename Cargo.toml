@@ -401,4 +401,3 @@ opt-level = 1
 #tari_comms_dht = { path = "../tari/comms/dht" }
 #tari_metrics = { path = "../tari/infrastructure/metrics" }
 #tari_libtor = { path = "../tari/infrastructure/libtor" }
-

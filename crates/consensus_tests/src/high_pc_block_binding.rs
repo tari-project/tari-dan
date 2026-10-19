@@ -54,7 +54,7 @@ fn certificate_for(block: &Block, height: NodeHeight, epoch: Epoch) -> ProposalC
         height,
         epoch,
         block.shard_group(),
-        vec![],
+        ProposalCertificate::genesis_signatures(),
         QuorumDecision::Accept,
     );
     assert_eq!(pc.calculate_block_id(), *block.id());

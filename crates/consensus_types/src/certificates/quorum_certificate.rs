@@ -31,7 +31,7 @@ impl QuorumCertificateRef<'_> {
 
     pub fn num_signatures(&self) -> usize {
         match self {
-            Self::ProposalCertificate(pc) => pc.signatures().len(),
+            Self::ProposalCertificate(pc) => pc.signatures().num_signatures(),
             Self::TimeoutCertificate(tc) => tc.num_signatures(),
         }
     }
