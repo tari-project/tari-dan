@@ -658,6 +658,9 @@ impl NetworkWideStateSync {
                     continue;
                 },
             };
+            if cancel.is_cancelled() {
+                break;
+            }
             // Wallets verify the validator set of an epoch through the checkpoint that ends the epoch
             // before it, so a missing checkpoint is fetched again after the work interval.
             let checkpoints_due_at =
