@@ -32,6 +32,7 @@ mod metrics;
 
 mod early_close;
 mod router;
+mod write_timeout;
 
 use std::{
     cmp,
@@ -73,7 +74,10 @@ use crate::{
     message::{RpcMethod, RpcResponse},
     notify::ProtocolNotificationRx,
     proto,
-    server::early_close::{EarlyClose, EarlyCloseError},
+    server::{
+        early_close::{EarlyClose, EarlyCloseError},
+        write_timeout::WriteTimeout,
+    },
 };
 
 const LOG_TARGET: &str = "libp2p::rpc::server";
@@ -169,6 +173,7 @@ pub struct RpcServerBuilder {
     minimum_keepalive_interval: Duration,
     handshake_timeout: Duration,
     idle_session_timeout: Duration,
+    write_timeout: Duration,
 }
 
 impl RpcServerBuilder {
@@ -202,17 +207,30 @@ impl RpcServerBuilder {
     }
 
     /// Sets the longest deadline the server honours. A client asking for a longer one is served this
-    /// one, so that a single request cannot hold its session for an unbounded span.
+    /// one, so that a single request cannot make its session wait an unbounded span for the service
+    /// to produce its response or the next item of it.
     pub fn with_maximum_client_deadline(mut self, deadline: Duration) -> Self {
         self.maximum_client_deadline = deadline;
         self
     }
 
     /// Sets how long a session may wait for its next request before the server closes it and
-    /// releases its slot. Only the gap between requests counts: a request being served is bounded by
-    /// its deadline instead.
+    /// releases its slot. Only the gap between requests counts. While a request is served, its
+    /// deadline bounds each wait for the service and the write timeout each stalled write; neither
+    /// caps how long the whole request takes.
     pub fn with_idle_session_timeout(mut self, timeout: Duration) -> Self {
         self.idle_session_timeout = timeout;
+        self
+    }
+
+    /// Sets how long a write to a session may go without the client taking any of it before the server closes the
+    /// session and releases its slot. A client that stops reading fills the transport's flow-control window, after
+    /// which nothing more can be written to it, so this bounds how long such a client holds its session whatever
+    /// the server was sending. Any write that goes ahead, however small, restarts the timeout: this bounds a stall,
+    /// not the time taken to serve a request, so a client that keeps taking some of a response is served for as
+    /// long as the response lasts.
+    pub fn with_write_timeout(mut self, timeout: Duration) -> Self {
+        self.write_timeout = timeout;
         self
     }
 
@@ -259,6 +277,7 @@ impl Default for RpcServerBuilder {
             minimum_keepalive_interval: crate::DEFAULT_MINIMUM_KEEPALIVE_INTERVAL,
             handshake_timeout: Duration::from_secs(5),
             idle_session_timeout: Duration::from_secs(2 * 60),
+            write_timeout: Duration::from_secs(60),
         }
     }
 }
@@ -392,6 +411,7 @@ where
                     peer_id
                 );
 
+                let substream = WriteTimeout::new(substream, self.config.write_timeout);
                 let framed = framing::canonical(substream, RPC_MAX_FRAME_SIZE);
                 if let Err(err) = self.try_initiate_service(notification.protocol, peer_id, framed).await {
                     debug!(target: LOG_TARGET, "Unable to spawn RPC service: {}", err);
@@ -432,7 +452,7 @@ where
         &mut self,
         protocol: StreamProtocol,
         peer_id: PeerId,
-        framed: CanonicalFraming<TSubstream>,
+        framed: CanonicalFraming<WriteTimeout<TSubstream>>,
     ) -> Result<(), RpcServerError> {
         if !self.executor.can_spawn() {
             reject_session(peer_id, framed, HandshakeRejectReason::NoSessionsAvailable);
@@ -1054,6 +1074,7 @@ fn err_to_log_level(err: &io::Error) -> log::Level {
         ErrorKind::ConnectionAborted |
         ErrorKind::BrokenPipe |
         ErrorKind::WriteZero |
+        ErrorKind::TimedOut |
         ErrorKind::UnexpectedEof => log::Level::Debug,
         _ => log::Level::Error,
     }

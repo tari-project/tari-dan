@@ -651,6 +651,29 @@ async fn an_idle_session_is_closed_and_its_slot_released() {
 }
 
 #[tokio::test]
+async fn a_session_whose_client_stops_reading_is_closed_and_its_slot_released() {
+    let write_timeout = Duration::from_millis(500);
+    let service_impl = GreetingService::default();
+    let server = TestRpcServer::spawn(
+        service_impl.clone(),
+        RpcServer::builder()
+            .with_maximum_simultaneous_sessions(1)
+            .with_write_timeout(write_timeout),
+    );
+
+    // Neither reads nor writes once the stream has started, so nothing can free the window it fills.
+    let _stalled = raw_session_streaming(&server, 4).await;
+    assert_eq!(
+        refusal_reason(server.dial()).await,
+        HandshakeRejectReason::NoSessionsAvailable.to_string()
+    );
+
+    time::sleep(write_timeout).await;
+    until_no_stream_is_live(&service_impl).await;
+    wait_for_session(&server).await;
+}
+
+#[tokio::test]
 async fn max_per_client_sessions() {
     let server = TestRpcServer::spawn(
         GreetingService::default(),
