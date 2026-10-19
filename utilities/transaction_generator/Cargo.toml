@@ -16,6 +16,10 @@ tari_crypto = { workspace = true }
 ootle_byte_type = { workspace = true, features = ["crypto"] }
 
 tari_indexer_client = { workspace = true, features = ["client"] }
+tari_engine_types = { workspace = true }
+tari_template_builtin = { workspace = true }
+
+bounded-vec = { workspace = true }
 
 anyhow = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros"] }
@@ -31,7 +35,6 @@ once_cell = { workspace = true, features = ["critical-section"] }
 [dev-dependencies]
 # Used by tests/max_compute.rs to measure the max_compute template's metered cost via the engine.
 tari_template_test_tooling = { workspace = true }
-tari_engine_types = { workspace = true }
 
 [package.metadata.cargo-machete]
 ignored = [
