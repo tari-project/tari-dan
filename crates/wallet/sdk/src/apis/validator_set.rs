@@ -238,9 +238,9 @@ where
         Ok(synced)
     }
 
-    /// Anchors anew on the validator set the latest checkpoint names, forgetting every set trusted before. This trusts
-    /// the indexer as first use does, and is how the wallet recovers when the network's checkpoints do not walk from
-    /// its anchor.
+    /// Anchors anew on the validator set the latest checkpoint names, or on the consensus epoch's set before the
+    /// network's first checkpoint, forgetting every set trusted before. This trusts the indexer as first use does, and
+    /// is how the wallet recovers when the network's checkpoints do not walk from its anchor.
     pub async fn reanchor(&self) -> Result<TrustedValidatorSet, ValidatorSetApiError> {
         let _guard = self.shared.lock.lock().await;
         let Some(latest_checkpoint) = self.latest_checkpoint().await? else {
@@ -314,6 +314,9 @@ where
     /// Anchors on the validator set of the epoch the network's consensus is in, with the walked shard group's committee
     /// in it, for a network that has not ended an epoch yet and so has no checkpoint to anchor on.
     ///
+    /// The epoch is the one the indexer observed the validators execute in, so that every receipt proven after the
+    /// anchor is proven in an epoch whose validator set the wallet trusts.
+    ///
     /// This takes the indexer at its word on the validator set, as anchoring on a first-use checkpoint does, whose
     /// quorum certificate no trusted committee can check either. The first end-of-epoch checkpoint must carry a quorum
     /// of the anchored committee's signatures for the walk to pass it.
@@ -323,9 +326,10 @@ where
     ) -> Result<TrustedValidatorSet, ValidatorSetApiError> {
         let epoch = self
             .network_interface
-            .get_current_epoch()
+            .get_consensus_epoch()
             .await
-            .map_err(network_error)?;
+            .map_err(network_error)?
+            .ok_or(ValidatorSetApiError::ConsensusEpochUnobserved)?;
         let committee = self
             .network_interface
             .get_committee(epoch, WALK_SHARD)
@@ -503,6 +507,11 @@ pub enum ValidatorSetApiError {
     Unverified(#[from] LightClientError),
     #[error("The indexer served no checkpoint ending {epoch} to walk the validator set handover through")]
     CheckpointNotServed { epoch: Epoch },
+    #[error(
+        "The network has no checkpoint yet, and the indexer has not observed which epoch the validators are in, so \
+         the wallet has no validator set to anchor on. It retries shortly."
+    )]
+    ConsensusEpochUnobserved,
 }
 
 impl ValidatorSetApiError {

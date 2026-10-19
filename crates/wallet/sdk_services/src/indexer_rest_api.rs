@@ -661,6 +661,12 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
         Ok(stats.consensus_epoch.unwrap_or(stats.current_epoch))
     }
 
+    async fn get_consensus_epoch(&self) -> Result<Option<Epoch>, Self::Error> {
+        let client = self.tracked_client();
+        let stats = self.observe(&client, client.get_epoch_manager_stats()).await?;
+        Ok(stats.consensus_epoch)
+    }
+
     async fn wait_until_ready(&self) -> Result<(), Self::Error> {
         let client = self.tracked_client();
         self.observe(&client, client.wait_until_ready()).await?;

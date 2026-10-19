@@ -52,6 +52,8 @@ struct ProvingNetworkState {
     first_epoch: Epoch,
     /// Whether the indexer fails every request about the validator sets, as when it cannot be reached.
     unreachable: bool,
+    /// Whether the indexer has observed the epoch the validators execute in.
+    observes_consensus_epoch: bool,
     committees: HashMap<Epoch, (ValidatorSetCommittee, ValidatorSetCommittee)>,
     result: Option<TransactionQueryResult>,
     /// Whether the indexer serves the latest checkpoint but none of the ones before it.
@@ -95,6 +97,7 @@ impl ProvingNetwork {
                 latest: Some(latest),
                 first_epoch: sets[0].epoch,
                 unreachable: false,
+                observes_consensus_epoch: true,
                 committees,
                 result: None,
                 withholds_walk: false,
@@ -134,6 +137,12 @@ impl ProvingNetwork {
 
     pub fn reconnect(&self) {
         self.state.lock().unwrap().unreachable = false;
+    }
+
+    /// Sets whether the indexer has observed the epoch the validators execute in, which it has not before it sees a
+    /// block from every committee.
+    pub fn set_observes_consensus_epoch(&self, observes: bool) {
+        self.state.lock().unwrap().observes_consensus_epoch = observes;
     }
 
     pub fn submissions(&self) -> usize {
@@ -321,6 +330,9 @@ impl WalletNetworkInterface for ProvingNetwork {
         // Lets a concurrent walk run while this request is in flight.
         tokio::task::yield_now().await;
         let mut state = self.state.lock().unwrap();
+        if state.unreachable {
+            return Err(ProvingNetworkError::Unreachable);
+        }
         state.walk_requests += 1;
         let Some(latest) = state.latest.filter(|_| !state.withholds_walk) else {
             return Ok(vec![]);
@@ -347,15 +359,22 @@ impl WalletNetworkInterface for ProvingNetwork {
         })
     }
 
-    /// The epoch after the latest checkpoint's, or the first validator set's before any.
     async fn get_current_epoch(&self) -> Result<Epoch, Self::Error> {
+        panic!("ProvingNetwork called")
+    }
+
+    /// The epoch after the latest checkpoint's, or the first validator set's before any.
+    async fn get_consensus_epoch(&self) -> Result<Option<Epoch>, Self::Error> {
         let state = self.state.lock().unwrap();
         if state.unreachable {
             return Err(ProvingNetworkError::Unreachable);
         }
-        Ok(state
-            .latest
-            .map_or(state.first_epoch, |latest| state.checkpoints[latest].epoch + Epoch(1)))
+        if !state.observes_consensus_epoch {
+            return Ok(None);
+        }
+        Ok(Some(state.latest.map_or(state.first_epoch, |latest| {
+            state.checkpoints[latest].epoch + Epoch(1)
+        })))
     }
 
     async fn wait_until_ready(&self) -> Result<(), Self::Error> {

@@ -88,6 +88,8 @@ struct TestIndexerState {
     latest: Option<usize>,
     /// The epoch of the first validator set.
     first_epoch: Epoch,
+    /// Whether the indexer has observed the epoch the validators execute in.
+    observes_consensus_epoch: bool,
     /// The epoch whose checkpoint the indexer has not stored yet, as during a backfill.
     unserved: Option<Epoch>,
     committees: HashMap<Epoch, (ValidatorSetCommittee, ValidatorSetCommittee)>,
@@ -132,6 +134,7 @@ impl TestIndexer {
             checkpoints,
             latest,
             first_epoch: sets[0].epoch,
+            observes_consensus_epoch: true,
             unserved: None,
             committees,
             substates: HashMap::new(),
@@ -175,6 +178,12 @@ impl TestIndexer {
     /// Leaves the checkpoint of `epoch` out of the pages of checkpoints the indexer lists.
     pub(crate) fn leave_unserved(&self, epoch: Epoch) {
         self.state.lock().unwrap().unserved = Some(epoch);
+    }
+
+    /// Sets whether the indexer has observed the epoch the validators execute in, which it has not before it sees a
+    /// block from every committee.
+    pub(crate) fn set_observes_consensus_epoch(&self, observes: bool) {
+        self.state.lock().unwrap().observes_consensus_epoch = observes;
     }
 
     pub(crate) fn set_latest(&self, latest: usize) {
@@ -231,7 +240,8 @@ async fn latest_checkpoint(State(state): Shared) -> Response {
     .into_response()
 }
 
-/// The epoch after the latest checkpoint's as both the current and the consensus epoch.
+/// The epoch after the latest checkpoint's as both the current and the consensus epoch, or no consensus epoch while it
+/// is unobserved.
 async fn epoch_manager_stats(State(state): Shared) -> Json<GetEpochManagerStatsResponse> {
     let state = state.lock().unwrap();
     let epoch = state
@@ -239,7 +249,7 @@ async fn epoch_manager_stats(State(state): Shared) -> Json<GetEpochManagerStatsR
         .map_or(state.first_epoch, |latest| state.checkpoints[latest].epoch + Epoch(1));
     Json(GetEpochManagerStatsResponse {
         current_epoch: epoch,
-        consensus_epoch: Some(epoch),
+        consensus_epoch: state.observes_consensus_epoch.then_some(epoch),
         current_block_height: 0,
         current_block_hash: Hash32::default(),
     })

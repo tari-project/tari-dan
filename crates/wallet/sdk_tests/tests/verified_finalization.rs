@@ -543,6 +543,30 @@ async fn before_the_first_checkpoint_the_wallet_anchors_on_the_current_epochs_se
 }
 
 #[tokio::test]
+async fn before_the_first_checkpoint_a_wallet_holds_back_until_the_consensus_epoch_is_observed() {
+    let sets = sets();
+    let network = ProvingNetwork::new(&sets, 0);
+    network.withhold_checkpoints();
+    network.set_observes_consensus_epoch(false);
+    let transaction = build_transaction();
+    let transaction_id = transaction.calculate_id();
+    let test = wallet(network.clone(), &transaction);
+    let transaction_api = test.sdk().transaction_api();
+
+    let err = test.sdk().validator_set_api().sync().await.unwrap_err();
+    assert!(matches!(err, ValidatorSetApiError::ConsensusEpochUnobserved), "{err}");
+    let submission = transaction_api.submit_transaction(transaction_id).await.unwrap();
+    assert_eq!(submission, Submission::Deferred);
+    assert_eq!(network.submissions(), 0);
+
+    network.set_observes_consensus_epoch(true);
+    let submission = transaction_api.submit_transaction(transaction_id).await.unwrap();
+    assert_eq!(submission, Submission::Submitted);
+    let anchor = test.sdk().validator_set_api().anchor().unwrap().unwrap();
+    assert_eq!(anchor.validator_set.epoch(), Epoch(1));
+}
+
+#[tokio::test]
 async fn a_set_anchored_before_the_first_checkpoint_walks_through_it() {
     let sets = sets();
     let network = ProvingNetwork::new(&sets, 0);

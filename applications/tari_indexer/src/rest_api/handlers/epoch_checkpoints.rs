@@ -12,11 +12,15 @@ use tari_indexer_client::types::{
 use tari_ootle_common_types::{Epoch, optional::Optional, shard::Shard};
 use tari_ootle_storage::consensus_models::EpochCheckpoint;
 
-use crate::rest_api::{
-    context::HandlerContext,
-    error::ErrorResponse,
-    handlers::HandlerResult,
-    proofs::{committee_proved_against, to_checkpoint_entry},
+use crate::{
+    rest_api::{
+        context::HandlerContext,
+        error::ErrorResponse,
+        handlers::HandlerResult,
+        proofs::{committee_proved_against, to_checkpoint_entry},
+    },
+    storage_sqlite::SqliteIndexerStore,
+    store::ReadOnlyStore,
 };
 
 const DEFAULT_LIMIT: u32 = 20;
@@ -101,18 +105,26 @@ pub async fn get_latest_epoch_checkpoint(
     axum::extract::Query(req): axum::extract::Query<GetLatestEpochCheckpointRequest>,
 ) -> HandlerResult<Response> {
     let committee_shard = committee_shard(req.include_committees, req.shard)?;
-    let checkpoint = context
-        .read_only_store()
-        .epoch_checkpoint_get_latest(req.shard)
-        .await
-        .optional()
-        .map_err(ErrorResponse::anyhow)?
-        .ok_or_else(|| ErrorResponse::not_found("This indexer holds no epoch checkpoint"))?;
+    let checkpoint = latest_stored_checkpoint(context.read_only_store(), req.shard).await?;
 
     let body = Json(GetLatestEpochCheckpointResponse {
         checkpoint: checkpoint_entry(&context, &checkpoint, committee_shard).await?,
     });
     Ok(context.apply_cache_control(body, RECENT_MAX_AGE_SECS))
+}
+
+/// The latest stored checkpoint, of the shard group containing `shard` when given. Not found while the store holds
+/// none, as before the network ends its first epoch.
+async fn latest_stored_checkpoint(
+    store: &ReadOnlyStore<SqliteIndexerStore>,
+    shard: Option<Shard>,
+) -> Result<EpochCheckpoint, ErrorResponse> {
+    store
+        .epoch_checkpoint_get_latest(shard)
+        .await
+        .optional()
+        .map_err(ErrorResponse::anyhow)?
+        .ok_or_else(|| ErrorResponse::not_found("This indexer holds no epoch checkpoint"))
 }
 
 /// The shard whose next-epoch committee to include, if committees were asked for.
@@ -208,6 +220,18 @@ mod tests {
             limit,
             shard: shard.map(Shard::from),
             include_committees,
+        }
+    }
+
+    #[tokio::test]
+    async fn an_empty_store_has_no_latest_checkpoint() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = SqliteIndexerStore::try_create(dir.path().join("indexer.db")).unwrap();
+        let store = ReadOnlyStore::new(store);
+
+        for shard in [None, Some(Shard::from(1u32))] {
+            let err = latest_stored_checkpoint(&store, shard).await.unwrap_err();
+            assert_eq!(err.status, axum::http::StatusCode::NOT_FOUND, "{}", err.error);
         }
     }
 

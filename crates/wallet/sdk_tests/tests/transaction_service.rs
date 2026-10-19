@@ -246,6 +246,10 @@ impl WalletNetworkInterface for ScriptedNetwork {
         panic!("ScriptedNetwork::get_current_epoch called")
     }
 
+    async fn get_consensus_epoch(&self) -> Result<Option<Epoch>, Self::Error> {
+        panic!("ScriptedNetwork::get_consensus_epoch called")
+    }
+
     async fn wait_until_ready(&self) -> Result<(), Self::Error> {
         Ok(())
     }

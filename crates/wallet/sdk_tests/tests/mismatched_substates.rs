@@ -306,6 +306,10 @@ impl WalletNetworkInterface for FixedSubstateNetwork {
         panic!("FixedSubstateNetwork called")
     }
 
+    async fn get_consensus_epoch(&self) -> Result<Option<tari_ootle_common_types::Epoch>, Self::Error> {
+        panic!("FixedSubstateNetwork called")
+    }
+
     async fn wait_until_ready(&self) -> Result<(), Self::Error> {
         Ok(())
     }
