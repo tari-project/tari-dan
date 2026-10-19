@@ -10,7 +10,7 @@ interface Store {
 }
 
 const useSettingsStore = create<Store>()((set) => ({
-  advancedUiFeatures: { enable_manifest: false },
+  advancedUiFeatures: { enable_manifest: false, enable_validator_set: false },
   setAdvancedUiFeatures: (features) => set({ advancedUiFeatures: features }),
 }));
 

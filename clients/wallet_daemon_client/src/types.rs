@@ -1528,6 +1528,9 @@ pub struct SettingsGetResponse {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
 pub struct AdvancedUiFeatures {
     pub enable_manifest: bool,
+    /// Shows the page that reports the validator sets the wallet trusts.
+    #[serde(default)]
+    pub enable_validator_set: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
