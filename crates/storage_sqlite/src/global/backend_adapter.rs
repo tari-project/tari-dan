@@ -500,26 +500,28 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
 
         debug!(target: LOG_TARGET, "Found {} validators", validators.len());
 
-        let mut committees = HashMap::with_capacity(shard_group.len());
+        let mut members = HashMap::<_, Vec<_>>::with_capacity(shard_group.len());
         for (vn, committee) in validators {
-            let validators = committees
+            members
                 .entry(committee.as_shard_group())
-                .or_insert_with(|| Committee::empty());
-
-            validators.members_mut().push(CommitteeMember {
-                address: DbValidatorNode::try_parse_address(&vn.address)?,
-                public_key: RistrettoPublicKeyBytes::from_bytes(&vn.public_key).map_err(|_| {
-                    SqliteStorageError::MalformedDbData(format!(
-                        "validator_nodes_get_overlapping_shard_group: Invalid public key in validator node record \
-                         id={}",
-                        vn.id
-                    ))
-                })?,
-                vote_power: VotePower::of(vn.power as u64),
-            });
+                .or_default()
+                .push(CommitteeMember {
+                    address: DbValidatorNode::try_parse_address(&vn.address)?,
+                    public_key: RistrettoPublicKeyBytes::from_bytes(&vn.public_key).map_err(|_| {
+                        SqliteStorageError::MalformedDbData(format!(
+                            "validator_nodes_get_overlapping_shard_group: Invalid public key in validator node record \
+                             id={}",
+                            vn.id
+                        ))
+                    })?,
+                    vote_power: VotePower::of(vn.power as u64),
+                });
         }
 
-        Ok(committees)
+        Ok(members
+            .into_iter()
+            .map(|(shard_group, members)| (shard_group, Committee::new(members)))
+            .collect())
     }
 
     fn validator_nodes_get_random_committee_member_from_shard_group(
@@ -595,15 +597,14 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
                 operation: "validator_nodes_get_committees",
             })?;
 
-        let mut committees = HashMap::new();
+        let mut members = HashMap::<_, Vec<_>>::new();
         for (shard_start, shard_end, address, public_key, power) in results {
             let addr = DbValidatorNode::try_parse_address(&address)?;
             let pk = RistrettoPublicKeyBytes::from_bytes(&public_key)
                 .map_err(|_| SqliteStorageError::MalformedDbData("Invalid public key".to_string()))?;
-            committees
+            members
                 .entry(ShardGroup::new(shard_start as u32, shard_end as u32))
-                .or_insert_with(Committee::empty)
-                .members_mut()
+                .or_default()
                 .push(CommitteeMember {
                     address: addr,
                     public_key: pk,
@@ -611,7 +612,10 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
                 });
         }
 
-        Ok(committees)
+        Ok(members
+            .into_iter()
+            .map(|(shard_group, members)| (shard_group, Committee::new(members)))
+            .collect())
     }
 
     fn insert_epoch(

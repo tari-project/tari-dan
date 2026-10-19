@@ -778,16 +778,16 @@ impl TestBuilder {
 
     pub fn add_committee(mut self, committee_num: u32, addresses: Vec<&'static str>) -> Self {
         let entry = self.committees.entry(committee_num).or_insert_with(Committee::empty);
-
-        for addr in addresses {
+        let added = addresses.into_iter().map(|addr| {
             let addr = TestAddress::new(addr);
             let (_, pk) = helpers::derive_keypair_from_address(&addr);
-            entry.members_mut().push(CommitteeMember {
+            CommitteeMember {
                 address: addr,
                 public_key: pk.to_byte_type(),
                 vote_power: VotePower::of(1),
-            });
-        }
+            }
+        });
+        *entry = entry.iter().cloned().chain(added).collect();
         self
     }
 

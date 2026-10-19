@@ -461,9 +461,8 @@ fn count_parked(validator: &Validator, blocks: &[Block]) -> usize {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn blocks_citing_unknown_transactions_do_not_stay_parked() {
     setup_logger();
-    let victim = TestAddress::new("1");
-    let sender = TestAddress::new("2");
     let mut test = Test::builder().add_committee(0, vec!["1", "2", "3", "4"]).start().await;
+    let [victim, sender, sentinel_proposer, _] = committee_in_rotation_order(&test).await;
     test.start_epoch(Epoch(1)).await;
     test.wait_for_all_validators_to_start_consensus().await;
 
@@ -512,7 +511,7 @@ async fn blocks_citing_unknown_transactions_do_not_stay_parked() {
         .map(|seed| block_citing_an_unknown_transaction(&leaf, leaf.justify(), &TestAddress::new("outsider"), seed))
         .collect::<Vec<_>>();
 
-    let sentinel = block_citing_an_unknown_transaction(&leaf, leaf.justify(), &TestAddress::new("3"), u32::MAX);
+    let sentinel = block_citing_an_unknown_transaction(&leaf, leaf.justify(), &sentinel_proposer, u32::MAX);
     let sentinel = send_blocks_until_sentinel_is_parked(
         &test,
         &victim,
@@ -542,9 +541,8 @@ async fn blocks_citing_unknown_transactions_do_not_stay_parked() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn proposals_citing_unknown_transactions_do_not_stay_parked() {
     setup_logger();
-    let victim = TestAddress::new("1");
-    let sender = TestAddress::new("2");
     let mut test = Test::builder().add_committee(0, vec!["1", "2", "3", "4"]).start().await;
+    let [victim, sender, sentinel_proposer, _] = committee_in_rotation_order(&test).await;
     test.start_epoch(Epoch(1)).await;
     test.wait_for_all_validators_to_start_consensus().await;
 
@@ -567,7 +565,7 @@ async fn proposals_citing_unknown_transactions_do_not_stay_parked() {
     let flood = (0..20)
         .map(|seed| block_citing_an_unknown_transaction(&template, &high_qc, &sender, seed))
         .collect::<Vec<_>>();
-    let sentinel = block_citing_an_unknown_transaction(&template, &high_qc, &TestAddress::new("3"), u32::MAX);
+    let sentinel = block_citing_an_unknown_transaction(&template, &high_qc, &sentinel_proposer, u32::MAX);
     let sentinel =
         send_blocks_until_sentinel_is_parked(&test, &victim, &sender, &flood, sentinel, HotstuffMessage::new_proposal)
             .await;
@@ -584,6 +582,21 @@ async fn proposals_citing_unknown_transactions_do_not_stay_parked() {
 
     test.stop();
     test.assert_all_validators_committed(&tx);
+}
+
+/// The members of the test's only committee in the order leader rotation visits them.
+async fn committee_in_rotation_order<const N: usize>(test: &Test) -> [TestAddress; N] {
+    let any_member = test.validators().keys().next().unwrap();
+    let state = test.get_validator(any_member).epoch_manager.state_lock().await;
+    let [committee] = state.committees.values().collect::<Vec<_>>()[..] else {
+        panic!("expected a single committee");
+    };
+    committee
+        .address_iter()
+        .cloned()
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap()
 }
 
 /// Sends `blocks` and then `sentinel` to `victim` as `to_message` builds them, and waits until `sentinel` is parked.
