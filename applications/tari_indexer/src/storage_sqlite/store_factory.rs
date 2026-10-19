@@ -542,6 +542,71 @@ mod tests {
         assert_eq!(set.max_state_version, StateVersion::new(20));
     }
 
+    /// The SQL diesel generates for `query`, with its parameters unbound. Unbound parameters do
+    /// not change the plan.
+    fn sql_of<Q: diesel::query_builder::QueryFragment<diesel::sqlite::Sqlite>>(query: &Q) -> String {
+        use diesel::query_builder::QueryBuilder;
+
+        let mut builder = diesel::sqlite::SqliteQueryBuilder::new();
+        query.to_sql(&mut builder, &diesel::sqlite::Sqlite).unwrap();
+        builder.finish()
+    }
+
+    /// A read that finds fewer rows than its limit (an empty shard, or an epoch past every row)
+    /// visits every index entry its search key admits. Every per-shard read of `utxos` must narrow
+    /// its key to the requested shard so that this is bounded by that shard's rows, not the
+    /// resource's whole history.
+    #[tokio::test]
+    async fn every_shard_utxo_read_seeks_to_the_shard() {
+        use diesel::{ExpressionMethods, QueryDsl};
+
+        use crate::storage_sqlite::{
+            reader::{utxo_max_state_version_query, utxo_updates_query},
+            schema::utxos,
+        };
+
+        let (_dir, store) = temp_store().await;
+        let shard = Shard::from(7u32);
+        let assert_seeks_to_shard = |read: &str, plan: String| {
+            assert!(
+                plan.starts_with("SEARCH ") && plan.contains("shard=?"),
+                "{read} does not seek to the shard: {plan}"
+            );
+            assert!(!plan.contains("TEMP B-TREE"), "{read} sorts outside the index: {plan}");
+        };
+
+        for unspent_only in [false, true] {
+            let updates = || utxo_updates_query(utxo_resource(), Epoch(2), shard, unspent_only);
+            let reads = [
+                (
+                    "after a non-negative version",
+                    updates().filter(utxos::state_version.gt(0)).limit(2),
+                ),
+                (
+                    "after a negative version",
+                    updates()
+                        .filter(utxos::state_version.gt(-5))
+                        .filter(utxos::state_version.lt(0))
+                        .limit(2),
+                ),
+                (
+                    "of the negative half",
+                    updates().filter(utxos::state_version.lt(0)).limit(2),
+                ),
+                ("of a whole version", updates().filter(utxos::state_version.eq(5))),
+            ];
+            for (read, query) in reads {
+                let read = format!("update read {read} (unspent_only={unspent_only})");
+                assert_seeks_to_shard(&read, query_plan(&store, sql_of(&query)).await);
+            }
+        }
+        for above_i64_max in [false, true] {
+            let query = utxo_max_state_version_query(utxo_resource(), shard, above_i64_max);
+            let read = format!("max state version read (above_i64_max={above_i64_max})");
+            assert_seeks_to_shard(&read, query_plan(&store, sql_of(&query)).await);
+        }
+    }
+
     async fn temp_store() -> (tempfile::TempDir, SqliteIndexerStore) {
         let dir = tempfile::tempdir().unwrap();
         let store = SqliteIndexerStore::try_create(dir.path().join("indexer.db")).unwrap();
@@ -1436,7 +1501,8 @@ mod tests {
             .collect()
     }
 
-    async fn query_plan(store: &SqliteIndexerStore, query: &'static str) -> String {
+    async fn query_plan(store: &SqliteIndexerStore, query: impl Into<String>) -> String {
+        let query = query.into();
         #[derive(diesel::QueryableByName)]
         struct QueryPlanRow {
             #[diesel(sql_type = diesel::sql_types::Text)]
