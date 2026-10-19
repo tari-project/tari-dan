@@ -30,7 +30,7 @@ use std::{
 use log::*;
 use tari_bor::encode;
 use tari_consensus::hotstuff::commit_proofs::generate_block_commit_proof;
-use tari_consensus_types::{HighPc, ProposalCertificate};
+use tari_consensus_types::{BlockId, HighPc, LastExecuted, LeafBlock, ProposalCertificate};
 use tari_engine_types::substate::SubstateId;
 use tari_epoch_manager::{EpochManagerReader, service::EpochManagerHandle};
 use tari_ootle_common_types::{
@@ -38,6 +38,7 @@ use tari_ootle_common_types::{
     NumPreshards,
     ShardGroup,
     SubstateRequirement,
+    committee::CommitteeInfo,
     displayable::Displayable,
     optional::Optional,
 };
@@ -188,10 +189,9 @@ impl<TStateStore: StateStore> ValidatorNodeRpcServiceImpl<TStateStore> {
     }
 
     /// Attaches a commit proof and a substate value proof for `substate` to `resp`, anchored to the
-    /// latest committed block. Generated within the caller's read tx (the same one used for the
-    /// substate lookup) so the value proof's group root matches the commit proof's block header. If
-    /// nothing is committed beyond the epoch genesis yet, no proof is attached and the caller treats
-    /// the result as unverified.
+    /// block [`read_anchor`] picks. Generated within the caller's read tx (the same one used for the
+    /// substate lookup) so the value proof's group root matches the commit proof's block header. With
+    /// no anchor, no proof is attached and the caller treats the result as unverified.
     ///
     /// A down substate is proven only together with a [`SubstateDownProof`](tari_state_tree::SubstateDownProof),
     /// since its exclusion proof alone is also satisfied by a version that never existed. A down substate this node
@@ -199,16 +199,17 @@ impl<TStateStore: StateStore> ValidatorNodeRpcServiceImpl<TStateStore> {
     fn attach_substate_proof<TTx: StateStoreReadTransaction>(
         &self,
         tx: &TTx,
-        num_preshards: NumPreshards,
+        local_committee_info: &CommitteeInfo,
         substate: &SubstateRecord,
         resp: &mut GetSubstateResponse,
     ) -> Result<(), RpcStatus> {
         let epoch = self.consensus.current_epoch();
-        let Some(commit_proof) = latest_commit_proof(tx, epoch).map_err(RpcStatus::log_internal_error(LOG_TARGET))?
+        let Some(commit_proof) = read_anchor(tx, epoch, local_committee_info.shard_group())
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
         else {
             return Ok(());
         };
-        attach_substate_proof_at(tx, num_preshards, &commit_proof, substate, resp)
+        attach_substate_proof_at(tx, local_committee_info.num_preshards(), &commit_proof, substate, resp)
     }
 }
 
@@ -298,6 +299,8 @@ fn proof_shard_group(commit_proof: &CommittedBlockProof) -> Result<ShardGroup, S
 /// What the responder needs to prove a batch of substates against its own committed state.
 struct BatchProofContext {
     epoch: Epoch,
+    /// The shard group this node holds the state of.
+    local_shard_group: ShardGroup,
     num_preshards: NumPreshards,
     include_proofs: bool,
     /// The most encoded bytes the anchor and substate frames of one response may take. The missing list
@@ -361,7 +364,7 @@ fn read_substate_batch<TTx: StateStoreReadTransaction>(
     let mut messages = Vec::with_capacity(ids.len() + 2);
     let mut response_bytes = 0usize;
     if ctx.include_proofs &&
-        let Some(commit_proof) = latest_commit_proof(tx, ctx.epoch)?
+        let Some(commit_proof) = read_anchor(tx, ctx.epoch, ctx.local_shard_group)?
     {
         let shard_group = proof_shard_group(&commit_proof)?;
         generator = Some(SubstateProofGenerator::new(
@@ -468,13 +471,55 @@ fn latest_commit_proof<TTx: StateStoreReadTransaction>(
     if last_executed.height.is_zero() {
         return Ok(None);
     }
+    commit_proof_of(tx, &last_executed.block_id).map(Some)
+}
 
-    let block = Block::get(tx, &last_executed.block_id)?;
+/// The commit proof a read is proven against: the latest committed block of `epoch`, or, while nothing past `epoch`'s
+/// genesis has committed, the end-of-epoch block that closed the epoch before it.
+///
+/// Nothing has committed since that end-of-epoch block, so the node's committed state is the state its header's root
+/// commits, and every epoch commits its end block, so a shard group with no traffic still has an anchor. The indexer
+/// and the wallet accept an anchor from the epoch before the current one. The block must have committed
+/// `local_shard_group`: a node whose shard group changed at the epoch boundary holds the state of another set of
+/// shards than the block's root commits. `None` when neither block is available.
+fn read_anchor<TTx: StateStoreReadTransaction>(
+    tx: &TTx,
+    epoch: Epoch,
+    local_shard_group: ShardGroup,
+) -> Result<Option<CommittedBlockProof>, StorageError> {
+    let last_executed = tx.last_executed_get(epoch).optional()?;
+    let epoch_end = tx.last_committed_epoch_end_get().optional()?;
+    read_anchor_block(last_executed.as_ref(), epoch_end.as_ref(), epoch, local_shard_group)
+        .map(|block_id| commit_proof_of(tx, &block_id))
+        .transpose()
+}
+
+/// The block [`read_anchor`] proves against, picked from the last block executed and the last end-of-epoch block
+/// committed.
+fn read_anchor_block(
+    last_executed: Option<&LastExecuted>,
+    epoch_end: Option<&LeafBlock>,
+    epoch: Epoch,
+    local_shard_group: ShardGroup,
+) -> Option<BlockId> {
+    if let Some(last_executed) = last_executed.filter(|b| b.epoch == epoch && !b.height.is_zero()) {
+        return Some(last_executed.block_id);
+    }
+    epoch_end
+        .filter(|b| b.epoch.saturating_add(1u64) == epoch && b.shard_group == local_shard_group)
+        .map(|b| b.block_id)
+}
+
+fn commit_proof_of<TTx: StateStoreReadTransaction>(
+    tx: &TTx,
+    block_id: &BlockId,
+) -> Result<CommittedBlockProof, StorageError> {
+    let block = Block::get(tx, block_id)?;
     let commit_qc = block.get_commit_qc(tx)?;
     let proof = generate_block_commit_proof(tx, &commit_qc, &block).map_err(|e| StorageError::QueryError {
         reason: format!("generate_block_commit_proof: {e}"),
     })?;
-    Ok(Some(CommittedBlockProof::new(proof)))
+    Ok(CommittedBlockProof::new(proof))
 }
 
 #[tari_rpc_framework::async_trait]
@@ -597,7 +642,7 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
             let info = local_committee_info
                 .as_ref()
                 .expect("committee info is fetched whenever include_proof is set");
-            self.attach_substate_proof(&tx, info.num_preshards(), &substate, &mut resp)?;
+            self.attach_substate_proof(&tx, info, &substate, &mut resp)?;
         }
 
         Ok(Response::new(resp))
@@ -974,6 +1019,7 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
         // finds nothing and yields no anchor, so results go out unproven rather than failing.
         let consensus_epoch = self.consensus.current_epoch();
         let num_preshards = local_committee_info.num_preshards();
+        let local_shard_group = local_committee_info.shard_group();
         let include_proofs = req.include_proofs;
         let responses = task::spawn_blocking(move || {
             // TODO: we should use a snapshot - will need to refactor the state store to support this, by abstracting
@@ -981,6 +1027,7 @@ impl<TStateStore: StateStore + Clone + Send + Sync + 'static> ValidatorNodeRpcSe
             store.with_read_tx(|tx| {
                 read_substate_batch(tx, &ids, BatchProofContext {
                     epoch: consensus_epoch,
+                    local_shard_group,
                     num_preshards,
                     include_proofs,
                     max_response_bytes: MAX_BATCH_RESPONSE_BYTES,
@@ -1001,7 +1048,6 @@ mod tests {
 
     use futures::StreamExt;
     use prost::Message;
-    use tari_consensus_types::BlockId;
     use tari_engine_types::{
         non_fungible::NonFungibleContainer,
         published_template::{PublishedTemplate, PublishedTemplateAddress},
@@ -1229,6 +1275,7 @@ mod tests {
         let tx = store.create_read_tx().unwrap();
         let messages = read_substate_batch(&tx, &ids, BatchProofContext {
             epoch: Epoch(1),
+            local_shard_group: ShardGroup::all_shards(NUM_PRESHARDS),
             num_preshards: NUM_PRESHARDS,
             include_proofs: false,
             max_response_bytes: MAX_BATCH_RESPONSE_BYTES,
@@ -1298,6 +1345,7 @@ mod tests {
         let tx = store.create_read_tx().unwrap();
         let messages = read_substate_batch(&tx, &ids, BatchProofContext {
             epoch: Epoch(1),
+            local_shard_group: ShardGroup::all_shards(NUM_PRESHARDS),
             num_preshards: NUM_PRESHARDS,
             include_proofs: false,
             max_response_bytes: 1,
@@ -1400,5 +1448,74 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    fn group(start: u32, end_inclusive: u32) -> ShardGroup {
+        ShardGroup::new(start, end_inclusive)
+    }
+
+    fn executed(epoch: u64, height: u64, block: u8) -> LastExecuted {
+        LastExecuted {
+            height: tari_ootle_common_types::NodeHeight(height),
+            block_id: BlockId::new([block; 32]),
+            epoch: Epoch(epoch),
+        }
+    }
+
+    fn epoch_end(epoch: u64, shard_group: ShardGroup, block: u8) -> LeafBlock {
+        LeafBlock {
+            block_id: BlockId::new([block; 32]),
+            height: tari_ootle_common_types::NodeHeight(30),
+            epoch: Epoch(epoch),
+            shard_group,
+        }
+    }
+
+    #[test]
+    fn a_read_is_anchored_to_the_last_block_executed_this_epoch() {
+        let anchor = read_anchor_block(
+            Some(&executed(5, 7, 1)),
+            Some(&epoch_end(4, group(0, 255), 2)),
+            Epoch(5),
+            group(0, 255),
+        );
+        assert_eq!(anchor, Some(BlockId::new([1; 32])));
+    }
+
+    /// A shard group with no traffic commits nothing in an epoch but its end block, so until something commits in the
+    /// new epoch a read is proven against the end block of the previous one.
+    #[test]
+    fn with_nothing_executed_this_epoch_a_read_is_anchored_to_the_previous_epochs_end() {
+        let previous_end = epoch_end(4, group(0, 255), 2);
+        let expected = Some(BlockId::new([2; 32]));
+        assert_eq!(
+            read_anchor_block(Some(&executed(5, 0, 1)), Some(&previous_end), Epoch(5), group(0, 255)),
+            expected,
+            "the new epoch's genesis"
+        );
+        assert_eq!(
+            read_anchor_block(Some(&executed(4, 30, 2)), Some(&previous_end), Epoch(5), group(0, 255)),
+            expected,
+            "a last executed block from the previous epoch"
+        );
+        assert_eq!(
+            read_anchor_block(None, Some(&previous_end), Epoch(5), group(0, 255)),
+            expected,
+            "no record of an executed block"
+        );
+    }
+
+    #[test]
+    fn an_end_block_from_before_the_previous_epoch_anchors_nothing() {
+        let anchor = read_anchor_block(None, Some(&epoch_end(3, group(0, 255), 2)), Epoch(5), group(0, 255));
+        assert_eq!(anchor, None);
+    }
+
+    /// A node whose shard group changed at the epoch boundary holds the state of other shards than the end block's
+    /// root commits.
+    #[test]
+    fn an_end_block_of_another_shard_group_anchors_nothing() {
+        let anchor = read_anchor_block(None, Some(&epoch_end(4, group(0, 127), 2)), Epoch(5), group(0, 255));
+        assert_eq!(anchor, None);
     }
 }
