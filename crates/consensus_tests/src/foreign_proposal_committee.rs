@@ -33,10 +33,12 @@ use tari_ootle_storage::{
     consensus_models::{
         BlockHeaderMetadata,
         BlockPledge,
+        Command,
         CommandOrHash,
         CommandsCommitProof,
         ForeignProposal,
         ForeignProposalRecord,
+        TrimmedCommand,
     },
 };
 use tari_ootle_transaction::{Network, Transaction};
@@ -422,6 +424,106 @@ async fn a_foreign_proposal_from_a_peer_that_was_not_asked_for_it_is_discarded()
     let stored = is_foreign_proposal_stored(&test, &replica, &[block_id]);
     test.stop();
     assert!(!stored, "replica processed a foreign proposal it did not request");
+}
+
+/// Whether `command` concerns `shard_group`'s side of a transaction.
+fn involves(command: &Command, shard_group: ShardGroup) -> bool {
+    command
+        .transaction()
+        .and_then(|atom| atom.evidence())
+        .is_some_and(|evidence| evidence.has(&shard_group))
+}
+
+/// The same proposal with every command that involves `shard_group` carried only by its hash, in the form that leaves
+/// the commit proof's command merkle root unchanged.
+fn with_commands_trimmed_for(proposal: &ForeignProposal, shard_group: ShardGroup) -> ForeignProposal {
+    let protocol_version = proposal.protocol_version().unwrap();
+    let mut num_trimmed = 0;
+    let commands = proposal
+        .commands()
+        .iter()
+        .map(|entry| match entry {
+            CommandOrHash::Command(command) if involves(command, shard_group) => {
+                num_trimmed += 1;
+                CommandOrHash::Trimmed(TrimmedCommand {
+                    hash: command.hash(protocol_version),
+                    full_command_shard_groups: command.full_command_shard_groups(),
+                })
+            },
+            entry => entry.clone(),
+        })
+        .collect();
+    assert!(num_trimmed > 0, "no command involves {shard_group}");
+    with_commands(proposal, commands)
+}
+
+/// The stored foreign proposal for `block_id`, if any, carries in full every command that involves `shard_group`.
+fn stored_foreign_proposal_is_complete(
+    test: &Test,
+    address: &TestAddress,
+    block_id: &BlockId,
+    shard_group: ShardGroup,
+) -> Option<bool> {
+    test.get_validator(address)
+        .state_store()
+        .with_read_tx(|tx| ForeignProposalRecord::get_any(tx, [block_id]))
+        .unwrap()
+        .pop()
+        .map(|record| {
+            record
+                .proposal()
+                .full_commands_iter()
+                .any(|cmd| involves(cmd, shard_group))
+        })
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_foreign_proposal_withholding_a_command_for_the_local_shard_group_does_not_take_its_slot() {
+    setup_logger();
+    let (mut test, replica, leader, proposal) = withheld_embedding_proposal(true).await;
+    let local_shard_group = test.get_validator(&replica).shard_group;
+
+    let genuine = proposal
+        .foreign_proposals
+        .first()
+        .expect("the captured proposal embeds a foreign proposal")
+        .clone();
+    let block_id = genuine.calculate_block_id();
+    let tampered = ProposalMessage {
+        block: proposal.block.clone(),
+        foreign_proposals: proposal
+            .foreign_proposals
+            .iter()
+            .map(|fp| with_commands_trimmed_for(fp, local_shard_group))
+            .collect(),
+    };
+    let tx_inbound = test.get_validator(&replica).tx_inbound_message.clone();
+    tx_inbound
+        .send((leader.clone(), HotstuffMessage::new_proposal(tampered)))
+        .await
+        .unwrap();
+    tx_inbound
+        .send((leader, HotstuffMessage::new_proposal(proposal)))
+        .await
+        .unwrap();
+
+    let is_complete = timeout(Duration::from_secs(15), async {
+        loop {
+            if let Some(is_complete) =
+                stored_foreign_proposal_is_complete(&test, &replica, &block_id, local_shard_group)
+            {
+                return is_complete;
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await;
+    test.stop();
+    assert_eq!(
+        is_complete,
+        Ok(true),
+        "the replica did not store the genuine foreign proposal after a copy that withheld one of its commands"
+    );
 }
 
 /// The same proposal, with every pledged component's state replaced.

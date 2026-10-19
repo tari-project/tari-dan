@@ -296,8 +296,8 @@ mod tests {
     fn a_v2_leaf_proves_its_own_shard_only() {
         let root = TreeHash::new([7; 32]);
         let network = Network::LocalNet;
-        assert_eq!(ProtocolVersion::genesis(network), ProtocolVersion::V2);
-        let (commit_proof, leaf_proof) = proof_of_leaf(network, ProtocolVersion::V2, Shard::from(3u32), root, 64);
+        assert_eq!(ProtocolVersion::genesis(network), ProtocolVersion::V3);
+        let (commit_proof, leaf_proof) = proof_of_leaf(network, ProtocolVersion::V3, Shard::from(3u32), root, 64);
         assert!(matches!(
             verify_state_version_leaf(network, &commit_proof, Shard::from(4u32), 64, &root, &leaf_proof),
             Err(StateVersionProofError::LeafNotIncluded { .. })

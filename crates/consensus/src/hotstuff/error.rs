@@ -340,6 +340,17 @@ pub enum ProposalValidationError {
         transaction_id: TransactionId,
     },
 
+    #[error(
+        "Foreign proposal for block {block_id} from {shard_group} carries command {command_hash} only by its hash, \
+         but its commit proof names {local_shard_group} as needing that command in full"
+    )]
+    ForeignProposalWithholdsCommand {
+        block_id: BlockId,
+        shard_group: ShardGroup,
+        local_shard_group: ShardGroup,
+        command_hash: FixedHash,
+    },
+
     // TODO: remove some foreign proposal validation variants
     #[error(
         "Foreign node in {shard_group} submitted invalid pledge for block {block}, transaction {transaction_id}: \
@@ -396,4 +407,16 @@ pub enum ProposalValidationError {
         shard_group: ShardGroup,
         details: String,
     },
+}
+
+impl ProposalValidationError {
+    /// True for a foreign proposal error in what one copy of the proposal carries beside its authenticated block, which
+    /// says nothing about the block itself. Nothing is recorded against the block id for such an error, so a genuine
+    /// copy of the block is still accepted.
+    pub fn is_specific_to_foreign_proposal_copy(&self) -> bool {
+        matches!(
+            self,
+            Self::ForeignPledgesNotCommitted { .. } | Self::ForeignProposalWithholdsCommand { .. }
+        )
+    }
 }

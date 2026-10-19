@@ -399,7 +399,7 @@ pub fn verify_substate_down_proof_against_roots(
 pub fn exclusion_is_shard_bound(protocol_version: ProtocolVersion) -> bool {
     match protocol_version {
         ProtocolVersion::V0 | ProtocolVersion::V1 => false,
-        ProtocolVersion::V2 => true,
+        ProtocolVersion::V2 | ProtocolVersion::V3 => true,
     }
 }
 

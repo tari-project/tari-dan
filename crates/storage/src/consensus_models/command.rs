@@ -6,7 +6,11 @@ use std::fmt::{Display, Formatter};
 use borsh::BorshSerialize;
 use serde::{Deserialize, Serialize};
 use tari_consensus_types::{BlockId, Decision};
-use tari_ootle_common_types::{ProtocolVersion, ShardGroup, hashing::command_hasher};
+use tari_ootle_common_types::{
+    ProtocolVersion,
+    ShardGroup,
+    hashing::{command_hasher, command_leaf_hasher},
+};
 use tari_ootle_transaction::TransactionId;
 use tari_sidechain::FixedHash;
 
@@ -271,7 +275,8 @@ impl Command {
         }
     }
 
-    /// The command's leaf in the command merkle root of a block proposed under `protocol_version`.
+    /// The command's hash in a block proposed under `protocol_version`. Before [`ProtocolVersion::V3`] it is also the
+    /// command's leaf in the block's command merkle root (see [`Self::merkle_leaf`]).
     ///
     /// From [`ProtocolVersion::V2`] the preimage of a command that carries evidence also commits to the pledged value
     /// hash of every input. The borsh encoding of the command fixes the number and order of the inputs, so the list
@@ -280,13 +285,53 @@ impl Command {
         let hasher = command_hasher().chain(self);
         match protocol_version {
             ProtocolVersion::V0 | ProtocolVersion::V1 => hasher.finalize().into(),
-            ProtocolVersion::V2 => match self {
+            ProtocolVersion::V2 | ProtocolVersion::V3 => match self {
                 Command::LocalPrepare(atom) |
                 Command::LocalAccept(atom) |
                 Command::AllAccept(atom) |
                 Command::SomeAccept(atom) => hasher.chain(&atom.evidence.pledged_value_hashes()).finalize().into(),
                 Command::LocalOnly(_) | Command::ForeignProposal(_) | Command::EndEpoch(_) => hasher.finalize().into(),
             },
+        }
+    }
+
+    /// The command's leaf in the command merkle root of a block proposed under `protocol_version`.
+    ///
+    /// From [`ProtocolVersion::V3`] the leaf of every command except `EndEpoch` commits to
+    /// [`Self::full_command_shard_groups`] alongside the command hash, so a foreign commit proof that carries the
+    /// command as a [`TrimmedCommand`](super::TrimmedCommand) must name, in an authenticated leaf, every shard group it
+    /// owes the full command. The `EndEpoch` leaf stays the bare command hash because the base layer recomputes it
+    /// from [`tari_sidechain::Command`] when verifying an end-of-epoch inclusion proof; a foreign commit proof always
+    /// carries that command in full.
+    pub fn merkle_leaf(&self, protocol_version: ProtocolVersion) -> FixedHash {
+        let hash = self.hash(protocol_version);
+        match protocol_version {
+            ProtocolVersion::V0 | ProtocolVersion::V1 | ProtocolVersion::V2 => hash,
+            ProtocolVersion::V3 => match self {
+                Command::EndEpoch(_) => hash,
+                Command::LocalOnly(_) |
+                Command::LocalPrepare(_) |
+                Command::LocalAccept(_) |
+                Command::AllAccept(_) |
+                Command::SomeAccept(_) |
+                Command::ForeignProposal(_) => command_leaf(&hash, &self.full_command_shard_groups()),
+            },
+        }
+    }
+
+    /// The shard groups that a foreign commit proof of this command's block must carry the command in full for: every
+    /// shard group with inputs for a `LocalPrepare`, since an output-only shard group receives the pledges it needs
+    /// with the `LocalAccept`, and every shard group in the evidence for a `LocalAccept`. A foreign shard group needs
+    /// no other command.
+    pub fn full_command_shard_groups(&self) -> Vec<ShardGroup> {
+        match self {
+            Command::LocalPrepare(atom) => atom.evidence.input_shard_groups_iter().copied().collect(),
+            Command::LocalAccept(atom) => atom.evidence.shard_groups_iter().copied().collect(),
+            Command::LocalOnly(_) |
+            Command::AllAccept(_) |
+            Command::SomeAccept(_) |
+            Command::ForeignProposal(_) |
+            Command::EndEpoch(_) => Vec::new(),
         }
     }
 
@@ -401,6 +446,16 @@ impl Command {
     pub fn is_local_accept(&self) -> bool {
         matches!(self, Command::LocalAccept(_))
     }
+}
+
+/// The [`ProtocolVersion::V3`] command merkle leaf of a command with hash `command_hash` that a foreign commit proof
+/// must carry in full for `full_command_shard_groups`.
+pub(super) fn command_leaf(command_hash: &FixedHash, full_command_shard_groups: &[ShardGroup]) -> FixedHash {
+    command_leaf_hasher()
+        .chain(command_hash)
+        .chain(full_command_shard_groups)
+        .finalize()
+        .into()
 }
 
 impl Display for Command {
@@ -640,14 +695,20 @@ mod borsh_discriminant_tests {
         }
     }
 
-    /// The whole command, not just its tag, is what the base layer hashes for an end-of-epoch proof.
+    /// The whole command, not just its tag, is what the base layer hashes for an end-of-epoch proof, and it checks
+    /// that hash as the command's merkle leaf.
     #[test]
     fn an_end_epoch_command_hashes_identically_on_both_sides() {
         let next_epoch_hash = FixedHash::zero();
 
-        for protocol_version in [ProtocolVersion::V0, ProtocolVersion::V1, ProtocolVersion::V2] {
+        for protocol_version in [
+            ProtocolVersion::V0,
+            ProtocolVersion::V1,
+            ProtocolVersion::V2,
+            ProtocolVersion::V3,
+        ] {
             assert_eq!(
-                Command::EndEpoch(EndEpochAtom::new(next_epoch_hash)).hash(protocol_version),
+                Command::EndEpoch(EndEpochAtom::new(next_epoch_hash)).merkle_leaf(protocol_version),
                 tari_sidechain::Command::EndEpoch(tari_sidechain::EndEpochAtom::new(next_epoch_hash)).hash(),
             );
         }

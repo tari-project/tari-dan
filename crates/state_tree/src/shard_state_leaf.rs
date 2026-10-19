@@ -13,8 +13,9 @@ use tari_ootle_common_types::shard::Shard;
 /// - [`ProtocolVersion::V0`]: the leaf is the shard root itself.
 /// - [`ProtocolVersion::V1`]: the leaf commits to the shard's state version as well as its root, so the quorum
 ///   signature over a header fixes the version each shard of the group is at. `shard` is ignored.
-/// - [`ProtocolVersion::V2`]: the leaf also commits to `shard`, so a leaf, and every proof that cites it, belongs to
-///   exactly one shard. Two shards with the same root and version (e.g. two empty shards) have different leaves.
+/// - [`ProtocolVersion::V2`] and later: the leaf also commits to `shard`, so a leaf, and every proof that cites it,
+///   belongs to exactly one shard. Two shards with the same root and version (e.g. two empty shards) have different
+///   leaves.
 pub fn shard_state_leaf(
     protocol_version: ProtocolVersion,
     shard: Shard,
@@ -30,7 +31,7 @@ pub fn shard_state_leaf(
                 .result();
             TreeHash::new(hash.into_array())
         },
-        ProtocolVersion::V2 => {
+        ProtocolVersion::V2 | ProtocolVersion::V3 => {
             let hash = hasher32(EngineHashDomainLabel::ShardStateLeaf)
                 .chain(&shard)
                 .chain(&shard_root.into_array())

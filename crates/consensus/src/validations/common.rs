@@ -557,10 +557,11 @@ mod tests {
         assert!(is_rejected(Network::Esmeralda, ProtocolVersion::V2, before));
         assert!(!is_rejected(Network::Esmeralda, ProtocolVersion::V2, v2_activation));
         assert!(is_rejected(Network::Esmeralda, ProtocolVersion::V1, v2_activation));
+        assert!(is_rejected(Network::Esmeralda, ProtocolVersion::V3, v2_activation));
     }
 
     #[test]
-    fn other_networks_require_v2_from_genesis() {
+    fn other_networks_require_v3_from_genesis() {
         for network in [
             Network::MainNet,
             Network::StageNet,
@@ -568,13 +569,13 @@ mod tests {
             Network::Igor,
             Network::LocalNet,
         ] {
-            for protocol_version in [ProtocolVersion::V0, ProtocolVersion::V1] {
+            for protocol_version in [ProtocolVersion::V0, ProtocolVersion::V1, ProtocolVersion::V2] {
                 assert!(
                     is_rejected(network, protocol_version, Epoch(0)),
                     "{network} {protocol_version}"
                 );
             }
-            assert!(!is_rejected(network, ProtocolVersion::V2, Epoch(0)), "{network}");
+            assert!(!is_rejected(network, ProtocolVersion::V3, Epoch(0)), "{network}");
         }
     }
 }
