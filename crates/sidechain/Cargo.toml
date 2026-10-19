@@ -1,0 +1,24 @@
+[package]
+name = "tari_sidechain"
+description = "Tari Ootle sidechain proofs and types, verified by the Minotari base layer"
+version = "7.0.0"
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+tari_hashing = { workspace = true }
+tari_crypto = { workspace = true, features = ["borsh"] }
+tari_utilities = { workspace = true }
+tari_common_types = { workspace = true }
+tari_jellyfish = { workspace = true }
+
+log = { workspace = true }
+thiserror = { workspace = true }
+borsh = { workspace = true, features = ["std", "derive"] }
+hex = { workspace = true }
+serde = { workspace = true, features = ["std", "derive"] }
+
+[dev-dependencies]
+serde_json = { workspace = true }

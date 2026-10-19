@@ -27,8 +27,10 @@ members = [
     "crates/engine",
     "crates/epoch_manager",
     "crates/indexer_lib",
+    "crates/jellyfish",
     "crates/p2p",
     "crates/rpc_state_sync",
+    "crates/sidechain",
     "crates/state_store_rocksdb",
     "crates/state_tree",
     "crates/storage_sqlite",
@@ -109,6 +111,8 @@ tari_ootle_storage = { path = "crates/storage", version = "0.47" }
 tari_ootle_storage_sqlite = { path = "crates/storage_sqlite" }
 tari_ootle_wallet_crypto = { path = "crates/wallet/crypto", version = "0.48" }
 tari_ootle_light_client = { path = "crates/wallet/light_client", version = "0.1" }
+tari_sidechain = { path = "crates/sidechain", version = "7.0.0" }
+tari_jellyfish = { path = "crates/jellyfish", version = "6.2.1" }
 tari_ootle_wallet_sdk = { path = "crates/wallet/sdk", version = "0.49.0" }
 tari_ootle_wallet_sdk_services = { path = "crates/wallet/sdk_services" }
 tari_ootle_wallet_storage_sqlite = { path = "crates/wallet/storage_sqlite", version = "0.49.0" }
@@ -164,13 +168,11 @@ minotari_wallet_grpc_client = "6.2.0-pre.2"
 tari_common = "6.2.0-pre.2"
 tari_common_sqlite = "6.2.0-pre.2"
 tari_common_types = "6.2.0-pre.2"
-tari_jellyfish = "6.2.0-pre.2"
 tari_metrics = "6.2.0-pre.2"
 tari_mmr = "6.2.0-pre.2"
 tari_node_components = "6.2.0-pre.2"
 tari_script = "6.2.0-pre.2"
 tari_shutdown = "6.2.0-pre.2"
-tari_sidechain = "6.2.0-pre.2"
 tari_transaction_components = "6.2.0-pre.2"
 
 tari_crypto = "0.24.0"
@@ -373,8 +375,6 @@ opt-level = 1
 #minotari_node = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 #tari_metrics = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 #tari_libtor = { git = "https://github.com/account/tari.git", branch = "my-branch" }
-#tari_sidechain = { git = "https://github.com/account/tari.git", branch = "my-branch" }
-#tari_jellyfish = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 
 # Uncomment this to use local paths instead of git dependencies
 #[patch."https://github.com/tari-project/tari.git"]
@@ -400,6 +400,4 @@ opt-level = 1
 #tari_comms_dht = { path = "../tari/comms/dht" }
 #tari_metrics = { path = "../tari/infrastructure/metrics" }
 #tari_libtor = { path = "../tari/infrastructure/libtor" }
-#tari_sidechain = { path = "../tari/base_layer/sidechain" }
-#tari_jellyfish = { path = "../tari/infrastructure/jellyfish" }
 
