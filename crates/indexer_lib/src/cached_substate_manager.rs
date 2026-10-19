@@ -492,13 +492,14 @@ where
         Ok(map)
     }
 
-    /// Fetches the live version of each substate from the committee. A substate the committee holds down or
-    /// absent is left out of the result. Each result carries the proof it was verified with, when one was.
+    /// Looks up the live version of each substate. A substate held down or absent is left out of the result. Each
+    /// result carries the proof it was verified with, when one was.
     ///
-    /// A batch is answered by one member, which may leave an id out or report it down without being able to prove
-    /// either. Every requested id the batch does not settle is therefore confirmed through
-    /// [`Self::get_substate`]'s committee agreement, and a confirmation that fails fails the call: leaving the id out
-    /// would tell the caller it is not live.
+    /// Fresh cache entries are served first, an up head only together with the proof held for it while verification
+    /// is on, and the rest are fetched from the committee in batches. A batch is answered by one member, which may
+    /// leave an id out or report it down without being able to prove either. Every requested id the batch does not
+    /// settle is therefore confirmed through [`Self::get_substate`]'s committee agreement, and a confirmation that
+    /// fails fails the call: leaving the id out would tell the caller it is not live.
     pub async fn fetch_and_cache_substates(
         &self,
         substate_ids: &[SubstateId],
@@ -508,10 +509,21 @@ where
             .collect::<HashSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let mut heads = self.fetch_and_cache_heads(&substate_ids).await?;
         let mut lookups = Vec::with_capacity(substate_ids.len());
-        let mut unsettled = Vec::new();
+        let mut misses = Vec::new();
         for id in substate_ids {
+            match self.read_fresh_cache_entry_with_proof(id).await? {
+                Some(lookup) => lookups.push((id.clone(), lookup)),
+                None => misses.push(id),
+            }
+        }
+        if misses.is_empty() {
+            return Ok(Self::live_substates(lookups));
+        }
+
+        let mut heads = self.fetch_and_cache_heads(&misses).await?;
+        let mut unsettled = Vec::new();
+        for id in misses {
             match heads.remove(id) {
                 Some(head)
                     if head.verified ||
@@ -533,9 +545,13 @@ where
             .await?;
         lookups.extend(confirmed);
 
-        // A batch answers with the head version; a caller asking for substates by id wants the live ones, and a
-        // down head is not one.
-        Ok(lookups
+        Ok(Self::live_substates(lookups))
+    }
+
+    /// The live substates among `lookups`, with their proofs. A lookup answers with the head version; a caller asking
+    /// for substates by id wants the live ones, and a down head is not one.
+    fn live_substates(lookups: Vec<(SubstateId, SubstateLookupResult)>) -> HashMap<SubstateId, ProvenSubstate> {
+        lookups
             .into_iter()
             .filter_map(|(id, lookup)| {
                 let proof = lookup.proof;
@@ -544,7 +560,28 @@ where
                     .into_up()
                     .map(|substate| (id, ProvenSubstate { substate, proof }))
             })
-            .collect())
+            .collect()
+    }
+
+    /// The fresh cached head of `substate_id`, carrying the proof held for it when it is up and verification is on.
+    /// `None` when [`Self::read_fresh_cache_entry`] has nothing to serve, or when it holds an up head with no proof
+    /// while verification is on.
+    async fn read_fresh_cache_entry_with_proof(
+        &self,
+        substate_id: &SubstateId,
+    ) -> Result<Option<SubstateLookupResult>, IndexerError> {
+        let Some(mut lookup) = self.read_fresh_cache_entry(substate_id, None).await? else {
+            return Ok(None);
+        };
+        if self.verify_substate_proofs &&
+            let SubstateResult::Up { substate } = &lookup.result
+        {
+            lookup.proof = self.substate_cache.read_proof(substate_id, substate.version()).await?;
+            if lookup.proof.is_none() {
+                return Ok(None);
+            }
+        }
+        Ok(Some(lookup))
     }
 
     /// Looks up the substates a transaction declares as inputs, stopping at the first one that is not
@@ -1312,6 +1349,8 @@ mod tests {
         /// Answered on a proven read as down at the given version, with the given proof.
         down_with_proof: HashMap<SubstateId, (SubstateVersion, SubstateProofData)>,
         batch_requests: AtomicUsize,
+        /// Every id requested in a batch, in request order.
+        batched_ids: Mutex<Vec<SubstateId>>,
         single_requests: AtomicUsize,
         /// Single reads of these fail.
         failing_single_reads: HashSet<SubstateId>,
@@ -1400,6 +1439,11 @@ mod tests {
             _include_proofs: bool,
         ) -> Result<SubstateBatch, ValidatorNodeRpcClientError> {
             self.0.batch_requests.fetch_add(1, Ordering::Relaxed);
+            self.0
+                .batched_ids
+                .lock()
+                .unwrap()
+                .extend(substate_ids.iter().map(|&id| id.clone()));
             if let Some(batch) = &self.0.proven_batch {
                 return Ok(batch.clone());
             }
@@ -2604,6 +2648,125 @@ mod tests {
             assert!(found.contains_key(&ids[1]), "verify: {verify}");
             assert_eq!(network.single_requests.load(Ordering::Relaxed), 1, "verify: {verify}");
         }
+    }
+
+    /// Caches `ids` as fresh, verified up heads, holding `proof` for each when one is given.
+    fn seed_cache(
+        manager: &CachedSubstateManager<FakeEpochManager, FakeClient, FakeCache>,
+        ids: &[SubstateId],
+        proof: Option<SubstateProofData>,
+    ) {
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        for (id, substate) in live(ids) {
+            let version = substate.version();
+            manager
+                .substate_cache
+                .0
+                .lock()
+                .unwrap()
+                .insert(id.clone(), SubstateCacheEntry {
+                    version: Some(version),
+                    substate_result: SubstateResult::Up {
+                        substate: Box::new(substate),
+                    },
+                    cached_at: now,
+                    verified: true,
+                });
+            if let Some(proof) = &proof {
+                manager
+                    .substate_cache
+                    .1
+                    .lock()
+                    .unwrap()
+                    .insert((id, version), proof.clone());
+            }
+        }
+    }
+
+    /// Fresh proven heads are served from the cache with their proofs, and only the ids it cannot serve are batched.
+    #[tokio::test]
+    async fn fresh_proven_heads_are_served_from_the_cache() {
+        let ids = (0..3).map(component_id).collect::<Vec<_>>();
+        let (manager, network) = manager(FakeNetwork {
+            live: live(&ids),
+            ..Default::default()
+        });
+        let manager = manager.with_substate_proof_verification(true);
+        let proof = down_proof_data(None);
+        seed_cache(&manager, &ids[..2], Some(proof.clone()));
+
+        let found = manager.fetch_and_cache_substates(&ids[..2]).await.unwrap();
+
+        assert_eq!(found.len(), 2);
+        assert!(
+            found
+                .values()
+                .all(|found| found.proof.as_ref().map(|p| &p.commit_proof) == Some(&proof.commit_proof))
+        );
+        assert_eq!(network.batch_requests.load(Ordering::Relaxed), 0);
+        assert_eq!(network.single_requests.load(Ordering::Relaxed), 0);
+
+        let found = manager.fetch_and_cache_substates(&ids).await.unwrap();
+
+        assert_eq!(found.len(), ids.len());
+        assert_eq!(*network.batched_ids.lock().unwrap(), vec![ids[2].clone()]);
+    }
+
+    /// Fresh cached down and nonexistent heads settle their ids as not live, with no committee call.
+    #[tokio::test]
+    async fn cached_down_and_absent_heads_are_left_out_from_the_cache() {
+        let ids = (0..2).map(component_id).collect::<Vec<_>>();
+        let (manager, network) = manager(FakeNetwork {
+            live: live(&ids),
+            ..Default::default()
+        });
+        let manager = manager.with_substate_proof_verification(true);
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let down = SubstateVersion::new(1);
+        manager.substate_cache.0.lock().unwrap().extend([
+            (ids[0].clone(), SubstateCacheEntry {
+                version: Some(down),
+                substate_result: SubstateResult::Down { version: down },
+                cached_at: now,
+                verified: true,
+            }),
+            (ids[1].clone(), SubstateCacheEntry {
+                version: None,
+                substate_result: SubstateResult::DoesNotExist,
+                cached_at: now,
+                verified: false,
+            }),
+        ]);
+
+        let found = manager.fetch_and_cache_substates(&ids).await.unwrap();
+
+        assert!(found.is_empty(), "{:?}", found.keys().collect::<Vec<_>>());
+        assert_eq!(network.batch_requests.load(Ordering::Relaxed), 0);
+        assert_eq!(network.single_requests.load(Ordering::Relaxed), 0);
+    }
+
+    /// While verification is on, a cached up head is served only with a proof, so one held without a proof is
+    /// fetched from the committee again.
+    #[tokio::test]
+    async fn a_cached_head_without_its_proof_is_fetched_again() {
+        let ids = (0..2).map(component_id).collect::<Vec<_>>();
+        let (manager, network) = manager(FakeNetwork {
+            live: live(&ids),
+            ..Default::default()
+        });
+        let manager = manager.with_substate_proof_verification(true);
+        seed_cache(&manager, &ids, None);
+
+        let found = manager.fetch_and_cache_substates(&ids).await.unwrap();
+
+        assert_eq!(found.len(), ids.len());
+        assert_eq!(network.batch_requests.load(Ordering::Relaxed), 1);
     }
 
     /// An id the committee holds absent is left out.
