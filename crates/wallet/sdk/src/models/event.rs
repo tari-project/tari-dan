@@ -174,7 +174,7 @@ pub struct TransactionRequestCreatedEvent {
 
 /// The wallet re-anchored: it now trusts a validator set that no handover from the set it trusted before vouches for.
 /// It trusts the indexer for that set as it did on first use.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ValidatorSetReanchoredEvent {
     /// The epoch of the latest validator set the wallet trusted before.
     pub previous_epoch: Option<Epoch>,

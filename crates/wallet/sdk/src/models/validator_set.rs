@@ -6,6 +6,8 @@ use std::str::FromStr;
 pub use tari_ootle_light_client::{TrustedValidatorSet, TrustedValidatorSetHash};
 use time::PrimitiveDateTime;
 
+use crate::models::ValidatorSetReanchoredEvent;
+
 /// How the wallet came to trust a validator set without a handover from the set before it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ValidatorSetAnchor {
@@ -43,6 +45,13 @@ pub struct AnchoredValidatorSet {
     pub validator_set: TrustedValidatorSetHash,
     pub anchor: ValidatorSetAnchor,
     pub anchored_at: PrimitiveDateTime,
+}
+
+/// A re-anchor the wallet recorded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValidatorSetReanchor {
+    pub event: ValidatorSetReanchoredEvent,
+    pub reanchored_at: PrimitiveDateTime,
 }
 
 /// Where the wallet's trust in the network's validator sets stands.

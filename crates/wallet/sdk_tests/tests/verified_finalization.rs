@@ -361,6 +361,7 @@ async fn a_wallet_synced_recently_never_reanchors_on_a_claimed_gap() {
     let anchor = test.sdk().validator_set_api().anchor().unwrap().unwrap();
     assert_eq!(anchor.anchor, ValidatorSetAnchor::FirstUse);
     assert_eq!(anchor.validator_set.epoch(), Epoch(2));
+    assert!(test.sdk().validator_set_api().reanchors(10).unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -382,6 +383,37 @@ async fn a_wallet_out_of_sync_long_enough_reanchors_when_the_walk_fails() {
     assert_eq!(anchor.validator_set.epoch(), Epoch(far + 1));
     let forgotten = test.store().with_read_tx(|tx| tx.trusted_validator_sets_get(Epoch(2)));
     assert!(forgotten.is_err(), "the old chain is forgotten");
+
+    let reanchors = validator_set_api.reanchors(10).unwrap();
+    assert_eq!(reanchors.len(), 1);
+    assert_eq!(reanchors[0].event.previous_epoch, Some(Epoch(2)));
+    assert_eq!(reanchors[0].event.epoch, Epoch(far + 1));
+    assert_eq!(reanchors[0].event.validator_set_hash, *trusted.validator_set_hash());
+}
+
+#[tokio::test]
+async fn the_latest_reanchors_are_read_back_newest_first() {
+    let sets = sets();
+    let network = ProvingNetwork::new(&sets, 0);
+    let transaction = build_transaction();
+    let test = wallet(network.clone(), &transaction);
+    let validator_set_api = test.sdk().validator_set_api();
+    validator_set_api.sync().await.unwrap();
+
+    network.set_latest(1);
+    validator_set_api.reanchor().await.unwrap();
+    validator_set_api.reanchor().await.unwrap();
+
+    let previous_epochs = |limit| {
+        validator_set_api
+            .reanchors(limit)
+            .unwrap()
+            .into_iter()
+            .map(|reanchor| reanchor.event.previous_epoch)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(previous_epochs(10), [Some(Epoch(3)), Some(Epoch(2))]);
+    assert_eq!(previous_epochs(1), [Some(Epoch(3))]);
 }
 
 #[tokio::test]
@@ -637,6 +669,9 @@ async fn a_walk_that_keeps_failing_for_a_day_reanchors() {
     let anchor = validator_set_api.anchor().unwrap().unwrap();
     assert_eq!(anchor.anchor, ValidatorSetAnchor::Reanchor);
     assert_eq!(anchor.validator_set.epoch(), Epoch(3));
+    let reanchors = validator_set_api.reanchors(10).unwrap();
+    assert_eq!(reanchors.len(), 1);
+    assert_eq!(reanchors[0].event.epoch, Epoch(3));
 }
 
 #[tokio::test(flavor = "multi_thread")]

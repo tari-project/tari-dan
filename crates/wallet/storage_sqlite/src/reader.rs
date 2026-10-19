@@ -53,7 +53,9 @@ use tari_ootle_wallet_sdk::{
         TransactionStatus,
         TrustedValidatorSetHash,
         ValidatorSetAnchor,
+        ValidatorSetReanchor,
         VaultModel,
+        WalletEventType,
         WalletLock,
         WalletLockId,
         WalletTransaction,
@@ -2027,6 +2029,30 @@ impl WalletStoreReader for ReadTransaction<'_> {
                 })?,
             anchored_at: row.created_at,
         }))
+    }
+
+    fn validator_set_reanchors_get_latest(
+        &mut self,
+        limit: u64,
+    ) -> Result<Vec<ValidatorSetReanchor>, WalletStorageError> {
+        const OPERATION: &str = "validator_set_reanchors_get_latest";
+        use crate::schema::wallet_events;
+
+        let rows = wallet_events::table
+            .select((wallet_events::event_data, wallet_events::created_at))
+            .filter(wallet_events::event_type.eq(WalletEventType::ValidatorSetReanchored.to_string()))
+            .order(wallet_events::id.desc())
+            .limit(i64::try_from(limit).unwrap_or(i64::MAX))
+            .load::<(String, time::PrimitiveDateTime)>(self.connection())
+            .map_err(|e| WalletStorageError::general(OPERATION, e))?;
+        rows.into_iter()
+            .map(|(event_data, reanchored_at)| {
+                Ok(ValidatorSetReanchor {
+                    event: deserialize_json(&event_data)?,
+                    reanchored_at,
+                })
+            })
+            .collect()
     }
 }
 
