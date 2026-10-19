@@ -125,9 +125,9 @@ function ValidatorSetPage() {
           </Alert>
         ) : (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            The wallet verifies the transaction results its indexer serves against the validator sets it trusts. It
-            anchors on the first validator set its indexer serves, and walks forward from it one signed checkpoint per
-            epoch.
+            The wallet verifies the transaction results and substates its indexer serves against the validator sets it
+            trusts. It anchors on the first validator set its indexer serves, and walks forward from it one signed
+            checkpoint per epoch.
           </Typography>
         )}
         {trusted ? (

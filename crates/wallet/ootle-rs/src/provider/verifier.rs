@@ -416,13 +416,22 @@ impl IndexerVerifier {
                 self.sync_locked(&mut state).await?;
             }
             check_fresh(&state, substate_id, anchor.epoch)?;
-            let committee = self
+            let Some(committee) = self
                 .verify_committee(&mut state, anchor.epoch, anchor.shard_group)
                 .await?
-                .ok_or_else(|| VerifyError::SubstateProvenOutsideTrustedSets {
-                    substate_id: substate_id.clone(),
-                    epoch: anchor.epoch,
-                })?;
+            else {
+                return Err(match state.sets.keys().next() {
+                    Some(&anchor_epoch) if anchor.epoch < anchor_epoch => VerifyError::SubstateProvenBeforeAnchor {
+                        substate_id: substate_id.clone(),
+                        epoch: anchor.epoch,
+                        anchor_epoch,
+                    },
+                    _ => VerifyError::SubstateProvenPastServedCheckpoints {
+                        substate_id: substate_id.clone(),
+                        epoch: anchor.epoch,
+                    },
+                });
+            };
             check_fresh(&state, substate_id, anchor.epoch)?;
             committee
         };
@@ -589,8 +598,20 @@ pub enum VerifyError {
          retry once the indexer can prove it."
     )]
     SubstateUnproven { substate_id: SubstateId },
-    #[error("The indexer proved {substate_id} in {epoch}, for which this provider trusts no validator set")]
-    SubstateProvenOutsideTrustedSets { substate_id: SubstateId, epoch: Epoch },
+    #[error(
+        "The indexer proved {substate_id} at a block of {epoch}, but has not yet served the checkpoint that hands \
+         over to that epoch's validator set. Retry shortly, once the indexer serves it."
+    )]
+    SubstateProvenPastServedCheckpoints { substate_id: SubstateId, epoch: Epoch },
+    #[error(
+        "The indexer proved {substate_id} at a block of {epoch}, before {anchor_epoch} whose validator set this \
+         provider anchored on"
+    )]
+    SubstateProvenBeforeAnchor {
+        substate_id: SubstateId,
+        epoch: Epoch,
+        anchor_epoch: Epoch,
+    },
     #[error("The indexer's proof of {substate_id} does not verify: {source}")]
     SubstateUnverified {
         substate_id: SubstateId,
@@ -810,12 +831,36 @@ mod tests {
 
         let err = read_error(&provider, &id).await;
         assert!(
-            matches!(err, VerifyError::SubstateProvenOutsideTrustedSets {
+            matches!(err, VerifyError::SubstateProvenBeforeAnchor {
                 epoch: Epoch(3),
+                anchor_epoch: Epoch(4),
                 ..
             }),
             "{err}"
         );
+    }
+
+    #[tokio::test]
+    async fn a_substate_proven_past_the_served_checkpoints_is_refused_until_they_are_served() {
+        let sets = sets();
+        // The provider anchors on the set of epoch 4, which the latest checkpoint names.
+        let indexer = TestIndexer::spawn(&sets, 2).await;
+        let provider = indexer.provider(IndexerTrust::Verify);
+        let (id, value) = substate(1);
+        let proof = substate_proof(&sets[4], &id, VERSION, &value);
+        indexer.serve_substate(id.clone(), VERSION, value, Some(proof));
+
+        let err = read_error(&provider, &id).await;
+        assert!(
+            matches!(err, VerifyError::SubstateProvenPastServedCheckpoints {
+                epoch: Epoch(5),
+                ..
+            }),
+            "{err}"
+        );
+
+        indexer.set_latest(3);
+        provider.fetch_substate(id).await.unwrap();
     }
 
     #[tokio::test]
