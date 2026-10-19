@@ -31,6 +31,19 @@ impl ConsensusHandle {
         }
     }
 
+    /// A handle to a consensus that is not running, publishing its events on `events`.
+    #[cfg(test)]
+    pub(crate) fn for_test(events: &broadcast::Sender<HotstuffEvent>) -> Self {
+        let (_, rx_current_state) = watch::channel(Default::default());
+        let (tx_new_transaction, _) = mpsc::channel(1);
+        Self::new(
+            rx_current_state,
+            EventSubscription::new(events.downgrade()),
+            CurrentView::new(),
+            tx_new_transaction,
+        )
+    }
+
     pub fn current_epoch(&self) -> Epoch {
         self.current_view.get_epoch()
     }

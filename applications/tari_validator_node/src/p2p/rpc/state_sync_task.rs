@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::num::NonZeroUsize;
+use std::{num::NonZeroUsize, sync::Arc};
 
 use log::*;
 use tari_consensus::hotstuff::{HotstuffEvent, commit_proofs::state_version_commit_proof};
@@ -31,7 +31,7 @@ use tari_ootle_storage::{
 };
 use tari_rpc_framework::RpcStatus;
 use tari_state_tree::Version;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{Semaphore, broadcast, mpsc};
 
 use crate::{consensus::ConsensusHandle, p2p::rpc::CONSENSUS_NOT_RUNNING};
 
@@ -260,6 +260,9 @@ pub struct StateSyncTask<TStateStore: StateStore> {
     value_filters: SubstateValueFilterFlags,
     /// Whether to interleave state version proofs, which only a bounded stream does.
     include_version_proofs: bool,
+    /// The state version reads every stream on this node shares. A permit is held for one version's read and
+    /// released before its batches are sent, so a stream waiting on its peer holds none.
+    reads: Arc<Semaphore>,
 }
 
 impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
@@ -275,6 +278,7 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
         batch_size: NonZeroUsize,
         value_filters: SubstateValueFilterFlags,
         include_version_proofs: bool,
+        reads: Arc<Semaphore>,
     ) -> Self {
         Self {
             store,
@@ -288,6 +292,7 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
             batch_size,
             value_filters,
             include_version_proofs,
+            reads,
         }
     }
 
@@ -422,7 +427,19 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
             },
         };
         loop {
-            match self.fetch_next_batch(shard, current_state_version) {
+            // A version whose updates are all filtered out sends nothing, so the scan checks for its peer before
+            // every version it reads.
+            let read = tokio::select! {
+                biased;
+                _ = self.sender.closed() => {
+                    debug!(target: LOG_TARGET, "Peer stream closed by client during the scan of {}. Aborting", shard);
+                    return Err(());
+                },
+                read = self.reads.acquire() => read.map_err(|_| ())?,
+            };
+            let fetched = self.fetch_next_batch(shard, current_state_version);
+            drop(read);
+            match fetched {
                 Ok(Some(transitions)) => {
                     if let Some(end_epoch) = self.end_epoch {
                         // TODO(perf): might be better to not load in the first place, however also might incur the cost
@@ -453,6 +470,9 @@ impl<TStateStore: StateStore> StateSyncTask<TStateStore> {
                     if has_updates {
                         last_sent_version = Some(state_version);
                     }
+                    // Reads are synchronous and a filtered-out version awaits nothing, so the scan yields after every
+                    // version to share its runtime worker.
+                    tokio::task::yield_now().await;
                 },
                 Ok(None) => {
                     // TODO: differentiate between not found and end of stream
@@ -777,21 +797,34 @@ fn version_proof_message<TTx: StateStoreReadTransaction>(
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        sync::atomic::{AtomicU64, AtomicUsize, Ordering},
+        time::Duration,
+    };
+
     use prost::Message;
     use tari_engine_types::{
         limits::ENGINE_LIMITS,
         published_template::{PublishedTemplate, PublishedTemplateAddress},
         substate::SubstateId,
     };
+    use tari_epoch_manager::service::CommitteeCache;
     use tari_ootle_common_types::{SubstateVersion, VotePower};
-    use tari_ootle_storage::consensus_models::{
-        SubstateCreate,
-        SubstateData,
-        SubstateDestroy,
-        SubstateUpdateProof,
-        SubstateValueOrHash,
+    use tari_ootle_storage::{
+        StateStoreWriteTransaction,
+        consensus_models::{
+            SubstateCreate,
+            SubstateData,
+            SubstateDestroy,
+            SubstateTransition,
+            SubstateUpdateBatch,
+            SubstateUpdateProof,
+            SubstateValueOrHash,
+        },
     };
+    use tari_ootle_transaction::Network;
     use tari_rpc_framework::max_response_payload_size;
+    use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
     use tari_template_lib::types::{Hash32, crypto::RistrettoPublicKeyBytes};
     use tari_validator_node_rpc::STATE_SYNC_MAX_BATCH_SIZE;
 
@@ -807,19 +840,22 @@ mod tests {
         SubstateId::Template(PublishedTemplateAddress::from(Hash32::from_array(hash)))
     }
 
-    fn create_template(seed: u16, binary_len: usize) -> SubstateUpdateProof {
-        let template = PublishedTemplate {
+    fn published_template(binary_len: usize) -> PublishedTemplate {
+        PublishedTemplate {
             template_name: "test".try_into().unwrap(),
             author: RistrettoPublicKeyBytes::default(),
             binary: vec![0xAB; binary_len].try_into().unwrap(),
             at_epoch: 0,
             metadata_hash: None,
-        };
+        }
+    }
+
+    fn create_template(seed: u16, binary_len: usize) -> SubstateUpdateProof {
         SubstateUpdateProof::Create(Box::new(SubstateCreate {
             substate: SubstateData {
                 substate_id: template_id(seed),
                 version: SubstateVersion::ZERO,
-                value: SubstateValueOrHash::Value(Box::new(template.into())),
+                value: SubstateValueOrHash::Value(Box::new(published_template(binary_len).into())),
                 template_metadata: None,
             },
         }))
@@ -1144,5 +1180,180 @@ mod tests {
         let cursors = ShardCursor::validate_all(vec![cursor(9, 1), cursor(17, 1)]).unwrap();
         let err = ShardCursor::ensure_all_stored(&cursors, &committee_info(9, 16)).unwrap_err();
         assert!(err.details().contains("does not store Shard(17)"), "{err}");
+    }
+
+    /// A store that counts the read transactions opened on it. A sync reads each state version it scans in a read
+    /// transaction of its own.
+    #[derive(Clone)]
+    struct CountingStore<T> {
+        inner: T,
+        reads: Arc<AtomicUsize>,
+    }
+
+    impl<T: StateStore> StateStore for CountingStore<T> {
+        type Addr = T::Addr;
+        type ReadTransaction<'a>
+            = T::ReadTransaction<'a>
+        where Self: 'a;
+        type WriteTransaction<'a>
+            = T::WriteTransaction<'a>
+        where Self: 'a;
+
+        fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, StorageError> {
+            self.reads.fetch_add(1, Ordering::SeqCst);
+            self.inner.create_read_tx()
+        }
+
+        fn create_write_tx(&self) -> Result<Self::WriteTransaction<'_>, StorageError> {
+            self.inner.create_write_tx()
+        }
+
+        fn create_durable_write_tx(&self) -> Result<Self::WriteTransaction<'_>, StorageError> {
+            self.inner.create_durable_write_tx()
+        }
+    }
+
+    /// A store holding `num_versions` state versions of the global shard, each bringing up one template.
+    fn store_with_history(num_versions: u16) -> (CountingStore<RocksDbStateStore<String>>, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RocksDbStateStore::<String>::open(dir.path().join("db"), DatabaseOptions::default()).unwrap();
+        store
+            .with_write_tx(|tx| {
+                let mut batch = SubstateUpdateBatch::new(Network::LocalNet, Epoch::zero());
+                for seed in 1..=num_versions {
+                    batch
+                        .with_transition(Shard::global(), u64::from(seed))
+                        .push(SubstateTransition::Up {
+                            id: template_id(seed),
+                            version: SubstateVersion::ZERO,
+                            substate_or_hash: SubstateValueOrHash::Value(Box::new(published_template(1).into())),
+                        });
+                }
+                tx.substates_commit_batch(batch)
+            })
+            .unwrap();
+        let store = CountingStore {
+            inner: store,
+            reads: Arc::new(AtomicUsize::new(0)),
+        };
+        (store, dir)
+    }
+
+    fn dummy_epoch_manager() -> EpochManagerHandle<PeerAddress> {
+        let (tx_request, _) = mpsc::channel(1);
+        let (tx_events, _) = broadcast::channel(1);
+        EpochManagerHandle::new(
+            tx_request,
+            tx_events.downgrade(),
+            Arc::new(AtomicU64::new(0)),
+            CommitteeCache::new(),
+        )
+    }
+
+    /// A task syncing the global shard from its first version through epoch 1.
+    fn sync_task<TStore: StateStore>(
+        store: TStore,
+        sender: mpsc::Sender<Result<rpc::SyncStateResponse, RpcStatus>>,
+        value_filters: SubstateValueFilterFlags,
+        reads: Arc<Semaphore>,
+    ) -> StateSyncTask<TStore> {
+        let (events, _) = broadcast::channel(1);
+        StateSyncTask::new(
+            store,
+            sender,
+            vec![ShardCursor {
+                shard: Shard::global(),
+                start_state_version: 1,
+            }],
+            Some(Epoch(1)),
+            ConsensusHandle::for_test(&events),
+            dummy_epoch_manager(),
+            None,
+            false,
+            max_updates(),
+            value_filters,
+            false,
+            reads,
+        )
+    }
+
+    #[tokio::test]
+    async fn a_scan_that_streams_nothing_stops_once_the_peer_is_gone() {
+        const VERSIONS: u16 = 500;
+        let (store, _dir) = store_with_history(VERSIONS);
+        let reads = store.reads.clone();
+        let (sender, receiver) = mpsc::channel(10);
+        // Every substate in the history is a template, so a component filter selects none of them.
+        let task = sync_task(
+            store,
+            sender,
+            SubstateValueFilterFlags::COMPONENT,
+            Arc::new(Semaphore::new(1)),
+        );
+
+        let handle = tokio::spawn(task.run());
+        // The scan runs until it first yields this thread, and the peer goes away in the meantime.
+        tokio::task::yield_now().await;
+        drop(receiver);
+
+        assert!(handle.await.unwrap().is_err());
+        let reads = reads.load(Ordering::SeqCst);
+        assert!(
+            reads < usize::from(VERSIONS / 10),
+            "the scan read {reads} state version(s) of {VERSIONS} for a peer that went away"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_scan_waiting_for_a_read_stops_once_the_peer_is_gone() {
+        let (store, _dir) = store_with_history(10);
+        let reads = store.reads.clone();
+        let (sender, receiver) = mpsc::channel(10);
+        let task = sync_task(
+            store,
+            sender,
+            SubstateValueFilterFlags::all_substates(),
+            Arc::new(Semaphore::new(0)),
+        );
+
+        let handle = tokio::spawn(task.run());
+        tokio::task::yield_now().await;
+        drop(receiver);
+
+        let result = tokio::time::timeout(Duration::from_secs(10), handle)
+            .await
+            .expect("the scan kept waiting for a read after its peer went away");
+        assert!(result.unwrap().is_err());
+        assert_eq!(reads.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn a_stream_waiting_on_its_peer_holds_no_read() {
+        let (store, _dir) = store_with_history(30);
+        let shared_reads = Arc::new(Semaphore::new(1));
+        // This peer takes nothing, so its stream stalls once the channel is full.
+        let (stalled_sender, stalled_receiver) = mpsc::channel(1);
+        let stalled = sync_task(
+            store.clone(),
+            stalled_sender,
+            SubstateValueFilterFlags::all_substates(),
+            shared_reads.clone(),
+        );
+        let _stalled = tokio::spawn(stalled.run());
+        while stalled_receiver.is_empty() {
+            tokio::task::yield_now().await;
+        }
+
+        let (sender, mut receiver) = mpsc::channel(10);
+        let task = sync_task(store, sender, SubstateValueFilterFlags::COMPONENT, shared_reads);
+        let _handle = tokio::spawn(task.run());
+
+        let response = tokio::time::timeout(Duration::from_secs(10), receiver.recv())
+            .await
+            .expect("a stream waiting on its peer kept every read");
+        assert!(matches!(
+            response.unwrap().unwrap().response,
+            Some(rpc::sync_state_response::Response::Complete(_))
+        ));
     }
 }
