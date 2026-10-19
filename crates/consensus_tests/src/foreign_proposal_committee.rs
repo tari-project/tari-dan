@@ -5,7 +5,11 @@
 
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Duration,
 };
 
@@ -545,37 +549,12 @@ async fn an_embedded_foreign_proposal_withholding_a_command_does_not_take_its_sl
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_foreign_proposal_reply_withholding_a_command_does_not_take_its_slot() {
-    setup_logger();
-    let input_member = TestAddress::new("1");
-    let captured = Arc::new(Mutex::new(None::<(TestAddress, ForeignProposal)>));
-    let mut test = Test::builder()
-        .add_committee(0, vec!["1"])
-        .add_committee(1, vec!["2", "4"])
-        .with_message_filter(Box::new({
-            let input_member = input_member.clone();
-            let captured = captured.clone();
-            // Only the first reply carrying two commands in full is withheld, so the retry to the other member of
-            // committee 1 is delivered
-            move |from, to, msg| match msg {
-                HotstuffMessage::ForeignProposal(msg) if *to == input_member => {
-                    let mut captured = captured.lock().unwrap();
-                    if msg.proposal.full_commands_iter().count() < 2 || captured.is_some() {
-                        return true;
-                    }
-                    *captured = Some((from.clone(), (*msg.proposal).clone()));
-                    false
-                },
-                _ => true,
-            }
-        }))
-        .start()
-        .await;
-
-    // A copy must still carry evidence for the replica once one command is withheld, so committee 1 needs two commands
-    // in full in one block. Inputs on both committees make every LocalPrepare a command the other committee needs in
-    // full, and the transactions that arrive while the first block is being voted on share the next one.
+/// Sends `destination` four transactions, each spending an input on committee 0 and one on committee 1.
+///
+/// A copy must still carry evidence for the replica once one command is withheld, so committee 1 needs two commands
+/// in full in one block. Inputs on both committees make every LocalPrepare a command the other committee needs in
+/// full, and the transactions that arrive while the first block is being voted on share the next one.
+async fn send_transactions_spending_on_both_committees(test: &Test, destination: TestVnDestination) {
     for _ in 0..4 {
         let mut inputs = test.create_substates_on_vns(TestVnDestination::Committee(0), 1);
         inputs.extend(test.create_substates_on_vns(TestVnDestination::Committee(1), 1));
@@ -596,8 +575,68 @@ async fn a_foreign_proposal_reply_withholding_a_command_does_not_take_its_slot()
                 .collect(),
             outputs,
         );
-        test.send_transaction_to_destination(TestVnDestination::All, tx).await;
+        test.send_transaction_to_destination(destination.clone(), tx).await;
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_foreign_proposal_reply_withholding_a_command_does_not_take_its_slot() {
+    a_foreign_proposal_reply_withholding_a_command_does_not_take_its_slot_when(true).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_parked_foreign_proposal_reply_withholding_a_command_does_not_take_its_slot() {
+    // The replica only learns of the transactions from committee 1's foreign proposals, so the withholding copy names
+    // transactions it lacks and is parked while it fetches them
+    a_foreign_proposal_reply_withholding_a_command_does_not_take_its_slot_when(false).await;
+}
+
+async fn a_foreign_proposal_reply_withholding_a_command_does_not_take_its_slot_when(replica_has_transactions: bool) {
+    setup_logger();
+    let input_member = TestAddress::new("1");
+    let captured = Arc::new(Mutex::new(None::<(TestAddress, ForeignProposal)>));
+    let is_retry_delivered = Arc::new(AtomicBool::new(false));
+    let mut test = Test::builder()
+        .add_committee(0, vec!["1"])
+        .add_committee(1, vec!["2", "4"])
+        .with_message_filter(Box::new({
+            let input_member = input_member.clone();
+            let captured = captured.clone();
+            let is_retry_delivered = is_retry_delivered.clone();
+            // Only the first reply carrying two commands in full is withheld, so the retry to the other member of
+            // committee 1 is delivered
+            move |from, to, msg| match msg {
+                HotstuffMessage::ForeignProposal(msg) if *to == input_member => {
+                    let mut captured = captured.lock().unwrap();
+                    if let Some((sender, proposal)) = captured.as_ref() {
+                        if sender != from && proposal.calculate_block_id() == msg.proposal.calculate_block_id() {
+                            is_retry_delivered.store(true, Ordering::SeqCst);
+                        }
+                        return true;
+                    }
+                    if msg.proposal.full_commands_iter().count() < 2 {
+                        return true;
+                    }
+                    *captured = Some((from.clone(), (*msg.proposal).clone()));
+                    false
+                },
+                // A copy parked for missing transactions keeps its slot until they arrive, so they are held back
+                // until the retried request delivers the genuine proposal
+                HotstuffMessage::MissingTransactionsResponse(_) if *to == input_member => {
+                    captured.lock().unwrap().is_none() || is_retry_delivered.load(Ordering::SeqCst)
+                },
+                _ => true,
+            }
+        }))
+        .start()
+        .await;
+
+    let destination = if replica_has_transactions {
+        TestVnDestination::All
+    } else {
+        TestVnDestination::Committee(1)
+    };
+    send_transactions_spending_on_both_committees(&test, destination).await;
     test.start_epoch(Epoch(1)).await;
 
     let (sender, genuine) = timeout(Duration::from_secs(60), async {
