@@ -15,6 +15,7 @@ experience for those transitioning from Ethereum or generic blockchain developme
 * **Alloy-like API:** Uses the familiar `Provider`, `Signer`, and `Transport` architecture found in `alloy`.
 * **Ootle Native:** First-class support for Tari Ootle
 * **Type-Safe:** Strongly typed interactions with Tari's confidential assets.
+* **Verified:** Substate reads and committed transactions are checked against proofs signed by the network's validators, so an indexer cannot forge them.
 * **Confidential & Cross-Layer:** Stealth transfers and claiming Layer 1 (minotari) burns (`claim_burn::ClaimBurn`).
 * **Async/Await:** Built on `tokio` for high-performance, non-blocking I/O.
 

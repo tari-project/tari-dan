@@ -10,7 +10,7 @@ use std::{
 use tari_indexer_client::{
     error::IndexerRestClientError,
     rest_api_client::IndexerRestApiClient,
-    types::{GetSubstateRequest, GetSubstateResponse, GetSubstatesRequest, GetUtxosRequest, SubmitTransactionRequest},
+    types::{GetUtxosRequest, SubmitTransactionRequest},
 };
 use tari_ootle_common_types::{
     Epoch,
@@ -29,7 +29,7 @@ use tari_template_lib_types::{
     UtxoId,
     crypto::{RistrettoPublicKeyBytes, UtxoTag},
 };
-use tracing::debug;
+use tracing::{debug, warn};
 use url::Url;
 
 use crate::{
@@ -38,18 +38,19 @@ use crate::{
     provider::{
         PendingTransaction,
         Provider,
-        ProviderError,
         ProviderResult,
         StealthUtxoStream,
         StealthUtxoWatchRequest,
         TransactionEventFilter,
         TransactionEventStream,
         TransactionWatcher,
+        TrustedValidatorSet,
         WalletProvider,
         WantInput,
         input_resolver::TransactionInputResolver,
         tx_stream::{EventStream, Paused},
         tx_watcher::TransactionWatcherHandle,
+        verifier::{IndexerTrust, IndexerVerifier, SavedValidatorSet},
     },
     wallet::NetworkWallet,
 };
@@ -61,17 +62,60 @@ pub struct IndexerProvider<Wallet> {
     network: Network,
     tx_timeout: Duration,
     tx_watcher: Arc<OnceLock<TransactionWatcherHandle>>,
+    verifier: Arc<IndexerVerifier>,
 }
 
 impl<Wallet> IndexerProvider<Wallet> {
+    /// A provider that verifies what the indexer serves, as [`IndexerTrust::Verify`] describes.
     pub fn new(client: IndexerRestApiClient, wallet: Wallet, network: Network) -> Self {
+        let client = Arc::new(client);
+        let verifier = Arc::new(IndexerVerifier::new(
+            Arc::downgrade(&client),
+            network,
+            IndexerTrust::Verify,
+        ));
         Self {
-            client: Arc::new(client),
+            client,
             wallet,
             network,
             tx_timeout: Duration::from_secs(60),
             tx_watcher: Arc::new(OnceLock::new()),
+            verifier,
         }
+    }
+
+    /// Whether this provider verifies what the indexer serves. Clones of a provider share the validator sets they
+    /// trust, so this is set before the provider is first cloned or used.
+    pub fn with_indexer_trust(mut self, trust: IndexerTrust) -> Self {
+        self.verifier = Arc::new(IndexerVerifier::new(Arc::downgrade(&self.client), self.network, trust));
+        self
+    }
+
+    pub fn indexer_trust(&self) -> IndexerTrust {
+        self.verifier.trust()
+    }
+
+    /// This provider's trust in the network's validator sets, or `None` before it first anchors. An application that
+    /// saves it and passes it to [`restore_validator_set`](Self::restore_validator_set) on its next run walks on from
+    /// it, where it would otherwise trust its indexer anew.
+    pub async fn saved_validator_set(&self) -> Option<SavedValidatorSet> {
+        self.verifier.saved_validator_set().await
+    }
+
+    /// Trusts `saved`, such as an earlier run's trust, in place of the validator sets trusted before. The next
+    /// verification walks the end-of-epoch handovers on from it.
+    pub async fn restore_validator_set(&self, saved: SavedValidatorSet) -> ProviderResult<()> {
+        Ok(self.verifier.restore_validator_set(saved).await?)
+    }
+
+    /// Brings the trusted validator set up to the one the indexer's latest checkpoint names, anchoring on that set on
+    /// first use. Verification does this as it needs; calling it checks that the indexer serves a walkable chain.
+    pub async fn sync_validator_set(&self) -> ProviderResult<TrustedValidatorSet> {
+        Ok(self.verifier.sync().await?)
+    }
+
+    pub(crate) fn verifier(&self) -> &Arc<IndexerVerifier> {
+        &self.verifier
     }
 
     /// The default timeout when waiting for a transaction to be finalized. This is used by the `PendingTransaction`
@@ -79,10 +123,6 @@ impl<Wallet> IndexerProvider<Wallet> {
     pub fn with_transaction_timeout(mut self, timeout: Duration) -> Self {
         self.tx_timeout = timeout;
         self
-    }
-
-    pub(crate) fn client(&self) -> &IndexerRestApiClient {
-        &self.client
     }
 
     /// The indexer URL this provider currently sends requests to.
@@ -111,12 +151,9 @@ impl<Wallet> IndexerProvider<Wallet> {
         Ok(resp.network)
     }
 
+    /// The live substate of `substate_id`, verified unless the provider trusts its indexer.
     pub async fn fetch_substate<T: Into<SubstateId>>(&self, substate_id: T) -> ProviderResult<Substate> {
-        let resp = self
-            .client
-            .get_substate(&substate_id.into(), GetSubstateRequest::default())
-            .await?;
-        Ok(up_substate(resp)?)
+        Ok(self.verifier.fetch_substate(&substate_id.into()).await?)
     }
 
     pub async fn get_epoch(&self) -> ProviderResult<Epoch> {
@@ -140,13 +177,10 @@ impl<Wallet> IndexerProvider<Wallet> {
         TransactionEventStream::new(Arc::downgrade(&self.client), filter)
     }
 
+    /// The live substate of `substate_id`, verified unless the provider trusts its indexer. `None` if the indexer has
+    /// none, which no proof shows.
     pub async fn get_substate<T: Into<SubstateId>>(&self, substate_id: T) -> ProviderResult<Option<Substate>> {
-        let resp = self
-            .client
-            .get_substate(&substate_id.into(), GetSubstateRequest::default())
-            .await
-            .optional()?;
-        Ok(resp.map(up_substate).transpose()?)
+        Ok(self.verifier.fetch_substate(&substate_id.into()).await.optional()?)
     }
 
     /// Fetch a resource by address. The returned [`Resource`] carries its type, optional view key,
@@ -235,12 +269,18 @@ impl<Wallet: NetworkWallet + Send + Sync> IndexerProvider<Wallet> {
     ) -> ProviderResult<PendingTransaction> {
         // Start the tx watcher if not already started
         let watcher = self.get_tx_watcher().clone();
+        if let Err(err) = self.verifier.anchor_if_untrusted().await {
+            warn!("Failed to anchor the trusted validator set before submitting a transaction: {err}");
+        }
 
         let resp = self
             .client
             .submit_transaction(SubmitTransactionRequest { transaction })
             .await?;
-        Ok(PendingTransaction::new(watcher, self.weak_client(), resp.transaction_id).with_timeout(self.tx_timeout))
+        Ok(
+            PendingTransaction::new(watcher, self.weak_client(), self.verifier.clone(), resp.transaction_id)
+                .with_timeout(self.tx_timeout),
+        )
     }
 
     pub(crate) fn get_tx_watcher(&self) -> &TransactionWatcherHandle {
@@ -273,7 +313,7 @@ impl<Wallet: NetworkWallet + Send + Sync> Provider for IndexerProvider<Wallet> {
         mut transaction: UnsignedTransaction,
         want_list: &HashSet<WantInput>,
     ) -> ProviderResult<UnsignedTransaction> {
-        TransactionInputResolver::new(self.weak_client())
+        TransactionInputResolver::new(self.verifier.clone())
             .resolve_inputs(&mut transaction, want_list)
             .await?;
         Ok(transaction)
@@ -288,31 +328,8 @@ impl<Wallet: NetworkWallet + Send + Sync> Provider for IndexerProvider<Wallet> {
             // The request API will not allow us to send an empty list, so we short-circuit here
             return Ok(HashMap::new());
         }
-
-        let resp = self
-            .client
-            .fetch_substates(GetSubstatesRequest {
-                requests: substate_ids
-                    .try_into()
-                    .map_err(|_| ProviderError::other("Too many substates requested in single request"))?,
-                cached_only: false,
-                include_proofs: false,
-            })
-            .await?;
-
-        Ok(resp.substates)
+        Ok(self.verifier.fetch_substates(&substate_ids).await?)
     }
-}
-
-/// The live substate a lookup without proofs answers with. The indexer answers such a lookup with a down version only
-/// in breach of its API.
-fn up_substate(resp: GetSubstateResponse) -> Result<Substate, IndexerRestClientError> {
-    let version = resp.version;
-    resp.into_substate_value()
-        .map(|value| Substate::new(version, value))
-        .ok_or_else(|| IndexerRestClientError::InvalidResponse {
-            message: format!("Indexer answered v{version} as down to a request without proofs"),
-        })
 }
 
 impl<Wallet: NetworkWallet + Send + Sync> WalletProvider for IndexerProvider<Wallet> {

@@ -29,8 +29,11 @@ mod traits;
 mod tx_stream;
 mod tx_watcher;
 mod utxo_watcher;
+mod verifier;
 mod want_input;
 
+#[cfg(test)]
+mod test_indexer;
 #[cfg(test)]
 mod test_sse_server;
 
@@ -39,7 +42,9 @@ pub use builder::*;
 pub use error::*;
 pub use event_watcher::*;
 pub use indexer::*;
+pub use tari_ootle_light_client::TrustedValidatorSet;
 pub use traits::*;
 pub use tx_watcher::*;
 pub use utxo_watcher::*;
+pub use verifier::{IndexerTrust, SavedValidatorSet, VerifyError};
 pub use want_input::*;

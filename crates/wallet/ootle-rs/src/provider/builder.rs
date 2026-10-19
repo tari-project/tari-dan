@@ -7,7 +7,7 @@ use tari_indexer_client::error::IndexerRestClientError;
 use tari_ootle_address::Network;
 
 use crate::{
-    provider::indexer::IndexerProvider,
+    provider::{IndexerTrust, indexer::IndexerProvider},
     wallet::{NetworkWallet, NoWallet},
 };
 
@@ -25,6 +25,7 @@ use crate::{
 pub struct ProviderBuilder<Wallet = NoWallet> {
     wallet: Wallet,
     network: Network,
+    indexer_trust: IndexerTrust,
 }
 
 impl ProviderBuilder<NoWallet> {
@@ -32,6 +33,7 @@ impl ProviderBuilder<NoWallet> {
         Self {
             network: Network::MainNet,
             wallet: NoWallet,
+            indexer_trust: IndexerTrust::Verify,
         }
     }
 
@@ -46,12 +48,19 @@ impl<Wallet> ProviderBuilder<Wallet> {
         ProviderBuilder {
             network: wallet.default_address().network(),
             wallet,
+            indexer_trust: self.indexer_trust,
         }
+    }
+
+    /// Whether the provider verifies what the indexer serves. Defaults to [`IndexerTrust::Verify`].
+    pub fn indexer_trust(mut self, indexer_trust: IndexerTrust) -> Self {
+        self.indexer_trust = indexer_trust;
+        self
     }
 
     pub async fn connect<T: AsRef<str>>(self, url: T) -> Result<IndexerProvider<Wallet>, IndexerRestClientError> {
         let client = tari_indexer_client::connect_rest(url.as_ref())?;
-        Ok(IndexerProvider::new(client, self.wallet, self.network))
+        Ok(IndexerProvider::new(client, self.wallet, self.network).with_indexer_trust(self.indexer_trust))
     }
 
     /// Connects to the indexer with a custom transaction timeout. This is the amount of time that the provider will
@@ -63,7 +72,9 @@ impl<Wallet> ProviderBuilder<Wallet> {
         tx_timeout: Duration,
     ) -> Result<IndexerProvider<Wallet>, IndexerRestClientError> {
         let client = tari_indexer_client::connect_rest(url.as_ref())?;
-        Ok(IndexerProvider::new(client, self.wallet, self.network).with_transaction_timeout(tx_timeout))
+        Ok(IndexerProvider::new(client, self.wallet, self.network)
+            .with_indexer_trust(self.indexer_trust)
+            .with_transaction_timeout(tx_timeout))
     }
 }
 

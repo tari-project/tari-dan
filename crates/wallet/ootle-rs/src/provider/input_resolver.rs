@@ -3,10 +3,10 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    sync::Weak,
+    sync::Arc,
 };
 
-use tari_indexer_client::{rest_api_client::IndexerRestApiClient, types::GetSubstatesRequest};
+use tari_indexer_client::types::MAX_SUBSTATES_PER_FETCH;
 use tari_ootle_common_types::{
     InputDeclaration,
     engine_types::{
@@ -19,7 +19,10 @@ use tari_ootle_transaction::UnsignedTransaction;
 use tari_template_lib_types::{ComponentAddress, constants::TARI_TOKEN};
 use tracing::debug;
 
-use crate::{macros::_macro_exports::ResourceAddress, provider::WantInput};
+use crate::{
+    macros::_macro_exports::ResourceAddress,
+    provider::{VerifyError, WantInput, verifier::IndexerVerifier},
+};
 
 const LOG_TARGET: &str = "ootle_rs::wallet::provider::input_resolver";
 
@@ -27,8 +30,8 @@ const LOG_TARGET: &str = "ootle_rs::wallet::provider::input_resolver";
 pub enum TransactionInputResolverError {
     #[error("Failed to resolve transaction input: {0}")]
     IndexerClientError(#[from] tari_indexer_client::error::IndexerRestClientError),
-    #[error("Indexer client has been dropped")]
-    IndexerClientDropped,
+    #[error(transparent)]
+    Unverified(#[from] VerifyError),
     #[error("Indexed value error: {0}")]
     IndexedValueError(#[from] IndexedValueError),
     #[error("Required substate {substate_id} not found: {details}")]
@@ -41,14 +44,14 @@ pub enum TransactionInputResolverError {
 }
 
 pub struct TransactionInputResolver {
-    client: Weak<IndexerRestApiClient>,
+    verifier: Arc<IndexerVerifier>,
     cache: HashMap<SubstateId, Option<SubstateValue>>,
 }
 
 impl TransactionInputResolver {
-    pub fn new(client: Weak<IndexerRestApiClient>) -> Self {
+    pub(crate) fn new(verifier: Arc<IndexerVerifier>) -> Self {
         Self {
-            client,
+            verifier,
             cache: HashMap::new(),
         }
     }
@@ -58,10 +61,6 @@ impl TransactionInputResolver {
         tx_mut: &mut UnsignedTransaction,
         want_list: &HashSet<WantInput>,
     ) -> Result<(), TransactionInputResolverError> {
-        let Some(client) = self.client.upgrade() else {
-            return Err(TransactionInputResolverError::IndexerClientDropped);
-        };
-
         let mut wants = want_list.iter().map(|i| (i, false)).collect::<HashMap<_, _>>();
 
         let mut substates_to_cache = Vec::new();
@@ -84,7 +83,7 @@ impl TransactionInputResolver {
             }
 
             // Populate the cache and then do another pass
-            self.cache_substates(&mut substates_to_cache, &client).await?;
+            self.cache_substates(&mut substates_to_cache).await?;
         }
 
         Ok(())
@@ -342,22 +341,12 @@ impl TransactionInputResolver {
     async fn cache_substates(
         &mut self,
         substates_to_cache: &mut Vec<SubstateId>,
-        client: &IndexerRestApiClient,
     ) -> Result<(), TransactionInputResolverError> {
-        for batch in substates_to_cache.chunks(20) {
-            let requests = batch.to_vec();
-            let resp = client
-                .fetch_substates(GetSubstatesRequest {
-                    requests: requests
-                        .try_into()
-                        .expect("number of substates drained should be <= request maximum"),
-                    cached_only: false,
-                    include_proofs: false,
-                })
-                .await?;
+        for batch in substates_to_cache.chunks(MAX_SUBSTATES_PER_FETCH) {
+            let substates = self.verifier.fetch_substates(batch).await?;
 
             self.cache.extend(
-                resp.substates
+                substates
                     .into_iter()
                     .map(|(id, substate)| (id, Some(substate.into_substate_value()))),
             );

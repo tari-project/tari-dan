@@ -17,6 +17,7 @@ tari_crypto = { workspace = true }
 tari_bor = { workspace = true }
 ootle_byte_type = { workspace = true, features = ["crypto"] }
 tari_indexer_client = { workspace = true, features = ["client"] }
+tari_ootle_light_client = { workspace = true }
 tari_ootle_address = { workspace = true }
 tari_template_builtin = { workspace = true }
 
@@ -38,6 +39,10 @@ url = { workspace = true }
 signature = "3.0.0"
 
 [dev-dependencies]
+tari_ootle_light_client = { workspace = true, features = ["test-fixtures"] }
+tari_consensus_types = { workspace = true }
+axum = { workspace = true, features = ["query"] }
+time = { workspace = true, features = ["macros"] }
 tokio = { workspace = true, features = ["sync", "macros", "rt-multi-thread", "net", "io-util", "time"] }
 env_logger = { workspace = true }
 tracing = { workspace = true, features = ["log-always"] }

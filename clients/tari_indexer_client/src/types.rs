@@ -179,6 +179,9 @@ pub struct SubstateProofAnchor {
     pub state_merkle_root: Hash32,
 }
 
+/// The most substates the indexer serves in one [`GetSubstatesRequest`].
+pub const MAX_SUBSTATES_PER_FETCH: usize = 20;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]

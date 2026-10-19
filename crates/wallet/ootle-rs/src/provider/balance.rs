@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use ootle_byte_type::ConvertFromByteType;
 use tari_crypto::ristretto::RistrettoSecretKey;
-use tari_indexer_client::types::GetSubstatesRequest;
+use tari_indexer_client::types::MAX_SUBSTATES_PER_FETCH;
 use tari_ootle_common_types::engine_types::{
     Utxo,
     crypto::{ElgamalVerifiableBalance, ValueLookup},
@@ -220,19 +220,13 @@ impl<Wallet> IndexerProvider<Wallet> {
         }
 
         let vault_substate_ids: Vec<SubstateId> = vault_ids.iter().copied().map(SubstateId::Vault).collect();
-        let resp = self
-            .client()
-            .fetch_substates(GetSubstatesRequest {
-                requests: vault_substate_ids
-                    .try_into()
-                    .map_err(|_| ProviderError::other("Too many vaults in account"))?,
-                cached_only: false,
-                include_proofs: false,
-            })
-            .await?;
+        let mut substates = HashMap::with_capacity(vault_substate_ids.len());
+        for batch in vault_substate_ids.chunks(MAX_SUBSTATES_PER_FETCH) {
+            substates.extend(self.verifier().fetch_substates(batch).await?);
+        }
 
-        let mut balances = Vec::with_capacity(resp.substates.len());
-        for (id, substate) in resp.substates {
+        let mut balances = Vec::with_capacity(substates.len());
+        for (id, substate) in substates {
             let substate: Substate = substate;
             let vault = substate.into_substate_value().into_vault().ok_or_else(|| {
                 ProviderError::other(format!(

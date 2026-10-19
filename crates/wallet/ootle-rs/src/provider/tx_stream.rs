@@ -48,8 +48,9 @@ pub(crate) struct PauseWaiter {
 }
 
 impl PauseWaiter {
-    pub(crate) fn is_paused(&self) -> bool {
-        *self.rx.borrow()
+    /// Whether the stream is paused. Marks the state seen, so that only a later change wakes a wait.
+    fn is_paused(&mut self) -> bool {
+        *self.rx.borrow_and_update()
     }
 
     /// Waits until the paused state is changed to `true`.
@@ -61,10 +62,14 @@ impl PauseWaiter {
             return false;
         }
 
-        if self.rx.changed().await.is_err() {
-            return true;
+        loop {
+            if self.rx.changed().await.is_err() {
+                return true;
+            }
+            if self.is_paused() {
+                break;
+            }
         }
-        debug_assert!(self.is_paused());
         true
     }
 
@@ -206,6 +211,25 @@ mod tests {
             .expect("stream ended")
             .expect("stream errored");
         event.event_type
+    }
+
+    #[tokio::test]
+    async fn an_unpause_before_the_first_wait_does_not_count_as_a_pause() {
+        let paused = Paused::default();
+        let mut waiter = paused.waiter();
+        paused.set_paused(false);
+
+        assert!(!waiter.wait_unpaused().await);
+        assert!(
+            time::timeout(Duration::from_millis(100), waiter.wait_paused())
+                .await
+                .is_err(),
+            "the waiter saw a pause while unpaused"
+        );
+        paused.set_paused(true);
+        time::timeout(Duration::from_millis(100), waiter.wait_paused())
+            .await
+            .expect("the waiter missed the pause");
     }
 
     #[tokio::test]
