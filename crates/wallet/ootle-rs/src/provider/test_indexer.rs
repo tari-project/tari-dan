@@ -257,17 +257,17 @@ async fn substate(State(state): Shared, Path(id): Path<String>, Query(req): Quer
 async fn fetch_substates(State(state): Shared, Json(req): Json<GetSubstatesRequest>) -> Json<GetSubstatesResponse> {
     let state = state.lock().unwrap();
     let mut substates = HashMap::new();
-    let mut proofs = HashMap::new();
+    let mut proofs = Vec::new();
     for id in &req.requests {
         let Some(served) = state.substates.get(id) else {
             continue;
         };
         substates.insert(id.clone(), Substate::new(served.version, served.value.clone()));
         if let Some(proof) = served.proof.clone().filter(|_| req.include_proofs) {
-            proofs.insert(id.clone(), proof);
+            proofs.push((id.clone(), proof));
         }
     }
-    Json(GetSubstatesResponse { substates, proofs })
+    Json(GetSubstatesResponse::new(substates, proofs))
 }
 
 async fn transaction_result(

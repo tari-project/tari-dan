@@ -532,18 +532,19 @@ impl IndexerVerifier {
                 include_proofs: self.is_verifying(),
             })
             .await?;
+        let (substates, proofs) = resp.into_proven();
         if self.is_verifying() {
-            for (substate_id, substate) in &resp.substates {
+            for (substate_id, substate) in &substates {
                 self.verify_substate(
                     substate_id,
                     substate.version(),
                     substate.substate_value(),
-                    resp.proofs.get(substate_id),
+                    proofs.get(substate_id),
                 )
                 .await?;
             }
         }
-        Ok(resp.substates)
+        Ok(substates)
     }
 }
 
