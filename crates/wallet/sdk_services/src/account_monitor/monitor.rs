@@ -40,9 +40,10 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::ootle::wallet_services::account_monitor";
 
-/// How often every account is refreshed from the network. Finalized transactions update the accounts they touch as
-/// they arrive, so this poll only catches changes the wallet sees no transaction for, such as a deposit made by
-/// another wallet.
+/// How often every account is refreshed from the network. The wallet's own finalized transactions update the accounts
+/// they touch as they arrive, so this poll catches the changes the wallet has no transaction for. A deposit made by
+/// another wallet, into a vault the account holds or into a new one, shows up on this poll, on an explicit refresh, or
+/// when one of the wallet's own transactions next writes the account.
 const DEFAULT_PERIODIC_SCAN_INTERVAL: Duration = Duration::from_secs(10 * 60);
 /// How often a stealth UTXO scan is requested for every account's associated stealth resources.
 const DEFAULT_UTXO_SCAN_INTERVAL: Duration = Duration::from_secs(60);
