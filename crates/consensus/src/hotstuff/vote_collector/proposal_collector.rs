@@ -201,11 +201,15 @@ where TConsensusSpec: ConsensusSpec
     }
 }
 
+/// Signatures are ordered by public key so that a node builds the same certificate from the same votes. The order is
+/// applied here rather than in `ProposalCertificate::new`, which also decodes received certificates: those must keep
+/// the order their proposer committed to, or their recomputed ids would differ from the signed ones.
 fn create_proposal_certificate(
-    signatures: Vec<ValidatorSignatureBytes>,
+    mut signatures: Vec<ValidatorSignatureBytes>,
     quorum_decision: QuorumDecision,
     block: Block,
 ) -> ProposalCertificate {
+    signatures.sort_by(|a, b| a.public_key().cmp(b.public_key()));
     ProposalCertificate::new(
         block.header().calculate_hash(),
         *block.parent(),
@@ -215,4 +219,36 @@ fn create_proposal_certificate(
         signatures,
         quorum_decision,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use tari_ootle_common_types::NumPreshards;
+    use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
+
+    use super::*;
+
+    fn signature(byte: u8) -> ValidatorSignatureBytes {
+        let public_key = RistrettoPublicKeyBytes::from_bytes(&[byte; 32]).unwrap();
+        ValidatorSignatureBytes::new(public_key, SchnorrSignatureBytes::zero())
+    }
+
+    #[test]
+    fn it_orders_signatures_by_public_key() {
+        let block = Block::zero_block(Network::LocalNet, NumPreshards::P1);
+        let orders = [[3, 1, 2], [1, 2, 3], [2, 3, 1]];
+        let certificates = orders
+            .iter()
+            .map(|order| {
+                let signatures = order.iter().map(|b| signature(*b)).collect();
+                create_proposal_certificate(signatures, QuorumDecision::Accept, block.clone())
+            })
+            .collect::<Vec<_>>();
+
+        let expected = [signature(1), signature(2), signature(3)];
+        for certificate in &certificates {
+            assert_eq!(certificate.signatures(), expected);
+            assert_eq!(certificate.calculate_id(), certificates[0].calculate_id());
+        }
+    }
 }
