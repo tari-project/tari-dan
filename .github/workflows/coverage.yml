@@ -22,7 +22,7 @@ jobs:
           sudo bash scripts/install_ubuntu_dependencies.sh
 
       - name: toolchain
-        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f  # master (no version tag)
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8  # master (no version tag)
         with:
           toolchain: nightly
           components: llvm-tools-preview
