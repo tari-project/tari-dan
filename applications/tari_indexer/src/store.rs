@@ -178,7 +178,8 @@ pub trait IndexerStoreReadTransaction {
     // -------------------------------- UTXOs -------------------------------- //
 
     /// Reads up to `limit` of a shard's UTXO rows above `from_state_version`, in whole state versions,
-    /// and returns the updates among them that pass `from_epoch` and `unspents_only`.
+    /// and returns the updates among them that pass `from_epoch` and `unspents_only`. A single state
+    /// version wider than `limit` is read whole, overrunning it.
     fn utxos_get_updates(
         &mut self,
         resource_address: ResourceAddress,
