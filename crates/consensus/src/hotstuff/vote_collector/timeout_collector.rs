@@ -92,8 +92,7 @@ where TConsensusSpec: ConsensusSpec
 
         match result {
             Ok(Some((quorum_votes, _))) => {
-                let timeouts = quorum_votes.iter().map(|vote| vote.as_signed_timeout()).collect();
-                let new_tc = TimeoutCertificate::new(current_epoch, height, timeouts);
+                let new_tc = create_timeout_certificate(current_epoch, height, &quorum_votes);
                 let high_tc = self.store.with_write_tx(|tx| new_tc.update_highest(tx))?;
                 if new_tc.calculate_id() == *high_tc.id() {
                     info!(target: LOG_TARGET, "🕒️ New HIGH {}", new_tc);
@@ -138,5 +137,57 @@ where TConsensusSpec: ConsensusSpec
         }
 
         Ok(())
+    }
+}
+
+/// Timeouts are ordered by signer public key so that a node builds the same certificate from the same votes. The order
+/// is applied here rather than in `TimeoutCertificate::new`, which also decodes received certificates: those must keep
+/// the order their proposer committed to, or their recomputed ids would differ from the signed ones.
+fn create_timeout_certificate(epoch: Epoch, height: NodeHeight, votes: &[TimeoutVote]) -> TimeoutCertificate {
+    let mut timeouts = votes.iter().map(|vote| vote.as_signed_timeout()).collect::<Vec<_>>();
+    timeouts.sort_by(|a, b| a.signature.public_key().cmp(b.signature.public_key()));
+    TimeoutCertificate::new(epoch, height, timeouts)
+}
+
+#[cfg(test)]
+mod tests {
+    use tari_consensus_types::ValidatorSignatureBytes;
+    use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
+
+    use super::*;
+
+    fn public_key(byte: u8) -> RistrettoPublicKeyBytes {
+        RistrettoPublicKeyBytes::from_bytes(&[byte; 32]).unwrap()
+    }
+
+    fn vote(byte: u8) -> TimeoutVote {
+        TimeoutVote {
+            epoch: Epoch(1),
+            height: NodeHeight(5),
+            high_pc_height: NodeHeight(u64::from(byte)),
+            signature: ValidatorSignatureBytes::new(public_key(byte), SchnorrSignatureBytes::zero()),
+        }
+    }
+
+    #[test]
+    fn it_orders_timeouts_by_public_key() {
+        let orders = [[3, 1, 2], [1, 2, 3], [2, 3, 1]];
+        let certificates = orders
+            .iter()
+            .map(|order| {
+                let votes = order.iter().map(|b| vote(*b)).collect::<Vec<_>>();
+                create_timeout_certificate(Epoch(1), NodeHeight(5), &votes)
+            })
+            .collect::<Vec<_>>();
+
+        for certificate in &certificates {
+            let public_keys = certificate
+                .timeouts()
+                .iter()
+                .map(|t| *t.signature.public_key())
+                .collect::<Vec<_>>();
+            assert_eq!(public_keys, [public_key(1), public_key(2), public_key(3)]);
+            assert_eq!(certificate.calculate_id(), certificates[0].calculate_id());
+        }
     }
 }

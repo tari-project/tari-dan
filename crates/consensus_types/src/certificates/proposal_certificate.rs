@@ -50,10 +50,9 @@ impl ProposalCertificate {
         height: NodeHeight,
         epoch: Epoch,
         shard_group: ShardGroup,
-        mut signatures: Vec<ValidatorSignatureBytes>,
+        signatures: Vec<ValidatorSignatureBytes>,
         decision: QuorumDecision,
     ) -> Self {
-        signatures.sort_by(|a, b| a.public_key().cmp(b.public_key()));
         Self {
             header_hash,
             parent_id,
@@ -170,55 +169,5 @@ impl Display for ProposalCertificate {
             self.epoch,
             self.signatures.len()
         )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use tari_template_lib::types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
-
-    use super::*;
-
-    #[test]
-    fn canonical_signature_ordering() {
-        let pk1 = RistrettoPublicKeyBytes::from_bytes(&[1u8; 32]).unwrap();
-        let pk2 = RistrettoPublicKeyBytes::from_bytes(&[2u8; 32]).unwrap();
-        let pk3 = RistrettoPublicKeyBytes::from_bytes(&[3u8; 32]).unwrap();
-
-        let sig1 = ValidatorSignatureBytes::new(pk1, SchnorrSignatureBytes::zero());
-        let sig2 = ValidatorSignatureBytes::new(pk2, SchnorrSignatureBytes::zero());
-        let sig3 = ValidatorSignatureBytes::new(pk3, SchnorrSignatureBytes::zero());
-
-        let pc1 = ProposalCertificate::new(
-            FixedHash::zero(),
-            BlockId::zero(),
-            NodeHeight(1),
-            Epoch(1),
-            ShardGroup::new(1, 1),
-            vec![sig3.clone(), sig1.clone(), sig2.clone()],
-            QuorumDecision::Accept,
-        );
-        let pc2 = ProposalCertificate::new(
-            FixedHash::zero(),
-            BlockId::zero(),
-            NodeHeight(1),
-            Epoch(1),
-            ShardGroup::new(1, 1),
-            vec![sig1.clone(), sig2.clone(), sig3.clone()],
-            QuorumDecision::Accept,
-        );
-        let pc3 = ProposalCertificate::new(
-            FixedHash::zero(),
-            BlockId::zero(),
-            NodeHeight(1),
-            Epoch(1),
-            ShardGroup::new(1, 1),
-            vec![sig2.clone(), sig3.clone(), sig1.clone()],
-            QuorumDecision::Accept,
-        );
-
-        assert_eq!(pc1.calculate_id(), pc2.calculate_id());
-        assert_eq!(pc2.calculate_id(), pc3.calculate_id());
-        assert_eq!(pc1.signatures(), pc2.signatures());
     }
 }
