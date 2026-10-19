@@ -14,7 +14,7 @@ use tari_ootle_walletd_client::{
 
 use crate::handlers::HandlerContext;
 
-/// The most re-anchors `validator_set.get_status` reports.
+/// The most re-anchors `validator_set.get_status` reports. The web UI's Validator Set page states this cap.
 const MAX_REANCHORS_REPORTED: u64 = 10;
 
 pub async fn handle_get_status(
