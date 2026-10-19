@@ -20,7 +20,7 @@ use crate::{
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
-    consensus_models::BlockHeaderMetadata,
+    consensus_models::{BlockHeaderMetadata, CommittedBlockProof},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, CborLen)]
@@ -79,6 +79,12 @@ impl EpochCheckpoint {
 
     pub fn proof(&self) -> &CommandCommitProof<EndOfEpochCommand> {
         &self.proof
+    }
+
+    /// The commit proof of the end-of-epoch block, which outlives the block once epoch GC prunes it.
+    pub fn block_commit_proof(&self) -> CommittedBlockProof {
+        let CommandCommitProof::V1(proof) = &self.proof;
+        CommittedBlockProof::new(proof.commit_proof().clone())
     }
 
     pub fn header(&self) -> &SidechainBlockHeader {
