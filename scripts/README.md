@@ -59,7 +59,7 @@ cohort; every other tier is independently versioned (each crate carries its own
 
 | Tier | Label      | Policy |
 |------|------------|--------|
-| 1    | `stable`   | Shared primitives, rarely change (e.g. `tari_bor`, `ootle-network`, `ootle_byte_type`, `ootle_serde`, `tari_ootle_address`). |
+| 1    | `stable`   | Shared primitives, rarely change (e.g. `tari_bor`, `ootle-network`, `ootle_byte_type`, `ootle_serde`, `tari_ootle_address`), and the sidechain crates the Minotari base layer also consumes (`tari_sidechain`, `tari_jellyfish`). |
 | 2    | `template` | The template-authoring API (`tari_template_*`, `tari_ootle_template_*`). |
 | 3    | `core`     | Share `[workspace.package].version` in the root `Cargo.toml`. **Move together.** A breaking bump on any tier-3 crate moves the entire cohort. |
 | 4    | `wallet`   | Wallet SDK, clients & storage (`tari_ootle_wallet_*`, `tari_*_client`, `ootle-rs`). Decoupled from the core version. |

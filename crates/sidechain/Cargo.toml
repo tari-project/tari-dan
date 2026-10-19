@@ -1,6 +1,6 @@
 [package]
 name = "tari_sidechain"
-description = "Tari Ootle sidechain proofs and types, verified by the Minotari base layer"
+description = "Tari Ootle sidechain commit proofs, burn claim proofs and consensus hashers"
 version = "7.0.0"
 edition.workspace = true
 authors.workspace = true

@@ -58,6 +58,10 @@ where they apply:
       Python. Bump it as a breaking release and regenerate its fixtures.
 - [ ] **Community templates** — a template ABI break means templates must be rebuilt and
       republished. Flag it. **(human)**
+- [ ] **Minotari base layer** — the Minotari wallet writes burn claim proofs with `tari_sidechain`
+      from crates.io. A change to `CompleteClaimBurnProof` or the types it carries breaks the claim
+      files it writes: say so in the upgrade notes, and plan the base layer release that takes the
+      new pin. **(human)**
 
 ## 4. crates.io cascade
 

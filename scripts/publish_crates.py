@@ -41,6 +41,10 @@ CRATES = [
     ("tari_template_lib", "crates/template_lib", 2),
     ("tari_ootle_template_metadata", "crates/template_metadata", 2),
     ("tari_ootle_template_build", "crates/template_build", 2),
+    # Also consumed by the Minotari base layer, whose wallet writes burn claim proofs with tari_sidechain.
+    # Both keep the version lines they had in the base layer repo.
+    ("tari_jellyfish", "crates/jellyfish", 1),
+    ("tari_sidechain", "crates/sidechain", 1),
     ("tari_engine_types", "crates/engine_types", 3),
     ("tari_ootle_common_types", "crates/common_types", 3),
     ("tari_state_tree", "crates/state_tree", 3),

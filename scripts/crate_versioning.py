@@ -160,10 +160,11 @@ class Release:
         """Highest non-yanked published version, or None if there is none.
 
         Yanked versions are excluded because this is the version dependents
-        resolve to; `taken` keeps them because their numbers stay spent.
+        resolve to; `taken` keeps them because their numbers stay spent. A
+        release outranks its own pre-releases, which `vkey` ranks equal to it.
         """
         live = [v for v, yanked in self.published or () if not yanked]
-        return max(live, key=vkey, default=None)
+        return max(live, key=lambda v: (vkey(v), "-" not in v), default=None)
 
     @property
     def taken(self) -> bool:
