@@ -500,26 +500,28 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
 
         debug!(target: LOG_TARGET, "Found {} validators", validators.len());
 
-        let mut committees = HashMap::with_capacity(shard_group.len());
+        let mut members = HashMap::<_, Vec<_>>::with_capacity(shard_group.len());
         for (vn, committee) in validators {
-            let validators = committees
+            members
                 .entry(committee.as_shard_group())
-                .or_insert_with(|| Committee::empty());
-
-            validators.members_mut().push(CommitteeMember {
-                address: DbValidatorNode::try_parse_address(&vn.address)?,
-                public_key: RistrettoPublicKeyBytes::from_bytes(&vn.public_key).map_err(|_| {
-                    SqliteStorageError::MalformedDbData(format!(
-                        "validator_nodes_get_overlapping_shard_group: Invalid public key in validator node record \
-                         id={}",
-                        vn.id
-                    ))
-                })?,
-                vote_power: VotePower::of(vn.power as u64),
-            });
+                .or_default()
+                .push(CommitteeMember {
+                    address: DbValidatorNode::try_parse_address(&vn.address)?,
+                    public_key: RistrettoPublicKeyBytes::from_bytes(&vn.public_key).map_err(|_| {
+                        SqliteStorageError::MalformedDbData(format!(
+                            "validator_nodes_get_overlapping_shard_group: Invalid public key in validator node record \
+                             id={}",
+                            vn.id
+                        ))
+                    })?,
+                    vote_power: VotePower::of(vn.power as u64),
+                });
         }
 
-        Ok(committees)
+        Ok(members
+            .into_iter()
+            .map(|(shard_group, members)| (shard_group, Committee::new(members)))
+            .collect())
     }
 
     fn validator_nodes_get_random_committee_member_from_shard_group(
@@ -565,53 +567,6 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
 
         let vn = vn.try_into()?;
         Ok(vn)
-    }
-
-    fn validator_nodes_get_committees_for_epoch(
-        &self,
-        tx: &mut Self::DbTransaction<'_>,
-        epoch: Epoch,
-    ) -> Result<HashMap<ShardGroup, Committee<Self::Addr>>, Self::Error> {
-        use crate::global::schema::{committees, validator_nodes};
-
-        let results = committees::table
-            .inner_join(validator_nodes::table.on(committees::validator_node_id.eq(validator_nodes::id)))
-            .select((
-                committees::shard_start,
-                committees::shard_end,
-                validator_nodes::address,
-                validator_nodes::public_key,
-                validator_nodes::power,
-            ))
-            .filter(committees::epoch.eq(epoch.as_u64() as i64))
-            .filter(
-                validator_nodes::end_epoch
-                    .is_null()
-                    .or(validator_nodes::end_epoch.gt(epoch.as_u64() as i64)),
-            )
-            .load::<(i32, i32, String, Vec<u8>, i64)>(tx.connection())
-            .map_err(|source| SqliteStorageError::DieselError {
-                source,
-                operation: "validator_nodes_get_committees",
-            })?;
-
-        let mut committees = HashMap::new();
-        for (shard_start, shard_end, address, public_key, power) in results {
-            let addr = DbValidatorNode::try_parse_address(&address)?;
-            let pk = RistrettoPublicKeyBytes::from_bytes(&public_key)
-                .map_err(|_| SqliteStorageError::MalformedDbData("Invalid public key".to_string()))?;
-            committees
-                .entry(ShardGroup::new(shard_start as u32, shard_end as u32))
-                .or_insert_with(Committee::empty)
-                .members_mut()
-                .push(CommitteeMember {
-                    address: addr,
-                    public_key: pk,
-                    vote_power: VotePower::of(power as u64),
-                });
-        }
-
-        Ok(committees)
     }
 
     fn insert_epoch(

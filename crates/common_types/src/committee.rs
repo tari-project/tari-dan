@@ -3,13 +3,16 @@
 
 use std::{cmp, fmt::Display, ops::RangeInclusive};
 
-use rand::seq::{IndexedRandom, SliceRandom};
+use rand::seq::IndexedRandom;
 use serde::{Deserialize, Serialize};
 use tari_engine_types::{SubstateVersion, substate::SubstateId};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{Epoch, NumPreshards, ShardGroup, SubstateAddress, VersionedSubstateIdRef, VotePower};
 
+/// A committee's members in ascending public key order, each public key at most once. Positions are protocol-visible:
+/// leader rotation indexes into them, and the validator set commits to committees in this order. Committee assignment
+/// keeps one registration per public key, and `hash_validator_set_committee` rejects a committee that repeats one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default, Hash)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Committee<TAddr> {
@@ -40,17 +43,10 @@ impl<TAddr: PartialEq> Committee<TAddr> {
         Self::new(vec![])
     }
 
-    pub fn with_capacity(cap: usize) -> Self {
-        Self::new(Vec::with_capacity(cap))
-    }
-
-    pub fn new(members: Vec<CommitteeMember<TAddr>>) -> Self {
+    /// Orders `members` by public key. `members` must not repeat a public key.
+    pub fn new(mut members: Vec<CommitteeMember<TAddr>>) -> Self {
+        members.sort_by_key(|member| member.public_key);
         Self { members }
-    }
-
-    // TODO: remove this - rather create committees from iterators than mutating directly
-    pub fn members_mut(&mut self) -> &mut Vec<CommitteeMember<TAddr>> {
-        &mut self.members
     }
 
     pub fn max_failures(&self) -> VotePower {
@@ -95,24 +91,23 @@ impl<TAddr: PartialEq> Committee<TAddr> {
     }
 
     pub fn contains_public_key(&self, public_key: &RistrettoPublicKeyBytes) -> bool {
-        // TODO(perf); O(n) lookup
-        self.members.iter().any(|member| *public_key == member.public_key)
+        self.index_of_public_key(public_key).is_some()
     }
 
     pub fn get_power_by_public_key(&self, public_key: &RistrettoPublicKeyBytes) -> Option<VotePower> {
-        // TODO(perf); O(n) lookup
+        self.index_of_public_key(public_key)
+            .map(|index| self.members[index].vote_power)
+    }
+
+    /// The position of the member with `public_key`, which is unique because a committee lists each public key once.
+    pub fn index_of_public_key(&self, public_key: &RistrettoPublicKeyBytes) -> Option<usize> {
         self.members
-            .iter()
-            .find(|m| m.public_key == *public_key)
-            .map(|m| m.vote_power)
+            .binary_search_by(|member| member.public_key.cmp(public_key))
+            .ok()
     }
 
     pub fn get(&self, index: usize) -> Option<&CommitteeMember<TAddr>> {
         self.members.get(index)
-    }
-
-    pub fn shuffle(&mut self) {
-        self.members.shuffle(&mut rand::rng());
     }
 
     pub fn shuffled(&self) -> impl Iterator<Item = &CommitteeMember<TAddr>> + '_ {
@@ -328,14 +323,43 @@ mod tests {
 
     fn create_committee(size: usize) -> Committee<u32> {
         Committee::new(
-            (0..size as u32)
+            (0..size as u8)
                 .map(|c| CommitteeMember {
-                    address: c,
-                    public_key: RistrettoPublicKeyBytes::default(),
+                    address: u32::from(c),
+                    public_key: RistrettoPublicKeyBytes::from_bytes(&[c; 32]).unwrap(),
                     vote_power: VotePower::of(1),
                 })
                 .collect(),
         )
+    }
+
+    fn member(address: u32, key_byte: u8) -> CommitteeMember<u32> {
+        CommitteeMember {
+            address,
+            public_key: RistrettoPublicKeyBytes::from_bytes(&[key_byte; 32]).unwrap(),
+            vote_power: VotePower::of(u64::from(address)),
+        }
+    }
+
+    #[test]
+    fn it_orders_members_by_public_key() {
+        let committee = Committee::new(vec![member(1, 3), member(2, 1), member(3, 2)]);
+        assert_eq!(committee.address_iter().copied().collect::<Vec<_>>(), vec![2, 3, 1]);
+
+        let merged = [Committee::new(vec![member(1, 3)]), Committee::new(vec![member(2, 1)])]
+            .into_iter()
+            .collect::<Committee<_>>();
+        assert_eq!(merged.address_iter().copied().collect::<Vec<_>>(), vec![2, 1]);
+    }
+
+    #[test]
+    fn it_finds_members_by_public_key() {
+        let committee = Committee::new(vec![member(1, 3), member(2, 1), member(3, 2)]);
+        let key = |byte| RistrettoPublicKeyBytes::from_bytes(&[byte; 32]).unwrap();
+        assert_eq!(committee.index_of_public_key(&key(3)), Some(2));
+        assert_eq!(committee.get_power_by_public_key(&key(2)), Some(VotePower::of(3)));
+        assert!(committee.contains_public_key(&key(1)));
+        assert_eq!(committee.index_of_public_key(&key(4)), None);
     }
 
     mod select_n_starting_from {
