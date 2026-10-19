@@ -125,7 +125,7 @@ function ValidatorSetPage() {
           </Alert>
         ) : (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            The wallet verifies the indexer's substates and transaction results against the validator sets it trusts. It
+            The wallet verifies the transaction results its indexer serves against the validator sets it trusts. It
             anchors on the first validator set its indexer serves, and walks forward from it one signed checkpoint per
             epoch.
           </Typography>
@@ -133,10 +133,13 @@ function ValidatorSetPage() {
         {trusted ? (
           <TrustedSet trusted={trusted} networkEpoch={settings.data?.current_epoch ?? null} />
         ) : (
-          <Alert severity="info">
-            The wallet trusts no validator set yet. It anchors on one when it first verifies a read or submits a
-            transaction.
-          </Alert>
+          indexer_trust === "verify" && (
+            <Alert severity="info">
+              The wallet trusts no validator set yet. It anchors on the first checkpoint its indexer serves at its next
+              sync, which runs every 10 minutes and before each submission. A wallet that stays unanchored usually
+              cannot reach its indexer, or the network has not yet finished its first epoch.
+            </Alert>
+          )
         )}
       </>
     );
