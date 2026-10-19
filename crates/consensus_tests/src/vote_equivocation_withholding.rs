@@ -88,8 +88,6 @@ async fn a_node_holding_evidence_withholds_its_vote_and_consensus_continues() {
         .unwrap();
     assert!(holds, "evidence is not readable back");
 
-    // Long enough for the accused to be the leader of a view, and for the block it proposes to be
-    // certified by the block above it.
     // A certificate names its signers by their position in the committee, which is ascending by public key.
     let mut committee = ["1", "2", "3", "4", "5"].map(|addr| public_key_of(&TestAddress::new(addr)));
     committee.sort();
@@ -97,6 +95,9 @@ async fn a_node_holding_evidence_withholds_its_vote_and_consensus_continues() {
         .iter()
         .position(|public_key| *public_key == public_key_of(&accuser))
         .unwrap();
+
+    // Long enough for the accused to be the leader of a view, and for the block it proposes to be
+    // certified by the block above it.
     let mut checked_a_block_by_the_accused = false;
     for _ in 0..12 {
         let (tx, _, _) = test.send_transaction_to_all(Decision::Commit, 1, 2, 1).await;

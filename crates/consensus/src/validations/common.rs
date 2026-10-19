@@ -11,7 +11,6 @@ use tari_consensus_types::{
     TimeoutVoteMessage,
     ValidatorSignatureBytes,
 };
-use tari_crypto::tari_utilities::ByteArray;
 use tari_engine_types::fees::ExhaustBurnRate;
 use tari_ootle_common_types::{
     DerivableFromPublicKey,
@@ -26,11 +25,11 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_storage::consensus_models::{Block, BlockHeader};
 use tari_ootle_transaction::Network;
-use tari_sidechain::{FixedHash, ProposalVoteMessage, QcSignatures, QcSignaturesError, ValidatorBlockSignature};
-use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, Scalar32Bytes, SchnorrSignatureBytes};
+use tari_sidechain::{FixedHash, ProposalVoteMessage, QcSignatures, QcSignaturesError};
+use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{
-    hotstuff::{HotstuffConfig, LeaderSkipSet, ProposalValidationError},
+    hotstuff::{HotstuffConfig, LeaderSkipSet, ProposalValidationError, commit_proofs::to_signature_bytes},
     traits::{ConsensusSpec, LeaderStrategy, ValidatorSignatureVerifierService},
     validations::signed_vote::{SignedProposalVote, SignedTimeoutVote},
 };
@@ -496,12 +495,6 @@ fn is_qc_signature_scheme_accepted(protocol_version: ProtocolVersion, signatures
             QcSignatures::Schnorr { .. },
         ) => true,
     }
-}
-
-fn to_signature_bytes(signature: &ValidatorBlockSignature) -> Option<SchnorrSignatureBytes> {
-    let public_nonce = RistrettoPublicKeyBytes::from_bytes(signature.get_compressed_public_nonce().as_bytes()).ok()?;
-    let signature = Scalar32Bytes::from_bytes(signature.get_signature().as_bytes()).ok()?;
-    Some(SchnorrSignatureBytes::new(public_nonce, signature))
 }
 
 fn check_timeout_certificate_signatures<TConsensusSpec: ConsensusSpec>(

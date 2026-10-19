@@ -18,7 +18,7 @@ use tari_sidechain::{
     SidechainBlockHeader,
     ValidatorBlockSignature,
 };
-use tari_template_lib_types::crypto::SchnorrSignatureBytes;
+use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, Scalar32Bytes, SchnorrSignatureBytes};
 
 use crate::hotstuff::HotStuffError;
 
@@ -266,6 +266,13 @@ pub(crate) fn convert_validator_block_signature(
     })?;
 
     Ok(ValidatorBlockSignature::new(public_nonce, signature))
+}
+
+/// The inverse of [`convert_validator_block_signature`].
+pub(crate) fn to_signature_bytes(signature: &ValidatorBlockSignature) -> Option<SchnorrSignatureBytes> {
+    let public_nonce = RistrettoPublicKeyBytes::from_bytes(signature.get_compressed_public_nonce().as_bytes()).ok()?;
+    let signature = Scalar32Bytes::from_bytes(signature.get_signature().as_bytes()).ok()?;
+    Some(SchnorrSignatureBytes::new(public_nonce, signature))
 }
 
 #[cfg(test)]
