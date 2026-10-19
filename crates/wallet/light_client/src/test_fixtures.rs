@@ -151,12 +151,13 @@ impl ValidatorSetFixture {
 
     pub fn with_signers(network: Network, epoch: u64, low_signers: Signers, high_signers: Signers) -> Self {
         let epoch = Epoch(epoch);
+        let version = ProtocolVersion::at(network, epoch);
         let leaves = [(low(), &low_signers), (high(), &high_signers)].map(|(shard_group, signers)| {
             (
                 shard_group,
                 signers
                     .committee()
-                    .calculate_validator_set_leaf_hash(&shard_group)
+                    .calculate_validator_set_leaf_hash(version, &shard_group)
                     .unwrap(),
             )
         });

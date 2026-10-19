@@ -10,6 +10,7 @@ use tari_jellyfish::{JmtHashScheme, LeafKey, SparseMerkleProofExt, TreeHash};
 use tari_ootle_common_types::{
     Epoch,
     NumPreshards,
+    ProtocolVersion,
     ShardGroup,
     ValidatorSetError,
     ValidatorSetHash,
@@ -40,7 +41,9 @@ pub struct ValidatorSetTree {
 }
 
 impl ValidatorSetTree {
-    /// Builds the tree over each shard group's committee leaf hash. Fails if a shard group appears more than once.
+    /// Builds the tree over each shard group's committee leaf hash, which is the committee's
+    /// [`hash_validator_set_committee`] under `ProtocolVersion::at(network, epoch)`. Fails if a shard group appears
+    /// more than once.
     pub fn build<I: IntoIterator<Item = (ShardGroup, Hash32)>>(
         network: Network,
         epoch: Epoch,
@@ -97,7 +100,8 @@ impl ValidatorSetTree {
                 shard_group: *shard_group,
                 epoch: self.epoch,
             })?;
-        if committee.calculate_validator_set_leaf_hash(shard_group)? != *committed_leaf {
+        let version = ProtocolVersion::at(self.network, self.epoch);
+        if committee.calculate_validator_set_leaf_hash(version, shard_group)? != *committed_leaf {
             return Err(ValidatorSetTreeError::CommitteeDoesNotMatchLeaf {
                 shard_group: *shard_group,
                 epoch: self.epoch,
@@ -115,6 +119,7 @@ impl ValidatorSetTree {
                 .map(|member| ValidatorSetMember {
                     public_key: member.public_key,
                     vote_power: member.vote_power,
+                    additional_keys: Vec::new(),
                 })
                 .collect(),
             proof,
@@ -199,10 +204,11 @@ impl ValidatorSetCommitteeProof {
         }
 
         let leaf_hash = hash_validator_set_committee(
+            ProtocolVersion::at(self.network, self.epoch),
             &self.shard_group,
             self.members
                 .iter()
-                .map(|member| (&member.public_key, member.vote_power)),
+                .map(|member| (&member.public_key, member.vote_power, member.additional_keys.as_slice())),
         )?;
         self.proof
             .verify_inclusion(
