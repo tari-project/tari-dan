@@ -212,7 +212,7 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Install cargo-machete
-        uses: taiki-e/install-action@v2.87.27
+        uses: taiki-e/install-action@v2.87.29
         with:
           tool: cargo-machete
 
@@ -245,7 +245,7 @@ jobs:
           node-version-file: .nvmrc
 
       - name: Install wasm-pack
-        uses: taiki-e/install-action@v2.87.27
+        uses: taiki-e/install-action@v2.87.29
         with:
           tool: wasm-pack@0.15.0
 
@@ -331,7 +331,7 @@ jobs:
         run: rustup target add wasm32-unknown-unknown
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@v2.87.27
+        uses: taiki-e/install-action@v2.87.29
         with:
           tool: cargo-nextest
 
