@@ -542,6 +542,65 @@ mod tests {
         assert_eq!(set.max_state_version, StateVersion::new(20));
     }
 
+    /// The query plan of one shard's update read against the migrated schema.
+    fn utxo_update_read_plan(db_path: &std::path::Path, unspent_only: bool, from_state_version: i64) -> String {
+        use diesel::{
+            ExpressionMethods,
+            QueryDsl,
+            query_builder::{QueryBuilder, QueryFragment},
+        };
+
+        use crate::storage_sqlite::{reader::utxo_updates_query, schema::utxos};
+
+        #[derive(diesel::QueryableByName)]
+        struct PlanRow {
+            #[diesel(sql_type = diesel::sql_types::Text)]
+            detail: String,
+        }
+
+        let mut query = utxo_updates_query(utxo_resource(), Epoch(2), Shard::from(7u32), unspent_only)
+            .filter(utxos::state_version.gt(from_state_version));
+        if from_state_version < 0 {
+            query = query.filter(utxos::state_version.lt(0));
+        }
+        let query = query.limit(2);
+        let mut builder = diesel::sqlite::SqliteQueryBuilder::new();
+        QueryFragment::<diesel::sqlite::Sqlite>::to_sql(&query, &mut builder, &diesel::sqlite::Sqlite).unwrap();
+
+        // Unbound parameters do not change the plan.
+        let mut conn = SqliteConnection::establish(db_path.to_str().unwrap()).unwrap();
+        sql_query(format!("EXPLAIN QUERY PLAN {}", builder.finish()))
+            .load::<PlanRow>(&mut conn)
+            .unwrap()
+            .into_iter()
+            .map(|row| row.detail)
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// A read that finds fewer rows than its limit (an empty shard, or an epoch past every row)
+    /// visits every index entry its search key admits. The key must narrow to the requested shard
+    /// so that this is bounded by that shard's rows, not the resource's whole history.
+    #[tokio::test]
+    async fn a_shard_update_read_seeks_to_the_shard() {
+        let (dir, _store) = temp_store().await;
+        let db_path = dir.path().join("indexer.db");
+
+        for unspent_only in [false, true] {
+            for from_state_version in [0, -5] {
+                let plan = utxo_update_read_plan(&db_path, unspent_only, from_state_version);
+                assert!(
+                    plan.contains("(resource_address=? AND shard=? AND state_version>?"),
+                    "unspent_only={unspent_only}, from={from_state_version}: {plan}"
+                );
+                assert!(
+                    !plan.contains("TEMP B-TREE"),
+                    "unspent_only={unspent_only}, from={from_state_version}: {plan}"
+                );
+            }
+        }
+    }
+
     async fn temp_store() -> (tempfile::TempDir, SqliteIndexerStore) {
         let dir = tempfile::tempdir().unwrap();
         let store = SqliteIndexerStore::try_create(dir.path().join("indexer.db")).unwrap();

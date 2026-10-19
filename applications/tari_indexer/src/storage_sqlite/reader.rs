@@ -205,6 +205,30 @@ fn filtered_events<'a>(
     }
 }
 
+/// One shard's UTXO updates for `resource_address` from `from_epoch` on, in state version order.
+/// The caller adds the state version range and the limit.
+pub(super) fn utxo_updates_query<'a>(
+    resource_address: ResourceAddress,
+    from_epoch: Epoch,
+    shard: Shard,
+    unspent_only: bool,
+) -> crate::storage_sqlite::schema::utxos::BoxedQuery<'a, diesel::sqlite::Sqlite> {
+    use crate::storage_sqlite::schema::utxos;
+
+    let mut query = utxos::table
+        .filter(utxos::resource_address.eq(resource_address.to_string()))
+        .filter(utxos::epoch.ge(from_epoch.as_u64() as i64))
+        .filter(utxos::shard.eq(shard.as_u32() as i32))
+        .order_by(utxos::state_version.asc())
+        .into_boxed();
+    if unspent_only {
+        query = query
+            .filter(utxos::is_spent.eq(false))
+            .filter(utxos::is_burnt.eq(false));
+    }
+    query
+}
+
 fn decode_event_row(row: EventRecord) -> Result<(i64, TransactionId, Event), StorageError> {
     let substate_id = row
         .substate_id
@@ -698,8 +722,8 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         let resource_address = resource_address.to_string();
         let shard = shard.as_u32() as i32;
         // State versions are stored `as i64`, so those from 2^63 up read back negative and are the
-        // highest when there are any. Each half is a seek on the (resource_address, state_version)
-        // index.
+        // highest when there are any. Each half is a seek on the
+        // (resource_address, shard, state_version) index.
         let mut max_version = None;
         for above_i64_max in [true, false] {
             let mut query = utxos::table
@@ -742,24 +766,10 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         // cursor the caller then resumes from, so a version is either wholly included or wholly
         // absent. One row beyond the limit is read to find where that boundary falls.
         let overshoot_limit = i64::from(limit).saturating_add(1);
-        let base_query = || {
-            let mut query = utxos::table
-                .filter(utxos::resource_address.eq(resource_address.to_string()))
-                .filter(utxos::epoch.ge(from_epoch.as_u64() as i64))
-                .filter(utxos::shard.eq(shard.as_u32() as i32))
-                .order_by(utxos::state_version.asc())
-                .into_boxed();
-            if unspent_only {
-                // Only return unspent UTXOs
-                query = query
-                    .filter(utxos::is_spent.eq(false))
-                    .filter(utxos::is_burnt.eq(false));
-            }
-            query
-        };
+        let base_query = || utxo_updates_query(resource_address, from_epoch, shard, unspent_only);
         // Versions from 2^63 up are stored negative and order above every non-negative one. The read
         // is split at that boundary so that each half is an ordered range on the
-        // (resource_address, state_version) index, stopping at the limit.
+        // (resource_address, shard, state_version) index, stopping at the limit.
         let from = from_state_version.as_u64() as i64;
         let mut rows = if from >= 0 {
             base_query()
