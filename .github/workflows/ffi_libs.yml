@@ -76,7 +76,7 @@ jobs:
       # Windows: install the GNU host toolchain (bundles its own mingw linker) so the .a is the
       # GNU-ABI lib cgo links against — not the MSVC .lib.
       - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f  # master (no version tag)
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8  # master (no version tag)
         with:
           toolchain: ${{ matrix.platform == 'windows-x64' && '1.97.1-x86_64-pc-windows-gnu' || '1.97.1' }}
           targets: ${{ matrix.target }}
