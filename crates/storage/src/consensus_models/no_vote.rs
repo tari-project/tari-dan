@@ -1,10 +1,10 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{BlockId, Decision};
 use tari_ootle_common_types::{ShardGroup, ValidatorSetHash};
 use tari_ootle_transaction::TransactionId;
+use tari_sidechain::FixedHash;
 
 use crate::consensus_models::TransactionPoolStage;
 

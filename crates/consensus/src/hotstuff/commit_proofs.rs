@@ -288,7 +288,6 @@ fn convert_validator_block_signature(
 
 #[cfg(test)]
 mod tests {
-    use tari_common_types::types::FixedHash;
     use tari_consensus_types::{
         Decision,
         ProposalCertificate,
@@ -314,7 +313,7 @@ mod tests {
         consensus_models::{BlockCommands, Command, LocalOnlyAtom, MultiShardAtom},
     };
     use tari_ootle_transaction::{Network, TransactionId};
-    use tari_sidechain::{ProposalVoteMessage, QuorumDecision, ValidatorQcSignature, check_proof_elements};
+    use tari_sidechain::{FixedHash, ProposalVoteMessage, QuorumDecision, ValidatorQcSignature, check_proof_elements};
     use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
 
     use super::*;

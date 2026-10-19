@@ -1,10 +1,10 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::{Epoch, NodeAddressable, optional::Optional};
 use tari_ootle_storage::global::{BlockHeaderModel, GlobalDb};
 use tari_ootle_storage_sqlite::global::SqliteGlobalDbAdapter;
+use tari_sidechain::FixedHash;
 use tari_template_lib_types::Hash32;
 
 pub trait BaseLayerBlockHeaderStore {

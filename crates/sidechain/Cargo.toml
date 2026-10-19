@@ -11,12 +11,13 @@ license.workspace = true
 tari_hashing = { workspace = true }
 tari_crypto = { workspace = true, features = ["borsh"] }
 tari_utilities = { workspace = true }
-tari_common_types = { workspace = true }
 tari_jellyfish = { workspace = true }
 
 log = { workspace = true }
 thiserror = { workspace = true }
+base64 = { workspace = true, features = ["std"] }
 borsh = { workspace = true, features = ["std", "derive"] }
+digest = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true, features = ["std", "derive"] }
 

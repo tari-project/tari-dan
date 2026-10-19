@@ -6,7 +6,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tari_common_types::types::FixedHash;
 use tari_consensus::{
     hotstuff::{HotStuffError, HotstuffEvent},
     messages::HotstuffMessage,
@@ -18,6 +17,7 @@ use tari_ootle_storage::{
     StateStoreReadTransaction,
     consensus_models::{Block, BookkeepingModel},
 };
+use tari_sidechain::FixedHash;
 use tokio::sync::broadcast;
 
 use crate::support::{Test, TestAddress, logging::setup_logger};

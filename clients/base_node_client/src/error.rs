@@ -1,8 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::FixedHashSizeError;
 use tari_ootle_common_types::optional::IsNotFoundError;
+use tari_sidechain::FixedHashSizeError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]

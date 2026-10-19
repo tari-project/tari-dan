@@ -14,7 +14,7 @@ use helpers::{
     create_tx_atom,
     transaction_id_from_seed,
 };
-use tari_common_types::types::{FixedHash, PrivateKey};
+use tari_common_types::types::PrivateKey;
 use tari_consensus_types::{Decision, PcId, ShardGroupAccumulatedData};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, TransactionResult},
@@ -42,6 +42,7 @@ use tari_ootle_storage::{
     },
 };
 use tari_ootle_transaction::{Instruction, Transaction, TransactionId};
+use tari_sidechain::FixedHash;
 use tari_template_lib::types::Hash32;
 use tari_utilities::epoch_time::EpochTime;
 

@@ -28,9 +28,9 @@ use minotari_app_grpc::{
     tari_rpc,
     tari_rpc::{self as grpc, GetValidatorNodeChangesRequest, base_node_client::BaseNodeClient as BaseNodeGrpcClient},
 };
-use tari_common_types::types::FixedHash;
 use tari_node_components::blocks::BlockHeader;
 use tari_ootle_common_types::{Epoch, SubstateAddress, SubstateVersion};
+use tari_sidechain::FixedHash;
 use tari_template_lib::types::{Hash32, crypto::RistrettoPublicKeyBytes};
 use tari_utilities::ByteArray;
 use tonic::codegen::tokio_stream::Stream;

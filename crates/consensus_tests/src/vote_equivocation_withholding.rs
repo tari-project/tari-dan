@@ -31,7 +31,7 @@ fn evidence_against(accused: &TestAddress, height: NodeHeight) -> VoteEquivocati
     let public_key = public_key_of(accused);
     let vote = |block_byte: u8| ProposalVote {
         epoch: Epoch(1),
-        block_id: BlockId::new(tari_common_types::types::FixedHash::new([block_byte; 32])),
+        block_id: BlockId::new(tari_sidechain::FixedHash::new([block_byte; 32])),
         block_height: height,
         decision: QuorumDecision::Accept,
         signature: ValidatorSignatureBytes::new(

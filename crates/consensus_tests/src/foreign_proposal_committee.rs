@@ -10,7 +10,7 @@ use std::{
 };
 
 use ootle_byte_type::ToByteType;
-use tari_common_types::types::{CompressedPublicKey, FixedHash, PrivateKey};
+use tari_common_types::types::{CompressedPublicKey, PrivateKey};
 use tari_consensus::{
     hotstuff::{HotStuffError, ProposalValidationError},
     is_authenticated_commit_proof_stored,
@@ -40,7 +40,7 @@ use tari_ootle_storage::{
     },
 };
 use tari_ootle_transaction::{Network, Transaction};
-use tari_sidechain::{SidechainBlockCommitProof, SidechainBlockHeader};
+use tari_sidechain::{FixedHash, SidechainBlockCommitProof, SidechainBlockHeader};
 use tari_state_store_rocksdb::DatabaseOptions;
 use tokio::{
     sync::broadcast,

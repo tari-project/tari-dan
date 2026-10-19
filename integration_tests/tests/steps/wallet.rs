@@ -10,12 +10,12 @@ use minotari_app_grpc::{
     tari_rpc,
     tari_rpc::{GetBalanceRequest, ValidateRequest},
 };
-use tari_common_types::{burn_proof::BurnOutputProof, types::CompressedPublicKey};
+use tari_common_types::{burn_proof::BurnOutputProof as L1BurnOutputProof, types::CompressedPublicKey};
 use tari_crypto::{
     ristretto::{CompressedRistrettoSchnorr, RistrettoSecretKey},
     tari_utilities::ByteArray,
 };
-use tari_ootle_app_utilities::burn_claim_proof::claim_proof_from_l1;
+use tari_ootle_app_utilities::burn_claim_proof::{burn_output_proof_from_l1, claim_proof_from_l1};
 use tari_ootle_walletd_client::types::{ClaimBurnProof, ClaimBurnProofContents};
 use tari_sidechain::{BurnClaimProof, CompleteClaimBurnProof};
 use tari_template_lib_types::{EncryptedData, crypto::PedersenCommitmentBytes};
@@ -178,7 +178,8 @@ async fn when_i_wait_for_proof_to_confirm_on_wallet(
         claim_proof: BurnClaimProof {
             burn_public_key: reciprocal_claim_public_key,
             ownership_proof,
-            output_proof: BurnOutputProof::try_from(output_proof)
+            output_proof: L1BurnOutputProof::try_from(output_proof)
+                .map(burn_output_proof_from_l1)
                 .map_err(|e| anyhow!("burn output proof parse error: {e}"))?,
             value: proof_resp.value,
         },

@@ -4,7 +4,6 @@
 use std::collections::{HashMap, hash_map::Entry};
 
 use ootle_network::Network;
-use tari_common_types::types::FixedHash;
 use tari_engine_types::{
     ProtocolVersion,
     SubstateVersion,
@@ -12,6 +11,7 @@ use tari_engine_types::{
     substate::{SubstateId, SubstateValue, hash_substate},
 };
 use tari_ootle_common_types::{Epoch, NodeHeight, NumPreshards, ShardGroup, VersionedSubstateId, shard::Shard};
+use tari_sidechain::FixedHash;
 use tari_state_tree::{
     SPARSE_MERKLE_PLACEHOLDER_HASH,
     ShardGroupRootTree,

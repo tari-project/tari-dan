@@ -29,7 +29,6 @@ use std::{
 
 use log::*;
 use ootle_byte_type::FromByteType;
-use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::{
     DerivableFromPublicKey,
     Epoch,
@@ -47,6 +46,7 @@ use tari_ootle_storage::{
     global::{GlobalDb, MetadataKey, models::ValidatorNode},
 };
 use tari_ootle_storage_sqlite::global::SqliteGlobalDbAdapter;
+use tari_sidechain::FixedHash;
 use tari_state_tree::{ValidatorSetCommitteeProof, ValidatorSetTree};
 use tari_template_lib_types::{Hash32, crypto::RistrettoPublicKeyBytes};
 

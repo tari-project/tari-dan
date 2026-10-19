@@ -6,7 +6,6 @@ use std::{
     sync::{Arc, atomic::AtomicU64},
 };
 
-use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::{
     Epoch,
     NodeAddressable,
@@ -17,6 +16,7 @@ use tari_ootle_common_types::{
     committee::{Committee, CommitteeInfo},
 };
 use tari_ootle_storage::global::models::ValidatorNode;
+use tari_sidechain::FixedHash;
 use tari_state_tree::ValidatorSetCommitteeProof;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::sync::{broadcast, mpsc, oneshot};

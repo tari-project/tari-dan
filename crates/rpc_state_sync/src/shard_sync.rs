@@ -1714,8 +1714,7 @@ mod tests {
         shard_root: TreeHash,
         epoch: Epoch,
     ) -> Result<SyncStateResponse, RpcStatus> {
-        use tari_common_types::types::FixedHash;
-        use tari_sidechain::{SidechainBlockCommitProof, SidechainBlockHeader};
+        use tari_sidechain::{FixedHash, SidechainBlockCommitProof, SidechainBlockHeader};
         use tari_state_tree::ShardGroupRootTree;
 
         let protocol_version = ProtocolVersion::at(NETWORK, epoch);

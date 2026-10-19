@@ -136,10 +136,10 @@ pub enum BlockCommandsError {
 mod tests {
     use std::collections::BTreeSet;
 
-    use tari_common_types::types::FixedHash;
     use tari_consensus_types::{BlockId, Decision};
     use tari_ootle_common_types::{ProtocolVersion, ShardGroup};
     use tari_ootle_transaction::TransactionId;
+    use tari_sidechain::FixedHash;
 
     use super::*;
     use crate::consensus_models::{

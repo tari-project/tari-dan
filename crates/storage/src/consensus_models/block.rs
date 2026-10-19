@@ -12,7 +12,6 @@ use indexmap::IndexMap;
 use log::*;
 use minicbor::{CborLen, Decode, Encode};
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{
     BlockId,
     HighestSeenBlock,
@@ -44,6 +43,7 @@ use tari_ootle_common_types::{
     shard::Shard,
 };
 use tari_ootle_transaction::{Network, TransactionId};
+use tari_sidechain::FixedHash;
 use tari_state_tree::{SparseMerkleProofExt, StateTreeError, TreeHash, Version, compute_proof_for_hashes};
 use tari_template_lib_types::{
     TransactionReceiptAddress,

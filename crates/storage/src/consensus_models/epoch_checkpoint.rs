@@ -8,11 +8,11 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use indexmap::IndexMap;
 use minicbor::{CborLen, Decode, Encode};
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::{CompressedPublicKey, FixedHash};
+use tari_common_types::types::CompressedPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_engine_types::ProtocolVersion;
 use tari_ootle_common_types::{Epoch, ShardGroup, ValidatorSetHash, VotePower, shard::Shard};
-use tari_sidechain::{CommandCommitProof, SidechainBlockHeader, SidechainProofValidationError, ToCommand};
+use tari_sidechain::{CommandCommitProof, FixedHash, SidechainBlockHeader, SidechainProofValidationError, ToCommand};
 use tari_state_tree::{SPARSE_MERKLE_PLACEHOLDER_HASH, StateTreeError, TreeHash, Version, compute_shard_group_root};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 

@@ -5,10 +5,10 @@ use std::fmt::{Display, Formatter};
 
 use borsh::BorshSerialize;
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{BlockId, Decision};
 use tari_ootle_common_types::{ProtocolVersion, ShardGroup, hashing::command_hasher};
 use tari_ootle_transaction::TransactionId;
+use tari_sidechain::FixedHash;
 
 use super::{ForeignProposalAtom, LeaderFee, TransactionRecord};
 use crate::{StateStoreReadTransaction, StorageError, consensus_models::evidence::Evidence};

@@ -4,9 +4,9 @@
 use std::io;
 
 use anyhow::anyhow;
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::BlockId;
 use tari_ootle_common_types::SubstateVersion;
+use tari_sidechain::FixedHash;
 
 use crate::{
     codecs::{DbDecoder, DbEncoder, SubstateIdCodec},

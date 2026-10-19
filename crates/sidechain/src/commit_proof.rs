@@ -5,20 +5,18 @@ use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use tari_common_types::{
-    epoch::VnEpoch,
-    types::{CompressedPublicKey, FixedHash, PrivateKey, UncompressedPublicKey},
-};
 use tari_crypto::signatures::{CompressedSchnorrSignature, SchnorrSignature};
-use tari_hashing::{ValidatorNodeHashDomain, layer2};
+use tari_hashing::ValidatorNodeHashDomain;
 use tari_jellyfish::{JmtHashScheme, LeafKey, SparseMerkleProofExt, TreeHash};
 use tari_utilities::ByteArray;
 
 use super::error::SidechainProofValidationError;
 use crate::{
     command::{Command, ToCommand},
+    hashing,
     serde::{hex_or_bytes, option_hex_or_bytes},
     shard_group::ShardGroup,
+    types::{CompressedPublicKey, FixedHash, PrivateKey, UncompressedPublicKey},
     validations::check_proof_elements,
 };
 
@@ -68,9 +66,9 @@ impl<C: ToCommand> CommandCommitProof<C> {
         }
     }
 
-    pub fn epoch(&self) -> VnEpoch {
+    pub fn epoch(&self) -> u64 {
         match self {
-            CommandCommitProof::V1(v1) => VnEpoch(v1.commit_proof.header().epoch),
+            CommandCommitProof::V1(v1) => v1.commit_proof.header().epoch,
         }
     }
 
@@ -195,10 +193,10 @@ pub struct ChainLink {
 
 impl ChainLink {
     pub fn calc_block_id(&self) -> FixedHash {
-        // NOTE: the L2 "Block" label (`layer2::block_hasher`) is shared by the block id (parent_id || header_hash) and
+        // NOTE: the L2 "Block" label (`hashing::block_hasher`) is shared by the block id (parent_id || header_hash) and
         // the header hash (`SidechainBlockHeader::calculate_hash`), two different preimage shapes separated only by
         // length/layout today. Give each a distinct label at the next hard fork.
-        layer2::block_hasher()
+        hashing::block_hasher()
             .chain(&self.parent_id)
             .chain(&self.header_hash)
             .finalize()
@@ -280,18 +278,18 @@ impl SidechainBlockHeader {
             }),
         };
 
-        // NOTE: the L2 "Block" label (`layer2::block_hasher`) is shared by the block id (parent_id || header_hash) and
+        // NOTE: the L2 "Block" label (`hashing::block_hasher`) is shared by the block id (parent_id || header_hash) and
         // the header hash (`SidechainBlockHeader::calculate_hash`), two different preimage shapes separated only by
         // length/layout today. Give each a distinct label at the next hard fork.
-        layer2::block_hasher().chain(&fields).finalize().into()
+        hashing::block_hasher().chain(&fields).finalize().into()
     }
 
     pub fn calculate_block_id(&self) -> FixedHash {
         let header_hash = self.calculate_hash();
-        // NOTE: the L2 "Block" label (`layer2::block_hasher`) is shared by the block id (parent_id || header_hash) and
+        // NOTE: the L2 "Block" label (`hashing::block_hasher`) is shared by the block id (parent_id || header_hash) and
         // the header hash (`SidechainBlockHeader::calculate_hash`), two different preimage shapes separated only by
         // length/layout today. Give each a distinct label at the next hard fork.
-        layer2::block_hasher()
+        hashing::block_hasher()
             .chain(&self.parent_id)
             .chain(&header_hash)
             .finalize()
@@ -341,10 +339,10 @@ pub struct QuorumCertificate {
 
 impl QuorumCertificate {
     pub fn calculate_justified_block(&self) -> FixedHash {
-        // NOTE: the L2 "Block" label (`layer2::block_hasher`) is shared by the block id (parent_id || header_hash) and
+        // NOTE: the L2 "Block" label (`hashing::block_hasher`) is shared by the block id (parent_id || header_hash) and
         // the header hash (`SidechainBlockHeader::calculate_hash`), two different preimage shapes separated only by
         // length/layout today. Give each a distinct label at the next hard fork.
-        layer2::block_hasher()
+        hashing::block_hasher()
             .chain(&self.parent_id)
             .chain(&self.header_hash)
             .finalize()
@@ -478,10 +476,10 @@ impl<'a> ProposalVoteMessage<'a> {
     }
 
     pub fn calculate_hash(&self) -> FixedHash {
-        // NOTE: the L2 "VoteSignature" label (`layer2::proposal_vote_signature_hasher`) is shared across the vote
+        // NOTE: the L2 "VoteSignature" label (`hashing::proposal_vote_signature_hasher`) is shared across the vote
         // message shapes of different protocol versions, separated only by length/layout today. Give each shape a
         // distinct label at the next hard fork.
-        layer2::proposal_vote_signature_hasher().chain(self).finalize().into()
+        hashing::proposal_vote_signature_hasher().chain(self).finalize().into()
     }
 }
 

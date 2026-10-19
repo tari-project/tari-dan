@@ -1,7 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{BlockId, LeafBlock, PcId, QcId, TcId};
 use tari_epoch_manager::EpochManagerError;
 use tari_ootle_common_types::{Epoch, NodeHeight, ProtocolVersion, ShardGroup, VersionedSubstateIdError, VotePower};
@@ -15,6 +14,7 @@ use tari_ootle_storage::{
     },
 };
 use tari_ootle_transaction::TransactionId;
+use tari_sidechain::FixedHash;
 use tari_state_tree::StateTreeError;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::task::JoinError;

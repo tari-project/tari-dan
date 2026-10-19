@@ -4,11 +4,11 @@
 use anyhow::anyhow;
 use minicbor::{CborLen, Decode, Encode};
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::{CompressedPublicKey, FixedHash};
+use tari_common_types::types::CompressedPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_engine_types::{ProtocolVersion, UnknownProtocolVersionError};
 use tari_ootle_common_types::VotePower;
-use tari_sidechain::{CommitProofElement, SidechainBlockCommitProof, SidechainProofValidationError};
+use tari_sidechain::{CommitProofElement, FixedHash, SidechainBlockCommitProof, SidechainProofValidationError};
 use tari_state_tree::{StateTreeError, TreeHash, compute_merkle_root_for_hashes};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 

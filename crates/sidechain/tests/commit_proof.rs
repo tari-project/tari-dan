@@ -1,10 +1,10 @@
 //   Copyright 2025 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::FixedHash;
 use tari_jellyfish::JmtHashScheme;
 use tari_sidechain::{
     CommitProofElement,
+    FixedHash,
     MAX_QC_SIGNATURES,
     ProposalVoteMessage,
     QuorumDecision,
@@ -159,9 +159,9 @@ fn it_validates_a_signed_version_1_proof_that_carries_a_transaction_merkle_root(
 }
 
 /// The secret key of test validator `i`.
-fn validator_secret(i: u8) -> tari_common_types::types::PrivateKey {
+fn validator_secret(i: u8) -> tari_sidechain::PrivateKey {
     use tari_crypto::keys::SecretKey;
-    tari_common_types::types::PrivateKey::from_uniform_bytes(&[i; 64]).unwrap()
+    tari_sidechain::PrivateKey::from_uniform_bytes(&[i; 64]).unwrap()
 }
 
 /// A version 1 proof over the fixture's header, committed by a 3-chain of certificates that four test validators
@@ -173,14 +173,15 @@ fn signed_version_1_proof(transaction_merkle_root: Option<FixedHash>) -> Sidecha
 
 /// A version 1 proof over the fixture's header, committed by a 3-chain of certificates that `validators` sign.
 fn signed_version_1_proof_by(
-    validators: &[tari_common_types::types::PrivateKey],
+    validators: &[tari_sidechain::PrivateKey],
     transaction_merkle_root: Option<FixedHash>,
 ) -> SidechainBlockCommitProof {
-    use tari_common_types::types::{CompressedPublicKey, PrivateKey};
     use tari_crypto::keys::SecretKey;
     use tari_sidechain::{
         ChainLink,
+        CompressedPublicKey,
         DecodedValidatorBlockSignature,
+        PrivateKey,
         QuorumCertificate,
         ValidatorBlockSignature,
         ValidatorQcSignature,
@@ -245,7 +246,7 @@ fn signed_version_1_proof_by(
 }
 
 mod weighted_committee {
-    use tari_common_types::types::{CompressedPublicKey, PrivateKey};
+    use tari_sidechain::{CompressedPublicKey, PrivateKey};
 
     use super::*;
 
@@ -329,9 +330,14 @@ fn the_protocol_version_selects_the_vote_message() {
 }
 
 mod batch_verification {
-    use tari_common_types::types::{CompressedPublicKey, PrivateKey};
     use tari_crypto::keys::SecretKey;
-    use tari_sidechain::{QuorumCertificate, ValidatorBlockSignature, ValidatorQcSignature};
+    use tari_sidechain::{
+        CompressedPublicKey,
+        PrivateKey,
+        QuorumCertificate,
+        ValidatorBlockSignature,
+        ValidatorQcSignature,
+    };
 
     use super::*;
 

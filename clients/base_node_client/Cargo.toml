@@ -9,7 +9,7 @@ license.workspace = true
 
 [dependencies]
 minotari_app_grpc = { workspace = true }
-tari_common_types = { workspace = true }
+tari_sidechain = { workspace = true }
 tari_transaction_components = { workspace = true }
 tari_node_components = { workspace = true }
 tari_utilities = { workspace = true }

@@ -10,6 +10,7 @@ license.workspace = true
 [dependencies]
 tari_base_node_client = { workspace = true, optional = true }
 tari_common_types = { workspace = true }
+tari_sidechain = { workspace = true }
 tari_transaction_components = { workspace = true, optional = true }
 tari_node_components = { workspace = true, optional = true }
 tari_template_lib_types = { workspace = true, optional = true }

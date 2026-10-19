@@ -3,7 +3,6 @@
 use std::collections::HashSet;
 
 use log::{debug, warn};
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{QuorumCertificateRef, TimeoutVote, ValidatorSignatureBytes};
 use tari_engine_types::fees::ExhaustBurnRate;
 use tari_ootle_common_types::{
@@ -19,7 +18,7 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_storage::consensus_models::{Block, BlockHeader};
 use tari_ootle_transaction::Network;
-use tari_sidechain::ProposalVoteMessage;
+use tari_sidechain::{FixedHash, ProposalVoteMessage};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{

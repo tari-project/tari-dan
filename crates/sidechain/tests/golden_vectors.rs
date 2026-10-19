@@ -7,16 +7,16 @@
 mod support;
 
 use support::load_fixture;
-use tari_common_types::{
-    burn_proof::{BurnOutputProof, MmrInclusionProof, OutputHashPreimage},
-    types::FixedHash,
-};
 use tari_sidechain::{
     BurnClaimProof,
+    BurnOutputProof,
     ChainLink,
     Command,
     CompleteClaimBurnProof,
     EndEpochAtom,
+    FixedHash,
+    MmrInclusionProof,
+    OutputHashPreimage,
     ProposalVoteMessage,
     QuorumDecision,
     SidechainBlockCommitProof,

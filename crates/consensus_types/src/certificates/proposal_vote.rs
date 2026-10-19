@@ -5,9 +5,8 @@ use std::fmt::Display;
 
 use minicbor::{CborLen, Decode, Encode};
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::{Epoch, NodeHeight};
-use tari_sidechain::{ProposalVoteMessage, QuorumDecision};
+use tari_sidechain::{FixedHash, ProposalVoteMessage, QuorumDecision};
 use tari_template_lib::types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
 
 use crate::{SignedMessage, ToSignatureMessage, Vote, ids::BlockId, validator_signature::ValidatorSignatureBytes};

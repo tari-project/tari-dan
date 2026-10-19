@@ -151,10 +151,10 @@ pub fn to_checkpoint_entry(
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use tari_common_types::types::{CompressedPublicKey, FixedHash};
+    use tari_common_types::types::CompressedPublicKey;
     use tari_crypto::ristretto::RistrettoSecretKey;
     use tari_ootle_common_types::ShardGroup;
-    use tari_sidechain::{SidechainBlockCommitProof, SidechainBlockHeader, ValidatorBlockSignature};
+    use tari_sidechain::{FixedHash, SidechainBlockCommitProof, SidechainBlockHeader, ValidatorBlockSignature};
 
     use super::*;
 

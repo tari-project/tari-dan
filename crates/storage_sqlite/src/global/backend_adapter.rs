@@ -42,7 +42,6 @@ use diesel::{
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 use log::debug;
 use serde::{Serialize, de::DeserializeOwned};
-use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::{
     Epoch,
     NodeAddressable,
@@ -56,6 +55,7 @@ use tari_ootle_storage::{
     AtomicDb,
     global::{BlockHeaderModel, EpochData, GlobalDbAdapter, models::ValidatorNode},
 };
+use tari_sidechain::FixedHash;
 use tari_template_lib::types::{Hash32, crypto::RistrettoPublicKeyBytes};
 use tari_utilities::ByteArray;
 

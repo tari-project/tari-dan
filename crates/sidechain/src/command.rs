@@ -5,10 +5,8 @@ use std::io;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::FixedHash;
-use tari_hashing::layer2::command_hasher;
 
-use crate::serde::hex_or_bytes;
+use crate::{FixedHash, hashing::command_hasher, serde::hex_or_bytes};
 
 pub trait ToCommand {
     fn to_command(&self) -> Command;

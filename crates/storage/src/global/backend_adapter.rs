@@ -23,7 +23,6 @@
 use std::collections::{HashMap, HashSet};
 
 use serde::{Serialize, de::DeserializeOwned};
-use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::{
     Epoch,
     NodeAddressable,
@@ -33,6 +32,7 @@ use tari_ootle_common_types::{
     VotePower,
     committee::Committee,
 };
+use tari_sidechain::FixedHash;
 use tari_template_lib_types::{Hash32, crypto::RistrettoPublicKeyBytes};
 
 use super::{BlockHeaderModel, EpochData};

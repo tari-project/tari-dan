@@ -4,12 +4,12 @@
 use std::{collections::HashSet, hash::Hash};
 
 use log::debug;
-use tari_common_types::types::FixedHash;
 
 use crate::{
     CheckVnFunc,
     CommitProofElement,
     DecodedValidatorBlockSignature,
+    FixedHash,
     ProposalVoteMessage,
     QuorumCertificate,
     QuorumDecision,

@@ -20,8 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_common_types::{burn_proof::BurnOutputProof, serializers, types::CompressedPublicKey};
-use tari_crypto::ristretto::CompressedRistrettoSchnorr;
+use tari_crypto::ristretto::{
+    CompressedRistrettoComAndPubSig,
+    CompressedRistrettoSchnorr,
+    pedersen::CompressedPedersenCommitment,
+};
+
+use crate::{
+    serde as serializers,
+    types::{CompressedPublicKey, FixedHash},
+};
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct CompleteClaimBurnProof {
@@ -44,10 +52,75 @@ pub struct BurnClaimProof {
     pub value: u64,
 }
 
+/// Proves that a burn output was mined in a block, against that block's `block_output_mr`.
+///
+/// The block output MMR has the coinbase output hashes as leaves, followed by one last leaf: the root of the MMR of
+/// every other output hash in the block (the normal output MMR). Burn outputs are never coinbases, so the proof is in
+/// two levels: the output hash in the normal output MMR, then the normal output MMR root in the block output MMR.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BurnOutputProof {
+    /// The hash of the block the output was mined in
+    #[serde(with = "serializers::hex")]
+    pub block_hash: FixedHash,
+    /// The height of the block the output was mined in
+    pub block_height: u64,
+    /// The burn output
+    pub output: OutputHashPreimage,
+    /// The inclusion proof of the output hash in the normal output MMR
+    pub normal_output_proof: MmrInclusionProof,
+    /// The root of the normal output MMR
+    #[serde(with = "serializers::hex")]
+    pub normal_output_mr: FixedHash,
+    /// The inclusion proof of `normal_output_mr` in the block output MMR (as its last leaf, for an honest proof)
+    pub block_output_proof: MmrInclusionProof,
+}
+
+/// An inclusion proof of a leaf in a Merkle mountain range, in a self-describing form so that consumers can verify it
+/// without decoding the bincode encoding of `tari_mmr::MerkleProof`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MmrInclusionProof {
+    /// The index of the leaf in the MMR
+    pub leaf_index: u64,
+    /// The size (node count) of the MMR the proof was created for
+    pub mmr_size: u64,
+    /// The sibling path from the leaf up to its local peak
+    #[serde(with = "serializers::hex_seq")]
+    pub path: Vec<FixedHash>,
+    /// The MMR peaks, excluding the local peak of the leaf
+    #[serde(with = "serializers::hex_seq")]
+    pub peaks: Vec<FixedHash>,
+}
+
+/// The fields of a base layer `TransactionOutput` that its hash commits to, in hash order. The range proof is carried
+/// only as its hash, which is all the output hash commits to.
+///
+/// The fields with types that live in `tari_transaction_components` (`features`, `script`, `covenant` and
+/// `encrypted_data`) are carried as their consensus (borsh) encoding, which is exactly what the output hash consumes.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct OutputHashPreimage {
+    pub version: u8,
+    /// Consensus encoded `OutputFeatures`
+    #[serde(with = "serializers::hex")]
+    pub features: Vec<u8>,
+    pub commitment: CompressedPedersenCommitment,
+    #[serde(with = "serializers::hex")]
+    pub rangeproof_hash: FixedHash,
+    /// Consensus encoded `TariScript`
+    #[serde(with = "serializers::hex")]
+    pub script: Vec<u8>,
+    pub sender_offset_public_key: CompressedPublicKey,
+    pub metadata_signature: CompressedRistrettoComAndPubSig,
+    /// Consensus encoded `Covenant`
+    #[serde(with = "serializers::hex")]
+    pub covenant: Vec<u8>,
+    /// Consensus encoded `EncryptedData`
+    #[serde(with = "serializers::hex")]
+    pub encrypted_data: Vec<u8>,
+    pub minimum_value_promise: u64,
+}
+
 #[cfg(test)]
 mod tests {
-    use tari_common_types::burn_proof::{MmrInclusionProof, OutputHashPreimage};
-
     use super::*;
 
     fn mmr_proof() -> MmrInclusionProof {

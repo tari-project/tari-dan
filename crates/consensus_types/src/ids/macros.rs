@@ -21,7 +21,7 @@ macro_rules! create_hash_type {
         )]
         #[serde(transparent)]
         $(#[$meta])*
-        pub struct $name(#[serde(with = "::ootle_serde::hex")] ::tari_common_types::types::FixedHash);
+        pub struct $name(#[serde(with = "::ootle_serde::hex")] ::tari_sidechain::FixedHash);
 
         // Minicbor codec: encode as a CBOR byte string of the fixed-size hash, mirroring the
         // serde `transparent` representation. FixedHash is a foreign type so derives on the
@@ -43,7 +43,7 @@ macro_rules! create_hash_type {
                 _ctx: &mut C,
             ) -> Result<Self, ::minicbor::decode::Error> {
                 let bytes = d.bytes()?;
-                let hash = ::tari_common_types::types::FixedHash::try_from(bytes)
+                let hash = ::tari_sidechain::FixedHash::try_from(bytes)
                     .map_err(|e| ::minicbor::decode::Error::message(::std::format!(
                         concat!(stringify!($name), " decode failed: {}"), e
                     )))?;
@@ -53,7 +53,7 @@ macro_rules! create_hash_type {
 
         impl<C> ::minicbor::CborLen<C> for $name {
             fn cbor_len(&self, ctx: &mut C) -> usize {
-                let n = ::tari_common_types::types::FixedHash::byte_size();
+                let n = ::tari_sidechain::FixedHash::byte_size();
                 <u64 as ::minicbor::CborLen<C>>::cbor_len(&(n as u64), ctx) + n
             }
         }
@@ -61,14 +61,14 @@ macro_rules! create_hash_type {
         impl $name {
             /// Represents a zero/null hash.
             pub const fn zero() -> Self {
-                Self(::tari_common_types::types::FixedHash::zero())
+                Self(::tari_sidechain::FixedHash::zero())
             }
 
-            pub fn new<T: Into<::tari_common_types::types::FixedHash>>(hash: T) -> Self {
+            pub fn new<T: Into<::tari_sidechain::FixedHash>>(hash: T) -> Self {
                 Self(hash.into())
             }
 
-            pub const fn hash(&self) -> &::tari_common_types::types::FixedHash {
+            pub const fn hash(&self) -> &::tari_sidechain::FixedHash {
                 &self.0
             }
 
@@ -85,7 +85,7 @@ macro_rules! create_hash_type {
             }
 
             pub const fn byte_size() -> usize {
-                ::tari_common_types::types::FixedHash::byte_size()
+                ::tari_sidechain::FixedHash::byte_size()
             }
         }
 
@@ -95,20 +95,20 @@ macro_rules! create_hash_type {
             }
         }
 
-        impl From<::tari_common_types::types::FixedHash> for $name {
-            fn from(value: ::tari_common_types::types::FixedHash) -> Self {
+        impl From<::tari_sidechain::FixedHash> for $name {
+            fn from(value: ::tari_sidechain::FixedHash) -> Self {
                 Self(value)
             }
         }
 
-        impl From<[u8; ::tari_common_types::types::FixedHash::byte_size()]> for $name {
-            fn from(value: [u8; ::tari_common_types::types::FixedHash::byte_size()]) -> Self {
+        impl From<[u8; ::tari_sidechain::FixedHash::byte_size()]> for $name {
+            fn from(value: [u8; ::tari_sidechain::FixedHash::byte_size()]) -> Self {
                 Self(value.into())
             }
         }
 
         impl TryFrom<Vec<u8>> for $name {
-            type Error = tari_common_types::types::FixedHashSizeError;
+            type Error = tari_sidechain::FixedHashSizeError;
 
             fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
                 value.as_slice().try_into()
@@ -116,10 +116,10 @@ macro_rules! create_hash_type {
         }
 
         impl TryFrom<&[u8]> for $name {
-            type Error = tari_common_types::types::FixedHashSizeError;
+            type Error = tari_sidechain::FixedHashSizeError;
 
             fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-                ::tari_common_types::types::FixedHash::try_from(value).map(Self)
+                ::tari_sidechain::FixedHash::try_from(value).map(Self)
             }
         }
 

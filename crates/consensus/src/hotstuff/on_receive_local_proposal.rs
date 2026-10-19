@@ -5,7 +5,6 @@ use std::{collections::HashSet, time::Duration};
 
 use log::*;
 use ootle_byte_type::ToByteType;
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{
     BlockId,
     Decision,
@@ -38,7 +37,7 @@ use tari_ootle_storage::{
         ValidBlock,
     },
 };
-use tari_sidechain::{ProposalVoteMessage, QuorumDecision};
+use tari_sidechain::{FixedHash, ProposalVoteMessage, QuorumDecision};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::{sync::broadcast, task};
 

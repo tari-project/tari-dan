@@ -4,10 +4,8 @@
 use std::fmt::Display;
 
 use borsh::BorshSerialize;
-use tari_common_types::types::FixedHash;
-use tari_hashing::layer2::timeout_vote_signature_hasher;
 use tari_ootle_common_types::{Epoch, NodeHeight};
-use tari_sidechain::QuorumDecision;
+use tari_sidechain::{FixedHash, QuorumDecision, hashing::timeout_vote_signature_hasher};
 use tari_template_lib::types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
 
 use crate::{SignedMessage, SignedTimeout, ToSignatureMessage, Vote, validator_signature::ValidatorSignatureBytes};
