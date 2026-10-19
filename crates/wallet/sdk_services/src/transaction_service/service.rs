@@ -341,7 +341,16 @@ where
             transaction_api.locks_set_transaction_id(lock_id, transaction_id)?;
         }
 
-        match transaction_api.submit_transaction(transaction_id).await? {
+        // A poll can submit the transaction while this call waits on the validator set, so the context is in place
+        // before the submission starts.
+        if let Some(context) = &context {
+            lock_deferred(&self.deferred_contexts).insert(transaction_id, context.clone());
+        }
+        let submission = transaction_api.submit_transaction(transaction_id).await;
+        if !matches!(submission, Ok(Submission::Deferred)) {
+            lock_deferred(&self.deferred_contexts).remove(&transaction_id);
+        }
+        match submission? {
             Submission::Submitted => self.notify.notify(TransactionSubmittedEvent {
                 transaction_id,
                 context,
@@ -357,9 +366,6 @@ where
                     target: LOG_TARGET,
                     "Transaction {transaction_id} waits to be submitted until the wallet trusts a validator set"
                 );
-                if let Some(context) = context {
-                    lock_deferred(&self.deferred_contexts).insert(transaction_id, context);
-                }
             },
         }
         Ok(transaction_id)
