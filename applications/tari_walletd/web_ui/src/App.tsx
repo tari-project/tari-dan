@@ -41,6 +41,7 @@ import Templates from "@routes/Templates/Templates";
 import TransactionRequests from "@routes/TransactionRequests/TransactionRequests";
 import TransactionDetails from "@routes/Transactions/TransactionDetails";
 import Transactions from "@routes/Transactions/TransactionsLayout";
+import ValidatorSetPage from "@routes/ValidatorSet/ValidatorSetPage";
 import Wallet from "@routes/Wallet/Wallet";
 import useAuthStore from "@store/authStore";
 import useSettingsStore from "@store/settingsStore";
@@ -134,6 +135,11 @@ export const breadcrumbRoutes = [
   {
     label: "Address Book",
     path: "/address-book",
+    dynamic: false,
+  },
+  {
+    label: "Validator Set",
+    path: "/validator-set",
     dynamic: false,
   },
   // {
@@ -270,6 +276,10 @@ function App() {
           <Route path="templates" element={<GuardedRoute redirect="/templates" component={Templates} />} />
           <Route path="manifest" element={<GuardedRoute redirect="/manifest" component={Manifest} />} />
           <Route path="address-book" element={<GuardedRoute redirect="/address-book" component={AddressBookPage} />} />
+          <Route
+            path="validator-set"
+            element={<GuardedRoute redirect="/validator-set" component={ValidatorSetPage} />}
+          />
           {/*<Route path="flow-editor" element={<GuardedRoute redirect="/flow-editor" component={FlowEditor} />} />*/}
           <Route
             path="stealth-utxos/:resource_address"

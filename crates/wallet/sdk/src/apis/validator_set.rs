@@ -24,7 +24,7 @@ use tari_ootle_light_client::{
 
 use crate::{
     apis::config::ConfigKey,
-    models::{AnchoredValidatorSet, ValidatorSetAnchor, ValidatorSetReanchoredEvent, WalletEvent},
+    models::{AnchoredValidatorSet, ValidatorSetAnchor, ValidatorSetReanchoredEvent, ValidatorSetStatus, WalletEvent},
     network::WalletNetworkInterface,
     storage::{WalletEventStoreWriter, WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
@@ -91,6 +91,36 @@ where
     /// The validator set the wallet's trusted sets descend from, or `None` before it first anchors.
     pub fn anchor(&self) -> Result<Option<AnchoredValidatorSet>, ValidatorSetApiError> {
         Ok(self.store.with_read_tx(|tx| tx.trusted_validator_sets_get_anchor())?)
+    }
+
+    /// Where the wallet's trust in the network's validator sets stands, or `None` before it first anchors.
+    pub fn status(&self) -> Result<Option<ValidatorSetStatus>, ValidatorSetApiError> {
+        let status = self.store.with_read_tx(|tx| {
+            let Some(latest) = tx
+                .config_get::<TrustedValidatorSet>(ConfigKey::TrustedValidatorSet.as_key_str())
+                .optional()?
+            else {
+                return Ok::<_, WalletStorageError>(None);
+            };
+            let Some(anchor) = tx.trusted_validator_sets_get_anchor()? else {
+                return Ok(None);
+            };
+            let synced_at = tx
+                .config_get::<u64>(ConfigKey::ValidatorSetSyncedAt.as_key_str())
+                .optional()?
+                .map(|config| config.value);
+            let walk_failing_since = tx
+                .config_get::<Option<u64>>(ConfigKey::ValidatorSetWalkFailingSince.as_key_str())
+                .optional()?
+                .and_then(|config| config.value);
+            Ok(Some(ValidatorSetStatus {
+                latest: latest.value.trusted_hash(),
+                anchor,
+                synced_at,
+                walk_failing_since,
+            }))
+        })?;
+        Ok(status)
     }
 
     /// Brings the trusted validator set up to the one the latest checkpoint names. On first use the wallet anchors on

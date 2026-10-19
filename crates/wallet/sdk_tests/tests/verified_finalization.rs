@@ -688,6 +688,8 @@ async fn a_walk_that_keeps_failing_for_a_day_reanchors() {
         }),
     );
     network.set_latest(1);
+    last_synced(&test, Duration::from_secs(60 * 60));
+    let synced_at = validator_set_api.status().unwrap().unwrap().synced_at;
     let err = validator_set_api.sync().await.unwrap_err();
     assert!(matches!(err, ValidatorSetApiError::Unverified(_)), "{err}");
     assert_eq!(
@@ -695,6 +697,9 @@ async fn a_walk_that_keeps_failing_for_a_day_reanchors() {
         ValidatorSetAnchor::FirstUse,
         "a walk that just started failing is no reason to re-anchor"
     );
+    let status = validator_set_api.status().unwrap().unwrap();
+    assert!(status.walk_failing_since.is_some(), "the status shows the walk failing");
+    assert_eq!(status.synced_at, synced_at, "a failed walk is no sync");
 
     let a_day_ago = SystemTime::now().duration_since(UNIX_EPOCH).unwrap() - Duration::from_secs(25 * 60 * 60);
     test.store()
@@ -757,4 +762,33 @@ async fn a_wallet_out_of_sync_for_less_than_the_gap_takes_does_not_reanchor() {
     assert!(matches!(err, ValidatorSetApiError::Unverified(_)), "{err}");
     let anchor = validator_set_api.anchor().unwrap().unwrap();
     assert_eq!(anchor.anchor, ValidatorSetAnchor::FirstUse);
+}
+
+#[tokio::test]
+async fn the_status_reports_the_current_anchor() {
+    let far = 600;
+    let (_, network) = broken_history(far);
+    let transaction = build_transaction();
+    let test = wallet(network.clone(), &transaction);
+    let validator_set_api = test.sdk().validator_set_api();
+    assert!(
+        validator_set_api.status().unwrap().is_none(),
+        "nothing is trusted before the first sync"
+    );
+
+    validator_set_api.sync().await.unwrap();
+    let status = validator_set_api.status().unwrap().unwrap();
+    assert_eq!(status.anchor.anchor, ValidatorSetAnchor::FirstUse);
+    assert_eq!(status.anchor.validator_set.epoch(), Epoch(2));
+    assert_eq!(status.latest.epoch(), Epoch(2));
+    assert!(status.synced_at.is_some());
+
+    network.set_latest(2);
+    last_synced(&test, Duration::from_secs(365 * 24 * 60 * 60));
+    validator_set_api.sync().await.unwrap();
+    let status = validator_set_api.status().unwrap().unwrap();
+    assert_eq!(status.anchor.anchor, ValidatorSetAnchor::Reanchor);
+    assert_eq!(status.anchor.validator_set.epoch(), Epoch(far + 1));
+    assert_eq!(status.latest, status.anchor.validator_set);
+    assert_eq!(status.walk_failing_since, None);
 }

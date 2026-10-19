@@ -138,6 +138,7 @@ import type {
   TransactionWaitResultResponse,
   TransferNftRequest,
   TransferNftResponse,
+  ValidatorSetGetStatusResponse,
   WalletGetInfoResponse,
   WebauthnAlreadyRegisteredResponse,
   WebauthnFinishRegisterRequest,
@@ -372,6 +373,9 @@ export const templatesListAuthored = (request: TemplatesListAuthoredRequest): Pr
 
 // info
 export const walletGetInfo = (): Promise<WalletGetInfoResponse> => client().then((c) => c.walletGetInfo());
+
+export const validatorSetGetStatus = (): Promise<ValidatorSetGetStatusResponse> =>
+  client().then((c) => c.validatorSetGetStatus());
 
 // utxos
 export const stealthUtxosList = (request: StealthUtxosListRequest): Promise<StealthUtxosListResponse> =>

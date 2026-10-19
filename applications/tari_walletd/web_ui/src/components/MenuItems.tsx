@@ -39,7 +39,7 @@ import {
   IoTerminal,
   IoTerminalOutline,
 } from "react-icons/io5";
-import { LuBookOpen, LuCircleCheck, LuKeyRound, LuLayoutTemplate, LuSignature } from "react-icons/lu";
+import { LuBookOpen, LuCircleCheck, LuKeyRound, LuLayoutTemplate, LuShieldCheck, LuSignature } from "react-icons/lu";
 import { NavLink } from "react-router-dom";
 
 function MainListItems() {
@@ -115,6 +115,14 @@ function MainListItems() {
       icon: <IoTerminalOutline style={iconStyle} />,
       activeIcon: <IoTerminal style={activeIconStyle} />,
       link: "manifest",
+    });
+  }
+  if (advancedUiFeatures.enable_validator_set) {
+    mainItems.push({
+      title: "Validator Set",
+      icon: <LuShieldCheck style={iconStyle} />,
+      activeIcon: <LuShieldCheck style={activeIconStyle} />,
+      link: "validator-set",
     });
   }
   // if (advancedUiFeatures.enable_flow_editor) {

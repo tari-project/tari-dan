@@ -41,6 +41,7 @@ use crate::handlers::{
     transaction,
     transaction_requests,
     validator,
+    validator_set,
     webrtc,
 };
 
@@ -292,6 +293,9 @@ async fn handler(
             _ => value.method_not_found(&value.method).into_response(),
         },
         Some(("wallet", "get_info")) => call_handler(context, value, token, wallet::handle_get_info).await,
+        Some(("validator_set", "get_status")) => {
+            call_handler(context, value, token, validator_set::handle_get_status).await
+        },
         _ => value.method_not_found(&value.method).into_response(),
     }
 }

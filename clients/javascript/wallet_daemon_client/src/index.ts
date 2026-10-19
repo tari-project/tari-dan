@@ -165,6 +165,8 @@ import type {
   TransactionWaitResultResponse,
   TransferNftRequest,
   TransferNftResponse,
+  ValidatorSetGetStatusRequest,
+  ValidatorSetGetStatusResponse,
   WalletGetInfoRequest,
   WalletGetInfoResponse,
   WebauthnAlreadyRegisteredRequest,
@@ -396,6 +398,10 @@ export class WalletDaemonClient<T extends RpcTransport = FetchRpcTransport> {
 
   public walletGetInfo(): Promise<WalletGetInfoResponse> {
     return this.sendRequest("wallet.get_info", {} as WalletGetInfoRequest);
+  }
+
+  public validatorSetGetStatus(): Promise<ValidatorSetGetStatusResponse> {
+    return this.sendRequest("validator_set.get_status", {} as ValidatorSetGetStatusRequest);
   }
 
   public accountsCreate(params: AccountsCreateRequest): Promise<AccountsCreateResponse> {
