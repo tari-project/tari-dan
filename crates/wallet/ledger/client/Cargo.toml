@@ -1,6 +1,6 @@
 [package]
 name = "ootle_ledger_client"
-version = "0.9.0"
+version = "0.10.0"
 description = "Host client for the Tari Ootle Ledger app: on-device key derivation and transaction signing over any APDU transport"
 edition.workspace = true
 authors.workspace = true

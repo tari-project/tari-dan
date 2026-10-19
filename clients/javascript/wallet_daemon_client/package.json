@@ -1,6 +1,6 @@
 {
   "name": "@tari-project/wallet_jrpc_client",
-  "version": "1.25.0",
+  "version": "1.26.0",
   "description": "Tari wallet JSON-RPC client library",
   "homepage": "https://github.com/tari-project/tari-ootle#readme",
   "bugs": {
