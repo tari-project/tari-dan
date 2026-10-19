@@ -2000,6 +2000,7 @@
           "per_shard_limit": {
             "type": "integer",
             "format": "int32",
+            "description": "The number of UTXO rows to read per shard in this pass, from 1 to 1000. `from_epoch` and\n`unspent_only` are applied to the rows read, so a shard can return fewer updates than this,\nor none, and still have more: `StartOfShard::has_more` says whether it does. A state version\nwider than the limit is returned whole, overrunning it.",
             "minimum": 0
           },
           "resource_address": {
