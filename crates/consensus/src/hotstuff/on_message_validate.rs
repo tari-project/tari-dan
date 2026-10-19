@@ -30,7 +30,7 @@ use crate::{
         ProposalValidationError,
         epoch_state::EpochState,
         error::HotStuffError,
-        on_receive_foreign_proposal::{OnReceiveForeignProposalHandler, validate_evidence_and_pledges_match},
+        on_receive_foreign_proposal::{OnReceiveForeignProposalHandler, validate_foreign_proposal_copy},
         on_receive_new_transaction::OnReceiveNewTransaction,
     },
     messages::{
@@ -672,12 +672,11 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             )
             .await
             {
-                Ok(()) => validate_evidence_and_pledges_match(
-                    foreign_proposal,
-                    epoch_state.local_committee_info().shard_group(),
-                )
-                .err()
-                .filter(|err| err.is_specific_to_foreign_proposal_copy()),
+                Ok(()) => {
+                    validate_foreign_proposal_copy(foreign_proposal, epoch_state.local_committee_info().shard_group())
+                        .err()
+                        .filter(|err| err.is_specific_to_foreign_proposal_copy())
+                },
                 Err(HotStuffError::ProposalValidationError(err)) => Some(err),
                 Err(err) => return Err(err),
             };
@@ -814,7 +813,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             // whose pledges its evidence does not commit to is turned away here, leaving the slot for the genuine
             // proposal.
             if let Err(err) =
-                validate_evidence_and_pledges_match(&msg.proposal, epoch_state.local_committee_info().shard_group()) &&
+                validate_foreign_proposal_copy(&msg.proposal, epoch_state.local_committee_info().shard_group()) &&
                 err.is_specific_to_foreign_proposal_copy()
             {
                 warn!(target: LOG_TARGET, "⚠️ Discarding foreign proposal from {from}: {err}");

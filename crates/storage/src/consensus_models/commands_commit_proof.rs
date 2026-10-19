@@ -509,7 +509,8 @@ mod tests {
     #[test]
     fn a_v3_proof_carrying_a_bare_hash_does_not_authenticate() {
         let local_accept = &commands()[1];
-        // A leaf passed off as a bare hash would otherwise authenticate without naming any shard group
+        // Neither the leaf nor the command hash authenticates as a bare hash entry, since either would name no shard
+        // group
         for hash in [
             local_accept.merkle_leaf(ProtocolVersion::V3),
             local_accept.hash(ProtocolVersion::V3),

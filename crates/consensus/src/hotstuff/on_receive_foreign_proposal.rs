@@ -527,13 +527,15 @@ where TConsensusSpec: ConsensusSpec
             });
         }
 
-        validate_evidence_and_pledges_match(proposal, local_committee_info.shard_group())?;
+        validate_foreign_proposal_copy(proposal, local_committee_info.shard_group())?;
 
         Ok(())
     }
 }
 
-pub(super) fn validate_evidence_and_pledges_match(
+/// Checks that this copy of an authenticated foreign proposal is internally consistent and complete for the local
+/// shard group: its evidence and pledges agree, and it carries in full every command the local shard group needs.
+pub(super) fn validate_foreign_proposal_copy(
     proposal: &ForeignProposal,
     local_shard_group: ShardGroup,
 ) -> Result<(), ProposalValidationError> {

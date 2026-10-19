@@ -437,13 +437,22 @@ fn involves(command: &Command, shard_group: ShardGroup) -> bool {
 /// The same proposal with every command that involves `shard_group` carried only by its hash, in the form that leaves
 /// the commit proof's command merkle root unchanged.
 fn with_commands_trimmed_for(proposal: &ForeignProposal, shard_group: ShardGroup) -> ForeignProposal {
+    with_commands_trimmed_for_up_to(proposal, shard_group, usize::MAX)
+}
+
+/// As [`with_commands_trimmed_for`], trimming at most `max_trimmed` commands.
+fn with_commands_trimmed_for_up_to(
+    proposal: &ForeignProposal,
+    shard_group: ShardGroup,
+    max_trimmed: usize,
+) -> ForeignProposal {
     let protocol_version = proposal.protocol_version().unwrap();
     let mut num_trimmed = 0;
     let commands = proposal
         .commands()
         .iter()
         .map(|entry| match entry {
-            CommandOrHash::Command(command) if involves(command, shard_group) => {
+            CommandOrHash::Command(command) if num_trimmed < max_trimmed && involves(command, shard_group) => {
                 num_trimmed += 1;
                 CommandOrHash::Trimmed(TrimmedCommand {
                     hash: command.hash(protocol_version),
@@ -479,8 +488,18 @@ fn stored_foreign_proposal_is_complete(
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_foreign_proposal_withholding_a_command_for_the_local_shard_group_does_not_take_its_slot() {
+    an_embedded_foreign_proposal_withholding_a_command_does_not_take_its_slot(true).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_parked_block_with_a_foreign_proposal_withholding_a_command_does_not_take_its_slot() {
+    // The replica lacks the transaction, so both copies of the block are parked while it fetches it
+    an_embedded_foreign_proposal_withholding_a_command_does_not_take_its_slot(false).await;
+}
+
+async fn an_embedded_foreign_proposal_withholding_a_command_does_not_take_its_slot(replica_has_transaction: bool) {
     setup_logger();
-    let (mut test, replica, leader, proposal) = withheld_embedding_proposal(true).await;
+    let (mut test, replica, leader, proposal) = withheld_embedding_proposal(replica_has_transaction).await;
     let local_shard_group = test.get_validator(&replica).shard_group;
 
     let genuine = proposal
@@ -523,6 +542,117 @@ async fn a_foreign_proposal_withholding_a_command_for_the_local_shard_group_does
         is_complete,
         Ok(true),
         "the replica did not store the genuine foreign proposal after a copy that withheld one of its commands"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_foreign_proposal_reply_withholding_a_command_does_not_take_its_slot() {
+    setup_logger();
+    let input_member = TestAddress::new("1");
+    let captured = Arc::new(Mutex::new(None::<(TestAddress, ForeignProposal)>));
+    let mut test = Test::builder()
+        .add_committee(0, vec!["1"])
+        .add_committee(1, vec!["2", "4"])
+        .with_message_filter(Box::new({
+            let input_member = input_member.clone();
+            let captured = captured.clone();
+            // Only the first reply carrying two commands in full is withheld, so the retry to the other member of
+            // committee 1 is delivered
+            move |from, to, msg| match msg {
+                HotstuffMessage::ForeignProposal(msg) if *to == input_member => {
+                    let mut captured = captured.lock().unwrap();
+                    if msg.proposal.full_commands_iter().count() < 2 || captured.is_some() {
+                        return true;
+                    }
+                    *captured = Some((from.clone(), (*msg.proposal).clone()));
+                    false
+                },
+                _ => true,
+            }
+        }))
+        .start()
+        .await;
+
+    // A copy must still carry evidence for the replica once one command is withheld, so committee 1 needs two commands
+    // in full in one block. Inputs on both committees make every LocalPrepare a command the other committee needs in
+    // full, and the transactions that arrive while the first block is being voted on share the next one.
+    for _ in 0..4 {
+        let mut inputs = test.create_substates_on_vns(TestVnDestination::Committee(0), 1);
+        inputs.extend(test.create_substates_on_vns(TestVnDestination::Committee(1), 1));
+        let outputs = test.build_outputs_for_committee(1, 1);
+        let tx = build_transaction_from(
+            Transaction::builder_localnet(Epoch(1))
+                .with_inputs(inputs.iter().cloned().map(|i| i.into()))
+                .build_and_seal(&PrivateKey::default()),
+        );
+        test.create_execution_at_destination_for_transaction(
+            TestVnDestination::All,
+            &tx,
+            Decision::Commit,
+            5,
+            inputs
+                .into_iter()
+                .map(|input| (input.substate_id().clone(), SubstateLockType::Write))
+                .collect(),
+            outputs,
+        );
+        test.send_transaction_to_destination(TestVnDestination::All, tx).await;
+    }
+    test.start_epoch(Epoch(1)).await;
+
+    let (sender, genuine) = timeout(Duration::from_secs(60), async {
+        loop {
+            if let Some(captured) = captured.lock().unwrap().clone() {
+                return captured;
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .expect("committee 1 never sent a foreign proposal carrying two commands in full");
+    let local_shard_group = test.get_validator(&input_member).shard_group;
+    let block_id = genuine.calculate_block_id();
+    let tx_inbound = test.get_validator(&input_member).tx_inbound_message.clone();
+    // Whether the stored proposal for the block, if any, is the genuine one
+    let stored_is_genuine = || {
+        test.get_validator(&input_member)
+            .state_store()
+            .with_read_tx(|tx| ForeignProposalRecord::get_any(tx, [&block_id]))
+            .unwrap()
+            .pop()
+            .map(|record| record.proposal().commit_proof() == genuine.commit_proof())
+    };
+
+    tx_inbound
+        .send((
+            sender,
+            HotstuffMessage::ForeignProposal(with_commands_trimmed_for_up_to(&genuine, local_shard_group, 1).into()),
+        ))
+        .await
+        .unwrap();
+    sleep(Duration::from_secs(2)).await;
+    assert_eq!(
+        stored_is_genuine(),
+        None,
+        "stored a foreign proposal that withheld a command"
+    );
+
+    // The withholding copy leaves the block id free, so the retried request to the other member of committee 1 stores
+    // the genuine proposal
+    let is_genuine = timeout(Duration::from_secs(60), async {
+        loop {
+            if let Some(is_genuine) = stored_is_genuine() {
+                return is_genuine;
+            }
+            sleep(Duration::from_millis(250)).await;
+        }
+    })
+    .await;
+    test.stop();
+    assert_eq!(
+        is_genuine,
+        Ok(true),
+        "the retried request did not store the genuine foreign proposal"
     );
 }
 

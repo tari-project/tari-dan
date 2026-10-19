@@ -293,7 +293,7 @@ mod tests {
 
     /// From V2 a leaf proves the state of its own shard only, however equal another shard's state is.
     #[test]
-    fn a_v2_leaf_proves_its_own_shard_only() {
+    fn a_shard_keyed_leaf_proves_its_own_shard_only() {
         let root = TreeHash::new([7; 32]);
         let network = Network::LocalNet;
         assert_eq!(ProtocolVersion::genesis(network), ProtocolVersion::V3);
