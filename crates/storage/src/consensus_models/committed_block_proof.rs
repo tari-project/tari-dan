@@ -96,12 +96,10 @@ impl CommittedBlockProof {
         check_vn: impl Fn(&RistrettoPublicKeyBytes) -> Result<VotePower, SidechainProofValidationError>,
     ) -> Result<VerifiedBlockTip, CommittedBlockProofError> {
         self.proof
-            // TODO: Currently 1 VN = 1 vote power. When voting power becomes non-uniform, the
-            //       sidechain proof library must validate accumulated power rather than membership.
-            .validate_committed(quorum_threshold.value() as usize, &|pk: &CompressedPublicKey| {
+            .validate_committed(quorum_threshold.value(), &|pk: &CompressedPublicKey| {
                 let pk_bytes = RistrettoPublicKeyBytes::from_bytes(pk.as_bytes())
                     .map_err(SidechainProofValidationError::internal_error)?;
-                check_vn(&pk_bytes).map(|power| !power.is_zero())
+                check_vn(&pk_bytes).map(|power| power.value())
             })?;
 
         Ok(VerifiedBlockTip {
