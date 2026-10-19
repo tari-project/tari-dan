@@ -205,50 +205,19 @@ fn filtered_events<'a>(
     }
 }
 
-/// One shard's UTXO updates for `resource_address` from `from_epoch` on, in state version order.
-/// The caller adds the state version range and the limit.
+/// One shard's UTXO rows for `resource_address`, in state version order. The caller adds the state
+/// version range and the limit.
 pub(super) fn utxo_updates_query<'a>(
     resource_address: ResourceAddress,
-    from_epoch: Epoch,
     shard: Shard,
-    unspent_only: bool,
 ) -> crate::storage_sqlite::schema::utxos::BoxedQuery<'a, diesel::sqlite::Sqlite> {
     use crate::storage_sqlite::schema::utxos;
 
-    let mut query = utxos::table
+    utxos::table
         .filter(utxos::resource_address.eq(resource_address.to_string()))
-        .filter(utxos::epoch.ge(from_epoch.as_u64() as i64))
         .filter(utxos::shard.eq(shard.as_u32() as i32))
         .order_by(utxos::state_version.asc())
-        .into_boxed();
-    if unspent_only {
-        query = query
-            .filter(utxos::is_spent.eq(false))
-            .filter(utxos::is_burnt.eq(false));
-    }
-    query
-}
-
-/// The highest stored state version of one shard's UTXOs for `resource_address`, among only those
-/// stored negative (from 2^63 up) when `above_i64_max` is set.
-pub(super) fn utxo_max_state_version_query<'a>(
-    resource_address: ResourceAddress,
-    shard: Shard,
-    above_i64_max: bool,
-) -> crate::storage_sqlite::schema::utxos::BoxedQuery<'a, diesel::sqlite::Sqlite, sql_types::Nullable<sql_types::BigInt>>
-{
-    use crate::storage_sqlite::schema::utxos;
-
-    let query = utxos::table
-        .select(dsl::max(utxos::state_version))
-        .filter(utxos::resource_address.eq(resource_address.to_string()))
-        .filter(utxos::shard.eq(shard.as_u32() as i32))
-        .into_boxed();
-    if above_i64_max {
-        query.filter(utxos::state_version.lt(0))
-    } else {
-        query
-    }
+        .into_boxed()
 }
 
 fn decode_event_row(row: EventRecord) -> Result<(i64, TransactionId, Event), StorageError> {
@@ -734,30 +703,6 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         deserialize_json(&json_data)
     }
 
-    fn utxos_get_max_state_version(
-        &mut self,
-        resource_address: ResourceAddress,
-        shard: Shard,
-    ) -> Result<StateVersion, StorageError> {
-        const OPERATION: &str = "utxos_get_max_state_version";
-        // State versions are stored `as i64`, so those from 2^63 up read back negative and are the
-        // highest when there are any. Each half is a seek on the
-        // (resource_address, shard, state_version) index.
-        let mut max_version = None;
-        for above_i64_max in [true, false] {
-            max_version = utxo_max_state_version_query(resource_address, shard, above_i64_max)
-                .get_result::<Option<i64>>(self.connection())
-                .map_err(|e| StorageError::QueryError {
-                    reason: format!("{OPERATION}: {}", e),
-                })?;
-            if max_version.is_some() {
-                break;
-            }
-        }
-
-        Ok(max_version.map_or_else(StateVersion::zero, |v| StateVersion::new(v as u64)))
-    }
-
     fn utxos_get_updates(
         &mut self,
         resource_address: ResourceAddress,
@@ -776,8 +721,13 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         // V". A response that ends mid-version would strand the rest of that version above the
         // cursor the caller then resumes from, so a version is either wholly included or wholly
         // absent. One row beyond the limit is read to find where that boundary falls.
+        //
+        // The limit bounds the rows read, not the updates returned. `from_epoch` and `unspent_only`
+        // are applied to the rows once read, so the cost of a read does not depend on how much of
+        // the shard's history they exclude. The read reports the version it reached, and a caller
+        // resuming from there skips the excluded rows instead of reading them again.
         let overshoot_limit = i64::from(limit).saturating_add(1);
-        let base_query = || utxo_updates_query(resource_address, from_epoch, shard, unspent_only);
+        let base_query = || utxo_updates_query(resource_address, shard);
         // Versions from 2^63 up are stored negative and order above every non-negative one. The read
         // is split at that boundary so that each half is an ordered range on the
         // (resource_address, shard, state_version) index, stopping at the limit.
@@ -811,56 +761,47 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         }
 
         let has_more = rows.len() as i64 == overshoot_limit;
-        let mut converted = Vec::with_capacity(rows.len());
-        let mut max_epoch = Epoch::zero();
-        for row in rows {
-            let epoch = Epoch(row.epoch as u64);
-            let (state_version, update) = row.try_convert_to_update()?;
-            max_epoch = max_epoch.max(epoch);
-            converted.push((state_version, update));
-        }
-
         if has_more {
             // Rows are ordered by state version, so the overshoot row's version is the highest
             // present and is the only one that can be partial.
-            let partial_version = converted
-                .last()
-                .map(|(state_version, _)| *state_version)
-                .expect("has_more implies at least one row");
-            let complete = converted.partition_point(|(v, _)| *v < partial_version);
+            let partial_version = rows.last().expect("has_more implies at least one row").state_version;
+            let complete = rows
+                .iter()
+                .position(|row| row.state_version == partial_version)
+                .expect("the last row is at its own version");
             if complete > 0 {
-                converted.truncate(complete);
+                rows.truncate(complete);
             } else {
                 // The whole read sits at one version, so there is no complete earlier version to
                 // stop at. Returning nothing would leave the caller's cursor where it was and no
-                // way past this shard, so the version is served whole and the limit is overrun.
-                let rows = base_query()
-                    .filter(utxos::state_version.eq(partial_version.as_u64() as i64))
-                    .load_iter::<models::UtxoRecord, _>(self.connection())
+                // way past this shard, so the version is read whole and the limit is overrun.
+                rows = base_query()
+                    .filter(utxos::state_version.eq(partial_version))
+                    .load::<models::UtxoRecord>(self.connection())
                     .map_err(|e| StorageError::QueryError {
                         reason: format!("{OPERATION}: {}", e),
                     })?;
-
-                converted.clear();
-                for r in rows {
-                    let row = r.map_err(|e| StorageError::QueryError {
-                        reason: format!("{OPERATION}: {e}"),
-                    })?;
-                    let epoch = Epoch(row.epoch as u64);
-                    let (state_version, update) = row.try_convert_to_update()?;
-                    max_epoch = max_epoch.max(epoch);
-                    converted.push((state_version, update));
-                }
             }
         }
 
-        let max_state_version = converted
+        let read_to = rows
             .last()
-            .map_or_else(StateVersion::zero, |(state_version, _)| *state_version);
+            .map_or(from_state_version, |row| StateVersion::new(row.state_version as u64));
+        let mut updates = Vec::with_capacity(rows.len());
+        let mut max_epoch = Epoch::zero();
+        for row in rows {
+            let epoch = Epoch(row.epoch as u64);
+            if epoch < from_epoch || (unspent_only && (row.is_spent || row.is_burnt)) {
+                continue;
+            }
+            let (_, update) = row.try_convert_to_update()?;
+            max_epoch = max_epoch.max(epoch);
+            updates.push(update);
+        }
 
         Ok(UtxoStateUpdateSet {
-            updates: converted.into_iter().map(|(_, update)| update).collect(),
-            max_state_version,
+            updates,
+            max_state_version: read_to,
             max_epoch,
             has_more,
         })

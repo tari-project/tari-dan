@@ -733,11 +733,14 @@ pub struct UtxoUpdateSet {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct UtxoStateUpdateSet {
     pub updates: Vec<WalletUtxoUpdate>,
-    /// The highest state version in `updates`. Every update at that version is included, so it is a
-    /// resume point: a later request filtering on `state_version > max_state_version` loses nothing.
+    /// The state version the read reached. Every update of the shard at or below it is either in
+    /// `updates` or excluded by the request's filters, so it is a resume point: a later request
+    /// filtering on `state_version > max_state_version` loses nothing. It can be above the highest
+    /// version in `updates`, and is the request's own cursor when the read found nothing past it.
     pub max_state_version: StateVersion,
     pub max_epoch: Epoch,
-    /// The shard holds further updates above `max_state_version`.
+    /// The shard holds further rows above `max_state_version`, which may or may not pass the
+    /// request's filters.
     pub has_more: bool,
 }
 
