@@ -9,7 +9,7 @@ use tari_indexer_client::types::{
     ListEpochCheckpointsRequest,
     ListEpochCheckpointsResponse,
 };
-use tari_ootle_common_types::{Epoch, shard::Shard};
+use tari_ootle_common_types::{Epoch, optional::Optional, shard::Shard};
 use tari_ootle_storage::consensus_models::EpochCheckpoint;
 
 use crate::rest_api::{
@@ -105,7 +105,9 @@ pub async fn get_latest_epoch_checkpoint(
         .read_only_store()
         .epoch_checkpoint_get_latest(req.shard)
         .await
-        .map_err(ErrorResponse::anyhow)?;
+        .optional()
+        .map_err(ErrorResponse::anyhow)?
+        .ok_or_else(|| ErrorResponse::not_found("This indexer holds no epoch checkpoint"))?;
 
     let body = Json(GetLatestEpochCheckpointResponse {
         checkpoint: checkpoint_entry(&context, &checkpoint, committee_shard).await?,

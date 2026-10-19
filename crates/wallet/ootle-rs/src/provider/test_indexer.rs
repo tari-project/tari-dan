@@ -28,6 +28,7 @@ use tari_indexer_client::{
         EpochCheckpointEntry,
         GetCommitteeRequest,
         GetCommitteeResponse,
+        GetEpochManagerStatsResponse,
         GetLatestEpochCheckpointResponse,
         GetSubstateRequest,
         GetSubstateResponse,
@@ -83,8 +84,10 @@ pub(crate) struct TestIndexer {
 struct TestIndexerState {
     /// Ascending by the epoch each ends.
     checkpoints: Vec<EpochCheckpointEntry>,
-    /// The index in `checkpoints` of the latest one.
-    latest: usize,
+    /// The index in `checkpoints` of the latest one, or `None` before the network's first checkpoint.
+    latest: Option<usize>,
+    /// The epoch of the first validator set.
+    first_epoch: Epoch,
     /// The epoch whose checkpoint the indexer has not stored yet, as during a backfill.
     unserved: Option<Epoch>,
     committees: HashMap<Epoch, (ValidatorSetCommittee, ValidatorSetCommittee)>,
@@ -107,6 +110,16 @@ impl TestIndexer {
     /// Serves the handovers between consecutive `sets`, with the latest checkpoint the one ending `sets[latest]`'s
     /// epoch.
     pub(crate) async fn spawn(sets: &[ValidatorSetFixture], latest: usize) -> Self {
+        Self::spawn_with_latest(sets, Some(latest)).await
+    }
+
+    /// Serves the committees of `sets` and no checkpoint, as on a network still in the epoch of `sets[0]`, its first.
+    /// [`Self::set_latest`] serves the handovers between them.
+    pub(crate) async fn spawn_before_first_checkpoint(sets: &[ValidatorSetFixture]) -> Self {
+        Self::spawn_with_latest(sets, None).await
+    }
+
+    async fn spawn_with_latest(sets: &[ValidatorSetFixture], latest: Option<usize>) -> Self {
         let checkpoints = sets
             .windows(2)
             .map(|window| checkpoint_entry(CheckpointSpec::handover(&window[0], &window[1])))
@@ -118,6 +131,7 @@ impl TestIndexer {
         let state = Arc::new(Mutex::new(TestIndexerState {
             checkpoints,
             latest,
+            first_epoch: sets[0].epoch,
             unserved: None,
             committees,
             substates: HashMap::new(),
@@ -130,6 +144,7 @@ impl TestIndexer {
             .route("/epoch-checkpoints/latest", get(latest_checkpoint))
             .route("/epoch-checkpoints", get(list_checkpoints))
             .route("/committees", get(committee))
+            .route("/epoch-manager/stats", get(epoch_manager_stats))
             .route("/substates/fetch", post(fetch_substates))
             .route("/substates/{id}", get(substate))
             .route("/transactions/{id}/result", get(transaction_result))
@@ -163,7 +178,7 @@ impl TestIndexer {
     }
 
     pub(crate) fn set_latest(&self, latest: usize) {
-        self.state.lock().unwrap().latest = latest;
+        self.state.lock().unwrap().latest = Some(latest);
     }
 
     pub(crate) fn committee_requests(&self) -> usize {
@@ -205,10 +220,28 @@ impl TestIndexer {
 
 type Shared = State<Arc<Mutex<TestIndexerState>>>;
 
-async fn latest_checkpoint(State(state): Shared) -> Json<GetLatestEpochCheckpointResponse> {
+async fn latest_checkpoint(State(state): Shared) -> Response {
     let state = state.lock().unwrap();
+    let Some(latest) = state.latest else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
     Json(GetLatestEpochCheckpointResponse {
-        checkpoint: state.checkpoints[state.latest].clone(),
+        checkpoint: state.checkpoints[latest].clone(),
+    })
+    .into_response()
+}
+
+/// The epoch after the latest checkpoint's as both the current and the consensus epoch.
+async fn epoch_manager_stats(State(state): Shared) -> Json<GetEpochManagerStatsResponse> {
+    let state = state.lock().unwrap();
+    let epoch = state
+        .latest
+        .map_or(state.first_epoch, |latest| state.checkpoints[latest].epoch + Epoch(1));
+    Json(GetEpochManagerStatsResponse {
+        current_epoch: epoch,
+        consensus_epoch: Some(epoch),
+        current_block_height: 0,
+        current_block_hash: Hash32::default(),
     })
 }
 
@@ -219,7 +252,9 @@ async fn list_checkpoints(
     let state = state.lock().unwrap();
     let from_epoch = req.from_epoch.unwrap_or(Epoch(0));
     Json(ListEpochCheckpointsResponse {
-        checkpoints: state.checkpoints[..=state.latest]
+        checkpoints: state
+            .latest
+            .map_or(&[][..], |latest| &state.checkpoints[..=latest])
             .iter()
             .filter(|checkpoint| checkpoint.epoch >= from_epoch && Some(checkpoint.epoch) != state.unserved)
             .take(req.limit.unwrap_or(20) as usize)

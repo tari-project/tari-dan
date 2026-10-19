@@ -181,6 +181,9 @@ where
     /// Brings the trusted validator set up to the one the latest checkpoint names. On first use the wallet anchors on
     /// that set. Later it walks the handovers to it, however far behind it is.
     ///
+    /// Before the network's first end-of-epoch checkpoint, the wallet anchors on the current epoch's validator set
+    /// itself (see [`Self::anchor_on_current_epoch`]), and an anchored wallet is up to date.
+    ///
     /// When the walk fails because the indexer's checkpoints do not connect to the trusted set, the wallet re-anchors
     /// on the set the latest checkpoint names in place of the walk, but only once its own clock vouches for the need:
     /// - the walk has failed on every sync for [`REANCHOR_AFTER_FAILING_FOR`], or
@@ -192,7 +195,15 @@ where
     /// as it does on first use. A walk that fails keeps the sets verified before the failure.
     pub async fn sync(&self) -> Result<TrustedValidatorSet, ValidatorSetApiError> {
         let _guard = self.shared.lock.lock().await;
-        let latest_checkpoint = self.latest_checkpoint().await?;
+        let Some(latest_checkpoint) = self.latest_checkpoint().await? else {
+            return match self.latest()? {
+                Some(trusted) => {
+                    self.store.with_write_tx(|tx| record_synced(tx))?;
+                    Ok(trusted)
+                },
+                None => self.anchor_on_current_epoch(ValidatorSetAnchor::FirstUse).await,
+            };
+        };
         let Some(trusted) = self.latest()? else {
             info!(target: LOG_TARGET, "Anchoring on the validator set that the checkpoint of {} names", latest_checkpoint.epoch);
             return self.anchor_on(&latest_checkpoint, ValidatorSetAnchor::FirstUse);
@@ -232,7 +243,9 @@ where
     /// its anchor.
     pub async fn reanchor(&self) -> Result<TrustedValidatorSet, ValidatorSetApiError> {
         let _guard = self.shared.lock.lock().await;
-        let latest_checkpoint = self.latest_checkpoint().await?;
+        let Some(latest_checkpoint) = self.latest_checkpoint().await? else {
+            return self.anchor_on_current_epoch(ValidatorSetAnchor::Reanchor).await;
+        };
         warn!(target: LOG_TARGET, "Re-anchoring on the validator set that the checkpoint of {} names", latest_checkpoint.epoch);
         self.anchor_on(&latest_checkpoint, ValidatorSetAnchor::Reanchor)
     }
@@ -279,10 +292,12 @@ where
         Ok(Some(committee))
     }
 
-    async fn latest_checkpoint(&self) -> Result<EpochCheckpointEntry, ValidatorSetApiError> {
+    /// The latest checkpoint of the walked shard group, or `None` before the network has ended an epoch.
+    async fn latest_checkpoint(&self) -> Result<Option<EpochCheckpointEntry>, ValidatorSetApiError> {
         self.network_interface
             .get_latest_epoch_checkpoint(WALK_SHARD)
             .await
+            .optional()
             .map_err(network_error)
     }
 
@@ -292,6 +307,47 @@ where
         anchor: ValidatorSetAnchor,
     ) -> Result<TrustedValidatorSet, ValidatorSetApiError> {
         let trusted = TrustedValidatorSet::anchor_on_first_use(self.network, WALK_SHARD, checkpoint)?;
+        self.store_anchor(&trusted, anchor)?;
+        Ok(trusted)
+    }
+
+    /// Anchors on the validator set of the epoch the network's consensus is in, with the walked shard group's committee
+    /// in it, for a network that has not ended an epoch yet and so has no checkpoint to anchor on.
+    ///
+    /// This takes the indexer at its word on the validator set, as anchoring on a first-use checkpoint does, whose
+    /// quorum certificate no trusted committee can check either. The first end-of-epoch checkpoint must carry a quorum
+    /// of the anchored committee's signatures for the walk to pass it.
+    async fn anchor_on_current_epoch(
+        &self,
+        anchor: ValidatorSetAnchor,
+    ) -> Result<TrustedValidatorSet, ValidatorSetApiError> {
+        let epoch = self
+            .network_interface
+            .get_current_epoch()
+            .await
+            .map_err(network_error)?;
+        let committee = self
+            .network_interface
+            .get_committee(epoch, WALK_SHARD)
+            .await
+            .map_err(network_error)?;
+        info!(target: LOG_TARGET, "The network has no checkpoint yet. Anchoring on the validator set of {epoch}");
+        let trusted = TrustedValidatorSet::anchor_pinned(
+            self.network,
+            WALK_SHARD,
+            epoch,
+            &committee.validator_set_hash,
+            &committee,
+        )?;
+        self.store_anchor(&trusted, anchor)?;
+        Ok(trusted)
+    }
+
+    fn store_anchor(
+        &self,
+        trusted: &TrustedValidatorSet,
+        anchor: ValidatorSetAnchor,
+    ) -> Result<(), ValidatorSetApiError> {
         self.store.with_write_tx(|tx| {
             if anchor == ValidatorSetAnchor::Reanchor {
                 let previous = tx
@@ -305,10 +361,10 @@ where
             }
             tx.trusted_validator_sets_clear()?;
             tx.trusted_validator_sets_insert(&trusted.trusted_hash(), Some(anchor))?;
-            tx.config_set(ConfigKey::TrustedValidatorSet.as_key_str(), &trusted, false)?;
+            tx.config_set(ConfigKey::TrustedValidatorSet.as_key_str(), trusted, false)?;
             record_synced(tx)
         })?;
-        Ok(trusted)
+        Ok(())
     }
 
     /// How long the walk has failed on every sync, counting this failure, which starts the count when it is the first.
