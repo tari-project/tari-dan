@@ -43,7 +43,7 @@ Once initialized, domain-specific APIs are accessed via accessor methods on `Wal
 ## Usage
 
 ```rust,ignore
-use tari_ootle_wallet_sdk::WalletSdk;
+use tari_ootle_wallet_sdk::{WalletSdk, apis::transaction::Submission};
 
 // Initialize the SDK (typically done once at startup)
 let sdk = WalletSdk::initialize(config, store, key_store, network_interface)?;
@@ -70,10 +70,18 @@ let vaults = sdk.accounts_api().get_vaults_by_account(account.component_address(
 let stealth = sdk.stealth_outputs_api()
     .get_unspent_outputs_by_account(account.component_address(), false)?;
 
-// Submit a transaction
-let tx_id = sdk.transaction_api().insert_new_transaction(transaction, None, false)?;
-sdk.transaction_api().submit_transaction(tx_id).await?;
-let result = sdk.transaction_api().wait_for_transaction_finalization(tx_id)?;
+// Submit a transaction. A wallet that verifies its indexer holds the transaction back until it trusts a
+// validator set, and leaves submitting it again to the caller.
+let tx_id = sdk.transaction_api().insert_new_transaction(transaction, None, &[], false)?;
+loop {
+    match sdk.transaction_api().submit_transaction(tx_id).await? {
+        Submission::Submitted => break,
+        Submission::Rejected => return Err(anyhow!("transaction {tx_id} was rejected")),
+        Submission::Deferred => tokio::time::sleep(Duration::from_secs(5)).await,
+    }
+}
+// None until the transaction finalizes
+let finalized = sdk.transaction_api().check_and_store_finalized_transaction(tx_id).await?;
 ```
 
 ## Features

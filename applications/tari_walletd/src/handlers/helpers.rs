@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashSet, fmt::Display, path::Path};
+use std::{collections::HashSet, fmt::Display, path::Path, time::Duration};
 
 use anyhow::anyhow;
 use ootle_byte_type::ToByteType;
@@ -22,11 +22,23 @@ use tari_ootle_walletd_client::{ComponentAddressOrName, types::ClaimBurnProofCon
 use tari_sidechain::CompleteClaimBurnProof;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib_types::{ComponentAddress, EncryptedData};
-use tokio::sync::broadcast;
+use tokio::{sync::broadcast, time};
 
 use crate::server::ApplicationErrorCode;
 
+/// How long a handler waits for its transaction to finalize before answering that it is still pending.
+const RESULT_WAIT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+
 pub async fn wait_for_result(
+    events: &mut broadcast::Receiver<WalletEvent>,
+    transaction_id: TransactionId,
+) -> Result<TransactionFinalizedEvent, anyhow::Error> {
+    time::timeout(RESULT_WAIT_TIMEOUT, wait_for_result_unbounded(events, transaction_id))
+        .await
+        .map_err(|_| still_pending(transaction_id))?
+}
+
+async fn wait_for_result_unbounded(
     events: &mut broadcast::Receiver<WalletEvent>,
     transaction_id: TransactionId,
 ) -> Result<TransactionFinalizedEvent, anyhow::Error> {
@@ -51,6 +63,19 @@ pub async fn wait_for_result(
 }
 
 pub async fn wait_for_result_and_account(
+    events: &mut broadcast::Receiver<WalletEvent>,
+    transaction_id: &TransactionId,
+    account_address: &ComponentAddress,
+) -> Result<(TransactionFinalizedEvent, Option<ComponentAddress>), anyhow::Error> {
+    time::timeout(
+        RESULT_WAIT_TIMEOUT,
+        wait_for_result_and_account_unbounded(events, transaction_id, account_address),
+    )
+    .await
+    .map_err(|_| still_pending(*transaction_id))?
+}
+
+async fn wait_for_result_and_account_unbounded(
     events: &mut broadcast::Receiver<WalletEvent>,
     transaction_id: &TransactionId,
     account_address: &ComponentAddress,
@@ -189,6 +214,18 @@ pub(super) fn application_error<T: Display>(code: ApplicationErrorCode, details:
     )
     .into()
 }
+
+fn still_pending(transaction_id: TransactionId) -> anyhow::Error {
+    application_error(
+        ApplicationErrorCode::TransactionPending,
+        format!(
+            "Transaction {transaction_id} has not finalized within {}s. The wallet keeps tracking it, and \
+             transactions.wait_result reports its outcome.",
+            RESULT_WAIT_TIMEOUT.as_secs()
+        ),
+    )
+}
+
 pub(super) fn not_found<T: Display>(details: T) -> anyhow::Error {
     axum_jrpc::error::JsonRpcError::new(
         axum_jrpc::error::JsonRpcErrorReason::ApplicationError(ApplicationErrorCode::NotFound as i32),
@@ -318,6 +355,28 @@ mod tests {
             e.downcast_ref::<JsonRpcError>().map(|e| e.error_reason()),
             Some(JsonRpcErrorReason::ApplicationError(code)) if code == ApplicationErrorCode::NotFound as i32
         )
+    }
+
+    fn error_code(e: &anyhow::Error) -> Option<i32> {
+        match e.downcast_ref::<JsonRpcError>().map(|e| e.error_reason()) {
+            Some(JsonRpcErrorReason::ApplicationError(code)) => Some(code),
+            _ => None,
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_transaction_that_never_finalizes_is_reported_pending_after_the_timeout() {
+        let (_sender, mut events) = broadcast::channel::<WalletEvent>(1);
+        let transaction_id = TransactionId::new([1; 32]);
+
+        let err = wait_for_result(&mut events, transaction_id).await.unwrap_err();
+        assert_eq!(error_code(&err), Some(ApplicationErrorCode::TransactionPending as i32));
+
+        let account = ComponentAddress::from_array([2; 32]);
+        let err = wait_for_result_and_account(&mut events, &transaction_id, &account)
+            .await
+            .unwrap_err();
+        assert_eq!(error_code(&err), Some(ApplicationErrorCode::TransactionPending as i32));
     }
 
     #[test]

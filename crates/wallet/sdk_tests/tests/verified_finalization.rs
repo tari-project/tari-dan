@@ -29,8 +29,12 @@ use tari_ootle_light_client::test_fixtures::{
 use tari_ootle_transaction::{Transaction, TransactionId, args};
 use tari_ootle_wallet_sdk::{
     IndexerTrust,
-    apis::{config::ConfigKey, transaction::TransactionApiError, validator_set::ValidatorSetApiError},
-    models::{TransactionStatus, ValidatorSetAnchor},
+    apis::{
+        config::ConfigKey,
+        transaction::{Submission, TransactionApiError},
+        validator_set::ValidatorSetApiError,
+    },
+    models::{TransactionContext, TransactionContextKind, TransactionStatus, ValidatorSetAnchor, WalletEvent},
     network::{TransactionFinalizedResult, TransactionQueryResult},
     storage::{ReadableWalletStore, WalletStoreReader, WalletStoreWriter, WriteableWalletStore},
 };
@@ -441,17 +445,129 @@ async fn the_wallet_anchors_before_its_first_submission() {
     let test = wallet(network, &transaction);
     assert!(test.sdk().validator_set_api().anchor().unwrap().is_none());
 
-    assert!(
-        test.sdk()
-            .transaction_api()
-            .submit_transaction(transaction.calculate_id())
-            .await
-            .unwrap()
-    );
+    let submission = test
+        .sdk()
+        .transaction_api()
+        .submit_transaction(transaction.calculate_id())
+        .await
+        .unwrap();
+    assert_eq!(submission, Submission::Submitted);
 
     let anchor = test.sdk().validator_set_api().anchor().unwrap().unwrap();
     assert_eq!(anchor.anchor, ValidatorSetAnchor::FirstUse);
     assert_eq!(anchor.validator_set.epoch(), Epoch(3));
+}
+
+#[tokio::test]
+async fn a_wallet_that_cannot_anchor_holds_its_transaction_back() {
+    let sets = sets();
+    let network = ProvingNetwork::new(&sets, 1);
+    network.withhold_checkpoints();
+    let transaction = build_transaction();
+    let transaction_id = transaction.calculate_id();
+    let test = wallet(network.clone(), &transaction);
+
+    let submission = test
+        .sdk()
+        .transaction_api()
+        .submit_transaction(transaction_id)
+        .await
+        .unwrap();
+
+    assert_eq!(submission, Submission::Deferred);
+    assert_eq!(network.submissions(), 0);
+    let held = test.sdk().transaction_api().get(transaction_id).unwrap();
+    assert_eq!(held.status, TransactionStatus::New);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_transaction_service_submits_a_held_back_transaction_once_the_wallet_anchors() {
+    let sets = sets();
+    let network = ProvingNetwork::new(&sets, 1);
+    network.withhold_checkpoints();
+    let test = TestWithNetwork::without_accounts_trusting(network.clone(), IndexerTrust::Verify);
+    let config = TransactionServiceConfig {
+        poll_interval: Duration::from_millis(20),
+        ..TransactionServiceConfig::default()
+    };
+    let shutdown = Shutdown::new();
+    let (service, handle) =
+        TransactionService::with_config(config, Notify::new(16), test.sdk().clone(), shutdown.to_signal());
+    tokio::spawn(service.run());
+
+    let transaction = build_transaction();
+    network.set_result(TransactionQueryResult {
+        result: TransactionFinalizedResult::Pending,
+        transaction_id: transaction.calculate_id(),
+        receipt: None,
+    });
+    let transaction_id = handle.submit_transaction(transaction).await.unwrap();
+    assert_eq!(network.submissions(), 0);
+    let held = test.sdk().transaction_api().get(transaction_id).unwrap();
+    assert_eq!(held.status, TransactionStatus::New);
+
+    network.set_latest(1);
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while network.submissions() == 0 {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the service never submitted the held-back transaction");
+    let submitted = test.sdk().transaction_api().get(transaction_id).unwrap();
+    assert_eq!(submitted.status, TransactionStatus::Pending);
+    assert!(test.sdk().validator_set_api().anchor().unwrap().is_some());
+}
+
+#[tokio::test]
+async fn a_held_back_transaction_is_announced_with_the_context_it_was_submitted_with() {
+    let sets = sets();
+    let network = ProvingNetwork::new(&sets, 1);
+    network.withhold_checkpoints();
+    let test = TestWithNetwork::without_accounts_trusting(network.clone(), IndexerTrust::Verify);
+    let config = TransactionServiceConfig {
+        poll_interval: Duration::from_millis(20),
+        ..TransactionServiceConfig::default()
+    };
+    let shutdown = Shutdown::new();
+    let notify = Notify::new(16);
+    let mut events = notify.subscribe();
+    let (service, handle) = TransactionService::with_config(config, notify, test.sdk().clone(), shutdown.to_signal());
+    tokio::spawn(service.run());
+
+    let transaction = build_transaction();
+    network.set_result(TransactionQueryResult {
+        result: TransactionFinalizedResult::Pending,
+        transaction_id: transaction.calculate_id(),
+        receipt: None,
+    });
+    let context = TransactionContext::default().with_kind(TransactionContextKind::ClaimBurn {
+        file_name: "burn.json".to_string(),
+    });
+    let transaction_id = handle
+        .submit_transaction_with_opts(transaction, Some(context), None)
+        .await
+        .unwrap();
+    assert_eq!(network.submissions(), 0);
+
+    network.set_latest(1);
+    let submitted = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let WalletEvent::TransactionSubmitted(event) = events.recv().await.unwrap() {
+                return event;
+            }
+        }
+    })
+    .await
+    .expect("the service never submitted the held-back transaction");
+    assert_eq!(submitted.transaction_id, transaction_id);
+    assert!(
+        matches!(
+            submitted.context.and_then(|c| c.kind),
+            Some(TransactionContextKind::ClaimBurn { file_name }) if file_name == "burn.json"
+        ),
+        "the submission lost its claim burn context"
+    );
 }
 
 #[tokio::test]

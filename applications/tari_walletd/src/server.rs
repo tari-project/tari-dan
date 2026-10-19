@@ -431,6 +431,7 @@ pub enum ApplicationErrorCode {
     TransactionRejected = 1000,
     FaucetAlreadyClaimed = 1001,
     FaucetEmpty = 1002,
+    TransactionPending = 1003,
     GeneralError = 500,
 }
 
