@@ -16,6 +16,7 @@ use tari_engine_types::{
 use tari_indexer_client::types::{
     EpochCheckpointEntry,
     ProvenTransactionReceipt,
+    SubstateProof,
     ValidatorSetCommittee,
     WatchedSubstateItem,
 };
@@ -59,17 +60,23 @@ pub struct TransactionFinalizedNotification {
 pub trait WalletNetworkInterface {
     type Error: IsNotFoundError + TransactionStatusResponseError + std::error::Error + Send + Sync + 'static;
 
+    /// Queries a substate, at `version` or its latest. With `include_proof`, the result carries the proof the indexer
+    /// verified it with, when a committee member could prove it.
     fn query_substate(
         &self,
         address: &SubstateId,
         version: Option<SubstateVersion>,
         local_search_only: bool,
+        include_proof: bool,
     ) -> impl Future<Output = Result<SubstateQueryResult, Self::Error>> + Send;
 
+    /// Fetches the latest version of each of `substate_ids` that exists. With `include_proofs`, the result carries the
+    /// proof of each substate a committee member could prove.
     fn get_substates(
         &self,
         substate_ids: Vec<SubstateId>,
-    ) -> impl Future<Output = Result<HashMap<SubstateId, Substate>, Self::Error>> + Send;
+        include_proofs: bool,
+    ) -> impl Future<Output = Result<FetchedSubstates, Self::Error>> + Send;
 
     fn submit_transaction(
         &self,
@@ -158,6 +165,17 @@ pub trait WalletNetworkInterface {
 pub struct SubstateQueryResult {
     pub version: SubstateVersion,
     pub substate: SubstateValue,
+    /// The proof that the substate held this value, when one was asked for and served.
+    #[serde(default)]
+    pub proof: Option<SubstateProof>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct FetchedSubstates {
+    pub substates: HashMap<SubstateId, Substate>,
+    /// The proof of each substate in `substates` that was asked for and served.
+    #[serde(default)]
+    pub proofs: HashMap<SubstateId, SubstateProof>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

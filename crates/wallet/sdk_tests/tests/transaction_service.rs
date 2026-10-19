@@ -4,7 +4,7 @@
 mod support;
 
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashSet, VecDeque},
     sync::{
         Arc,
         Mutex,
@@ -21,7 +21,7 @@ use tari_engine_types::{
     Utxo,
     commit_result::{AbortReason, ExecuteResult, FinalizeResult, TransactionResult},
     fees::FeeReceipt,
-    substate::{Substate, SubstateDiff, SubstateId},
+    substate::{SubstateDiff, SubstateId},
     transaction_receipt::FinalizeOutcome,
 };
 use tari_indexer_client::types::{EpochCheckpointEntry, ValidatorSetCommittee, WatchedSubstateItem};
@@ -36,6 +36,7 @@ use tari_ootle_transaction::{Transaction, TransactionEnvelope, TransactionId, ar
 use tari_ootle_wallet_sdk::{
     models::{TransactionStatus, WalletEvent},
     network::{
+        FetchedSubstates,
         SubstateQueryResult,
         TransactionFinalizedNotification,
         TransactionFinalizedResult,
@@ -142,11 +143,12 @@ impl WalletNetworkInterface for ScriptedNetwork {
         _address: &SubstateId,
         _version: Option<SubstateVersion>,
         _local_search_only: bool,
+        _include_proof: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
         panic!("ScriptedNetwork::query_substate called")
     }
 
-    async fn get_substates(&self, _: Vec<SubstateId>) -> Result<HashMap<SubstateId, Substate>, Self::Error> {
+    async fn get_substates(&self, _: Vec<SubstateId>, _: bool) -> Result<FetchedSubstates, Self::Error> {
         panic!("ScriptedNetwork::get_substates called")
     }
 

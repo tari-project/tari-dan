@@ -193,16 +193,16 @@ where
     /// Adds the account derived from the key and scans it for vaults and stealth UTXOs. The account is found if it
     /// exists on chain or has ever received a stealth UTXO.
     async fn try_recover_account(&self, key: &DerivedWalletKey) -> Result<RecoveredAccount, AccountRecoveryError> {
-        let network_interface = self.wallet_sdk.get_network_interface();
-
         let public_key = RistrettoPublicKey::from_secret_key(&key.key).to_byte_type();
         // Derive the account address from the public key
         let account_addr = derive_component_address_from_public_key(&ACCOUNT_TEMPLATE_ADDRESS, &public_key);
 
         // Attempt to fetch the account substate
         // TODO: perf we should batch these requests e.g. query 10 accounts in one go
-        let result = network_interface
-            .query_substate(&account_addr.into(), None, false)
+        let result = self
+            .wallet_sdk
+            .substate_api()
+            .fetch_substate_from_network(&account_addr.into(), None)
             .await
             .optional()
             .map_err(|e| AccountRecoveryError::NetworkInterfaceError { details: e.to_string() })?;

@@ -4,7 +4,6 @@
 mod support;
 
 use std::{
-    collections::HashMap,
     sync::{
         Arc,
         Mutex,
@@ -16,11 +15,7 @@ use std::{
 use futures::StreamExt;
 use ootle_byte_type::ToByteType;
 use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey};
-use tari_engine_types::{
-    Epoch,
-    Utxo,
-    substate::{Substate, SubstateId},
-};
+use tari_engine_types::{Epoch, Utxo, substate::SubstateId};
 use tari_indexer_client::types::{EpochCheckpointEntry, ValidatorSetCommittee, WatchedSubstateItem};
 use tari_ootle_common_types::{
     StateVersion,
@@ -34,6 +29,7 @@ use tari_ootle_wallet_sdk::{
     apis::config::ConfigKey,
     models::{KeyBranch, KeyId, StartOfShard, UtxoUnspent, UtxoUpdatePayload, WalletUtxoUpdate},
     network::{
+        FetchedSubstates,
         SubstateQueryResult,
         TransactionFinalizedStream,
         TransactionQueryResult,
@@ -113,6 +109,7 @@ impl WalletNetworkInterface for OneUtxoNetwork {
         _address: &SubstateId,
         _version: Option<SubstateVersion>,
         _local_search_only: bool,
+        _include_proof: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
         let failed = self
             .failing_substate_queries
@@ -124,7 +121,7 @@ impl WalletNetworkInterface for OneUtxoNetwork {
         Err(FakeError::NotFound)
     }
 
-    async fn get_substates(&self, _: Vec<SubstateId>) -> Result<HashMap<SubstateId, Substate>, Self::Error> {
+    async fn get_substates(&self, _: Vec<SubstateId>, _: bool) -> Result<FetchedSubstates, Self::Error> {
         panic!("OneUtxoNetwork::get_substates called")
     }
 
