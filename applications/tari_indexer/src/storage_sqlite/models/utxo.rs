@@ -52,7 +52,7 @@ pub(crate) struct UtxoRecord {
     pub output: Option<Vec<u8>>,
     pub _utxo_tag: i32,
     pub epoch: i64,
-    pub _is_spent: bool,
+    pub is_spent: bool,
     pub is_burnt: bool,
     pub is_frozen: bool,
     pub _created_at: PrimitiveDateTime,

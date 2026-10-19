@@ -37,8 +37,9 @@ pub struct StealthUtxoWatchRequest {
     /// When true, only currently-unspent UTXOs are streamed (no `Spent`/`Burnt` frames).
     /// A monitor that must track spends has to set this to `false`.
     pub unspent_only: bool,
-    /// Target number of updates returned per shard per pass. A pass may return fewer and still have
-    /// more to give, and may overrun this to keep one state version whole, so
+    /// Number of UTXO rows the indexer reads per shard per pass, before `from_epoch` and
+    /// `unspent_only` filter them. A pass may return fewer updates and still have more to give, and
+    /// may overrun this to keep one state version whole, so
     /// [`StealthUtxoFrame::StartOfShard::has_more`] — not a count comparison — says whether the
     /// shard has updates left to drain.
     pub per_shard_limit: u32,
@@ -87,9 +88,10 @@ pub enum StealthUtxoFrame {
         id: UtxoId,
         version: SubstateVersion,
     },
-    /// Terminates a shard's updates. `max_state_version` is the resume point for the shard, chosen
-    /// by the indexer: the last delivered state version while the shard has more to drain, and the
-    /// shard's high watermark once it is drained.
+    /// Terminates a shard's updates. `max_state_version` is the resume point for the shard: the
+    /// state version the indexer's read reached, which can be past the last delivered update when
+    /// the request's filters excluded the rows after it. A shard can end with no updates at all
+    /// and still move the cursor.
     EndOfShard {
         shard: Shard,
         max_state_version: StateVersion,

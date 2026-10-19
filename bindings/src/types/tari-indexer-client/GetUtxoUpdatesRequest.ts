@@ -9,5 +9,11 @@ export type GetUtxoUpdatesRequest = {
   shard_state_versions: Array<[Shard, StateVersion]>;
   resource_address: ResourceAddress;
   unspent_only?: boolean;
+  /**
+   * The number of UTXO rows to read per shard in this pass, from 1 to 1000. `from_epoch` and
+   * `unspent_only` are applied to the rows read, so a shard can return fewer updates than this,
+   * or none, and still have more: `StartOfShard::has_more` says whether it does. A state version
+   * wider than the limit is returned whole, overrunning it.
+   */
   per_shard_limit: number;
 };

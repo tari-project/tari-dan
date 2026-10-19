@@ -241,19 +241,6 @@ impl SubstateManager {
         Ok(updates)
     }
 
-    pub async fn get_max_state_version(
-        &self,
-        resource_address: &ResourceAddress,
-        shard: Shard,
-    ) -> Result<StateVersion, SubstateManagerError> {
-        let resource_address = *resource_address;
-        let max_version = self
-            .substate_store
-            .with_read_tx(move |tx| tx.utxos_get_max_state_version(resource_address, shard))
-            .await?;
-        Ok(max_version)
-    }
-
     pub async fn get_unspent_utxos(
         &self,
         resource_address: &ResourceAddress,

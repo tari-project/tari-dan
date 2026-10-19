@@ -62,36 +62,26 @@ impl UtxoUpdateStream {
                     .await
                     .map_err(anyhow::Error::from)?;
 
-                if updates.is_empty() {
+                // `max_state_version` is the version the read reached, and becomes the client's
+                // resume point for the shard. Every update at or below it was either delivered here
+                // or excluded by this request's `from_epoch`/`unspent_only` filters. A shard whose
+                // read matched nothing still reports it when the read moved past the cursor, so that
+                // the client does not read the excluded rows again on its next pass.
+                if updates.is_empty() && max_state_version <= state_version {
                     debug!(target: LOG_TARGET, "No updates found for shard {}, moving to next shard", shard);
                     continue;
                 }
 
-                // The resume point the client stores for this shard. A drained pass hands back the
-                // shard's high watermark, which carries the cursor past versions this request's own
-                // `from_epoch`/`unspent_only` filters excluded so they are not re-read every pass. A
-                // pass with more to give can only offer its last delivered version — the high
-                // watermark sits above the undelivered remainder.
-                let resume_state_version = if has_more {
-                    max_state_version
-                } else {
-                    substate_manager
-                        .get_max_state_version(&request.resource_address, shard)
-                        .await
-                        .map_err(anyhow::Error::from)?
-                };
-
                 debug!(
                     target: LOG_TARGET,
-                    "Received {} updates for shard {shard}, max_epoch = {max_epoch}, max_state_version {max_state_version} -> {resume_state_version} (has_more = {has_more})",
+                    "Received {} updates for shard {shard}, max_epoch = {max_epoch}, max_state_version {max_state_version} (has_more = {has_more})",
                     updates.len(),
                 );
 
                 let mut pending = PendingUpdates {
                     sos_emitted: false,
                     shard,
-                    updates_state_version: max_state_version,
-                    resume_state_version,
+                    max_state_version,
                     has_more,
                     updates,
                     index: 0,
@@ -103,7 +93,7 @@ impl UtxoUpdateStream {
                     if !pending.sos_emitted {
                         payload.sos = Some(protobuf::StartOfShard {
                             shard: pending.shard.as_u32(),
-                            max_state_version: pending.updates_state_version.as_u64(),
+                            max_state_version: pending.max_state_version.as_u64(),
                             num_updates: u32::try_from(pending.updates_len()).expect("loaded more than u32::MAX updates"),
                             has_more: pending.has_more,
                         });
@@ -116,7 +106,7 @@ impl UtxoUpdateStream {
 
                     if pending.is_empty() {
                         payload.eos = Some(protobuf::EndOfShard {
-                            max_state_version: pending.resume_state_version.as_u64(),
+                            max_state_version: pending.max_state_version.as_u64(),
                         });
                     }
 
@@ -169,8 +159,7 @@ impl IntoResponse for UtxoUpdateStream {
 struct PendingUpdates {
     pub sos_emitted: bool,
     pub shard: Shard,
-    pub updates_state_version: StateVersion,
-    pub resume_state_version: StateVersion,
+    pub max_state_version: StateVersion,
     pub has_more: bool,
     pub updates: Vec<WalletUtxoUpdate>,
     pub index: usize,

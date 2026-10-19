@@ -605,3 +605,32 @@ fn rejects_locked_unconfirmed_under_a_different_lock() {
     );
     assert_eq!(stored.lock_id, Some(lock_a.id()));
 }
+
+/// The UTXO scanner streams spends only while this count is non-zero, so an output locked by a pending
+/// transaction must count: its spend still has to reach the wallet.
+#[test]
+fn locked_outputs_count_as_unspent_or_locked() {
+    let test = Test::new();
+    let outputs = test.sdk().stealth_outputs_api();
+    let account = Test::test_account_address();
+    let count = || {
+        outputs
+            .count_unspent_or_locked_outputs_for_account(&account, &STEALTH_TARI_RESOURCE_ADDRESS)
+            .unwrap()
+    };
+
+    let output = stealth_output(10, 1);
+    outputs.add_output(&output).unwrap();
+    let mut spent = stealth_output(20, 2);
+    spent.status = OutputStatus::Spent;
+    outputs.add_output(&spent).unwrap();
+    assert_eq!(count(), 1);
+
+    let lock = test.new_lock();
+    outputs
+        .lock_specific_outputs(&account, &STEALTH_TARI_RESOURCE_ADDRESS, lock.id(), &[
+            output.to_utxo_address()
+        ])
+        .unwrap();
+    assert_eq!(count(), 1);
+}

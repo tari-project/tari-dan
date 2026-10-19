@@ -205,50 +205,88 @@ fn filtered_events<'a>(
     }
 }
 
-/// One shard's UTXO updates for `resource_address` from `from_epoch` on, in state version order.
-/// The caller adds the state version range and the limit.
+/// One shard's UTXO rows for `resource_address`, in state version order. The caller adds the state
+/// version range and the limit.
 pub(super) fn utxo_updates_query<'a>(
     resource_address: ResourceAddress,
-    from_epoch: Epoch,
     shard: Shard,
-    unspent_only: bool,
+) -> crate::storage_sqlite::schema::utxos::BoxedQuery<'a, diesel::sqlite::Sqlite> {
+    use crate::storage_sqlite::schema::utxos;
+
+    utxos::table
+        .filter(utxos::resource_address.eq(resource_address.to_string()))
+        .filter(utxos::shard.eq(shard.as_u32() as i32))
+        .order_by(utxos::state_version.asc())
+        .into_boxed()
+}
+
+/// Restricts `utxos` to unspent, unburnt rows. The terms are SQL literals because SQLite uses a
+/// partial index only when the query's own `WHERE` repeats the index's condition verbatim.
+fn is_unspent_utxo() -> diesel::expression::SqlLiteral<sql_types::Bool> {
+    dsl::sql::<sql_types::Bool>(r#""utxos"."is_spent" = false AND "utxos"."is_burnt" = false"#)
+}
+
+/// Up to `limit` unspent UTXOs of `resource_address` in insertion order, after `from_id` when given.
+pub(super) fn utxos_list_query<'a>(
+    resource_address: &ResourceAddress,
+    from_id: Option<UtxoId>,
+    limit: u32,
 ) -> crate::storage_sqlite::schema::utxos::BoxedQuery<'a, diesel::sqlite::Sqlite> {
     use crate::storage_sqlite::schema::utxos;
 
     let mut query = utxos::table
         .filter(utxos::resource_address.eq(resource_address.to_string()))
-        .filter(utxos::epoch.ge(from_epoch.as_u64() as i64))
-        .filter(utxos::shard.eq(shard.as_u32() as i32))
-        .order_by(utxos::state_version.asc())
+        .filter(is_unspent_utxo())
         .into_boxed();
-    if unspent_only {
-        query = query
-            .filter(utxos::is_spent.eq(false))
-            .filter(utxos::is_burnt.eq(false));
+
+    if let Some(from_id) = from_id {
+        let uxo = alias!(utxos as uxo);
+        let subquery = uxo
+            .select(uxo.field(utxos::id))
+            .filter(uxo.field(utxos::resource_address).eq(resource_address.to_string()))
+            .filter(uxo.field(utxos::commitment).eq(from_id.to_commitment_hex_string()))
+            .limit(1)
+            .single_value()
+            .assume_not_null();
+        query = query.filter(utxos::id.gt(subquery));
     }
-    query
+
+    query.limit(i64::from(limit)).order_by(utxos::id.asc())
 }
 
-/// The highest stored state version of one shard's UTXOs for `resource_address`, among only those
-/// stored negative (from 2^63 up) when `above_i64_max` is set.
-pub(super) fn utxo_max_state_version_query<'a>(
-    resource_address: ResourceAddress,
-    shard: Shard,
-    above_i64_max: bool,
-) -> crate::storage_sqlite::schema::utxos::BoxedQuery<'a, diesel::sqlite::Sqlite, sql_types::Nullable<sql_types::BigInt>>
-{
+/// The unspent UTXOs of `resource_address` matching any of `tag_and_nonce_pairs`.
+pub(super) fn unspent_utxos_by_tag_and_nonce_query<'a>(
+    resource_address: &ResourceAddress,
+    tag_and_nonce_pairs: &[(UtxoTag, RistrettoPublicKeyBytes)],
+) -> crate::storage_sqlite::schema::utxos::BoxedQuery<'a, diesel::sqlite::Sqlite> {
     use crate::storage_sqlite::schema::utxos;
 
-    let query = utxos::table
-        .select(dsl::max(utxos::state_version))
-        .filter(utxos::resource_address.eq(resource_address.to_string()))
-        .filter(utxos::shard.eq(shard.as_u32() as i32))
-        .into_boxed();
-    if above_i64_max {
-        query.filter(utxos::state_version.lt(0))
-    } else {
-        query
+    // Diesel does not support tuple IN queries, so we have to use raw SQL here (https://github.com/diesel-rs/diesel/issues/3222#issuecomment-2088239186)
+    // The row value follows the column order of the unique (resource_address, public_nonce,
+    // utxo_tag) index, which lets SQLite seek that index for each pair.
+    let mut tag_and_nonce_query = String::with_capacity(29 + tag_and_nonce_pairs.len() * 50);
+    tag_and_nonce_query.push_str("(public_nonce,utxo_tag) IN (");
+    for (i, (tag, nonce)) in tag_and_nonce_pairs.iter().enumerate() {
+        // SQLINJECTION not possible as we control the types
+        write!(
+            &mut tag_and_nonce_query,
+            "('{}',{})",
+            serialize_hex(nonce),
+            tag.value() as i32
+        )
+        .expect("write to string is infallible");
+
+        if i < tag_and_nonce_pairs.len() - 1 {
+            tag_and_nonce_query.push(',');
+        }
     }
+    tag_and_nonce_query.push(')');
+
+    utxos::table
+        .filter(utxos::resource_address.eq(resource_address.to_string()))
+        .filter(dsl::sql::<sql_types::Bool>(&tag_and_nonce_query))
+        .filter(is_unspent_utxo())
+        .into_boxed()
 }
 
 fn decode_event_row(row: EventRecord) -> Result<(i64, TransactionId, Event), StorageError> {
@@ -734,30 +772,6 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         deserialize_json(&json_data)
     }
 
-    fn utxos_get_max_state_version(
-        &mut self,
-        resource_address: ResourceAddress,
-        shard: Shard,
-    ) -> Result<StateVersion, StorageError> {
-        const OPERATION: &str = "utxos_get_max_state_version";
-        // State versions are stored `as i64`, so those from 2^63 up read back negative and are the
-        // highest when there are any. Each half is a seek on the
-        // (resource_address, shard, state_version) index.
-        let mut max_version = None;
-        for above_i64_max in [true, false] {
-            max_version = utxo_max_state_version_query(resource_address, shard, above_i64_max)
-                .get_result::<Option<i64>>(self.connection())
-                .map_err(|e| StorageError::QueryError {
-                    reason: format!("{OPERATION}: {}", e),
-                })?;
-            if max_version.is_some() {
-                break;
-            }
-        }
-
-        Ok(max_version.map_or_else(StateVersion::zero, |v| StateVersion::new(v as u64)))
-    }
-
     fn utxos_get_updates(
         &mut self,
         resource_address: ResourceAddress,
@@ -776,8 +790,13 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         // V". A response that ends mid-version would strand the rest of that version above the
         // cursor the caller then resumes from, so a version is either wholly included or wholly
         // absent. One row beyond the limit is read to find where that boundary falls.
+        //
+        // The limit bounds the rows read, not the updates returned. `from_epoch` and `unspent_only`
+        // are applied to the rows once read, so the cost of a read does not depend on how much of
+        // the shard's history they exclude. The read reports the version it reached, and a caller
+        // resuming from there skips the excluded rows instead of reading them again.
         let overshoot_limit = i64::from(limit).saturating_add(1);
-        let base_query = || utxo_updates_query(resource_address, from_epoch, shard, unspent_only);
+        let base_query = || utxo_updates_query(resource_address, shard);
         // Versions from 2^63 up are stored negative and order above every non-negative one. The read
         // is split at that boundary so that each half is an ordered range on the
         // (resource_address, shard, state_version) index, stopping at the limit.
@@ -811,56 +830,47 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         }
 
         let has_more = rows.len() as i64 == overshoot_limit;
-        let mut converted = Vec::with_capacity(rows.len());
-        let mut max_epoch = Epoch::zero();
-        for row in rows {
-            let epoch = Epoch(row.epoch as u64);
-            let (state_version, update) = row.try_convert_to_update()?;
-            max_epoch = max_epoch.max(epoch);
-            converted.push((state_version, update));
-        }
-
         if has_more {
             // Rows are ordered by state version, so the overshoot row's version is the highest
             // present and is the only one that can be partial.
-            let partial_version = converted
-                .last()
-                .map(|(state_version, _)| *state_version)
-                .expect("has_more implies at least one row");
-            let complete = converted.partition_point(|(v, _)| *v < partial_version);
+            let partial_version = rows.last().expect("has_more implies at least one row").state_version;
+            let complete = rows
+                .iter()
+                .position(|row| row.state_version == partial_version)
+                .expect("the last row is at its own version");
             if complete > 0 {
-                converted.truncate(complete);
+                rows.truncate(complete);
             } else {
                 // The whole read sits at one version, so there is no complete earlier version to
                 // stop at. Returning nothing would leave the caller's cursor where it was and no
-                // way past this shard, so the version is served whole and the limit is overrun.
-                let rows = base_query()
-                    .filter(utxos::state_version.eq(partial_version.as_u64() as i64))
-                    .load_iter::<models::UtxoRecord, _>(self.connection())
+                // way past this shard, so the version is read whole and the limit is overrun.
+                rows = base_query()
+                    .filter(utxos::state_version.eq(partial_version))
+                    .load::<models::UtxoRecord>(self.connection())
                     .map_err(|e| StorageError::QueryError {
                         reason: format!("{OPERATION}: {}", e),
                     })?;
-
-                converted.clear();
-                for r in rows {
-                    let row = r.map_err(|e| StorageError::QueryError {
-                        reason: format!("{OPERATION}: {e}"),
-                    })?;
-                    let epoch = Epoch(row.epoch as u64);
-                    let (state_version, update) = row.try_convert_to_update()?;
-                    max_epoch = max_epoch.max(epoch);
-                    converted.push((state_version, update));
-                }
             }
         }
 
-        let max_state_version = converted
+        let read_to = rows
             .last()
-            .map_or_else(StateVersion::zero, |(state_version, _)| *state_version);
+            .map_or(from_state_version, |row| StateVersion::new(row.state_version as u64));
+        let mut updates = Vec::with_capacity(rows.len());
+        let mut max_epoch = Epoch::zero();
+        for row in rows {
+            let epoch = Epoch(row.epoch as u64);
+            if epoch < from_epoch || (unspent_only && (row.is_spent || row.is_burnt)) {
+                continue;
+            }
+            let (_, update) = row.try_convert_to_update()?;
+            max_epoch = max_epoch.max(epoch);
+            updates.push(update);
+        }
 
         Ok(UtxoStateUpdateSet {
-            updates: converted.into_iter().map(|(_, update)| update).collect(),
-            max_state_version,
+            updates,
+            max_state_version: read_to,
             max_epoch,
             has_more,
         })
@@ -873,28 +883,8 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         limit: u32,
     ) -> Result<Vec<(UtxoId, Utxo)>, StorageError> {
         const OPERATION: &str = "utxos_list";
-        use crate::storage_sqlite::schema::utxos;
 
-        let mut query = utxos::table
-            .filter(utxos::resource_address.eq(resource_address.to_string()))
-            .filter(utxos::is_spent.eq(false))
-            .filter(utxos::is_burnt.eq(false))
-            .into_boxed();
-
-        if let Some(from_id) = from_id {
-            let uxo = alias!(utxos as uxo);
-            let subquery = uxo
-                .select(uxo.field(utxos::id))
-                .filter(uxo.field(utxos::commitment).eq(from_id.to_commitment_hex_string()))
-                .limit(1)
-                .single_value()
-                .assume_not_null();
-            query = query.filter(utxos::id.gt(subquery));
-        }
-
-        let rows = query
-            .limit(i64::from(limit))
-            .order_by(utxos::id.asc())
+        let rows = utxos_list_query(resource_address, from_id, limit)
             .load_iter::<models::UtxoRecord, _>(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("{OPERATION}: {}", e),
@@ -918,32 +908,8 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         tag_and_nonce_pairs: &[(UtxoTag, RistrettoPublicKeyBytes)],
     ) -> Result<Vec<(UtxoId, Utxo)>, StorageError> {
         const OPERATION: &str = "utxos_get_unspent_by_public_nonce_and_tag";
-        use crate::storage_sqlite::schema::utxos;
 
-        // Diesel does not support tuple IN queries, so we have to use raw SQL here (https://github.com/diesel-rs/diesel/issues/3222#issuecomment-2088239186)
-        let mut tag_and_nonce_query = String::with_capacity(29 + tag_and_nonce_pairs.len() * 50);
-        tag_and_nonce_query.push_str("(utxo_tag,public_nonce) IN (");
-        for (i, (tag, nonce)) in tag_and_nonce_pairs.iter().enumerate() {
-            // SQLINJECTION not possible as we control the types
-            write!(
-                &mut tag_and_nonce_query,
-                "({},'{}')",
-                tag.value() as i32,
-                serialize_hex(nonce)
-            )
-            .expect("write to string is infallible");
-
-            if i < tag_and_nonce_pairs.len() - 1 {
-                tag_and_nonce_query.push(',');
-            }
-        }
-        tag_and_nonce_query.push(')');
-
-        let rows = utxos::table
-            .filter(utxos::resource_address.eq(resource_address.to_string()))
-            .filter(dsl::sql::<sql_types::Bool>(&tag_and_nonce_query))
-            .filter(utxos::is_spent.eq(false))
-            .filter(utxos::is_burnt.eq(false))
+        let rows = unspent_utxos_by_tag_and_nonce_query(resource_address, tag_and_nonce_pairs)
             .load_iter::<models::UtxoRecord, _>(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("{OPERATION}: {}", e),
