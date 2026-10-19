@@ -13,6 +13,7 @@ use tari_engine_types::{
 };
 use tari_ootle_common_types::{
     SubstateVersion,
+    VersionedSubstateId,
     optional::Optional,
     substate_type::{SubstateType, check_diff_substate_types},
 };
@@ -124,20 +125,21 @@ where TSpec: WalletSdkSpec
                 (s.into_substate_id(), version)
             })
             .collect::<HashMap<_, _>>();
+        let vault_substate_ids = indexed_value
+            .vault_ids()
+            .iter()
+            .map(|vault_id| SubstateId::Vault(*vault_id))
+            .collect::<HashSet<_>>();
+        let latest_vaults = substate_api
+            .get_substates_from_network(vault_substate_ids.into_iter().collect())
+            .await?;
         for vault_id in indexed_value.vault_ids() {
             let vault_substate_id = SubstateId::Vault(*vault_id);
-            let Some(ValidatorScanResult {
-                id: versioned_vault_substate_id,
-                substate,
-                ..
-            }) = substate_api
-                .fetch_substate_from_network(&vault_substate_id, None)
-                .await
-                .optional()?
-            else {
+            let Some(substate) = latest_vaults.get(&vault_substate_id) else {
                 warn!(target: LOG_TARGET, "Vault {} for account {} does not exist according to indexer", vault_substate_id, account_substate_id);
                 continue;
             };
+            let versioned_vault_substate_id = VersionedSubstateId::new(vault_substate_id.clone(), substate.version());
 
             let maybe_vault_version = known_child_vaults.get(&vault_substate_id).copied().flatten();
             if let Some(vault_version) = maybe_vault_version {
@@ -149,7 +151,7 @@ where TSpec: WalletSdkSpec
                 }
             }
 
-            let SubstateValue::Vault(latest_vault) = substate else {
+            let SubstateValue::Vault(latest_vault) = substate.substate_value() else {
                 error!(target: LOG_TARGET, "Substate {} is not a vault. This should be impossible.", vault_substate_id);
                 continue;
             };
@@ -157,13 +159,13 @@ where TSpec: WalletSdkSpec
             let Some(account_addr) = account_substate_id.substate_id().as_component_address() else {
                 continue;
             };
-            self.add_vault_to_account_if_not_exist(&account_addr, *vault_id, &latest_vault)
+            self.add_vault_to_account_if_not_exist(&account_addr, *vault_id, latest_vault)
                 .await?;
             self.refresh_vault(
                 account_addr,
                 *vault_id,
                 versioned_vault_substate_id.version(),
-                &latest_vault,
+                latest_vault,
                 Default::default(),
                 source,
             )
