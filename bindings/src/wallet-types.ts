@@ -207,6 +207,7 @@ export * from "./types/wallet-types/TrustedValidatorSetInfo";
 export * from "./types/wallet-types/UtxoInfo";
 export * from "./types/wallet-types/ValidatorSetGetStatusRequest";
 export * from "./types/wallet-types/ValidatorSetGetStatusResponse";
+export * from "./types/wallet-types/ValidatorSetReanchorInfo";
 export * from "./types/wallet-types/ValueScanCoverage";
 export * from "./types/wallet-types/WalletGetInfoRequest";
 export * from "./types/wallet-types/WalletGetInfoResponse";

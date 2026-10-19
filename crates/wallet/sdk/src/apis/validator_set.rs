@@ -29,7 +29,14 @@ use tari_ootle_light_client::{
 
 use crate::{
     apis::config::ConfigKey,
-    models::{AnchoredValidatorSet, ValidatorSetAnchor, ValidatorSetReanchoredEvent, ValidatorSetStatus, WalletEvent},
+    models::{
+        AnchoredValidatorSet,
+        ValidatorSetAnchor,
+        ValidatorSetReanchor,
+        ValidatorSetReanchoredEvent,
+        ValidatorSetStatus,
+        WalletEvent,
+    },
     network::WalletNetworkInterface,
     storage::{WalletEventStoreWriter, WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
@@ -132,6 +139,13 @@ where
     /// The validator set the wallet's trusted sets descend from, or `None` before it first anchors.
     pub fn anchor(&self) -> Result<Option<AnchoredValidatorSet>, ValidatorSetApiError> {
         Ok(self.store.with_read_tx(|tx| tx.trusted_validator_sets_get_anchor())?)
+    }
+
+    /// The wallet's latest `limit` re-anchors, newest first. Each one trusted its indexer for the set it anchored on.
+    pub fn reanchors(&self, limit: u64) -> Result<Vec<ValidatorSetReanchor>, ValidatorSetApiError> {
+        Ok(self
+            .store
+            .with_read_tx(|tx| tx.validator_set_reanchors_get_latest(limit))?)
     }
 
     /// Where the wallet's trust in the network's validator sets stands, or `None` before it first anchors.

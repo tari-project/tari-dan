@@ -42,6 +42,7 @@ use crate::{
         TransactionRequestModel,
         TransactionStatus,
         TrustedValidatorSetHash,
+        ValidatorSetReanchor,
         VaultModel,
         WalletLock,
         WalletLockId,
@@ -326,4 +327,9 @@ pub trait WalletStoreReader {
     fn trusted_validator_sets_get(&mut self, epoch: Epoch) -> Result<TrustedValidatorSetHash, WalletStorageError>;
     /// The validator set the wallet's trusted sets descend from, if it has anchored.
     fn trusted_validator_sets_get_anchor(&mut self) -> Result<Option<AnchoredValidatorSet>, WalletStorageError>;
+    /// The wallet's latest `limit` re-anchors, newest first.
+    fn validator_set_reanchors_get_latest(
+        &mut self,
+        limit: u64,
+    ) -> Result<Vec<ValidatorSetReanchor>, WalletStorageError>;
 }

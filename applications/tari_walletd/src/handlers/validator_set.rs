@@ -4,10 +4,18 @@
 use axum_extra::headers::authorization::Bearer;
 use tari_ootle_walletd_client::{
     permissions::{Crud, Permission},
-    types::{TrustedValidatorSetInfo, ValidatorSetGetStatusRequest, ValidatorSetGetStatusResponse},
+    types::{
+        TrustedValidatorSetInfo,
+        ValidatorSetGetStatusRequest,
+        ValidatorSetGetStatusResponse,
+        ValidatorSetReanchorInfo,
+    },
 };
 
 use crate::handlers::HandlerContext;
+
+/// The most re-anchors `validator_set.get_status` reports.
+const MAX_REANCHORS_REPORTED: u64 = 10;
 
 pub async fn handle_get_status(
     context: &HandlerContext,
@@ -26,9 +34,21 @@ pub async fn handle_get_status(
         synced_at: status.synced_at,
         walk_failing_since: status.walk_failing_since,
     });
+    let reanchors = sdk
+        .validator_set_api()
+        .reanchors(MAX_REANCHORS_REPORTED)?
+        .into_iter()
+        .map(|reanchor| ValidatorSetReanchorInfo {
+            previous_epoch: reanchor.event.previous_epoch,
+            epoch: reanchor.event.epoch,
+            validator_set_hash: reanchor.event.validator_set_hash,
+            reanchored_at: reanchor.reanchored_at.assume_utc().unix_timestamp(),
+        })
+        .collect();
     Ok(ValidatorSetGetStatusResponse {
         indexer_trust: sdk.sdk_config().indexer_trust,
         trusted,
+        reanchors,
     })
 }
 
@@ -47,5 +67,6 @@ mod tests {
             .unwrap();
         assert_eq!(status.indexer_trust, IndexerTrust::Verify);
         assert!(status.trusted.is_none());
+        assert!(status.reanchors.is_empty());
     }
 }

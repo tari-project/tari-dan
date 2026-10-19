@@ -12,10 +12,11 @@ import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useQuery } from "@tanstack/react-query";
-import { TrustedValidatorSetInfo } from "@tari-project/ootle-ts-bindings";
+import { TrustedValidatorSetInfo, ValidatorSetReanchorInfo } from "@tari-project/ootle-ts-bindings";
 import { settingsGet, validatorSetGetStatus } from "@utils/json_rpc";
 import { ReactNode } from "react";
 
@@ -94,6 +95,44 @@ function TrustedSet({ trusted, networkEpoch }: { trusted: TrustedValidatorSetInf
   );
 }
 
+function Reanchors({ reanchors }: { reanchors: ValidatorSetReanchorInfo[] }) {
+  return (
+    <>
+      <Typography variant="h6" sx={{ mt: 4, mb: 1 }}>
+        Re-anchors
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        On each re-anchor the wallet took its indexer's word for a validator set again, in place of walking to it. The
+        latest {reanchors.length === 1 ? "one is" : `${reanchors.length} are`} shown, newest first.
+      </Typography>
+      <TableContainer>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Re-anchored at</TableCell>
+              <TableCell>From epoch</TableCell>
+              <TableCell>To epoch</TableCell>
+              <TableCell>Validator set hash</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {reanchors.map((reanchor) => (
+              <TableRow key={`${reanchor.reanchored_at}-${reanchor.validator_set_hash}`}>
+                <DataTableCell>{formatUnixTime(reanchor.reanchored_at)}</DataTableCell>
+                <DataTableCell>{reanchor.previous_epoch ?? "—"}</DataTableCell>
+                <DataTableCell>{reanchor.epoch}</DataTableCell>
+                <DataTableCell>
+                  <Hash hash={reanchor.validator_set_hash} />
+                </DataTableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </>
+  );
+}
+
 function ValidatorSetPage() {
   const status = useQuery({
     queryKey: ["validator_set_status"],
@@ -116,7 +155,7 @@ function ValidatorSetPage() {
     if (!status.data) {
       return null;
     }
-    const { indexer_trust, trusted } = status.data;
+    const { indexer_trust, trusted, reanchors } = status.data;
     return (
       <>
         {indexer_trust === "trust" ? (
@@ -141,6 +180,7 @@ function ValidatorSetPage() {
             </Alert>
           )
         )}
+        {reanchors.length > 0 && <Reanchors reanchors={reanchors} />}
       </>
     );
   };

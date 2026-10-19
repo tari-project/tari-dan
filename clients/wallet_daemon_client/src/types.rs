@@ -1744,6 +1744,24 @@ pub struct ValidatorSetGetStatusResponse {
     pub indexer_trust: IndexerTrust,
     /// `None` until the wallet first anchors on a validator set.
     pub trusted: Option<TrustedValidatorSetInfo>,
+    /// The wallet's latest re-anchors, newest first. On each the wallet took its indexer's word for the set it
+    /// anchored on.
+    pub reanchors: Vec<ValidatorSetReanchorInfo>,
+}
+
+/// A re-anchor the wallet recorded.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
+pub struct ValidatorSetReanchorInfo {
+    /// The epoch of the latest validator set the wallet trusted before.
+    pub previous_epoch: Option<Epoch>,
+    /// The epoch of the validator set the wallet anchored on.
+    pub epoch: Epoch,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub validator_set_hash: ValidatorSetHash,
+    /// When the wallet re-anchored, in seconds since the Unix epoch.
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub reanchored_at: i64,
 }
 
 /// The validator sets the wallet trusts.
