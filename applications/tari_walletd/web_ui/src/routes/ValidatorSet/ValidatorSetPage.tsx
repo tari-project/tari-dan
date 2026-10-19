@@ -102,8 +102,8 @@ function Reanchors({ reanchors }: { reanchors: ValidatorSetReanchorInfo[] }) {
         Re-anchors
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        On each re-anchor the wallet took its indexer's word for a validator set again, in place of walking to it. The
-        latest {reanchors.length === 1 ? "one is" : `${reanchors.length} are`} shown, newest first.
+        On each re-anchor the wallet took its indexer's word for a validator set again, in place of walking to it.
+        Newest first; the wallet reports at most its latest 10.
       </Typography>
       <TableContainer>
         <Table>

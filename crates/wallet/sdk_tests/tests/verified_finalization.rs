@@ -392,6 +392,31 @@ async fn a_wallet_out_of_sync_long_enough_reanchors_when_the_walk_fails() {
 }
 
 #[tokio::test]
+async fn the_latest_reanchors_are_read_back_newest_first() {
+    let sets = sets();
+    let network = ProvingNetwork::new(&sets, 0);
+    let transaction = build_transaction();
+    let test = wallet(network.clone(), &transaction);
+    let validator_set_api = test.sdk().validator_set_api();
+    validator_set_api.sync().await.unwrap();
+
+    network.set_latest(1);
+    validator_set_api.reanchor().await.unwrap();
+    validator_set_api.reanchor().await.unwrap();
+
+    let previous_epochs = |limit| {
+        validator_set_api
+            .reanchors(limit)
+            .unwrap()
+            .into_iter()
+            .map(|reanchor| reanchor.event.previous_epoch)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(previous_epochs(10), [Some(Epoch(3)), Some(Epoch(2))]);
+    assert_eq!(previous_epochs(1), [Some(Epoch(3))]);
+}
+
+#[tokio::test]
 async fn a_wallet_far_behind_walks_the_whole_way() {
     let sets = (1..=510).map(ValidatorSetFixture::new).collect::<Vec<_>>();
     let network = ProvingNetwork::new(&sets, 0);
@@ -624,6 +649,9 @@ async fn a_walk_that_keeps_failing_for_a_day_reanchors() {
     let anchor = validator_set_api.anchor().unwrap().unwrap();
     assert_eq!(anchor.anchor, ValidatorSetAnchor::Reanchor);
     assert_eq!(anchor.validator_set.epoch(), Epoch(3));
+    let reanchors = validator_set_api.reanchors(10).unwrap();
+    assert_eq!(reanchors.len(), 1);
+    assert_eq!(reanchors[0].event.epoch, Epoch(3));
 }
 
 #[tokio::test(flavor = "multi_thread")]
