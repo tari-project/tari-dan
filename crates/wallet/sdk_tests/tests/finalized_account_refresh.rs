@@ -144,7 +144,7 @@ async fn a_finalized_account_holding_an_unknown_vault_is_refreshed() {
 #[tokio::test]
 async fn a_finalized_account_holding_only_known_vaults_is_not_read_from_the_network() {
     let held = vault_id(1);
-    // The network serves nothing, so any read of it panics.
+    // The network serves no account, so a refresh panics on reading it.
     let (_network, test) = wallet_holding(held);
 
     scanner(&test)
