@@ -81,9 +81,6 @@ pub fn create_withdraw_proof(
 
 /// The balance proof signs with the blinding factors alone, so it only verifies when the committed values on each
 /// side are equal. An unbalanced withdraw yields a proof the engine is guaranteed to reject.
-///
-/// Revealed change returns to the source container with the change output, so non-zero revealed change requires a
-/// change output; the engine rejects the proof otherwise.
 fn check_withdraw_balance(
     inputs: &[MaskAndValue],
     input_revealed_amount: Amount,
@@ -92,12 +89,6 @@ fn check_withdraw_balance(
     change_statement: Option<&OutputWitness>,
     change_revealed_amount: Amount,
 ) -> Result<(), WalletCryptoError> {
-    if change_statement.is_none() && !change_revealed_amount.is_zero() {
-        return Err(WalletCryptoError::InvalidArgument {
-            name: "change_revealed_amount",
-            details: format!("revealed change of {change_revealed_amount} requires a change output"),
-        });
-    }
     let overflow = || WalletCryptoError::InvalidArgument {
         name: "amounts",
         details: "withdraw amounts overflow".to_string(),

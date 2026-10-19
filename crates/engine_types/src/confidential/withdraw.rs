@@ -56,16 +56,6 @@ pub(crate) fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Pede
 ) -> Result<ValidatedConfidentialWithdrawProof, ResourceError> {
     let validated_proof = validate_confidential_statement(&withdraw_proof.output_proof, view_key)?;
 
-    // Revealed change returns to the source container alongside the change output, so it needs one to return with.
-    if validated_proof.change_output.is_none() && !withdraw_proof.output_proof.change_revealed_amount.is_zero() {
-        return Err(ResourceError::InvalidConfidentialProof {
-            details: format!(
-                "Withdraw has revealed change of {} but no change output",
-                withdraw_proof.output_proof.change_revealed_amount
-            ),
-        });
-    }
-
     let input_revealed_amount = withdraw_proof.input_revealed_amount;
     // We expect the revealed amount to be excluded from the output commitment.
     let total_output_revealed_amount = withdraw_proof
@@ -178,10 +168,13 @@ pub(crate) fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Pede
 #[cfg(test)]
 mod tests {
     use tari_crypto::{keys::PublicKey, ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
-    use tari_template_lib::types::crypto::{BalanceProofSignature, RistrettoPublicKeyBytes, Scalar32Bytes};
+    use tari_template_lib::types::{
+        constants::STEALTH_TARI_RESOURCE_ADDRESS,
+        crypto::{BalanceProofSignature, RistrettoPublicKeyBytes, Scalar32Bytes},
+    };
 
     use super::*;
-    use crate::limits::NativeExecutionPoints;
+    use crate::{limits::NativeExecutionPoints, resource_container::ResourceContainer};
 
     /// A revealed withdraw carrying a decodable, non-zero balance proof: no inputs and no
     /// confidential outputs, but not revealed-only.
@@ -226,19 +219,16 @@ mod tests {
     }
 
     #[test]
-    fn revealed_only_withdraw_with_revealed_change_is_rejected() {
+    fn revealed_only_withdraw_returns_revealed_change_to_the_source() {
         let mut proof = ConfidentialWithdrawProof::revealed_withdraw(100u64);
         proof.output_proof.output_revealed_amount = Amount::new(40);
         proof.output_proof.change_revealed_amount = Amount::new(60);
         assert!(proof.is_revealed_only());
 
-        let err = validate_confidential_withdraw([], None, proof).unwrap_err();
-        assert!(
-            matches!(
-                &err,
-                ResourceError::InvalidConfidentialProof { details } if details.contains("change output")
-            ),
-            "unexpected error: {err:?}"
-        );
+        let mut source = ResourceContainer::confidential(STEALTH_TARI_RESOURCE_ADDRESS, None, Amount::new(150));
+        let (output, _) = source.withdraw_confidential(proof, None).unwrap();
+
+        assert_eq!(output.unlocked_amount(), Amount::new(40));
+        assert_eq!(source.unlocked_amount(), Amount::new(110));
     }
 }
