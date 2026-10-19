@@ -3,6 +3,101 @@
 All notable changes to this project will be documented in this file.
 See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.47.0](https://github.com/tari-project/tari-ootle/compare/v0.46.1...v0.47.0) (2026-10-19)
+
+Wallets stop trusting their indexer: end-of-epoch blocks now sign over the next epoch's validator
+set, and the wallet SDK and ootle-rs walk that handover to verify every receipt and substate read.
+The indexer's GraphQL server and the `tari_debug` host function are removed.
+
+### ⚠️ Upgrade notes
+
+- **Validators and indexers upgrade and restart together**: end-of-epoch blocks carry the next
+  epoch's validator set hash, committees are ordered by public key, and engine metering and
+  confidential proof rules change. (#2943, #2996, #2934, #2955, #2978)
+- **Indexer config: `graphql_address` and `web_ui_public_graphql_url` are removed**, along with the
+  `--web-ui-public-graphql-url` flag. A config that still sets them fails to load. (#2926)
+- **Wallets verify their indexer by default** (`indexer_trust = "verify"`) and need a 0.47.0
+  indexer. Set `indexer_trust = "trust"` only for development against an indexer that serves no
+  proofs. (#2961, #2976, #2977)
+- **Indexer REST: `GET /substates/{id}` returns `state` in place of `substate`**, and answers a
+  proven spent version with 200 and a down proof. `GET /substates` shares commit proofs per anchor
+  in `commit_proofs`, and `GET /epoch-checkpoints` returns typed entries. (#2968, #3002, #2954)
+- **Templates that import `tari_debug` are refused**, and `engine_debug!` is removed from
+  `tari_template_lib` 0.35; log with `log!`, `debug!` or `info!`. (#2949)
+- **Confidential outputs must promise a minimum value of at least 1**; zero-value confidential
+  outputs are rejected. (#2978)
+- **walletd: result waits time out after five minutes** with `TransactionPending` (1003), and
+  transactions are signed only with account, transaction, nonce and imported keys. (#2987, #2960)
+
+### Features
+
+- **Validator set handover**: each epoch's committees commit to a versioned Merkle-root validator
+  set hash, and end-of-epoch blocks sign the next one. (#2932, #2937, #2943, #3005)
+- **Indexer serves the handover and down proofs**, and verifies every checkpoint it syncs. (#2954,
+  #2968)
+- **Verified wallet reads and finalization** in the wallet SDK and ootle-rs, walked by the new
+  `tari_ootle_light_client` crate. (#2956, #2961, #2976, #2977)
+- **walletd reports its trusted validator set**, anchor and re-anchors, with a web UI page. (#2975,
+  #3000)
+- **Wallet accounts refresh from finalized transactions**, with a 10-minute poll. (#3001)
+- **Swarm hot-reloads `[[executables]]` config.** (#2974)
+
+### Performance
+
+- **Indexer:** batch substate reads come from fresh cache entries, committee proofs and settled
+  checkpoints are cached, and a batch carries each commit proof once. (#2971, #2972, #3002)
+- **Wallet:** an account's vaults are read in one batched fetch. (#2999)
+
+### Bug fixes
+
+- **consensus:** only requested foreign proposals are accepted, and future-view messages only from
+  committee members under a per-sender budget. (#2920, #2921)
+- **consensus:** cross-shard transactions drain before an epoch end that changes committees, and
+  out-of-window ones abort before locking local inputs. (#2957, #2988)
+- **consensus:** a transaction with locked inputs is deferred before it executes, and held-back
+  transactions are sequenced again after the post-epoch sync. (#2945, #2964)
+- **consensus:** foreign proposals settle at their epoch's burn rate, and duplicate foreign pledge
+  versions are validated in output-only transactions. (#2952, #2915)
+- **consensus:** parked blocks, ready records and missing-transactions responses are bounded.
+  (#2929, #2940, #2962)
+- **consensus:** certificates sort their signatures, and a notifier's committee is looked up in the
+  notification's epoch. (#2912, #2936)
+- **engine:** every engine call and component load is charged, and the fee checkpoint is held to the
+  output size cap. (#2933, #2934, #2955)
+- **engine:** restricted frames cannot create buckets, proofs or address allocations, and
+  confidential withdraw pricing tracks its verification. (#2970, #2925)
+- **engine:** a confidential withdraw that reveals change without a change output is rejected.
+  (#3006)
+- **template_builtin:** LP contribute returns the unused remainder of both buckets. (#2928)
+- **manifest:** identifiers resolve the same way in every position. (#2922)
+- **transaction_validation:** dry-run transactions are refused at ingress. (#2924)
+- **storage:** a transaction proof is refused when the header root disagrees with the commands.
+  (#2938)
+- **state sync:** synced substates that stay up carry their value, batches bound their commit
+  epoch, and scans are tied to their peer. (#2935, #2944, #2967)
+- **validator:** substate batch responses are bounded, reads are proven against the previous
+  epoch's end block until the epoch commits, and block listings cap their page size. (#2953, #2966,
+  #2994, #2923)
+- **validator:** the unused `sync_blocks` RPC is removed. (#2965)
+- **networking:** pending inbound connections time out, an RPC stream's idle budget is bounded,
+  and an RPC session whose client stops reading is closed. (#2948, #2958, #3004)
+- **indexer:** template addresses are verified before caching, UTXOs are indexed by shard, and UTXO
+  stream reads are bounded. (#2913, #2989, #2995)
+- **indexer:** previous-epoch checkpoints are fetched until produced, and synced ahead of the
+  backfill. (#2985, #2998)
+- **walletd:** confidential output proofs are encrypted to the destination view key, and
+  transaction-request locks are bound to their creator. (#2946, #2930)
+- **walletd:** every referenced substate kind is detected as an input, and stealth outputs whose
+  total overflows are rejected. (#2942, #2939)
+- **wallet:** a read waiting on an unserved checkpoint says so. (#2997)
+- **ootle_wasm:** stealth amounts outside the u64 range are rejected. (#2983)
+- **ootle_sdk_core:** a workspace fee payer resolves like any workspace component. (#2931)
+
+### Dependencies
+
+- **rustls 0.23.46** for RUSTSEC-2026-0346 and RUSTSEC-2026-0347. (#2941)
+- **minotari crates 6.2.0-pre.2.** (#3003)
+
 ## [0.46.1](https://github.com/tari-project/tari-ootle/compare/v0.46.0...v0.46.1) (2026-10-14)
 
 Fixes cross-shard transactions stuck past their expiry, tightens state sync and RPC streams, and
