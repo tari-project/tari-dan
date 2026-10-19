@@ -357,13 +357,15 @@ impl NetworkWideStateSync {
     /// Returns whether the group's checkpoints reach the epoch before `epoch`. They fall short when
     /// the committee has not yet completed that epoch: consensus ends an epoch some time after the
     /// base layer moves past it. They fall short for all of `epoch` when the epoch before it has no
-    /// checkpoint at all, as in a network's first epoch or after an epoch consensus never ran.
+    /// checkpoint at all, as in a network's first epoch or after an epoch consensus never ran. They
+    /// also fall short when `cancel` stops the backfill between pages.
     async fn sync_group_checkpoints(
         &self,
         shard_group: ShardGroup,
         pool: &mut ValidatorCommitteeRpcPool,
         epoch: Epoch,
         progress: &SharedSyncProgress,
+        cancel: &CancellationToken,
     ) -> Result<bool, NetworkStateSyncError> {
         let Some(prev_epoch) = epoch.checked_sub(Epoch(1)) else {
             return Ok(true);
@@ -384,7 +386,8 @@ impl NetworkWideStateSync {
             }
         }
         // Each page is fetched as soon as the one before it is stored, so a wallet walking from an older set waits
-        // only as long as the pages take to verify.
+        // only as long as the pages take to verify. A cancelled plan stops between pages; progress is recorded per
+        // checkpoint, so the next plan resumes where this one stopped.
         loop {
             info!(target: LOG_TARGET, "🌍️ Syncing checkpoints from {from_epoch} for shard group {shard_group}");
             let checkpoints = self
@@ -406,7 +409,7 @@ impl NetworkWideStateSync {
             let reached = checkpoint_epoch().await;
             match reached {
                 Some(reached) if reached >= prev_epoch => return Ok(true),
-                Some(reached) if reached > from_epoch => from_epoch = reached,
+                Some(reached) if reached > from_epoch && !cancel.is_cancelled() => from_epoch = reached,
                 _ => return Ok(false),
             }
         }
@@ -641,7 +644,7 @@ impl NetworkWideStateSync {
         while !cancel.is_cancelled() {
             let current_epoch = *epoch.borrow_and_update();
             let checkpoints_reached_epoch = match self
-                .sync_group_checkpoints(shard_group, &mut pool, current_epoch, &progress)
+                .sync_group_checkpoints(shard_group, &mut pool, current_epoch, &progress, &cancel)
                 .await
             {
                 Ok(reached) => reached,
