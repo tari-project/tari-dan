@@ -407,7 +407,7 @@ mod tests {
         check_proof_elements(
             &proof.header,
             &proof.proof_elements,
-            &|_| Ok(true),
+            &|_| Ok(1),
             QuorumDecision::Accept,
             0,
         )

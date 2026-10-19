@@ -5864,6 +5864,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
+name = "libmimalloc-sys"
+version = "0.1.49"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a45a52f43e1c16f667ccfe4dd8c85b7f7c204fd5e3bf46c5b0db9a5c3c0b8e9"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "libp2p"
 version = "0.57.0"
 source = "git+https://github.com/tari-project/rust-libp2p.git?rev=a85a6e395f46451cb9d5fb5e6b4bdfbe63d93454#a85a6e395f46451cb9d5fb5e6b4bdfbe63d93454"
@@ -6895,6 +6904,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mimalloc"
+version = "0.1.52"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d4139bb28d14ad1facf21d5eb8825051b326e172d216b39f6d31df53cc97862"
+dependencies = [
+ "libmimalloc-sys",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7119,9 +7137,9 @@ dependencies = [
 
 [[package]]
 name = "minotari_node"
-version = "6.2.0-pre.0"
+version = "6.2.0-pre.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8dc5c27dbd0ef0b830dca0e0962a99b5baad8681dbe343066da6986b6308596"
+checksum = "947e4c254da973f6cf2a7ed968527aa5d6854e5f9c65a219684b66b2aa7dc0ac"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7145,6 +7163,7 @@ dependencies = [
  "hyper-util",
  "log",
  "log4rs",
+ "mimalloc",
  "minotari_app_grpc",
  "minotari_app_utilities",
  "nom 7.1.3",
@@ -12092,9 +12111,9 @@ dependencies = [
 
 [[package]]
 name = "tari_libtor"
-version = "6.2.0-pre.0"
+version = "6.2.0-pre.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9ef82bc17bb53cf9da5b72bcf717554b534f838a1156a250bfd6eb5dbcfcb6e"
+checksum = "334b92b761bc3141e9ea6a1ccfc4adf5fcd06eafaf70c51e4a626b3bc8bb5386"
 dependencies = [
  "derivative",
  "libtor",

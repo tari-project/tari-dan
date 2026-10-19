@@ -106,11 +106,9 @@ impl CommandsCommitProofV1 {
     ) -> Result<(), ForeignProposalCommitProofError> {
         self.validate_command_merkle_root()?;
         self.commit_proof
-            // TODO: Currently 1 Vn = 1 vote power. But this may change in the future. Update the library.
-            .validate_committed(quorum_threshold.value() as usize, &|pk: &CompressedPublicKey| {
-                // TODO: commit proof should validate vote power not just pk existence
+            .validate_committed(quorum_threshold.value(), &|pk: &CompressedPublicKey| {
                 check_vn(&RistrettoPublicKeyBytes::from_bytes(pk.as_bytes()).expect("already checked"))
-                    .map(|v| !v.is_zero())
+                    .map(|v| v.value())
             })?;
         Ok(())
     }

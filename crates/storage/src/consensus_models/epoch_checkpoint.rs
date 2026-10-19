@@ -169,14 +169,12 @@ impl EpochCheckpoint {
 
         // Validate the proof
         self.proof
-            .validate_committed(quorum_threshold.value() as usize, &|pk: &CompressedPublicKey| {
+            .validate_committed(quorum_threshold.value(), &|pk: &CompressedPublicKey| {
                 let pk_bytes = RistrettoPublicKeyBytes::from_bytes(pk.as_bytes())
                     // Should not be possible - however, since CompressedPublicKey currently represented using a Vec<u8>
                     // it is possible, in theory, to have a CompressedPublicKey that is any size.
                     .map_err(SidechainProofValidationError::internal_error)?;
-                // TODO: change this to return and check the actual voting power of the VN. Even if it is always 1 for
-                // now.
-                check_vn(&pk_bytes).map(|power| !power.is_zero())
+                check_vn(&pk_bytes).map(|power| power.value())
             })?;
 
         Ok(())
