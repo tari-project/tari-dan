@@ -214,6 +214,7 @@ pub(super) fn application_error<T: Display>(code: ApplicationErrorCode, details:
     )
     .into()
 }
+
 fn still_pending(transaction_id: TransactionId) -> anyhow::Error {
     application_error(
         ApplicationErrorCode::TransactionPending,

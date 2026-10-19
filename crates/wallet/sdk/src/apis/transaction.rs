@@ -86,6 +86,8 @@ where
     /// If the submission is successful, the transaction status is updated to `Pending`.
     /// If the transaction is rejected, the status is updated to `InvalidTransaction` and the
     /// rejection reason is stored.
+    /// A wallet that verifies its indexer but trusts no validator set yet, and cannot anchor on one now, returns
+    /// [`Submission::Deferred`] and leaves the transaction `New`. The caller submits it again later.
     pub async fn submit_transaction(&self, transaction_id: TransactionId) -> Result<Submission, TransactionApiError> {
         let transaction = self.store.with_read_tx(|tx| tx.transactions_get(transaction_id))?;
         if transaction.is_dry_run {
@@ -107,7 +109,7 @@ where
             self.validator_set_api.latest()?.is_none() &&
             let Err(err) = self.validator_set_api.sync().await
         {
-            warn!(target: LOG_TARGET, "Transaction {transaction_id} waits to be submitted until the wallet trusts a validator set: {err}");
+            debug!(target: LOG_TARGET, "Transaction {transaction_id} waits to be submitted until the wallet trusts a validator set: {err}");
             return Ok(Submission::Deferred);
         }
 

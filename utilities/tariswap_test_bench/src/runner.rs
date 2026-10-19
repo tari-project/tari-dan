@@ -17,6 +17,7 @@ use tari_ootle_wallet_sdk::{
     IndexerTrust,
     WalletSdk as Sdk,
     WalletSdkConfig,
+    apis::transaction::Submission,
     cipher_seed::CipherSeedRestore,
     local_key_store::LocalKeyStore,
     models::EpochBirthday,
@@ -86,7 +87,13 @@ impl Runner {
             .transaction_api()
             .insert_new_transaction(transaction, None, &[], false)?;
 
-        self.sdk.transaction_api().submit_transaction(tx_id).await?;
+        loop {
+            match self.sdk.transaction_api().submit_transaction(tx_id).await? {
+                Submission::Submitted => break,
+                Submission::Rejected => anyhow::bail!("Transaction {tx_id} was rejected"),
+                Submission::Deferred => sleep(Duration::from_secs(1)).await,
+            }
+        }
 
         self.stats.inc_transaction();
         Ok(tx_id)

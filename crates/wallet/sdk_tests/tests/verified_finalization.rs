@@ -34,7 +34,7 @@ use tari_ootle_wallet_sdk::{
         transaction::{Submission, TransactionApiError},
         validator_set::ValidatorSetApiError,
     },
-    models::{TransactionStatus, ValidatorSetAnchor},
+    models::{TransactionContext, TransactionContextKind, TransactionStatus, ValidatorSetAnchor, WalletEvent},
     network::{TransactionFinalizedResult, TransactionQueryResult},
     storage::{ReadableWalletStore, WalletStoreReader, WalletStoreWriter, WriteableWalletStore},
 };
@@ -517,6 +517,57 @@ async fn the_transaction_service_submits_a_held_back_transaction_once_the_wallet
     let submitted = test.sdk().transaction_api().get(transaction_id).unwrap();
     assert_eq!(submitted.status, TransactionStatus::Pending);
     assert!(test.sdk().validator_set_api().anchor().unwrap().is_some());
+}
+
+#[tokio::test]
+async fn a_held_back_transaction_is_announced_with_the_context_it_was_submitted_with() {
+    let sets = sets();
+    let network = ProvingNetwork::new(&sets, 1);
+    network.withhold_checkpoints();
+    let test = TestWithNetwork::without_accounts_trusting(network.clone(), IndexerTrust::Verify);
+    let config = TransactionServiceConfig {
+        poll_interval: Duration::from_millis(20),
+        ..TransactionServiceConfig::default()
+    };
+    let shutdown = Shutdown::new();
+    let notify = Notify::new(16);
+    let mut events = notify.subscribe();
+    let (service, handle) = TransactionService::with_config(config, notify, test.sdk().clone(), shutdown.to_signal());
+    tokio::spawn(service.run());
+
+    let transaction = build_transaction();
+    network.set_result(TransactionQueryResult {
+        result: TransactionFinalizedResult::Pending,
+        transaction_id: transaction.calculate_id(),
+        receipt: None,
+    });
+    let context = TransactionContext::default().with_kind(TransactionContextKind::ClaimBurn {
+        file_name: "burn.json".to_string(),
+    });
+    let transaction_id = handle
+        .submit_transaction_with_opts(transaction, Some(context), None)
+        .await
+        .unwrap();
+    assert_eq!(network.submissions(), 0);
+
+    network.set_latest(1);
+    let submitted = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let WalletEvent::TransactionSubmitted(event) = events.recv().await.unwrap() {
+                return event;
+            }
+        }
+    })
+    .await
+    .expect("the service never submitted the held-back transaction");
+    assert_eq!(submitted.transaction_id, transaction_id);
+    assert!(
+        matches!(
+            submitted.context.and_then(|c| c.kind),
+            Some(TransactionContextKind::ClaimBurn { file_name }) if file_name == "burn.json"
+        ),
+        "the submission lost its claim burn context"
+    );
 }
 
 #[tokio::test]
