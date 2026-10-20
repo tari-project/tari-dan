@@ -26,6 +26,8 @@ pub enum ManifestError {
     LexError(String),
     #[error("Manifest source is {size} bytes, exceeding the maximum of {max}")]
     ManifestTooLarge { size: usize, max: usize },
+    #[error("Manifest nests brackets, braces or parentheses more than {max} levels deep")]
+    NestingTooDeep { max: usize },
     #[error("Syntax error: {0}")]
     SyntaxError(#[from] syn::Error),
     #[error("Missing expression")]
