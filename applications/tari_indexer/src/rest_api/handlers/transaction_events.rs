@@ -140,9 +140,8 @@ fn replay_then_live_stream(
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<sse::Event, axum::Error>>(256);
 
     tokio::spawn(async move {
-        // A send is the only point at which the task itself notices a closed stream, and a filter
-        // that matches nothing never sends, so the task ends as soon as the response stream is
-        // dropped.
+        // `run_replay_then_live` only observes a closed stream when it sends, and a filter that
+        // matches nothing never sends, so the task also waits on `tx.closed()`.
         tokio::select! {
             result = run_replay_then_live(store, broadcast_rx, filter, after_id, REPLAY_LIMITS, &tx) => {
                 if let Err(e) = result {
