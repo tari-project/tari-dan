@@ -69,8 +69,8 @@ pub enum IndexerRestClientError {
         source: reqwest::Error,
         details: Option<String>,
     },
-    /// The indexer answered with a status that is neither a success nor a client or server error, e.g. a 3xx that
-    /// was not followed as a redirect.
+    /// The indexer answered with a 1xx or 3xx status, e.g. a redirect that was not followed. Such a response does not
+    /// carry the requested resource.
     #[error("Unexpected HTTP status {status} from {url}")]
     UnexpectedStatus { status: StatusCode, url: Url },
     #[error("Request failed: code: {code} message: {message}")]
