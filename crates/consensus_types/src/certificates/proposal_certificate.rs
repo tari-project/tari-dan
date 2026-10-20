@@ -79,23 +79,11 @@ impl ProposalCertificate {
     /// However, we implement a secure hash (as opposed to a cheaper, non-collision-resistant hash e.g. siphash) to
     /// avoid any collision issues e.g. storage keys.
     pub fn calculate_id(&self) -> PcId {
-        // We use the same fields as tari_sidechain::QuorumCertificate. Since should calculate a consistent ID between
-        // shards. Although, worth noting that in the current protocol, this does not matter because the foreign
-        // QC id only needs to be consistent within a shard group. This may change in the future.
-        Self::calculate_id_from_parts(&self.header_hash, &self.parent_id, &self.signatures, &self.decision)
-    }
-
-    pub fn calculate_id_from_parts(
-        header_hash: &FixedHash,
-        parent_id: &BlockId,
-        signatures: &[ValidatorSignatureBytes],
-        decision: &QuorumDecision,
-    ) -> PcId {
         quorum_certificate_id_hasher()
-            .chain(header_hash)
-            .chain(parent_id)
-            .chain(signatures)
-            .chain(decision)
+            .chain(&self.header_hash)
+            .chain(&self.parent_id)
+            .chain(&self.signatures)
+            .chain(&self.decision)
             .finalize_into_array()
             .into()
     }
