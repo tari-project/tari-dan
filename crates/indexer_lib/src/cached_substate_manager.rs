@@ -325,7 +325,8 @@ where
 
     /// Like [`Self::get_substate`], but the result comes with the proof it was verified with: a live result with its
     /// value proof, and a down one with its down proof when the read names its version. A cached head is served with
-    /// the proof held for it; one with no proof held is fetched from the committee again, and cached with its proof.
+    /// the proof held for it while [`Self::read_live_proof`] still serves that proof; otherwise it is fetched from the
+    /// committee again, and cached with its proof.
     /// The cache holds no down proofs, so a read naming a version below the cached head is fetched from the committee.
     ///
     /// The proof is `None` when proof verification is off, for a nonexistent substate, for a down head read, and when
@@ -495,11 +496,11 @@ where
     /// Looks up the live version of each substate. A substate held down or absent is left out of the result. Each
     /// result carries the proof it was verified with, when one was.
     ///
-    /// Fresh cache entries are served first, an up head only together with the proof held for it while verification
-    /// is on, and the rest are fetched from the committee in batches. A batch is answered by one member, which may
-    /// leave an id out or report it down without being able to prove either. Every requested id the batch does not
-    /// settle is therefore confirmed through [`Self::get_substate`]'s committee agreement, and a confirmation that
-    /// fails fails the call: leaving the id out would tell the caller it is not live.
+    /// Fresh cache entries are served first, an up head only together with the proof [`Self::read_live_proof`] serves
+    /// for it while verification is on, and the rest are fetched from the committee in batches. A batch is answered by
+    /// one member, which may leave an id out or report it down without being able to prove either. Every requested
+    /// id the batch does not settle is therefore confirmed through [`Self::get_substate`]'s committee agreement,
+    /// and a confirmation that fails fails the call: leaving the id out would tell the caller it is not live.
     pub async fn fetch_and_cache_substates(
         &self,
         substate_ids: &[SubstateId],
@@ -564,8 +565,8 @@ where
     }
 
     /// The fresh cached head of `substate_id`, carrying the proof held for it when it is up and verification is on.
-    /// `None` when [`Self::read_fresh_cache_entry`] has nothing to serve, or when it holds an up head with no proof
-    /// while verification is on.
+    /// `None` when [`Self::read_fresh_cache_entry`] has nothing to serve, or when it holds an up head for which
+    /// [`Self::read_live_proof`] serves no proof while verification is on.
     async fn read_fresh_cache_entry_with_proof(
         &self,
         substate_id: &SubstateId,
@@ -589,7 +590,8 @@ where
     ///
     /// A cached value stays current until the transition stream retracts it, but its proof is anchored at the block it
     /// was fetched at and ages with it. Clients reject a proof anchored more than an epoch before the latest validator
-    /// set, so a proof held past its anchor's epoch is left for the caller to refetch, as a fresh read would be.
+    /// set, so a proof held past its anchor's epoch is left for the caller to refetch, as a fresh read would be. A held
+    /// proof whose anchor does not decode is left for the refetch to overwrite in the same way.
     async fn read_live_proof(
         &self,
         substate_id: &SubstateId,
@@ -598,11 +600,19 @@ where
         let Some(proof) = self.substate_cache.read_proof(substate_id, version).await? else {
             return Ok(None);
         };
-        let commit_proof = decode_commit_proof(&proof.commit_proof)?;
-        let epoch = commit_proof.epoch();
-        let shard_group = commit_proof
-            .shard_group()
-            .map_err(|e| IndexerError::SubstateProofVerificationFailed { details: e.to_string() })?;
+        let anchor = CommittedBlockProof::from_bytes(&proof.commit_proof)
+            .map_err(|e| e.to_string())
+            .and_then(|commit_proof| {
+                let shard_group = commit_proof.shard_group().map_err(|e| e.to_string())?;
+                Ok((commit_proof.epoch(), shard_group))
+            });
+        let (epoch, shard_group) = match anchor {
+            Ok(anchor) => anchor,
+            Err(e) => {
+                warn!(target: LOG_TARGET, "Cached proof of {substate_id}v{version} has an undecodable anchor: {e}");
+                return Ok(None);
+            },
+        };
         if !self.anchor_epoch_is_live(epoch, shard_group).await? {
             debug!(
                 target: LOG_TARGET,
@@ -2987,6 +2997,49 @@ mod tests {
 
         let manager = manager.with_substate_proof_verification(true);
         seed_cache(&manager, &ids, Some(cached_proof()));
+
+        manager.fetch_and_cache_substates(&ids).await.unwrap();
+
+        assert_eq!(network.batch_requests.load(Ordering::Relaxed), 1);
+    }
+
+    /// A cached proof anchored in the previous epoch is not served once a tip of the current epoch is validated for a
+    /// shard group overlapping the anchor's.
+    #[tokio::test]
+    async fn a_cached_proof_anchored_in_the_previous_epoch_is_fetched_again_once_the_new_epoch_has_a_tip() {
+        let ids = vec![component_id(1)];
+        let (mut manager, network) = manager(FakeNetwork {
+            live: live(&ids),
+            ..Default::default()
+        });
+        manager.committee_provider.3 = Epoch(2);
+        let manager = manager
+            .with_substate_proof_verification(true)
+            .with_trusted_root_store(RecordedTips::with([(Epoch(2), group(1, 128), 2, NEWER_ROOT)]));
+        seed_cache(&manager, &ids, Some(cached_proof()));
+
+        manager.fetch_and_cache_substates(&ids).await.unwrap();
+
+        assert_eq!(network.batch_requests.load(Ordering::Relaxed), 1);
+    }
+
+    /// A cached proof whose anchor does not decode is not served, so the refetch overwrites it.
+    #[tokio::test]
+    async fn a_cached_proof_with_an_undecodable_anchor_is_fetched_again() {
+        let ids = vec![component_id(1)];
+        let (manager, network) = manager(FakeNetwork {
+            live: live(&ids),
+            ..Default::default()
+        });
+        let manager = manager.with_substate_proof_verification(true);
+        seed_cache(
+            &manager,
+            &ids,
+            Some(SubstateProofData {
+                commit_proof: vec![2],
+                ..cached_proof()
+            }),
+        );
 
         manager.fetch_and_cache_substates(&ids).await.unwrap();
 
