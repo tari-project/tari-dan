@@ -73,13 +73,20 @@ impl GenesisCouncil {
 /// nothing an operator configures is safe to write into it.
 pub fn genesis_council(network: Network) -> GenesisCouncil {
     match network {
-        Network::MainNet |
-        Network::StageNet |
-        Network::NextNet |
-        Network::Igor |
-        Network::Esmeralda |
-        Network::LocalNet => GenesisCouncil::none(),
+        Network::MainNet => GenesisCouncil {
+            threshold: 1,
+            members: vec![council_member(
+                "9a05fef0e26b4a87d995ccb8c48582d86485c7a2c767c77c561f3db2724a8b19",
+            )],
+        },
+        Network::StageNet | Network::NextNet | Network::Igor | Network::Esmeralda | Network::LocalNet => {
+            GenesisCouncil::none()
+        },
     }
+}
+
+fn council_member(hex: &str) -> RistrettoPublicKeyBytes {
+    RistrettoPublicKeyBytes::from_hex(hex).expect("a release council member is a 32-byte hex public key")
 }
 
 /// The council a node writes into genesis: the one its operator `configured`, or the network's own
@@ -115,6 +122,8 @@ pub enum GenesisCouncilError {
 
 #[cfg(test)]
 mod tests {
+    use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::ByteArray};
+
     use super::*;
 
     fn all_networks() -> Vec<Network> {
@@ -137,6 +146,27 @@ mod tests {
                 council.threshold,
                 council.members.len()
             );
+        }
+    }
+
+    #[test]
+    fn every_networks_council_passes_the_checks_a_configured_one_must() {
+        for network in all_networks() {
+            genesis_council(network)
+                .validate()
+                .unwrap_or_else(|e| panic!("{network}: {e}"));
+        }
+    }
+
+    #[test]
+    fn every_council_member_is_a_valid_public_key() {
+        for network in all_networks() {
+            for member in genesis_council(network).members {
+                assert!(
+                    RistrettoPublicKey::from_canonical_bytes(member.as_bytes()).is_ok(),
+                    "{network} seats {member}, which is not a canonical Ristretto point"
+                );
+            }
         }
     }
 
