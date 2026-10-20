@@ -16,6 +16,11 @@ pub fn quorum_certificate_id_hasher() -> TariConsensusHasher {
     tari_consensus_hasher("QuorumCertificateId")
 }
 
+/// Hashes a proven foreign block id into the id that evidence records for the certificate justifying that block.
+pub fn foreign_quorum_certificate_id_hasher() -> TariConsensusHasher {
+    tari_consensus_hasher("ForeignQuorumCertificateId")
+}
+
 pub fn timeout_certificate_id_hasher() -> TariConsensusHasher {
     tari_consensus_hasher("TimeoutCertificateId")
 }
