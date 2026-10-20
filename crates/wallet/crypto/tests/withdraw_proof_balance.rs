@@ -6,7 +6,7 @@ use tari_crypto::{keys::SecretKey, ristretto::RistrettoSecretKey};
 use tari_engine_types::{
     confidential::MIN_CONFIDENTIAL_OUTPUT_VALUE_PROMISE,
     crypto::commit_u64_amount,
-    resource_container::ResourceContainer,
+    resource_container::{ResourceContainer, ResourceError},
 };
 use tari_ootle_wallet_crypto::{MaskAndValue, OutputWitness, WalletCryptoError, confidential::create_withdraw_proof};
 use tari_template_lib_types::{Amount, EncryptedData, ResourceAddress};
@@ -94,6 +94,43 @@ fn it_returns_revealed_change_to_the_source_without_a_change_output() {
     assert_eq!(output.unlocked_amount(), Amount::zero());
     // 200 - 50 input revealed + 650 revealed change
     assert_eq!(container.unlocked_amount(), Amount::from(800u64));
+}
+
+#[test]
+fn it_rejects_revealed_change_that_takes_the_balance_past_the_maximum() {
+    let input_mask = random_mask();
+    let input = MaskAndValue::new(1_000, input_mask.clone());
+
+    let proof = create_withdraw_proof(
+        &[input],
+        Amount::from(50u64),
+        Some(&witness(400)),
+        Amount::zero(),
+        None,
+        Amount::from(650u64),
+    )
+    .unwrap();
+
+    let input_commitment = commit_u64_amount(&input_mask, 1_000).to_byte_type();
+    let resource_address =
+        ResourceAddress::from_hex("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef").unwrap();
+    let mut container = ResourceContainer::confidential(resource_address, [input_commitment], Amount::MAX);
+    // Locked and unlocked revealed funds together make up the balance that Amount::MAX bounds.
+    let locked = container.lock_by_amount(Amount::MAX - Amount::from(200u64)).unwrap();
+
+    let err = container.withdraw_confidential(proof, None).unwrap_err();
+    assert!(
+        matches!(err, ResourceError::BalanceOverflow {
+            operate: "withdraw_confidential change",
+            ..
+        }),
+        "expected BalanceOverflow, got {err:?}"
+    );
+
+    let all = container.lock_all().unwrap();
+    container.unlock(all).unwrap();
+    container.unlock(locked).unwrap();
+    assert_eq!(container.unlocked_amount(), Amount::MAX);
 }
 
 #[test]
