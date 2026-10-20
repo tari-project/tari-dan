@@ -17,7 +17,7 @@ use tari_template_lib_types::TemplateAddress;
 use crate::cmap_semaphore;
 
 const LOG_TARGET: &str = "tari::ootle::template_provider::memory_cache";
-const CONCURRENT_ACCESS_LIMIT: isize = 100;
+pub(crate) const CONCURRENT_ACCESS_LIMIT: isize = 100;
 
 /// Multiplier applied to the WASM source byte count when weighing cache
 /// entries. The source size under-estimates the resident footprint of a

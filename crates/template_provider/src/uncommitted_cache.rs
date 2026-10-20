@@ -7,7 +7,10 @@ use tari_engine::{
 };
 use tari_template_lib_types::TemplateAddress;
 
-use crate::memory_cache::CODE_SIZE_TO_RESIDENT_BYTES_FACTOR;
+use crate::{
+    cmap_semaphore::ConcurrentMapSemaphore,
+    memory_cache::{CODE_SIZE_TO_RESIDENT_BYTES_FACTOR, CONCURRENT_ACCESS_LIMIT},
+};
 
 /// Compiled templates published in uncommitted blocks.
 ///
@@ -19,6 +22,8 @@ use crate::memory_cache::CODE_SIZE_TO_RESIDENT_BYTES_FACTOR;
 #[derive(Clone)]
 pub struct UncommittedTemplateCache {
     cache: mini_moka::sync::Cache<TemplateAddress, LoadedTemplate>,
+    /// Admits one compile per address at a time, so concurrent first loads of a template compile it once.
+    cmap_semaphore: ConcurrentMapSemaphore<TemplateAddress>,
 }
 
 impl UncommittedTemplateCache {
@@ -30,11 +35,20 @@ impl UncommittedTemplateCache {
             })
             .max_capacity(max_resident_bytes)
             .build();
-        Self { cache }
+        Self {
+            cache,
+            cmap_semaphore: ConcurrentMapSemaphore::new(CONCURRENT_ACCESS_LIMIT),
+        }
     }
 
     /// The compiled template published at `address` with `binary`, compiling it on a miss.
     pub fn load(&self, address: TemplateAddress, binary: &[u8]) -> Result<LoadedTemplate, TemplateLoaderError> {
+        if let Some(loaded) = self.cache.get(&address) {
+            return Ok(loaded);
+        }
+        let guard = self.cmap_semaphore.acquire(address);
+        let _access = guard.access();
+        // A load that held the address before this one may have filled the cache.
         if let Some(loaded) = self.cache.get(&address) {
             return Ok(loaded);
         }
