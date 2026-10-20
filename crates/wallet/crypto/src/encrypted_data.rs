@@ -260,7 +260,11 @@ fn decrypt_inner(
     let mask_bytes = bytes
         .get(EncryptedData::SIZE_VALUE..EncryptedData::SIZE_VALUE + EncryptedData::SIZE_MASK)
         .ok_or(aead::Error)?;
-    let mask = RistrettoSecretKey::from_canonical_bytes(mask_bytes).expect("The length of bytes is exactly SIZE_MASK");
+    // The sender chooses the plaintext, so an authenticated payload may still carry a non-canonical mask.
+    let mask =
+        RistrettoSecretKey::from_canonical_bytes(mask_bytes).map_err(|_| WalletCryptoError::FailedDecryptData {
+            details: "Decrypted mask is not a canonical scalar".to_string(),
+        })?;
     let mut memo_bytes = bytes
         .get(EncryptedData::SIZE_VALUE + EncryptedData::SIZE_MASK..)
         .expect("invariant violation: bytes length is less than SIZE_VALUE + SIZE_MASK");
@@ -440,5 +444,35 @@ mod tests {
         assert_eq!(value, amount);
         assert_eq!(msk, mask);
         assert!(decrypted_memo.is_none());
+    }
+
+    #[test]
+    fn it_rejects_an_authenticated_payload_with_a_non_canonical_mask() {
+        let key = RistrettoSecretKey::random(&mut rand::rng());
+        let amount = 100u64;
+        let mask = RistrettoSecretKey::random(&mut rand::rng());
+        let commitment = get_commitment_factory().commit_value(&mask, amount).to_byte_type();
+
+        // A validly sealed value||mask payload whose mask bytes exceed the group order.
+        let nonce_bytes = [9u8; EncryptedData::SIZE_NONCE];
+        let nonce = XNonce::from_slice(&nonce_bytes);
+        let aead_key = inner_encrypted_data_kdf_aead(&key, &commitment);
+        let cipher = XChaCha20Poly1305::new(GenericArray::from_slice(aead_key.reveal()));
+
+        let mut bytes = vec![0u8; EncryptedData::min_size()];
+        let payload = &mut bytes[EncryptedData::payload_offset()..];
+        payload[..EncryptedData::SIZE_VALUE].copy_from_slice(&amount.to_le_bytes());
+        payload[EncryptedData::SIZE_VALUE..].copy_from_slice(&[0xFF; EncryptedData::SIZE_MASK]);
+        let tag = cipher
+            .encrypt_in_place_detached(nonce, ENCRYPTED_DATA_TAG, payload)
+            .unwrap();
+        bytes[..EncryptedData::SIZE_TAG].copy_from_slice(&tag);
+        bytes[EncryptedData::SIZE_TAG..EncryptedData::payload_offset()].copy_from_slice(&nonce_bytes);
+        let encrypted = EncryptedData::try_from(bytes).unwrap();
+
+        let err = decrypt_data(&key, &commitment, &encrypted, false).unwrap_err();
+        assert!(matches!(err, WalletCryptoError::FailedDecryptData { .. }), "{err:?}");
+        let err = unblind_output(&commitment, &encrypted, &key, false).unwrap_err();
+        assert!(matches!(err, WalletCryptoError::FailedDecryptData { .. }), "{err:?}");
     }
 }
