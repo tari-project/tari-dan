@@ -19,7 +19,12 @@ import Divider from "@mui/material/Divider";
 import Grid from "@mui/material/Grid";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import type { EffectiveStatus, KeyId, TransactionRequestInfo } from "@tari-project/ootle-ts-bindings";
+import type {
+  EffectiveStatus,
+  KeyId,
+  TransactionRequestInfo,
+  TransactionRequestMainSigner,
+} from "@tari-project/ootle-ts-bindings";
 import { useEffect, useState } from "react";
 import Inputs from "../Transactions/Inputs";
 import Instructions from "../Transactions/Instructions";
@@ -29,6 +34,23 @@ function formatKeyId(keyId: KeyId): string {
     return `${keyId.Derived.key_branch.replace(/_/g, " ")} key #${keyId.Derived.index}`;
   }
   return `imported key #${keyId.Imported.local_key_id}`;
+}
+
+function describeMainSigner(mainSigner: TransactionRequestMainSigner): {
+  label: string;
+  publicKey?: string;
+  color: "default" | "warning" | "error";
+} {
+  if (mainSigner === "SealSigner") {
+    return { label: "the seal signer", color: "warning" };
+  }
+  if (mainSigner === "None") {
+    return { label: "none", color: "default" };
+  }
+  if ("WalletKey" in mainSigner) {
+    return { label: "a key of this wallet", publicKey: mainSigner.WalletKey.public_key, color: "warning" };
+  }
+  return { label: "a key outside this wallet", publicKey: mainSigner.External.public_key, color: "error" };
 }
 
 function statusColor(status: EffectiveStatus): "default" | "warning" | "success" | "error" | "info" {
@@ -109,7 +131,8 @@ function RequestCard({ request }: { request: TransactionRequestInfo }) {
   const instructions = v1?.instructions ?? [];
   const feeInstructions = v1?.fee_instructions ?? [];
   const inputs = v1?.inputs ?? [];
-  const isSealSignerAuthorized = v1?.is_seal_signer_authorized ?? false;
+  const isSealSignerAuthorized = v1?.main_signer === "SealSigner";
+  const mainSigner = describeMainSigner(request.main_signer);
 
   const togglePanel = (panel: string) => (_event: React.SyntheticEvent, isExpanded: boolean) =>
     setExpanded(isExpanded ? panel : null);
@@ -146,6 +169,34 @@ function RequestCard({ request }: { request: TransactionRequestInfo }) {
             />
           </Stack>
         </Grid>
+        <Grid size={12}>
+          <Typography variant="body2" sx={{ opacity: 0.7 }}>
+            Main signer
+          </Typography>
+          {/* Whatever the transaction creates as "owned by signer" belongs to
+              this key, and templates that ask for the transaction's signer
+              see it. */}
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+            <Chip label={mainSigner.label} size="small" color={mainSigner.color} variant="outlined" />
+            {mainSigner.publicKey && (
+              <Typography variant="body2" sx={{ fontFamily: "monospace", wordBreak: "break-all" }}>
+                {mainSigner.publicKey}
+              </Typography>
+            )}
+          </Stack>
+        </Grid>
+        {request.external_signers.length > 0 && (
+          <Grid size={12}>
+            <Typography variant="body2" sx={{ opacity: 0.7 }}>
+              Also signed by ({request.external_signers.length} key(s) outside this wallet)
+            </Typography>
+            {request.external_signers.map((publicKey) => (
+              <Typography key={publicKey} variant="body2" sx={{ fontFamily: "monospace", wordBreak: "break-all" }}>
+                {publicKey}
+              </Typography>
+            ))}
+          </Grid>
+        )}
       </Grid>
 
       <Accordion expanded={expanded === "instructions"} onChange={togglePanel("instructions")}>

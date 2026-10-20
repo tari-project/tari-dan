@@ -22,11 +22,12 @@
 //! seal entry points re-derive the same canonical unsigned from the partial, so A seals
 //! byte-identically to what B signed.
 //!
-//! ## `is_seal_signer_authorized`
+//! ## `main_signer`
 //!
-//! With auth signatures present the seal keeps `is_seal_signer_authorized = false`; it is only `true`
-//! when there are zero authorizations. An empty authorization slice therefore behaves like the plain
-//! single-key seal.
+//! With auth signatures present the seal keeps `main_signer = None`: the seal signer is not authorized
+//! and the transaction has no main signer, so anything in it that needs one (`OwnerRule::OwnedBySigner`,
+//! `CallerContext::transaction_signer_public_key`) aborts. It is only `SealSigner` when there are zero
+//! authorizations. An empty authorization slice therefore behaves like the plain single-key seal.
 //!
 //! ## Secrets
 //!
@@ -35,7 +36,7 @@
 
 use serde::{Deserialize, Serialize};
 use tari_crypto::ristretto::{RistrettoSchnorr, RistrettoSecretKey};
-use tari_ootle_transaction::{TransactionSignature, UnsignedTransaction};
+use tari_ootle_transaction::{MainSigner, TransactionSignature, UnsignedTransaction};
 
 use crate::{
     PartialTransaction,
@@ -114,12 +115,12 @@ impl Authorization {
 /// already-canonicalized unsigned tx (the exact bytes the seal will sign over), so B's authorization
 /// signs the identical message A seals.
 ///
-/// A co-sign hand-off always attaches at least one authorization, so the record's
-/// `is_seal_signer_authorized` flag is set to `false` here (the value the seal will commit to once
-/// authorizations are present). B signs over this `false`, and [`seal_and_encode_with_auth`] settles
-/// the same `false` before sealing — so A and B commit to the identical flag value and the
-/// signatures cross-verify. Were the flag left at the default `true`, B would sign over `true` while
-/// the seal-with-auth path seals over `false`, and B's authorization would no longer verify.
+/// A co-sign hand-off always attaches at least one authorization, so the record's `main_signer` is
+/// set to `None` here (the value the seal will commit to once authorizations are present). B signs
+/// over this `None`, and [`seal_and_encode_with_auth`] settles the same `None` before sealing — so A
+/// and B commit to the identical value and the signatures cross-verify. Were it left at the default
+/// `SealSigner`, B would sign over `SealSigner` while the seal-with-auth path seals over `None`, and
+/// B's authorization would no longer verify.
 pub fn unsigned_record_for_cosign(partial: &PartialTransaction) -> Result<UnsignedTransactionRecord, OotleSdkError> {
     if !partial.outstanding_wants().is_empty() {
         return Err(OotleSdkError::Resolution(format!(
@@ -132,7 +133,7 @@ pub fn unsigned_record_for_cosign(partial: &PartialTransaction) -> Result<Unsign
     // Apply the same canonical input sort the seal path applies, so the shipped record is
     // byte-identical to what the seal will sign over.
     canonicalize_inputs(&mut unsigned);
-    unsigned.set_seal_signer_authorized(false);
+    unsigned.set_main_signer(MainSigner::None);
     Ok(UnsignedTransactionRecord::new(unsigned))
 }
 
@@ -168,7 +169,7 @@ fn authorization_from_parts(secret: &RistrettoSecretKey, sig: RistrettoSchnorr) 
 /// **Party A.** Attaches the supplied `authorizations` to a resolved partial and seals it (random
 /// nonce). The bytes/id are **not** reproducible — the safe default for real submission.
 ///
-/// `is_seal_signer_authorized` stays `false` with authorizations present; an empty slice behaves like
+/// `main_signer` stays `None` with authorizations present; an empty slice behaves like
 /// the plain single-key seal. An unresolved partial ⇒ [`OotleSdkError::Resolution`].
 pub fn seal_and_encode_with_auth(
     partial: PartialTransaction,
@@ -372,9 +373,9 @@ mod tests {
     }
 
     /// Full authorize → attach → seal: the sealed cosigned transaction validates (all signatures
-    /// verify), and `is_seal_signer_authorized` is `false` with an authorization attached.
+    /// verify), and `main_signer` is `None` with an authorization attached.
     #[test]
-    fn cosigned_seal_validates_and_flips_authorized_flag() {
+    fn cosigned_seal_validates_and_declares_no_main_signer() {
         let record = unsigned_record_for_cosign(&resolved_partial()).unwrap();
         let auth = add_signature(&record, &a_seal_pk(), &b_secret_bytes()).unwrap();
         let out = seal_and_encode_with_auth(resolved_partial(), &a_keys(), std::slice::from_ref(&auth)).unwrap();
@@ -383,28 +384,29 @@ mod tests {
         let value =
             crate::decode_and_canonicalize_sealed_transfer(Network::Esmeralda, &out.encoded_transaction.to_hex())
                 .expect("cosigned sealed bytes must decode and verify");
-        // With an authorization attached, is_seal_signer_authorized must be false.
-        let flag = find_bool(&value, "is_seal_signer_authorized");
         assert_eq!(
-            flag,
-            Some(false),
-            "is_seal_signer_authorized must be false with auth sigs present"
+            find_value(&value, "main_signer"),
+            Some(&serde_json::json!("None")),
+            "main_signer must be None with auth sigs present"
         );
     }
 
     /// An empty authorization slice behaves like the plain single-key seal — and there flips
-    /// `is_seal_signer_authorized` to `true`.
+    /// `main_signer` to `SealSigner`.
     #[test]
     fn empty_authorizations_behave_like_plain_seal() {
         let out = seal_and_encode_with_auth(resolved_partial(), &a_keys(), &[]).unwrap();
         let plain = crate::seal_and_encode_public_transfer(resolved_partial(), &a_keys()).unwrap();
         // Plain seal also produces one auth signature (A's own); the no-auth cosign seal produces
-        // zero. They are NOT byte-equal, but the no-auth cosign seal must still validate and set the
-        // authorized flag true.
+        // zero. They are NOT byte-equal, but the no-auth cosign seal must still validate and declare
+        // the seal signer as the main signer.
         let value =
             crate::decode_and_canonicalize_sealed_transfer(Network::Esmeralda, &out.encoded_transaction.to_hex())
                 .expect("no-auth seal must validate");
-        assert_eq!(find_bool(&value, "is_seal_signer_authorized"), Some(true));
+        assert_eq!(
+            find_value(&value, "main_signer"),
+            Some(&serde_json::json!("SealSigner"))
+        );
         assert!(!plain.encoded_transaction.as_bytes().is_empty());
     }
 
@@ -455,15 +457,10 @@ mod tests {
     }
 
     /// Recursively finds the first boolean value for `key` in a JSON tree.
-    fn find_bool(value: &serde_json::Value, key: &str) -> Option<bool> {
+    fn find_value<'a>(value: &'a serde_json::Value, key: &str) -> Option<&'a serde_json::Value> {
         match value {
-            serde_json::Value::Object(map) => {
-                if let Some(serde_json::Value::Bool(b)) = map.get(key) {
-                    return Some(*b);
-                }
-                map.values().find_map(|v| find_bool(v, key))
-            },
-            serde_json::Value::Array(items) => items.iter().find_map(|v| find_bool(v, key)),
+            serde_json::Value::Object(map) => map.get(key).or_else(|| map.values().find_map(|v| find_value(v, key))),
+            serde_json::Value::Array(items) => items.iter().find_map(|v| find_value(v, key)),
             _ => None,
         }
     }

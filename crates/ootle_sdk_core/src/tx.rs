@@ -8,15 +8,17 @@
 //! so the sealed bytes and id are unique per call — the safe default for real submission. Nothing here
 //! pins a signature nonce from a seed.
 //!
-//! ### The `is_seal_signer_authorized` rule
+//! ### The `main_signer` rule
 //!
-//! The field defaults to `true`, is only changed by explicit choice, and is committed to by every
-//! signing message — `seal()` never mutates it. The [`seal_public_transfer_with_auth`] path (which
-//! supplies its own authorizations) settles it explicitly (`true` iff there are zero authorization
-//! signatures) before computing any message, so the flag the co-signers signed over is the one the
-//! seal commits to.
+//! The field defaults to [`MainSigner::SealSigner`], is only changed by explicit choice, and is
+//! committed to by every signing message — `seal()` never mutates it. The
+//! [`seal_public_transfer_with_auth`] path (which supplies its own authorizations) settles it
+//! explicitly ([`MainSigner::SealSigner`] iff there are zero authorization signatures, otherwise
+//! [`MainSigner::None`]) before computing any message, so the value the co-signers signed over is the
+//! one the seal commits to.
 
 use tari_ootle_transaction::{
+    MainSigner,
     Transaction,
     TransactionEnvelope,
     TransactionId,
@@ -54,10 +56,10 @@ pub fn seal_public_transfer(
 /// the supplied `auth_signatures` are attached verbatim as the authorization signatures (they were
 /// produced by other parties over the auth message committing to this seal signer).
 ///
-/// `is_seal_signer_authorized` is set to `true` iff there are zero authorization signatures, before
-/// the seal message is computed. With auth signatures present the flag is `false` (the value the
-/// co-sign record shipped, and the one the authorizations signed over), or the bytes would diverge /
-/// the engine would reject.
+/// `main_signer` is set to [`MainSigner::SealSigner`] iff there are zero authorization signatures,
+/// before the seal message is computed. With auth signatures present it is [`MainSigner::None`] (the
+/// value the co-sign record shipped, and the one the authorizations signed over), or the bytes would
+/// diverge / the engine would reject.
 pub fn seal_public_transfer_with_auth(
     unsigned: UnsignedTransaction,
     keys: &PublicTransferKeys,
@@ -66,11 +68,15 @@ pub fn seal_public_transfer_with_auth(
     let seal_secret = parse_secret_key(&keys.account_secret)?;
     let UnsignedTransaction::V1(mut unsigned_v1) = unsigned;
 
-    // With authorizations present the seal signer is not implicitly authorized (the flag is
-    // `false`); with zero authorizations the seal signer is the only authority (`true`). Set it
-    // explicitly for both cases so the flag the seal commits to is the same one the supplied
-    // authorizations signed over (the co-sign record disables it before A ships it to B).
-    unsigned_v1.is_seal_signer_authorized = auth_signatures.is_empty();
+    // With authorizations present the seal signer is not authorized and the transaction has no main
+    // signer; with zero authorizations the seal signer is the only authority. Set it explicitly for
+    // both cases so the value the seal commits to is the same one the supplied authorizations signed
+    // over (the co-sign record settles it before A ships it to B).
+    unsigned_v1.main_signer = if auth_signatures.is_empty() {
+        MainSigner::SealSigner
+    } else {
+        MainSigner::None
+    };
 
     let unsealed = UnsealedTransactionV1::new(unsigned_v1, auth_signatures);
     // Stock random-nonce seal — the bytes/id are intentionally non-reproducible.

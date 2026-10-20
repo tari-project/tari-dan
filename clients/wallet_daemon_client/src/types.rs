@@ -235,6 +235,22 @@ pub struct TransactionRequestValueSummary {
     pub amount_leaving: u64,
 }
 
+/// The key a request's transaction acts as wherever the engine needs a single signer
+/// (`OwnerRule::OwnedBySigner`, `CallerContext::transaction_signer_public_key`, a published
+/// template's author), as the wallet resolves it.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
+pub enum TransactionRequestMainSigner {
+    /// The request's seal signer, a key of this wallet.
+    SealSigner,
+    /// One of the request's `other_signers`, keys of this wallet.
+    WalletKey { public_key: RistrettoPublicKeyBytes },
+    /// A key outside this wallet. Only a request whose creator supplied that key's signature is accepted.
+    External { public_key: RistrettoPublicKeyBytes },
+    /// The transaction has no main signer, so anything in it that needs one aborts.
+    None,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
 pub struct TransactionRequestInfo {
@@ -251,6 +267,11 @@ pub struct TransactionRequestInfo {
     pub transaction_id: Option<TransactionId>,
     /// `None` for an ordinary transaction, whose instructions are readable.
     pub value_summary: Option<TransactionRequestValueSummary>,
+    /// Who the transaction acts as wherever the engine needs a single signer.
+    pub main_signer: TransactionRequestMainSigner,
+    /// Public keys of the signatures the request's creator supplied out of band. Each one authorizes the
+    /// transaction alongside this wallet's keys.
+    pub external_signers: Vec<RistrettoPublicKeyBytes>,
     /// Unix timestamp (seconds).
     pub expires_at: i64,
     /// Unix timestamp (seconds). `None` until approved.

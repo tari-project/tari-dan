@@ -205,9 +205,9 @@ async fn submit_inner(
     let stealth_signers = derive_stealth_signers(sdk, &req.lock_ids)?;
 
     if !req.other_signers.is_empty() || !stealth_signers.is_empty() {
-        let main_signer = sdk.key_manager_api().get_public_key(req.seal_signer)?;
-        let main_signer_pk = main_signer.public_key.to_byte_type();
-        let local_signer = sdk.signer_api().with_context(&main_signer_pk);
+        let seal_signer = sdk.key_manager_api().get_public_key(req.seal_signer)?;
+        let seal_signer_pk = seal_signer.public_key.to_byte_type();
+        let local_signer = sdk.signer_api().with_context(&seal_signer_pk);
         for key in req.other_signers {
             transaction = local_signer.sign(key, transaction)?;
         }
@@ -458,9 +458,9 @@ async fn submit_dry_run_inner(
     // the locks, and the seal signature is added last.
     let stealth_signers = derive_stealth_signers(sdk, &req.lock_ids)?;
     if !req.other_signers.is_empty() || !stealth_signers.is_empty() {
-        let main_signer = sdk.key_manager_api().get_public_key(req.seal_signer)?;
-        let main_signer_pk = main_signer.public_key.to_byte_type();
-        let local_signer = sdk.signer_api().with_context(&main_signer_pk);
+        let seal_signer = sdk.key_manager_api().get_public_key(req.seal_signer)?;
+        let seal_signer_pk = seal_signer.public_key.to_byte_type();
+        let local_signer = sdk.signer_api().with_context(&seal_signer_pk);
         for key in req.other_signers {
             transaction = local_signer.sign(key, transaction)?;
         }

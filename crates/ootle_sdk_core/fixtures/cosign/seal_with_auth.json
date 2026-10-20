@@ -2,8 +2,8 @@
   "name": "cosign/seal_with_auth",
   "schema_version": 1,
   "provenance": {
-    "core_version": "0.41.2",
-    "git_rev": "397cfaae8ea3b09ff5a6dcd8be33d85db8c18235",
+    "core_version": "0.47.0",
+    "git_rev": "a25b2ca804a1ae75cb3f1fc1c3860e7cb5073b90",
     "generated_by": "ootle_sdk_core golden-vector generator"
   },
   "operation": "cosign_seal_with_auth",
@@ -156,7 +156,7 @@
                 }
               }
             ],
-            "is_seal_signer_authorized": false,
+            "main_signer": "None",
             "max_epoch": 10,
             "min_epoch": 1,
             "network": 38,

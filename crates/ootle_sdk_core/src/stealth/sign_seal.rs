@@ -14,10 +14,10 @@
 //!
 //! Every signature (auth + seal) is signed with a **fresh random Schnorr nonce** ([`sign_random`]) over
 //! the `create_message_v1` digests, and [`crate::tx::bor_encode`] encodes the result. The
-//! `is_seal_signer_authorized` flag is set `true` before building the unsealed tx in every seal case:
-//! all three seal with a key the spender controls, so the seal signer is always an authority here.
-//! (The public path in [`crate::tx`] assigns the flag from the authorization-signature count instead,
-//! because a public transaction's seal signer need not be one.)
+//! `main_signer` is set to `SealSigner` before building the unsealed tx in every seal case: all three
+//! seal with a key the spender controls, so the seal signer is always an authority here. (The public
+//! path in [`crate::tx`] assigns it from the authorization-signature count instead, because a public
+//! transaction's seal signer need not be one.)
 //!
 //! ## Comparison mode
 //!
@@ -268,17 +268,17 @@ pub fn seal_and_encode_stealth_transfer(
     encode(transaction, id)
 }
 
-/// Sets `is_seal_signer_authorized`, builds the unsealed tx with the planned authorization signatures,
+/// Sets `main_signer`, builds the unsealed tx with the planned authorization signatures,
 /// computes the seal signature over the seal digest with the planned key (random nonce), and injects it.
 fn finalize_seal(unsigned_v1: &mut UnsignedTransactionV1, plan: SealPlan) -> Result<Transaction, OotleSdkError> {
-    // The flag is committed by the seal digest, so it must be settled before constructing the
+    // The main signer is committed by the seal digest, so it must be settled before constructing the
     // unsealed tx. Every seal case here seals with a key the spender controls — the account key, a
     // stealth input's one-time `c+k`, or the ephemeral key — so the seal signer is always an
-    // authority, whatever authorization signatures accompany it. The flag is what puts its badge in
+    // authority, whatever authorization signatures accompany it. `SealSigner` is what puts its badge in
     // the transaction's auth scope, which a promoted stealth seal signer (which carries no
     // authorization signature of its own) needs to spend its own input, and which a revealed output
     // naming that key needs to be taken.
-    unsigned_v1.is_seal_signer_authorized = true;
+    unsigned_v1.main_signer = tari_ootle_transaction::MainSigner::SealSigner;
 
     let seal_pk = public_key_bytes_from_secret(&plan.seal_secret);
     let unsealed = UnsealedTransactionV1::new(unsigned_v1.clone(), plan.auth_signatures);
@@ -657,10 +657,10 @@ mod tests {
         assert!(verify_all_signatures(&decode(&ak)));
     }
 
-    // (f) is_seal_signer_authorized. Ephemeral (0 auth sigs) ⇒ true. Account-key (1+ auth sigs) ⇒ also
-    //     true (builder default; the auth sig covers the seal key per the stock semantics).
+    // (f) main_signer. Ephemeral (0 auth sigs) ⇒ SealSigner. Account-key (1+ auth sigs) ⇒ also
+    //     SealSigner (builder default; the auth sig covers the seal key per the stock semantics).
     #[test]
-    fn is_seal_signer_authorized_flag_set() {
+    fn seal_signer_is_the_main_signer() {
         let eph = seal_and_encode_stealth_transfer(NETWORK, ephemeral_partial(), &stealth_keys()).unwrap();
         let eph_tx = decode(&eph);
         assert!(

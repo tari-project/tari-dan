@@ -105,6 +105,7 @@ export * from "./types/LockedEpoch";
 export * from "./types/LockFlag";
 export * from "./types/LogEntry";
 export * from "./types/LogLevel";
+export * from "./types/MainSigner";
 export * from "./types/Memo";
 export * from "./types/MerkleProof";
 export * from "./types/Metadata";

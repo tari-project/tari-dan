@@ -209,7 +209,7 @@ pub const OP_ENCODE_ARG: &str = "encode_arg";
 ///
 /// **`"semantic"` comparison mode.** Matches the stealth-send precedent: the runner re-seals, verifies
 /// every signature via [`ootle_sdk_core::decode_and_canonicalize_sealed_transfer`], and compares the
-/// deterministic decoded fields (the signer public keys + `is_seal_signer_authorized` survive, locking
+/// deterministic decoded fields (the signer public keys + `main_signer` survive, locking
 /// the seal-signer-authorized contract; the Schnorr scalars are nulled).
 pub const OP_COSIGN_SEAL_WITH_AUTH: &str = "cosign_seal_with_auth";
 

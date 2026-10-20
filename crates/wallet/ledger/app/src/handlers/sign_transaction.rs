@@ -50,7 +50,7 @@ const ADD_SIGNER_SEQ: &[SigningField] = &[
     SigningField::Inputs,
     SigningField::MinEpoch,
     SigningField::MaxEpoch,
-    SigningField::IsSealSignerAuthorized,
+    SigningField::MainSigner,
     SigningField::DryRun,
     SigningField::BlobHashes,
 ];
@@ -65,7 +65,7 @@ const SEAL_SEQ: &[SigningField] = &[
     SigningField::Inputs,
     SigningField::MinEpoch,
     SigningField::MaxEpoch,
-    SigningField::IsSealSignerAuthorized,
+    SigningField::MainSigner,
     SigningField::DryRun,
     SigningField::BlobHashes,
     SigningField::Signatures,

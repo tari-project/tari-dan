@@ -25,6 +25,7 @@ use tari_template_lib_types::{
 use crate::{
     Blobs,
     Instruction,
+    MainSigner,
     TransactionId,
     TransactionIntent,
     TransactionSealSignature,
@@ -135,8 +136,12 @@ impl TransactionV1 {
         &self.seal_signature
     }
 
+    pub fn declared_main_signer(&self) -> &MainSigner {
+        &self.body.unsigned_transaction().main_signer
+    }
+
     pub fn is_seal_signer_authorized(&self) -> bool {
-        self.body.unsigned_transaction().is_seal_signer_authorized
+        self.declared_main_signer().is_seal_signer_authorized()
     }
 
     pub fn verify_all_signatures(&self) -> bool {
@@ -544,7 +549,7 @@ mod blob_validation_tests {
             inputs,
             min_epoch: None,
             max_epoch: Epoch(1),
-            is_seal_signer_authorized: true,
+            main_signer: MainSigner::SealSigner,
             dry_run: false,
             blobs,
             nonce: 0,
@@ -720,7 +725,7 @@ mod transaction_id_tests {
             inputs: indexmap::IndexSet::new(),
             min_epoch: None,
             max_epoch: Epoch(10),
-            is_seal_signer_authorized: true,
+            main_signer: MainSigner::SealSigner,
             dry_run: false,
             blobs: Blobs::empty(),
             nonce: 0,

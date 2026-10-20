@@ -24,6 +24,10 @@ impl Executable for Transaction {
         self.all_inputs_iter().map(|decl| decl.to_owned())
     }
 
+    fn main_signer(&self) -> Option<RistrettoPublicKeyBytes> {
+        Transaction::main_signer(self)
+    }
+
     fn signers_iter(&self) -> impl Iterator<Item = &RistrettoPublicKeyBytes> {
         self.is_seal_signer_authorized()
             .then_some(self.seal_signature().public_key())

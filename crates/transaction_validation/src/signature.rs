@@ -2,7 +2,7 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use log::warn;
-use tari_ootle_transaction::Transaction;
+use tari_ootle_transaction::{MainSigner, Transaction};
 
 use crate::{TransactionValidationError, Validator};
 
@@ -16,10 +16,20 @@ impl Validator<Transaction> for TransactionSignatureValidator {
     type Error = TransactionValidationError;
 
     fn validate(&self, _context: &(), transaction: &Transaction) -> Result<(), TransactionValidationError> {
-        if transaction.main_signer().is_none() {
-            warn!(target: LOG_TARGET, "TransactionSignatureValidator - FAIL: No main signer");
-            return Err(TransactionValidationError::NoMainSigner {
+        if !transaction.has_authorizer() {
+            warn!(target: LOG_TARGET, "TransactionSignatureValidator - FAIL: No authorizer");
+            return Err(TransactionValidationError::TransactionNotSigned {
                 transaction_id: transaction.calculate_id(),
+            });
+        }
+
+        if let MainSigner::Authorizer(public_key) = transaction.declared_main_signer() &&
+            transaction.main_signer().is_none()
+        {
+            warn!(target: LOG_TARGET, "TransactionSignatureValidator - FAIL: Main signer {public_key} did not sign");
+            return Err(TransactionValidationError::MainSignerDidNotSign {
+                transaction_id: transaction.calculate_id(),
+                public_key: *public_key,
             });
         }
 

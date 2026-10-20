@@ -17,6 +17,7 @@ use crate::{
     Instruction,
     InstructionLimitTracker,
     MAX_TRANSACTION_INSTRUCTIONS,
+    MainSigner,
     ResourceAddressRef,
     Signable,
     TransactionSignature,
@@ -66,7 +67,8 @@ pub struct UnsignedTransactionV1 {
     #[n(5)]
     pub max_epoch: Epoch,
     #[n(6)]
-    pub is_seal_signer_authorized: bool,
+    #[cfg_attr(feature = "serde", serde(alias = "is_seal_signer_authorized"))]
+    pub main_signer: MainSigner,
     #[n(7)]
     pub dry_run: bool,
 
@@ -102,7 +104,7 @@ impl UnsignedTransactionV1 {
             inputs: IndexSet::new(),
             min_epoch: None,
             max_epoch,
-            is_seal_signer_authorized: true,
+            main_signer: MainSigner::SealSigner,
             dry_run: false,
             blobs: Blobs::empty(),
             nonce: 0,
@@ -125,7 +127,7 @@ impl UnsignedTransactionV1 {
             inputs,
             min_epoch,
             max_epoch,
-            is_seal_signer_authorized: true,
+            main_signer: MainSigner::SealSigner,
             dry_run,
             blobs: Blobs::empty(),
             nonce: 0,

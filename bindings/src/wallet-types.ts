@@ -188,6 +188,7 @@ export * from "./types/wallet-types/TransactionRequestGetResponse";
 export * from "./types/wallet-types/TransactionRequestInfo";
 export * from "./types/wallet-types/TransactionRequestListRequest";
 export * from "./types/wallet-types/TransactionRequestListResponse";
+export * from "./types/wallet-types/TransactionRequestMainSigner";
 export * from "./types/wallet-types/TransactionRequestSubmitRequest";
 export * from "./types/wallet-types/TransactionRequestSubmitResponse";
 export * from "./types/wallet-types/TransactionRequestValueSummary";

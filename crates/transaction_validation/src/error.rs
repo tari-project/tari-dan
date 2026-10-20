@@ -6,7 +6,7 @@ use tari_networking::NetworkingError;
 use tari_ootle_common_types::Epoch;
 use tari_ootle_storage::{StorageError, consensus_models::TransactionPoolError};
 use tari_ootle_transaction::{BlobValidationError, InstructionLimitError, Network, TransactionId};
-use tari_template_lib::types::TemplateAddress;
+use tari_template_lib::types::{TemplateAddress, crypto::RistrettoPublicKeyBytes};
 
 #[derive(thiserror::Error, Debug)]
 pub enum TransactionValidationError {
@@ -44,9 +44,15 @@ pub enum TransactionValidationError {
     },
     #[error("Invalid transaction signature")]
     InvalidSignature,
-    #[error("Transaction {transaction_id} has no main signer")]
-    NoMainSigner { transaction_id: TransactionId },
-    #[error("Transaction {transaction_id} is not signed")]
+    #[error("Transaction {transaction_id} names {public_key} as its main signer, but {public_key} did not sign it")]
+    MainSignerDidNotSign {
+        transaction_id: TransactionId,
+        public_key: RistrettoPublicKeyBytes,
+    },
+    #[error(
+        "Transaction {transaction_id} authorizes nothing: its seal signer is not authorized and it has no \
+         authorization signatures"
+    )]
     TransactionNotSigned { transaction_id: TransactionId },
     #[error("Network error: {0}")]
     NetworkingError(#[from] NetworkingError),
@@ -185,7 +191,7 @@ impl TransactionValidationError {
             // Properties of the transaction itself, on which every node agrees.
             Self::NoFeeInstructions { .. } |
             Self::InvalidSignature |
-            Self::NoMainSigner { .. } |
+            Self::MainSignerDidNotSign { .. } |
             Self::TransactionNotSigned { .. } |
             Self::UnknownNetwork { .. } |
             Self::NetworkMismatch { .. } |
@@ -286,7 +292,11 @@ mod tests {
     fn structural_failures_are_blamed_on_the_sender() {
         let structural = [
             TransactionValidationError::InvalidSignature,
-            TransactionValidationError::NoMainSigner {
+            TransactionValidationError::MainSignerDidNotSign {
+                transaction_id: tx_id(),
+                public_key: RistrettoPublicKeyBytes::default(),
+            },
+            TransactionValidationError::TransactionNotSigned {
                 transaction_id: tx_id(),
             },
             TransactionValidationError::NoFeeInstructions {

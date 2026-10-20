@@ -116,6 +116,11 @@ pub enum RuntimeError {
     AddressAllocationNotInScope { id: AddressAllocationId },
     #[error("Encountered unknown or out of scope signer badge with public key {public_key}")]
     SignerBadgeNotInScope { public_key: RistrettoPublicKeyBytes },
+    #[error(
+        "{needed_for} needs the transaction's main signer, but the transaction declares none. Declare a main signer \
+         or name the key explicitly"
+    )]
+    NoMainSigner { needed_for: &'static str },
     #[error("Layer one commitment not found with address '{address}'")]
     LayerOneCommitmentNotFound { address: ClaimedOutputTombstoneAddress },
     #[error("Invalid argument {argument}: {reason}")]
@@ -495,6 +500,7 @@ impl RuntimeError {
             Self::ProofNotInScope { .. } |
             Self::AddressAllocationNotInScope { .. } |
             Self::SignerBadgeNotInScope { .. } |
+            Self::NoMainSigner { .. } |
             Self::InvalidArgument { .. } |
             Self::IntrinsicNotSupported { .. } |
             Self::InvalidNumberOfArguments { .. } |

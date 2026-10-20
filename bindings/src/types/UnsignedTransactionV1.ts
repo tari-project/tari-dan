@@ -3,6 +3,7 @@ import type { Blobs } from "./Blobs";
 import type { Epoch } from "./Epoch";
 import type { InputDeclaration } from "./InputDeclaration";
 import type { Instruction } from "./Instruction";
+import type { MainSigner } from "./MainSigner";
 
 export type UnsignedTransactionV1 = {
   network: number;
@@ -20,7 +21,7 @@ export type UnsignedTransactionV1 = {
    * retried indefinitely.
    */
   max_epoch: Epoch;
-  is_seal_signer_authorized: boolean;
+  main_signer: MainSigner;
   dry_run: boolean;
   /**
    * Prunable side-channel of opaque payloads referenced by instructions via `BlobIndex`.
