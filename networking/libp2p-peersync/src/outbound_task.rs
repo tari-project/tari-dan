@@ -98,49 +98,9 @@ where
 
         match msg {
             Ok(msg) => {
-                let Some(peer) = msg.peer else {
-                    return Err(Error::InvalidMessage {
-                        peer_id,
-                        details: "empty message".to_string(),
-                    });
-                };
-
-                let rec = match SignedPeerRecord::try_from(peer) {
-                    Ok(rec) => rec,
-                    Err(e) => {
-                        return Err(Error::InvalidMessage {
-                            peer_id,
-                            details: e.to_string(),
-                        });
-                    },
-                };
-
-                let subject_peer_id = rec.to_peer_id();
-                if !want_list.contains(&subject_peer_id) {
-                    return Err(Error::InvalidMessage {
-                        peer_id,
-                        details: format!("Peer {peer_id} sent us a peer we didnt request"),
-                    });
-                }
-
-                if !rec.is_valid() {
-                    return Err(Error::InvalidSignedPeer {
-                        peer_id,
-                        details: format!(
-                            "Peer {peer_id} returned an invalid signed peer record for peer {subject_peer_id}"
-                        ),
-                    });
-                }
-
-                if !rec.is_updated_at_within(config.max_clock_drift) {
-                    tracing::debug!(
-                        "Skipping peer record for {subject_peer_id} from {peer_id}: updated_at {:?} is more than {:?} \
-                         ahead of local time",
-                        rec.updated_at,
-                        config.max_clock_drift,
-                    );
+                let Some(rec) = validate_want_peer_response(peer_id, msg, &want_list, config)? else {
                     continue;
-                }
+                };
 
                 new_peers += 1;
 
@@ -166,6 +126,58 @@ where
         from_peer: peer_id,
         new_peers,
     })
+}
+
+/// Validates a single want-list response, returning `None` if the record should be skipped.
+fn validate_want_peer_response(
+    peer_id: PeerId,
+    msg: proto::WantPeerResponse,
+    want_list: &WantList,
+    config: &Config,
+) -> Result<Option<SignedPeerRecord>, Error> {
+    let Some(peer) = msg.peer else {
+        return Err(Error::InvalidMessage {
+            peer_id,
+            details: "empty message".to_string(),
+        });
+    };
+
+    let rec = match SignedPeerRecord::try_from(peer) {
+        Ok(rec) => rec,
+        Err(e) => {
+            return Err(Error::InvalidMessage {
+                peer_id,
+                details: e.to_string(),
+            });
+        },
+    };
+
+    let subject_peer_id = rec.to_peer_id();
+    if !want_list.contains(&subject_peer_id) {
+        return Err(Error::InvalidMessage {
+            peer_id,
+            details: format!("Peer {peer_id} sent us a peer we didnt request"),
+        });
+    }
+
+    if !rec.is_valid() {
+        return Err(Error::InvalidSignedPeer {
+            peer_id,
+            details: format!("Peer {peer_id} returned an invalid signed peer record for peer {subject_peer_id}"),
+        });
+    }
+
+    if !rec.is_updated_at_within(config.max_clock_drift) {
+        tracing::debug!(
+            "Skipping peer record for {subject_peer_id} from {peer_id}: updated_at {:?} is more than {:?} ahead of \
+             local time",
+            rec.updated_at,
+            config.max_clock_drift,
+        );
+        return Ok(None);
+    }
+
+    Ok(Some(rec))
 }
 
 #[cfg(test)]
