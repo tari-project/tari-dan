@@ -1,6 +1,7 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use ootle_network::Network;
 use tari_common_types::types::CompressedPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_engine_types::{ProtocolVersion, UnknownProtocolVersionError, limits::MAX_CBOR_NESTING_DEPTH};
@@ -83,7 +84,8 @@ impl CommittedBlockProof {
         })
     }
 
-    /// Validates the commit proof against the shard group committee, returning the verified tip.
+    /// Validates that the commit proof commits a block on `network`, signed by the shard group committee, returning the
+    /// verified tip.
     ///
     /// `check_vn` must return the voting power of the given validator in the committee expected to
     /// have signed this proof's QCs (zero if it is not a member). The caller is responsible for
@@ -92,15 +94,19 @@ impl CommittedBlockProof {
     /// (correctly) fail the quorum check.
     pub fn validate(
         &self,
+        network: Network,
         quorum_threshold: VotePower,
         check_vn: impl Fn(&RistrettoPublicKeyBytes) -> Result<VotePower, SidechainProofValidationError>,
     ) -> Result<VerifiedBlockTip, CommittedBlockProofError> {
-        self.proof
-            .validate_committed(quorum_threshold.value(), &|pk: &CompressedPublicKey| {
+        self.proof.validate_committed(
+            network.as_byte(),
+            quorum_threshold.value(),
+            &|pk: &CompressedPublicKey| {
                 let pk_bytes = RistrettoPublicKeyBytes::from_bytes(pk.as_bytes())
                     .map_err(SidechainProofValidationError::internal_error)?;
                 check_vn(&pk_bytes).map(|power| power.value())
-            })?;
+            },
+        )?;
 
         Ok(VerifiedBlockTip {
             epoch: self.epoch(),

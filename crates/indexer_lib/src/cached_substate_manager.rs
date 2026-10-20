@@ -1286,7 +1286,7 @@ where
             .await?;
 
         let verified_tip = commit_proof
-            .validate(committee.quorum_threshold(), |pk| {
+            .validate(self.network, committee.quorum_threshold(), |pk| {
                 Ok(committee.get_power_by_public_key(pk).unwrap_or_else(VotePower::zero))
             })
             .map_err(|e| IndexerError::SubstateProofVerificationFailed { details: e.to_string() })?;

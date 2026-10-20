@@ -147,7 +147,7 @@ impl VerifiedCommittee {
                 found: shard_group,
             });
         }
-        let tip = commit_proof.validate(self.quorum_threshold(), |pk| Ok(self.vote_power(pk)))?;
+        let tip = commit_proof.validate(self.network, self.quorum_threshold(), |pk| Ok(self.vote_power(pk)))?;
         Ok(tip)
     }
 }

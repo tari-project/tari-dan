@@ -1001,7 +1001,7 @@ mod tests {
             proposal
                 .commit_proof()
                 .sidechain_block_commit_proof()
-                .validate_committed(quorum_threshold, &|_| Ok(1))
+                .validate_committed(0, quorum_threshold, &|_| Ok(1))
                 .unwrap();
             assert_eq!(proposal.calculate_block_id(), honest.calculate_block_id());
         }

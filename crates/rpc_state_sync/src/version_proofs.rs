@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use anyhow::anyhow;
+use ootle_network::Network;
 use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
 use tari_ootle_common_types::{Epoch, ShardGroup, VotePower, optional::Optional};
 use tari_ootle_p2p::PeerAddress;
@@ -21,13 +22,15 @@ pub trait CommitProofValidator {
 /// Validates commit proofs against the committees the epoch manager records, for blocks no later than the epoch
 /// of the checkpoint being synced to.
 pub(crate) struct CommitteeProofValidator<'a, TEpochManager> {
+    network: Network,
     epoch_manager: &'a TEpochManager,
     max_epoch: Epoch,
 }
 
 impl<'a, TEpochManager> CommitteeProofValidator<'a, TEpochManager> {
-    pub fn new(epoch_manager: &'a TEpochManager, max_epoch: Epoch) -> Self {
+    pub fn new(network: Network, epoch_manager: &'a TEpochManager, max_epoch: Epoch) -> Self {
         Self {
+            network,
             epoch_manager,
             max_epoch,
         }
@@ -56,7 +59,7 @@ where TEpochManager: EpochManagerReader<Addr = PeerAddress> + Sync
                 .await,
         )?;
         commit_proof
-            .validate(committee.quorum_threshold(), |pk| {
+            .validate(self.network, committee.quorum_threshold(), |pk| {
                 Ok(committee.get_power_by_public_key(pk).unwrap_or_else(VotePower::zero))
             })
             .map_err(|e| RpcStateSyncError::InvalidResponse(anyhow!("Invalid commit proof: {e}")))?;

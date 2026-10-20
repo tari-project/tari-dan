@@ -17,7 +17,14 @@ use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
-    consensus_models::{Block, BookkeepingModel, ForeignParkedProposal, ForeignProposal, TransactionRecord},
+    consensus_models::{
+        Block,
+        BookkeepingModel,
+        ForeignParkedProposal,
+        ForeignProposal,
+        ForeignProposalRecord,
+        TransactionRecord,
+    },
 };
 use tari_ootle_transaction::{Transaction, TransactionId};
 use tokio::sync::broadcast;
@@ -745,6 +752,15 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
                 message: HotstuffMessage::ForeignProposal(msg),
                 err: ProposalValidationError::NoTransactionsInCommittee { block_id }.into(),
             });
+        }
+
+        let block_id = msg.proposal.calculate_block_id();
+        if self
+            .store
+            .with_read_tx(|tx| ForeignProposalRecord::record_exists(tx, &block_id))?
+        {
+            debug!(target: LOG_TARGET, "Foreign proposal {block_id} from {from} is already stored. Discarding message");
+            return Ok(MessageValidationResult::Discard);
         }
 
         let committee = match validations::resolve_foreign_committee(&self.epoch_manager, &msg.proposal).await {
