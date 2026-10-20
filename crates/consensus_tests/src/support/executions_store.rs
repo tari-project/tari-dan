@@ -46,7 +46,7 @@ pub struct ExecuteSpec {
     pub input_locks: Vec<(SubstateId, SubstateLockType)>,
     pub new_outputs: Vec<SubstateId>,
     pub validator_fee_withdrawals: Vec<ValidatorFeeWithdrawal>,
-    /// A template the transaction calls. Execution aborts unless the parent chain of the block it executes in
-    /// publishes the template.
+    /// A template the transaction calls. Execution aborts unless the template resolves, from the uncommitted
+    /// ancestors of the block it executes in or from durably committed state.
     pub calls_template: Option<PublishedTemplateAddress>,
 }

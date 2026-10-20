@@ -39,7 +39,7 @@ use tari_ootle_storage::{
 };
 use tari_ootle_transaction::{Transaction, TransactionId};
 
-use super::{PledgedTransaction, PreparedTransaction};
+use super::{PledgedTransaction, PreparedTransaction, UncommittedTemplateStore};
 use crate::{
     hotstuff::{
         block_change_set::ProposedBlockChangeSet,
@@ -54,6 +54,7 @@ const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::block_transaction_ex
 #[derive(Debug, Clone)]
 pub struct ConsensusTransactionManager<TExecutor, TStateStore> {
     executor: TExecutor,
+    uncommitted_templates: UncommittedTemplateStore,
     max_transaction_validity_epochs: u64,
     max_transaction_pledge_bytes: usize,
     _store: PhantomData<TStateStore>,
@@ -65,10 +66,15 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
     pub fn new(executor: TExecutor, max_transaction_validity_epochs: u64, max_transaction_pledge_bytes: usize) -> Self {
         Self {
             executor,
+            uncommitted_templates: UncommittedTemplateStore::default(),
             max_transaction_validity_epochs,
             max_transaction_pledge_bytes,
             _store: PhantomData,
         }
+    }
+
+    pub fn uncommitted_templates(&self) -> &UncommittedTemplateStore {
+        &self.uncommitted_templates
     }
 
     /// Adds the transaction's local inputs to what the block pledges to foreign shard groups, before they are
@@ -371,7 +377,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
             pledged_transaction.transaction.transaction(),
             execution_epoch,
             &resolved_inputs,
-            store,
+            &self.uncommitted_templates.templates_for(store)?,
         )
     }
 
@@ -419,7 +425,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
             transaction.transaction(),
             execution_locked_epoch,
             resolved_inputs,
-            &*store,
+            &self.uncommitted_templates.templates_for(store)?,
         )
     }
 
@@ -939,7 +945,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::traits::{ParentChainTemplates, WriteableSubstateStore};
+    use crate::traits::{UncommittedChainTemplates, WriteableSubstateStore};
 
     /// Stands in for the engine: any transaction that reaches it fails, so a test can tell an
     /// execution from an abort consensus decided before executing.
@@ -951,7 +957,7 @@ mod tests {
             _transaction: &Transaction,
             _locked_epoch: LockedEpoch,
             _resolved_inputs: &HashMap<SubstateRequirement, Substate>,
-            _templates: &dyn ParentChainTemplates,
+            _templates: &UncommittedChainTemplates,
         ) -> Result<TransactionExecution, BlockTransactionExecutorError> {
             Err(BlockTransactionExecutorError::ExecutionThreadFailure(
                 "reached the engine".to_string(),

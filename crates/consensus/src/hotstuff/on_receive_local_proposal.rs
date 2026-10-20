@@ -449,6 +449,18 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         })
         .await??;
 
+        // The write transaction has committed, so the committed blocks' templates are in durable state.
+        if let Some(committed) = process_result
+            .block_decision
+            .commit_blocks
+            .iter()
+            .max_by_key(|b| (b.epoch(), b.height()))
+        {
+            self.on_ready_to_vote_on_local_block
+                .uncommitted_templates()
+                .prune_to(committed.epoch(), committed.height());
+        }
+
         // If accepted, the changeset is already saved, otherwise we log everything here for debugging
         if !process_result.block_decision.is_accept() {
             change_set.log_everything_dropped();

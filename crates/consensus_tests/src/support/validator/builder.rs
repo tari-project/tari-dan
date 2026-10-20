@@ -154,6 +154,7 @@ impl ValidatorBuilder {
             .with_state_history_length(state_history_length)
     }
 
+    #[allow(clippy::too_many_lines)]
     pub fn spawn(&self, shutdown_signal: ShutdownSignal) -> (ValidatorChannels, Validator) {
         log::info!(
             "Spawning validator with address {} and public key {}",
@@ -202,8 +203,11 @@ impl ValidatorBuilder {
         let transaction_pool = TransactionPool::new();
         let (tx_events, _) = broadcast::channel(100);
 
-        let transaction_executor =
-            TestBlockTransactionProcessor::new(self.address.clone(), self.transaction_executions.clone());
+        let transaction_executor = TestBlockTransactionProcessor::new(
+            self.address.clone(),
+            self.transaction_executions.clone(),
+            store.clone(),
+        );
 
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
             self.config

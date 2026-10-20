@@ -40,7 +40,7 @@ pub trait TransactionExecutor<TStore> {
         state_store: TStore,
         virtual_substates: VirtualSubstates,
         burn_rate: ExhaustBurnRate,
-        uncommitted_templates: UncommittedTemplates,
+        uncommitted_templates: Arc<dyn UncommittedTemplates>,
     ) -> Result<ExecutionOutput, Self::Error>;
 }
 
@@ -142,7 +142,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         state_store: TStore,
         virtual_substates: VirtualSubstates,
         burn_rate: ExhaustBurnRate,
-        uncommitted_templates: UncommittedTemplates,
+        uncommitted_templates: Arc<dyn UncommittedTemplates>,
     ) -> Result<ExecutionOutput, Self::Error> {
         // Include signature public key badges for all transaction signers in the initial auth scope
         // NOTE: we assume all signatures have already been validated.

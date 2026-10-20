@@ -27,7 +27,7 @@ use ootle_network::Network;
 use tari_engine::{
     fees::FeeTable,
     state_store::new_memory_store,
-    template::UncommittedTemplates,
+    template::NoUncommittedTemplates,
     traits::ClaimProofVerifier,
     wasm::WasmModuleCache,
 };
@@ -167,7 +167,7 @@ impl DryRunTransactionProcessor {
                 state_store.into_read_only(),
                 virtual_substates,
                 burn_rate,
-                UncommittedTemplates::default(),
+                Arc::new(NoUncommittedTemplates),
             )
         })
         .await??;

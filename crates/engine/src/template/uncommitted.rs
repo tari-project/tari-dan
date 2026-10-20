@@ -1,49 +1,27 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
-};
+use std::sync::Arc;
 
 use tari_ootle_common_types::services::template_provider::TemplateProvider;
 use tari_template_lib::types::TemplateAddress;
 
 use crate::template::LoadedTemplate;
 
-/// Templates published in the uncommitted part of the chain a transaction executes on, which the executing validator
-/// resolved before the execution, and the addresses the execution could resolve from neither those nor committed
-/// state.
-#[derive(Debug, Clone, Default)]
-pub struct UncommittedTemplates {
-    /// A template that fails to load keeps its error, so the execution fails to load it as it would from committed
-    /// state.
-    templates: Arc<HashMap<TemplateAddress, Result<LoadedTemplate, String>>>,
-    misses: Arc<Mutex<HashSet<TemplateAddress>>>,
+/// The templates published in the uncommitted blocks of the chain one execution builds on.
+pub trait UncommittedTemplates: Send + Sync {
+    /// The template published at `address`, or the error loading it, if an uncommitted block of the chain publishes
+    /// it.
+    fn get_template(&self, address: &TemplateAddress) -> Option<Result<LoadedTemplate, String>>;
 }
 
-impl UncommittedTemplates {
-    /// Returns a copy holding `template`, or the error loading it, at `address` as well, with no misses recorded.
-    pub fn with_template(&self, address: TemplateAddress, template: Result<LoadedTemplate, String>) -> Self {
-        let mut templates = (*self.templates).clone();
-        templates.insert(address, template);
-        Self {
-            templates: Arc::new(templates),
-            misses: Arc::default(),
-        }
-    }
+/// No uncommitted blocks, for an execution against committed state alone.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoUncommittedTemplates;
 
-    /// The addresses an execution using these templates could not resolve.
-    pub fn take_misses(&self) -> HashSet<TemplateAddress> {
-        std::mem::take(&mut *self.misses.lock().unwrap())
-    }
-
-    fn get(&self, address: &TemplateAddress) -> Option<&Result<LoadedTemplate, String>> {
-        self.templates.get(address)
-    }
-
-    fn record_miss(&self, address: TemplateAddress) {
-        self.misses.lock().unwrap().insert(address);
+impl UncommittedTemplates for NoUncommittedTemplates {
+    fn get_template(&self, _address: &TemplateAddress) -> Option<Result<LoadedTemplate, String>> {
+        None
     }
 }
 
@@ -55,19 +33,15 @@ pub enum ExecutionTemplateProviderError<E> {
     Uncommitted { address: TemplateAddress, details: String },
 }
 
-/// Resolves templates for one execution from committed state, through `inner`, and then from the uncommitted
-/// templates.
-///
-/// Committed state is a prefix of the chain any block a validator executes builds on, and templates are immutable and
-/// never destroyed, so a template either source holds is one the chain holds.
-#[derive(Debug)]
+/// Resolves templates for one execution from the uncommitted blocks of its chain, then from committed state through
+/// `inner`.
 pub struct ExecutionTemplateProvider<TProvider> {
     inner: Arc<TProvider>,
-    uncommitted: UncommittedTemplates,
+    uncommitted: Arc<dyn UncommittedTemplates>,
 }
 
 impl<TProvider> ExecutionTemplateProvider<TProvider> {
-    pub fn new(inner: Arc<TProvider>, uncommitted: UncommittedTemplates) -> Self {
+    pub fn new(inner: Arc<TProvider>, uncommitted: Arc<dyn UncommittedTemplates>) -> Self {
         Self { inner, uncommitted }
     }
 }
@@ -88,31 +62,23 @@ where TProvider: TemplateProvider<Template = LoadedTemplate>
     type Template = LoadedTemplate;
 
     fn get_template(&self, address: &TemplateAddress) -> Result<Option<Self::Template>, Self::Error> {
-        if let Some(template) = self
-            .inner
-            .get_template(address)
-            .map_err(ExecutionTemplateProviderError::Committed)?
-        {
-            return Ok(Some(template));
-        }
-
-        match self.uncommitted.get(address) {
-            Some(Ok(template)) => Ok(Some(template.clone())),
+        match self.uncommitted.get_template(address) {
+            Some(Ok(template)) => Ok(Some(template)),
             Some(Err(details)) => Err(ExecutionTemplateProviderError::Uncommitted {
                 address: *address,
-                details: details.clone(),
+                details,
             }),
-            None => {
-                self.uncommitted.record_miss(*address);
-                Ok(None)
-            },
+            None => self
+                .inner
+                .get_template(address)
+                .map_err(ExecutionTemplateProviderError::Committed),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::convert::Infallible;
+    use std::{collections::HashMap, convert::Infallible};
 
     use tari_template_builtin::{ACCOUNT_TEMPLATE_ADDRESS, get_template_builtin};
 
@@ -136,41 +102,43 @@ mod tests {
         }
     }
 
-    fn provider() -> (ExecutionTemplateProvider<Committed>, UncommittedTemplates) {
+    struct Uncommitted(HashMap<TemplateAddress, Result<LoadedTemplate, String>>);
+
+    impl UncommittedTemplates for Uncommitted {
+        fn get_template(&self, address: &TemplateAddress) -> Option<Result<LoadedTemplate, String>> {
+            self.0.get(address).cloned()
+        }
+    }
+
+    fn provider() -> ExecutionTemplateProvider<Committed> {
         let template = WasmModule::load_template_from_code(get_template_builtin(&ACCOUNT_TEMPLATE_ADDRESS)).unwrap();
-        let uncommitted = UncommittedTemplates::default()
-            .with_template(UNCOMMITTED, Ok(template.clone()))
-            .with_template(UNLOADABLE, Err("invalid module".to_string()));
-        let provider = ExecutionTemplateProvider::new(Arc::new(Committed(template)), uncommitted.clone());
-        (provider, uncommitted)
+        let uncommitted = Uncommitted(HashMap::from([
+            (UNCOMMITTED, Ok(template.clone())),
+            (UNLOADABLE, Err("invalid module".to_string())),
+        ]));
+        ExecutionTemplateProvider::new(Arc::new(Committed(template)), Arc::new(uncommitted))
     }
 
     #[test]
-    fn a_committed_or_uncommitted_template_resolves_without_a_miss() {
-        let (provider, uncommitted) = provider();
+    fn a_committed_or_uncommitted_template_resolves() {
+        let provider = provider();
         assert!(provider.get_template(&COMMITTED).unwrap().is_some());
         assert!(provider.get_template(&UNCOMMITTED).unwrap().is_some());
-        assert!(uncommitted.take_misses().is_empty());
     }
 
     #[test]
-    fn a_template_in_neither_is_not_found_and_recorded_as_a_miss() {
-        let (provider, uncommitted) = provider();
-        assert!(provider.get_template(&ABSENT).unwrap().is_none());
-        assert_eq!(uncommitted.take_misses(), HashSet::from([ABSENT]));
-        assert!(uncommitted.take_misses().is_empty());
+    fn a_template_in_neither_is_not_found() {
+        assert!(provider().get_template(&ABSENT).unwrap().is_none());
     }
 
     #[test]
     fn an_uncommitted_template_that_fails_to_load_fails_the_lookup() {
-        let (provider, uncommitted) = provider();
         assert!(matches!(
-            provider.get_template(&UNLOADABLE),
+            provider().get_template(&UNLOADABLE),
             Err(ExecutionTemplateProviderError::Uncommitted {
                 address: UNLOADABLE,
                 ..
             })
         ));
-        assert!(uncommitted.take_misses().is_empty());
     }
 }

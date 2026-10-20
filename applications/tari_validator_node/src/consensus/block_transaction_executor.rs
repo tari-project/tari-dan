@@ -1,17 +1,17 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use log::info;
-use tari_consensus::traits::{BlockTransactionExecutor, BlockTransactionExecutorError, ParentChainTemplates};
+use tari_consensus::traits::{BlockTransactionExecutor, BlockTransactionExecutorError, UncommittedChainTemplates};
 use tari_engine::{
     state_store::{
         StateWriter,
         memory::{MemoryStateStore, ReadOnlyMemoryStateStore},
         new_memory_store,
     },
-    template::UncommittedTemplates,
+    template::{LoadedTemplate, NoUncommittedTemplates, UncommittedTemplates},
 };
 use tari_engine_types::{
     substate::Substate,
@@ -25,6 +25,7 @@ use tari_ootle_storage::{
 };
 use tari_ootle_template_provider::UncommittedTemplateCache;
 use tari_ootle_transaction::Transaction;
+use tari_template_lib::types::TemplateAddress;
 
 #[cfg(feature = "metrics")]
 use crate::metrics::PrometheusExecutionMetrics;
@@ -66,6 +67,23 @@ impl<TExecutor: TransactionExecutor<ReadOnlyMemoryStateStore>> TariBlockTransact
     }
 }
 
+/// The uncommitted templates of one execution's chain, compiled through the cache shared by every execution.
+struct ChainTemplates {
+    templates: UncommittedChainTemplates,
+    cache: UncommittedTemplateCache,
+}
+
+impl UncommittedTemplates for ChainTemplates {
+    fn get_template(&self, address: &TemplateAddress) -> Option<Result<LoadedTemplate, String>> {
+        let published = self.templates.get(address)?;
+        Some(
+            self.cache
+                .load(*address, published.binary.as_slice())
+                .map_err(|e| e.to_string()),
+        )
+    }
+}
+
 impl<TExecutor, TStateStore> BlockTransactionExecutor<TStateStore> for TariBlockTransactionExecutor<TExecutor>
 where
     TStateStore: StateStore,
@@ -76,11 +94,15 @@ where
         transaction: &Transaction,
         locked_epoch: LockedEpoch,
         resolved_inputs: &HashMap<SubstateRequirement, Substate>,
-        templates: &dyn ParentChainTemplates,
+        templates: &UncommittedChainTemplates,
     ) -> Result<TransactionExecution, BlockTransactionExecutorError> {
         let id = transaction.calculate_id();
 
         info!(target: LOG_TARGET, "Transaction {} executing. {} input(s)", id, resolved_inputs.len());
+
+        // Create a memory db with all the input substates, needed for the transaction execution
+        let mut state_db = new_memory_store();
+        Self::add_substates_to_memory_db(resolved_inputs, &mut state_db)?;
 
         let (execute_epoch, execute_epoch_hash, burn_rate) = locked_epoch.destructure();
         let virtual_substates = VirtualSubstates::from_iter([
@@ -94,47 +116,26 @@ where
             ),
         ]);
 
-        // The executor resolves templates from committed state, which may stop short of the chain this block builds
-        // on. A template it misses that the chain publishes is resolved from the chain and the transaction executed
-        // again, until every template it misses is one the chain does not publish either.
-        let mut uncommitted_templates = UncommittedTemplates::default();
-        let exec_output = loop {
-            // Create a memory db with all the input substates, needed for the transaction execution
-            let mut state_db = new_memory_store();
-            Self::add_substates_to_memory_db(resolved_inputs, &mut state_db)?;
-
-            let exec_output = self
-                .executor
-                .execute(
-                    transaction,
-                    state_db.into_read_only(),
-                    virtual_substates.clone(),
-                    burn_rate,
-                    uncommitted_templates.clone(),
-                )
-                .map_err(|e| BlockTransactionExecutorError::ExecutionThreadFailure(e.to_string()))?;
-
-            let mut resolved_any = false;
-            for address in uncommitted_templates.take_misses() {
-                if let Some(published) = templates.get_published_template(&address)? {
-                    info!(
-                        target: LOG_TARGET,
-                        "Transaction {} calls template {} from the uncommitted chain; executing again",
-                        id,
-                        address,
-                    );
-                    let loaded = self
-                        .uncommitted_cache
-                        .load(address, published.binary.as_slice())
-                        .map_err(|e| e.to_string());
-                    uncommitted_templates = uncommitted_templates.with_template(address, loaded);
-                    resolved_any = true;
-                }
-            }
-            if !resolved_any {
-                break exec_output;
-            }
+        let uncommitted_templates: Arc<dyn UncommittedTemplates> = if templates.is_empty() {
+            Arc::new(NoUncommittedTemplates)
+        } else {
+            Arc::new(ChainTemplates {
+                templates: templates.clone(),
+                cache: self.uncommitted_cache.clone(),
+            })
         };
+
+        // Execute the transaction and get the result
+        let exec_output = self
+            .executor
+            .execute(
+                transaction,
+                state_db.into_read_only(),
+                virtual_substates,
+                burn_rate,
+                uncommitted_templates,
+            )
+            .map_err(|e| BlockTransactionExecutorError::ExecutionThreadFailure(e.to_string()))?;
 
         #[cfg(feature = "metrics")]
         self.metrics
@@ -188,7 +189,7 @@ mod tests {
     use tari_ootle_common_types::{Epoch, services::template_provider::TemplateProvider};
     use tari_ootle_template_provider::{MemoryCacheTemplateProvider, TemplateConfig};
     use tari_template_builtin::{ACCOUNT_TEMPLATE_ADDRESS, get_template_builtin};
-    use tari_template_lib::types::{Hash32, TemplateAddress};
+    use tari_template_lib::types::Hash32;
     use tempfile::TempDir;
 
     use super::*;
@@ -229,7 +230,7 @@ mod tests {
             _state_store: ReadOnlyMemoryStateStore,
             _virtual_substates: VirtualSubstates,
             _burn_rate: ExhaustBurnRate,
-            uncommitted_templates: UncommittedTemplates,
+            uncommitted_templates: Arc<dyn UncommittedTemplates>,
         ) -> Result<ExecutionOutput, Self::Error> {
             *self.executions.lock().unwrap() += 1;
             let provider = ExecutionTemplateProvider::new(self.committed.clone(), uncommitted_templates);
@@ -256,20 +257,14 @@ mod tests {
         }
     }
 
-    /// A parent chain that publishes `CALLED` if `publishes` is set.
-    struct Chain {
-        publishes: bool,
-    }
-
-    impl ParentChainTemplates for Chain {
-        fn get_published_template(
-            &self,
-            address: &TemplateAddress,
-        ) -> Result<Option<PublishedTemplate>, BlockTransactionExecutorError> {
-            if !self.publishes || *address != CALLED {
-                return Ok(None);
-            }
-            Ok(Some(PublishedTemplate {
+    /// The uncommitted templates of a chain that publishes `CALLED` if `publishes` is set.
+    fn chain(publishes: bool) -> UncommittedChainTemplates {
+        if !publishes {
+            return UncommittedChainTemplates::default();
+        }
+        UncommittedChainTemplates::new(HashMap::from([(
+            CALLED,
+            Arc::new(PublishedTemplate {
                 template_name: "test".try_into().unwrap(),
                 author: Default::default(),
                 binary: get_template_builtin(&ACCOUNT_TEMPLATE_ADDRESS)
@@ -278,8 +273,8 @@ mod tests {
                     .unwrap(),
                 at_epoch: 0,
                 metadata_hash: None,
-            }))
-        }
+            }),
+        )]))
     }
 
     fn executor() -> TariBlockTransactionExecutor<CallingExecutor> {
@@ -290,14 +285,17 @@ mod tests {
         )
     }
 
-    fn execute(executor: &TariBlockTransactionExecutor<CallingExecutor>, chain: &Chain) -> TransactionExecution {
+    fn execute(
+        executor: &TariBlockTransactionExecutor<CallingExecutor>,
+        templates: &UncommittedChainTemplates,
+    ) -> TransactionExecution {
         let transaction = Transaction::builder_localnet(Epoch(1)).build_and_seal(&PrivateKey::from(1u64));
         BlockTransactionExecutor::<TestStateStore>::execute(
             executor,
             &transaction,
             LockedEpoch::new(Epoch(1), Default::default(), Default::default()),
             &HashMap::new(),
-            chain,
+            templates,
         )
         .unwrap()
     }
@@ -307,17 +305,17 @@ mod tests {
     }
 
     #[test]
-    fn a_template_the_parent_chain_publishes_resolves_though_it_is_not_committed() {
+    fn a_template_an_uncommitted_ancestor_publishes_resolves_in_one_execution() {
         let executor = executor();
-        let execution = execute(&executor, &Chain { publishes: true });
+        let execution = execute(&executor, &chain(true));
         assert!(execution.decision().is_commit());
-        assert_eq!(executions(&executor), 2);
+        assert_eq!(executions(&executor), 1);
     }
 
     #[test]
-    fn a_template_the_parent_chain_does_not_publish_is_not_found() {
+    fn a_template_the_chain_does_not_publish_is_not_found() {
         let executor = executor();
-        let execution = execute(&executor, &Chain { publishes: false });
+        let execution = execute(&executor, &chain(false));
         assert!(!execution.decision().is_commit());
         assert_eq!(executions(&executor), 1);
     }

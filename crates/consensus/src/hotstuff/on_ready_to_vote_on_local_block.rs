@@ -70,6 +70,7 @@ use crate::{
             PledgedTransaction,
             PreparedTransaction,
             TransactionLockConflicts,
+            UncommittedTemplateStore,
         },
     },
     tracing::TraceTimer,
@@ -116,6 +117,10 @@ where TConsensusSpec: ConsensusSpec
             tx_events,
             transaction_manager,
         }
+    }
+
+    pub fn uncommitted_templates(&self) -> &UncommittedTemplateStore {
+        self.transaction_manager.uncommitted_templates()
     }
 
     pub fn handle(
@@ -207,6 +212,9 @@ where TConsensusSpec: ConsensusSpec
                 change_set
             );
             change_set.save(tx)?;
+            self.transaction_manager
+                .uncommitted_templates()
+                .record(change_set.block(), change_set.local_substate_changes());
         } else {
             warn!(
                 target: LOG_TARGET,

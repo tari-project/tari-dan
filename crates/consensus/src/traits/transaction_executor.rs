@@ -1,7 +1,7 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use tari_engine_types::{published_template::PublishedTemplate, substate::Substate};
 use tari_ootle_common_types::{SubstateRequirement, optional::IsNotFoundError};
@@ -41,24 +41,39 @@ impl IsNotFoundError for BlockTransactionExecutorError {
     }
 }
 
-/// The templates published in committed state and in the uncommitted ancestors of a block: the templates every
-/// validator executing the block agrees on, in whatever order it executes the block's transactions.
-pub trait ParentChainTemplates {
-    fn get_published_template(
-        &self,
-        address: &TemplateAddress,
-    ) -> Result<Option<PublishedTemplate>, BlockTransactionExecutorError>;
+/// The templates published in the uncommitted ancestors of the block a transaction executes in. With the templates in
+/// durably committed state, they are every template the block's chain publishes. The block's own changes are not
+/// among them, so its transactions may execute in any order.
+#[derive(Debug, Clone, Default)]
+pub struct UncommittedChainTemplates {
+    templates: Arc<HashMap<TemplateAddress, Arc<PublishedTemplate>>>,
+}
+
+impl UncommittedChainTemplates {
+    pub fn new(templates: HashMap<TemplateAddress, Arc<PublishedTemplate>>) -> Self {
+        Self {
+            templates: Arc::new(templates),
+        }
+    }
+
+    pub fn get(&self, address: &TemplateAddress) -> Option<&Arc<PublishedTemplate>> {
+        self.templates.get(address)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.templates.is_empty()
+    }
 }
 
 pub trait BlockTransactionExecutor<TStateStore: StateStore> {
-    /// Executes `transaction` in a block whose parent chain publishes `templates`. The execution must resolve a
-    /// template exactly when `templates` holds it, whatever this validator has committed, so that every validator
-    /// executing the block reaches the same result.
+    /// Executes `transaction` in a block whose uncommitted ancestors publish `templates`. The execution resolves a
+    /// template from `templates`, then from durably committed state, so that every validator executing the block
+    /// resolves the same templates however far it has committed.
     fn execute(
         &self,
         transaction: &Transaction,
         locked_epoch: LockedEpoch,
         resolved_inputs: &HashMap<SubstateRequirement, Substate>,
-        templates: &dyn ParentChainTemplates,
+        templates: &UncommittedChainTemplates,
     ) -> Result<TransactionExecution, BlockTransactionExecutorError>;
 }
