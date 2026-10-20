@@ -32,4 +32,4 @@
 # Authentication method: "webauthn" (default) or "none" (dangerous: any local program can spend funds)
 #authentication = "webauthn"
 # Indexer API URLs for Esme.
-indexer_api_url = ["https://ootle-indexer-a.tari.com/", "https://ootle-indexer-b.tari.com/"]
+indexer_api_url = ["https://esme-indexer-a.ootle.tari.com/", "https://esme-indexer-b.ootle.tari.com/"]
