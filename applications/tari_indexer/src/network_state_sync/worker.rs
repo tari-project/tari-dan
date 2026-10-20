@@ -1989,9 +1989,8 @@ mod tests {
 
     mod served_checkpoints {
         use indexmap::IndexMap;
-        use tari_common_types::types::FixedHash;
         use tari_ootle_storage::consensus_models::EndOfEpochCommand;
-        use tari_sidechain::{CommandCommitProof, SidechainBlockCommitProof, SidechainBlockHeader};
+        use tari_sidechain::{CommandCommitProof, FixedHash, SidechainBlockCommitProof, SidechainBlockHeader};
         use tari_state_tree::{TreeHash, compute_proof_for_hashes};
 
         use super::*;
@@ -2370,7 +2369,6 @@ mod tests {
             sync::Arc,
         };
 
-        use tari_common_types::types::FixedHash;
         use tari_epoch_manager::EpochManagerError;
         use tari_ootle_common_types::{
             SubstateAddress,
@@ -2380,7 +2378,7 @@ mod tests {
             consensus_models::{BlockHeaderMetadata, EndOfEpochCommand},
             global::models::ValidatorNode,
         };
-        use tari_sidechain::{CommandCommitProof, SidechainBlockCommitProof, SidechainBlockHeader};
+        use tari_sidechain::{CommandCommitProof, FixedHash, SidechainBlockCommitProof, SidechainBlockHeader};
         use tari_state_tree::{TreeHash, compute_proof_for_hashes};
         use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
         use tokio::sync::broadcast;

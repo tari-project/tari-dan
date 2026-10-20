@@ -3,8 +3,8 @@
 
 use std::future::Future;
 
-use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::Epoch;
+use tari_sidechain::FixedHash;
 
 use crate::epoch_event_oracle::EpochEvent;
 

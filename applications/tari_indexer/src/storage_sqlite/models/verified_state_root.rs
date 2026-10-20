@@ -1,9 +1,9 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::{Epoch, NodeHeight, ShardGroup};
 use tari_ootle_storage::consensus_models::VerifiedBlockTip;
+use tari_sidechain::FixedHash;
 
 use crate::storage_sqlite::schema::verified_state_roots;
 

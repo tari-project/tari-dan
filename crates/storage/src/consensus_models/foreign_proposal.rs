@@ -10,13 +10,12 @@ use std::{
 
 use borsh::BorshSerialize;
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{BlockId, LeafBlock};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_engine_types::{ProtocolVersion, UnknownProtocolVersionError, fees::ExhaustBurnRate};
 use tari_ootle_common_types::{Epoch, NodeHeight, ShardGroup, committee::CommitteeInfo};
 use tari_ootle_transaction::TransactionId;
-use tari_sidechain::QuorumCertificate;
+use tari_sidechain::{FixedHash, QuorumCertificate};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use super::{BlockHeaderMetadata, BlockPledge, Command, CommandOrHash, CommandsCommitProof, LockedEpoch};

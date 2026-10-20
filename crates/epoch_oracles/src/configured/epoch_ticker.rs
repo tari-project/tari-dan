@@ -3,8 +3,8 @@
 
 use std::task::{Context, Poll, ready};
 
-use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::Epoch;
+use tari_sidechain::FixedHash;
 
 pub trait EpochTicker {
     fn poll_tick(&mut self, cx: &mut Context) -> Poll<Option<EpochTickerData>>;

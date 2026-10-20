@@ -7,7 +7,7 @@
 
 use indexmap::IndexMap;
 use ootle_network::Network;
-use tari_common_types::types::{CompressedPublicKey, FixedHash, PrivateKey};
+use tari_common_types::types::{CompressedPublicKey, PrivateKey};
 use tari_crypto::{keys::SecretKey, tari_utilities::ByteArray};
 use tari_engine_types::{
     ProtocolVersion,
@@ -44,6 +44,7 @@ use tari_sidechain::{
     CommandCommitProof,
     CommitProofElement,
     DecodedValidatorBlockSignature,
+    FixedHash,
     ProposalVoteMessage,
     QuorumCertificate,
     QuorumDecision,

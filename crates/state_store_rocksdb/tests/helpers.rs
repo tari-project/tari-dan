@@ -5,7 +5,6 @@ use std::{collections::BTreeMap, io::Write, ops::Deref};
 
 use rand::{Rng, RngExt};
 use tari_bor::cbor;
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{BlockId, Decision, LeafBlock, PcId, ProposalCertificate, ShardGroupAccumulatedData};
 use tari_engine_types::{
     component::{Component, ComponentBody, ComponentHeader},
@@ -46,7 +45,7 @@ use tari_ootle_storage::{
     },
 };
 use tari_ootle_transaction::{Network, TransactionId};
-use tari_sidechain::{CommitProofElement, QuorumDecision, SidechainBlockCommitProof, SidechainBlockHeader};
+use tari_sidechain::{CommitProofElement, FixedHash, QuorumDecision, SidechainBlockCommitProof, SidechainBlockHeader};
 use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
 use tari_state_tree::{SpreadPrefixStateTree, SubstateTreeChange, Version};
 use tari_template_lib::types::{

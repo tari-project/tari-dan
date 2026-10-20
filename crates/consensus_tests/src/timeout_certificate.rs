@@ -13,7 +13,6 @@
 //! that timeout certificate must justify from a certificate at least that high, so a leader cannot use a leader
 //! failure to rewind the committee onto an older branch.
 
-use tari_common_types::types::FixedHash;
 use tari_consensus::{
     check_block_commits_to_timeout_certificate,
     check_justify_reaches_timeout_certificate,
@@ -34,7 +33,7 @@ use tari_crypto::tari_utilities::epoch_time::EpochTime;
 use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight, NumPreshards, ProtocolVersion, ShardGroup};
 use tari_ootle_storage::consensus_models::{Block, BlockCommands, BlockHeader};
 use tari_ootle_transaction::Network;
-use tari_sidechain::QuorumDecision;
+use tari_sidechain::{FixedHash, QuorumDecision};
 use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
 
 const NUM_PRESHARDS: NumPreshards = NumPreshards::P256;

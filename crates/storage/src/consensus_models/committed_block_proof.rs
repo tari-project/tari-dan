@@ -1,11 +1,11 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::{CompressedPublicKey, FixedHash};
+use tari_common_types::types::CompressedPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_engine_types::{ProtocolVersion, UnknownProtocolVersionError, limits::MAX_CBOR_NESTING_DEPTH};
 use tari_ootle_common_types::{Epoch, NodeHeight, ShardGroup, VotePower};
-use tari_sidechain::{SidechainBlockCommitProof, SidechainProofValidationError};
+use tari_sidechain::{FixedHash, SidechainBlockCommitProof, SidechainProofValidationError};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 /// A commit proof for a single committed block: a block header authenticated by the committed QC

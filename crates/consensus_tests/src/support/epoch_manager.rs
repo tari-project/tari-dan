@@ -9,7 +9,6 @@ use std::{
 
 use ootle_byte_type::ToByteType;
 use rand::seq::IteratorRandom;
-use tari_common_types::types::FixedHash;
 use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_epoch_manager::{EpochManagerError, EpochManagerEvent, EpochManagerReader};
 use tari_ootle_common_types::{
@@ -26,6 +25,7 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_storage::{StorageError, global::models::ValidatorNode};
 use tari_ootle_transaction::Network;
+use tari_sidechain::FixedHash;
 use tari_template_lib_types::{Hash32, crypto::RistrettoPublicKeyBytes};
 use tokio::sync::{Mutex, MutexGuard, broadcast};
 

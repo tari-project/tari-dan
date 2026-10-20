@@ -299,9 +299,9 @@ pub struct DuplicateVoteDetected<V: Vote> {
 
 #[cfg(test)]
 mod tests {
-    use tari_common_types::types::FixedHash;
     use tari_consensus_types::{SignedMessage, ToSignatureMessage};
     use tari_ootle_common_types::{SubstateAddress, committee::CommitteeMember};
+    use tari_sidechain::FixedHash;
     use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, Scalar32Bytes, SchnorrSignatureBytes};
 
     use super::*;

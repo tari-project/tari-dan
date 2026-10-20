@@ -4,11 +4,11 @@
 use std::io::Write;
 
 use anyhow::anyhow;
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::BlockId;
 use tari_engine_types::substate::SubstateId;
 use tari_ootle_common_types::{Epoch, NodeHeight};
 use tari_ootle_transaction::TransactionId;
+use tari_sidechain::FixedHash;
 
 use crate::{
     codecs::{DbDecoder, DbEncoder, SubstateIdCodec},

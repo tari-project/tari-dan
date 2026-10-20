@@ -21,10 +21,10 @@ use tari_base_node_client::{
     grpc::GrpcBaseNodeClient,
     types::{BaseLayerConsensusConstants, BaseLayerMetadata},
 };
-use tari_common_types::types::FixedHash;
 use tari_epoch_manager::epoch_event_oracle::{EpochEvent, EpochEventOracle, ValidatorNodeChange};
 use tari_ootle_common_types::{Epoch, displayable::Displayable, optional::Optional};
 use tari_ootle_storage::global::BlockHeaderModel;
+use tari_sidechain::FixedHash;
 use tokio::time;
 
 use crate::{
@@ -362,7 +362,7 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore, TClient: BaseNodeClie
                     );
                     self.last_scanned_height = fork_height;
                     self.last_scanned_hash = Some(canonical_hash);
-                    self.last_scanned_validator_node_mr = Some(header.validator_node_mr);
+                    self.last_scanned_validator_node_mr = Some(header.validator_node_mr.into_array().into());
                     self.reset_last_epoch_hash_to_boundary(constants.height_to_epoch(fork_height), &constants)?;
                     return Ok(());
                 }
@@ -468,7 +468,7 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore, TClient: BaseNodeClie
             let Some(ref hash) = self.last_scanned_hash
         {
             let header = self.base_node_client.get_header_by_hash(hash).await?;
-            self.last_scanned_validator_node_mr = Some(header.validator_node_mr);
+            self.last_scanned_validator_node_mr = Some(header.validator_node_mr.into_array().into());
             // cached_header = Some(header);
         }
 
@@ -592,15 +592,15 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore, TClient: BaseNodeClie
             let header_height = header.height;
             // Note: Cant use header.hash() because it uses CURRENT_NETWORK global
             let header_hash = hash_header(self.network, &header);
-            let current_validator_node_mr = header.validator_node_mr;
+            let current_validator_node_mr = FixedHash::from(header.validator_node_mr.into_array());
             // Keep only the fields the store persists; the full `header` (incl. its pow_data blob)
             // is dropped at the end of this iteration.
             self.header_buf.push(BlockHeaderModel {
                 epoch: current_epoch,
                 height: header_height,
                 block_hash: header_hash,
-                block_output_merkle_root: header.block_output_mr,
-                validator_node_merkle_root: header.validator_node_mr,
+                block_output_merkle_root: header.block_output_mr.into_array().into(),
+                validator_node_merkle_root: current_validator_node_mr,
             });
 
             // Record validator node MR changes BEFORE epoch changes so that new registrations are
@@ -711,7 +711,11 @@ impl<TStore: EpochOracleStore + BaseLayerBlockHeaderStore, TClient: BaseNodeClie
                         ))
                     })?;
                     let header_hash = hash_header(network, &header);
-                    Ok::<_, BaseLayerOracleError>((height, header_hash, header.validator_node_mr))
+                    Ok::<_, BaseLayerOracleError>((
+                        height,
+                        header_hash,
+                        FixedHash::from(header.validator_node_mr.into_array()),
+                    ))
                 }
             })
             .buffer_unordered(BOUNDARY_HEADER_FETCH_CONCURRENCY)
@@ -1075,11 +1079,11 @@ mod tests {
         tonic,
         types::{BaseLayerConsensusConstants, BaseLayerMetadata, BaseLayerValidatorNode, SideChainUtxos},
     };
-    use tari_common_types::types::FixedHash;
     use tari_epoch_manager::epoch_event_oracle::{EpochEvent, EpochEventOracle};
     use tari_node_components::blocks::BlockHeader;
     use tari_ootle_common_types::Epoch;
     use tari_ootle_storage::global::BlockHeaderModel;
+    use tari_sidechain::FixedHash;
     use tari_template_lib::types::crypto::RistrettoPublicKeyBytes;
     use tari_transaction_components::tari_amount::MicroMinotari;
 
@@ -1597,7 +1601,7 @@ mod tests {
         heights
             .map(|h| {
                 let mut header = make_header(h, h);
-                header.validator_node_mr = FixedHash::from([(h / EPOCH_LENGTH) as u8; 32]);
+                header.validator_node_mr = tari_common_types::types::FixedHash::from([(h / EPOCH_LENGTH) as u8; 32]);
                 header
             })
             .collect()

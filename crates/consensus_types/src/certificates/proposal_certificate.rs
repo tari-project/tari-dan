@@ -6,9 +6,8 @@ use std::fmt::Display;
 use borsh::BorshSerialize;
 use minicbor::{CborLen, Decode, Encode};
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::{Epoch, NodeHeight, ShardGroup, hashing::quorum_certificate_id_hasher};
-use tari_sidechain::QuorumDecision;
+use tari_sidechain::{FixedHash, QuorumDecision};
 
 use crate::{
     bookkeeping::{HighPc, LeafBlock},

@@ -9,7 +9,6 @@
 //! `CertificateStore::update_highest` checks the certificate against it before writing HighPc, the leaf block or
 //! the certificate record.
 
-use tari_common_types::types::FixedHash;
 use tari_consensus::traits::CertificateStore;
 use tari_consensus_types::{HighPc, LeafBlock, ProposalCertificate};
 use tari_engine_types::fees::ExhaustBurnRate;
@@ -20,7 +19,7 @@ use tari_ootle_storage::{
     consensus_models::{Block, BookkeepingModel},
 };
 use tari_ootle_transaction::Network;
-use tari_sidechain::QuorumDecision;
+use tari_sidechain::{FixedHash, QuorumDecision};
 use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
 
 type TestStore = RocksDbStateStore<PeerAddress>;

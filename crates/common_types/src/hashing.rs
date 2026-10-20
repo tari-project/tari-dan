@@ -2,8 +2,8 @@
 //   SPDX-License-Identifier: BSD-3-clause
 
 use tari_engine_types::substate::SubstateValue;
-use tari_hashing::layer2::TariConsensusHasher;
-pub use tari_hashing::layer2::{
+use tari_sidechain::hashing::TariConsensusHasher;
+pub use tari_sidechain::hashing::{
     block_hasher,
     block_metadata_hasher,
     command_hasher,

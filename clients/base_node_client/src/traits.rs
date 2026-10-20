@@ -4,9 +4,9 @@
 use std::future::Future;
 
 use minotari_app_grpc::tari_rpc::ValidatorNodeChange;
-use tari_common_types::types::FixedHash;
 use tari_node_components::blocks::BlockHeader;
 use tari_ootle_common_types::Epoch;
+use tari_sidechain::FixedHash;
 use tari_template_lib::types::crypto::RistrettoPublicKeyBytes;
 use tonic::codegen::tokio_stream::Stream;
 

@@ -17,7 +17,6 @@ use diesel::{
     sql_types,
 };
 use serde::de::DeserializeOwned;
-use tari_common_types::types::FixedHash;
 use tari_engine_types::{
     Utxo,
     events::Event,
@@ -39,6 +38,7 @@ use tari_ootle_common_types::{
 use tari_ootle_storage::{Ordering, StorageError, consensus_models::EpochCheckpoint, time::PrimitiveDateTime};
 use tari_ootle_storage_sqlite::SqliteTransaction;
 use tari_ootle_transaction::{Transaction, TransactionId};
+use tari_sidechain::FixedHash;
 use tari_template_lib_types::{
     Amount,
     Hash32,

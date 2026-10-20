@@ -249,10 +249,10 @@ fn classify(
 
 #[cfg(test)]
 mod tests {
-    use tari_common_types::types::FixedHash;
     use tari_consensus_types::LeafBlock;
     use tari_engine_types::ProtocolVersion;
     use tari_ootle_common_types::{Epoch, NumPreshards, ShardGroup};
+    use tari_sidechain::FixedHash;
     use tokio::sync::mpsc;
 
     use super::*;

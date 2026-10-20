@@ -4,7 +4,6 @@
 use std::num::NonZeroU64;
 
 use log::*;
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{BlockId, Decision, LastVoted, LeafBlock, PcId, ProposalCertificate};
 use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_engine_types::commit_result::{AbortReason, RejectReason};
@@ -41,7 +40,7 @@ use tari_ootle_storage::{
         index_substate_down_proofs,
     },
 };
-use tari_sidechain::QuorumDecision;
+use tari_sidechain::{FixedHash, QuorumDecision};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::sync::broadcast;
 

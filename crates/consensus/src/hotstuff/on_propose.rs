@@ -5,7 +5,6 @@ use std::{collections::HashMap, fmt::Display, num::NonZeroU64, time::Instant};
 
 use log::*;
 use ootle_byte_type::ToByteType;
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{
     BlockId,
     Decision,
@@ -55,6 +54,7 @@ use tari_ootle_storage::{
     },
 };
 use tari_ootle_transaction::TransactionId;
+use tari_sidechain::FixedHash;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::task;
 

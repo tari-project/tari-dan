@@ -9,7 +9,6 @@ use std::{
 };
 
 use log::*;
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{
     BlockId,
     HighPc,
@@ -49,6 +48,7 @@ use tari_ootle_storage::{
 };
 use tari_ootle_transaction::{Transaction, TransactionId};
 use tari_shutdown::ShutdownSignal;
+use tari_sidechain::FixedHash;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::{
     sync::{broadcast, mpsc},

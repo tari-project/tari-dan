@@ -3,13 +3,13 @@
 
 use std::sync::Arc;
 
-use tari_common_types::types::FixedHash;
 use tari_engine_types::fees::ExhaustBurnRate;
 use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
 use tari_ootle_common_types::{
     Epoch,
     committee::{Committee, CommitteeInfo},
 };
+use tari_sidechain::FixedHash;
 
 pub struct EpochState<TAddr> {
     /// The current epoch

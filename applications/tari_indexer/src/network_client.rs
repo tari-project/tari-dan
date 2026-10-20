@@ -524,7 +524,6 @@ impl NetworkClientError {
 mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use tari_common_types::types::FixedHash;
     use tari_engine_types::{
         commit_result::{ExecuteResult, RejectReason, TransactionResult},
         substate::SubstateId,
@@ -536,6 +535,7 @@ mod tests {
         committee::{CommitteeInfo, CommitteeMember},
     };
     use tari_ootle_storage::{global::models::ValidatorNode, time::PrimitiveDateTime};
+    use tari_sidechain::FixedHash;
     use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
     use tari_validator_node_rpc::client::{FinalizedResult, SubstateBatch, SubstateProofData, SubstateResult};
     use tokio::sync::broadcast;

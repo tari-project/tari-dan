@@ -39,8 +39,8 @@ impl EpochTicker for MpscEpochTicker {
 mod tests {
     use std::future::poll_fn;
 
-    use tari_common_types::types::FixedHash;
     use tari_ootle_common_types::Epoch;
+    use tari_sidechain::FixedHash;
 
     use super::*;
 

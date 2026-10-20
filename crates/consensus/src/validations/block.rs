@@ -4,13 +4,13 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::FixedHash;
 use tari_engine_types::fees::ExhaustBurnRate;
 use tari_ootle_common_types::{
     Epoch,
     committee::{Committee, CommitteeInfo},
 };
 use tari_ootle_storage::consensus_models::{Block, BlockHeader};
+use tari_sidechain::FixedHash;
 
 use super::common::{
     check_block_signature,

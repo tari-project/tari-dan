@@ -229,8 +229,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use tari_common_types::types::FixedHash;
-    use tari_sidechain::{SidechainBlockCommitProof, SidechainBlockHeader};
+    use tari_sidechain::{FixedHash, SidechainBlockCommitProof, SidechainBlockHeader};
     use tari_state_tree::SPARSE_MERKLE_PLACEHOLDER_HASH;
 
     use super::*;

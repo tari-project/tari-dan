@@ -23,13 +23,13 @@ use prometheus_client::{
     },
     registry::Registry,
 };
-use tari_common_types::types::FixedHash;
 use tari_epoch_manager::{
     epoch_event_oracle::{EpochEvent, EpochEventOracle},
     service::EpochManagerHandle,
 };
 use tari_ootle_common_types::Epoch;
 use tari_ootle_p2p::PeerAddress;
+use tari_sidechain::FixedHash;
 
 use crate::metrics::CollectorRegister;
 

@@ -4,7 +4,6 @@
 pub mod helpers;
 
 use helpers::{commit_chain, create_chain, create_rocksdb, create_tx_atom};
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{PcId, ShardGroupAccumulatedData};
 use tari_ootle_common_types::{
     Epoch,
@@ -24,6 +23,7 @@ use tari_ootle_storage::{
     consensus_models::{Block, BlockCommands, BookkeepingModel, Command},
 };
 use tari_ootle_transaction::Network;
+use tari_sidechain::FixedHash;
 use tari_template_lib_types::crypto::SchnorrSignatureBytes;
 use tari_utilities::epoch_time::EpochTime;
 

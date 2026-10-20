@@ -30,7 +30,6 @@ use async_trait::async_trait;
 use futures::{FutureExt, StreamExt, TryStreamExt, stream};
 use log::*;
 use ootle_network::Network;
-use tari_common_types::types::FixedHash;
 use tari_engine_types::{
     ProtocolVersion,
     substate::{Substate, SubstateId, SubstateValue},
@@ -61,6 +60,7 @@ use tari_ootle_storage::{
     verify_substate_down_proof_against_roots,
     verify_substate_value_proof_against_root,
 };
+use tari_sidechain::FixedHash;
 use tari_validator_node_rpc::client::{
     SubstateBatch,
     SubstateProofData,

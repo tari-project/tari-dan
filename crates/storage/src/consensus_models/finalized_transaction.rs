@@ -1,10 +1,10 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::Decision;
 use tari_ootle_common_types::hashing::finalized_transaction_hasher;
 use tari_ootle_transaction::TransactionId;
+use tari_sidechain::FixedHash;
 use tari_state_tree::{KeyedProofTree, LeafKey, TreeHash};
 
 use super::{BlockCommands, BlockError, Command};

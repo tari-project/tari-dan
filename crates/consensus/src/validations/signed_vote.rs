@@ -1,9 +1,8 @@
 //   Copyright 2025 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{SignedMessage, ToSignatureMessage, ValidatorSignatureBytes};
-use tari_sidechain::ProposalVoteMessage;
+use tari_sidechain::{FixedHash, ProposalVoteMessage};
 use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
 
 pub struct SignedProposalVote<'a> {

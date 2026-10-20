@@ -5,7 +5,6 @@ use std::{collections::HashMap, iter, ops::ControlFlow};
 
 use indexmap::IndexMap;
 use log::*;
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{BlockId, HighPc, HighTc, LeafBlock, PcId, ProposalCertificate, ShardGroupAccumulatedData};
 use tari_engine_types::{
     ValidatorFeePool,
@@ -45,6 +44,7 @@ use tari_ootle_storage::{
     },
 };
 use tari_ootle_transaction::Network;
+use tari_sidechain::FixedHash;
 use tari_state_tree::{JellyfishMerkleTree, JmtHashScheme, SPARSE_MERKLE_PLACEHOLDER_HASH, StateTreeError};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 

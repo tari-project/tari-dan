@@ -1,4 +1,5 @@
 ./applications/tari_indexer/src/storage_sqlite/schema.rs
+./crates/sidechain/tests/fixtures/commit_proof.borsh.hex
 ./crates/storage_sqlite/src/global/schema.rs
 ./crates/wallet/storage_sqlite/src/schema.rs
 ./networking/sqlite_message_logger/src/schema.rs

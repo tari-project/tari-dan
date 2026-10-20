@@ -18,6 +18,7 @@ web_ui = []
 [dependencies]
 tari_common = { workspace = true }
 tari_common_types = { workspace = true }
+tari_sidechain = { workspace = true }
 tari_transaction_components = { workspace = true }
 tari_crypto = { workspace = true }
 tari_epoch_oracles = { workspace = true, features = ["base_layer"] }
@@ -87,7 +88,6 @@ console-subscriber = { version = "0.4.1", optional = true }
 tari_common = { workspace = true, features = ["build"] }
 
 [dev-dependencies]
-tari_sidechain = { workspace = true }
 tempfile = { workspace = true }
 tari_template_lib_types = { workspace = true }
 

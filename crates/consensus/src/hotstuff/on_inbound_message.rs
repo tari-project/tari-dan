@@ -741,9 +741,8 @@ mod tests {
     use super::*;
 
     mod is_own_chain_ahead {
-        use tari_common_types::types::FixedHash;
         use tari_consensus_types::BlockId;
-        use tari_sidechain::QuorumDecision;
+        use tari_sidechain::{FixedHash, QuorumDecision};
 
         use super::*;
 

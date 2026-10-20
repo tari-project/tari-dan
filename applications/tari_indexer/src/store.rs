@@ -10,7 +10,6 @@ use std::{
 
 use async_trait::async_trait;
 use serde::{Serialize, de::DeserializeOwned};
-use tari_common_types::types::FixedHash;
 use tari_engine_types::{
     Utxo,
     events::Event,
@@ -37,6 +36,7 @@ use tari_ootle_storage::{
     time::PrimitiveDateTime,
 };
 use tari_ootle_transaction::{Transaction, TransactionId};
+use tari_sidechain::FixedHash;
 use tari_template_lib_types::{
     Amount,
     ResourceAddress,

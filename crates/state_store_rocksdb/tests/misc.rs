@@ -5,7 +5,6 @@ pub mod helpers;
 
 use helpers::{assert_eq_debug, create_rocksdb};
 use indexmap::IndexMap;
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{
     BlockId,
     HighPc,
@@ -26,7 +25,7 @@ use tari_ootle_storage::{
     consensus_models::{Block, EndOfEpochCommand, EpochCheckpoint, TreeRootSummary},
 };
 use tari_ootle_transaction::Network;
-use tari_sidechain::{CommandCommitProof, QuorumDecision, SidechainBlockCommitProof, SidechainBlockHeader};
+use tari_sidechain::{CommandCommitProof, FixedHash, QuorumDecision, SidechainBlockCommitProof, SidechainBlockHeader};
 use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
 use tari_state_tree::{TreeHash, compute_proof_for_hashes};
 use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
