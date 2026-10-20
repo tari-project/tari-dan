@@ -106,7 +106,7 @@ fn command_hashes() {
 #[test]
 fn commit_proof_encodings() {
     let proof = fixture_proof();
-    let expected_json: serde_json::Value = load_fixture("commit_proof.reserialized.json");
+    let expected_json: serde_json::Value = load_fixture("commit_proof.json");
     assert_eq!(serde_json::to_value(&proof).unwrap(), expected_json);
 
     let expected_borsh = std::fs::read_to_string("tests/fixtures/commit_proof.borsh.hex").unwrap();
