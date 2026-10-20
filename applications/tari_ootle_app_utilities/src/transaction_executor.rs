@@ -9,7 +9,7 @@ use tari_engine::{
     fees::{FeeModule, FeeTable, WasmMeteringRate},
     runtime::{AuthParams, RuntimeModule},
     state_store::{StateReader, StateStoreError},
-    template::LoadedTemplate,
+    template::{ExecutionTemplateProvider, LoadedTemplate, UncommittedTemplates},
     traits::ClaimProofVerifier,
     transaction::{ModulesCollection, TransactionError, TransactionProcessor},
 };
@@ -40,6 +40,7 @@ pub trait TransactionExecutor<TStore> {
         state_store: TStore,
         virtual_substates: VirtualSubstates,
         burn_rate: ExhaustBurnRate,
+        uncommitted_templates: UncommittedTemplates,
     ) -> Result<ExecutionOutput, Self::Error>;
 }
 
@@ -141,6 +142,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         state_store: TStore,
         virtual_substates: VirtualSubstates,
         burn_rate: ExhaustBurnRate,
+        uncommitted_templates: UncommittedTemplates,
     ) -> Result<ExecutionOutput, Self::Error> {
         // Include signature public key badges for all transaction signers in the initial auth scope
         // NOTE: we assume all signatures have already been validated.
@@ -152,8 +154,9 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             initial_ownership_proofs,
         };
 
+        let template_provider = ExecutionTemplateProvider::new(self.template_provider.clone(), uncommitted_templates);
         let processor = TransactionProcessor::new(
-            self.template_provider.clone(),
+            Arc::new(template_provider),
             state_store,
             auth_params,
             virtual_substates,

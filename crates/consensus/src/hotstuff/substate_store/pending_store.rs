@@ -11,7 +11,10 @@ use std::{
 use indexmap::IndexMap;
 use log::*;
 use tari_consensus_types::LeafBlock;
-use tari_engine_types::substate::{Substate, SubstateDiff, SubstateId, SubstateValue};
+use tari_engine_types::{
+    published_template::{PublishedTemplate, PublishedTemplateAddress},
+    substate::{Substate, SubstateDiff, SubstateId, SubstateValue},
+};
 use tari_ootle_common_types::{
     LockIntent,
     NumPreshards,
@@ -34,11 +37,12 @@ use tari_ootle_storage::{
     consensus_models::{BlockDiff, LockConflict, SubstateChange, SubstateLock, SubstateRecord},
 };
 use tari_ootle_transaction::TransactionId;
+use tari_template_lib_types::TemplateAddress;
 
 use super::error::SubstateStoreError;
 use crate::{
     hotstuff::substate_store::LockFailedError,
-    traits::{ReadableSubstateStore, WriteableSubstateStore},
+    traits::{BlockTransactionExecutorError, ParentChainTemplates, ReadableSubstateStore, WriteableSubstateStore},
 };
 
 const LOG_TARGET: &str = "tari::ootle::hotstuff::substate_store::pending_store";
@@ -108,6 +112,26 @@ impl<'a, TTx: StateStoreReadTransaction> PendingSubstateStore<'a, TTx> {
 
     pub fn read_transaction(&self) -> &'a TTx {
         self.store
+    }
+
+    /// The substate as the chain this store builds on holds it, leaving out this block's own changes.
+    fn get_from_parent_chain(&self, id: VersionedSubstateIdRef<'_>) -> Result<Option<Substate>, SubstateStoreError> {
+        if let Some(change) =
+            BlockDiff::get_for_versioned_substate(self.read_transaction(), &self.parent_chain, id).optional()?
+        {
+            return Ok(change.into_up());
+        }
+
+        let Some(substate) = SubstateRecord::get(self.read_transaction(), &id.to_substate_address()).optional()? else {
+            return Ok(None);
+        };
+        if substate.is_destroyed() {
+            return Ok(None);
+        }
+        substate
+            .into_substate()
+            .map(Some)
+            .ok_or_else(|| up_substate_without_value(id.to_owned()))
     }
 
     fn get_latest_change_from_store(&self, id: &SubstateId) -> Result<SubstateChange, SubstateStoreError> {
@@ -241,8 +265,7 @@ impl<'store, TTx: StateStoreReadTransaction> ReadableSubstateStore for PendingSu
     type Error = SubstateStoreError;
 
     fn get(&self, id: VersionedSubstateIdRef<'_>) -> Result<Substate, Self::Error> {
-        let substate_addr = id.to_substate_address();
-        if let Some(change) = self.get_pending(&substate_addr) {
+        if let Some(change) = self.get_pending(&id.to_substate_address()) {
             return change
                 .up_substate()
                 .cloned()
@@ -251,23 +274,29 @@ impl<'store, TTx: StateStoreReadTransaction> ReadableSubstateStore for PendingSu
                 });
         }
 
-        if let Some(change) =
-            BlockDiff::get_for_versioned_substate(self.read_transaction(), &self.parent_chain, id).optional()?
-        {
-            return change
-                .into_up()
-                .ok_or_else(|| SubstateStoreError::SubstateNotFound { id: id.to_owned() });
-        }
+        self.get_from_parent_chain(id)?
+            .ok_or_else(|| SubstateStoreError::SubstateNotFound { id: id.to_owned() })
+    }
+}
 
-        let Some(substate) = SubstateRecord::get(self.read_transaction(), &substate_addr).optional()? else {
-            return Err(SubstateStoreError::SubstateNotFound { id: id.to_owned() });
+impl<TTx: StateStoreReadTransaction> ParentChainTemplates for PendingSubstateStore<'_, TTx> {
+    fn get_published_template(
+        &self,
+        address: &TemplateAddress,
+    ) -> Result<Option<PublishedTemplate>, BlockTransactionExecutorError> {
+        let id = SubstateId::Template(PublishedTemplateAddress::from_template_address(*address));
+        let Some(substate) = self.get_from_parent_chain(VersionedSubstateIdRef::new(&id, SubstateVersion::ZERO))?
+        else {
+            return Ok(None);
         };
-        if substate.is_destroyed() {
-            return Err(SubstateStoreError::SubstateNotFound { id: id.to_owned() });
-        }
-        substate
-            .into_substate()
-            .ok_or_else(|| up_substate_without_value(id.to_owned()))
+        let template =
+            substate
+                .into_substate_value()
+                .into_template()
+                .ok_or_else(|| SubstateStoreError::InvariantError {
+                    details: format!("Template substate {id} does not hold a published template"),
+                })?;
+        Ok(Some(template))
     }
 }
 

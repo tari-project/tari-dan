@@ -118,6 +118,7 @@ impl Test {
                 .collect(),
             new_outputs: new_outputs.clone(),
             validator_fee_withdrawals: vec![],
+            calls_template: None,
         });
 
         self.send_transaction_to_destination(TestVnDestination::All, transaction.clone())
@@ -155,6 +156,7 @@ impl Test {
             input_locks,
             new_outputs,
             validator_fee_withdrawals: vec![],
+            calls_template: None,
         });
         self
     }

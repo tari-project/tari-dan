@@ -24,7 +24,13 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use log::{debug, info};
 use ootle_network::Network;
-use tari_engine::{fees::FeeTable, state_store::new_memory_store, traits::ClaimProofVerifier, wasm::WasmModuleCache};
+use tari_engine::{
+    fees::FeeTable,
+    state_store::new_memory_store,
+    template::UncommittedTemplates,
+    traits::ClaimProofVerifier,
+    wasm::WasmModuleCache,
+};
 use tari_engine_types::{
     commit_result::ExecuteResult,
     substate::{Substate, SubstateId},
@@ -156,7 +162,13 @@ impl DryRunTransactionProcessor {
             .expect("execution_slots is never closed");
         let exec_output = task::spawn_blocking(move || {
             let _slot = slot;
-            processor.execute(&transaction, state_store.into_read_only(), virtual_substates, burn_rate)
+            processor.execute(
+                &transaction,
+                state_store.into_read_only(),
+                virtual_substates,
+                burn_rate,
+                UncommittedTemplates::default(),
+            )
         })
         .await??;
 

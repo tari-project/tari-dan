@@ -7,9 +7,18 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use tari_consensus::traits::{BlockTransactionExecutor, BlockTransactionExecutorError, BlockTransactionValidator};
+use tari_consensus::traits::{
+    BlockTransactionExecutor,
+    BlockTransactionExecutorError,
+    BlockTransactionValidator,
+    ParentChainTemplates,
+};
+use tari_consensus_types::Decision;
 use tari_engine::state_store::{StateWriter, memory::MemoryStateStore, new_memory_store};
-use tari_engine_types::substate::{Substate, SubstateId};
+use tari_engine_types::{
+    commit_result::AbortReason,
+    substate::{Substate, SubstateId},
+};
 use tari_ootle_common_types::{
     Epoch,
     LockIntent,
@@ -34,6 +43,7 @@ pub struct TestBlockTransactionProcessor {
     store: TestExecutionSpecStore,
     history: Arc<Mutex<HashMap<TransactionId, TestHistoricalExecution>>>,
     execute_counts: Arc<Mutex<HashMap<TransactionId, usize>>>,
+    template_misses: Arc<Mutex<HashMap<TransactionId, usize>>>,
 }
 
 impl TestBlockTransactionProcessor {
@@ -43,6 +53,7 @@ impl TestBlockTransactionProcessor {
             store,
             history: Default::default(),
             execute_counts: Default::default(),
+            template_misses: Default::default(),
         }
     }
 
@@ -57,6 +68,16 @@ impl TestBlockTransactionProcessor {
     /// The number of times this validator has executed `transaction_id`.
     pub fn get_execute_count(&self, transaction_id: &TransactionId) -> usize {
         self.execute_counts
+            .lock()
+            .unwrap()
+            .get(transaction_id)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// The number of times this validator executed `transaction_id` without finding the template it calls.
+    pub fn get_template_miss_count(&self, transaction_id: &TransactionId) -> usize {
+        self.template_misses
             .lock()
             .unwrap()
             .get(transaction_id)
@@ -97,6 +118,7 @@ impl<TStateStore: StateStore> BlockTransactionExecutor<TStateStore> for TestBloc
         transaction: &Transaction,
         execution_epoch: LockedEpoch,
         resolved_inputs: &HashMap<SubstateRequirement, Substate>,
+        templates: &dyn ParentChainTemplates,
     ) -> Result<TransactionExecution, BlockTransactionExecutorError> {
         let id = transaction.calculate_id();
 
@@ -162,9 +184,27 @@ impl<TStateStore: StateStore> BlockTransactionExecutor<TStateStore> for TestBloc
             .map(VersionedSubstateIdLockIntent::output)
             .collect::<Vec<_>>();
 
+        let decision = match spec.calls_template {
+            Some(template)
+                if templates
+                    .get_published_template(&template.as_template_address())?
+                    .is_none() =>
+            {
+                log::info!(
+                    "[{}] Transaction {} aborts: template {} not found",
+                    self.address,
+                    id,
+                    template
+                );
+                *self.template_misses.lock().unwrap().entry(id).or_default() += 1;
+                Decision::Abort(AbortReason::ExecutionFailure)
+            },
+            _ => spec.decision,
+        };
+
         let result = create_execution_result_for_transaction(
             transaction,
-            spec.decision,
+            decision,
             spec.fee,
             &resolved_inputs,
             &resulting_outputs,
