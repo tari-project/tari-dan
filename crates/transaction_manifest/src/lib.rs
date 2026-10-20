@@ -52,8 +52,8 @@ pub fn parse_manifest(
     blob_inputs: HashMap<String, Blob>,
 ) -> Result<ManifestInstructions, ManifestError> {
     // A wallet daemon parses manifests submitted by its clients, so every input must end in an error rather than
-    // exhaust the stack. Lexing is iterative; `syn` recurses once per group level, and the manifest parser recurses
-    // only into lists, so capping group depth here bounds the stack the parse needs.
+    // exhaust the stack. Lexing is iterative; `syn` recurses once per group level, and every recursion in the manifest
+    // parser descends into a nested group, so capping group depth here bounds the stack the parse needs.
     if input.len() > MAX_MANIFEST_BYTES {
         return Err(ManifestError::ManifestTooLarge {
             size: input.len(),

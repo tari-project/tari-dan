@@ -390,16 +390,16 @@ impl ManifestParser {
 
                 macro_call(&mac.ident, tokens)
             },
-            _ => Err(syn::Error::new_spanned(
-                expr.clone(),
-                format!("Only function calls are supported in let statements. {:?}", expr),
+            other => Err(syn::Error::new_spanned(
+                other,
+                "Only function calls, method calls and macros are supported as statements",
             )),
         }
     }
 }
 
-// The parsers below accept the manifest grammar only. Each consumes a token before it loops, and only a list
-// argument recurses, so the parse depth is bounded by the group depth that `parse_manifest` caps.
+// The parsers below accept the manifest grammar only. Each consumes a token before it loops, and each recursion
+// descends into a nested group, so the parse depth is bounded by the group depth that `parse_manifest` caps.
 
 /// Skips doc comments and other attributes, which carry no meaning in a manifest.
 fn skip_attributes(input: ParseStream) -> Result<(), syn::Error> {
@@ -906,10 +906,7 @@ fn extract_single_var_name(expr: &Expr) -> Result<Ident, syn::Error> {
             }
             Ok(segments[0].ident.clone())
         },
-        _ => Err(syn::Error::new_spanned(
-            expr.clone(),
-            format!("Invalid method call {:?}", expr),
-        )),
+        _ => Err(syn::Error::new_spanned(expr, "Invalid method call")),
     }
 }
 
