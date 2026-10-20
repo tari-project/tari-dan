@@ -594,7 +594,8 @@ impl EpochManagerReader for TestEpochManager {
         shard_group: ShardGroup,
     ) -> Result<CommitteeInfo, EpochManagerError> {
         let state = self.state_lock().await;
-        let committee = state.committees.get(&shard_group).ok_or_else(|| {
+        let committees = state.committees_at(epoch);
+        let committee = committees.get(&shard_group).ok_or_else(|| {
             EpochManagerError::StorageError(StorageError::NotFound {
                 item: "committee",
                 key: format!("for shard group {shard_group}"),
@@ -607,7 +608,7 @@ impl EpochManagerReader for TestEpochManager {
         Ok(CommitteeInfo::new(
             TEST_NUM_PRESHARDS,
             num_members as u32,
-            state.committees.len() as u32,
+            committees.len() as u32,
             shard_group,
             epoch,
             total_power,

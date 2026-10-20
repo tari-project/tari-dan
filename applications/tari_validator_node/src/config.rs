@@ -151,9 +151,9 @@ pub struct ValidatorNodeConfig {
     pub max_transaction_gossip_queue_bytes: usize,
     /// Maximum total size of inbound consensus gossip awaiting processing.
     ///
-    /// The topic carries only `HotstuffMessage::ForeignProposalNotification` — a block id, an epoch
-    /// and a shard group list. The proposal itself is requested over the messaging protocol, so
-    /// legitimate traffic here is a few hundred bytes per message and nowhere near this budget.
+    /// The topic carries only `HotstuffMessage::ForeignProposalNotification` — a block id, an epoch,
+    /// the producing shard group and a shard group list. The proposal itself is requested over the messaging protocol,
+    /// so legitimate traffic here is a few hundred bytes per message and nowhere near this budget.
     ///
     /// The budget is not sized for legitimate traffic. It is sized for what a flood can queue before
     /// the node starts dropping, and the topic is open to anyone: a message is only known to be

@@ -49,6 +49,7 @@ message ForeignProposalNotification {
   bytes block_id = 1;
   uint64 epoch = 2;
   repeated uint32 shard_groups = 3;
+  uint32 shard_group = 4;
 }
 
 message ForeignProposalRequest {
