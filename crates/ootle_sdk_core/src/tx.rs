@@ -60,7 +60,8 @@ pub fn seal_public_transfer(
 /// `CallerContext::transaction_signer_public_key`); it must be one of the `auth_signatures` keys, else
 /// [`OotleSdkError::Invalid`]. The field is set before the seal message is computed (see the module
 /// docs), and must match the value the co-sign record shipped, which is what the authorizations signed
-/// over.
+/// over. An authorization that does not verify against the sealed transaction, such as one signed over
+/// a record declaring a different main signer, ⇒ [`OotleSdkError::Validation`].
 pub fn seal_public_transfer_with_auth(
     unsigned: UnsignedTransaction,
     keys: &PublicTransferKeys,
@@ -74,6 +75,13 @@ pub fn seal_public_transfer_with_auth(
     let unsealed = UnsealedTransactionV1::new(unsigned_v1, auth_signatures);
     // Stock random-nonce seal — the bytes/id are intentionally non-reproducible.
     let transaction = unsealed.seal(&seal_secret);
+    if !transaction.verify_all_signatures() {
+        return Err(OotleSdkError::Validation(
+            "the authorizations do not verify against the sealed transaction: each co-signer must sign the record \
+             sealed here, including the same main signer"
+                .to_string(),
+        ));
+    }
     let id = transaction.calculate_id();
     Ok((transaction, id))
 }

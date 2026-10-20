@@ -342,8 +342,9 @@ OotleResult ootle_add_signature(uint8_t network,
  * `[{ "public_key": "<hex>", "signature": "<hex>" }, ...]`. An empty array behaves like the plain
  * single-key seal. `main_signer_hex` (nullable) must be the value passed to
  * [`ootle_unsigned_record_for_cosign`]; a main signer that is not one of the authorizations ⇒
- * `INVALID`. On success `data_json` is the `EncodedPublicTransfer`. The bytes/id are not
- * reproducible (random-nonce seal).
+ * `INVALID`, and an authorization that does not verify against the sealed transaction (for example
+ * one signed over a record with a different main signer) ⇒ `VALIDATION`. On success `data_json` is the
+ * `EncodedPublicTransfer`. The bytes/id are not reproducible (random-nonce seal).
  *
  * # Safety
  * `handle` must be a non-null, not-yet-consumed public handle. `keys_json` and `authorizations_json`

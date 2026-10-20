@@ -174,8 +174,10 @@ fn authorization_from_parts(secret: &RistrettoSecretKey, sig: RistrettoSchnorr) 
 /// nonce). The bytes/id are **not** reproducible — the safe default for real submission.
 ///
 /// `main_signer` must be the key passed to [`unsigned_record_for_cosign`], and one of the
-/// `authorizations`, else [`OotleSdkError::Invalid`]. An empty slice with no main signer behaves like
-/// the plain single-key seal. An unresolved partial ⇒ [`OotleSdkError::Resolution`].
+/// `authorizations`, else [`OotleSdkError::Invalid`]. An authorization that does not verify against
+/// the sealed transaction, such as one signed over a record with a different main signer, ⇒
+/// [`OotleSdkError::Validation`]. An empty slice with no main signer behaves like the plain single-key
+/// seal. An unresolved partial ⇒ [`OotleSdkError::Resolution`].
 pub fn seal_and_encode_with_auth(
     partial: PartialTransaction,
     keys: &PublicTransferKeys,
@@ -438,6 +440,18 @@ mod tests {
         assert_eq!(err.code(), "INVALID");
     }
 
+    /// Sealing with a different main signer than the record B signed is refused at seal time.
+    #[test]
+    fn a_main_signer_other_than_the_records_is_refused_at_seal() {
+        let b_pk = PublicKeyBytes::from_internal(&public_key_bytes_from_secret(&fixed_scalar(99)));
+        let record = unsigned_record_for_cosign(&resolved_partial(), Some(&b_pk)).unwrap();
+        let auth = add_signature(&record, &a_seal_pk(), &b_secret_bytes()).unwrap();
+
+        let err =
+            seal_and_encode_with_auth(resolved_partial(), &a_keys(), std::slice::from_ref(&auth), None).unwrap_err();
+        assert_eq!(err.code(), "VALIDATION");
+    }
+
     /// An empty authorization slice behaves like the plain single-key seal — and there flips
     /// `main_signer` to `SealSigner`.
     #[test]
@@ -467,23 +481,11 @@ mod tests {
         sig[10] ^= 0xff;
         auth.signature = SignatureBytes::from_bytes(&sig);
 
-        match seal_and_encode_with_auth(resolved_partial(), &a_keys(), std::slice::from_ref(&auth), None) {
-            // Either attaching rejects the non-canonical signature (KEY), or the seal succeeds but the
-            // verification step rejects it (VALIDATION). Both are correct "tampered ⇒ rejected".
-            Err(e) => assert!(matches!(e.code(), "KEY" | "VALIDATION")),
-            Ok(out) => {
-                let err = crate::decode_and_canonicalize_sealed_transfer(
-                    Network::Esmeralda,
-                    &out.encoded_transaction.to_hex(),
-                )
-                .unwrap_err();
-                assert_eq!(
-                    err.code(),
-                    "VALIDATION",
-                    "tampered authorization must fail verification"
-                );
-            },
-        }
+        let err =
+            seal_and_encode_with_auth(resolved_partial(), &a_keys(), std::slice::from_ref(&auth), None).unwrap_err();
+        // Attaching rejects a non-canonical signature (KEY); a canonical one fails verification at seal
+        // (VALIDATION).
+        assert!(matches!(err.code(), "KEY" | "VALIDATION"));
     }
 
     /// Bad signer secret hex ⇒ `KEY`.
