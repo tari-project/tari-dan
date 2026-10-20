@@ -117,8 +117,8 @@ pub enum RuntimeError {
     #[error("Encountered unknown or out of scope signer badge with public key {public_key}")]
     SignerBadgeNotInScope { public_key: RistrettoPublicKeyBytes },
     #[error(
-        "{needed_for} needs the transaction's main signer, but the transaction declares none. Declare a main signer \
-         or name the key explicitly"
+        "{needed_for} needs the transaction's main signer, but the transaction has no main signer that signed it. \
+         Declare a main signer that signs the transaction, or name the key explicitly"
     )]
     NoMainSigner { needed_for: &'static str },
     #[error("Layer one commitment not found with address '{address}'")]
