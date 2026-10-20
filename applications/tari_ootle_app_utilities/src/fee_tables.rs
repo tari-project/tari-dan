@@ -35,12 +35,12 @@
 //! ## Storage Fees
 //!
 //! - **`per_byte_storage_cost`**: Cost per byte of data written to persistent storage (substates), divided by
-//!   `storage_cost_divisor`. Both shipped tables set that divisor to 1: storage is the only indefinite-liability
+//!   `storage_cost_divisor`. The shipped table sets that divisor to 1: storage is the only indefinite-liability
 //!   category, so the full byte cost stands until a rent or endowment model lands.
 //!
-//! - **`per_substate_create_cost`**: Flat charge per newly-created substate, on top of its bytes. It prices the part of
-//!   a substate that outlives pruning: the record shell, head-index entry and state-tree leaf that stay after its value
-//!   is cleared.
+//! - **`per_substate_create_cost`**: Flat charge per newly-created substate, on top of its bytes. It prices what a
+//!   substate costs the store beyond its value: a record shell and head-index entry that outlive pruning, and a
+//!   state-tree leaf held for as long as the substate is up.
 //!
 //! - **`log_bytes_cost_divisor`**: Divides the per-byte storage rate when charging for a log message
 //!   (`per_byte_storage_cost × message_bytes / log_bytes_cost_divisor`). A log is retained in every validator's
@@ -91,12 +91,12 @@ const FEE_TABLE: FeeTable = FeeTable {
     // Bumped from 1 to better reflect worst-case cold wasmer instantiation: a 2 MiB template (the
     // current cap) costs ~7000 µT to load vs ~700 µT previously.
     per_template_load_cost_unit: 10,
-    // Slot premium for a newly-created substate, on top of `per_byte_storage_cost`. Pruning a
-    // downed version clears only its value: the record shell (id, version, state hash, created and
-    // destroyed markers), the head-index entry and the state-tree leaf with its share of internal
-    // nodes stay for good, and every syncing node replicates them. That residue is roughly 250
-    // bytes, so the premium charges it at the per-byte rate. An update keeps the substate's head
-    // entry and leaf and leaves only a shell, which its own byte charge already covers.
+    // Slot premium for a newly-created substate, on top of `per_byte_storage_cost`. A created
+    // substate adds a record shell (id, version, state hash, created and destroyed markers) and a
+    // head-index entry that outlive pruning of its value, plus a state-tree leaf with its share of
+    // internal nodes for as long as the substate is up; every syncing node replicates them. That
+    // is roughly 250 bytes, so the premium charges it at the per-byte rate. An update swaps the
+    // leaf for its new version's, and its own byte charge covers the shell it leaves.
     per_substate_create_cost: 250,
     // µT charged per `wasm_points_cost_divisor` Wasmer metering points. Opcode → point mapping
     // lives in `wasm/metering.rs` (most arithmetic = 1, calls = 4, heavy ops up to 40). Starts at
