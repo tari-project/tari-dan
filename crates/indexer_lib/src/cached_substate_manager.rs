@@ -339,7 +339,7 @@ where
         if let Some(mut lookup_result) = self.read_fresh_cache_entry(substate_id, specific_version).await? {
             match &lookup_result.result {
                 SubstateResult::Up { substate } => {
-                    lookup_result.proof = self.substate_cache.read_proof(substate_id, substate.version()).await?;
+                    lookup_result.proof = self.read_live_proof(substate_id, substate.version()).await?;
                     if lookup_result.proof.is_some() {
                         return Ok(lookup_result);
                     }
@@ -576,12 +576,41 @@ where
         if self.verify_substate_proofs &&
             let SubstateResult::Up { substate } = &lookup.result
         {
-            lookup.proof = self.substate_cache.read_proof(substate_id, substate.version()).await?;
+            lookup.proof = self.read_live_proof(substate_id, substate.version()).await?;
             if lookup.proof.is_none() {
                 return Ok(None);
             }
         }
         Ok(Some(lookup))
+    }
+
+    /// The proof the cache holds for `substate_id` at `version`, if its anchor is still live by
+    /// [`Self::anchor_epoch_is_live`].
+    ///
+    /// A cached value stays current until the transition stream retracts it, but its proof is anchored at the block it
+    /// was fetched at and ages with it. Clients reject a proof anchored more than an epoch before the latest validator
+    /// set, so a proof held past its anchor's epoch is left for the caller to refetch, as a fresh read would be.
+    async fn read_live_proof(
+        &self,
+        substate_id: &SubstateId,
+        version: SubstateVersion,
+    ) -> Result<Option<SubstateProofData>, IndexerError> {
+        let Some(proof) = self.substate_cache.read_proof(substate_id, version).await? else {
+            return Ok(None);
+        };
+        let commit_proof = decode_commit_proof(&proof.commit_proof)?;
+        let epoch = commit_proof.epoch();
+        let shard_group = commit_proof
+            .shard_group()
+            .map_err(|e| IndexerError::SubstateProofVerificationFailed { details: e.to_string() })?;
+        if !self.anchor_epoch_is_live(epoch, shard_group).await? {
+            debug!(
+                target: LOG_TARGET,
+                "Cached proof of {substate_id}v{version} is anchored at epoch {epoch} {shard_group}, which has ended"
+            );
+            return Ok(None);
+        }
+        Ok(Some(proof))
     }
 
     /// Looks up the substates a transaction declares as inputs, stopping at the first one that is not
@@ -2755,6 +2784,17 @@ mod tests {
         }
     }
 
+    /// A proof as the cache holds it, anchored at a block of the epoch [`test_header`] gives it.
+    fn cached_proof() -> SubstateProofData {
+        SubstateProofData {
+            substate_value_proof: vec![1],
+            commit_proof: unsigned_commit_proof(all_shards(), 4, tari_state_tree::TreeHash::new([0; 32])),
+            proof_epoch: 0,
+            substate_down_proof: None,
+            destroyed_at_state_version: None,
+        }
+    }
+
     /// Fresh proven heads are served from the cache with their proofs, and only the ids it cannot serve are batched.
     #[tokio::test]
     async fn fresh_proven_heads_are_served_from_the_cache() {
@@ -2764,7 +2804,7 @@ mod tests {
             ..Default::default()
         });
         let manager = manager.with_substate_proof_verification(true);
-        let proof = down_proof_data(None);
+        let proof = cached_proof();
         seed_cache(&manager, &ids[..2], Some(proof.clone()));
 
         let found = manager.fetch_and_cache_substates(&ids[..2]).await.unwrap();
@@ -2902,13 +2942,7 @@ mod tests {
         let result = SubstateResult::Up {
             substate: Box::new(live(&ids).remove(&ids[0]).unwrap()),
         };
-        let proof = SubstateProofData {
-            substate_value_proof: vec![1],
-            commit_proof: vec![2],
-            proof_epoch: 0,
-            substate_down_proof: None,
-            destroyed_at_state_version: None,
-        };
+        let proof = cached_proof();
         manager
             .substate_cache
             .write(
@@ -2932,6 +2966,52 @@ mod tests {
 
         assert_eq!(lookup.proof.unwrap().substate_value_proof, vec![1]);
         assert_eq!(network.single_requests.load(Ordering::Relaxed), 0);
+    }
+
+    /// A cached proof anchored before the previous epoch is not served: the head is fetched from the committee again,
+    /// as a fresh read anchored there would be.
+    #[tokio::test]
+    async fn a_cached_proof_anchored_before_the_previous_epoch_is_fetched_again() {
+        let ids = vec![component_id(1)];
+        let (mut manager, network) = manager(FakeNetwork {
+            live: live(&ids),
+            ..Default::default()
+        });
+        manager.committee_provider.3 = Epoch(3);
+        seed_cache(&manager, &ids, Some(cached_proof()));
+
+        let lookup = manager.get_substate_with_proof(&ids[0], None).await.unwrap();
+
+        assert!(lookup.result.into_up().is_some());
+        assert_eq!(network.single_requests.load(Ordering::Relaxed), 1);
+
+        let manager = manager.with_substate_proof_verification(true);
+        seed_cache(&manager, &ids, Some(cached_proof()));
+
+        manager.fetch_and_cache_substates(&ids).await.unwrap();
+
+        assert_eq!(network.batch_requests.load(Ordering::Relaxed), 1);
+    }
+
+    /// A cached proof anchored in the previous epoch is still served.
+    #[tokio::test]
+    async fn a_cached_proof_anchored_in_the_previous_epoch_is_served() {
+        let ids = vec![component_id(1)];
+        let (mut manager, network) = manager(FakeNetwork {
+            live: live(&ids),
+            ..Default::default()
+        });
+        manager.committee_provider.3 = Epoch(2);
+        let manager = manager.with_substate_proof_verification(true);
+        seed_cache(&manager, &ids, Some(cached_proof()));
+
+        let lookup = manager.get_substate_with_proof(&ids[0], None).await.unwrap();
+        assert!(lookup.proof.is_some());
+        let found = manager.fetch_and_cache_substates(&ids).await.unwrap();
+        assert!(found[&ids[0]].proof.is_some());
+
+        assert_eq!(network.single_requests.load(Ordering::Relaxed), 0);
+        assert_eq!(network.batch_requests.load(Ordering::Relaxed), 0);
     }
 
     /// Committee-validated tips, as the trusted-root store records them.
