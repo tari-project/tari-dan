@@ -318,7 +318,7 @@ mod weighted_committee {
 }
 
 mod signer_bitmap {
-    use tari_sidechain::{SidechainProofValidationError, SignerBitmap};
+    use tari_sidechain::{SidechainProofValidationError, SignerBitmap, SigningCommittee};
 
     use super::*;
 
@@ -423,6 +423,37 @@ mod signer_bitmap {
         assert!(
             matches!(err, SidechainProofValidationError::InternalError { .. }),
             "Expected an internal error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn it_reports_an_undecodable_committee_key_as_an_internal_error() {
+        /// Bytes that are not a canonical Ristretto encoding, and that sort after every other key.
+        const UNDECODABLE: [u8; 32] = [0xff; 32];
+
+        /// The fixture committee with its last member's key replaced by `UNDECODABLE`.
+        struct WithUndecodableLastKey(TestCommittee);
+
+        impl SigningCommittee for WithUndecodableLastKey {
+            fn len(&self) -> usize {
+                self.0.len()
+            }
+
+            fn member(&self, index: usize) -> Option<(&[u8], u64)> {
+                let (public_key, power) = self.0.member(index)?;
+                let is_last = index == self.0.len().saturating_sub(1);
+                Some((if is_last { &UNDECODABLE } else { public_key }, power))
+            }
+        }
+
+        let proof = load_fixture::<SidechainBlockCommitProof>("commit_proof.json");
+        let err = proof
+            .validate_committed(FIXTURE_NETWORK, 4, &WithUndecodableLastKey(fixture_committee()))
+            .unwrap_err();
+        assert!(
+            matches!(err, SidechainProofValidationError::InternalError { .. }) &&
+                err.to_string().contains("is not a valid public key"),
+            "Expected an internal error for the undecodable key, got: {err}"
         );
     }
 }
