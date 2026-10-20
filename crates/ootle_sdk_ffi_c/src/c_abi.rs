@@ -54,7 +54,7 @@ use serde::Deserialize;
 /// static pointer). Every host binding asserts this at startup to detect a header/lib mismatch. Bump on any
 /// breaking ABI change (a changed signature, envelope layout, or handle contract) so a stale lib is
 /// caught loudly rather than mis-marshalled.
-const ABI_VERSION: &[u8] = b"ootle-sdk-ffi-c/17\0";
+const ABI_VERSION: &[u8] = b"ootle-sdk-ffi-c/18\0";
 
 /// The kind discriminant that guards opaque-handle **type confusion** across the FFI.
 ///
@@ -928,15 +928,24 @@ pub unsafe extern "C" fn ootle_seal_and_encode(
 /// public handle. **Borrows** the handle (does **not** consume it) so A can ship the record JSON *and*
 /// keep the handle to seal later with [`ootle_seal_and_encode_with_auth`].
 ///
+/// `main_signer_hex` (lowercase hex, nullable) names the co-signer the transaction acts as wherever it
+/// needs a single signer (`OwnerRule::OwnedBySigner`, the default owner of new components and
+/// resources). NULL declares no main signer. Pass the same value to [`ootle_seal_and_encode_with_auth`].
+///
 /// On success `data_json` is the `UnsignedTransactionRecord` JSON (`{"unsigned": <UnsignedTransaction>}`).
-/// An unresolved partial ⇒ a `RESOLUTION` error (the handle is left intact).
+/// An unresolved partial ⇒ a `RESOLUTION` error (the handle is left intact). Bad `main_signer_hex` ⇒
+/// `PARSE`.
 ///
 /// # Safety
-/// `handle` must be a non-null, not-yet-consumed public handle. The returned envelope must be freed
-/// with [`ootle_result_free`]. The handle is **not** consumed; free it with
-/// [`ootle_partial_transaction_free`] (or consume it via a seal fn) exactly once afterwards.
+/// `handle` must be a non-null, not-yet-consumed public handle. `main_signer_hex` must be NULL or a
+/// valid NUL-terminated UTF-8 C string. The returned envelope must be freed with [`ootle_result_free`].
+/// The handle is **not** consumed; free it with [`ootle_partial_transaction_free`] (or consume it via a
+/// seal fn) exactly once afterwards.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn ootle_unsigned_record_for_cosign(handle: *const OotlePartialTransaction) -> OotleResult {
+pub unsafe extern "C" fn ootle_unsigned_record_for_cosign(
+    handle: *const OotlePartialTransaction,
+    main_signer_hex: *const c_char,
+) -> OotleResult {
     guarded(|| {
         if handle.is_null() {
             return OotleResult::err("INVALID", "argument `handle` must not be null");
@@ -946,9 +955,12 @@ pub unsafe extern "C" fn ootle_unsigned_record_for_cosign(handle: *const OotlePa
         }
         // SAFETY: non-null, kind-checked public handle; borrowed (not boxed/consumed).
         let partial: &PartialTransaction = unsafe { &(*handle).inner };
-        flatten((|| match ootle_sdk_core::unsigned_record_for_cosign(partial) {
-            Ok(record) => Ok(OotleResult::ok_json(&output_json(&record, "unsigned record")?)),
-            Err(e) => Ok(OotleResult::from_core_err(&e)),
+        flatten((|| {
+            let main_signer = unsafe { optional_main_signer(main_signer_hex) }?;
+            match ootle_sdk_core::unsigned_record_for_cosign(partial, main_signer.as_ref()) {
+                Ok(record) => Ok(OotleResult::ok_json(&output_json(&record, "unsigned record")?)),
+                Err(e) => Ok(OotleResult::from_core_err(&e)),
+            }
         })())
     })
 }
@@ -1005,18 +1017,22 @@ pub unsafe extern "C" fn ootle_add_signature(
 ///
 /// `keys_json` is `{account_secret}` (lowercase hex). `authorizations_json` is a JSON array
 /// `[{ "public_key": "<hex>", "signature": "<hex>" }, ...]`. An empty array behaves like the plain
-/// single-key seal. On success `data_json` is the `EncodedPublicTransfer`. The bytes/id are not
+/// single-key seal. `main_signer_hex` (nullable) must be the value passed to
+/// [`ootle_unsigned_record_for_cosign`]; a main signer that is not one of the authorizations ⇒
+/// `INVALID`. On success `data_json` is the `EncodedPublicTransfer`. The bytes/id are not
 /// reproducible (random-nonce seal).
 ///
 /// # Safety
 /// `handle` must be a non-null, not-yet-consumed public handle. `keys_json` and `authorizations_json`
-/// must be valid NUL-terminated UTF-8 C strings. The returned envelope must be freed with
-/// [`ootle_result_free`]. Do **not** free `handle` afterwards — it is consumed here.
+/// must be valid NUL-terminated UTF-8 C strings, and `main_signer_hex` NULL or one. The returned
+/// envelope must be freed with [`ootle_result_free`]. Do **not** free `handle` afterwards — it is
+/// consumed here.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ootle_seal_and_encode_with_auth(
     handle: *mut OotlePartialTransaction,
     keys_json: *const c_char,
     authorizations_json: *const c_char,
+    main_signer_hex: *const c_char,
 ) -> OotleResult {
     guarded(|| {
         if handle.is_null() {
@@ -1032,12 +1048,23 @@ pub unsafe extern "C" fn ootle_seal_and_encode_with_auth(
             let keys: ProductionKeysJson = parse_json(keys_json, "keys")?;
             let authorizations_json = unsafe { required_str(authorizations_json, "authorizations_json") }?;
             let authorizations: Vec<Authorization> = parse_json(authorizations_json, "authorizations")?;
-            match seal_and_encode_with_auth(partial, &keys.into_core(), &authorizations) {
+            let main_signer = unsafe { optional_main_signer(main_signer_hex) }?;
+            match seal_and_encode_with_auth(partial, &keys.into_core(), &authorizations, main_signer.as_ref()) {
                 Ok(encoded) => Ok(OotleResult::ok_json(&output_json(&encoded, "encoded transfer")?)),
                 Err(e) => Ok(OotleResult::from_core_err(&e)),
             }
         })())
     })
+}
+
+/// Reads the nullable `main_signer_hex` co-sign argument.
+///
+/// # Safety
+/// `ptr` must be NULL or a valid NUL-terminated C string.
+unsafe fn optional_main_signer(ptr: *const c_char) -> Result<Option<PublicKeyBytes>, OotleResult> {
+    unsafe { optional_str(ptr, "main_signer_hex") }?
+        .map(|hex| public_key_from_hex(hex, "main_signer_hex"))
+        .transpose()
 }
 
 // --- Result parsing -------------------------------------------------------------------------------

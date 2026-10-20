@@ -292,15 +292,22 @@ OotleResult ootle_seal_and_encode(OotlePartialTransaction *handle,
  * public handle. **Borrows** the handle (does **not** consume it) so A can ship the record JSON *and*
  * keep the handle to seal later with [`ootle_seal_and_encode_with_auth`].
  *
+ * `main_signer_hex` (lowercase hex, nullable) names the co-signer the transaction acts as wherever it
+ * needs a single signer (`OwnerRule::OwnedBySigner`, the default owner of new components and
+ * resources). NULL declares no main signer. Pass the same value to [`ootle_seal_and_encode_with_auth`].
+ *
  * On success `data_json` is the `UnsignedTransactionRecord` JSON (`{"unsigned": <UnsignedTransaction>}`).
- * An unresolved partial ⇒ a `RESOLUTION` error (the handle is left intact).
+ * An unresolved partial ⇒ a `RESOLUTION` error (the handle is left intact). Bad `main_signer_hex` ⇒
+ * `PARSE`.
  *
  * # Safety
- * `handle` must be a non-null, not-yet-consumed public handle. The returned envelope must be freed
- * with [`ootle_result_free`]. The handle is **not** consumed; free it with
- * [`ootle_partial_transaction_free`] (or consume it via a seal fn) exactly once afterwards.
+ * `handle` must be a non-null, not-yet-consumed public handle. `main_signer_hex` must be NULL or a
+ * valid NUL-terminated UTF-8 C string. The returned envelope must be freed with [`ootle_result_free`].
+ * The handle is **not** consumed; free it with [`ootle_partial_transaction_free`] (or consume it via a
+ * seal fn) exactly once afterwards.
  */
-OotleResult ootle_unsigned_record_for_cosign(const OotlePartialTransaction *handle);
+OotleResult ootle_unsigned_record_for_cosign(const OotlePartialTransaction *handle,
+                                             const char *main_signer_hex);
 
 /**
  * Authorizes party A's serialized unsigned transaction record (production path: fresh random Schnorr
@@ -333,17 +340,21 @@ OotleResult ootle_add_signature(uint8_t network,
  *
  * `keys_json` is `{account_secret}` (lowercase hex). `authorizations_json` is a JSON array
  * `[{ "public_key": "<hex>", "signature": "<hex>" }, ...]`. An empty array behaves like the plain
- * single-key seal. On success `data_json` is the `EncodedPublicTransfer`. The bytes/id are not
+ * single-key seal. `main_signer_hex` (nullable) must be the value passed to
+ * [`ootle_unsigned_record_for_cosign`]; a main signer that is not one of the authorizations ⇒
+ * `INVALID`. On success `data_json` is the `EncodedPublicTransfer`. The bytes/id are not
  * reproducible (random-nonce seal).
  *
  * # Safety
  * `handle` must be a non-null, not-yet-consumed public handle. `keys_json` and `authorizations_json`
- * must be valid NUL-terminated UTF-8 C strings. The returned envelope must be freed with
- * [`ootle_result_free`]. Do **not** free `handle` afterwards — it is consumed here.
+ * must be valid NUL-terminated UTF-8 C strings, and `main_signer_hex` NULL or one. The returned
+ * envelope must be freed with [`ootle_result_free`]. Do **not** free `handle` afterwards — it is
+ * consumed here.
  */
 OotleResult ootle_seal_and_encode_with_auth(OotlePartialTransaction *handle,
                                             const char *keys_json,
-                                            const char *authorizations_json);
+                                            const char *authorizations_json,
+                                            const char *main_signer_hex);
 
 /**
  * Parses a raw indexer finalized-result JSON string into the typed `FinalizedResult`.

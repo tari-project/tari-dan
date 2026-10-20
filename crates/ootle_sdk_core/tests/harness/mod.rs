@@ -953,6 +953,7 @@ pub fn run_operation(fixture: &Fixture) -> ExpectedOutput {
                 cosign_resolved_partial(fixture),
                 &keys.to_core(),
                 std::slice::from_ref(&auth),
+                None,
             )
             .unwrap_or_else(|e| {
                 panic!(
@@ -1007,7 +1008,7 @@ fn cosign_authorize_inputs(
     PublicKeyBytes,
     SecretKeyBytes,
 ) {
-    let record = ootle_sdk_core::unsigned_record_for_cosign(&cosign_resolved_partial(fixture))
+    let record = ootle_sdk_core::unsigned_record_for_cosign(&cosign_resolved_partial(fixture), None)
         .unwrap_or_else(|e| panic!("fixture `{}`: unsigned_record_for_cosign failed: {e}", fixture.name));
     let seal_pk_hex = fixture
         .input
