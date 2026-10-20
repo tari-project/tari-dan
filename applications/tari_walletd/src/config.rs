@@ -421,7 +421,7 @@ mod tests {
         let config = WalletDaemonConfig::load_from(&cfg).unwrap();
         assert_eq!(
             config.indexer_api_urls,
-            urls(&["https://ootle-indexer-a.tari.com/", "https://ootle-indexer-b.tari.com/"])
+            urls(&["https://esme-indexer-a.ootle.tari.com/", "https://esme-indexer-b.ootle.tari.com/"])
         );
     }
 
