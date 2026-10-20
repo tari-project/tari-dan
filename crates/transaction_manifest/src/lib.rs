@@ -22,14 +22,14 @@
 
 use std::{collections::HashMap, str::FromStr};
 
-use proc_macro2::TokenStream;
+use proc_macro2::{TokenStream, TokenTree};
 use syn::parse2;
 use tari_ootle_transaction::{Blob, Blobs, Instruction};
 use tari_template_lib_types::TemplateAddress;
 
 use self::ast::ManifestAst;
 pub use crate::value::ManifestValue;
-use crate::{error::ManifestError, generator::ManifestInstructionGenerator};
+use crate::{error::ManifestError, generator::ManifestInstructionGenerator, value::MAX_LIST_DEPTH};
 
 mod ast;
 mod cbor_literal;
@@ -51,11 +51,9 @@ pub fn parse_manifest(
     templates: HashMap<String, TemplateAddress>,
     blob_inputs: HashMap<String, Blob>,
 ) -> Result<ManifestInstructions, ManifestError> {
-    // Manifests are authored/parsed wallet-side, not at a public consensus boundary, so this is a
-    // sanity bound rather than a hardened defence: it keeps `proc_macro2`/`syn` from doing unbounded
-    // work on absurd input. Pathologically deep nesting within the cap can still abort the parser
-    // (`syn` recurses without a depth limit) — acceptable here, since the only consequence is that a
-    // malicious manifest fails to parse and is never signed.
+    // A wallet daemon parses manifests submitted by its clients, so every input must end in an error rather than
+    // exhaust the stack. Lexing is iterative; `syn` recurses once per group level, and the manifest parser recurses
+    // only into lists, so capping group depth here bounds the stack the parse needs.
     if input.len() > MAX_MANIFEST_BYTES {
         return Err(ManifestError::ManifestTooLarge {
             size: input.len(),
@@ -64,12 +62,37 @@ pub fn parse_manifest(
     }
 
     let tokens = TokenStream::from_str(input).map_err(|e| ManifestError::LexError(e.to_string()))?;
+    check_group_depth(&tokens)?;
     let ast = parse2::<ManifestAst>(tokens)?;
     ManifestInstructionGenerator::new(globals, templates, blob_inputs).generate_instructions(ast)
 }
 
 /// Sanity bound on manifest source size. Generous — real manifests are a few KiB at most.
 const MAX_MANIFEST_BYTES: usize = 64 * 1024;
+
+/// A valid manifest nests groups no deeper than a function body, a call and a macro around a value, and a value
+/// nests at most `MAX_LIST_DEPTH` levels. Twice that leaves the list and CBOR depth checks to reject a value a few
+/// levels too deep with their own errors.
+const MAX_GROUP_DEPTH: usize = 2 * MAX_LIST_DEPTH;
+
+fn check_group_depth(tokens: &TokenStream) -> Result<(), ManifestError> {
+    let mut stack = vec![tokens.clone().into_iter()];
+    while let Some(level) = stack.last_mut() {
+        match level.next() {
+            Some(TokenTree::Group(group)) => {
+                if stack.len() > MAX_GROUP_DEPTH {
+                    return Err(ManifestError::NestingTooDeep { max: MAX_GROUP_DEPTH });
+                }
+                stack.push(group.stream().into_iter());
+            },
+            Some(_) => {},
+            None => {
+                stack.pop();
+            },
+        }
+    }
+    Ok(())
+}
 
 pub struct ManifestInstructions {
     pub instructions: Vec<Instruction>,

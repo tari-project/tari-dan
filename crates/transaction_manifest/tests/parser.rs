@@ -1330,3 +1330,145 @@ fn local_function_call_cannot_be_bound() {
         .expect("a local function call has no value to bind");
     assert!(err.to_string().contains("local function"), "{err}");
 }
+
+/// Parses `manifest` on a thread with the 2 MiB stack a tokio worker gets by default, so a parser
+/// whose recursion grows with the input aborts the test rather than passing on a larger stack.
+fn parse_on_worker_stack(manifest: String) -> Result<ManifestInstructions, String> {
+    assert!(manifest.len() <= 64 * 1024, "the manifest must fit the size cap");
+    std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(move || {
+            parse_manifest(&manifest, HashMap::new(), Default::default(), Default::default()).map_err(|e| e.to_string())
+        })
+        .unwrap()
+        .join()
+        .unwrap()
+}
+
+#[test]
+fn deeply_nested_groups_are_rejected() {
+    let depth = 20_000;
+    for (open, close) in [("(", ")"), ("[", "]"), ("{", "}")] {
+        let manifest = format!(
+            "fn main() {{ acc.deposit({}1{}); }}",
+            open.repeat(depth),
+            close.repeat(depth)
+        );
+        let err = parse_on_worker_stack(manifest)
+            .err()
+            .expect("deeply nested groups are rejected");
+        assert!(err.contains("braces or parentheses"), "{err}");
+    }
+}
+
+#[test]
+fn nesting_up_to_the_depth_cap_fails_with_an_error() {
+    // The function body and the call's parentheses are the first two levels.
+    let depth = 2 * tari_bor::MAX_DECODE_DEPTH - 2;
+    let cases = [
+        format!(
+            "fn main() {{ acc.deposit({}1{}); }}",
+            "[".repeat(depth),
+            "]".repeat(depth)
+        ),
+        format!(
+            "fn main() {{ acc.deposit({}1{}); }}",
+            "(".repeat(depth),
+            ")".repeat(depth)
+        ),
+        format!(
+            "fn main() {{ acc.deposit(cbor!({}1{})); }}",
+            "[".repeat(depth - 1),
+            "]".repeat(depth - 1)
+        ),
+        format!(
+            "fn main() {{ acc.deposit(amount!({}1{})); }}",
+            "(".repeat(depth - 1),
+            ")".repeat(depth - 1)
+        ),
+    ];
+    for manifest in cases {
+        let err = parse_on_worker_stack(manifest)
+            .err()
+            .expect("a value nested past the list depth is rejected");
+        assert!(
+            !err.contains("braces or parentheses"),
+            "the parser rejects it, not the group cap: {err}"
+        );
+    }
+}
+
+#[test]
+fn long_expression_chains_are_rejected() {
+    let cases = [
+        format!("fn main() {{ acc.deposit({}1); }}", "-".repeat(30_000)),
+        format!("fn main() {{ let x = {}acc; }}", "!".repeat(30_000)),
+        format!("fn main() {{ let x = {}acc; }}", "&".repeat(30_000)),
+        format!("fn main() {{ let x = {}acc; }}", "acc + ".repeat(8_000)),
+        format!("fn main() {{ let x = {}acc; }}", "acc = ".repeat(8_000)),
+        format!("fn main() {{ let x = acc{}; }}", ".b()".repeat(10_000)),
+        format!("fn main() {{ let x = {}acc; }}", "|| ".repeat(10_000)),
+        format!("fn main() {{ let x = {}acc; }}", "return ".repeat(5_000)),
+        format!(
+            "fn main() {{ let x: {}u8{} = acc; }}",
+            "A<".repeat(10_000),
+            ">".repeat(10_000)
+        ),
+        format!("fn main() {{ let {}x = acc; }}", "&".repeat(30_000)),
+    ];
+    for manifest in cases {
+        let prefix = manifest.chars().take(40).collect::<String>();
+        assert!(
+            parse_on_worker_stack(manifest).is_err(),
+            "a chained expression is not a manifest statement: {prefix}"
+        );
+    }
+}
+
+#[test]
+fn deepest_valid_list_still_parses() {
+    // The scalar inside the innermost list is one more level of the encoded value.
+    let depth = tari_bor::MAX_DECODE_DEPTH - 1;
+    let manifest = format!(
+        r#"
+        use template_{LIST_TEMPLATE} as MyTemplate;
+
+        fn main() {{
+            MyTemplate::create({}1u8{});
+        }}
+    "#,
+        "[".repeat(depth),
+        "]".repeat(depth),
+    );
+
+    let ManifestInstructions { instructions, .. } = parse_on_worker_stack(manifest).unwrap();
+    assert_eq!(instructions.len(), 1);
+}
+
+#[test]
+fn doc_comments_and_attributes_are_ignored() {
+    let manifest = r#"
+        /// Pays the fee.
+        fn fee_main() {
+            let account = var!["account"];
+            account.pay_fee(1000);
+        }
+
+        #[allow(unused)]
+        fn main() {
+            //! The main body.
+            /// The account.
+            let mut account = var!["account"];
+            account.deposit(amount!(1))
+        }
+    "#;
+
+    let globals = HashMap::from([("account".to_string(), caller_component())]);
+    let ManifestInstructions {
+        instructions,
+        fee_instructions,
+        ..
+    } = parse_manifest(manifest, globals, Default::default(), Default::default()).unwrap();
+    assert_eq!(instructions.len(), 1);
+    assert_eq!(fee_instructions.len(), 1);
+}
