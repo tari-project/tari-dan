@@ -59,10 +59,6 @@ impl UncommittedChainTemplates {
     pub fn get(&self, address: &TemplateAddress) -> Option<&Arc<PublishedTemplate>> {
         self.templates.get(address)
     }
-
-    pub fn is_empty(&self) -> bool {
-        self.templates.is_empty()
-    }
 }
 
 pub trait BlockTransactionExecutor<TStateStore: StateStore> {

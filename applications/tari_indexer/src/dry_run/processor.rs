@@ -24,13 +24,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use log::{debug, info};
 use ootle_network::Network;
-use tari_engine::{
-    fees::FeeTable,
-    state_store::new_memory_store,
-    template::NoUncommittedTemplates,
-    traits::ClaimProofVerifier,
-    wasm::WasmModuleCache,
-};
+use tari_engine::{fees::FeeTable, state_store::new_memory_store, traits::ClaimProofVerifier, wasm::WasmModuleCache};
 use tari_engine_types::{
     commit_result::ExecuteResult,
     substate::{Substate, SubstateId},
@@ -148,11 +142,11 @@ impl DryRunTransactionProcessor {
         // execute the payload in the WASM engine and return the result
         let processor = TariTransactionProcessor::new(
             self.network,
-            self.template_provider.clone(),
             self.fee_table.clone(),
             true,
             self.claim_burn_proof_verifier.clone(),
         );
+        let template_provider = self.template_provider.clone();
         let slot = tokio::time::timeout(EXECUTION_SLOT_WAIT, self.execution_slots.clone().acquire_owned())
             .await
             .map_err(|_| {
@@ -164,10 +158,10 @@ impl DryRunTransactionProcessor {
             let _slot = slot;
             processor.execute(
                 &transaction,
+                template_provider,
                 state_store.into_read_only(),
                 virtual_substates,
                 burn_rate,
-                Arc::new(NoUncommittedTemplates),
             )
         })
         .await??;

@@ -28,11 +28,3 @@ pub use loaded_template::LoadedTemplate;
 
 mod template_loader;
 pub use template_loader::TemplateModuleLoader;
-
-mod uncommitted;
-pub use uncommitted::{
-    ExecutionTemplateProvider,
-    ExecutionTemplateProviderError,
-    NoUncommittedTemplates,
-    UncommittedTemplates,
-};

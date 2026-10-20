@@ -9,7 +9,7 @@ use tari_engine::{
     fees::{FeeModule, FeeTable, WasmMeteringRate},
     runtime::{AuthParams, RuntimeModule},
     state_store::{StateReader, StateStoreError},
-    template::{ExecutionTemplateProvider, LoadedTemplate, UncommittedTemplates},
+    template::LoadedTemplate,
     traits::ClaimProofVerifier,
     transaction::{ModulesCollection, TransactionError, TransactionProcessor},
 };
@@ -34,13 +34,14 @@ const _LOG_TARGET: &str = "tari::ootle::transaction_executor";
 pub trait TransactionExecutor<TStore> {
     type Error: std::error::Error + Send + Sync + 'static;
 
-    fn execute(
+    /// Executes `transaction`, resolving every template it calls from `template_provider`.
+    fn execute<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>>(
         &self,
         transaction: &Transaction,
+        template_provider: TTemplateProvider,
         state_store: TStore,
         virtual_substates: VirtualSubstates,
         burn_rate: ExhaustBurnRate,
-        uncommitted_templates: Arc<dyn UncommittedTemplates>,
     ) -> Result<ExecutionOutput, Self::Error>;
 }
 
@@ -98,19 +99,17 @@ impl ExecutionOutput {
 }
 
 #[derive(Clone)]
-pub struct TariTransactionProcessor<TStore, TTemplateProvider> {
+pub struct TariTransactionProcessor<TStore> {
     network: Network,
-    template_provider: Arc<TTemplateProvider>,
     modules: ModulesCollection<TStore>,
     dry_run: bool,
     claim_burn_proof_verifier: Arc<dyn ClaimProofVerifier + Send + Sync + 'static>,
     wasm_metering_rate: WasmMeteringRate,
 }
 
-impl<TStore: StateReader + 'static, TTemplateProvider> TariTransactionProcessor<TStore, TTemplateProvider> {
+impl<TStore: StateReader + 'static> TariTransactionProcessor<TStore> {
     pub fn new(
         network: Network,
-        template_provider: TTemplateProvider,
         fee_table: FeeTable,
         dry_run: bool,
         claim_burn_proof_verifier: Arc<dyn ClaimProofVerifier + Send + Sync + 'static>,
@@ -121,7 +120,6 @@ impl<TStore: StateReader + 'static, TTemplateProvider> TariTransactionProcessor<
         let modules = vec![Box::new(FeeModule::new(0, fee_table)) as Box<dyn RuntimeModule<TStore>>];
         Self {
             network,
-            template_provider: Arc::new(template_provider),
             modules: Arc::from(modules),
             dry_run,
             claim_burn_proof_verifier,
@@ -130,19 +128,16 @@ impl<TStore: StateReader + 'static, TTemplateProvider> TariTransactionProcessor<
     }
 }
 
-impl<TStore: StateReader + Clone + 'static, TTemplateProvider> TransactionExecutor<TStore>
-    for TariTransactionProcessor<TStore, TTemplateProvider>
-where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
-{
+impl<TStore: StateReader + Clone + 'static> TransactionExecutor<TStore> for TariTransactionProcessor<TStore> {
     type Error = TransactionProcessorError;
 
-    fn execute(
+    fn execute<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>>(
         &self,
         transaction: &Transaction,
+        template_provider: TTemplateProvider,
         state_store: TStore,
         virtual_substates: VirtualSubstates,
         burn_rate: ExhaustBurnRate,
-        uncommitted_templates: Arc<dyn UncommittedTemplates>,
     ) -> Result<ExecutionOutput, Self::Error> {
         // Include signature public key badges for all transaction signers in the initial auth scope
         // NOTE: we assume all signatures have already been validated.
@@ -154,7 +149,6 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             initial_ownership_proofs,
         };
 
-        let template_provider = ExecutionTemplateProvider::new(self.template_provider.clone(), uncommitted_templates);
         let processor = TransactionProcessor::new(
             Arc::new(template_provider),
             state_store,
