@@ -25,6 +25,9 @@ Feature: Account transfers
     Then indexer INDEXER has scanned to at least height 40
 
     When I wait for proof BURN_PROOF to confirm on wallet MINOTARI_WALLET
+    When miner MINER mines to the next epoch
+    Then VN is past the epoch burn proof BURN_PROOF was mined in
+
     When I claim burn BURN_PROOF and spend it into account ACCOUNT using wallet daemon WALLET_D
 
     # Wait for the wallet daemon account monitor to update the sender account information
@@ -80,6 +83,9 @@ Feature: Account transfers
     Then indexer INDEXER has scanned to at least height 40
 
     When I wait for proof BURN_PROOF to confirm on wallet MINOTARI_WALLET
+    When miner MINER mines to the next epoch
+    Then VN is past the epoch burn proof BURN_PROOF was mined in
+
     When I claim burn BURN_PROOF and spend it into account ACCOUNT_1 using wallet daemon WALLET_D
 
     # Fund the sender account with faucet tokens
