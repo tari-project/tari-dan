@@ -259,7 +259,7 @@ mod tests {
             per_transaction_weight_cost: 1,
             per_module_call_cost: 1,
             per_byte_storage_cost: 1,
-            per_substate_create_cost: 25,
+            per_substate_create_cost: 250,
             per_wasm_point_cost: 1,
             storage_cost_divisor: 1,
             wasm_points_cost_divisor: 1000,
@@ -285,7 +285,7 @@ mod tests {
         let two = shape(1, 2).estimate_fee(&rates());
 
         let native = P::PER_OUTPUT / 1000;
-        let slot = 25;
+        let slot = 250;
         assert!(
             two - one > native + slot,
             "an added output must cost its verification, its slot and the bytes of both the UTXO and its receipt entry"

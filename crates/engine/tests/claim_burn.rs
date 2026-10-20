@@ -324,7 +324,7 @@ mod fee_estimate {
         // Price a created substate as the shipped tables do, so the slots the claim creates carry the
         // weight they do on a real network.
         test.set_fee_table(FeeTable {
-            per_substate_create_cost: 25,
+            per_substate_create_cost: 250,
             ..test.fee_table().clone()
         });
         test.enable_fees();
