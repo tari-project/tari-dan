@@ -140,9 +140,15 @@ fn replay_then_live_stream(
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<sse::Event, axum::Error>>(256);
 
     tokio::spawn(async move {
-        let result = run_replay_then_live(store, broadcast_rx, filter, after_id, REPLAY_LIMITS, &tx).await;
-        if let Err(e) = result {
-            warn!(target: LOG_TARGET, "SSE replay-then-live stream error: {}", e);
+        // `run_replay_then_live` only observes a closed stream when it sends, and a filter that
+        // matches nothing never sends, so the task also waits on `tx.closed()`.
+        tokio::select! {
+            result = run_replay_then_live(store, broadcast_rx, filter, after_id, REPLAY_LIMITS, &tx) => {
+                if let Err(e) = result {
+                    warn!(target: LOG_TARGET, "SSE replay-then-live stream error: {}", e);
+                }
+            },
+            () = tx.closed() => {},
         }
         // tx is dropped here, which closes the stream
     });
@@ -389,5 +395,28 @@ mod tests {
             publisher.send(live_event(id, topic)).unwrap();
         }
         assert_eq!(next_event_id(&mut rx).await.as_deref(), Some("8"));
+    }
+
+    #[tokio::test]
+    async fn dropping_a_replay_stream_releases_its_subscription_without_a_matching_event() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = SqliteIndexerStore::try_create(dir.path().join("indexer.db")).unwrap();
+        let (publisher, broadcast_rx) = broadcast::channel(4);
+        let filter = EventFilter {
+            topic: Some("never.emitted".into()),
+            ..Default::default()
+        };
+
+        let stream = replay_then_live_stream(ReadOnlyStore::new(store), broadcast_rx, filter, 0);
+        drop(stream);
+        publisher.send(live_event(1, "common.miss")).unwrap();
+
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while publisher.receiver_count() > 0 {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("the replay task outlived its response stream");
     }
 }
