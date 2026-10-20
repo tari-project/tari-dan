@@ -121,10 +121,11 @@ where TConsensusSpec: ConsensusSpec
             if let Err(err) = self.validate_and_save(tx, &proposal, local_committee_info) {
                 if err
                     .validation_error()
-                    .is_some_and(|err| err.is_specific_to_foreign_proposal_copy())
+                    .is_some_and(|err| err.rejects_message_not_block())
                 {
-                    // Nothing is recorded against the block id, so another copy is still accepted. A pending request
-                    // for the block is retried with another member of the foreign committee when it times out.
+                    // Nothing is recorded against the block id, so another delivery of the block is still accepted. A
+                    // pending request for the block is retried with another member of the foreign committee when it
+                    // times out.
                     warn!(target: LOG_TARGET, "⚠️ Discarding foreign proposal: {}", err);
                     return Ok(false);
                 }
@@ -527,15 +528,15 @@ where TConsensusSpec: ConsensusSpec
             });
         }
 
-        validate_foreign_proposal_copy(proposal, local_committee_info.shard_group())?;
+        validate_foreign_proposal_contents(proposal, local_committee_info.shard_group())?;
 
         Ok(())
     }
 }
 
-/// Checks that this copy of an authenticated foreign proposal is internally consistent and complete for the local
-/// shard group: its evidence and pledges agree, and it carries in full every command the local shard group needs.
-pub(super) fn validate_foreign_proposal_copy(
+/// Checks what the relayer of an authenticated foreign proposal chose to send for the local shard group: the pledges
+/// match the values the evidence commits to, and every command the local shard group needs is carried in full.
+pub(super) fn validate_foreign_proposal_contents(
     proposal: &ForeignProposal,
     local_shard_group: ShardGroup,
 ) -> Result<(), ProposalValidationError> {

@@ -410,10 +410,13 @@ pub enum ProposalValidationError {
 }
 
 impl ProposalValidationError {
-    /// True for a foreign proposal error in what one copy of the proposal carries beside its authenticated block, which
-    /// says nothing about the block itself. Nothing is recorded against the block id for such an error, so a genuine
-    /// copy of the block is still accepted.
-    pub fn is_specific_to_foreign_proposal_copy(&self) -> bool {
+    /// True for a foreign proposal error that rejects the message carrying a block and leaves the block id free.
+    ///
+    /// The signed header and the command root fix a foreign proposal's block id. The relayer chooses its pledges and
+    /// which commands it sends in full, so two messages carrying the same block can differ in them. An error in that
+    /// part says nothing about the block, so nothing is recorded against its block id and another delivery of the
+    /// block is still accepted.
+    pub fn rejects_message_not_block(&self) -> bool {
         matches!(
             self,
             Self::ForeignPledgesNotCommitted { .. } | Self::ForeignProposalWithholdsCommand { .. }

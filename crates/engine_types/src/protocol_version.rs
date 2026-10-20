@@ -28,8 +28,8 @@ pub enum ProtocolVersion {
     /// state version, so a substate proof can only cite the state of the shard the substate lives in.
     V2 = 2,
     /// Each leaf of a block's command merkle root commits to the shard groups that a foreign commit proof of the block
-    /// must carry the command in full for, so a copy of the proof that sends one of those shard groups a command as
-    /// its bare hash names that shard group in the authenticated leaf.
+    /// must carry the command in full for, so a foreign proposal that sends one of those shard groups a command as its
+    /// bare hash names that shard group in the authenticated leaf.
     V3 = 3,
 }
 

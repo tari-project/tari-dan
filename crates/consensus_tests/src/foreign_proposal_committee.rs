@@ -195,8 +195,9 @@ fn with_commands(proposal: &ForeignProposal, commands: Vec<CommandOrHash>) -> Fo
     )
 }
 
-/// Stored foreign proposals are pruned by epoch, so a copy that shares only the block id of a stored proposal can be
-/// saved once the stored proposal is gone. Only a copy carrying the stored commit proof inherits its authentication.
+/// Stored foreign proposals are pruned by epoch, so a message that shares only the block id of a stored proposal can
+/// be saved once the stored proposal is gone. Only a message carrying the stored commit proof inherits its
+/// authentication.
 #[test]
 fn only_a_stored_commit_proof_counts_as_authenticated() {
     let group_b = committee_number_to_shard_group(TEST_NUM_PRESHARDS, 1, 2);
@@ -224,7 +225,7 @@ fn only_a_stored_commit_proof_counts_as_authenticated() {
     assert!(stored_is_authenticated);
     assert!(
         !copy_is_authenticated,
-        "a copy with different commands was treated as authenticated by the stored proposal's block id"
+        "a message with different commands was treated as authenticated by the stored proposal's block id"
     );
 }
 
@@ -366,7 +367,7 @@ async fn an_embedded_foreign_proposal_is_not_stored_without_its_committees_commi
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_block_with_an_unauthenticated_embedded_foreign_proposal_does_not_take_the_parked_slot() {
     setup_logger();
-    // The replica lacks the transaction, so both copies of the block are parked while it fetches it
+    // The replica lacks the transaction, so both deliveries of the block are parked while it fetches it
     let (mut test, replica, leader, proposal) = withheld_embedding_proposal(false).await;
 
     let block_ids = proposal
@@ -402,7 +403,7 @@ async fn a_block_with_an_unauthenticated_embedded_foreign_proposal_does_not_take
     test.stop();
     assert!(
         stored,
-        "the genuine block was not processed after an unauthenticated copy"
+        "the genuine block was not processed after an unauthenticated delivery of it"
     );
 }
 
@@ -411,7 +412,7 @@ async fn a_foreign_proposal_from_a_peer_that_was_not_asked_for_it_is_discarded()
     setup_logger();
     let (mut test, replica, leader, proposal) = withheld_embedding_proposal(true).await;
 
-    // The replica only ever asks members of the foreign committee, so a copy from a local member is unsolicited
+    // The replica only ever asks members of the foreign committee, so a delivery from a local member is unsolicited
     let foreign_proposal = proposal
         .foreign_proposals
         .first()
@@ -497,7 +498,7 @@ async fn a_foreign_proposal_withholding_a_command_for_the_local_shard_group_does
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_parked_block_with_a_foreign_proposal_withholding_a_command_does_not_take_its_slot() {
-    // The replica lacks the transaction, so both copies of the block are parked while it fetches it
+    // The replica lacks the transaction, so both deliveries of the block are parked while it fetches it
     an_embedded_foreign_proposal_withholding_a_command_does_not_take_its_slot(false).await;
 }
 
@@ -545,13 +546,13 @@ async fn an_embedded_foreign_proposal_withholding_a_command_does_not_take_its_sl
     assert_eq!(
         is_complete,
         Ok(true),
-        "the replica did not store the genuine foreign proposal after a copy that withheld one of its commands"
+        "the replica did not store the genuine foreign proposal after a message that withheld one of its commands"
     );
 }
 
 /// Sends `destination` four transactions, each spending an input on committee 0 and one on committee 1.
 ///
-/// A copy must still carry evidence for the replica once one command is withheld, so committee 1 needs two commands
+/// A message must still carry evidence for the replica once one command is withheld, so committee 1 needs two commands
 /// in full in one block. Inputs on both committees make every LocalPrepare a command the other committee needs in
 /// full, and the transactions that arrive while the first block is being voted on share the next one.
 async fn send_transactions_spending_on_both_committees(test: &Test, destination: TestVnDestination) {
@@ -586,8 +587,8 @@ async fn a_foreign_proposal_reply_withholding_a_command_does_not_take_its_slot()
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_parked_foreign_proposal_reply_withholding_a_command_does_not_take_its_slot() {
-    // The replica only learns of the transactions from committee 1's foreign proposals, so the withholding copy names
-    // transactions it lacks and is parked while it fetches them
+    // The replica only learns of the transactions from committee 1's foreign proposals, so the withholding message
+    // names transactions it lacks and is parked while it fetches them
     a_foreign_proposal_reply_withholding_a_command_does_not_take_its_slot_when(false).await;
 }
 
@@ -620,7 +621,7 @@ async fn a_foreign_proposal_reply_withholding_a_command_does_not_take_its_slot_w
                     *captured = Some((from.clone(), (*msg.proposal).clone()));
                     false
                 },
-                // A copy parked for missing transactions keeps its slot until they arrive, so they are held back
+                // A message parked for missing transactions keeps its slot until they arrive, so they are held back
                 // until the retried request delivers the genuine proposal
                 HotstuffMessage::MissingTransactionsResponse(_) if *to == input_member => {
                     captured.lock().unwrap().is_none() || is_retry_delivered.load(Ordering::SeqCst)
@@ -676,8 +677,8 @@ async fn a_foreign_proposal_reply_withholding_a_command_does_not_take_its_slot_w
         "stored a foreign proposal that withheld a command"
     );
 
-    // The withholding copy leaves the block id free, so the retried request to the other member of committee 1 stores
-    // the genuine proposal
+    // The withholding message leaves the block id free, so the retried request to the other member of committee 1
+    // stores the genuine proposal
     let is_genuine = timeout(Duration::from_secs(60), async {
         loop {
             if let Some(is_genuine) = stored_is_genuine() {
@@ -794,7 +795,7 @@ async fn a_foreign_proposal_is_not_stored_with_pledge_values_its_evidence_does_n
     sleep(Duration::from_secs(2)).await;
     assert!(!is_stored(), "stored a foreign proposal with substituted pledge values");
 
-    // The substituted copy was the asked peer's one reply, so a second copy from it is not processed
+    // The substituted message was the asked peer's one reply, so a second delivery from it is not processed
     tx_inbound
         .send((sender, HotstuffMessage::ForeignProposal(genuine.into())))
         .await
@@ -802,8 +803,8 @@ async fn a_foreign_proposal_is_not_stored_with_pledge_values_its_evidence_does_n
     sleep(Duration::from_secs(2)).await;
     assert!(!is_stored(), "processed a second reply to one request");
 
-    // The substituted copy leaves nothing behind that stops the genuine proposal from being accepted once the request
-    // is retried with the other member of committee 0
+    // The substituted message leaves nothing behind that stops the genuine proposal from being accepted once the
+    // request is retried with the other member of committee 0
     let stored = timeout(Duration::from_secs(60), async {
         while !is_stored() {
             sleep(Duration::from_millis(250)).await;
