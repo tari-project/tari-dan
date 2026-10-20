@@ -41,8 +41,8 @@ impl IsNotFoundError for BlockTransactionExecutorError {
     }
 }
 
-/// The templates published in the chain a block builds on. A template published earlier in the block itself is not
-/// included: a block's transactions do not depend on one another, so every validator may execute them in any order.
+/// The templates published in committed state and in the uncommitted ancestors of a block: the templates every
+/// validator executing the block agrees on, in whatever order it executes the block's transactions.
 pub trait ParentChainTemplates {
     fn get_published_template(
         &self,

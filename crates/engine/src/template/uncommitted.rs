@@ -6,11 +6,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use tari_engine_types::published_template::PublishedTemplate;
 use tari_ootle_common_types::services::template_provider::TemplateProvider;
 use tari_template_lib::types::TemplateAddress;
 
-use crate::{template::LoadedTemplate, wasm::WasmModule};
+use crate::template::LoadedTemplate;
 
 /// Templates published in the uncommitted part of the chain a transaction executes on, which the executing validator
 /// resolved before the execution, and the addresses the execution could resolve from neither those nor committed
@@ -24,13 +23,10 @@ pub struct UncommittedTemplates {
 }
 
 impl UncommittedTemplates {
-    /// Returns a copy holding `published` at `address` as well, with no misses recorded.
-    pub fn with_published(&self, address: TemplateAddress, published: &PublishedTemplate) -> Self {
+    /// Returns a copy holding `template`, or the error loading it, at `address` as well, with no misses recorded.
+    pub fn with_template(&self, address: TemplateAddress, template: Result<LoadedTemplate, String>) -> Self {
         let mut templates = (*self.templates).clone();
-        templates.insert(
-            address,
-            WasmModule::load_template_from_code(published.binary.as_slice()).map_err(|e| e.to_string()),
-        );
+        templates.insert(address, template);
         Self {
             templates: Arc::new(templates),
             misses: Arc::default(),
@@ -111,5 +107,70 @@ where TProvider: TemplateProvider<Template = LoadedTemplate>
                 Ok(None)
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::convert::Infallible;
+
+    use tari_template_builtin::{ACCOUNT_TEMPLATE_ADDRESS, get_template_builtin};
+
+    use super::*;
+    use crate::wasm::WasmModule;
+
+    const COMMITTED: TemplateAddress = TemplateAddress::from_array([1; 32]);
+    const UNCOMMITTED: TemplateAddress = TemplateAddress::from_array([2; 32]);
+    const UNLOADABLE: TemplateAddress = TemplateAddress::from_array([3; 32]);
+    const ABSENT: TemplateAddress = TemplateAddress::from_array([4; 32]);
+
+    #[derive(Clone)]
+    struct Committed(LoadedTemplate);
+
+    impl TemplateProvider for Committed {
+        type Error = Infallible;
+        type Template = LoadedTemplate;
+
+        fn get_template(&self, address: &TemplateAddress) -> Result<Option<Self::Template>, Self::Error> {
+            Ok((*address == COMMITTED).then(|| self.0.clone()))
+        }
+    }
+
+    fn provider() -> (ExecutionTemplateProvider<Committed>, UncommittedTemplates) {
+        let template = WasmModule::load_template_from_code(get_template_builtin(&ACCOUNT_TEMPLATE_ADDRESS)).unwrap();
+        let uncommitted = UncommittedTemplates::default()
+            .with_template(UNCOMMITTED, Ok(template.clone()))
+            .with_template(UNLOADABLE, Err("invalid module".to_string()));
+        let provider = ExecutionTemplateProvider::new(Arc::new(Committed(template)), uncommitted.clone());
+        (provider, uncommitted)
+    }
+
+    #[test]
+    fn a_committed_or_uncommitted_template_resolves_without_a_miss() {
+        let (provider, uncommitted) = provider();
+        assert!(provider.get_template(&COMMITTED).unwrap().is_some());
+        assert!(provider.get_template(&UNCOMMITTED).unwrap().is_some());
+        assert!(uncommitted.take_misses().is_empty());
+    }
+
+    #[test]
+    fn a_template_in_neither_is_not_found_and_recorded_as_a_miss() {
+        let (provider, uncommitted) = provider();
+        assert!(provider.get_template(&ABSENT).unwrap().is_none());
+        assert_eq!(uncommitted.take_misses(), HashSet::from([ABSENT]));
+        assert!(uncommitted.take_misses().is_empty());
+    }
+
+    #[test]
+    fn an_uncommitted_template_that_fails_to_load_fails_the_lookup() {
+        let (provider, uncommitted) = provider();
+        assert!(matches!(
+            provider.get_template(&UNLOADABLE),
+            Err(ExecutionTemplateProviderError::Uncommitted {
+                address: UNLOADABLE,
+                ..
+            })
+        ));
+        assert!(uncommitted.take_misses().is_empty());
     }
 }

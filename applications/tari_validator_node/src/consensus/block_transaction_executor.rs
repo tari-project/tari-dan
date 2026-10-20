@@ -23,6 +23,7 @@ use tari_ootle_storage::{
     StateStore,
     consensus_models::{LockedEpoch, TransactionExecution, VersionedSubstateIdLockIntent},
 };
+use tari_ootle_template_provider::UncommittedTemplateCache;
 use tari_ootle_transaction::Transaction;
 
 #[cfg(feature = "metrics")]
@@ -30,9 +31,13 @@ use crate::metrics::PrometheusExecutionMetrics;
 
 const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::block_transaction_executor";
 
+/// Bounds the compiled templates held for templates published in uncommitted blocks.
+const UNCOMMITTED_TEMPLATE_CACHE_BYTES: u64 = 64 * 1024 * 1024;
+
 #[derive(Debug, Clone)]
 pub struct TariBlockTransactionExecutor<TExecutor> {
     executor: TExecutor,
+    uncommitted_cache: UncommittedTemplateCache,
     #[cfg(feature = "metrics")]
     metrics: PrometheusExecutionMetrics,
 }
@@ -41,6 +46,7 @@ impl<TExecutor: TransactionExecutor<ReadOnlyMemoryStateStore>> TariBlockTransact
     pub fn new(executor: TExecutor, #[cfg(feature = "metrics")] metrics: PrometheusExecutionMetrics) -> Self {
         Self {
             executor,
+            uncommitted_cache: UncommittedTemplateCache::new(UNCOMMITTED_TEMPLATE_CACHE_BYTES),
             #[cfg(feature = "metrics")]
             metrics,
         }
@@ -117,7 +123,11 @@ where
                         id,
                         address,
                     );
-                    uncommitted_templates = uncommitted_templates.with_published(address, &published);
+                    let loaded = self
+                        .uncommitted_cache
+                        .load(address, published.binary.as_slice())
+                        .map_err(|e| e.to_string());
+                    uncommitted_templates = uncommitted_templates.with_template(address, loaded);
                     resolved_any = true;
                 }
             }
@@ -167,7 +177,7 @@ mod tests {
     };
 
     use tari_common_types::types::PrivateKey;
-    use tari_engine::template::{ExecutionTemplateProvider, LoadedTemplate};
+    use tari_engine::{template::ExecutionTemplateProvider, wasm::DiskCachedWasmTemplateProvider};
     use tari_engine_types::{
         commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
         fees::{ExhaustBurnRate, FeeReceipt},
@@ -176,32 +186,38 @@ mod tests {
     };
     use tari_ootle_app_utilities::transaction_executor::ExecutionOutput;
     use tari_ootle_common_types::{Epoch, services::template_provider::TemplateProvider};
+    use tari_ootle_template_provider::{MemoryCacheTemplateProvider, TemplateConfig};
     use tari_template_builtin::{ACCOUNT_TEMPLATE_ADDRESS, get_template_builtin};
     use tari_template_lib::types::{Hash32, TemplateAddress};
+    use tempfile::TempDir;
 
     use super::*;
 
     type TestStateStore = tari_state_store_rocksdb::RocksDbStateStore<String>;
+    type CommittedTemplates = MemoryCacheTemplateProvider<DiskCachedWasmTemplateProvider<TestStateStore>>;
 
     const CALLED: TemplateAddress = TemplateAddress::from_array([7; 32]);
 
-    #[derive(Clone)]
-    struct NoCommittedTemplates;
-
-    impl TemplateProvider for NoCommittedTemplates {
-        type Error = Infallible;
-        type Template = LoadedTemplate;
-
-        fn get_template(&self, _address: &TemplateAddress) -> Result<Option<Self::Template>, Self::Error> {
-            Ok(None)
-        }
+    /// Stands in for the engine: a transaction commits if `CALLED` resolves through the validator's template
+    /// provider stack, and is rejected otherwise.
+    struct CallingExecutor {
+        committed: Arc<CommittedTemplates>,
+        executions: Mutex<usize>,
+        _dir: TempDir,
     }
 
-    /// Stands in for the engine with nothing committed: a transaction commits if `CALLED` resolves, and is rejected
-    /// otherwise.
-    #[derive(Default)]
-    struct CallingExecutor {
-        executions: Mutex<usize>,
+    impl CallingExecutor {
+        /// Committed state holds no templates.
+        fn with_nothing_committed() -> Self {
+            let dir = tempfile::tempdir().unwrap();
+            let store = TestStateStore::open(dir.path().join("db"), Default::default()).unwrap();
+            let disk = DiskCachedWasmTemplateProvider::open(store, dir.path().join("wasm_cache"), u64::MAX).unwrap();
+            Self {
+                committed: Arc::new(MemoryCacheTemplateProvider::new(disk, &TemplateConfig::default())),
+                executions: Mutex::new(0),
+                _dir: dir,
+            }
+        }
     }
 
     impl TransactionExecutor<ReadOnlyMemoryStateStore> for CallingExecutor {
@@ -216,7 +232,7 @@ mod tests {
             uncommitted_templates: UncommittedTemplates,
         ) -> Result<ExecutionOutput, Self::Error> {
             *self.executions.lock().unwrap() += 1;
-            let provider = ExecutionTemplateProvider::new(Arc::new(NoCommittedTemplates), uncommitted_templates);
+            let provider = ExecutionTemplateProvider::new(self.committed.clone(), uncommitted_templates);
             let finalize = if provider.get_template(&CALLED).unwrap().is_some() {
                 FinalizeResult::new(
                     Hash32::default(),
@@ -266,36 +282,43 @@ mod tests {
         }
     }
 
-    fn execute(chain: &Chain) -> (TransactionExecution, usize) {
-        let executor = TariBlockTransactionExecutor {
-            executor: CallingExecutor::default(),
+    fn executor() -> TariBlockTransactionExecutor<CallingExecutor> {
+        TariBlockTransactionExecutor::new(
+            CallingExecutor::with_nothing_committed(),
             #[cfg(feature = "metrics")]
-            metrics: PrometheusExecutionMetrics::register(&mut Default::default()),
-        };
+            PrometheusExecutionMetrics::register(&mut Default::default()),
+        )
+    }
+
+    fn execute(executor: &TariBlockTransactionExecutor<CallingExecutor>, chain: &Chain) -> TransactionExecution {
         let transaction = Transaction::builder_localnet(Epoch(1)).build_and_seal(&PrivateKey::from(1u64));
-        let execution = BlockTransactionExecutor::<TestStateStore>::execute(
-            &executor,
+        BlockTransactionExecutor::<TestStateStore>::execute(
+            executor,
             &transaction,
             LockedEpoch::new(Epoch(1), Default::default(), Default::default()),
             &HashMap::new(),
             chain,
         )
-        .unwrap();
-        let executions = *executor.executor.executions.lock().unwrap();
-        (execution, executions)
+        .unwrap()
+    }
+
+    fn executions(executor: &TariBlockTransactionExecutor<CallingExecutor>) -> usize {
+        *executor.executor.executions.lock().unwrap()
     }
 
     #[test]
     fn a_template_the_parent_chain_publishes_resolves_though_it_is_not_committed() {
-        let (execution, executions) = execute(&Chain { publishes: true });
+        let executor = executor();
+        let execution = execute(&executor, &Chain { publishes: true });
         assert!(execution.decision().is_commit());
-        assert_eq!(executions, 2);
+        assert_eq!(executions(&executor), 2);
     }
 
     #[test]
     fn a_template_the_parent_chain_does_not_publish_is_not_found() {
-        let (execution, executions) = execute(&Chain { publishes: false });
+        let executor = executor();
+        let execution = execute(&executor, &Chain { publishes: false });
         assert!(!execution.decision().is_commit());
-        assert_eq!(executions, 1);
+        assert_eq!(executions(&executor), 1);
     }
 }
