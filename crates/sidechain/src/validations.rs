@@ -15,6 +15,7 @@ use crate::{
     QuorumDecision,
     SidechainBlockHeader,
     SidechainProofValidationError,
+    UncompressedPublicKey,
 };
 
 const LOG_TARGET: &str = "c::sidechain::validations";
@@ -33,8 +34,8 @@ pub const MAX_PROOF_ELEMS: usize = 4;
 /// `check_vn` describes. `quorum_threshold` must be positive: a QC with no signatures holds no power, so a threshold
 /// of 0 would accept one.
 ///
-/// Every check that needs no signature verification runs first, so a proof that is malformed or does not prove
-/// `header` costs no signature verification.
+/// Every check that needs no signature verification runs first, for every quorum certificate, so a proof that fails
+/// one costs no signature verification.
 pub fn check_proof_elements(
     network: u8,
     header: &SidechainBlockHeader,
@@ -58,12 +59,16 @@ pub fn check_proof_elements(
     }
     check_proof_structure(header, proof_elements)?;
 
+    let mut signed_qcs = Vec::with_capacity(proof_elements.len());
     for elem in proof_elements {
         if let CommitProofElement::QuorumCertificate(qc) = elem {
-            debug!(target: LOG_TARGET, "Validating quorum certificate that justifies: {}", qc.calculate_justified_block());
-            validate_qc(qc, quorum_threshold, check_vn, expected_decision)?;
-            debug!(target: LOG_TARGET, "Quorum certificate OK");
+            signed_qcs.push((qc, check_qc_signers(qc, quorum_threshold, check_vn, expected_decision)?));
         }
+    }
+    for (qc, signers) in &signed_qcs {
+        debug!(target: LOG_TARGET, "Verifying quorum certificate that justifies: {}", qc.calculate_justified_block());
+        verify_qc_signatures(qc, signers)?;
+        debug!(target: LOG_TARGET, "Quorum certificate OK");
     }
 
     Ok(())
@@ -224,12 +229,14 @@ pub fn check_proof_elements_num_qcs(
     Ok(())
 }
 
-fn validate_qc(
+/// Checks every part of `qc` that needs no signature verification and returns its signers' decoded keys and
+/// signatures, which hold at least `quorum_threshold` voting power.
+fn check_qc_signers(
     qc: &QuorumCertificate,
     quorum_threshold: u64,
     check_vn: &CheckVnFunc<'_>,
     quorum_decision: QuorumDecision,
-) -> Result<(), SidechainProofValidationError> {
+) -> Result<Vec<(UncompressedPublicKey, DecodedValidatorBlockSignature)>, SidechainProofValidationError> {
     if qc.signatures.len() > MAX_QC_SIGNATURES {
         return Err(SidechainProofValidationError::InvalidProof {
             details: format!(
@@ -255,7 +262,6 @@ fn validate_qc(
         });
     }
 
-    let block_id = qc.calculate_justified_block();
     let mut decoded = Vec::with_capacity(qc.signatures.len());
     let mut signed_power = 0u64;
     for sig in &qc.signatures {
@@ -271,13 +277,13 @@ fn validate_qc(
         signed_power = signed_power.saturating_add(power);
 
         let Some(pair) = sig.decode() else {
-            return Err(invalid_qc_signature(&block_id));
+            return Err(invalid_qc_signature(&qc.calculate_justified_block()));
         };
         decoded.push(pair);
     }
 
-    // The signers are distinct and the batch below accepts all of their signatures or none, so this is the power of
-    // the signers whose signatures verify. It is checked first so that a QC short of quorum costs no verification.
+    // The signers are distinct and `verify_qc_signatures` accepts all of their signatures or none, so this is the power
+    // of the signers whose signatures verify. It is checked first so that a QC short of quorum costs no verification.
     if signed_power < quorum_threshold {
         return Err(SidechainProofValidationError::InvalidProof {
             details: format!(
@@ -287,10 +293,19 @@ fn validate_qc(
         });
     }
 
+    Ok(decoded)
+}
+
+/// Verifies that every one of `signers` signed `qc`.
+fn verify_qc_signatures(
+    qc: &QuorumCertificate,
+    signers: &[(UncompressedPublicKey, DecodedValidatorBlockSignature)],
+) -> Result<(), SidechainProofValidationError> {
+    let block_id = qc.calculate_justified_block();
     // Every member of a QC signs the same message.
     let message =
-        ProposalVoteMessage::new(qc.protocol_version, &block_id, quorum_decision, qc.epoch, qc.height).calculate_hash();
-    let batch = decoded
+        ProposalVoteMessage::new(qc.protocol_version, &block_id, qc.decision, qc.epoch, qc.height).calculate_hash();
+    let batch = signers
         .iter()
         .map(|(public_key, signature)| (signature, public_key, message))
         .collect::<Vec<_>>();

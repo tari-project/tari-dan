@@ -97,6 +97,28 @@ fn it_rejects_a_proof_for_another_header_before_checking_any_signature() {
 }
 
 #[test]
+fn it_rejects_a_qc_with_the_wrong_decision_before_verifying_any_signature() {
+    let mut proof = load_fixture::<SidechainBlockCommitProof>("commit_proof.json");
+    let mut qcs = proof.proof_elements.iter_mut().filter_map(|elem| match elem {
+        CommitProofElement::QuorumCertificate(qc) => Some(qc),
+        CommitProofElement::ChainLinks(_) => None,
+    });
+    let first = qcs.next().expect("fixture has a quorum certificate");
+    let [a, b, ..] = first.signatures.as_mut_slice() else {
+        panic!("commit_proof.json fixture QC must have at least two signatures");
+    };
+    std::mem::swap(&mut a.signature, &mut b.signature);
+    let last = qcs.last().expect("fixture has more than one quorum certificate");
+    last.decision = QuorumDecision::Reject;
+
+    let err = proof.validate_committed(FIXTURE_NETWORK, 4, &|_| Ok(1)).unwrap_err();
+    assert!(
+        err.to_string().contains("decision must be Accept"),
+        "Expected the decision error, got: {err}"
+    );
+}
+
+#[test]
 fn it_rejects_a_proof_with_more_elements_than_a_commit_needs() {
     let mut proof = load_fixture::<SidechainBlockCommitProof>("commit_proof.json");
     let qc = proof

@@ -846,7 +846,7 @@ mod tests {
     use tari_crypto::{keys::SecretKey, tari_utilities::ByteArray};
     use tari_ootle_common_types::{Epoch, ExtraData, ExtraFieldKey, NumPreshards};
     use tari_ootle_storage::consensus_models::{BlockHeaderMetadata, BlockPledge, CommandsCommitProof};
-    use tari_ootle_transaction::Transaction;
+    use tari_ootle_transaction::{Network, Transaction};
     use tari_sidechain::{
         ChainLink,
         CommitProofElement,
@@ -886,7 +886,7 @@ mod tests {
             is_dummy: false,
         };
         let header = SidechainBlockHeader {
-            network: 0,
+            network: Network::MainNet.as_byte(),
             protocol_version: 0,
             parent_id: Default::default(),
             justify_id: Default::default(),
@@ -1001,7 +1001,7 @@ mod tests {
             proposal
                 .commit_proof()
                 .sidechain_block_commit_proof()
-                .validate_committed(0, quorum_threshold, &|_| Ok(1))
+                .validate_committed(Network::MainNet.as_byte(), quorum_threshold, &|_| Ok(1))
                 .unwrap();
             assert_eq!(proposal.calculate_block_id(), honest.calculate_block_id());
         }
