@@ -14184,6 +14184,7 @@ name = "transaction_generator"
 version = "0.47.0"
 dependencies = [
  "anyhow",
+ "bounded-vec",
  "bytes",
  "clap 4.5.54",
  "once_cell",
@@ -14196,6 +14197,7 @@ dependencies = [
  "tari_indexer_client",
  "tari_ootle_common_types",
  "tari_ootle_transaction",
+ "tari_template_builtin",
  "tari_template_lib_types",
  "tari_template_test_tooling",
  "tari_transaction_manifest",

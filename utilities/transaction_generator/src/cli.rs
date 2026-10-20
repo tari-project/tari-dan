@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use tari_ootle_transaction::Network;
 use url::Url;
 
@@ -40,6 +40,15 @@ pub struct WriteArgs {
     pub overwrite: bool,
     #[clap(long, short = 'm')]
     pub manifest: Option<PathBuf>,
+    /// The transactions to generate when no `--manifest` is given.
+    #[clap(long, value_enum, default_value_t = Flood::Faucet, conflicts_with = "manifest")]
+    pub flood: Flood,
+    /// Derive each transaction's signing key from this seed and the transaction's index instead of at random.
+    ///
+    /// A faucet flood with a seed funds the accounts that a transfers flood with the same seed spends from. Required
+    /// by `--flood transfers`.
+    #[clap(long, conflicts_with = "manifest")]
+    pub account_seed: Option<u64>,
     #[clap(long, short = 'a', alias = "arg")]
     pub manifest_args: Vec<String>,
     /// Template alias to address mappings used to resolve `use <alias>;` imports in the manifest,
@@ -89,6 +98,17 @@ pub struct WriteArgs {
     #[clap(long, default_value_t = 100)]
     pub validity_epochs: u64,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Flood {
+    /// Every transaction claims from the builtin faucet into a new account. All of them write the faucet's vault,
+    /// so each depends on the one before it.
+    Faucet,
+    /// Transaction `i` transfers from account `i` of `--account-seed` into a new account. No two write the same
+    /// substate, so none depends on another. The accounts must first be funded by a faucet flood with the same seed
+    /// and at least as many transactions.
+    Transfers,
+}
+
 #[derive(Args, Debug)]
 pub struct ReadArgs {
     #[clap(long, short = 'f')]

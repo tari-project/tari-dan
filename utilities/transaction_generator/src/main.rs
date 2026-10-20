@@ -12,22 +12,33 @@ use std::{
 };
 
 use anyhow::anyhow;
+use bounded_vec::BoundedVec;
 use cli::Cli;
 use tari_crypto::{keys::SecretKey, ristretto::RistrettoSecretKey, tari_utilities::hex::Hex};
-use tari_indexer_client::rest_api_client::IndexerRestApiClient;
+use tari_engine_types::substate::SubstateId;
+use tari_indexer_client::{
+    rest_api_client::IndexerRestApiClient,
+    types::{GetSubstatesRequest, MAX_SUBSTATES_PER_FETCH},
+};
 use tari_ootle_common_types::{Epoch, InputDeclaration};
 use tari_ootle_transaction::{Blob, Network};
-use tari_template_lib_types::TemplateAddress;
+use tari_template_lib_types::{TemplateAddress, VaultId};
 use tari_transaction_manifest::ManifestValue;
 use transaction_generator::{
     BoxedTransactionBuilder,
     read_number_of_transactions,
     read_transactions,
-    transaction_builders::{free_coins, manifest},
+    transaction_builders::{
+        accounts::{account_address, account_keypair},
+        free_coins,
+        manifest,
+        transfers,
+    },
 };
+use url::Url;
 
 use crate::{
-    cli::{SubCommand, WriteArgs},
+    cli::{Flood, SubCommand, WriteArgs},
     transaction_writer::write_transactions,
 };
 
@@ -155,8 +166,80 @@ fn get_transaction_builder(args: &WriteArgs, max_epoch: Epoch) -> anyhow::Result
                 max_epoch,
             )
         },
-        None => Ok(Box::new(free_coins::builder(network, max_epoch))),
+        None => match args.flood {
+            Flood::Faucet => match args.account_seed {
+                Some(seed) => Ok(Box::new(free_coins::seeded_builder(network, max_epoch, seed))),
+                None => Ok(Box::new(free_coins::builder(network, max_epoch))),
+            },
+            Flood::Transfers => {
+                let seed = args.account_seed.ok_or_else(|| {
+                    anyhow!(
+                        "--flood transfers spends from the accounts a faucet flood funded: pass the --account-seed \
+                         that flood used"
+                    )
+                })?;
+                let vaults = resolve_account_vaults(&args.indexer_url, seed, args.num_transactions)?;
+                Ok(Box::new(transfers::builder(network, max_epoch, seed, vaults)))
+            },
+        },
     }
+}
+
+/// The TARI vault of each of the first `count` accounts derived from `seed`, in account order.
+///
+/// A vault id is allocated from the hash of the transaction that created it, so it is read from the indexer rather
+/// than derived. A faucet-funded account holds exactly one vault.
+fn resolve_account_vaults(indexer_url: &Url, seed: u64, count: u64) -> anyhow::Result<Vec<VaultId>> {
+    let client = IndexerRestApiClient::connect(indexer_url.clone())?;
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+    let indices = (0..count).collect::<Vec<_>>();
+    let mut vaults = Vec::with_capacity(indices.len());
+    for chunk in indices.chunks(MAX_SUBSTATES_PER_FETCH) {
+        let addresses = chunk
+            .iter()
+            .map(|&index| account_address(&account_keypair(seed, index).1))
+            .collect::<Vec<_>>();
+        let requests = BoundedVec::<_, 1, 50>::from_vec(
+            addresses
+                .iter()
+                .map(|&address| SubstateId::Component(address))
+                .collect(),
+        )
+        .map_err(|e| anyhow!("Could not batch account lookups: {e}"))?;
+        let response = runtime
+            .block_on(client.fetch_substates(GetSubstatesRequest {
+                requests,
+                cached_only: false,
+                include_proofs: false,
+            }))
+            .map_err(|e| anyhow!("Could not read the accounts of seed {seed} from indexer {indexer_url}: {e}"))?;
+
+        for (&index, address) in chunk.iter().zip(&addresses) {
+            let component = response
+                .substates
+                .get(&SubstateId::Component(*address))
+                .and_then(|substate| substate.substate_value().component())
+                .ok_or_else(|| {
+                    anyhow!(
+                        "Account {index} of seed {seed} ({address}) does not exist. Fund the accounts first with \
+                         `--account-seed {seed}` and at least {count} faucet transactions."
+                    )
+                })?;
+            let indexed = component
+                .body
+                .to_indexed_well_known_types()
+                .map_err(|e| anyhow!("Could not read the vaults of account {index} ({address}): {e}"))?;
+            match indexed.vault_ids() {
+                [vault] => vaults.push(*vault),
+                found => anyhow::bail!(
+                    "Account {index} of seed {seed} ({address}) holds {} vaults, but a transfers flood spends only \
+                     the TARI vault the faucet funded",
+                    found.len()
+                ),
+            }
+        }
+    }
+    Ok(vaults)
 }
 
 fn parse_inputs(items: &[String]) -> anyhow::Result<Vec<InputDeclaration>> {
