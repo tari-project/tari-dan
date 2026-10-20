@@ -131,7 +131,7 @@ mod tests {
         SubstateVersion,
         shard::Shard,
     };
-    use tari_ootle_storage::{StateStore, consensus_models::BlockDiff};
+    use tari_ootle_storage::{StateStore, StateStoreWriteTransaction, consensus_models::BlockDiff};
     use tari_ootle_transaction::Network;
     use tari_sidechain::{FixedHash, QuorumDecision};
     use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
@@ -246,5 +246,46 @@ mod tests {
         let store = UncommittedTemplateStore::default();
         db.with_read_tx(|tx| store.rebuild(tx, committed.id())).unwrap();
         assert_eq!(recorded(&store), vec![NodeHeight(2), NodeHeight(2)]);
+    }
+
+    fn template_address(n: u8) -> TemplateAddress {
+        tari_engine_types::published_template::PublishedTemplateAddress::from_hash([n; 32].into()).as_template_address()
+    }
+
+    #[test]
+    fn an_execution_gets_the_templates_of_its_pending_and_committed_ancestors_and_not_of_a_fork() {
+        let zero = Block::zero_block(Network::LocalNet, NumPreshards::P256);
+        let committed = child_of(&zero, 1);
+        let pending = child_of(&committed, 2);
+        let parent = child_of(&pending, 3);
+        let fork = child_of(&committed, 4);
+
+        let dir = tempfile::tempdir().unwrap();
+        let db = RocksDbStateStore::<String>::open(dir.path().join("db"), DatabaseOptions::default()).unwrap();
+        db.with_write_tx(|tx| {
+            for block in [&zero, &committed, &pending, &parent, &fork] {
+                block.insert(tx)?;
+            }
+            for block in [&zero, &committed] {
+                tx.blocks_set_qcs(block.id(), Some(&block.justify().calculate_id()), None)?;
+            }
+            Ok::<_, StorageError>(())
+        })
+        .unwrap();
+
+        let store = UncommittedTemplateStore::default();
+        store.record(&committed.as_leaf(), &[publishes(1)]);
+        store.record(&pending.as_leaf(), &[publishes(2)]);
+        store.record(&fork.as_leaf(), &[publishes(4)]);
+
+        let templates = db
+            .with_read_tx(|tx| {
+                let substate_store = PendingSubstateStore::init(tx, parent.as_leaf(), NumPreshards::P256)?;
+                store.templates_for(&substate_store)
+            })
+            .unwrap();
+        assert!(templates.get(&template_address(1)).is_some(), "committed ancestor");
+        assert!(templates.get(&template_address(2)).is_some(), "pending ancestor");
+        assert!(templates.get(&template_address(4)).is_none(), "fork");
     }
 }
