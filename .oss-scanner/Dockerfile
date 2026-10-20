@@ -40,10 +40,13 @@ RUN cargo fetch --locked \
          -not -path './crates/wallet/ledger/app/*' -exec grep -l '^\[workspace\]' {} + \
        | while read -r manifest; do cargo fetch --manifest-path "$manifest" || exit 1; done
 
-# CI's test profile: release with opt-level 1 and overflow checks on, as validators run it. The web UIs are not built
-# outside the release profile, so this needs no node toolchain. integration_tests is left out: its cucumber suite needs
-# a Minotari base node and wallet. A step that fails fails the build, and primary_contact gets the log.
-RUN cargo build --locked --workspace --exclude integration_tests --all-features --profile ci-build \
+# CI's test profile: release with opt-level 1 and overflow checks on, as validators run it. The applications' `ts`
+# feature, which --all-features enables, skips their web UI builds. db-inspector has no such feature, and its build
+# script cannot run pnpm here, so the dist directory its include_dir! embeds is created empty instead. integration_tests
+# is left out: its cucumber suite needs a Minotari base node and wallet. A step that fails fails the build, and
+# primary_contact gets the log.
+RUN mkdir -p utilities/db_inspector/web_ui/dist \
+    && cargo build --locked --workspace --exclude integration_tests --all-features --profile ci-build \
       --lib --bins --examples \
     && cargo nextest run --locked --workspace --exclude integration_tests --all-features --cargo-profile ci-build \
       --no-run
