@@ -275,13 +275,7 @@ impl IndexerRestApiClient {
             .json(&req)
             .send()
             .await?;
-
-        if !resp.status().is_success() {
-            return Err(IndexerRestClientError::ErrorResponse {
-                source: resp.error_for_status_ref().err().unwrap(),
-                details: None,
-            });
-        }
+        let resp = require_success_status(resp)?;
 
         let stream = resp.bytes_stream();
         let stream = ProtobufStream::<protobuf::UtxoUpdatePayload>::new(stream);
@@ -452,6 +446,23 @@ impl EndpointChanges {
     }
 }
 
+/// Passes `resp` through only if its status is 2xx, the only statuses whose body is the requested resource. A 4xx or
+/// 5xx becomes [`IndexerRestClientError::ErrorResponse`]; any other status (1xx, or a 3xx that was not followed as a
+/// redirect) becomes [`IndexerRestClientError::UnexpectedStatus`].
+pub(crate) fn require_success_status(resp: reqwest::Response) -> Result<reqwest::Response, IndexerRestClientError> {
+    let resp = resp
+        .error_for_status()
+        .map_err(|source| IndexerRestClientError::ErrorResponse { source, details: None })?;
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(IndexerRestClientError::UnexpectedStatus {
+            status,
+            url: resp.url().clone(),
+        });
+    }
+    Ok(resp)
+}
+
 async fn handle_json_response<T: DeserializeOwned>(
     resp: reqwest::Response,
     path: String,
@@ -468,6 +479,7 @@ async fn handle_json_response<T: DeserializeOwned>(
             details: None,
         });
     }
+    let resp = require_success_status(resp)?;
     match resp.json().await {
         Ok(r) => Ok(r),
         Err(e) => Err(IndexerRestClientError::DeserializeResponse { path, source: e.into() }),

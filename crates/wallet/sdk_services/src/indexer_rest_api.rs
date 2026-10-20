@@ -149,6 +149,7 @@ impl IndexerHealth {
                     Some(_) => Self::Answered,
                 }
             },
+            IndexerRestClientError::UnexpectedStatus { .. } => Self::Unavailable,
             _ => Self::Inconclusive,
         }
     }
@@ -997,6 +998,10 @@ mod tests {
         assert_eq!(
             health_of_request_to(spawn_status_server("503 Service Unavailable", r#"{"error":"still syncing"}"#).await)
                 .await,
+            IndexerHealth::Unavailable
+        );
+        assert_eq!(
+            health_of_request_to(spawn_status_server("304 Not Modified", "").await).await,
             IndexerHealth::Unavailable
         );
         assert_eq!(

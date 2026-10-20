@@ -12,7 +12,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures::Stream;
 use reqwest::{header, header::HeaderValue};
 
-use crate::error::IndexerRestClientError;
+use crate::{error::IndexerRestClientError, rest_api_client::require_success_status};
 
 pub static MIME_EVENT_STREAM: HeaderValue = HeaderValue::from_static("text/event-stream");
 
@@ -26,15 +26,7 @@ impl SseEventStreamBuilder {
     }
 
     pub fn into_stream(self) -> Result<SseEventStream, IndexerRestClientError> {
-        let response = match self.response.error_for_status() {
-            Ok(resp) => resp,
-            Err(err) => {
-                return Err(IndexerRestClientError::ErrorResponse {
-                    source: err,
-                    details: None,
-                });
-            },
-        };
+        let response = require_success_status(self.response)?;
         let content_type = response.headers().get(header::CONTENT_TYPE);
         if content_type != Some(&MIME_EVENT_STREAM) {
             return Err(IndexerRestClientError::InvalidResponse {

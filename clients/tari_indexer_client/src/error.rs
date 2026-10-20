@@ -3,7 +3,7 @@
 
 use std::error::Error as StdError;
 
-use reqwest::StatusCode;
+use reqwest::{StatusCode, Url};
 use tari_ootle_common_types::optional::IsNotFoundError;
 
 /// reqwest hides the actual transport failure (timeout, connection refused, DNS error, ...) in its
@@ -69,6 +69,10 @@ pub enum IndexerRestClientError {
         source: reqwest::Error,
         details: Option<String>,
     },
+    /// The indexer answered with a 1xx or 3xx status, e.g. a redirect that was not followed. Such a response does not
+    /// carry the requested resource.
+    #[error("Unexpected HTTP status {status} from {url}")]
+    UnexpectedStatus { status: StatusCode, url: Url },
     #[error("Request failed: code: {code} message: {message}")]
     RequestFailedWithStatus { code: i64, message: String },
     #[error("Invalid response: {message}")]
