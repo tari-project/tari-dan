@@ -5,6 +5,7 @@ use tari_jellyfish::JmtHashScheme;
 use tari_sidechain::{
     CommitProofElement,
     FixedHash,
+    MAX_PROOF_ELEMS,
     MAX_QC_SIGNATURES,
     ProposalVoteMessage,
     QuorumDecision,
@@ -16,16 +17,19 @@ use tari_sidechain::{
 mod support;
 use support::load_fixture;
 
+/// The network byte of the header in `commit_proof.json`.
+const FIXTURE_NETWORK: u8 = 16;
+
 #[test]
 fn it_validates_a_correct_proof() {
     let proof = load_fixture::<SidechainBlockCommitProof>("commit_proof.json");
-    proof.validate_committed(4, &|_| Ok(1)).unwrap();
+    proof.validate_committed(FIXTURE_NETWORK, 4, &|_| Ok(1)).unwrap();
 }
 
 #[test]
 fn it_rejects_if_qc_signs_for_unknown_validator() {
     let proof = load_fixture::<SidechainBlockCommitProof>("commit_proof.json");
-    proof.validate_committed(4, &|_| Ok(0)).unwrap_err();
+    proof.validate_committed(FIXTURE_NETWORK, 4, &|_| Ok(0)).unwrap_err();
 }
 
 #[test]
@@ -41,7 +45,7 @@ fn it_rejects_a_qc_with_too_many_signatures() {
             qc.signatures = vec![signature; MAX_QC_SIGNATURES + 1];
         }
     }
-    let err = proof.validate_committed(4, &|_| Ok(1)).unwrap_err();
+    let err = proof.validate_committed(FIXTURE_NETWORK, 4, &|_| Ok(1)).unwrap_err();
     let expected = format!(
         "must contain at most {} signatures but contained {}",
         MAX_QC_SIGNATURES,
@@ -50,6 +54,87 @@ fn it_rejects_a_qc_with_too_many_signatures() {
     assert!(
         err.to_string().contains(&expected),
         "Expected the signature-count error, got: {err}"
+    );
+}
+
+#[test]
+fn it_rejects_a_zero_quorum_threshold() {
+    let mut proof = load_fixture::<SidechainBlockCommitProof>("commit_proof.json");
+    for elem in &mut proof.proof_elements {
+        if let CommitProofElement::QuorumCertificate(qc) = elem {
+            qc.signatures.clear();
+        }
+    }
+    let err = proof.validate_committed(FIXTURE_NETWORK, 0, &|_| Ok(1)).unwrap_err();
+    assert!(err.is_internal_error(), "Expected the zero threshold error, got: {err}");
+}
+
+#[test]
+fn it_rejects_a_proof_for_another_network() {
+    let proof = load_fixture::<SidechainBlockCommitProof>("commit_proof.json");
+    let err = proof
+        .validate_committed(FIXTURE_NETWORK.wrapping_add(1), 4, &|_| Ok(1))
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("Commit proof is for a block on network 16"),
+        "Expected the network error, got: {err}"
+    );
+}
+
+#[test]
+fn it_rejects_a_proof_for_another_header_before_checking_any_signature() {
+    let mut proof = load_fixture::<SidechainBlockCommitProof>("commit_proof.json");
+    proof.header.height = proof.header.height.wrapping_add(1);
+    let err = proof
+        .validate_committed(FIXTURE_NETWORK, 4, &|_| {
+            panic!("no committee lookup may precede the header check")
+        })
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("does not match the block ID in the header"),
+        "Expected the block ID mismatch error, got: {err}"
+    );
+}
+
+#[test]
+fn it_rejects_a_qc_with_the_wrong_decision_before_verifying_any_signature() {
+    let mut proof = load_fixture::<SidechainBlockCommitProof>("commit_proof.json");
+    let mut qcs = proof.proof_elements.iter_mut().filter_map(|elem| match elem {
+        CommitProofElement::QuorumCertificate(qc) => Some(qc),
+        CommitProofElement::ChainLinks(_) => None,
+    });
+    let first = qcs.next().expect("fixture has a quorum certificate");
+    let [a, b, ..] = first.signatures.as_mut_slice() else {
+        panic!("commit_proof.json fixture QC must have at least two signatures");
+    };
+    std::mem::swap(&mut a.signature, &mut b.signature);
+    let last = qcs.last().expect("fixture has more than one quorum certificate");
+    last.decision = QuorumDecision::Reject;
+
+    let err = proof.validate_committed(FIXTURE_NETWORK, 4, &|_| Ok(1)).unwrap_err();
+    assert!(
+        err.to_string().contains("decision must be Accept"),
+        "Expected the decision error, got: {err}"
+    );
+}
+
+#[test]
+fn it_rejects_a_proof_with_more_elements_than_a_commit_needs() {
+    let mut proof = load_fixture::<SidechainBlockCommitProof>("commit_proof.json");
+    let qc = proof
+        .proof_elements
+        .first()
+        .cloned()
+        .expect("fixture has proof elements");
+    proof.proof_elements.resize(MAX_PROOF_ELEMS + 1, qc);
+    let err = proof
+        .validate_committed(FIXTURE_NETWORK, 4, &|_| {
+            panic!("no committee lookup may precede the size check")
+        })
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("too many proof elements"),
+        "Expected the proof element count error, got: {err}"
     );
 }
 
@@ -79,7 +164,7 @@ fn the_protocol_version_selects_the_hash_schema() {
 fn it_rejects_a_proof_whose_header_claims_another_protocol_version() {
     let mut proof = load_fixture::<SidechainBlockCommitProof>("commit_proof.json");
     proof.header.protocol_version = 1;
-    let err = proof.validate_committed(4, &|_| Ok(1)).unwrap_err();
+    let err = proof.validate_committed(FIXTURE_NETWORK, 4, &|_| Ok(1)).unwrap_err();
     assert!(
         err.to_string().contains("does not match the block ID in the header"),
         "Expected the block ID mismatch error, got: {err}"
@@ -94,7 +179,7 @@ fn it_rejects_a_qc_that_claims_another_protocol_version() {
             qc.protocol_version = 1;
         }
     }
-    let err = proof.validate_committed(4, &|_| Ok(1)).unwrap_err();
+    let err = proof.validate_committed(FIXTURE_NETWORK, 4, &|_| Ok(1)).unwrap_err();
     assert!(
         err.to_string().contains("Invalid signature for QC"),
         "Expected the signature error, got: {err}"
@@ -128,7 +213,7 @@ fn it_rejects_a_version_0_header_that_carries_a_transaction_merkle_root() {
     let mut proof = load_fixture::<SidechainBlockCommitProof>("commit_proof.json");
     proof.header.transaction_merkle_root = Some(FixedHash::from([1u8; 32]));
     // The version 0 preimage does not cover the root, so the block ID still matches.
-    let err = proof.validate_committed(4, &|_| Ok(1)).unwrap_err();
+    let err = proof.validate_committed(FIXTURE_NETWORK, 4, &|_| Ok(1)).unwrap_err();
     assert!(
         err.to_string().contains("commits to no transaction merkle root"),
         "Expected the transaction merkle root error, got: {err}"
@@ -139,11 +224,11 @@ fn it_rejects_a_version_0_header_that_carries_a_transaction_merkle_root() {
 fn it_validates_a_signed_version_1_proof_that_carries_a_transaction_merkle_root() {
     let root = FixedHash::from([1u8; 32]);
     let proof = signed_version_1_proof(Some(root));
-    proof.validate_committed(4, &|_| Ok(1)).unwrap();
+    proof.validate_committed(FIXTURE_NETWORK, 4, &|_| Ok(1)).unwrap();
 
     let mut tampered = proof.clone();
     tampered.header.transaction_merkle_root = Some(FixedHash::from([2u8; 32]));
-    let err = tampered.validate_committed(4, &|_| Ok(1)).unwrap_err();
+    let err = tampered.validate_committed(FIXTURE_NETWORK, 4, &|_| Ok(1)).unwrap_err();
     assert!(
         err.to_string().contains("does not match the block ID in the header"),
         "Expected the block ID mismatch error, got: {err}"
@@ -151,7 +236,7 @@ fn it_validates_a_signed_version_1_proof_that_carries_a_transaction_merkle_root(
 
     let mut stripped = proof;
     stripped.header.transaction_merkle_root = None;
-    let err = stripped.validate_committed(4, &|_| Ok(1)).unwrap_err();
+    let err = stripped.validate_committed(FIXTURE_NETWORK, 4, &|_| Ok(1)).unwrap_err();
     assert!(
         err.to_string().contains("does not match the block ID in the header"),
         "Expected the block ID mismatch error, got: {err}"
@@ -273,7 +358,7 @@ mod weighted_committee {
         // Five of seven members, more than two thirds by count, but only 14 of 34 power.
         let proof = signed_by(1..=5);
         let err = proof
-            .validate_committed(QUORUM_POWER, &|pk| Ok(power_of(pk)))
+            .validate_committed(FIXTURE_NETWORK, QUORUM_POWER, &|pk| Ok(power_of(pk)))
             .unwrap_err();
         assert!(
             err.to_string()
@@ -286,7 +371,9 @@ mod weighted_committee {
     fn it_accepts_a_qc_with_few_signers_holding_enough_power() {
         // Three of seven members, but 30 of 34 power.
         let proof = signed_by(5..=7);
-        proof.validate_committed(QUORUM_POWER, &|pk| Ok(power_of(pk))).unwrap();
+        proof
+            .validate_committed(FIXTURE_NETWORK, QUORUM_POWER, &|pk| Ok(power_of(pk)))
+            .unwrap();
     }
 }
 
@@ -351,7 +438,7 @@ mod batch_verification {
     }
 
     fn assert_invalid_signature(proof: &SidechainBlockCommitProof) {
-        let err = proof.validate_committed(4, &|_| Ok(1)).unwrap_err();
+        let err = proof.validate_committed(FIXTURE_NETWORK, 4, &|_| Ok(1)).unwrap_err();
         assert!(
             err.to_string().contains("Invalid signature for QC"),
             "Expected the signature error, got: {err}"

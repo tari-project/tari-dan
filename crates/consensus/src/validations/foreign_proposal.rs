@@ -98,7 +98,7 @@ pub fn check_foreign_proposal<TConsensusSpec: ConsensusSpec>(
     check_proposer_in_committee(proposal, foreign_committee)?;
     check_header(proposal)?;
     check_block_metadata(proposal)?;
-    check_commit_proof::<TConsensusSpec>(proposal.commit_proof(), foreign_committee)?;
+    check_commit_proof::<TConsensusSpec>(proposal.commit_proof(), config.network, foreign_committee)?;
     Ok(())
 }
 
@@ -181,10 +181,11 @@ fn check_protocol_version(proposal: &ForeignProposal, network: Network) -> Resul
 
 pub fn check_commit_proof<TConsensusSpec: ConsensusSpec>(
     proof: &CommandsCommitProof,
+    network: Network,
     foreign_committee: &Committee<TConsensusSpec::Addr>,
 ) -> Result<(), ProposalValidationError> {
     let quorum_threshold = foreign_committee.quorum_threshold();
-    proof.validate_committed(quorum_threshold, &|pk| {
+    proof.validate_committed(network, quorum_threshold, &|pk| {
         Ok(foreign_committee
             .get_power_by_public_key(pk)
             .unwrap_or_else(VotePower::zero))

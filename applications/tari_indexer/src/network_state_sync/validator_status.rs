@@ -8,6 +8,7 @@ use std::{
 };
 
 use log::*;
+use ootle_network::Network;
 use tari_consensus::hotstuff::ConsensusCurrentState;
 use tari_epoch_manager::{EpochManagerReader, service::EpochManagerHandle};
 use tari_ootle_common_types::{Epoch, NodeHeight, ShardGroup, VotePower};
@@ -95,13 +96,15 @@ pub enum ProbeFailure {
 /// In-memory, lazily-populated map of the latest probe of each validator the indexer has contacted.
 #[derive(Clone)]
 pub struct ValidatorStatusMonitor {
+    network: Network,
     epoch_manager: EpochManagerHandle<PeerAddress>,
     inner: Arc<RwLock<HashMap<PeerAddress, ValidatorProbeRecord>>>,
 }
 
 impl ValidatorStatusMonitor {
-    pub fn new(epoch_manager: EpochManagerHandle<PeerAddress>) -> Self {
+    pub fn new(network: Network, epoch_manager: EpochManagerHandle<PeerAddress>) -> Self {
         Self {
+            network,
             epoch_manager,
             inner: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -223,7 +226,7 @@ impl ValidatorStatusMonitor {
             .map_err(|e| ProbeError::CommitteeUnavailable(e.to_string()))?;
 
         proof
-            .validate(committee.quorum_threshold(), |pk| {
+            .validate(self.network, committee.quorum_threshold(), |pk| {
                 Ok(committee.get_power_by_public_key(pk).unwrap_or_else(VotePower::zero))
             })
             .map_err(|e| ProbeError::InvalidProof(e.to_string()))

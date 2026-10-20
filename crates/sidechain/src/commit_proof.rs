@@ -78,14 +78,16 @@ impl<C: ToCommand> CommandCommitProof<C> {
         }
     }
 
+    /// See [`SidechainBlockCommitProof::validate_committed`].
     pub fn validate_committed(
         &self,
+        network: u8,
         quorum_threshold: u64,
         check_vn: &CheckVnFunc<'_>,
     ) -> Result<(), SidechainProofValidationError> {
         #[allow(clippy::single_match)]
         match self {
-            CommandCommitProof::V1(v1) => v1.validate_committed(quorum_threshold, check_vn),
+            CommandCommitProof::V1(v1) => v1.validate_committed(network, quorum_threshold, check_vn),
         }
     }
 }
@@ -124,14 +126,17 @@ impl<C: ToCommand> CommandCommitProofV1<C> {
         Ok(())
     }
 
+    /// See [`SidechainBlockCommitProof::validate_committed`].
     pub fn validate_committed(
         &self,
+        network: u8,
         quorum_threshold: u64,
         check_vn: &CheckVnFunc<'_>,
     ) -> Result<(), SidechainProofValidationError> {
         let command = self.command.to_command();
         self.validate_inclusion_proof(&command)?;
-        self.commit_proof.validate_committed(quorum_threshold, check_vn)
+        self.commit_proof
+            .validate_committed(network, quorum_threshold, check_vn)
     }
 }
 
@@ -142,12 +147,19 @@ pub struct SidechainBlockCommitProof {
 }
 
 impl SidechainBlockCommitProof {
+    /// Validates that the header's block committed on `network`, signed by a quorum of the committee that `check_vn`
+    /// describes. `quorum_threshold` must be positive.
+    ///
+    /// The caller binds the header's epoch and shard group by passing that epoch and shard group's committee in
+    /// `check_vn`.
     pub fn validate_committed(
         &self,
+        network: u8,
         quorum_threshold: u64,
         check_vn: &CheckVnFunc<'_>,
     ) -> Result<(), SidechainProofValidationError> {
         check_proof_elements(
+            network,
             &self.header,
             &self.proof_elements,
             check_vn,

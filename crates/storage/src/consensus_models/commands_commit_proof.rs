@@ -3,6 +3,7 @@
 
 use anyhow::anyhow;
 use minicbor::{CborLen, Decode, Encode};
+use ootle_network::Network;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::CompressedPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
@@ -68,11 +69,12 @@ impl CommandsCommitProof {
 
     pub fn validate_committed(
         &self,
+        network: Network,
         quorum_threshold: VotePower,
         check_vn: &CheckVnFunc<'_>,
     ) -> Result<(), ForeignProposalCommitProofError> {
         match self {
-            Self::V1(proof) => proof.validate_committed(quorum_threshold, check_vn),
+            Self::V1(proof) => proof.validate_committed(network, quorum_threshold, check_vn),
         }
     }
 }
@@ -101,15 +103,19 @@ impl CommandsCommitProofV1 {
 
     pub fn validate_committed(
         &self,
+        network: Network,
         quorum_threshold: VotePower,
         check_vn: &CheckVnFunc<'_>,
     ) -> Result<(), ForeignProposalCommitProofError> {
         self.validate_command_merkle_root()?;
-        self.commit_proof
-            .validate_committed(quorum_threshold.value(), &|pk: &CompressedPublicKey| {
+        self.commit_proof.validate_committed(
+            network.as_byte(),
+            quorum_threshold.value(),
+            &|pk: &CompressedPublicKey| {
                 check_vn(&RistrettoPublicKeyBytes::from_bytes(pk.as_bytes()).expect("already checked"))
                     .map(|v| v.value())
-            })?;
+            },
+        )?;
         Ok(())
     }
 

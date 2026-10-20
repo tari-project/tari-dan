@@ -313,7 +313,7 @@ mod tests {
         consensus_models::{BlockCommands, Command, LocalOnlyAtom, MultiShardAtom},
     };
     use tari_ootle_transaction::{Network, TransactionId};
-    use tari_sidechain::{FixedHash, ProposalVoteMessage, QuorumDecision, ValidatorQcSignature, check_proof_elements};
+    use tari_sidechain::{FixedHash, ProposalVoteMessage, QuorumDecision, ValidatorQcSignature, check_proof_structure};
     use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
 
     use super::*;
@@ -400,17 +400,9 @@ mod tests {
         (store, dir)
     }
 
-    /// Runs the proof through the sidechain verifier's structural checks. The certificates carry no signatures,
-    /// so a zero quorum threshold exercises everything but signature verification.
+    /// Runs the proof through the sidechain verifier's structural checks. The certificates carry no signatures.
     fn assert_verifies(proof: &SidechainBlockCommitProof) {
-        check_proof_elements(
-            &proof.header,
-            &proof.proof_elements,
-            &|_| Ok(1),
-            QuorumDecision::Accept,
-            0,
-        )
-        .unwrap();
+        check_proof_structure(&proof.header, &proof.proof_elements).unwrap();
     }
 
     fn qc_element_ids(proof: &SidechainBlockCommitProof) -> Vec<Vec<FixedHash>> {
