@@ -53,8 +53,8 @@ pub async fn get(Extension(context): Extension<HandlerContext>) -> HandlerResult
     path = "/network/economics",
     description = "Get network-wide TARI economic totals (claimed, burned, fee volume, supply, fees claimable by validators, target rate and the rate changes scheduled ahead)",
     responses(
-        (status = 200, body = GetNetworkEconomicsResponse),
-        (status = INTERNAL_SERVER_ERROR, body = ErrorResponse),
+        (status = 200, description = "Network economic totals", body = GetNetworkEconomicsResponse),
+        (status = INTERNAL_SERVER_ERROR, description = "Failed to fetch network economics", body = ErrorResponse),
     ),
 )]
 pub async fn get_economics(Extension(context): Extension<HandlerContext>) -> HandlerResult<Response> {
@@ -100,8 +100,8 @@ pub async fn get_economics(Extension(context): Extension<HandlerContext>) -> Han
 
 #[utoipa::path(get, path = "/network/stats", description = "Get network sync stats",
     responses(
-        (status = 200, body = GetNetworkSyncStateResponse),
-        (status = INTERNAL_SERVER_ERROR, body = ErrorResponse),
+        (status = 200, description = "Network sync stats", body = GetNetworkSyncStateResponse),
+        (status = INTERNAL_SERVER_ERROR, description = "Failed to fetch network sync stats", body = ErrorResponse),
     ),
 )]
 pub async fn get_network_sync_stats(
@@ -189,8 +189,8 @@ fn to_client_consensus_state(state: ConsensusCurrentState) -> ValidatorConsensus
 
 #[utoipa::path(get, path = "/network/connections", description = "Get active peer connections",
     responses(
-        (status = 200, body = GetConnectionsResponse),
-        (status = INTERNAL_SERVER_ERROR, body = ErrorResponse),
+        (status = 200, description = "Active peer connections", body = GetConnectionsResponse),
+        (status = INTERNAL_SERVER_ERROR, description = "Failed to fetch peer connections", body = ErrorResponse),
     ),
 )]
 pub async fn get_connections(Extension(context): Extension<HandlerContext>) -> HandlerResult<Response> {

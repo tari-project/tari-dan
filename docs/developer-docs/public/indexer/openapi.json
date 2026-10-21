@@ -10,7 +10,7 @@
       "name": "BSD-3-Clause",
       "identifier": "BSD-3-Clause"
     },
-    "version": "0.46.1"
+    "version": "0.47.0"
   },
   "paths": {
     "/committees": {
@@ -255,7 +255,7 @@
         "operationId": "get_epoch_manager_stats",
         "responses": {
           "200": {
-            "description": "",
+            "description": "Epoch manager stats",
             "content": {
               "application/json": {
                 "schema": {
@@ -265,7 +265,7 @@
             }
           },
           "500": {
-            "description": "",
+            "description": "Failed to fetch epoch manager stats",
             "content": {
               "application/json": {
                 "schema": {
@@ -358,7 +358,7 @@
         "operationId": "get_connections",
         "responses": {
           "200": {
-            "description": "",
+            "description": "Active peer connections",
             "content": {
               "application/json": {
                 "schema": {
@@ -368,7 +368,7 @@
             }
           },
           "500": {
-            "description": "",
+            "description": "Failed to fetch peer connections",
             "content": {
               "application/json": {
                 "schema": {
@@ -389,7 +389,7 @@
         "operationId": "get_economics",
         "responses": {
           "200": {
-            "description": "",
+            "description": "Network economic totals",
             "content": {
               "application/json": {
                 "schema": {
@@ -399,7 +399,7 @@
             }
           },
           "500": {
-            "description": "",
+            "description": "Failed to fetch network economics",
             "content": {
               "application/json": {
                 "schema": {
@@ -420,7 +420,7 @@
         "operationId": "get_network_sync_stats",
         "responses": {
           "200": {
-            "description": "",
+            "description": "Network sync stats",
             "content": {
               "application/json": {
                 "schema": {
@@ -430,7 +430,7 @@
             }
           },
           "500": {
-            "description": "",
+            "description": "Failed to fetch network sync stats",
             "content": {
               "application/json": {
                 "schema": {
@@ -1559,11 +1559,11 @@
           "next_epoch_committee": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ValidatorSetCommittee",
                 "description": "The next epoch's committee for the requested shard, when `include_committees` was set and this indexer holds\nthat epoch's validator set."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -1851,10 +1851,10 @@
           "sync_progress": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/SyncProgress"
               },
               {
-                "$ref": "#/components/schemas/SyncProgress"
+                "type": "null"
               }
             ]
           },
@@ -1901,11 +1901,11 @@
           "proof": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SubstateProof",
                 "description": "The proof the indexer verified this answer with. Present only when `include_proof` was set\nand a committee member could prove the answer. A down answer always carries one."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -2013,11 +2013,11 @@
           "receipt": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ProvenTransactionReceipt",
                 "description": "The committed transaction receipt and its proof, when `include_proof` was set and the\ntransaction committed. An aborted transaction commits no receipt."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -2279,11 +2279,11 @@
           "proof": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SubstateProof",
                 "description": "`None` when no committee member could prove the receipt, e.g. when nothing has been committed\nsince an epoch change."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -2582,11 +2582,11 @@
           "summary": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/TransactionResultSummary",
                 "description": "Result summary from the locally indexed transaction receipt. None when no receipt has been\nindexed yet (pending or aborted)."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -2783,11 +2783,11 @@
           "probe_error": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ValidatorProbeError",
                 "description": "Why the latest probe produced no snapshot, or `None` when it produced `snapshot`. While this\nis set, `snapshot` is stale: it is the last one an earlier probe produced."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -2803,11 +2803,11 @@
           "snapshot": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ValidatorStatusSnapshot",
                 "description": "The last snapshot any probe of this validator produced, or `None` if none has succeeded."
+              },
+              {
+                "type": "null"
               }
             ]
           }

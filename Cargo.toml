@@ -309,8 +309,8 @@ tari-wasmer-middlewares = "~7.5.0"
 zeroize = "1"
 webauthn-rs = { version = "0.5.1", features = ["default"] }
 webauthn-rs-proto = { version = "0.5.1", features = ["default"] }
-utoipa = "5.4.0"
-utoipa-swagger-ui = { version = "9.0.2" }
+utoipa = "6.0.0"
+utoipa-swagger-ui = { version = "10.0.2" }
 uuid = "1.15.0"
 xxhash-rust = "0.8.15"
 
