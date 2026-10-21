@@ -34,11 +34,10 @@ pub trait RuntimeModule<TStore>: Send + Sync {
     /// Pricing it here is what lets the paid-in-full check that follows, and the compute allowance
     /// that follows it, both account for what that fallback costs.
     ///
-    /// It bounds the shortfall rather than eliminating it. Charges the main intent accrues after the
-    /// last allowance was computed — a template load, the host calls made inside the final
-    /// invocation — are not reserved against, so a payment sitting just above what the checkpoint
-    /// required can still fall short by that much at finalization. Closing the remainder means
-    /// refusing a charge that the payment cannot cover, at the point it is charged.
+    /// Charges the main intent accrues after the last allowance was computed — a template load,
+    /// instructions after the final invocation — are not reserved against, so the whole transaction
+    /// can still finish a little past the payment. That does not unsettle the fallback: whether it
+    /// commits is decided on the fee intent's own charges alone.
     fn on_fee_checkpoint(&self, _state: &mut ChargeableState<'_, TStore>) -> Result<(), RuntimeModuleError> {
         Ok(())
     }
@@ -54,6 +53,11 @@ pub trait RuntimeModule<TStore>: Send + Sync {
     /// are settled. On a fee-intent commit that state is the fee checkpoint, not the working state
     /// [`Self::on_before_finalize`] saw, so any charge that is a function of what gets persisted
     /// must be recomputed here against `state`.
+    ///
+    /// A fee-intent commit invokes this twice over the same persisted state: once against the
+    /// whole transaction's fee state, which is what is billed, and once against the fee state the
+    /// checkpoint left, which decides whether the fee intent can afford to commit at all. Charges
+    /// set here must therefore be assigned from what `state` holds, never accumulated.
     fn on_before_persist(&self, _state: &mut ChargeableState<'_, TStore>) -> Result<(), RuntimeModuleError> {
         Ok(())
     }
