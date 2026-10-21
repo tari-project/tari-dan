@@ -236,9 +236,13 @@ allowance = points_funded_by( payments − charges_so_far )
 ```
 
 The flat credit is gone — sourcing the fee was its only purpose, and that is done. Funding
-compute from the *unspent* part of the payment (rather than from the whole of it) is what keeps a
-transaction from spending its entire payment on execution and then being unable to afford even its
-own fee-intent fallback, which would settle as a rejection that collects nothing.
+compute from the *unspent* part of the payment (rather than from the whole of it) keeps the share
+of the payment that the fee-intent fallback already owes from also funding execution.
+
+The allowance is sized against the charges standing when each invocation starts, so charges accrued
+after the last one — instructions that follow the final template call — can still take the total a
+few microtari past the payment. That does not affect whether the fee intent commits; see the final
+check below.
 
 Three ceilings apply on top of each other:
 
@@ -291,12 +295,17 @@ The charges computed in these passes:
   call would let a transaction split work into sub-divisor chunks and pay zero for each.
 </Aside>
 
-**The final check.** After pass 2, `payments ≥ charges` is tested one last time. A fee-intent commit
-still persists real state — substates and a receipt carrying every event the intent emitted — so a
-payment that cannot cover *that* commits nothing at all. The transaction is rejected, nothing is
-taken, and the receipt reports the charges as metered against no payment so the payer knows what to
-retry with. Only a fee-intent commit can fail here — a full commit's charges were tested against the
-payment to reach this point.
+**The final check.** After pass 2, the payment is tested one last time against what the commit
+itself costs. A fee-intent commit still persists real state — substates and a receipt carrying every
+event the intent emitted — so a fee intent whose *own* charges (as the checkpoint left them, with the
+persisted state and the fee intent's own execution re-priced) exceed the payment commits nothing at
+all. The transaction is rejected, nothing is taken, and the receipt reports the charges as metered
+against no payment so the payer knows what to retry with. Only a fee-intent commit can fail here — a
+full commit's charges were tested against the payment to reach this point.
+
+A fee intent that covers its own charges always commits, even when the main intent's charges take the
+total past the payment. Settlement then collects the whole payment, and the receipt reports the
+metered charges, so it shows more charged than paid.
 
 ---
 
@@ -432,9 +441,10 @@ where the only remedy is to restructure the transaction.
   at, where the fee feeds back into the shape.
 </Aside>
 
-Note that `FeeReceipt::required_fees()` reads only what *that receipt* was charged — on an
-`AcceptFeeRejectRest` outcome that is the fee intent's own cost, not what the transaction needed. Use
-`FinalizeResult::required_fees()` when telling a caller what to resubmit with.
+Note that `FeeReceipt::required_fees()` reads only what *that receipt* was charged. On an
+`AcceptFeeRejectRest` outcome the receipt carries the whole transaction's metered charges, with
+storage priced over the fee checkpoint. That can be less than the transaction needed, and it may exceed
+what was paid. Use `FinalizeResult::required_fees()` when telling a caller what to resubmit with.
 
 ---
 
@@ -443,7 +453,7 @@ Note that `FeeReceipt::required_fees()` reads only what *that receipt* was charg
 | Outcome | State persisted | Fee taken |
 |---|---|---|
 | `Accept` | the full transaction | charges in full, surplus refunded |
-| `AcceptFeeRejectRest` | the fee checkpoint only | charges in full, surplus refunded |
+| `AcceptFeeRejectRest` | the fee checkpoint only | charges up to the whole payment, surplus refunded |
 | `Reject` at the fee checkpoint | none | none |
 | `Reject` at finalisation | none | none; the receipt reports what a commit would have cost |
 

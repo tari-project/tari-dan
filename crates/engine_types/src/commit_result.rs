@@ -175,10 +175,11 @@ pub struct FinalizeResult {
     /// decision was made against.
     ///
     /// Equal to `fee_receipt.total_fees_charged()` on a full commit. When only the fee intent
-    /// commits, the charges are re-derived over the fee checkpoint alone and so fall below what was
-    /// paid; this keeps the figure the main intent was rejected for — the one a resubmission has to
-    /// clear. Execution metadata rather than settled state, so it stays out of the persisted
-    /// receipt, whose every field is priced into the storage charge of each transaction.
+    /// commits, the receipt's storage charges are re-derived over the fee checkpoint, so its total
+    /// can fall below this figure; this keeps the figure the main intent was rejected for — the one a
+    /// resubmission has to clear. Execution metadata rather than settled state, so it stays out of
+    /// the persisted receipt, whose every field is priced into the storage charge of each
+    /// transaction.
     #[n(6)]
     #[serde(default)]
     pub total_fees_required: u64,

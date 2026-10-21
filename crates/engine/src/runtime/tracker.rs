@@ -60,6 +60,7 @@ use crate::{
     runtime::{
         RuntimeError,
         error::ArgumentValidationError,
+        fee_state::FeeState,
         locking::LockedSubstate,
         scope::{CallScope, FrameWriteMode, PushCallFrame},
         working_state::{ChargeableState, WorkingState},
@@ -80,11 +81,22 @@ pub struct FinalizedState<TStore> {
     /// What committing the whole transaction was priced at, captured before the second charging
     /// pass re-derives the charges over whichever state was chosen.
     total_fees_required: u64,
+    /// On a fee-intent commit, the fee state as the fee checkpoint left it: what the fee intent
+    /// alone was charged and paid. `state` carries the whole transaction's fee state, main intent
+    /// included.
+    fee_intent_fees: Option<FeeState>,
 }
 
 impl<TStore> FinalizedState<TStore> {
     pub fn chargeable_state(&mut self) -> ChargeableState<'_, TStore> {
         ChargeableState::new(&mut self.state)
+    }
+
+    /// The persisted state as the fee intent alone is charged for it. `None` unless this is a
+    /// fee-intent commit.
+    pub fn fee_intent_chargeable_state(&mut self) -> Option<ChargeableState<'_, TStore>> {
+        let fee_state = self.fee_intent_fees.as_mut()?;
+        Some(ChargeableState::with_fee_state(&mut self.state, fee_state))
     }
 
     pub fn outcome(&self) -> FinalizeOutcome {
@@ -182,13 +194,13 @@ impl<TStore: StateReader> StateTracker<TStore> {
     ///
     /// Past the checkpoint the credit ends and compute is funded by what the payment has *left*,
     /// not by the whole of it. The charges standing at the checkpoint are what the fallback commit
-    /// costs, so funding compute out of the full payment would let a transaction spend the lot on
-    /// execution and leave its own fee-intent commit unaffordable — a rejection that again collects
-    /// nothing.
+    /// costs, and that share of the payment is already spoken for; funding compute out of the full
+    /// payment would run work nothing is left to pay for.
     ///
     /// That payment-funded figure is measured against the charges *standing when it is asked*.
-    /// Anything charged after the last call — a host call inside the final invocation — is outside
-    /// it, so it bounds the unpaid work rather than reducing it to zero.
+    /// Anything charged after the last call — instructions that follow the final invocation — is
+    /// outside it, so the total can end a little past the payment. The fallback commit is decided
+    /// on the fee intent's own charges, so it still settles and collects the whole payment.
     pub fn compute_allowance(&self) -> Option<ComputeAllowance> {
         let rate = self.wasm_metering_rate;
         let is_fee_intent = self.fee_checkpoint.borrow().is_none();
@@ -493,15 +505,16 @@ impl<TStore: StateReader> StateTracker<TStore> {
                 outcome: FinalizeOutcome::Commit,
                 reason: None,
                 total_fees_required,
+                fee_intent_fees: None,
             });
         };
 
         let mut checkpoint_state = self.take_fee_checkpoint().ok_or(RuntimeError::NoFeeCheckpoint)?;
         // Preserve fee state across resets so that we can charge for fees incurred during execution before the
         // failure
-        self.read_with(|state| {
+        let fee_intent_fees = self.read_with(|state| {
             // Fee state in `state` includes the payments and charges from the fee transaction
-            *checkpoint_state.fee_state_mut() = state.fee_state().clone();
+            std::mem::replace(checkpoint_state.fee_state_mut(), state.fee_state().clone())
         });
 
         Ok(FinalizedState {
@@ -509,6 +522,7 @@ impl<TStore: StateReader> StateTracker<TStore> {
             outcome: FinalizeOutcome::FeeIntentCommit,
             reason: Some(reason),
             total_fees_required,
+            fee_intent_fees: Some(fee_intent_fees),
         })
     }
 
@@ -518,18 +532,27 @@ impl<TStore: StateReader> StateTracker<TStore> {
             outcome,
             reason,
             total_fees_required,
+            fee_intent_fees,
         } = finalized;
 
-        // Committing costs whatever the charges now say, and they have just been recomputed over
-        // this exact state. A payment that cannot cover that commits nothing: a fee-intent commit
+        // Whether this state may commit turns on what the commit itself costs. On a full commit
+        // that is every charge, and the commit path cannot fail here: its charges were tested
+        // against payments to reach it, and recomputing them over the same state does not change
+        // them.
+        //
+        // On a fee-intent commit it is what the fee intent alone is charged for the state it
+        // persists. A fee intent that cannot cover that commits nothing: a fee-intent commit
         // persists real state — substates, and a receipt carrying every event the intent emitted —
         // and there is no shallower checkpoint left to fall back to. Letting it through is what
         // would make an underfunded fee intent a way to write state for free.
         //
-        // The commit path cannot fail here: its charges were tested against payments to reach it,
-        // and recomputing them over the same state does not change them.
-        let fee_state = state.fee_state();
-        if !fee_state.is_dry_run() && !fee_state.is_paid_in_full() {
+        // The compute allowance holds the main intent's charges inside the payment only up to the
+        // last allowance it sized, so charges accrued past that can leave the total a little over
+        // the payment. A fee intent that paid for itself commits regardless, and settlement collects
+        // the whole payment against the larger total.
+        let commit_fees = fee_intent_fees.as_ref().unwrap_or_else(|| state.fee_state());
+        if !commit_fees.is_dry_run() && !commit_fees.is_paid_in_full() {
+            let fee_state = state.fee_state();
             // Whatever rejected the main intent is why the transaction failed and stays the reason
             // reported; the shortfall below only decides that not even the fee intent survives it.
             let reason = reason.unwrap_or_else(|| {

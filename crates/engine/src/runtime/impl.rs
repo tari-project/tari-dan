@@ -357,6 +357,9 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
     fn invoke_modules_on_before_persist(&self, finalized: &mut FinalizedState<TStore>) -> Result<(), RuntimeError> {
         for module in self.modules.iter() {
             module.on_before_persist(&mut finalized.chargeable_state())?;
+            if let Some(mut fee_intent_state) = finalized.fee_intent_chargeable_state() {
+                module.on_before_persist(&mut fee_intent_state)?;
+            }
         }
         Ok(())
     }
