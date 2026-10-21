@@ -35,6 +35,7 @@ use tari_ootle_common_types::{
     },
     optional::{IsNotFoundError, Optional},
     shard::Shard,
+    substate_type::{SubstateTypeMismatch, check_substate_type},
 };
 use tari_ootle_light_client::{
     DEFAULT_MAX_WALK_EPOCHS,
@@ -82,7 +83,10 @@ const MAX_CACHED_COMMITTEES: usize = 256;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum IndexerTrust {
     /// Every substate read and every committed transaction is verified against a validator set the provider trusts.
-    /// The indexer must run with `verify_substate_proofs` enabled.
+    /// The indexer must run with `verify_substate_proofs` enabled. Stealth UTXO scans
+    /// ([`IndexerProvider::watch_stealth_utxos`](crate::provider::IndexerProvider::watch_stealth_utxos) and
+    /// [`IndexerProvider::fetch_unspent_utxos`](crate::provider::IndexerProvider::fetch_unspent_utxos)) are served
+    /// unproven and are not verified.
     ///
     /// The provider trusts the validator set that the indexer's latest checkpoint names on first use, or the consensus
     /// epoch's set before the network's first checkpoint, unless given one with
@@ -567,6 +571,7 @@ impl IndexerVerifier {
                 },
             ));
         };
+        check_substate_type(substate_id, &value)?;
         if self.is_verifying() {
             self.verify_substate(substate_id, version, &value, resp.proof.as_ref())
                 .await?;
@@ -574,23 +579,34 @@ impl IndexerVerifier {
         Ok(Substate::new(version, *value))
     }
 
-    /// The live substates of `substate_ids` that the indexer has, every one verified when verifying.
+    /// The live substates of `substate_ids` that the indexer has, every one verified when verifying. Fetched in
+    /// requests of at most [`MAX_SUBSTATES_PER_FETCH`] substates each.
     pub(crate) async fn fetch_substates(
         &self,
         substate_ids: &[SubstateId],
     ) -> Result<HashMap<SubstateId, Substate>, VerifyError> {
-        let invalid_count = || {
-            VerifyError::IndexerClientError(IndexerRestClientError::RequestInvariant {
+        let mut substates = HashMap::with_capacity(substate_ids.len());
+        for batch in substate_ids.chunks(MAX_SUBSTATES_PER_FETCH) {
+            substates.extend(self.fetch_substate_batch(batch).await?);
+        }
+        Ok(substates)
+    }
+
+    /// The live substates of `substate_ids` that the indexer has, from one request. The indexer answers with no
+    /// substate other than those requested, each of the type its id addresses.
+    async fn fetch_substate_batch(
+        &self,
+        substate_ids: &[SubstateId],
+    ) -> Result<HashMap<SubstateId, Substate>, VerifyError> {
+        let requests = substate_ids
+            .to_vec()
+            .try_into()
+            .map_err(|_| IndexerRestClientError::RequestInvariant {
                 details: format!(
                     "a substate fetch takes between 1 and {MAX_SUBSTATES_PER_FETCH} substates, not {}",
                     substate_ids.len()
                 ),
-            })
-        };
-        if substate_ids.len() > MAX_SUBSTATES_PER_FETCH {
-            return Err(invalid_count());
-        }
-        let requests = substate_ids.to_vec().try_into().map_err(|_| invalid_count())?;
+            })?;
         let resp = self
             .client()?
             .fetch_substates(GetSubstatesRequest {
@@ -600,8 +616,14 @@ impl IndexerVerifier {
             })
             .await?;
         let (substates, proofs) = resp.into_proven();
-        if self.is_verifying() {
-            for (substate_id, substate) in &substates {
+        for (substate_id, substate) in &substates {
+            if !substate_ids.contains(substate_id) {
+                return Err(VerifyError::UnrequestedSubstate {
+                    substate_id: substate_id.clone(),
+                });
+            }
+            check_substate_type(substate_id, substate.substate_value())?;
+            if self.is_verifying() {
                 self.verify_substate(
                     substate_id,
                     substate.version(),
@@ -646,6 +668,10 @@ pub enum VerifyError {
     IndexerClientError(#[from] IndexerRestClientError),
     #[error("Indexer client has been dropped")]
     ClientDropped,
+    #[error("The indexer answered a substate fetch with {substate_id}, which the fetch did not request")]
+    UnrequestedSubstate { substate_id: SubstateId },
+    #[error("The indexer served a substate of the wrong type: {0}")]
+    SubstateOfAnotherType(#[from] SubstateTypeMismatch),
     #[error("The indexer's validator set data does not verify: {0}")]
     ValidatorSetUnverified(#[from] LightClientError),
     #[error("The indexer served no checkpoint ending {epoch} to walk the validator set handover through")]
@@ -722,7 +748,21 @@ impl IsNotFoundError for VerifyError {
 
 #[cfg(test)]
 mod tests {
-    use tari_ootle_common_types::{VersionedSubstateId, engine_types::confidential::ClaimedOutputTombstone};
+    use std::{
+        collections::HashSet,
+        hash::{DefaultHasher, Hash, Hasher},
+    };
+
+    use tari_ootle_common_types::{
+        VersionedSubstateId,
+        engine_types::{
+            component::{Component, ComponentBody, ComponentHeader},
+            confidential::ClaimedOutputTombstone,
+            resource::Resource,
+            resource_container::ResourceContainer,
+            vault::Vault,
+        },
+    };
     use tari_ootle_light_client::test_fixtures::{
         CheckpointSpec,
         NETWORK,
@@ -734,11 +774,27 @@ mod tests {
         shard_group_of,
         substate_proof,
     };
-    use tari_template_lib_types::ClaimedOutputTombstoneAddress;
+    use tari_ootle_transaction::Transaction;
+    use tari_template_lib_types::{
+        Amount,
+        ClaimedOutputTombstoneAddress,
+        ComponentAddress,
+        ResourceType,
+        SubstateOwnerRule,
+        VaultId,
+        access_rules::ComponentAccessRules,
+        constants::TARI_TOKEN,
+    };
 
     use super::*;
     use crate::{
-        provider::{IndexerProvider, ProviderError, test_indexer::TestIndexer},
+        provider::{
+            IndexerProvider,
+            ProviderError,
+            WantInput,
+            input_resolver::{TransactionInputResolver, TransactionInputResolverError},
+            test_indexer::TestIndexer,
+        },
         wallet::NoWallet,
     };
 
@@ -1007,6 +1063,225 @@ mod tests {
             .unwrap_err();
         assert!(
             matches!(&err, VerifyError::SubstateUnproven { substate_id } if *substate_id == unproven_id),
+            "{err}"
+        );
+    }
+
+    /// Serves `id` holding `value` with a proof anchored at a block of its own, so that the proofs of one batch fetch
+    /// each keep their own commit proof.
+    fn serve_proven(sets: &[ValidatorSetFixture], indexer: &TestIndexer, id: &SubstateId, value: SubstateValue) {
+        let mut proof = substate_proof(&sets[4], id, VERSION, &value);
+        let mut hasher = DefaultHasher::new();
+        id.hash(&mut hasher);
+        let mut block_id = [0u8; 32];
+        block_id[..8].copy_from_slice(&hasher.finish().to_le_bytes());
+        proof.anchor.block_id = block_id.into();
+        indexer.serve_substate(id.clone(), VERSION, value, Some(proof));
+    }
+
+    fn account_component(vaults: &[VaultId]) -> SubstateValue {
+        Component {
+            header: ComponentHeader {
+                template_address: tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS,
+                owner_rule: SubstateOwnerRule::None,
+                access_rules: ComponentAccessRules::new(),
+                entity_id: Default::default(),
+            },
+            body: ComponentBody::from_cbor_value(tari_bor::to_value(&vaults).unwrap()),
+        }
+        .into()
+    }
+
+    fn tari_vault(amount: u64) -> SubstateValue {
+        Vault::new(ResourceContainer::public_fungible(TARI_TOKEN, amount)).into()
+    }
+
+    #[tokio::test]
+    async fn a_fetch_answered_with_an_unrequested_substate_is_refused() {
+        for trust in [IndexerTrust::Verify, IndexerTrust::Trust] {
+            let (sets, indexer, provider) = walked_provider(trust).await;
+            let (requested_id, requested_value) = substate(1);
+            serve_proven(&sets, &indexer, &requested_id, requested_value);
+            let (unrequested_id, unrequested_value) = substate(2);
+            serve_proven(&sets, &indexer, &unrequested_id, unrequested_value);
+            indexer.serve_unrequested_on_fetch(unrequested_id.clone());
+
+            let err = provider.verifier().fetch_substates(&[requested_id]).await.unwrap_err();
+            assert!(
+                matches!(&err, VerifyError::UnrequestedSubstate { substate_id } if *substate_id == unrequested_id),
+                "{trust:?}: {err}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn a_substate_whose_value_is_of_another_type_is_refused() {
+        for trust in [IndexerTrust::Verify, IndexerTrust::Trust] {
+            let (sets, indexer, provider) = walked_provider(trust).await;
+            let id = SubstateId::Vault(VaultId::from_hex(&"11".repeat(32)).unwrap());
+            serve_proven(&sets, &indexer, &id, substate(1).1);
+
+            let err = read_error(&provider, &id).await;
+            assert!(matches!(err, VerifyError::SubstateOfAnotherType(_)), "{trust:?}: {err}");
+            let err = provider
+                .verifier()
+                .fetch_substates(std::slice::from_ref(&id))
+                .await
+                .unwrap_err();
+            assert!(matches!(err, VerifyError::SubstateOfAnotherType(_)), "{trust:?}: {err}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_fetch_of_more_substates_than_one_request_takes_is_split() {
+        let (sets, indexer, provider) = walked_provider(IndexerTrust::Verify).await;
+        let substates = high_substates(MAX_SUBSTATES_PER_FETCH * 2 + 1);
+        for (id, value) in &substates {
+            serve_proven(&sets, &indexer, id, value.clone());
+        }
+        let ids = substates.iter().map(|(id, _)| id.clone()).collect::<Vec<_>>();
+
+        let fetched = provider.verifier().fetch_substates(&ids).await.unwrap();
+        assert_eq!(fetched.len(), substates.len());
+        for (id, value) in &substates {
+            assert_eq!(tombstone_value(fetched[id].substate_value()), tombstone_value(value));
+        }
+        assert_eq!(indexer.fetch_sizes(), vec![
+            MAX_SUBSTATES_PER_FETCH,
+            MAX_SUBSTATES_PER_FETCH,
+            1
+        ]);
+
+        assert!(provider.verifier().fetch_substates(&[]).await.unwrap().is_empty());
+        assert_eq!(indexer.fetch_sizes().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn an_account_balance_covers_exactly_the_vaults_the_account_references() {
+        let account = ComponentAddress::from_hex(&"22".repeat(32)).unwrap();
+        let vault = VaultId::from_hex(&"33".repeat(32)).unwrap();
+        let other_vault = SubstateId::Vault(VaultId::from_hex(&"44".repeat(32)).unwrap());
+        for trust in [IndexerTrust::Verify, IndexerTrust::Trust] {
+            let (sets, indexer, provider) = walked_provider(trust).await;
+            serve_proven(&sets, &indexer, &account.into(), account_component(&[vault]));
+
+            // The indexer withholds the account's vault.
+            for err in [
+                provider.get_account_balance(account, TARI_TOKEN).await.unwrap_err(),
+                provider.get_account_balances(account).await.unwrap_err(),
+            ] {
+                assert!(
+                    err.to_string().contains(&format!(
+                        "did not serve vault {vault}, which account {account} references"
+                    )),
+                    "{trust:?}: {err}"
+                );
+            }
+
+            // The indexer answers with another vault in its place.
+            serve_proven(&sets, &indexer, &other_vault, tari_vault(1_000_000));
+            indexer.serve_unrequested_on_fetch(other_vault.clone());
+            for err in [
+                provider.get_account_balance(account, TARI_TOKEN).await.unwrap_err(),
+                provider.get_account_balances(account).await.unwrap_err(),
+            ] {
+                assert!(
+                    matches!(
+                        &err,
+                        ProviderError::Unverified(VerifyError::UnrequestedSubstate { substate_id })
+                            if *substate_id == other_vault
+                    ),
+                    "{trust:?}: {err}"
+                );
+            }
+        }
+
+        let (sets, indexer, provider) = walked_provider(IndexerTrust::Verify).await;
+        serve_proven(&sets, &indexer, &account.into(), account_component(&[vault]));
+        serve_proven(&sets, &indexer, &vault.into(), tari_vault(100));
+        assert_eq!(
+            provider.get_account_balance(account, TARI_TOKEN).await.unwrap(),
+            Amount::from(100u64)
+        );
+        let balances = provider.get_account_balances(account).await.unwrap();
+        assert_eq!(balances, HashMap::from([(TARI_TOKEN, Amount::from(100u64))]));
+    }
+
+    #[tokio::test]
+    async fn resolving_a_vault_for_a_resource_refuses_a_withheld_vault_the_component_references() {
+        let component_address = ComponentAddress::from_hex(&"22".repeat(32)).unwrap();
+        let served_vault = SubstateId::Vault(VaultId::from_hex(&"33".repeat(32)).unwrap());
+        let withheld_vault = VaultId::from_hex(&"44".repeat(32)).unwrap();
+        for with_served_vault_cached in [false, true] {
+            for required in [false, true] {
+                let (sets, indexer, provider) = walked_provider(IndexerTrust::Verify).await;
+                serve_proven(
+                    &sets,
+                    &indexer,
+                    &component_address.into(),
+                    account_component(&[served_vault.as_vault_id().unwrap(), withheld_vault]),
+                );
+                serve_proven(&sets, &indexer, &served_vault, tari_vault(100));
+
+                let mut wants = HashSet::from([WantInput::VaultForResource {
+                    component_address,
+                    resource_address: TARI_TOKEN,
+                    required,
+                }]);
+                if with_served_vault_cached {
+                    wants.insert(WantInput::SpecificSubstate {
+                        substate_id: served_vault.clone(),
+                        required: false,
+                    });
+                }
+                let mut transaction = Transaction::builder(NETWORK, Epoch(5)).build_unsigned();
+                let err = TransactionInputResolver::new(provider.verifier().clone())
+                    .resolve_inputs(&mut transaction, &wants)
+                    .await
+                    .unwrap_err();
+                assert!(
+                    matches!(
+                        &err,
+                        TransactionInputResolverError::RequiredSubstateNotFound { substate_id, .. }
+                            if *substate_id == SubstateId::Vault(withheld_vault)
+                    ),
+                    "cached={with_served_vault_cached}, required={required}: {err}"
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn a_resource_is_read_verified() {
+        let (sets, indexer, provider) = walked_provider(IndexerTrust::Verify).await;
+        let resource = Resource::new(
+            ResourceType::Fungible,
+            SubstateOwnerRule::None,
+            Default::default(),
+            Default::default(),
+            None,
+            None,
+            6,
+            true,
+        );
+        let id = SubstateId::Resource(TARI_TOKEN);
+        serve_proven(&sets, &indexer, &id, resource.into());
+        assert_eq!(provider.get_resource(TARI_TOKEN).await.unwrap().divisibility(), 6);
+
+        let forged = Resource::new(
+            ResourceType::Fungible,
+            SubstateOwnerRule::None,
+            Default::default(),
+            Default::default(),
+            None,
+            None,
+            2,
+            true,
+        );
+        indexer.serve_substate(id.clone(), VERSION, forged.into(), None);
+        let err = provider.get_resource(TARI_TOKEN).await.unwrap_err();
+        assert!(
+            matches!(&err, ProviderError::Unverified(VerifyError::SubstateUnproven { substate_id }) if *substate_id == id),
             "{err}"
         );
     }
