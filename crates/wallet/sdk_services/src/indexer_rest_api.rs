@@ -17,6 +17,7 @@ use tari_indexer_client::{
     event::{IndexerEvent, TransactionFinalizedEvent},
     protobuf,
     rest_api_client::IndexerRestApiClient,
+    sse::SseStreamError,
     types::{
         EpochCheckpointEntry,
         GetCommitteeRequest,
@@ -234,6 +235,32 @@ impl IndexerRestApiNetworkInterface {
         request: impl Future<Output = Result<T, IndexerRestClientError>>,
         check: impl FnOnce(&T) -> Result<(), E>,
     ) -> Result<T, IndexerRestApiNetworkInterfaceError> {
+        self.observe_with(client, request, check, IndexerHealth::Answered).await
+    }
+
+    /// As [`Self::observe`] for a request that opens a stream. The indexer is judged by what the stream delivers, so
+    /// opening it successfully counts as [`IndexerHealth::Inconclusive`].
+    async fn observe_stream_open<T>(
+        &self,
+        client: &TrackedClient,
+        request: impl Future<Output = Result<T, IndexerRestClientError>>,
+    ) -> Result<T, IndexerRestApiNetworkInterfaceError> {
+        self.observe_with(
+            client,
+            request,
+            |_| Ok::<_, IndexerRestApiNetworkInterfaceError>(()),
+            IndexerHealth::Inconclusive,
+        )
+        .await
+    }
+
+    async fn observe_with<T, E: Into<IndexerRestApiNetworkInterfaceError>>(
+        &self,
+        client: &TrackedClient,
+        request: impl Future<Output = Result<T, IndexerRestClientError>>,
+        check: impl FnOnce(&T) -> Result<(), E>,
+        health_on_success: IndexerHealth,
+    ) -> Result<T, IndexerRestApiNetworkInterfaceError> {
         let Ok(result) = tokio::time::timeout(self.request_timeout, request).await else {
             self.record_health(&client.endpoint, IndexerHealth::Unavailable);
             return Err(IndexerRestApiNetworkInterfaceError::IndexerTimedOut {
@@ -245,7 +272,12 @@ impl IndexerRestApiNetworkInterface {
             self.record_health(&client.endpoint, IndexerHealth::Unavailable);
             return Err(err.into());
         }
-        self.record_health(&client.endpoint, IndexerHealth::of(&result));
+        let health = if result.is_ok() {
+            health_on_success
+        } else {
+            IndexerHealth::of(&result)
+        };
+        self.record_health(&client.endpoint, health);
         Ok(result?)
     }
 
@@ -455,9 +487,16 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
 
     async fn subscribe_transaction_finalized(&self) -> Result<TransactionFinalizedStream<Self::Error>, Self::Error> {
         let client = self.tracked_client();
-        let events = self.observe(&client, client.sse_events()).await?;
+        let events = self.observe_stream_open(&client, client.sse_events()).await?;
+        let network = self.clone();
         let stream = events
-            .map_err(|e| IndexerRestApiNetworkInterfaceError::StreamDecodeError(e.into()))
+            .map_err(move |e| {
+                // A transport failure shows when the stream is reopened; a malformed stream reopens without error.
+                if matches!(e, SseStreamError::EventParseError { .. }) {
+                    network.record_health(&client.endpoint, IndexerHealth::Unavailable);
+                }
+                IndexerRestApiNetworkInterfaceError::StreamDecodeError(e.into())
+            })
             .try_filter_map(|event| async move {
                 if event.event_type != IndexerEvent::TRANSACTION_FINALIZED_EVENT_NAME {
                     return Ok(None);
@@ -1072,6 +1111,51 @@ mod tests {
             result,
             Err(IndexerRestApiNetworkInterfaceError::IndexerTimedOut { .. })
         ));
+    }
+
+    /// Answers every request with an event stream whose only line is longer than the client accepts.
+    async fn spawn_oversized_event_stream_server() -> Url {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = Url::parse(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
+        tokio::spawn(async move {
+            let body = vec![b'x'; 2 * 1024 * 1024];
+            loop {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut buf = [0u8; 4096];
+                let _ignore = socket.read(&mut buf).await;
+                let head = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\n\r\n",
+                    body.len()
+                );
+                let _ignore = socket.write_all(head.as_bytes()).await;
+                let _ignore = socket.write_all(&body).await;
+            }
+        });
+        url
+    }
+
+    #[tokio::test]
+    async fn an_indexer_that_keeps_streaming_malformed_events_is_failed_over() {
+        let malformed = spawn_oversized_event_stream_server().await;
+        let other = spawn_status_server("503 Service Unavailable", "{}").await;
+        let network = IndexerRestApiNetworkInterface::init(vec![malformed.clone()]).unwrap();
+        network.set_endpoints(vec![malformed.clone(), other.clone()]).unwrap();
+
+        for _ in 0..FAILOVER_THRESHOLD {
+            assert_eq!(network.get_endpoint(), malformed);
+            let mut stream = network.subscribe_transaction_finalized().await.unwrap();
+            let err = tokio::time::timeout(Duration::from_secs(5), stream.next())
+                .await
+                .expect("the stream produced nothing within the timeout")
+                .expect("the stream ended without an error")
+                .unwrap_err();
+            assert!(
+                matches!(err, IndexerRestApiNetworkInterfaceError::StreamDecodeError(_)),
+                "{err}"
+            );
+        }
+
+        assert_eq!(network.get_endpoint(), other);
     }
 
     fn component_id() -> SubstateId {

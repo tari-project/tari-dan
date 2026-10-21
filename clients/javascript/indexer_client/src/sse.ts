@@ -34,6 +34,15 @@ export interface SseStreamOptions {
 }
 
 /**
+ * Longest SSE line accepted, in UTF-16 code units, excluding its terminator. Indexer events are a few KiB of
+ * JSON, so this bounds the read buffer.
+ */
+const MAX_LINE_LENGTH = 1024 * 1024;
+
+/** Most `data` accepted for one event, in UTF-16 code units, across all of its `data:` lines. */
+const MAX_EVENT_DATA_LENGTH = 1024 * 1024;
+
+/**
  * Connect to an SSE endpoint using fetch and parse the streaming response.
  * Returns an SseStream handle that can be closed.
  */
@@ -67,11 +76,18 @@ export function connectSse(url: string, options: SseStreamOptions): SseStream {
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = "";
+    // Splits on \r\n, \r, or \n per the SSE spec
+    const lineEnding = /\r\n|\r|\n/g;
+    // Pieces of the current line received so far, held apart so that each chunk is searched only once
+    let pending: string[] = [];
+    let pendingLength = 0;
+    // The last chunk ended in "\r", so a "\n" opening the next chunk completes that terminator
+    let afterCr = false;
 
     // Current event being built
     let eventType = "";
     let dataLines: string[] = [];
+    let dataLength = 0;
     let eventId: string | undefined;
     let retry: number | undefined;
 
@@ -96,11 +112,15 @@ export function connectSse(url: string, options: SseStreamOptions): SseStream {
       // Reset for next event
       eventType = "";
       dataLines = [];
+      dataLength = 0;
       eventId = undefined;
       retry = undefined;
     };
 
     const processLine = (line: string) => {
+      if (line.length > MAX_LINE_LENGTH) {
+        throw new Error(`SSE line exceeds the maximum length of ${MAX_LINE_LENGTH}`);
+      }
       if (line === "") {
         // Empty line = end of event
         dispatch();
@@ -132,6 +152,11 @@ export function connectSse(url: string, options: SseStreamOptions): SseStream {
           eventType = value;
           break;
         case "data":
+          // Each line after the first adds a "\n" separator
+          dataLength += value.length + (dataLines.length > 0 ? 1 : 0);
+          if (dataLength > MAX_EVENT_DATA_LENGTH) {
+            throw new Error(`SSE event data exceeds the maximum length of ${MAX_EVENT_DATA_LENGTH}`);
+          }
           dataLines.push(value);
           break;
         case "id":
@@ -153,23 +178,46 @@ export function connectSse(url: string, options: SseStreamOptions): SseStream {
         const { done, value } = await reader.read();
         if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
+        let text = decoder.decode(value, { stream: true });
+        if (afterCr && text.length > 0) {
+          if (text.startsWith("\n")) {
+            text = text.slice(1);
+          }
+          afterCr = false;
+        }
 
-        // Process complete lines, splitting on \r\n, \r, or \n per the SSE spec
-        const LINE_ENDING = /\r\n|\r|\n/;
+        let lineStart = 0;
+        lineEnding.lastIndex = 0;
         let match: RegExpExecArray | null;
-        while ((match = LINE_ENDING.exec(buffer)) !== null) {
-          const line = buffer.slice(0, match.index);
-          buffer = buffer.slice(match.index + match[0].length);
+        while ((match = lineEnding.exec(text)) !== null) {
+          pending.push(text.slice(lineStart, match.index));
+          const line = pending.join("");
+          pending = [];
+          pendingLength = 0;
           processLine(line);
+          lineStart = lineEnding.lastIndex;
+          afterCr = match[0] === "\r" && lineStart === text.length;
+        }
+        if (lineStart < text.length) {
+          pending.push(text.slice(lineStart));
+          pendingLength += text.length - lineStart;
+          if (pendingLength > MAX_LINE_LENGTH) {
+            throw new Error(`SSE line exceeds the maximum length of ${MAX_LINE_LENGTH}`);
+          }
         }
       }
 
       // Process any remaining data
-      if (buffer.length > 0) {
-        processLine(buffer);
+      pending.push(decoder.decode());
+      const rest = pending.join("");
+      if (rest.length > 0) {
+        processLine(rest);
         dispatch();
       }
+    } catch (err) {
+      // Closes the connection; the caller learns of the failure from the rethrown error
+      await reader.cancel().catch(() => {});
+      throw err;
     } finally {
       reader.releaseLock();
     }
