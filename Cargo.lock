@@ -2835,7 +2835,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ab67060fc6b8ef687992d439ca0fa36e7ed17e9a0b16b25b601e8757df720de"
 dependencies = [
  "data-encoding",
- "syn 2.0.117",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -7193,8 +7193,8 @@ dependencies = [
  "tonic-health",
  "tower-http",
  "url",
- "utoipa",
- "utoipa-swagger-ui",
+ "utoipa 5.4.0",
+ "utoipa-swagger-ui 9.0.2",
 ]
 
 [[package]]
@@ -11579,7 +11579,7 @@ dependencies = [
  "tari_max_size",
  "tari_utilities",
  "thiserror 2.0.18",
- "utoipa",
+ "utoipa 5.4.0",
  "zeroize",
 ]
 
@@ -12034,8 +12034,8 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "url",
- "utoipa",
- "utoipa-swagger-ui",
+ "utoipa 6.0.0",
+ "utoipa-swagger-ui 10.0.2",
 ]
 
 [[package]]
@@ -12065,7 +12065,7 @@ dependencies = [
  "time",
  "tokio",
  "ts-rs",
- "utoipa",
+ "utoipa 6.0.0",
 ]
 
 [[package]]
@@ -13244,7 +13244,7 @@ dependencies = [
  "tari_script",
  "tari_utilities",
  "thiserror 2.0.18",
- "utoipa",
+ "utoipa 5.4.0",
  "uuid",
  "zeroize",
 ]
@@ -14362,6 +14362,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "typed-path"
+version = "0.12.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54ec2755506471f54baf5e4bb5499d8e510cc1caf271270e778a736bd2d7336c"
+
+[[package]]
 name = "typemap-ors"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14519,7 +14525,19 @@ dependencies = [
  "indexmap 2.14.2",
  "serde",
  "serde_json",
- "utoipa-gen",
+ "utoipa-gen 5.4.0",
+]
+
+[[package]]
+name = "utoipa"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8765fe27aeff71012a3f90fa474cf1df863a7d0dd81ed25de4e63fff2544994f"
+dependencies = [
+ "indexmap 2.14.2",
+ "serde",
+ "serde_json",
+ "utoipa-gen 6.0.1",
 ]
 
 [[package]]
@@ -14531,6 +14549,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "utoipa-gen"
+version = "6.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d935f1c83fdf8b88f09bbe050d0cea78ea4afee6d7b0317403228c1200b2c8ab"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.4",
 ]
 
 [[package]]
@@ -14547,8 +14576,25 @@ dependencies = [
  "serde",
  "serde_json",
  "url",
- "utoipa",
- "zip",
+ "utoipa 5.4.0",
+ "zip 3.0.0",
+]
+
+[[package]]
+name = "utoipa-swagger-ui"
+version = "10.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f1fd2f9615838885c6ff4115fde8a2b58825dc7b4617f78d29c167377a15c92"
+dependencies = [
+ "axum 0.8.8",
+ "base64 0.23.1",
+ "mime_guess",
+ "regex",
+ "serde",
+ "serde_json",
+ "url",
+ "utoipa 6.0.0",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -16252,6 +16298,21 @@ dependencies = [
  "flate2",
  "indexmap 2.14.2",
  "memchr",
+ "zopfli",
+]
+
+[[package]]
+name = "zip"
+version = "9.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e04976da629d3b04204ba8105b396a193af8ad2583b2c79bfb3ab8af580a11e"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "indexmap 2.14.2",
+ "memchr",
+ "nix 0.31.3",
+ "typed-path",
  "zopfli",
 ]
 
