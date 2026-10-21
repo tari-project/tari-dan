@@ -83,7 +83,10 @@ const MAX_CACHED_COMMITTEES: usize = 256;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum IndexerTrust {
     /// Every substate read and every committed transaction is verified against a validator set the provider trusts.
-    /// The indexer must run with `verify_substate_proofs` enabled.
+    /// The indexer must run with `verify_substate_proofs` enabled. Stealth UTXO scans
+    /// ([`IndexerProvider::watch_stealth_utxos`](crate::provider::IndexerProvider::watch_stealth_utxos) and
+    /// [`IndexerProvider::fetch_unspent_utxos`](crate::provider::IndexerProvider::fetch_unspent_utxos)) are served
+    /// unproven and are not verified.
     ///
     /// The provider trusts the validator set that the indexer's latest checkpoint names on first use, or the consensus
     /// epoch's set before the network's first checkpoint, unless given one with
@@ -1167,20 +1170,12 @@ mod tests {
                 provider.get_account_balance(account, TARI_TOKEN).await.unwrap_err(),
                 provider.get_account_balances(account).await.unwrap_err(),
             ] {
-                match trust {
-                    IndexerTrust::Verify => assert!(
-                        matches!(
-                            &err,
-                            ProviderError::Unverified(VerifyError::SubstateUnproven { substate_id })
-                                if *substate_id == SubstateId::Vault(vault)
-                        ),
-                        "{err}"
-                    ),
-                    IndexerTrust::Trust => assert!(
-                        err.to_string().contains(&format!("did not serve vault {vault}")),
-                        "{err}"
-                    ),
-                }
+                assert!(
+                    err.to_string().contains(&format!(
+                        "did not serve vault {vault}, which account {account} references"
+                    )),
+                    "{trust:?}: {err}"
+                );
             }
 
             // The indexer answers with another vault in its place.

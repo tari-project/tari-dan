@@ -13,7 +13,7 @@ use tari_ootle_common_types::engine_types::{
 };
 use tari_template_lib_types::{Amount, ComponentAddress, ResourceAddress, UtxoAddress, UtxoId, VaultId};
 
-use crate::provider::{ProviderError, ProviderResult, VerifyError, indexer::IndexerProvider};
+use crate::provider::{ProviderError, ProviderResult, indexer::IndexerProvider};
 
 /// Balance information for a single vault
 #[derive(Debug, Clone)]
@@ -225,15 +225,9 @@ impl<Wallet> IndexerProvider<Wallet> {
         let mut balances = Vec::with_capacity(vault_ids.len());
         for (vault_id, id) in vault_ids.iter().zip(vault_substate_ids) {
             let substate = substates.remove(&id).ok_or_else(|| {
-                if self.verifier().is_verifying() {
-                    ProviderError::Unverified(VerifyError::SubstateUnproven {
-                        substate_id: id.clone(),
-                    })
-                } else {
-                    ProviderError::other(format!(
-                        "The indexer did not serve vault {vault_id}, which account {account} references"
-                    ))
-                }
+                ProviderError::other(format!(
+                    "The indexer did not serve vault {vault_id}, which account {account} references"
+                ))
             })?;
             let vault = substate.into_substate_value().into_vault().ok_or_else(|| {
                 ProviderError::other(format!(

@@ -212,6 +212,9 @@ impl<Wallet> IndexerProvider<Wallet> {
     /// Only currently-unspent outputs are returned — the indexer prunes an output's ciphertext once
     /// it is spent, so a key whose output has since been spent is simply absent from the result.
     /// Requests are automatically chunked to the indexer's per-request limit.
+    ///
+    /// The outputs are served unproven and are not verified under any [`IndexerTrust`]. Read an output with
+    /// [`Self::get_substate`] to verify it.
     pub async fn fetch_unspent_utxos(
         &self,
         resource_address: ResourceAddress,
