@@ -71,12 +71,6 @@ libp2p = { workspace = true }
 log = { workspace = true, features = ["std"] }
 hex = { workspace = true }
 headers-accept = "0.2.1"
-log4rs = { workspace = true, features = [
-    "rolling_file_appender",
-    "compound_policy",
-    "size_trigger",
-    "fixed_window_roller",
-] }
 mime_guess = { workspace = true }
 mediatype = "0.20.0"
 mini-moka = { workspace = true }
@@ -108,12 +102,6 @@ utoipa-swagger-ui = { workspace = true, features = ["axum"] }
 [dev-dependencies]
 tempfile = { workspace = true }
 toml = { workspace = true }
-
-[package.metadata.cargo-machete]
-ignored = [
-    # Want to enable some log4rs features
-    "log4rs",
-]
 
 [features]
 default = ["web_ui", "metrics"]

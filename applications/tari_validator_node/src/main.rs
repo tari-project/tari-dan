@@ -172,3 +172,14 @@ fn handle_panic(panic_info: &panic::PanicHookInfo) {
         warn!(target: LOG_TARGET, "Failed to write panic log file: {}", err);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn log4rs_sample_config_builds_with_enabled_features() {
+        let log_dir = tempfile::tempdir().unwrap();
+        let yaml = include_str!("../log4rs_sample.yml").replace("{{log_dir}}", log_dir.path().to_str().unwrap());
+        let config: log4rs::config::RawConfig = serde_saphyr::from_str(&yaml).unwrap();
+        log4rs::config::create_raw_config(config).unwrap();
+    }
+}
