@@ -1,7 +1,7 @@
 [package]
 name = "tari_jellyfish"
 description = "Jellyfish Merkle Tree implementation for Tari"
-version = "6.2.1"
+version = "6.2.0"
 edition.workspace = true
 authors.workspace = true
 repository.workspace = true
