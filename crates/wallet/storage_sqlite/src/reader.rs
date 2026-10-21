@@ -1863,6 +1863,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
             .select((
                 shard_state_version_claims::shard,
                 shard_state_version_claims::state_version,
+                shard_state_version_claims::first_state_version,
                 shard_state_version_claims::verified_epoch,
             ))
             .filter(
@@ -1881,14 +1882,15 @@ impl WalletStoreReader for ReadTransaction<'_> {
                     .single_value()
                     .assume_not_null()),
             )
-            .get_results::<(i32, i64, Option<i64>)>(self.connection())
+            .get_results::<(i32, i64, i64, Option<i64>)>(self.connection())
             .map_err(|e| WalletStorageError::general(OPERATION, e))?;
 
         Ok(rows
             .into_iter()
-            .map(|(shard, state_version, verified_epoch)| {
+            .map(|(shard, state_version, first_state_version, verified_epoch)| {
                 (Shard::from(shard as u32), ClaimedStateVersion {
                     state_version: StateVersion::new(state_version as u64),
+                    first_state_version: StateVersion::new(first_state_version as u64),
                     verified_epoch: verified_epoch.map(|epoch| Epoch(epoch as u64)),
                 })
             })

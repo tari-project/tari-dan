@@ -2,16 +2,17 @@
 -- is bounded by a verified checkpoint. A scan resumes from the claim until a verified checkpoint that ended after the
 -- claim began expires it.
 --
--- `verified_epoch` is the epoch of the latest verified checkpoint of the shard when the claim began, NULL without
--- one.
+-- `first_state_version` is the state version the claim began at. `verified_epoch` is the epoch of the latest verified
+-- checkpoint of the shard when the claim began, NULL without one.
 CREATE TABLE shard_state_version_claims
 (
     id             INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
     account_id     INTEGER  NOT NULL REFERENCES accounts (id) ON DELETE CASCADE,
     resource_id    INTEGER  NOT NULL REFERENCES resources (id) ON DELETE CASCADE,
     shard          INTEGER  NOT NULL,
-    state_version  BIGINT   NOT NULL,
-    verified_epoch BIGINT   NULL,
+    state_version       BIGINT   NOT NULL,
+    first_state_version BIGINT   NOT NULL,
+    verified_epoch      BIGINT   NULL,
     created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

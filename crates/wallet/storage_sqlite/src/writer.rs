@@ -2727,6 +2727,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
         for (shard, claim) in claims {
             let state_version = claim.state_version.as_u64() as i64;
+            let first_state_version = claim.first_state_version.as_u64() as i64;
             let verified_epoch = claim.verified_epoch.map(|epoch| epoch.as_u64() as i64);
             diesel::insert_into(shard_state_version_claims::table)
                 .values((
@@ -2744,6 +2745,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                         .assume_not_null()),
                     shard_state_version_claims::shard.eq(shard.as_u32() as i32),
                     shard_state_version_claims::state_version.eq(state_version),
+                    shard_state_version_claims::first_state_version.eq(first_state_version),
                     shard_state_version_claims::verified_epoch.eq(verified_epoch),
                 ))
                 .on_conflict((
@@ -2754,6 +2756,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 .do_update()
                 .set((
                     shard_state_version_claims::state_version.eq(state_version),
+                    shard_state_version_claims::first_state_version.eq(first_state_version),
                     shard_state_version_claims::verified_epoch.eq(verified_epoch),
                     shard_state_version_claims::updated_at.eq(diesel::dsl::now),
                 ))

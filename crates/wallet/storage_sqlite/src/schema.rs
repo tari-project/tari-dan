@@ -167,6 +167,7 @@ diesel::table! {
         resource_id -> Integer,
         shard -> Integer,
         state_version -> BigInt,
+        first_state_version -> BigInt,
         verified_epoch -> Nullable<BigInt>,
         created_at -> Timestamp,
         updated_at -> Timestamp,

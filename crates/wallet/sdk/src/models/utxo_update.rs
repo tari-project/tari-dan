@@ -38,6 +38,9 @@ pub struct EndOfShard {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClaimedStateVersion {
     pub state_version: StateVersion,
+    /// The state version the claim began at. An honest indexer reported no more than the network had committed then,
+    /// so a checkpoint that ended after the claim began commits at least this.
+    pub first_state_version: StateVersion,
     /// The epoch of the latest verified checkpoint of the shard when the claim began, or `None` without one.
     pub verified_epoch: Option<Epoch>,
 }

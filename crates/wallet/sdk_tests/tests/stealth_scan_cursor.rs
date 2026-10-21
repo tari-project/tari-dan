@@ -227,18 +227,21 @@ fn store_claim(test: &TestWithNetwork<ProvingNetwork>, state_version: u64, verif
             tx.shard_state_version_claims_set_many(
                 &TestWithNetwork::<ProvingNetwork>::test_account_address(),
                 &STEALTH_TARI_RESOURCE_ADDRESS,
-                [(SHARD, ClaimedStateVersion {
-                    state_version: StateVersion::from(state_version),
-                    verified_epoch,
-                })],
+                [(SHARD, claim(state_version, verified_epoch))],
             )
         })
         .unwrap();
 }
 
+/// A claim that began at `state_version` and has not advanced.
 fn claim(state_version: u64, verified_epoch: Option<Epoch>) -> ClaimedStateVersion {
+    advanced_claim(state_version, state_version, verified_epoch)
+}
+
+fn advanced_claim(first_state_version: u64, state_version: u64, verified_epoch: Option<Epoch>) -> ClaimedStateVersion {
     ClaimedStateVersion {
         state_version: StateVersion::from(state_version),
+        first_state_version: StateVersion::from(first_state_version),
         verified_epoch,
     }
 }
@@ -296,8 +299,12 @@ async fn a_scan_resumed_from_a_claim_advances_the_claim_but_not_the_verified_cur
     assert_eq!(queued_utxos(&test), 1);
     assert_eq!(
         stored_claims(&test).get(&SHARD),
-        Some(&claim(CHECKPOINT_VERSION + 10, Some(began_in))),
-        "the claim advances and keeps the epoch it began in"
+        Some(&advanced_claim(
+            CHECKPOINT_VERSION + 5,
+            CHECKPOINT_VERSION + 10,
+            Some(began_in)
+        )),
+        "the claim advances and keeps where it began"
     );
     assert_eq!(
         stored_cursors(&test).get(&SHARD),
@@ -466,7 +473,12 @@ async fn a_scan_pages_past_the_verified_state_version_without_storing_past_it() 
     );
     assert_eq!(
         stored_claims(&test).get(&SHARD),
-        Some(&claim(CHECKPOINT_VERSION + 2, Some(CHECKPOINT_EPOCH)))
+        Some(&advanced_claim(
+            CHECKPOINT_VERSION + 1,
+            CHECKPOINT_VERSION + 2,
+            Some(CHECKPOINT_EPOCH)
+        )),
+        "the claim begins on the first page past the verified state version"
     );
 }
 
