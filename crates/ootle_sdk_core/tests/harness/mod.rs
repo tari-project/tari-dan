@@ -209,7 +209,7 @@ pub const OP_ENCODE_ARG: &str = "encode_arg";
 ///
 /// **`"semantic"` comparison mode.** Matches the stealth-send precedent: the runner re-seals, verifies
 /// every signature via [`ootle_sdk_core::decode_and_canonicalize_sealed_transfer`], and compares the
-/// deterministic decoded fields (the signer public keys + `is_seal_signer_authorized` survive, locking
+/// deterministic decoded fields (the signer public keys + `main_signer` survive, locking
 /// the seal-signer-authorized contract; the Schnorr scalars are nulled).
 pub const OP_COSIGN_SEAL_WITH_AUTH: &str = "cosign_seal_with_auth";
 
@@ -953,6 +953,7 @@ pub fn run_operation(fixture: &Fixture) -> ExpectedOutput {
                 cosign_resolved_partial(fixture),
                 &keys.to_core(),
                 std::slice::from_ref(&auth),
+                None,
             )
             .unwrap_or_else(|e| {
                 panic!(
@@ -1007,7 +1008,7 @@ fn cosign_authorize_inputs(
     PublicKeyBytes,
     SecretKeyBytes,
 ) {
-    let record = ootle_sdk_core::unsigned_record_for_cosign(&cosign_resolved_partial(fixture))
+    let record = ootle_sdk_core::unsigned_record_for_cosign(&cosign_resolved_partial(fixture), None)
         .unwrap_or_else(|e| panic!("fixture `{}`: unsigned_record_for_cosign failed: {e}", fixture.name));
     let seal_pk_hex = fixture
         .input

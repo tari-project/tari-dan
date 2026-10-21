@@ -203,12 +203,13 @@ where
             dry_run,
         );
 
-        let transaction_signer_public_key =
-            executable
-                .main_signer()
-                .ok_or_else(|| TransactionErrorKind::InvariantError {
-                    details: "Transaction must have at least one authorized signature".to_string(),
-                })?;
+        if executable.signers_iter().next().is_none() {
+            return Err(TransactionErrorKind::InvariantError {
+                details: "Transaction must have at least one authorized signature".to_string(),
+            }
+            .into());
+        }
+        let main_signer = executable.main_signer();
 
         let instructions = executable.into_instructions();
 
@@ -217,7 +218,7 @@ where
         let runtime_interface = std::rc::Rc::new(RuntimeInterfaceImpl::initialize(
             tracker,
             template_provider.clone(),
-            transaction_signer_public_key,
+            main_signer,
             entity_id_provider,
             modules,
             claim_burn_proof_verifier,

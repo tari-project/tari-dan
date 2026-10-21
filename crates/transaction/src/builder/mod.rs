@@ -41,6 +41,7 @@ use crate::{
     ComponentReference,
     Instruction,
     IntoSigned,
+    MainSigner,
     MigrateFunction,
     NftAssertVec,
     NftCheck,
@@ -311,13 +312,13 @@ impl TransactionBuilder<MainIntent> {
         self
     }
 
-    /// Set whether the seal signature also authorises the transaction (defaults to `true`).
+    /// Sets the transaction's main signer (defaults to [`MainSigner::SealSigner`]).
     ///
     /// The value is final: neither the builder nor sealing changes it afterwards, so a
     /// transaction whose seal signer must not carry authority (e.g. a co-signed spend) can
-    /// settle the flag here before any signing message is computed.
-    pub fn with_seal_signer_authorized(mut self, authorized: bool) -> Self {
-        self.unsigned_transaction.set_seal_signer_authorized(authorized);
+    /// settle it here before any signing message is computed.
+    pub fn with_main_signer(mut self, main_signer: MainSigner) -> Self {
+        self.unsigned_transaction.set_main_signer(main_signer);
         self
     }
 
