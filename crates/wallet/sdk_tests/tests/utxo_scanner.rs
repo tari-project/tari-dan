@@ -11,17 +11,14 @@ use std::{
 
 use futures::StreamExt;
 use ootle_byte_type::ToByteType;
-use tari_engine_types::{
-    Epoch,
-    Utxo,
-    substate::{Substate, SubstateId},
-};
+use tari_engine_types::{Epoch, Utxo, substate::SubstateId};
 use tari_indexer_client::types::{EpochCheckpointEntry, ValidatorSetCommittee, WatchedSubstateItem};
 use tari_ootle_common_types::{StateVersion, SubstateVersion, shard::Shard};
 use tari_ootle_transaction::{Transaction, TransactionEnvelope, TransactionId};
 use tari_ootle_wallet_sdk::{
     models::{EndOfShard, KeyBranch, KeyId, StartOfShard, UtxoUnspent, UtxoUpdatePayload, WalletUtxoUpdate},
     network::{
+        FetchedSubstates,
         SubstateQueryResult,
         TransactionFinalizedStream,
         TransactionQueryResult,
@@ -56,11 +53,12 @@ impl WalletNetworkInterface for ScriptedUtxoNetwork {
         _: &SubstateId,
         _: Option<SubstateVersion>,
         _: bool,
+        _: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
         panic!("ScriptedUtxoNetwork::query_substate called")
     }
 
-    async fn get_substates(&self, _: Vec<SubstateId>) -> Result<HashMap<SubstateId, Substate>, Self::Error> {
+    async fn get_substates(&self, _: Vec<SubstateId>, _: bool) -> Result<FetchedSubstates, Self::Error> {
         panic!("ScriptedUtxoNetwork::get_substates called")
     }
 
@@ -135,6 +133,10 @@ impl WalletNetworkInterface for ScriptedUtxoNetwork {
 
     async fn get_current_epoch(&self) -> Result<Epoch, Self::Error> {
         panic!("ScriptedUtxoNetwork::get_current_epoch called")
+    }
+
+    async fn get_consensus_epoch(&self) -> Result<Option<Epoch>, Self::Error> {
+        panic!("ScriptedUtxoNetwork::get_consensus_epoch called")
     }
 
     async fn wait_until_ready(&self) -> Result<(), Self::Error> {
