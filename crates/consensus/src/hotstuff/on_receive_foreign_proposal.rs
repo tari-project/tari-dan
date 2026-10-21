@@ -119,13 +119,13 @@ where TConsensusSpec: ConsensusSpec
 
         let is_saved = self.store.with_write_tx(|tx| {
             if let Err(err) = self.validate_and_save(tx, &proposal, local_committee_info) {
-                if matches!(
-                    err.validation_error(),
-                    Some(ProposalValidationError::ForeignPledgesNotCommitted { .. })
-                ) {
-                    // The pledges travel beside the commit proof, so a bad set says nothing about the block itself.
-                    // Nothing is recorded against the block id, so another copy is still accepted. A pending request
-                    // for the block is retried with another member of the foreign committee when it times out.
+                if err
+                    .validation_error()
+                    .is_some_and(|err| err.rejects_message_not_block())
+                {
+                    // Nothing is recorded against the block id, so another delivery of the block is still accepted. A
+                    // pending request for the block is retried with another member of the foreign committee when it
+                    // times out.
                     warn!(target: LOG_TARGET, "⚠️ Discarding foreign proposal: {}", err);
                     return Ok(false);
                 }
@@ -556,13 +556,15 @@ where TConsensusSpec: ConsensusSpec
             });
         }
 
-        validate_evidence_and_pledges_match(proposal, local_committee_info.shard_group())?;
+        validate_foreign_proposal_contents(proposal, local_committee_info.shard_group())?;
 
         Ok(())
     }
 }
 
-pub(super) fn validate_evidence_and_pledges_match(
+/// Checks what the relayer of an authenticated foreign proposal chose to send for the local shard group: the pledges
+/// match the values the evidence commits to, and every command the local shard group needs is carried in full.
+pub(super) fn validate_foreign_proposal_contents(
     proposal: &ForeignProposal,
     local_shard_group: ShardGroup,
 ) -> Result<(), ProposalValidationError> {
@@ -587,6 +589,14 @@ pub(super) fn validate_evidence_and_pledges_match(
                 shard_group: foreign_shard_group,
                 details: e.into(),
             })?;
+    if let Some(withheld) = proposal.commit_proof().withheld_command_for(local_shard_group) {
+        return Err(ProposalValidationError::ForeignProposalWithholdsCommand {
+            block_id: proposal.calculate_block_id(),
+            shard_group: foreign_shard_group,
+            local_shard_group,
+            command_hash: withheld.hash,
+        });
+    }
     // A rejected proposal is never applied. A transaction waiting on it in LocalPrepared aborts in the first epoch
     // after its max_epoch plus `LOCAL_PREPARED_GRACE_EPOCHS` (see
     // `TransactionPoolRecord::is_local_prepared_expired_at`); one that has already sent its LocalAccept keeps
@@ -681,23 +691,11 @@ fn generate_transaction_commands_commit_proof_for_shard_group<TTx: StateStoreRea
     for_shard_group: ShardGroup,
 ) -> Result<CommandsCommitProof, HotStuffError> {
     let _timer = TraceTimer::info(LOG_TARGET, "generate_transaction_commands_commit_proof_for_shard_group");
-    let applicable_commands = committed_block.commands().iter().map(|cmd| {
-        let is_involved_local_prepare_with_inputs = cmd
-            .local_prepare()
-            .map(|atom| atom.evidence.has_inputs(for_shard_group))
-            .unwrap_or(false);
-
-        let is_involved_local_accept = cmd
-            .local_accept()
-            .map(|atom| atom.evidence.has(&for_shard_group))
-            .unwrap_or(false);
-
-        if is_involved_local_prepare_with_inputs || is_involved_local_accept {
-            CommandOrHash::Command(cmd.clone())
-        } else {
-            CommandOrHash::Hash(cmd.hash(committed_block.header().protocol_version()))
-        }
-    });
+    let protocol_version = committed_block.header().protocol_version();
+    let applicable_commands = committed_block
+        .commands()
+        .iter()
+        .map(|cmd| CommandOrHash::for_shard_group(protocol_version, cmd, for_shard_group));
 
     let proof = generate_block_commit_proof(tx, commit_qc, committed_block)?;
     let command_commit_proof = CommandsCommitProof::new_latest(applicable_commands.collect(), proof);

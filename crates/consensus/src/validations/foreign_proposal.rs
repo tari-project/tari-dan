@@ -55,8 +55,9 @@ pub async fn resolve_foreign_committee<TEpochManager: EpochManagerReader>(
 /// foreign proposal was authenticated before it was saved, and authentication reads only those two, so this
 /// proposal authenticates too.
 ///
-/// The whole commit proof is compared because stored foreign proposals are pruned by epoch: a copy that shares only
-/// the block id may be saved once its stored twin is pruned, so it must be authenticated on its own.
+/// The whole commit proof is compared because stored foreign proposals are pruned by epoch: a message that shares
+/// only the block id with a stored proposal may be saved once that proposal is pruned, so it must be authenticated on
+/// its own.
 pub fn is_authenticated_commit_proof_stored<TTx: StateStoreReadTransaction>(
     tx: &TTx,
     proposal: &ForeignProposal,

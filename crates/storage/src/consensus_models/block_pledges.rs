@@ -111,7 +111,7 @@ impl BlockPledge {
         }
         match protocol_version {
             ProtocolVersion::V0 | ProtocolVersion::V1 => return Some(substate),
-            ProtocolVersion::V2 => {},
+            ProtocolVersion::V2 | ProtocolVersion::V3 => {},
         }
         let committed_hash = ev.pledged_value_hash?;
         if hash_pledged_substate_value(substate.substate_value()) != committed_hash {

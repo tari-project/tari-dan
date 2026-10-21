@@ -509,7 +509,12 @@ mod tests {
             }),
         ])
         .unwrap();
-        for protocol_version in [ProtocolVersion::V0, ProtocolVersion::V1, ProtocolVersion::V2] {
+        for protocol_version in [
+            ProtocolVersion::V0,
+            ProtocolVersion::V1,
+            ProtocolVersion::V2,
+            ProtocolVersion::V3,
+        ] {
             for timeout_certificate_id in [None, Some(TcId::from([4u8; 32]))] {
                 for commands in [BlockCommands::empty(), finalizing.clone()] {
                     assert_hashes_identically_to_sidechain_header(protocol_version, timeout_certificate_id, &commands);

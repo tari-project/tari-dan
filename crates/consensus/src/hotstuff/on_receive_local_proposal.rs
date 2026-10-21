@@ -253,11 +253,8 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     &foreign_proposal,
                     epoch_state.local_committee_info(),
                 ) {
-                    if let Some(err @ ProposalValidationError::ForeignPledgesNotCommitted { .. }) =
-                        err.validation_error()
-                    {
-                        // The pledges travel beside the commit proof, so the block id is left unmarked for the genuine
-                        // proposal to arrive
+                    if let Some(err) = err.validation_error().filter(|err| err.rejects_message_not_block()) {
+                        // The block id is left unmarked for another delivery of the block
                         warn!(target: LOG_TARGET, "⚠️❌ Rejecting block {}: {}", valid_block, err);
                         return Ok(false);
                     }

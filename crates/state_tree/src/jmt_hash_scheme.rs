@@ -10,6 +10,6 @@ use tari_jellyfish::JmtHashScheme;
 /// root), never from a proof. The match lists every version so that a new protocol version must state its scheme.
 pub fn jmt_hash_scheme(protocol_version: ProtocolVersion) -> JmtHashScheme {
     match protocol_version {
-        ProtocolVersion::V0 | ProtocolVersion::V1 | ProtocolVersion::V2 => JmtHashScheme::V1,
+        ProtocolVersion::V0 | ProtocolVersion::V1 | ProtocolVersion::V2 | ProtocolVersion::V3 => JmtHashScheme::V1,
     }
 }

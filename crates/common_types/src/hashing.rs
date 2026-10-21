@@ -30,6 +30,12 @@ pub fn finalized_transaction_hasher() -> TariConsensusHasher {
     tari_consensus_hasher("FinalizedTransaction")
 }
 
+/// Hashes a command, with the shard groups a foreign commit proof must carry it in full for, into a leaf of a block's
+/// command merkle root.
+pub fn command_leaf_hasher() -> TariConsensusHasher {
+    tari_consensus_hasher("CommandLeaf")
+}
+
 /// Commits to a substate value that one shard group pledges to another. The receiving shard group recomputes it over
 /// the pledged value and compares it with the hash in the sending shard group's committed evidence.
 pub fn hash_pledged_substate_value(value: &SubstateValue) -> Hash32 {

@@ -511,7 +511,7 @@ impl Block {
         let hashes = self
             .commands
             .iter()
-            .map(|cmd| TreeHash::from(cmd.hash(protocol_version).into_array()));
+            .map(|cmd| TreeHash::from(cmd.merkle_leaf(protocol_version).into_array()));
         let hash =
             hashes
                 .clone()

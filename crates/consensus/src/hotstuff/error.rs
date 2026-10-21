@@ -340,6 +340,17 @@ pub enum ProposalValidationError {
         transaction_id: TransactionId,
     },
 
+    #[error(
+        "Foreign proposal for block {block_id} from {shard_group} carries command {command_hash} only by its hash, \
+         but its commit proof names {local_shard_group} as needing that command in full"
+    )]
+    ForeignProposalWithholdsCommand {
+        block_id: BlockId,
+        shard_group: ShardGroup,
+        local_shard_group: ShardGroup,
+        command_hash: FixedHash,
+    },
+
     // TODO: remove some foreign proposal validation variants
     #[error(
         "Foreign node in {shard_group} submitted invalid pledge for block {block}, transaction {transaction_id}: \
@@ -396,4 +407,19 @@ pub enum ProposalValidationError {
         shard_group: ShardGroup,
         details: String,
     },
+}
+
+impl ProposalValidationError {
+    /// True for a foreign proposal error that rejects the message carrying a block and leaves the block id free.
+    ///
+    /// The signed header and the command root fix a foreign proposal's block id. The relayer chooses its pledges and
+    /// which commands it sends in full, so two messages carrying the same block can differ in them. An error in that
+    /// part says nothing about the block, so nothing is recorded against its block id and another delivery of the
+    /// block is still accepted.
+    pub fn rejects_message_not_block(&self) -> bool {
+        matches!(
+            self,
+            Self::ForeignPledgesNotCommitted { .. } | Self::ForeignProposalWithholdsCommand { .. }
+        )
+    }
 }
