@@ -52,9 +52,8 @@ impl LoadedTemplate {
         }
     }
 
-    /// A handle to the definition shared with the template provider. A loaded template is shared by the provider's
-    /// caches, so the definition is borrowed through this handle rather than copied: copying it is host work
-    /// proportional to the definition's size that no meter charges for.
+    /// A handle to the definition shared with the template provider. Execution must not copy a definition: its size is
+    /// chosen by the template author and the copy is unmetered.
     pub fn shared_template_def(&self) -> Arc<TemplateDef> {
         match self {
             LoadedTemplate::Wasm(wasm) => wasm.shared_template_def(),
