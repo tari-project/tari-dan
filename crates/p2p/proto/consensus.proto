@@ -208,12 +208,24 @@ message SchnorrQcSignatures {
 message TimeoutCertificate {
   uint64 epoch = 1;
   uint64 block_height = 2;
-  repeated SignedTimeout timeouts = 3;
+  TcSignatures signatures = 3;
+}
+
+message TcSignatures {
+  oneof scheme {
+    SchnorrTcSignatures schnorr = 1;
+  }
+}
+
+// One timeout per committee member whose bit is set in `signers`, in ascending committee order.
+message SchnorrTcSignatures {
+  bytes signers = 1;
+  repeated SignedTimeout timeouts = 2;
 }
 
 message SignedTimeout {
   uint64 high_pc_height = 1;
-  tari.ootle.common.SignatureAndPublicKey signature = 2;
+  tari.ootle.common.Signature signature = 2;
 }
 
 message ValidatorMetadata {

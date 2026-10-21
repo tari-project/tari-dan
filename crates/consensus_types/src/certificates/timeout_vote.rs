@@ -33,7 +33,7 @@ impl TimeoutVote {
     pub fn as_signed_timeout(&self) -> SignedTimeout {
         SignedTimeout {
             high_pc_height: self.high_pc_height,
-            signature: self.signature.clone(),
+            signature: self.signature.signature,
         }
     }
 }

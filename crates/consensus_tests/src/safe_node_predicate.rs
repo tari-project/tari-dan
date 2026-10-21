@@ -16,7 +16,14 @@
 //! chains in a tempdir-backed state store and exercise both rules and the unsafe corner.
 
 use tari_consensus::traits::CertificateStore;
-use tari_consensus_types::{BlockId, LeafBlock, ProposalCertificate, ShardGroupAccumulatedData, TimeoutCertificate};
+use tari_consensus_types::{
+    BlockId,
+    LeafBlock,
+    ProposalCertificate,
+    ShardGroupAccumulatedData,
+    TcSignatures,
+    TimeoutCertificate,
+};
 use tari_crypto::tari_utilities::epoch_time::EpochTime;
 use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight, NumPreshards, ProtocolVersion, ShardGroup};
 use tari_ootle_p2p::PeerAddress;
@@ -26,7 +33,7 @@ use tari_ootle_storage::{
     consensus_models::{Block, BlockCommands, BlockHeader, BookkeepingModel},
 };
 use tari_ootle_transaction::Network;
-use tari_sidechain::{FixedHash, QuorumDecision};
+use tari_sidechain::{FixedHash, QuorumDecision, SignerBitmap};
 use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tempfile::TempDir;
@@ -60,6 +67,14 @@ fn qc_of(target: &LeafBlock) -> ProposalCertificate {
         ProposalCertificate::genesis_signatures(),
         QuorumDecision::Accept,
     )
+}
+
+/// The signatures of a timeout certificate that no committee member signed.
+fn unsigned() -> TcSignatures {
+    TcSignatures::Schnorr {
+        signers: SignerBitmap::default(),
+        timeouts: vec![],
+    }
 }
 
 /// Build a real block extending `parent_id` at `height` with `justify`. `marker` is mixed into
@@ -212,7 +227,7 @@ fn unsafe_when_only_the_timeout_certificate_is_above_locked() {
         qc_of(&sibling.as_leaf()),
         NodeHeight(10),
         2,
-        Some(TimeoutCertificate::new(TEST_EPOCH, NodeHeight(9), vec![])),
+        Some(TimeoutCertificate::new(TEST_EPOCH, NodeHeight(9), unsigned())),
     );
 
     store

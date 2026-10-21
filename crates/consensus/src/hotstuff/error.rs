@@ -249,11 +249,6 @@ pub enum ProposalValidationError {
         qc: QcId,
         protocol_version: ProtocolVersion,
     },
-    #[error("QC has duplicate signature: {qc} by {validator}")]
-    QcDuplicateSignature {
-        qc: QcId,
-        validator: RistrettoPublicKeyBytes,
-    },
     #[error("Quorum was not reached on QC {qc}. {got} out of {required}")]
     QuorumWasNotReached {
         qc: QcId,

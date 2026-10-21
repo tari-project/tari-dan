@@ -17,7 +17,14 @@ use tari_consensus::hotstuff::{
     calculate_dummy_blocks_from_justify,
     check_extends_justify,
 };
-use tari_consensus_types::{BlockId, LeafBlock, ProposalCertificate, ShardGroupAccumulatedData, TimeoutCertificate};
+use tari_consensus_types::{
+    BlockId,
+    LeafBlock,
+    ProposalCertificate,
+    ShardGroupAccumulatedData,
+    TcSignatures,
+    TimeoutCertificate,
+};
 use tari_crypto::tari_utilities::epoch_time::EpochTime;
 use tari_ootle_common_types::{
     Epoch,
@@ -31,7 +38,7 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_storage::consensus_models::{Block, BlockCommands, BlockHeader};
 use tari_ootle_transaction::Network;
-use tari_sidechain::{FixedHash, QuorumDecision};
+use tari_sidechain::{FixedHash, QuorumDecision, SignerBitmap};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::support::{RoundRobinLeaderStrategy, TestAddress};
@@ -63,6 +70,14 @@ fn qc_of(target: &LeafBlock) -> ProposalCertificate {
         ProposalCertificate::genesis_signatures(),
         QuorumDecision::Accept,
     )
+}
+
+/// The signatures of a timeout certificate that no committee member signed.
+fn unsigned() -> TcSignatures {
+    TcSignatures::Schnorr {
+        signers: SignerBitmap::default(),
+        timeouts: vec![],
+    }
 }
 
 /// Builds a real block extending `parent_id` at `height` with `justify`. `marker` is mixed into the state Merkle
@@ -100,7 +115,7 @@ fn build_block(
 }
 
 fn timeout_certificate_at(height: NodeHeight) -> TimeoutCertificate {
-    TimeoutCertificate::new(TEST_EPOCH, height, vec![])
+    TimeoutCertificate::new(TEST_EPOCH, height, unsigned())
 }
 
 /// The dummy chain a proposer must fill `[justify_block.height + 1, candidate_height - 1]` with, as every

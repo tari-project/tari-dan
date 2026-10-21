@@ -189,6 +189,7 @@ export * from "./types/SubstateRequirement";
 export * from "./types/SubstateType";
 export * from "./types/SubstateValue";
 export * from "./types/SubstateVersion";
+export * from "./types/TcSignatures";
 export * from "./types/TemplateDef";
 export * from "./types/TemplateDefV1";
 export * from "./types/TemplateFunction";
