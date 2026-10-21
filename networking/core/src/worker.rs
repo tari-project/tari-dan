@@ -487,6 +487,8 @@ where
         &mut self,
         event: SwarmEvent<TariNodeBehaviourEvent<BytesCodec>>,
     ) -> Result<(), NetworkingError> {
+        #[cfg(feature = "metrics")]
+        self.record_metrics(&event);
         match event {
             SwarmEvent::Behaviour(event) => self.on_behaviour_event(event).await?,
             SwarmEvent::ConnectionEstablished {
@@ -573,8 +575,6 @@ where
     #[allow(clippy::too_many_lines)]
     async fn on_behaviour_event(&mut self, event: TariNodeBehaviourEvent<BytesCodec>) -> Result<(), NetworkingError> {
         use TariNodeBehaviourEvent::*;
-        #[cfg(feature = "metrics")]
-        self.record_metrics(&event);
         match event {
             Ping(ping::Event {
                 peer,
@@ -829,7 +829,7 @@ where
     }
 
     #[cfg(feature = "metrics")]
-    fn record_metrics(&mut self, event: &TariNodeBehaviourEvent<BytesCodec>) {
+    fn record_metrics(&self, event: &SwarmEvent<TariNodeBehaviourEvent<BytesCodec>>) {
         use tari_swarm::metrics::Recorder;
         if let Some(metrics) = self.metrics.as_ref() {
             metrics.record(event);
