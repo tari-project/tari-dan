@@ -26,6 +26,7 @@ use crate::{
         AuthoredTemplateModel,
         BalanceChangePage,
         BalanceChangeSourceType,
+        ClaimedStateVersion,
         ConfidentialOutputModel,
         Config,
         KeyType,
@@ -296,6 +297,11 @@ pub trait WalletStoreReader {
         account: &ComponentAddress,
         resource: &ResourceAddress,
     ) -> Result<HashMap<Shard, StateVersion>, WalletStorageError>;
+    fn shard_state_version_claims_get(
+        &mut self,
+        account: &ComponentAddress,
+        resource: &ResourceAddress,
+    ) -> Result<HashMap<Shard, ClaimedStateVersion>, WalletStorageError>;
 
     fn utxo_process_queue_fetch_batch(
         &mut self,

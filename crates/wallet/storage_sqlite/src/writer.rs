@@ -45,6 +45,7 @@ use tari_ootle_wallet_sdk::{
         BalanceChangeSnapshot,
         BalanceChangeSource,
         BalanceChangeSourceType,
+        ClaimedStateVersion,
         ConfidentialOutputModel,
         ImportedKeyId,
         KeyId,
@@ -2711,6 +2712,94 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 .execute(self.connection())
                 .map_err(|e| WalletStorageError::general(OPERATION, e))?;
         }
+
+        Ok(())
+    }
+
+    fn shard_state_version_claims_set_many<I: IntoIterator<Item = (Shard, ClaimedStateVersion)>>(
+        &mut self,
+        account_address: &ComponentAddress,
+        resource_address: &ResourceAddress,
+        claims: I,
+    ) -> Result<(), WalletStorageError> {
+        const OPERATION: &str = "shard_state_version_claims_set_many";
+        use crate::schema::{accounts, resources, shard_state_version_claims};
+
+        for (shard, claim) in claims {
+            let state_version = claim.state_version.as_u64() as i64;
+            let verified_epoch = claim.verified_epoch.map(|epoch| epoch.as_u64() as i64);
+            diesel::insert_into(shard_state_version_claims::table)
+                .values((
+                    shard_state_version_claims::account_id.eq(accounts::table
+                        .select(accounts::id)
+                        .filter(accounts::address.eq(account_address.to_string()))
+                        .limit(1)
+                        .single_value()
+                        .assume_not_null()),
+                    shard_state_version_claims::resource_id.eq(resources::table
+                        .select(resources::id)
+                        .filter(resources::address.eq(resource_address.to_string()))
+                        .limit(1)
+                        .single_value()
+                        .assume_not_null()),
+                    shard_state_version_claims::shard.eq(shard.as_u32() as i32),
+                    shard_state_version_claims::state_version.eq(state_version),
+                    shard_state_version_claims::verified_epoch.eq(verified_epoch),
+                ))
+                .on_conflict((
+                    shard_state_version_claims::account_id,
+                    shard_state_version_claims::resource_id,
+                    shard_state_version_claims::shard,
+                ))
+                .do_update()
+                .set((
+                    shard_state_version_claims::state_version.eq(state_version),
+                    shard_state_version_claims::verified_epoch.eq(verified_epoch),
+                    shard_state_version_claims::updated_at.eq(diesel::dsl::now),
+                ))
+                .execute(self.connection())
+                .map_err(|e| WalletStorageError::general(OPERATION, e))?;
+        }
+
+        Ok(())
+    }
+
+    fn shard_state_version_claims_remove<I: IntoIterator<Item = Shard>>(
+        &mut self,
+        account_address: &ComponentAddress,
+        resource_address: &ResourceAddress,
+        shards: I,
+    ) -> Result<(), WalletStorageError> {
+        const OPERATION: &str = "shard_state_version_claims_remove";
+        use crate::schema::{accounts, resources, shard_state_version_claims};
+
+        let shards = shards
+            .into_iter()
+            .map(|shard| shard.as_u32() as i32)
+            .collect::<Vec<_>>();
+        if shards.is_empty() {
+            return Ok(());
+        }
+        diesel::delete(shard_state_version_claims::table)
+            .filter(
+                shard_state_version_claims::account_id.eq(accounts::table
+                    .select(accounts::id)
+                    .filter(accounts::address.eq(account_address.to_string()))
+                    .limit(1)
+                    .single_value()
+                    .assume_not_null()),
+            )
+            .filter(
+                shard_state_version_claims::resource_id.eq(resources::table
+                    .select(resources::id)
+                    .filter(resources::address.eq(resource_address.to_string()))
+                    .limit(1)
+                    .single_value()
+                    .assume_not_null()),
+            )
+            .filter(shard_state_version_claims::shard.eq_any(shards))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general(OPERATION, e))?;
 
         Ok(())
     }
