@@ -10,9 +10,10 @@ use tari_engine_types::{
     resource::Resource,
     substate::{Substate, SubstateId, SubstateValue},
 };
-use tari_indexer_client::types::SubstateProof;
+use tari_indexer_client::types::{SubstateProof, SubstateState};
 use tari_ootle_common_types::{
     Epoch,
+    ShardGroup,
     SubstateRequirement,
     VersionedSubstateId,
     VersionedSubstateIdRef,
@@ -20,7 +21,7 @@ use tari_ootle_common_types::{
     optional::{IsNotFoundError, Optional},
     substate_type::SubstateType,
 };
-use tari_ootle_light_client::LightClientError;
+use tari_ootle_light_client::{LightClientError, VerifiedCommittee, down_proof_up_anchor, verify_down_proof};
 use tari_template_lib::types::{ResourceAddress, TemplateAddress, constants::TARI_TOKEN};
 
 use crate::{
@@ -363,8 +364,13 @@ where
                 served: resp.version,
             });
         }
+        let SubstateState::Up { substate } = resp.state else {
+            return Err(SubstateApiError::SubstateDoesNotExist {
+                address: address.clone(),
+            });
+        };
         if verify {
-            self.verify_read(address, resp.version, &resp.substate, resp.proof.as_ref())
+            self.verify_read(address, resp.version, &substate, resp.proof.as_ref())
                 .await?;
         }
 
@@ -374,8 +380,74 @@ where
         );
         Ok(ValidatorScanResult {
             id: VersionedSubstateId::new(address.clone(), resp.version),
-            substate: resp.substate,
+            substate: *substate,
         })
+    }
+
+    /// Verifies that `substate_id` at `version` has gone down: the indexer must prove that the version was committed
+    /// and that a later block's state no longer holds it, each against a committee of a validator set the wallet
+    /// trusts.
+    ///
+    /// A version that has gone down never comes back up, so the proof shows the version's current state however old
+    /// its blocks are. It says nothing about later versions of the substate.
+    pub async fn verify_down(
+        &self,
+        substate_id: &SubstateId,
+        version: SubstateVersion,
+    ) -> Result<(), SubstateApiError> {
+        let resp = self
+            .network_interface
+            .query_substate(substate_id, Some(version), false, true)
+            .await
+            .optional()
+            .map_err(|e| SubstateApiError::NetworkInterfaceError(e.into()))?
+            .ok_or_else(|| SubstateApiError::SubstateDoesNotExist {
+                address: substate_id.clone(),
+            })?;
+        if let SubstateState::Up { .. } = resp.state {
+            return Err(SubstateApiError::SubstateNotDown {
+                substate_id: substate_id.clone(),
+                version: resp.version,
+            });
+        }
+        let unproven = || SubstateApiError::SubstateUnproven {
+            substate_id: substate_id.clone(),
+        };
+        let proof = resp.proof.ok_or_else(unproven)?;
+        let down_proof = proof.down_proof.as_deref().ok_or_else(unproven)?;
+        let unverified = |source| SubstateApiError::SubstateUnverified {
+            substate_id: substate_id.clone(),
+            source,
+        };
+
+        let (up_epoch, up_shard_group) = down_proof_up_anchor(down_proof).map_err(unverified)?;
+        let up_committee = self.trusted_committee(substate_id, up_epoch, up_shard_group).await?;
+        let down_committee = self
+            .trusted_committee(substate_id, proof.anchor.epoch, proof.anchor.shard_group)
+            .await?;
+        verify_down_proof(
+            substate_id,
+            version,
+            down_proof,
+            &up_committee,
+            &down_committee,
+            &proof.commit_proof,
+        )
+        .map_err(unverified)
+    }
+
+    /// The committee of `shard_group` in `epoch`, verified against a validator set the wallet trusts, to verify a proof
+    /// of `substate_id` anchored at a block of that committee.
+    async fn trusted_committee(
+        &self,
+        substate_id: &SubstateId,
+        epoch: Epoch,
+        shard_group: ShardGroup,
+    ) -> Result<VerifiedCommittee, SubstateApiError> {
+        match self.validator_set_api.verify_committee(epoch, shard_group).await? {
+            Some(committee) => Ok(committee),
+            None => Err(self.untrusted_anchor_error(substate_id, epoch)?),
+        }
     }
 
     /// Verifies that `substate_id` at `version` held `value` at the block `proof` is anchored at, and that the block
@@ -398,13 +470,9 @@ where
         // A proof anchored before the latest trusted set walks nowhere, so it is judged before its committee is
         // fetched.
         self.check_fresh(substate_id, anchor_epoch)?;
-        let Some(committee) = self
-            .validator_set_api
-            .verify_committee(anchor_epoch, proof.anchor.shard_group)
-            .await?
-        else {
-            return Err(self.untrusted_anchor_error(substate_id, anchor_epoch)?);
-        };
+        let committee = self
+            .trusted_committee(substate_id, anchor_epoch, proof.anchor.shard_group)
+            .await?;
         committee
             .verify_substate(substate_id, version, Some(value), proof)
             .map_err(|source| SubstateApiError::SubstateUnverified {
@@ -523,6 +591,11 @@ pub enum SubstateApiError {
     ValueVisitorError(#[from] IndexedValueError),
     #[error("The indexer served substate {substate_id} without a proof. Retry, or use another indexer.")]
     SubstateUnproven { substate_id: SubstateId },
+    #[error("The indexer served substate {substate_id} as live at v{version}, not as gone down")]
+    SubstateNotDown {
+        substate_id: SubstateId,
+        version: SubstateVersion,
+    },
     #[error(
         "The indexer proved substate {substate_id} at a block of {epoch}, but has not yet served the checkpoint that \
          hands over to that epoch's validator set. Retry shortly, once the indexer serves it."

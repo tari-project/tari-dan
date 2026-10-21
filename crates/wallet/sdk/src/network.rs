@@ -10,13 +10,14 @@ use tari_engine_types::{
     SubstateVersion,
     Utxo,
     commit_result::ExecuteResult,
-    substate::{Substate, SubstateId, SubstateValue},
+    substate::{Substate, SubstateId},
     transaction_receipt::FinalizeOutcome,
 };
 use tari_indexer_client::types::{
     EpochCheckpointEntry,
     ProvenTransactionReceipt,
     SubstateProof,
+    SubstateState,
     ValidatorSetCommittee,
     WatchedSubstateItem,
 };
@@ -61,7 +62,8 @@ pub trait WalletNetworkInterface {
     type Error: IsNotFoundError + TransactionStatusResponseError + std::error::Error + Send + Sync + 'static;
 
     /// Queries a substate, at `version` or its latest. With `include_proof`, the result carries the proof the indexer
-    /// verified it with, when a committee member could prove it.
+    /// verified it with, when a committee member could prove it. Only a query with `include_proof` that names `version`
+    /// may be answered with [`SubstateState::Down`].
     fn query_substate(
         &self,
         address: &SubstateId,
@@ -168,8 +170,9 @@ pub trait WalletNetworkInterface {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SubstateQueryResult {
     pub version: SubstateVersion,
-    pub substate: SubstateValue,
-    /// The proof that the substate held this value, when one was asked for and served.
+    /// What the shard group holds for `version`.
+    pub state: SubstateState,
+    /// The proof of `state`, when one was asked for and served.
     #[serde(default)]
     pub proof: Option<SubstateProof>,
 }

@@ -61,6 +61,7 @@ use tari_state_tree::{
     ShardGroupRootTree,
     SpreadPrefixStateTree,
     StateTreePayload,
+    SubstateDownProof,
     SubstateTreeChange,
     SubstateValueProof,
     TreeHash,
@@ -69,7 +70,7 @@ use tari_state_tree::{
     compute_proof_for_hashes,
     memory_store::MemoryTreeStore,
 };
-use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
+use tari_template_lib_types::{Hash32, crypto::RistrettoPublicKeyBytes};
 
 pub const NETWORK: Network = Network::LocalNet;
 pub const NUM_PRESHARDS: NumPreshards = NumPreshards::P4;
@@ -421,6 +422,76 @@ pub fn substate_proof(
         value_proof: tari_bor::serde_codec::to_vec(&value_proof).unwrap(),
         value_hash_epoch: set.epoch,
         down_proof: None,
+    }
+}
+
+/// A proof that `id` at `version` has gone down: up at height 5 of its shard group's chain in `up_set`'s epoch and
+/// absent at height 9 in `down_set`'s, each block signed by its set's committee. The proof is anchored at the block it
+/// is absent at.
+pub fn substate_down_proof(
+    up_set: &ValidatorSetFixture,
+    down_set: &ValidatorSetFixture,
+    id: &SubstateId,
+    version: SubstateVersion,
+) -> SubstateProof {
+    let versioned_id = VersionedSubstateId::new(id.clone(), version);
+    let shard = versioned_id.to_shard(NUM_PRESHARDS);
+    let shard_group = shard_group_of(shard);
+
+    let mut store = MemoryTreeStore::<StateTreePayload>::new();
+    let up_root = SpreadPrefixStateTree::new(&mut store)
+        .put_substate_changes(None, 1, vec![SubstateTreeChange::Up {
+            id: versioned_id.clone(),
+            value_hash: Hash32::from_array([5; 32]),
+        }])
+        .unwrap();
+    let down_root = SpreadPrefixStateTree::new(&mut store)
+        .put_substate_changes(Some(1), 2, vec![SubstateTreeChange::Down {
+            id: versioned_id.clone(),
+        }])
+        .unwrap();
+    let up_tree = shard_group_root_tree(up_set.network, up_set.epoch, shard, up_root, 1);
+    let down_tree = shard_group_root_tree(down_set.network, down_set.epoch, shard, down_root, 2);
+    let (_, up_value, up_leaf) = SpreadPrefixStateTree::new(&mut store)
+        .get_proof(1, &versioned_id)
+        .unwrap();
+    let (_, _, down_leaf) = SpreadPrefixStateTree::new(&mut store)
+        .get_proof(2, &versioned_id)
+        .unwrap();
+    let down = SubstateValueProof::new(down_root, 2, down_tree.get_proof(shard).unwrap().1, down_leaf);
+
+    let down_proof = SubstateDownProof {
+        up: SubstateValueProof::new(up_root, 1, up_tree.get_proof(shard).unwrap().1, up_leaf),
+        up_value_hash: up_value.unwrap().0,
+        up_commit_proof: block_commit_proof(
+            up_set.network,
+            up_set.epoch,
+            shard_group,
+            5,
+            up_tree.root(),
+            up_set.signers(shard_group),
+        ),
+        down: down.clone(),
+    };
+    SubstateProof {
+        anchor: SubstateProofAnchor {
+            epoch: down_set.epoch,
+            shard_group,
+            height: 9,
+            block_id: Default::default(),
+            state_merkle_root: Default::default(),
+        },
+        commit_proof: block_commit_proof(
+            down_set.network,
+            down_set.epoch,
+            shard_group,
+            9,
+            down_tree.root(),
+            down_set.signers(shard_group),
+        ),
+        value_proof: tari_bor::serde_codec::to_vec(&down).unwrap(),
+        value_hash_epoch: up_set.epoch,
+        down_proof: Some(tari_bor::serde_codec::to_vec(&down_proof).unwrap()),
     }
 }
 

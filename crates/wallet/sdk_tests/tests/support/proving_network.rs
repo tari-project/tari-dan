@@ -11,7 +11,13 @@ use tari_engine_types::{
     Utxo,
     substate::{Substate, SubstateId, SubstateValue},
 };
-use tari_indexer_client::types::{EpochCheckpointEntry, SubstateProof, ValidatorSetCommittee, WatchedSubstateItem};
+use tari_indexer_client::types::{
+    EpochCheckpointEntry,
+    SubstateProof,
+    SubstateState,
+    ValidatorSetCommittee,
+    WatchedSubstateItem,
+};
 use tari_ootle_common_types::{
     Epoch,
     ShardGroup,
@@ -68,6 +74,8 @@ struct ProvingNetworkState {
     /// Requests for a page of checkpoints to walk through.
     walk_requests: usize,
     substates: HashMap<SubstateId, ServedSubstate>,
+    /// How many of the next substate queries fail as if the indexer could not be reached.
+    failing_substate_queries: usize,
     /// Requests for a committee.
     committee_requests: usize,
     /// Transactions submitted to the network.
@@ -85,7 +93,8 @@ struct ProvingNetworkState {
 
 struct ServedSubstate {
     version: SubstateVersion,
-    value: SubstateValue,
+    /// `None` when `version` has gone down.
+    value: Option<SubstateValue>,
     proof: Option<SubstateProof>,
 }
 
@@ -114,6 +123,7 @@ impl ProvingNetwork {
                 unserved: None,
                 walk_requests: 0,
                 substates: HashMap::new(),
+                failing_substate_queries: 0,
                 committee_requests: 0,
                 submissions: 0,
                 substate_queries: 0,
@@ -199,11 +209,25 @@ impl ProvingNetwork {
         value: SubstateValue,
         proof: Option<SubstateProof>,
     ) {
-        self.state
-            .lock()
-            .unwrap()
-            .substates
-            .insert(id, ServedSubstate { version, value, proof });
+        self.state.lock().unwrap().substates.insert(id, ServedSubstate {
+            version,
+            value: Some(value),
+            proof,
+        });
+    }
+
+    /// Serves `id` as gone down at `version`, with `proof` to requests for proofs that name the version.
+    pub fn serve_down_substate(&self, id: SubstateId, version: SubstateVersion, proof: Option<SubstateProof>) {
+        self.state.lock().unwrap().substates.insert(id, ServedSubstate {
+            version,
+            value: None,
+            proof,
+        });
+    }
+
+    /// Fails the next `count` substate queries as if the indexer could not be reached.
+    pub fn fail_substate_queries(&self, count: usize) {
+        self.state.lock().unwrap().failing_substate_queries = count;
     }
 
     pub fn set_result(&self, result: TransactionQueryResult) {
@@ -237,19 +261,30 @@ impl WalletNetworkInterface for ProvingNetwork {
     async fn query_substate(
         &self,
         address: &SubstateId,
-        _version: Option<SubstateVersion>,
+        version: Option<SubstateVersion>,
         _local_search_only: bool,
         include_proof: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
         let mut state = self.state.lock().unwrap();
         state.substate_queries += 1;
+        if state.failing_substate_queries > 0 {
+            state.failing_substate_queries -= 1;
+            return Err(ProvingNetworkError::Unreachable);
+        }
         let served = state
             .substates
             .get(address)
             .expect("ProvingNetwork serves no such substate");
+        let state = match &served.value {
+            Some(value) => SubstateState::Up {
+                substate: Box::new(value.clone()),
+            },
+            None if include_proof && version == Some(served.version) => SubstateState::Down {},
+            None => return Err(ProvingNetworkError::NotFound),
+        };
         Ok(SubstateQueryResult {
             version: served.version,
-            substate: served.value.clone(),
+            state,
             proof: served.proof.clone().filter(|_| include_proof),
         })
     }
@@ -266,9 +301,12 @@ impl WalletNetworkInterface for ProvingNetwork {
             let Some(served) = state.substates.get(&id) else {
                 continue;
             };
+            let Some(value) = &served.value else {
+                continue;
+            };
             fetched
                 .substates
-                .insert(id.clone(), Substate::new(served.version, served.value.clone()));
+                .insert(id.clone(), Substate::new(served.version, value.clone()));
             if let Some(proof) = served.proof.clone().filter(|_| include_proofs) {
                 fetched.proofs.insert(id, proof);
             }
@@ -435,18 +473,20 @@ pub enum ProvingNetworkError {
     NoCheckpoint,
     #[error("The indexer cannot be reached")]
     Unreachable,
+    #[error("Substate not found")]
+    NotFound,
 }
 
 impl IsNotFoundError for ProvingNetworkError {
     fn is_not_found_error(&self) -> bool {
-        matches!(self, Self::NoCheckpoint)
+        matches!(self, Self::NoCheckpoint | Self::NotFound)
     }
 }
 
 impl TransactionStatusResponseError for ProvingNetworkError {
     fn get_status(&self) -> ResponseErrorStatus {
         match self {
-            Self::NoCheckpoint => ResponseErrorStatus::NotFound {
+            Self::NoCheckpoint | Self::NotFound => ResponseErrorStatus::NotFound {
                 message: self.to_string(),
             },
             Self::Unreachable => ResponseErrorStatus::InternalError {

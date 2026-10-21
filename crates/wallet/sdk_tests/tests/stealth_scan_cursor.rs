@@ -12,8 +12,15 @@ mod support;
 use std::{collections::HashMap, time::Duration};
 
 use ootle_byte_type::ToByteType;
+use tari_engine_types::substate::SubstateId;
 use tari_ootle_common_types::{Epoch, StateVersion, SubstateVersion, shard::Shard};
-use tari_ootle_light_client::test_fixtures::{CheckpointSpec, ValidatorSetFixture, checkpoint_entry, high};
+use tari_ootle_light_client::test_fixtures::{
+    CheckpointSpec,
+    ValidatorSetFixture,
+    checkpoint_entry,
+    high,
+    substate_down_proof,
+};
 use tari_ootle_wallet_sdk::{
     IndexerTrust,
     models::{
@@ -519,6 +526,10 @@ async fn a_spend_delivered_again_is_reported_once() {
         id: UtxoId::from(output.commitment),
         version: SubstateVersion::new(1),
     };
+    let id = SubstateId::Utxo(output.to_utxo_address());
+    let set = ValidatorSetFixture::new(CHECKPOINT_EPOCH.as_u64());
+    let proof = substate_down_proof(&set, &set, &id, spent.version);
+    network.serve_down_substate(id, spent.version, Some(proof));
     network.answer_utxo_streams(move |_| {
         vec![UtxoUpdatePayload {
             sos: Some(start_of_shard(CHECKPOINT_VERSION + 1, false)),

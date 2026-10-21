@@ -345,18 +345,10 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
                 },
             )
             .await?;
-        let version = result.version;
-        let proof = result.proof.clone();
-        let Some(substate) = result.into_substate_value() else {
-            return Err(IndexerRestApiNetworkInterfaceError::SubstateVersionDown {
-                substate_id: substate_id.clone(),
-                version,
-            });
-        };
         Ok(SubstateQueryResult {
-            version,
-            substate,
-            proof,
+            version: result.version,
+            state: result.state,
+            proof: result.proof,
         })
     }
 
@@ -738,18 +730,12 @@ pub enum IndexerRestApiNetworkInterfaceError {
         substate_id: SubstateId,
         version: SubstateVersion,
     },
-    #[error("Substate {substate_id} v{version} is down")]
-    SubstateVersionDown {
-        substate_id: SubstateId,
-        version: SubstateVersion,
-    },
 }
 
 impl IsNotFoundError for IndexerRestApiNetworkInterfaceError {
     fn is_not_found_error(&self) -> bool {
         match self {
             IndexerRestApiNetworkInterfaceError::IndexerClientError(err) => err.is_not_found_error(),
-            IndexerRestApiNetworkInterfaceError::SubstateVersionDown { .. } => true,
             _ => false,
         }
     }
@@ -806,9 +792,6 @@ impl TransactionStatusResponseError for IndexerRestApiNetworkInterfaceError {
             IndexerRestApiNetworkInterfaceError::IndexerTimedOut { .. } |
             IndexerRestApiNetworkInterfaceError::SubstateTypeMismatch(_) |
             IndexerRestApiNetworkInterfaceError::UnrequestedDownAnswer { .. } => ResponseErrorStatus::InternalError {
-                message: self.to_string(),
-            },
-            IndexerRestApiNetworkInterfaceError::SubstateVersionDown { .. } => ResponseErrorStatus::NotFound {
                 message: self.to_string(),
             },
         }
@@ -1309,7 +1292,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_down_answer_to_a_proven_request_for_a_version_is_not_found() {
+    async fn a_down_answer_to_a_proven_request_for_a_version_is_served_down() {
         let body = serde_json::to_string(&GetSubstateResponse {
             version: SubstateVersion::new(1),
             state: SubstateState::Down {},
@@ -1323,11 +1306,11 @@ mod tests {
         network.set_endpoints(vec![answering.clone(), other]).unwrap();
 
         for _ in 0..FAILOVER_THRESHOLD {
-            let err = network
+            let resp = network
                 .query_substate(&component_id(), Some(SubstateVersion::new(1)), false, true)
                 .await
-                .unwrap_err();
-            assert!(err.is_not_found_error(), "{err}");
+                .unwrap();
+            assert!(matches!(resp.state, SubstateState::Down {}));
         }
 
         assert_eq!(network.get_endpoint(), answering, "a down answer is a valid one");
