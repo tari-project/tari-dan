@@ -13,6 +13,7 @@ use tari_indexer_client::types::EpochCheckpointEntry;
 use tari_ootle_common_types::{
     Epoch,
     ShardGroup,
+    StateVersion,
     ValidatorSetHash,
     optional::{IsNotFoundError, Optional},
     shard::Shard,
@@ -292,6 +293,51 @@ where
         Ok(Some(committee))
     }
 
+    /// The state version every shard reached at the end of the latest epoch the indexer serves a checkpoint of. Each
+    /// version is read from an end-of-epoch checkpoint that the committee of the shard's group signed, verified
+    /// against the validator set the wallet trusts for that epoch, so none is ahead of what the network committed.
+    ///
+    /// Empty before the network has ended an epoch.
+    pub async fn verified_shard_state_versions(&self) -> Result<HashMap<Shard, StateVersion>, ValidatorSetApiError> {
+        let trusted = match self.latest()? {
+            Some(trusted) => trusted,
+            None => self.sync().await?,
+        };
+        let mut versions = HashMap::new();
+        for shard in trusted.num_preshards().all_shards_iter() {
+            if versions.contains_key(&shard) {
+                continue;
+            }
+            let Some(entry) = self
+                .network_interface
+                .get_latest_epoch_checkpoint(shard)
+                .await
+                .optional()
+                .map_err(network_error)?
+            else {
+                return Ok(HashMap::new());
+            };
+            let committee = self
+                .verify_committee(entry.epoch, entry.shard_group)
+                .await?
+                .ok_or(ValidatorSetApiError::NoTrustedValidatorSet { epoch: entry.epoch })?;
+            let checkpoint = committee.verify_checkpoint(&entry)?;
+            if !checkpoint.shard_group().contains(&shard) {
+                return Err(ValidatorSetApiError::CheckpointOfAnotherShardGroup {
+                    shard,
+                    shard_group: checkpoint.shard_group(),
+                });
+            }
+            versions.extend(
+                checkpoint
+                    .shard_group()
+                    .shard_iter()
+                    .filter_map(|shard| Some((shard, checkpoint.shard_state_version(shard)?))),
+            );
+        }
+        Ok(versions)
+    }
+
     /// The latest checkpoint of the walked shard group, or `None` before the network has ended an epoch.
     async fn latest_checkpoint(&self) -> Result<Option<EpochCheckpointEntry>, ValidatorSetApiError> {
         self.network_interface
@@ -512,6 +558,10 @@ pub enum ValidatorSetApiError {
          the wallet has no validator set to anchor on. It retries shortly."
     )]
     ConsensusEpochUnobserved,
+    #[error("The indexer served a checkpoint ending {epoch}, but the wallet trusts no validator set for that epoch")]
+    NoTrustedValidatorSet { epoch: Epoch },
+    #[error("The indexer served a checkpoint of shard group {shard_group} as the latest checkpoint of shard {shard}")]
+    CheckpointOfAnotherShardGroup { shard: Shard, shard_group: ShardGroup },
 }
 
 impl ValidatorSetApiError {

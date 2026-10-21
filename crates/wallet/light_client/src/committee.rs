@@ -3,13 +3,13 @@
 
 use ootle_network::Network;
 use serde::{Deserialize, Serialize};
-use tari_indexer_client::types::ValidatorSetCommittee;
+use tari_indexer_client::types::{EpochCheckpointEntry, ValidatorSetCommittee};
 use tari_ootle_common_types::{Epoch, NumPreshards, ShardGroup, ValidatorSetHash, ValidatorSetMember, VotePower};
 use tari_ootle_storage::consensus_models::{CommittedBlockProof, VerifiedBlockTip};
 use tari_state_tree::ValidatorSetCommitteeProof;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
-use crate::LightClientError;
+use crate::{LightClientError, VerifiedCheckpoint, validator_set::decode_checkpoint};
 
 /// One shard group's committee in an epoch, proved to be that shard group's committee in a validator set the light
 /// client trusts.
@@ -149,6 +149,35 @@ impl VerifiedCommittee {
         }
         let tip = commit_proof.validate(self.network, self.quorum_threshold(), |pk| Ok(self.vote_power(pk)))?;
         Ok(tip)
+    }
+
+    /// Verifies that this committee signed the end-of-epoch checkpoint in `entry`, which must end this committee's
+    /// epoch for its shard group.
+    pub fn verify_checkpoint(&self, entry: &EpochCheckpointEntry) -> Result<VerifiedCheckpoint, LightClientError> {
+        let checkpoint = decode_checkpoint(self.network, entry)?;
+        let epoch = checkpoint.epoch();
+        if epoch != self.epoch {
+            return Err(LightClientError::CheckpointEpochMismatch {
+                expected: self.epoch,
+                found: epoch,
+            });
+        }
+        let shard_group = checkpoint
+            .checked_shard_group()
+            .map_err(|source| LightClientError::InvalidCheckpoint { epoch, source })?;
+        if shard_group != self.shard_group {
+            return Err(LightClientError::CheckpointShardGroupMismatch {
+                epoch,
+                expected: self.shard_group,
+                found: shard_group,
+            });
+        }
+        checkpoint
+            .validate(self.network, epoch, self.quorum_threshold(), |pk| {
+                Ok(self.vote_power(pk))
+            })
+            .map_err(|source| LightClientError::InvalidCheckpoint { epoch, source })?;
+        Ok(VerifiedCheckpoint::new(shard_group, checkpoint))
     }
 }
 

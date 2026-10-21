@@ -14,6 +14,7 @@ use tari_engine_types::{
 use tari_indexer_client::types::{EpochCheckpointEntry, SubstateProof, ValidatorSetCommittee, WatchedSubstateItem};
 use tari_ootle_common_types::{
     Epoch,
+    ShardGroup,
     StateVersion,
     SubstateVersion,
     optional::IsNotFoundError,
@@ -23,6 +24,7 @@ use tari_ootle_common_types::{
 use tari_ootle_light_client::test_fixtures::{CheckpointSpec, ValidatorSetFixture, checkpoint_entry, high, low};
 use tari_ootle_transaction::{Transaction, TransactionEnvelope, TransactionId};
 use tari_ootle_wallet_sdk::{
+    models::UtxoUpdatePayload,
     network::{
         FetchedSubstates,
         SubstateQueryResult,
@@ -35,6 +37,9 @@ use tari_ootle_wallet_sdk::{
 };
 use tari_template_abi::TemplateDef;
 use tari_template_lib::types::{ResourceAddress, TemplateAddress, UtxoId};
+
+/// Answers a stealth UTXO stream request, given the cursor of each shard it asks from.
+type UtxoStreamAnswer = Arc<dyn Fn(&[(Shard, StateVersion)]) -> Vec<UtxoUpdatePayload> + Send + Sync>;
 
 /// An indexer that serves a chain of signed end-of-epoch checkpoints, the committees of every epoch's validator set,
 /// one transaction result, and the substates it is given to serve.
@@ -71,6 +76,11 @@ struct ProvingNetworkState {
     substate_queries: usize,
     /// Requests for a batch of substates.
     substate_fetches: usize,
+    /// The latest checkpoint of each shard group other than the walked one.
+    shard_group_checkpoints: HashMap<ShardGroup, EpochCheckpointEntry>,
+    utxo_stream_answer: Option<UtxoStreamAnswer>,
+    /// The shard cursors of each stealth UTXO stream request.
+    utxo_stream_requests: Vec<Vec<(Shard, StateVersion)>>,
 }
 
 struct ServedSubstate {
@@ -108,6 +118,9 @@ impl ProvingNetwork {
                 submissions: 0,
                 substate_queries: 0,
                 substate_fetches: 0,
+                shard_group_checkpoints: HashMap::new(),
+                utxo_stream_answer: None,
+                utxo_stream_requests: Vec::new(),
             })),
         }
     }
@@ -195,6 +208,26 @@ impl ProvingNetwork {
 
     pub fn set_result(&self, result: TransactionQueryResult) {
         self.state.lock().unwrap().result = Some(result);
+    }
+
+    /// Serves `checkpoint` as the latest checkpoint of its shard group, in place of the walked chain's latest one.
+    pub fn serve_latest_checkpoint(&self, checkpoint: EpochCheckpointEntry) {
+        self.state
+            .lock()
+            .unwrap()
+            .shard_group_checkpoints
+            .insert(checkpoint.shard_group, checkpoint);
+    }
+
+    /// Answers every stealth UTXO stream request with what `answer` returns for the request's shard cursors.
+    pub fn answer_utxo_streams<F>(&self, answer: F)
+    where F: Fn(&[(Shard, StateVersion)]) -> Vec<UtxoUpdatePayload> + Send + Sync + 'static {
+        self.state.lock().unwrap().utxo_stream_answer = Some(Arc::new(answer));
+    }
+
+    /// The shard cursors of each stealth UTXO stream request so far.
+    pub fn utxo_stream_requests(&self) -> Vec<Vec<(Shard, StateVersion)>> {
+        self.state.lock().unwrap().utxo_stream_requests.clone()
     }
 }
 
@@ -289,10 +322,17 @@ impl WalletNetworkInterface for ProvingNetwork {
         &self,
         _from_epoch: Epoch,
         _resource_address: ResourceAddress,
-        _shard_state_versions: Vec<(Shard, StateVersion)>,
+        shard_state_versions: Vec<(Shard, StateVersion)>,
         _unspent_only: bool,
     ) -> Result<UtxoUpdateStream<Self::Error>, Self::Error> {
-        panic!("ProvingNetwork called")
+        let mut state = self.state.lock().unwrap();
+        let answer = state
+            .utxo_stream_answer
+            .clone()
+            .expect("ProvingNetwork answers no UTXO stream");
+        let payloads = answer(&shard_state_versions);
+        state.utxo_stream_requests.push(shard_state_versions);
+        Ok(futures::stream::iter(payloads.into_iter().map(Ok)).boxed())
     }
 
     async fn list_watched_substates(
@@ -312,12 +352,19 @@ impl WalletNetworkInterface for ProvingNetwork {
         panic!("ProvingNetwork called")
     }
 
-    async fn get_latest_epoch_checkpoint(&self, _shard: Shard) -> Result<EpochCheckpointEntry, Self::Error> {
+    async fn get_latest_epoch_checkpoint(&self, shard: Shard) -> Result<EpochCheckpointEntry, Self::Error> {
         let state = self.state.lock().unwrap();
         if state.unreachable {
             return Err(ProvingNetworkError::Unreachable);
         }
         let latest = state.latest.ok_or(ProvingNetworkError::NoCheckpoint)?;
+        if let Some(checkpoint) = state
+            .shard_group_checkpoints
+            .values()
+            .find(|checkpoint| checkpoint.shard_group.contains(&shard))
+        {
+            return Ok(checkpoint.clone());
+        }
         Ok(state.checkpoints[latest].clone())
     }
 

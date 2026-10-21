@@ -8,6 +8,7 @@
 //! [`TrustedValidatorSet`], proves the committees it needs against it, and checks commit proofs, substate proofs and
 //! receipts with those committees.
 
+mod checkpoint;
 mod committee;
 mod error;
 mod proofs;
@@ -16,6 +17,7 @@ pub mod test_fixtures;
 mod validator_set;
 mod walk;
 
+pub use checkpoint::VerifiedCheckpoint;
 pub use committee::VerifiedCommittee;
 pub use error::LightClientError;
 pub use proofs::{check_diff_matches_receipt, check_result_matches_receipt, down_proof_up_anchor, verify_down_proof};
