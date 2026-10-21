@@ -5,10 +5,7 @@ use std::{array, time::Duration};
 
 use log::*;
 use tari_engine_types::UtxoOutput;
-use tari_ootle_common_types::{
-    optional::{IsNotFoundError, Optional},
-    response_status::TransactionStatusResponseError,
-};
+use tari_ootle_common_types::{optional::IsNotFoundError, response_status::TransactionStatusResponseError};
 use tari_ootle_transaction::Network;
 use tari_ootle_wallet_sdk::{
     WalletSdk,
@@ -264,12 +261,9 @@ where
         else {
             // The output could be burnt, frozen, or otherwise invalid. If we already have it in the db, update its
             // status, if not, do nothing.
-            let has_utxo = outputs_api
-                .update_utxo_status(&address, None, None, Some(found.is_frozen))
-                .optional()?
-                .is_some();
+            let frozen_changed = outputs_api.set_utxo_frozen(&address, found.is_frozen)?.unwrap_or(false);
 
-            if has_utxo {
+            if frozen_changed {
                 self.notify(UtxoRecoveredEvent {
                     address: UtxoAddress::new(resource_address, found.id),
                     account_address: found.account_addr,
@@ -282,12 +276,16 @@ where
             return Ok(false);
         };
 
-        outputs_api.upsert_utxo(&output)?;
+        let changed = outputs_api.upsert_utxo(&output)?;
 
         self.sdk.store().with_write_tx(|tx| {
             tx.utxo_process_queue_remove_item(resource_address, found.output.tag, found.output.output.public_nonce)
         })?;
 
+        if !changed {
+            debug!(target: LOG_TARGET, "Stealth output {} is already recorded", address);
+            return Ok(false);
+        }
         self.notify(UtxoRecoveredEvent {
             address: UtxoAddress::new(resource_address, found.id),
             account_address: found.account_addr,

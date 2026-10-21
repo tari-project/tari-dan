@@ -634,3 +634,42 @@ fn locked_outputs_count_as_unspent_or_locked() {
         .unwrap();
     assert_eq!(count(), 1);
 }
+
+/// UTXO recovery reports an output only when recording it changes the wallet's view of it.
+#[test]
+fn upserting_an_output_reports_whether_it_changed() {
+    let test = Test::new();
+    let outputs = test.sdk().stealth_outputs_api();
+    let output = stealth_output(10, 1);
+
+    assert!(outputs.upsert_utxo(&output).unwrap(), "a new output is inserted");
+    assert!(
+        !outputs.upsert_utxo(&output).unwrap(),
+        "the same output again changes nothing"
+    );
+
+    let mut frozen = output.clone();
+    frozen.is_frozen = true;
+    assert!(outputs.upsert_utxo(&frozen).unwrap(), "freezing the output changes it");
+    assert!(!outputs.upsert_utxo(&frozen).unwrap());
+}
+
+#[test]
+fn setting_the_frozen_flag_reports_whether_it_changed() {
+    let test = Test::new();
+    let outputs = test.sdk().stealth_outputs_api();
+    let output = stealth_output(10, 1);
+    let address = output.to_utxo_address();
+
+    assert_eq!(
+        outputs.set_utxo_frozen(&address, true).unwrap(),
+        None,
+        "no output is held"
+    );
+
+    outputs.add_output(&output).unwrap();
+    assert_eq!(outputs.set_utxo_frozen(&address, false).unwrap(), Some(false));
+    assert_eq!(outputs.set_utxo_frozen(&address, true).unwrap(), Some(true));
+    assert!(stored_output(&test, &Test::test_account_address(), &output.commitment).is_frozen);
+    assert_eq!(outputs.set_utxo_frozen(&address, true).unwrap(), Some(false));
+}

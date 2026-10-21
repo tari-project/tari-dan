@@ -15,6 +15,7 @@ use tari_ootle_wallet_sdk::{
     apis::validator_set::ValidatorSetApiError,
     models::{
         AccountWithAddress,
+        OutputStatus,
         StartOfShard,
         UtxoSpent,
         UtxoSpentEvent,
@@ -151,7 +152,6 @@ where TSpec: WalletSdkSpec
         Ok(())
     }
 
-    #[allow(clippy::too_many_lines)]
     async fn process_next_batch(&mut self) -> Result<bool, StealthScannerApiError> {
         info!(
             target: LOG_TARGET,
@@ -356,22 +356,23 @@ where TSpec: WalletSdkSpec
         resource_address: &ResourceAddress,
         spent: &UtxoSpent,
     ) -> Result<bool, WalletStorageError> {
-        match tx
-            .stealth_outputs_mark_as_spent(resource_address, &spent.id)
+        let Some(output) = tx
+            .stealth_outputs_get_by_commitment(resource_address, &spent.id.into_commitment_bytes())
             .optional()?
-        {
-            Some(_) => {
-                info!(target: LOG_TARGET, "Marked stealth output {} as spent", spent.id);
-                Ok(true)
-            },
-            None => {
-                debug!(
-                    target: LOG_TARGET,
-                    "Spent UTXO {} not found in wallet store (likely not our output)", spent.id
-                );
-                Ok(false)
-            },
+        else {
+            debug!(
+                target: LOG_TARGET,
+                "Spent UTXO {} not found in wallet store (likely not our output)", spent.id
+            );
+            return Ok(false);
+        };
+        if output.status == OutputStatus::Spent {
+            debug!(target: LOG_TARGET, "Stealth output {} is already spent", spent.id);
+            return Ok(false);
         }
+        tx.stealth_outputs_mark_as_spent(resource_address, &spent.id)?;
+        info!(target: LOG_TARGET, "Marked stealth output {} as spent", spent.id);
+        Ok(true)
     }
 }
 

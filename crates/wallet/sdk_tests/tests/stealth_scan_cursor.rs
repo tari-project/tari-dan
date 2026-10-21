@@ -10,18 +10,35 @@ mod support;
 use std::{collections::HashMap, time::Duration};
 
 use ootle_byte_type::ToByteType;
-use tari_ootle_common_types::{StateVersion, shard::Shard};
+use tari_ootle_common_types::{StateVersion, SubstateVersion, shard::Shard};
 use tari_ootle_light_client::test_fixtures::{CheckpointSpec, ValidatorSetFixture, checkpoint_entry, high};
 use tari_ootle_wallet_sdk::{
     IndexerTrust,
-    models::{KeyBranch, KeyId, StartOfShard, UtxoUnspent, UtxoUpdatePayload, WalletUtxoUpdate},
+    models::{
+        KeyBranch,
+        KeyId,
+        OutputStatus,
+        StartOfShard,
+        StealthOutputModel,
+        UtxoSpent,
+        UtxoUnspent,
+        UtxoUpdatePayload,
+        WalletEvent,
+        WalletUtxoUpdate,
+    },
     storage::{ReadableWalletStore, WalletStoreReader, WalletStoreWriter, WriteableWalletStore},
 };
 use tari_ootle_wallet_sdk_services::{
     notify::Notify,
     utxo_scanner::{StealthUtxoScannerWorker, UtxoScannerHandle},
 };
-use tari_template_lib::types::{constants::STEALTH_TARI_RESOURCE_ADDRESS, crypto::UtxoTag};
+use tari_template_lib::types::{
+    EncryptedData,
+    UtxoId,
+    constants::STEALTH_TARI_RESOURCE_ADDRESS,
+    crypto::{PedersenCommitmentBytes, RistrettoPublicKeyBytes, UtxoTag},
+    stealth::SpendAuthorization,
+};
 
 use crate::support::{ProvingNetwork, TestWithNetwork, random_keypair};
 
@@ -120,8 +137,36 @@ fn serve_utxos(network: &ProvingNetwork, utxos: Vec<(u64, UtxoUnspent)>) {
 }
 
 fn scanner(test: &TestWithNetwork<ProvingNetwork>) -> UtxoScannerHandle {
-    let (_join, handle) = StealthUtxoScannerWorker::new(test.sdk().clone(), Notify::new(100)).spawn();
+    scanner_notifying(test, Notify::new(100))
+}
+
+fn scanner_notifying(test: &TestWithNetwork<ProvingNetwork>, notify: Notify<WalletEvent>) -> UtxoScannerHandle {
+    let (_join, handle) = StealthUtxoScannerWorker::new(test.sdk().clone(), notify).spawn();
     handle
+}
+
+/// An unspent stealth output of the test account.
+fn held_output(seed: u8) -> StealthOutputModel {
+    StealthOutputModel {
+        owner_account: TestWithNetwork::<ProvingNetwork>::test_account_address(),
+        resource_address: STEALTH_TARI_RESOURCE_ADDRESS,
+        commitment: PedersenCommitmentBytes::from_array([seed; PedersenCommitmentBytes::length()]),
+        value: 10,
+        sender_public_nonce: RistrettoPublicKeyBytes::default(),
+        view_only_key_id: KeyId::derived(KeyBranch::ViewOnlyKey, 0),
+        owner_key_id: Some(KeyId::derived(KeyBranch::Account, 0)),
+        encrypted_data: EncryptedData::try_from(vec![0u8; EncryptedData::min_size()]).unwrap(),
+        tag_byte: UtxoTag::new(u32::from(seed)),
+        memo: None,
+        auth: SpendAuthorization::Key(RistrettoPublicKeyBytes::default()),
+        minimum_value_promise: 0,
+        status: OutputStatus::Unspent,
+        is_burnt: false,
+        is_frozen: false,
+        is_on_chain: true,
+        is_condition_spendable: true,
+        lock_id: None,
+    }
 }
 
 async fn scan(scanner: &UtxoScannerHandle) {
@@ -275,4 +320,39 @@ async fn without_a_verified_checkpoint_a_scan_stores_no_cursor() {
 
     assert_eq!(queued_utxos(&test), 1, "the scan still finds the UTXO");
     assert_eq!(stored_cursors(&test).get(&SHARD), None);
+}
+
+/// Each scan reads the updates past the verified state version again, so a spend there reaches the wallet on every
+/// scan until a later checkpoint covers it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_spend_delivered_again_is_reported_once() {
+    let (network, test) = anchored_wallet().await;
+    let output = held_output(7);
+    test.sdk().stealth_outputs_api().add_output(&output).unwrap();
+    let spent = UtxoSpent {
+        id: UtxoId::from(output.commitment),
+        version: SubstateVersion::new(1),
+    };
+    network.answer_utxo_streams(move |_| {
+        vec![UtxoUpdatePayload {
+            sos: Some(start_of_shard(CHECKPOINT_VERSION + 1, false)),
+            update: Some(WalletUtxoUpdate::Spent(spent.clone())),
+            eos: None,
+        }]
+    });
+    let notify = Notify::new(100);
+    let mut events = notify.subscribe();
+    let scanner = scanner_notifying(&test, notify);
+
+    scan(&scanner).await;
+    scan(&scanner).await;
+
+    assert_eq!(network.utxo_stream_requests().len(), 2);
+    let mut spent_events = 0;
+    while let Ok(event) = events.try_recv() {
+        if matches!(event, WalletEvent::UtxoSpent(_)) {
+            spent_events += 1;
+        }
+    }
+    assert_eq!(spent_events, 1);
 }
