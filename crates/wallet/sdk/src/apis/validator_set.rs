@@ -4,7 +4,7 @@
 use std::{
     collections::HashMap,
     sync::Mutex,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use log::*;
@@ -63,6 +63,11 @@ const CHECKPOINTS_PER_REQUEST: u32 = 100;
 /// The most committees [`ValidatorSetShared`] keeps verified at once.
 const MAX_CACHED_COMMITTEES: usize = 256;
 
+/// How long [`ValidatorSetApi::verified_shard_state_versions`] reuses the versions it verified. A shard's version only
+/// grows from one epoch's checkpoint to the next, so a reused version is one the network committed, at most one
+/// checkpoint behind the latest.
+const SHARD_STATE_VERSIONS_TTL: Duration = Duration::from_secs(5 * 60);
+
 /// What every clone of the SDK shares about the validator sets it trusts.
 #[derive(Default)]
 pub struct ValidatorSetShared {
@@ -71,9 +76,28 @@ pub struct ValidatorSetShared {
     /// Committees verified against the trusted validator set of their epoch, by epoch and shard group. An entry is
     /// used only while the set it was verified against is the one the wallet trusts for its epoch.
     committees: Mutex<HashMap<(Epoch, ShardGroup), VerifiedCommittee>>,
+    /// The shard state versions last verified, and when. Cleared when the wallet anchors anew.
+    shard_state_versions: Mutex<Option<(Instant, HashMap<Shard, StateVersion>)>>,
 }
 
 impl ValidatorSetShared {
+    fn cached_shard_state_versions(&self) -> Option<HashMap<Shard, StateVersion>> {
+        self.shard_state_versions
+            .lock()
+            .unwrap()
+            .as_ref()
+            .filter(|(verified_at, _)| verified_at.elapsed() < SHARD_STATE_VERSIONS_TTL)
+            .map(|(_, versions)| versions.clone())
+    }
+
+    fn cache_shard_state_versions(&self, versions: HashMap<Shard, StateVersion>) {
+        *self.shard_state_versions.lock().unwrap() = Some((Instant::now(), versions));
+    }
+
+    fn clear_shard_state_versions(&self) {
+        *self.shard_state_versions.lock().unwrap() = None;
+    }
+
     fn cached_committee(
         &self,
         epoch: Epoch,
@@ -297,8 +321,17 @@ where
     /// version is read from an end-of-epoch checkpoint that the committee of the shard's group signed, verified
     /// against the validator set the wallet trusts for that epoch, so none is ahead of what the network committed.
     ///
-    /// Empty before the network has ended an epoch.
+    /// Empty before the network has ended an epoch. The versions are reused for [`SHARD_STATE_VERSIONS_TTL`].
     pub async fn verified_shard_state_versions(&self) -> Result<HashMap<Shard, StateVersion>, ValidatorSetApiError> {
+        if let Some(versions) = self.shared.cached_shard_state_versions() {
+            return Ok(versions);
+        }
+        let versions = self.fetch_verified_shard_state_versions().await?;
+        self.shared.cache_shard_state_versions(versions.clone());
+        Ok(versions)
+    }
+
+    async fn fetch_verified_shard_state_versions(&self) -> Result<HashMap<Shard, StateVersion>, ValidatorSetApiError> {
         let trusted = match self.latest()? {
             Some(trusted) => trusted,
             None => self.sync().await?,
@@ -414,6 +447,7 @@ where
             tx.config_set(ConfigKey::TrustedValidatorSet.as_key_str(), trusted, false)?;
             record_synced(tx)
         })?;
+        self.shared.clear_shard_state_versions();
         Ok(())
     }
 
