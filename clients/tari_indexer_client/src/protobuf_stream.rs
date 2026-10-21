@@ -26,6 +26,9 @@ pub struct ProtobufStream<TMsg> {
     bytes_stream: Pin<Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send>>,
     buf: BytesMut,
     max_message_size: usize,
+    /// Set once the stream has returned an error or reached the end of the body. After an error the buffered bytes no
+    /// longer start on a message boundary, so the stream ends there.
+    terminated: bool,
     _marker: std::marker::PhantomData<TMsg>,
 }
 
@@ -42,6 +45,7 @@ impl<TMsg> ProtobufStream<TMsg> {
             bytes_stream: Box::pin(bytes_stream.fuse()),
             buf: BytesMut::with_capacity(max_message_size),
             max_message_size,
+            terminated: false,
             _marker: std::marker::PhantomData,
         }
     }
@@ -82,26 +86,36 @@ impl<TMsg: prost::Message + Default + Unpin> Stream for ProtobufStream<TMsg> {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
-        loop {
+        if this.terminated {
+            return Poll::Ready(None);
+        }
+        let result = loop {
             // A single chunk may carry several messages, so drain the buffer before reading more.
             if let Some(result) = this.try_decode_message().transpose() {
-                return Poll::Ready(Some(result));
+                break result;
             }
 
             match this.bytes_stream.as_mut().poll_next(cx) {
                 Poll::Ready(Some(Ok(bytes))) => this.buf.put(bytes),
-                Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(e.into()))),
+                Poll::Ready(Some(Err(e))) => break Err(e.into()),
                 Poll::Ready(None) => {
                     if this.buf.is_empty() {
+                        this.terminated = true;
                         return Poll::Ready(None);
                     }
-                    let remaining = this.buf.len();
-                    this.buf.clear();
-                    return Poll::Ready(Some(Err(ProtobufStreamError::TruncatedFrame { remaining })));
+                    break Err(ProtobufStreamError::TruncatedFrame {
+                        remaining: this.buf.len(),
+                    });
                 },
                 Poll::Pending => return Poll::Pending,
             }
+        };
+
+        if result.is_err() {
+            this.terminated = true;
+            this.buf.clear();
         }
+        Poll::Ready(Some(result))
     }
 }
 
@@ -161,6 +175,30 @@ mod tests {
         assert_eq!(stream.next().await.unwrap().unwrap().max_state_version, 1);
         let err = stream.next().await.unwrap().unwrap_err();
         assert!(matches!(err, ProtobufStreamError::TruncatedFrame { .. }), "{err}");
+        assert!(stream.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn it_ends_after_a_malformed_length_delimiter() {
+        let mut stream = ProtobufStream::<EndOfShard>::new(futures::stream::iter([
+            Ok(Bytes::from(frame(1))),
+            Ok(Bytes::from(vec![0xff; 11])),
+            Ok(Bytes::from(frame(2))),
+        ]));
+        assert_eq!(stream.next().await.unwrap().unwrap().max_state_version, 1);
+        let err = stream.next().await.unwrap().unwrap_err();
+        assert!(matches!(err, ProtobufStreamError::DecodeError(_)), "{err}");
+        assert!(stream.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn it_ends_after_an_oversized_message() {
+        let mut stream = ProtobufStream::<EndOfShard>::with_max_message_size(
+            futures::stream::iter([Ok(Bytes::from([frame(u64::MAX), frame(1)].concat()))]),
+            4,
+        );
+        let err = stream.next().await.unwrap().unwrap_err();
+        assert!(matches!(err, ProtobufStreamError::MessageSizeExceeded { .. }), "{err}");
         assert!(stream.next().await.is_none());
     }
 }
