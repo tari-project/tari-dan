@@ -238,12 +238,14 @@ impl LoadedWasmTemplate {
         &self.template_def
     }
 
-    pub fn into_template_def(self) -> TemplateDef {
-        Arc::try_unwrap(self.template_def).unwrap_or_else(|arc| (*arc).clone())
+    /// A handle to the definition shared with every other clone of this template, for callers that must hold it past
+    /// a move of the template itself.
+    pub fn shared_template_def(&self) -> Arc<TemplateDef> {
+        self.template_def.clone()
     }
 
-    pub fn into_shared_template_def(self) -> Arc<TemplateDef> {
-        self.template_def
+    pub fn into_template_def(self) -> TemplateDef {
+        Arc::try_unwrap(self.template_def).unwrap_or_else(|arc| (*arc).clone())
     }
 
     pub fn find_func_by_name(&self, function_name: &str) -> Option<&FunctionDef> {

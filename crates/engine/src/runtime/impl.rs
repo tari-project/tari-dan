@@ -381,7 +381,7 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
             })?;
         self.track_template_loaded(template_address, loaded.code_size())?;
 
-        Ok(loaded.into_shared_template_def())
+        Ok(loaded.shared_template_def())
     }
 
     fn validate_return_value(&self, value: &IndexedValue) -> Result<(), RuntimeError> {
@@ -832,7 +832,7 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
     /// per leading (non-`SpendContext`) parameter. Because a condition tree commits only an opaque root, leaves are
     /// hidden at creation; this runs at spend time (T2) when the leaf is revealed. Templates are immutable substates,
     /// so a referenced template must already resolve — there is no "not yet published" skip case.
-    fn validate_template_function(&self, tf: &TemplateFunction) -> Result<FunctionDef, RuntimeError> {
+    fn validate_template_function(&self, tf: &TemplateFunction) -> Result<(), RuntimeError> {
         let template_def = self.get_template_def(&tf.template)?;
         let func = template_def
             .get_function(&tf.function)
@@ -871,7 +871,7 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
             })?;
         }
 
-        Ok(func.clone())
+        Ok(())
     }
 
     /// Authorises every spent input of a transfer before the spend executes, so that a rejection leaves the inputs
