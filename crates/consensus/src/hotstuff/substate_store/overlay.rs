@@ -14,8 +14,8 @@ use crate::traits::{ReadableSubstateStore, WriteableSubstateStore};
 ///
 /// The overlay reads the store as it stood when the overlay was taken: the store is borrowed shared, so it cannot
 /// change while any overlay of it lives, and many overlays may read it at once from different threads. A put
-/// follows the same rules as a put to the store. A failed one means the speculation no longer matches the store, and
-/// the transaction is left to be applied to the store itself.
+/// follows the same rules as a put to the store, and one that fails here may still succeed against the store once the
+/// transactions before it are applied there.
 pub struct SubstateOverlay<'base, 'store, TTx: StateStoreReadTransaction> {
     base: &'base PendingSubstateStore<'store, TTx>,
     log: ChangeLog,
@@ -58,7 +58,9 @@ impl<'base, 'store, TTx: StateStoreReadTransaction> SubstateOverlay<'base, 'stor
         self.log.lock_assert_is_up(self.base, id)
     }
 
-    /// The changes made in this overlay, oldest first.
+    /// The changes made in this overlay, oldest first. An in-place update of a substate the store's block already
+    /// changed restates that change at its version, so these changes are read through the overlay and never applied
+    /// to the store as a diff.
     pub fn changes(&self) -> &Vec<SubstateChange> {
         self.log.changes()
     }

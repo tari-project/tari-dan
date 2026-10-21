@@ -338,12 +338,9 @@ impl ChangeLog {
         }
 
         if let Some(head_change) = base.block_head_change(substate_id) {
-            match head_change {
-                SubstateChange::Up { .. } => {
-                    let mut head_change = head_change.clone();
-                    let SubstateChange::Up { substate, .. } = &mut head_change else {
-                        unreachable!("cloned from an UP change")
-                    };
+            let mut head_change = head_change.clone();
+            match &mut head_change {
+                SubstateChange::Up { substate, .. } => {
                     debug!(target: LOG_TARGET, "Updating substate in place: {} v{}", substate_id, substate.version());
                     updater(substate.substate_value_mut())?;
                     self.insert(head_change);
