@@ -4,7 +4,8 @@
 use tari_engine_types::substate::SubstateValue;
 use tari_sidechain::hashing::TariConsensusHasher;
 pub use tari_sidechain::hashing::{
-    block_hasher,
+    block_header_hasher,
+    block_id_hasher,
     block_metadata_hasher,
     command_hasher,
     proposal_vote_signature_hasher,
