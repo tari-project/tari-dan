@@ -50,7 +50,7 @@ use tari_ootle_light_client::{
 use tari_ootle_transaction::TransactionId;
 use tracing::{info, warn};
 
-use crate::Network;
+use crate::{Network, provider::CheckpointStateVersion};
 
 const LOG_TARGET: &str = "ootle_rs::provider::verifier";
 
@@ -86,7 +86,9 @@ pub enum IndexerTrust {
     /// The indexer must run with `verify_substate_proofs` enabled. Stealth UTXO scans
     /// ([`IndexerProvider::watch_stealth_utxos`](crate::provider::IndexerProvider::watch_stealth_utxos) and
     /// [`IndexerProvider::fetch_unspent_utxos`](crate::provider::IndexerProvider::fetch_unspent_utxos)) are served
-    /// unproven and are not verified.
+    /// unproven and are not verified, but
+    /// [`IndexerProvider::shard_state_version_bound`](crate::provider::IndexerProvider::shard_state_version_bound)
+    /// bounds a scan's [`ShardCursor`](crate::provider::ShardCursor) by verified checkpoints.
     ///
     /// The provider trusts the validator set that the indexer's latest checkpoint names on first use, or the consensus
     /// epoch's set before the network's first checkpoint, unless given one with
@@ -456,6 +458,55 @@ impl IndexerVerifier {
         Ok(Some(committee))
     }
 
+    /// Each shard's state version in the latest end-of-epoch checkpoint of its shard group, every checkpoint verified
+    /// against the committee of its epoch. Empty before every shard group has a checkpoint.
+    pub(crate) async fn verified_shard_state_versions(
+        &self,
+    ) -> Result<BTreeMap<Shard, CheckpointStateVersion>, VerifyError> {
+        let client = self.client()?;
+        let mut state = self.state.lock().await;
+        let trusted = match state.latest.clone() {
+            Some(trusted) => trusted,
+            None => self.sync_locked(&mut state).await?,
+        };
+        let mut versions = BTreeMap::new();
+        for shard in trusted.num_preshards().all_shards_iter() {
+            if versions.contains_key(&shard) {
+                continue;
+            }
+            let Some(entry) = client
+                .get_latest_epoch_checkpoint(GetLatestEpochCheckpointRequest {
+                    shard: Some(shard),
+                    include_committees: false,
+                })
+                .await
+                .optional()?
+                .map(|resp| resp.checkpoint)
+            else {
+                return Ok(BTreeMap::new());
+            };
+            let committee = self
+                .verify_committee(&mut state, entry.epoch, entry.shard_group)
+                .await?
+                .ok_or(VerifyError::CheckpointOfUntrustedEpoch { epoch: entry.epoch })?;
+            let checkpoint = committee.verify_checkpoint(&entry)?;
+            if !checkpoint.shard_group().contains(&shard) {
+                return Err(VerifyError::CheckpointOfAnotherShardGroup {
+                    shard,
+                    shard_group: checkpoint.shard_group(),
+                });
+            }
+            versions.extend(checkpoint.shard_group().shard_iter().filter_map(|shard| {
+                let state_version = checkpoint.shard_state_version(shard)?;
+                Some((shard, CheckpointStateVersion {
+                    epoch: checkpoint.epoch(),
+                    state_version,
+                }))
+            }));
+        }
+        Ok(versions)
+    }
+
     /// Verifies that `substate_id` at `version` holds `value` at a block recent enough to show its current state: one
     /// of the latest trusted validator set's epoch, or of the epoch before.
     ///
@@ -674,6 +725,13 @@ pub enum VerifyError {
     SubstateOfAnotherType(#[from] SubstateTypeMismatch),
     #[error("The indexer's validator set data does not verify: {0}")]
     ValidatorSetUnverified(#[from] LightClientError),
+    #[error(
+        "The indexer served a checkpoint ending {epoch} as the latest of its shard group, but the provider trusts no \
+         validator set of that epoch to verify it by"
+    )]
+    CheckpointOfUntrustedEpoch { epoch: Epoch },
+    #[error("The indexer served a checkpoint of shard group {shard_group} as the latest checkpoint of shard {shard}")]
+    CheckpointOfAnotherShardGroup { shard: Shard, shard_group: ShardGroup },
     #[error("The indexer served no checkpoint ending {epoch} to walk the validator set handover through")]
     CheckpointNotServed { epoch: Epoch },
     #[error(
@@ -754,6 +812,7 @@ mod tests {
     };
 
     use tari_ootle_common_types::{
+        StateVersion,
         VersionedSubstateId,
         engine_types::{
             component::{Component, ComponentBody, ComponentHeader},
@@ -771,6 +830,7 @@ mod tests {
         ValidatorSetFixture,
         checkpoint_entry,
         high,
+        low,
         shard_group_of,
         substate_proof,
     };
@@ -791,6 +851,8 @@ mod tests {
         provider::{
             IndexerProvider,
             ProviderError,
+            ShardCursor,
+            ShardStateVersionBound,
             WantInput,
             input_resolver::{TransactionInputResolver, TransactionInputResolverError},
             test_indexer::TestIndexer,
@@ -1431,5 +1493,163 @@ mod tests {
         let trusted = restarted.sync_validator_set().await.unwrap();
         assert_eq!(trusted.validator_set_hash(), &named.hash());
         assert_eq!(trusted.anchor_epoch(), trusted.epoch());
+    }
+
+    /// The checkpoint of `shard_group` ending `sets[3]`'s epoch 4, signed by `signers`, with `shard_state_versions`.
+    fn checkpoint_of_epoch_4(
+        sets: &[ValidatorSetFixture],
+        shard_group: ShardGroup,
+        signers: &Signers,
+        shard_state_versions: Vec<(Shard, u64)>,
+    ) -> EpochCheckpointEntry {
+        checkpoint_entry(CheckpointSpec {
+            shard_group,
+            signers,
+            shard_state_versions,
+            ..CheckpointSpec::handover(&sets[3], &sets[4])
+        })
+    }
+
+    /// A provider walked to the set of epoch 5, whose indexer serves the checkpoints of both shard groups ending epoch
+    /// 4 with shard 1 at version 100, shard 2 at 7 and shard 3 at 50.
+    async fn provider_with_shard_state_versions() -> (Vec<ValidatorSetFixture>, TestIndexer, IndexerProvider<NoWallet>)
+    {
+        let (sets, indexer, provider) = walked_provider(IndexerTrust::Verify).await;
+        indexer.serve_latest_of_group(checkpoint_of_epoch_4(&sets, low(), &sets[3].low, vec![
+            (Shard::from_u32(1), 100),
+            (Shard::from_u32(2), 7),
+        ]));
+        indexer.serve_latest_of_group(checkpoint_of_epoch_4(&sets, high(), &sets[3].high, vec![(
+            Shard::from_u32(3),
+            50,
+        )]));
+        (sets, indexer, provider)
+    }
+
+    fn at_epoch_4(state_version: u64) -> CheckpointStateVersion {
+        CheckpointStateVersion {
+            epoch: Epoch(4),
+            state_version: StateVersion::from(state_version),
+        }
+    }
+
+    #[tokio::test]
+    async fn the_shard_state_version_bound_holds_every_shards_version_in_its_groups_latest_verified_checkpoint() {
+        let (_, _, provider) = provider_with_shard_state_versions().await;
+
+        let bound = provider.shard_state_version_bound().await.unwrap();
+        assert_eq!(
+            bound,
+            ShardStateVersionBound::Verified(BTreeMap::from([
+                (Shard::from_u32(1), at_epoch_4(100)),
+                (Shard::from_u32(2), at_epoch_4(7)),
+                (Shard::from_u32(3), at_epoch_4(50)),
+                (Shard::from_u32(4), at_epoch_4(0)),
+            ]))
+        );
+    }
+
+    #[tokio::test]
+    async fn a_trusting_provider_leaves_shard_cursors_unbounded() {
+        let (_, _, provider) = walked_provider(IndexerTrust::Trust).await;
+
+        assert_eq!(
+            provider.shard_state_version_bound().await.unwrap(),
+            ShardStateVersionBound::Unbounded
+        );
+    }
+
+    #[tokio::test]
+    async fn a_shard_state_version_in_a_checkpoint_the_committee_did_not_sign_is_refused() {
+        let (sets, indexer, provider) = walked_provider(IndexerTrust::Verify).await;
+        indexer.serve_latest_of_group(checkpoint_of_epoch_4(&sets, high(), &Signers::new(200, 4), vec![(
+            Shard::from_u32(3),
+            u64::MAX,
+        )]));
+
+        let err = provider.shard_state_version_bound().await.unwrap_err();
+        assert!(
+            matches!(err, ProviderError::Unverified(VerifyError::ValidatorSetUnverified(_))),
+            "{err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_checkpoint_of_another_shard_group_is_refused_as_a_shards_latest() {
+        // Every shard is answered with the walked chain's checkpoint of the low shard group.
+        let (_, _, provider) = walked_provider(IndexerTrust::Verify).await;
+
+        let err = provider.shard_state_version_bound().await.unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ProviderError::Unverified(VerifyError::CheckpointOfAnotherShardGroup { shard, .. }) if shard == Shard::from_u32(3)
+            ),
+            "{err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_latest_checkpoint_of_an_epoch_before_the_anchor_is_unverifiable() {
+        let sets = sets();
+        // The provider anchors on the set of epoch 5, which the checkpoint ending epoch 4 names.
+        let indexer = TestIndexer::spawn(&sets, 3).await;
+        let provider = indexer.provider(IndexerTrust::Verify);
+
+        let err = provider.shard_state_version_bound().await.unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ProviderError::Unverified(VerifyError::CheckpointOfUntrustedEpoch { epoch }) if epoch == Epoch(4)
+            ),
+            "{err}"
+        );
+    }
+
+    /// Serves the checkpoints of both shard groups ending `sets[i]`'s epoch as the latest, with `shard` at
+    /// `state_version`.
+    fn serve_latest_checkpoints(
+        indexer: &TestIndexer,
+        sets: &[ValidatorSetFixture],
+        i: usize,
+        shard: Shard,
+        state_version: u64,
+    ) {
+        let spec = || CheckpointSpec::handover(&sets[i], &sets[i + 1]);
+        indexer.serve_latest_of_group(checkpoint_entry(CheckpointSpec {
+            shard_state_versions: vec![(shard, state_version)],
+            ..spec()
+        }));
+        indexer.serve_latest_of_group(checkpoint_entry(CheckpointSpec {
+            shard_group: high(),
+            signers: &sets[i].high,
+            ..spec()
+        }));
+    }
+
+    #[tokio::test]
+    async fn a_poisoned_shard_cursor_is_rescanned_from_the_verified_state_version_once_its_claim_expires() {
+        let sets = (1..=7).map(ValidatorSetFixture::new).collect::<Vec<_>>();
+        let indexer = TestIndexer::spawn(&sets, 0).await;
+        let provider = indexer.provider(IndexerTrust::Verify);
+        assert_eq!(provider.sync_validator_set().await.unwrap().epoch(), Epoch(2));
+        indexer.set_latest(3);
+        let shard = Shard::from_u32(1);
+        serve_latest_checkpoints(&indexer, &sets, 3, shard, 100);
+        let mut cursor = ShardCursor::genesis(NUM_PRESHARDS);
+
+        let bound = provider.shard_state_version_bound().await.unwrap();
+        cursor.resume(&bound);
+        cursor.observe(shard, StateVersion::from(u64::MAX), &bound);
+        assert_eq!(cursor.position(shard).verified, StateVersion::from(100));
+        assert_eq!(cursor.get(shard), StateVersion::from(u64::MAX));
+
+        indexer.set_latest(5);
+        serve_latest_checkpoints(&indexer, &sets, 5, shard, 120);
+        let bound = provider.shard_state_version_bound().await.unwrap();
+
+        let resumed = cursor.resume(&bound);
+        assert!(resumed.contains(&(shard, StateVersion::from(100))), "{resumed:?}");
+        assert_eq!(cursor.position(shard).claim, None);
     }
 }

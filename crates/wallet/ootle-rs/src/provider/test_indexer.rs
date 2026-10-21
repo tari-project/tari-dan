@@ -29,6 +29,7 @@ use tari_indexer_client::{
         GetCommitteeRequest,
         GetCommitteeResponse,
         GetEpochManagerStatsResponse,
+        GetLatestEpochCheckpointRequest,
         GetLatestEpochCheckpointResponse,
         GetSubstateRequest,
         GetSubstateResponse,
@@ -86,6 +87,9 @@ struct TestIndexerState {
     checkpoints: Vec<EpochCheckpointEntry>,
     /// The index in `checkpoints` of the latest one, or `None` before the network's first checkpoint.
     latest: Option<usize>,
+    /// The latest checkpoint served for a shard of each of these checkpoints' shard groups, in place of the latest in
+    /// `checkpoints`.
+    latest_of_group: Vec<EpochCheckpointEntry>,
     /// The epoch of the first validator set.
     first_epoch: Epoch,
     /// Whether the indexer has observed the epoch the validators execute in.
@@ -137,6 +141,7 @@ impl TestIndexer {
         let state = Arc::new(Mutex::new(TestIndexerState {
             checkpoints,
             latest,
+            latest_of_group: Vec::new(),
             first_epoch: sets[0].epoch,
             observes_consensus_epoch: true,
             unserved: None,
@@ -192,6 +197,16 @@ impl TestIndexer {
         self.state.lock().unwrap().observes_consensus_epoch = observes;
     }
 
+    /// Serves `checkpoint` as the latest checkpoint of each shard of its shard group, in place of the latest one in
+    /// the served chain.
+    pub(crate) fn serve_latest_of_group(&self, checkpoint: EpochCheckpointEntry) {
+        let mut state = self.state.lock().unwrap();
+        state
+            .latest_of_group
+            .retain(|served| served.shard_group != checkpoint.shard_group);
+        state.latest_of_group.push(checkpoint);
+    }
+
     pub(crate) fn set_latest(&self, latest: usize) {
         self.state.lock().unwrap().latest = Some(latest);
     }
@@ -245,8 +260,19 @@ impl TestIndexer {
 
 type Shared = State<Arc<Mutex<TestIndexerState>>>;
 
-async fn latest_checkpoint(State(state): Shared) -> Response {
+async fn latest_checkpoint(State(state): Shared, Query(req): Query<GetLatestEpochCheckpointRequest>) -> Response {
     let state = state.lock().unwrap();
+    if let Some(shard) = req.shard &&
+        let Some(checkpoint) = state
+            .latest_of_group
+            .iter()
+            .find(|checkpoint| checkpoint.shard_group.contains(&shard))
+    {
+        return Json(GetLatestEpochCheckpointResponse {
+            checkpoint: checkpoint.clone(),
+        })
+        .into_response();
+    }
     let Some(latest) = state.latest else {
         return StatusCode::NOT_FOUND.into_response();
     };

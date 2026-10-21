@@ -40,6 +40,7 @@ use crate::{
         Provider,
         ProviderError,
         ProviderResult,
+        ShardStateVersionBound,
         StealthUtxoStream,
         StealthUtxoWatchRequest,
         TransactionEventFilter,
@@ -195,7 +196,29 @@ impl<Wallet> IndexerProvider<Wallet> {
             .ok_or_else(|| ProviderError::other(format!("Expected resource substate for {resource_address}")))
     }
 
+    /// The bound a pass of [`watch_stealth_utxos`](Self::watch_stealth_utxos) moves a
+    /// [`ShardCursor`](crate::provider::ShardCursor)'s verified cursors by: each shard's state version in the
+    /// latest verified end-of-epoch checkpoint of its shard group, or [`ShardStateVersionBound::Unbounded`] when
+    /// the provider trusts its indexer.
+    ///
+    /// Fails while the checkpoints do not verify, as when the provider anchored on the latest checkpoint and trusts no
+    /// validator set of its epoch. A pass can then go on under [`ShardStateVersionBound::default`], which holds its
+    /// progress only as claims.
+    pub async fn shard_state_version_bound(&self) -> ProviderResult<ShardStateVersionBound> {
+        if !self.verifier.is_verifying() {
+            return Ok(ShardStateVersionBound::Unbounded);
+        }
+        Ok(ShardStateVersionBound::Verified(
+            self.verifier.verified_shard_state_versions().await?,
+        ))
+    }
+
     /// Watch stealth UTXO updates for a resource, resuming from a per-shard cursor.
+    ///
+    /// Build the request from a [`ShardCursor`](crate::provider::ShardCursor) with
+    /// [`ShardCursor::resume`](crate::provider::ShardCursor::resume) under the bound from
+    /// [`shard_state_version_bound`](Self::shard_state_version_bound), and advance it under the same bound, so that an
+    /// indexer that reports a shard past its real state version hides none of the shard's updates for long.
     ///
     /// Each drained pass yields typed [`StealthUtxoFrame`](crate::provider::StealthUtxoFrame)s. An
     /// `Unspent` frame carries only the `(tag, public_nonce)` fetch key — resolve the commitment and
