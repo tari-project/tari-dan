@@ -28,7 +28,7 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_transaction::{Transaction, TransactionEnvelope, TransactionId};
 use tari_ootle_wallet_sdk::{
-    models::{AccountWithAddress, StartOfShard, UtxoUnspent, UtxoUpdatePayload, WalletUtxoUpdate},
+    models::{AccountWithAddress, StartOfShard, UtxoUnspent, UtxoUpdatePayload, WalletEvent, WalletUtxoUpdate},
     network::{
         FetchedSubstates,
         FetchedUtxos,
@@ -349,7 +349,9 @@ async fn a_utxo_the_lookup_does_not_know_stays_queued_until_it_is_recovered() {
     scan(&test, &account).await;
     assert_eq!(queued(&test), 1);
 
-    let mut recovery = UtxoRecovery::new(test.sdk().clone());
+    let notify = Notify::new(10);
+    let mut events = notify.subscribe();
+    let mut recovery = UtxoRecovery::new(test.sdk().clone()).with_notify(notify);
     let num_unresolved = recovery.process_utxo_validation_queue().await.unwrap();
     assert_eq!(num_unresolved, 1);
     assert_eq!(
@@ -358,6 +360,10 @@ async fn a_utxo_the_lookup_does_not_know_stays_queued_until_it_is_recovered() {
         "an output the lookup does not know is not known to be spent"
     );
     assert!(!is_stored(&test, id));
+    assert!(
+        events.try_recv().is_err(),
+        "a round that resolves nothing publishes no events"
+    );
 
     network.index((id, utxo));
     let num_unresolved = recovery.process_utxo_validation_queue().await.unwrap();
@@ -365,6 +371,17 @@ async fn a_utxo_the_lookup_does_not_know_stays_queued_until_it_is_recovered() {
     assert_eq!(queued(&test), 0);
     assert!(is_stored(&test, id));
     assert_eq!(balance(&test, &account), Amount::from_u64(1_234));
+
+    let events = std::iter::from_fn(|| events.try_recv().ok()).collect::<Vec<_>>();
+    assert!(matches!(events.first(), Some(WalletEvent::UtxoRecoveryStarted(_))));
+    assert!(matches!(events.last(), Some(WalletEvent::UtxoRecoveryCompleted(e)) if e.num_recovered == 1));
+    assert_eq!(
+        events
+            .iter()
+            .filter(|e| matches!(e, WalletEvent::UtxoRecoveryCompleted(_)))
+            .count(),
+        1
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

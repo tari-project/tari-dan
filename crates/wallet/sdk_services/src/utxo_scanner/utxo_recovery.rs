@@ -122,18 +122,16 @@ where
 
             let Some(last) = batch.last else {
                 debug!(target: LOG_TARGET, "✅ No more UTXOs to process ({} unresolved)", num_unresolved);
+                if start_event_published {
+                    self.notify(UtxoRecoveryCompletedEvent {
+                        round_id: self.round_id,
+                        num_recovered,
+                    });
+                }
                 return Ok(num_unresolved);
             };
             // Unresolved entries stay queued, so each batch starts after the last entry of the one before
             cursor = Some(last);
-
-            if !start_event_published {
-                self.round_id += 1;
-                self.notify(UtxoRecoveryStartedEvent {
-                    round_id: self.round_id,
-                });
-                start_event_published = true;
-            }
 
             for (resource_addr, tag_and_nonce_to_view_key_map) in &batch.entries {
                 if tag_and_nonce_to_view_key_map.is_empty() {
@@ -158,10 +156,22 @@ where
                     .filter_map(|(_, utxo)| utxo.output())
                     .map(|output| (output.tag, output.output.public_nonce))
                     .collect::<HashSet<_>>();
+                // A spent report names a (tag, nonce) pair, so it means some output with that pair is spent. The queue
+                // holds no commitment to tell outputs sharing a pair apart, and an unspent output with the pair
+                // resolves it first.
                 let spent = spent
                     .into_iter()
                     .filter(|pair| tag_and_nonce_to_view_key_map.contains_key(pair) && !returned.contains(pair))
                     .collect::<HashSet<_>>();
+
+                // A round that only retries unresolved entries publishes no round events
+                if !start_event_published && (!spent.is_empty() || !utxos.is_empty()) {
+                    self.round_id += 1;
+                    self.notify(UtxoRecoveryStartedEvent {
+                        round_id: self.round_id,
+                    });
+                    start_event_published = true;
+                }
 
                 self.sdk.store().with_write_tx(|tx| {
                     for (tag, nonce) in &spent {
@@ -215,13 +225,6 @@ where
                     })
                     .collect();
                 num_recovered += self.process_recovered_utxos(*resource_addr, utxos)?;
-            }
-
-            if start_event_published {
-                self.notify(UtxoRecoveryCompletedEvent {
-                    round_id: self.round_id,
-                    num_recovered,
-                });
             }
         }
     }
