@@ -149,16 +149,20 @@ where TSpec: WalletSdkSpec
             };
 
             let maybe_vault_version = known_child_vaults.get(&vault_substate_id).copied().flatten();
-            if let Some(vault_version) = maybe_vault_version {
-                // The first time a vault is found, know about the vault substate from the tx result but never added
-                // it to the database.
-                if versioned_vault_substate_id.version() <= vault_version &&
-                    accounts_api.has_vault(vault_id)? &&
-                    self.has_all_confidential_outputs(account_address, *vault_id, latest_vault)?
-                {
-                    info!(target: LOG_TARGET, "Vault {} is up to date", versioned_vault_substate_id.substate_id());
-                    continue;
-                }
+            // The first time a vault is found, know about the vault substate from the tx result but never added
+            // it to the database.
+            let is_known_version = maybe_vault_version
+                .is_some_and(|vault_version| versioned_vault_substate_id.version() <= vault_version) &&
+                accounts_api.has_vault(vault_id)?;
+            // A known vault version is only up to date once every confidential output it names is recorded.
+            let unrecorded_outputs = if is_known_version {
+                self.count_unrecorded_confidential_outputs(account_address, *vault_id, latest_vault)?
+            } else {
+                0
+            };
+            if is_known_version && unrecorded_outputs == 0 {
+                info!(target: LOG_TARGET, "Vault {} is up to date", versioned_vault_substate_id.substate_id());
+                continue;
             }
 
             let Some(account_addr) = account_substate_id.substate_id().as_component_address() else {
@@ -181,6 +185,13 @@ where TSpec: WalletSdkSpec
                 versioned_vault_substate_id.as_versioned_ref(),
                 [SubstateId::from(*latest_vault.resource_address())],
             )?;
+            // At a known version only newly recorded outputs can change the vault.
+            if is_known_version &&
+                self.count_unrecorded_confidential_outputs(account_address, *vault_id, latest_vault)? ==
+                    unrecorded_outputs
+            {
+                continue;
+            }
             is_updated = true;
 
             self.notify.notify(AccountChangedEvent {
@@ -272,7 +283,9 @@ where TSpec: WalletSdkSpec
             // Confidential OutputBodies live in separate ConfidentialOutput substates. Only commitments the
             // wallet does not already have a record for are fetched (verify_and_update_confidential_outputs
             // skips known ones anyway), in one batched network request. A commitment the indexer does not
-            // return (e.g. spent since the vault was fetched) is skipped rather than failing the refresh.
+            // return (e.g. spent since the vault was fetched) is skipped rather than failing the refresh; while it
+            // has no record, `count_unrecorded_confidential_outputs` keeps the vault version out of date, so the next
+            // account refresh fetches it again.
             let account = self
                 .wallet_sdk
                 .accounts_api()
@@ -393,22 +406,23 @@ where TSpec: WalletSdkSpec
         Ok(commitments)
     }
 
-    /// Whether every confidential output `vault` names has a local record. A vault version is only up to date once
-    /// this holds: an output the indexer did not return when the version was scanned is fetched again until it is.
-    fn has_all_confidential_outputs(
+    /// The number of confidential outputs `vault` names that have no local record. An output the indexer did not
+    /// return when a vault version was scanned keeps that version out of date, so it is fetched again on the next
+    /// refresh.
+    fn count_unrecorded_confidential_outputs(
         &self,
         account_address: ComponentAddress,
         vault_id: VaultId,
         vault: &Vault,
-    ) -> Result<bool, AccountMonitorError> {
+    ) -> Result<usize, AccountMonitorError> {
         let Some(commitments) = vault.get_confidential_commitments() else {
-            return Ok(true);
+            return Ok(0);
         };
         if commitments.is_empty() {
-            return Ok(true);
+            return Ok(0);
         }
         let known = self.known_confidential_commitments(account_address, vault_id, vault.resource_address())?;
-        Ok(commitments.iter().all(|c| known.contains(c)))
+        Ok(commitments.iter().filter(|c| !known.contains(*c)).count())
     }
 
     pub(crate) fn record_stealth_balance_change(

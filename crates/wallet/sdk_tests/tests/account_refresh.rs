@@ -282,6 +282,23 @@ async fn an_output_the_indexer_omits_is_recorded_once_it_is_served_at_the_same_v
 }
 
 #[tokio::test]
+async fn a_retry_that_records_no_output_does_not_report_an_update() {
+    let (sets, network, test) = verifying_wallet().await;
+    let (commitment, _) = confidential_output(&test, &account_view_key(&test), 123);
+    serve_confidential_account(&sets, &network, &test, &[commitment]);
+    assert!(scanner(&test).refresh_account(account_address()).await.unwrap());
+    let fetches = network.substate_fetches();
+
+    assert!(!scanner(&test).refresh_account(account_address()).await.unwrap());
+
+    assert_eq!(
+        network.substate_fetches(),
+        fetches + 2,
+        "the vaults and the unrecorded output are fetched"
+    );
+}
+
+#[tokio::test]
 async fn an_account_refresh_leaves_a_fully_recorded_confidential_vault_alone() {
     let (sets, network, test) = verifying_wallet().await;
     let (commitment, output) = confidential_output(&test, &account_view_key(&test), 123);
