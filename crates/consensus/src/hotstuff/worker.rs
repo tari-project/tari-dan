@@ -182,8 +182,12 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             signing_service.clone(),
             hooks.clone(),
         );
-        let timeout_vote_collector =
-            TimeoutVoteCollector::new(state_store.clone(), epoch_manager.clone(), signing_service.clone());
+        let timeout_vote_collector = TimeoutVoteCollector::new(
+            config.network,
+            state_store.clone(),
+            epoch_manager.clone(),
+            signing_service.clone(),
+        );
         let transaction_manager = ConsensusTransactionManager::new(
             transaction_executor.clone(),
             config.consensus_constants.max_transaction_validity_epochs,

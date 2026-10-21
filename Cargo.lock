@@ -11712,6 +11712,7 @@ version = "0.47.0"
 dependencies = [
  "borsh",
  "minicbor",
+ "ootle-network",
  "ootle_serde",
  "serde",
  "tari_bor",
