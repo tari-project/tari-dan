@@ -98,8 +98,10 @@ windows-native-keyring-store = { workspace = true }
 [dev-dependencies]
 # Test-only, so the wallet binary does not carry the consensus engine: lets the config guard
 # assert against the real network ceiling rather than drifting from a hand-copied number.
+serde-saphyr = { workspace = true }
 tari_consensus = { workspace = true }
 tari_utilities = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 
 [package.metadata.cargo-machete]
