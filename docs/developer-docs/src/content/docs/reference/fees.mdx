@@ -441,9 +441,10 @@ where the only remedy is to restructure the transaction.
   at, where the fee feeds back into the shape.
 </Aside>
 
-Note that `FeeReceipt::required_fees()` reads only what *that receipt* was charged — on an
-`AcceptFeeRejectRest` outcome that is the fee intent's own cost, not what the transaction needed. Use
-`FinalizeResult::required_fees()` when telling a caller what to resubmit with.
+Note that `FeeReceipt::required_fees()` reads only what *that receipt* was charged. On an
+`AcceptFeeRejectRest` outcome the receipt carries the whole transaction's metered charges, with
+storage priced over the fee checkpoint. That can be less than the transaction needed, and it may exceed
+what was paid. Use `FinalizeResult::required_fees()` when telling a caller what to resubmit with.
 
 ---
 
