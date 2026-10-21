@@ -46,7 +46,7 @@ fn would_vote(last_voted: Option<&LastVoted>, candidate_height: NodeHeight) -> b
 fn last_voted_survives_close_and_reopen() {
     let temp_dir = tempfile::tempdir().unwrap();
     let path = temp_dir.path().to_path_buf();
-    let block_id = BlockId::new(tari_common_types::types::FixedHash::new([7u8; 32]));
+    let block_id = BlockId::new(tari_sidechain::FixedHash::new([7u8; 32]));
     let height = NodeHeight(42);
 
     // Open, write, drop.
@@ -79,7 +79,7 @@ fn last_voted_survives_close_and_reopen() {
 fn safety_predicate_respects_persisted_last_voted_after_reopen() {
     let temp_dir = tempfile::tempdir().unwrap();
     let path = temp_dir.path().to_path_buf();
-    let voted_block = BlockId::new(tari_common_types::types::FixedHash::new([1u8; 32]));
+    let voted_block = BlockId::new(tari_sidechain::FixedHash::new([1u8; 32]));
     let voted_height = NodeHeight(10);
 
     {

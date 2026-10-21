@@ -200,6 +200,7 @@ mod tests {
                 block_id: vec![1; 32],
                 epoch: 1,
                 shard_groups: vec![],
+                shard_group: 0,
             })),
         };
         let decoded = decode_gossiped_message(msg).unwrap();

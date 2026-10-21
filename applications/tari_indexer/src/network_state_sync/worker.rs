@@ -11,7 +11,6 @@ use std::{
 
 use futures::{StreamExt, future::Either, stream::FuturesUnordered};
 use log::*;
-#[cfg(feature = "metrics")]
 use ootle_network::Network;
 use prost::Message;
 use tari_engine_types::{
@@ -26,15 +25,7 @@ use tari_epoch_manager::{
 };
 use tari_indexer_client::event::{IndexerEvent, NewEpochEvent, TransactionEvent, TransactionFinalizedEvent};
 use tari_networking::NetworkingHandle;
-use tari_ootle_common_types::{
-    Epoch,
-    ShardGroup,
-    StateVersion,
-    ValidatorSetHash,
-    VotePower,
-    optional::Optional,
-    shard::Shard,
-};
+use tari_ootle_common_types::{Epoch, ShardGroup, StateVersion, ValidatorSetHash, optional::Optional, shard::Shard};
 use tari_ootle_p2p::{PeerAddress, TariMessagingSpec, proto::rpc};
 use tari_ootle_storage::{
     StorageError,
@@ -120,14 +111,13 @@ pub struct NetworkWideStateSync {
     validator_status: ValidatorStatusMonitor,
     shard_watermarks: Arc<ShardWatermarks>,
     consensus_epoch: ConsensusEpoch,
+    network: Network,
     #[cfg(feature = "metrics")]
     metrics: NetworkStateMetrics,
     #[cfg(feature = "metrics")]
     substate_cache_metrics: SubstateCacheMetrics,
     #[cfg(feature = "metrics")]
     substate_manager: SubstateManager,
-    #[cfg(feature = "metrics")]
-    network: Network,
 }
 
 impl NetworkWideStateSync {
@@ -141,10 +131,10 @@ impl NetworkWideStateSync {
         validator_status: ValidatorStatusMonitor,
         shard_watermarks: Arc<ShardWatermarks>,
         consensus_epoch: ConsensusEpoch,
+        network: Network,
         #[cfg(feature = "metrics")] metrics: NetworkStateMetrics,
         #[cfg(feature = "metrics")] substate_cache_metrics: SubstateCacheMetrics,
         #[cfg(feature = "metrics")] substate_manager: SubstateManager,
-        #[cfg(feature = "metrics")] network: Network,
     ) -> Self {
         Self {
             epoch_manager,
@@ -157,14 +147,13 @@ impl NetworkWideStateSync {
             validator_status,
             shard_watermarks,
             consensus_epoch,
+            network,
             #[cfg(feature = "metrics")]
             metrics,
             #[cfg(feature = "metrics")]
             substate_cache_metrics,
             #[cfg(feature = "metrics")]
             substate_manager,
-            #[cfg(feature = "metrics")]
-            network,
         }
     }
 
@@ -514,7 +503,14 @@ impl NetworkWideStateSync {
                     details: format!("Checkpoint for shard group {} is not valid: {}", shard_group, e),
                 })?;
 
-        verify_checkpoint(&self.epoch_manager, &checkpoint, checkpoint_shard_group, prev_epoch).await?;
+        verify_checkpoint(
+            self.network,
+            &self.epoch_manager,
+            &checkpoint,
+            checkpoint_shard_group,
+            prev_epoch,
+        )
+        .await?;
 
         info!(target: LOG_TARGET, "🌍️ Inserting checkpoint for {}, shard group {}", checkpoint.epoch(), checkpoint_shard_group);
 
@@ -1420,6 +1416,7 @@ fn restore_preimages_from(checkpoints: &mut [EpochCheckpoint], others: Vec<Epoch
 /// The next epoch's validator set the checkpoint names, which the committee ratified, must be the one this indexer
 /// assigned: an indexer that disagrees would serve committees the network does not run.
 async fn verify_checkpoint<TEpochManager: EpochManagerReader>(
+    network: Network,
     epoch_manager: &TEpochManager,
     checkpoint: &EpochCheckpoint,
     shard_group: ShardGroup,
@@ -1450,9 +1447,7 @@ async fn verify_checkpoint<TEpochManager: EpochManagerReader>(
         });
     };
     checkpoint
-        .validate(epoch, committee.quorum_threshold(), |pk| {
-            Ok(committee.get_power_by_public_key(pk).unwrap_or_else(VotePower::zero))
-        })
+        .validate(network, epoch, committee.quorum_threshold(), &*committee)
         .map_err(|e| NetworkStateSyncError::InvalidCheckpoint {
             details: format!("Checkpoint for {epoch}, shard group {shard_group} is not valid: {e}"),
         })?;
@@ -1989,9 +1984,8 @@ mod tests {
 
     mod served_checkpoints {
         use indexmap::IndexMap;
-        use tari_common_types::types::FixedHash;
         use tari_ootle_storage::consensus_models::EndOfEpochCommand;
-        use tari_sidechain::{CommandCommitProof, SidechainBlockCommitProof, SidechainBlockHeader};
+        use tari_sidechain::{CommandCommitProof, FixedHash, SidechainBlockCommitProof, SidechainBlockHeader};
         use tari_state_tree::{TreeHash, compute_proof_for_hashes};
 
         use super::*;
@@ -2370,17 +2364,17 @@ mod tests {
             sync::Arc,
         };
 
-        use tari_common_types::types::FixedHash;
         use tari_epoch_manager::EpochManagerError;
         use tari_ootle_common_types::{
             SubstateAddress,
+            VotePower,
             committee::{Committee, CommitteeInfo, CommitteeMember},
         };
         use tari_ootle_storage::{
             consensus_models::{BlockHeaderMetadata, EndOfEpochCommand},
             global::models::ValidatorNode,
         };
-        use tari_sidechain::{CommandCommitProof, SidechainBlockCommitProof, SidechainBlockHeader};
+        use tari_sidechain::{CommandCommitProof, FixedHash, SidechainBlockCommitProof, SidechainBlockHeader};
         use tari_state_tree::{TreeHash, compute_proof_for_hashes};
         use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
         use tokio::sync::broadcast;
@@ -2613,7 +2607,8 @@ mod tests {
         async fn a_checkpoint_before_the_records_is_checked_for_form_only() {
             let records = EpochRecords::default().with(5, &[low(), high()]);
 
-            let result = verify_checkpoint(&records, &checkpoint(2, low(), true), low(), Epoch(5)).await;
+            let result =
+                verify_checkpoint(Network::MainNet, &records, &checkpoint(2, low(), true), low(), Epoch(5)).await;
 
             assert!(result.is_ok(), "{result:?}");
         }
@@ -2624,7 +2619,8 @@ mod tests {
                 .with(3, &[low(), high()])
                 .with(5, &[low(), high()]);
 
-            let result = verify_checkpoint(&records, &checkpoint(3, low(), true), low(), Epoch(5)).await;
+            let result =
+                verify_checkpoint(Network::MainNet, &records, &checkpoint(3, low(), true), low(), Epoch(5)).await;
 
             assert!(is_invalid_checkpoint(&result), "{result:?}");
         }
@@ -2638,7 +2634,8 @@ mod tests {
             let all = ShardGroup::new(1u32, 255u32);
 
             for epoch in [3, 5] {
-                let result = verify_checkpoint(&records, &checkpoint(epoch, all, true), all, Epoch(5)).await;
+                let result =
+                    verify_checkpoint(Network::MainNet, &records, &checkpoint(epoch, all, true), all, Epoch(5)).await;
                 assert!(is_invalid_checkpoint(&result), "{epoch}: {result:?}");
                 assert!(result.unwrap_err().is_peer_fault());
             }

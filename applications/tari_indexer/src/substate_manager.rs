@@ -29,7 +29,6 @@ use std::{
 use async_trait::async_trait;
 use ootle_network::Network;
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::FixedHash;
 use tari_engine_types::{
     Utxo,
     substate::{Substate, SubstateId, SubstateValue},
@@ -59,6 +58,7 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_p2p::PeerAddress;
 use tari_ootle_storage::{StorageError, consensus_models::VerifiedBlockTip};
+use tari_sidechain::FixedHash;
 use tari_template_lib_types::{
     ResourceAddress,
     UtxoId,

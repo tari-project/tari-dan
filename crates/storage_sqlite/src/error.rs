@@ -23,9 +23,9 @@ use std::error::Error;
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
 use diesel;
-use tari_common_types::types::FixedHashSizeError;
 use tari_ootle_common_types::optional::IsNotFoundError;
 use tari_ootle_storage::StorageError;
+use tari_sidechain::FixedHashSizeError;
 use tari_template_lib::types::HashParseError;
 use thiserror::Error;
 

@@ -2,11 +2,11 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use rocksdb::{SingleThreaded, Transaction, TransactionDB};
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::BlockId;
 use tari_ootle_common_types::{Epoch, NodeHeight};
 use tari_ootle_storage::{Ordering, StorageError};
 use tari_ootle_transaction::TransactionId;
+use tari_sidechain::FixedHash;
 use tempfile::TempDir;
 
 use crate::{

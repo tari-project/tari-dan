@@ -136,10 +136,10 @@ pub enum BlockCommandsError {
 mod tests {
     use std::collections::BTreeSet;
 
-    use tari_common_types::types::FixedHash;
     use tari_consensus_types::{BlockId, Decision};
     use tari_ootle_common_types::{ProtocolVersion, ShardGroup};
     use tari_ootle_transaction::TransactionId;
+    use tari_sidechain::FixedHash;
 
     use super::*;
     use crate::consensus_models::{
@@ -308,11 +308,16 @@ mod tests {
         let decoded = minicbor::decode::<BlockCommands>(&minicbor::to_vec(&set).unwrap()).unwrap();
         assert_eq!(decoded, commands);
 
-        for protocol_version in [ProtocolVersion::V0, ProtocolVersion::V1, ProtocolVersion::V2] {
+        for protocol_version in [
+            ProtocolVersion::V0,
+            ProtocolVersion::V1,
+            ProtocolVersion::V2,
+            ProtocolVersion::V3,
+        ] {
             let set_root = tari_state_tree::compute_merkle_root_for_hashes(
                 set_commands
                     .iter()
-                    .map(|cmd| tari_state_tree::TreeHash::from(cmd.hash(protocol_version).into_array())),
+                    .map(|cmd| tari_state_tree::TreeHash::from(cmd.merkle_leaf(protocol_version).into_array())),
             )
             .unwrap();
             assert_eq!(

@@ -229,8 +229,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use tari_common_types::types::FixedHash;
-    use tari_sidechain::{SidechainBlockCommitProof, SidechainBlockHeader};
+    use tari_sidechain::{FixedHash, SidechainBlockCommitProof, SidechainBlockHeader};
     use tari_state_tree::SPARSE_MERKLE_PLACEHOLDER_HASH;
 
     use super::*;
@@ -294,11 +293,11 @@ mod tests {
 
     /// From V2 a leaf proves the state of its own shard only, however equal another shard's state is.
     #[test]
-    fn a_v2_leaf_proves_its_own_shard_only() {
+    fn a_shard_keyed_leaf_proves_its_own_shard_only() {
         let root = TreeHash::new([7; 32]);
         let network = Network::LocalNet;
-        assert_eq!(ProtocolVersion::genesis(network), ProtocolVersion::V2);
-        let (commit_proof, leaf_proof) = proof_of_leaf(network, ProtocolVersion::V2, Shard::from(3u32), root, 64);
+        assert_eq!(ProtocolVersion::genesis(network), ProtocolVersion::V3);
+        let (commit_proof, leaf_proof) = proof_of_leaf(network, ProtocolVersion::V3, Shard::from(3u32), root, 64);
         assert!(matches!(
             verify_state_version_leaf(network, &commit_proof, Shard::from(4u32), 64, &root, &leaf_proof),
             Err(StateVersionProofError::LeafNotIncluded { .. })

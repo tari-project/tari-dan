@@ -21,6 +21,7 @@ tari_base_node_client = { workspace = true }
 tari_bor = { workspace = true, features = ["serde"] }
 tari_common = { workspace = true }
 tari_common_types = { workspace = true }
+tari_sidechain = { workspace = true }
 tari_consensus = { workspace = true }
 tari_template_builtin = { workspace = true, features = ["templates"] }
 tari_crypto = { workspace = true }
@@ -70,12 +71,6 @@ libp2p = { workspace = true }
 log = { workspace = true, features = ["std"] }
 hex = { workspace = true }
 headers-accept = "0.2.1"
-log4rs = { workspace = true, features = [
-    "rolling_file_appender",
-    "compound_policy",
-    "size_trigger",
-    "fixed_window_roller",
-] }
 mime_guess = { workspace = true }
 mediatype = "0.20.0"
 mini-moka = { workspace = true }
@@ -105,15 +100,8 @@ utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true, features = ["axum"] }
 
 [dev-dependencies]
-tari_sidechain = { workspace = true }
 tempfile = { workspace = true }
 toml = { workspace = true }
-
-[package.metadata.cargo-machete]
-ignored = [
-    # Want to enable some log4rs features
-    "log4rs",
-]
 
 [features]
 default = ["web_ui", "metrics"]

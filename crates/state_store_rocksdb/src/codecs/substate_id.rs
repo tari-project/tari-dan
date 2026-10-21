@@ -86,9 +86,9 @@ impl<'a> DbEncoder<VersionedSubstateIdRef<'a>> for SubstateIdCodec {
 
 #[cfg(test)]
 mod tests {
-    use tari_common_types::types::FixedHash;
     use tari_consensus_types::BlockId;
     use tari_ootle_common_types::SubstateVersion;
+    use tari_sidechain::FixedHash;
     use tari_template_lib_types::{ComponentAddress, ObjectKey};
 
     use super::*;

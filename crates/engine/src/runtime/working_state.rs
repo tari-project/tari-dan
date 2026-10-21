@@ -102,11 +102,21 @@ const LOG_TARGET: &str = "tari::ootle::engine::runtime::working_state";
 /// API that [`super::RuntimeModule`] defines.
 pub struct ChargeableState<'a, TStore> {
     state: &'a mut WorkingState<TStore>,
+    /// The fee state charges are recorded against, when it is not the one `state` carries.
+    fee_state: Option<&'a mut FeeState>,
 }
 
 impl<'a, TStore> ChargeableState<'a, TStore> {
     pub(super) fn new(state: &'a mut WorkingState<TStore>) -> Self {
-        Self { state }
+        Self { state, fee_state: None }
+    }
+
+    /// Prices `state` into `fee_state` instead of the fee state `state` carries.
+    pub(super) fn with_fee_state(state: &'a mut WorkingState<TStore>, fee_state: &'a mut FeeState) -> Self {
+        Self {
+            state,
+            fee_state: Some(fee_state),
+        }
     }
 }
 
@@ -127,11 +137,17 @@ impl<TStore: StateReader> ChargeableState<'_, TStore> {
     }
 
     pub fn fee_state(&self) -> &FeeState {
-        self.state.fee_state()
+        match &self.fee_state {
+            Some(fee_state) => fee_state,
+            None => self.state.fee_state(),
+        }
     }
 
     pub fn fee_state_mut(&mut self) -> &mut FeeState {
-        self.state.fee_state_mut()
+        match &mut self.fee_state {
+            Some(fee_state) => fee_state,
+            None => self.state.fee_state_mut(),
+        }
     }
 }
 

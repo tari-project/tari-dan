@@ -37,7 +37,7 @@ jobs:
       # Override it with the INDEXER_API_ADDRESS repository variable.
       - name: Build
         env:
-          VITE_INDEXER_API_ADDRESS: ${{ vars.INDEXER_API_ADDRESS || 'https://ootle-indexer-a.tari.com' }}
+          VITE_INDEXER_API_ADDRESS: ${{ vars.INDEXER_API_ADDRESS || 'https://esme-indexer-a.ootle.tari.com' }}
         run: pnpm --filter "tari_indexer_web_ui..." run build
 
       # wrangler-action is not used here: it installs wrangler into the working directory,

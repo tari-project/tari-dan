@@ -94,6 +94,10 @@ struct TestIndexerState {
     unserved: Option<Epoch>,
     committees: HashMap<Epoch, (ValidatorSetCommittee, ValidatorSetCommittee)>,
     substates: HashMap<SubstateId, ServedSubstate>,
+    /// A served substate every batch fetch answers with, requested or not.
+    unrequested_on_fetch: Option<SubstateId>,
+    /// The number of substates each batch fetch requested.
+    fetch_sizes: Vec<usize>,
     results: HashMap<TransactionId, GetTransactionResultResponse>,
     /// The finalization events every event stream starts with.
     hints: Vec<TransactionFinalizedEvent>,
@@ -138,6 +142,8 @@ impl TestIndexer {
             unserved: None,
             committees,
             substates: HashMap::new(),
+            unrequested_on_fetch: None,
+            fetch_sizes: Vec::new(),
             results: HashMap::new(),
             hints: Vec::new(),
             committee_requests: 0,
@@ -207,6 +213,16 @@ impl TestIndexer {
             .unwrap()
             .substates
             .insert(id, ServedSubstate { version, value, proof });
+    }
+
+    /// Answers every batch fetch with the served substate `id` as well, whether requested or not.
+    pub(crate) fn serve_unrequested_on_fetch(&self, id: SubstateId) {
+        self.state.lock().unwrap().unrequested_on_fetch = Some(id);
+    }
+
+    /// The number of substates each batch fetch so far requested.
+    pub(crate) fn fetch_sizes(&self) -> Vec<usize> {
+        self.state.lock().unwrap().fetch_sizes.clone()
     }
 
     pub(crate) fn set_result(&self, transaction_id: TransactionId, result: GetTransactionResultResponse) {
@@ -308,10 +324,11 @@ async fn substate(State(state): Shared, Path(id): Path<String>, Query(req): Quer
 }
 
 async fn fetch_substates(State(state): Shared, Json(req): Json<GetSubstatesRequest>) -> Json<GetSubstatesResponse> {
-    let state = state.lock().unwrap();
+    let mut state = state.lock().unwrap();
+    state.fetch_sizes.push(req.requests.len());
     let mut substates = HashMap::new();
     let mut proofs = Vec::new();
-    for id in &req.requests {
+    for id in req.requests.iter().chain(state.unrequested_on_fetch.iter()) {
         let Some(served) = state.substates.get(id) else {
             continue;
         };

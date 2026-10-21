@@ -408,7 +408,6 @@ pub async fn spawn_services(
     let fee_table = get_fee_table_by_network(config.network);
     let transaction_processor = TariTransactionProcessor::new(
         config.network,
-        template_provider.clone(),
         fee_table.clone(),
         false,
         Arc::new(TariClaimBurnProofVerifier::new(
@@ -420,6 +419,7 @@ pub async fn spawn_services(
     // The executor resolves the exhaust burn rate for each transaction's execution epoch.
     let transaction_executor = TariBlockTransactionExecutor::new(
         transaction_processor,
+        template_provider.clone(),
         #[cfg(feature = "metrics")]
         PrometheusExecutionMetrics::register(tari_metrics_registry),
     );

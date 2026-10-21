@@ -333,9 +333,9 @@ mod tests {
     };
 
     use serde::{Serialize, de::DeserializeOwned};
-    use tari_common_types::types::FixedHash;
     use tari_epoch_manager::epoch_event_oracle::{EpochEvent, ValidatorNodeChange};
     use tari_ootle_common_types::{Epoch, ShardGroup, SubstateAddress};
+    use tari_sidechain::FixedHash;
     use tari_template_lib::types::crypto::RistrettoPublicKeyBytes;
 
     use super::ConfiguredEpochOracle;

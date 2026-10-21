@@ -29,7 +29,7 @@ fn quorum_certificates_operations(db: impl StateStore) {
         genesis_qc.height() + NodeHeight(1),
         epoch,
         shard_group,
-        vec![],
+        ProposalCertificate::genesis_signatures(),
         QuorumDecision::Accept,
     );
 

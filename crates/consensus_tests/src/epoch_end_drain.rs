@@ -76,6 +76,9 @@ async fn cross_shard_transaction_is_finalized_before_an_epoch_end_that_changes_t
     let mut test = Test::builder()
         .modify_config(|cfg| {
             cfg.epoch_end_grace_period = Duration::from_millis(10);
+            // Committee 0's abort must reach committee 1 within one drain period of committee 0 starting to abort,
+            // before committee 1's drain is overdue and EndEpoch stops waiting for its LocalAccepted transaction.
+            cfg.epoch_end_drain_period = Duration::from_secs(15);
         })
         .modify_consensus_constants(|c| {
             c.pacemaker_block_time = Duration::from_secs(1);

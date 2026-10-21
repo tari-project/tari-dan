@@ -5,7 +5,6 @@ use std::{collections::HashSet, time::Duration};
 
 use log::*;
 use ootle_byte_type::ToByteType;
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{
     BlockId,
     Decision,
@@ -38,7 +37,7 @@ use tari_ootle_storage::{
         ValidBlock,
     },
 };
-use tari_sidechain::{ProposalVoteMessage, QuorumDecision};
+use tari_sidechain::{FixedHash, ProposalVoteMessage, QuorumDecision};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::{sync::broadcast, task};
 
@@ -254,11 +253,8 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     &foreign_proposal,
                     epoch_state.local_committee_info(),
                 ) {
-                    if let Some(err @ ProposalValidationError::ForeignPledgesNotCommitted { .. }) =
-                        err.validation_error()
-                    {
-                        // The pledges travel beside the commit proof, so the block id is left unmarked for the genuine
-                        // proposal to arrive
+                    if let Some(err) = err.validation_error().filter(|err| err.rejects_message_not_block()) {
+                        // The block id is left unmarked for another delivery of the block
                         warn!(target: LOG_TARGET, "⚠️❌ Rejecting block {}: {}", valid_block, err);
                         return Ok(false);
                     }
@@ -425,6 +421,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             .unwrap_or_else(|| ProposedBlockChangeSet::new(valid_block.block().as_leaf()));
 
         let store = self.store.clone();
+        let committee = local_committee.clone();
 
         let (process_result, mut change_set) = task::spawn_blocking(move || {
             store.with_write_tx(|tx| {
@@ -432,6 +429,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                     tx,
                     &valid_block,
                     &local_committee_info,
+                    &committee,
                     &proposer_claim_public_key_bytes,
                     can_propose_epoch_end,
                     local_next_epoch,
@@ -449,6 +447,18 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             })
         })
         .await??;
+
+        // The write transaction has committed, so the committed blocks' templates are in durable state.
+        if let Some(committed) = process_result
+            .block_decision
+            .commit_blocks
+            .iter()
+            .max_by_key(|b| (b.epoch(), b.height()))
+        {
+            self.on_ready_to_vote_on_local_block
+                .uncommitted_templates()
+                .prune_to(committed.epoch(), committed.height());
+        }
 
         // If accepted, the changeset is already saved, otherwise we log everything here for debugging
         if !process_result.block_decision.is_accept() {
@@ -1173,6 +1183,7 @@ async fn broadcast_foreign_proposal_if_required<TConsensusSpec: ConsensusSpec>(
             ForeignProposalNotificationMessage {
                 block_id: *block.id(),
                 epoch: block.epoch(),
+                shard_group: block.shard_group(),
                 shard_groups,
             },
         ))

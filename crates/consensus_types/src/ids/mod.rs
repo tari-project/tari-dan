@@ -5,7 +5,7 @@ mod block_id;
 mod macros;
 
 pub use block_id::*;
-use tari_common_types::types::FixedHash;
+use tari_sidechain::FixedHash;
 
 #[derive(
     Debug,

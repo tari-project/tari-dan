@@ -98,6 +98,15 @@ where TPeerStore: PeerStore
                 details: "Peer signature failed validation".to_string(),
             });
         }
+        if !peer.is_updated_at_within(self.config.max_clock_drift) {
+            return Err(Error::InvalidSignedPeer {
+                peer_id: peer.to_peer_id(),
+                details: format!(
+                    "updated_at {:?} is more than {:?} ahead of local time",
+                    peer.updated_at, self.config.max_clock_drift
+                ),
+            });
+        }
         self.store()
             .put_if_newer(peer)
             .await

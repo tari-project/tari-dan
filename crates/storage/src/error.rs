@@ -22,8 +22,8 @@
 
 use std::fmt::Display;
 
-use tari_common_types::types::FixedHashSizeError;
 use tari_ootle_common_types::optional::IsNotFoundError;
+use tari_sidechain::FixedHashSizeError;
 
 use crate::consensus_models::BlockError;
 

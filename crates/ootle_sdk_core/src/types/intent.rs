@@ -121,7 +121,7 @@ pub struct PublicTransferIntent {
     /// The last epoch this transaction is valid in. Mandatory: every transaction has a bounded
     /// validity window, capped network-wide at `max_transaction_validity_epochs` past the current epoch.
     pub max_epoch: u64,
-    /// Whether this is a dry run. The core sets `is_seal_signer_authorized` itself — it is
+    /// Whether this is a dry run. The core sets `main_signer` itself — it is
     /// intentionally **not** part of the intent.
     pub dry_run: bool,
 }

@@ -7,7 +7,7 @@
 
 use indexmap::IndexMap;
 use ootle_network::Network;
-use tari_common_types::types::{CompressedPublicKey, FixedHash, PrivateKey};
+use tari_common_types::types::{CompressedPublicKey, PrivateKey};
 use tari_crypto::{keys::SecretKey, tari_utilities::ByteArray};
 use tari_engine_types::{
     ProtocolVersion,
@@ -38,20 +38,23 @@ use tari_ootle_storage::consensus_models::{
     CommittedBlockProof,
     EndOfEpochCommand,
     EpochCheckpoint,
+    TreeRootSummary,
 };
 use tari_sidechain::{
     ChainLink,
     CommandCommitProof,
     CommitProofElement,
     DecodedValidatorBlockSignature,
+    FixedHash,
     ProposalVoteMessage,
+    QcSignatures,
     QuorumCertificate,
     QuorumDecision,
     SidechainBlockCommitProof,
     SidechainBlockHeader,
+    SignerBitmap,
     ToCommand,
     ValidatorBlockSignature,
-    ValidatorQcSignature,
 };
 use tari_state_tree::{
     SPARSE_MERKLE_PLACEHOLDER_HASH,
@@ -210,6 +213,9 @@ pub struct CheckpointSpec<'a> {
     /// Whether the checkpoint carries the header metadata preimage.
     pub carry_preimage: bool,
     pub next_epoch_committee: Option<ValidatorSetCommittee>,
+    /// The state version each of these shards of `shard_group` reached at the end of the epoch. Every other shard is
+    /// at version zero.
+    pub shard_state_versions: Vec<(Shard, u64)>,
 }
 
 impl<'a> CheckpointSpec<'a> {
@@ -223,6 +229,7 @@ impl<'a> CheckpointSpec<'a> {
             next_set: next.hash(),
             carry_preimage: true,
             next_epoch_committee: Some(next.committee(low())),
+            shard_state_versions: vec![],
         }
     }
 }
@@ -245,10 +252,20 @@ pub fn checkpoint_entry(spec: CheckpointSpec<'_>) -> EpochCheckpointEntry {
     header.command_merkle_root = FixedHash::new(compute_merkle_root_for_hashes([command_hash]).unwrap().into_array());
     header.metadata_hash = metadata.calculate_hash();
 
+    let shard_tree_summary = spec
+        .shard_state_versions
+        .iter()
+        .map(|&(shard, state_version)| {
+            (shard, TreeRootSummary {
+                root_hash: SPARSE_MERKLE_PLACEHOLDER_HASH,
+                state_version,
+            })
+        })
+        .collect::<IndexMap<_, _>>();
     let build = |commit_proof: SidechainBlockCommitProof| {
         EpochCheckpoint::new(
             CommandCommitProof::new(command.clone(), commit_proof, inclusion_proof.clone()),
-            IndexMap::new(),
+            shard_tree_summary.clone(),
             spec.carry_preimage.then(|| metadata.clone()),
         )
     };
@@ -317,19 +334,22 @@ fn sign(header: SidechainBlockHeader, signers: &Signers) -> SidechainBlockCommit
             height,
         )
         .calculate_hash();
-        let signatures = signers
-            .keys
-            .iter()
+        // Every member signs, so signatures follow committee order: ascending by public key.
+        let mut keys = signers.keys.iter().collect::<Vec<_>>();
+        keys.sort_by_key(|secret| public_key_bytes(secret));
+        let signatures = keys
+            .into_iter()
             .map(|secret| {
                 let nonce = PrivateKey::from_uniform_bytes(&[secret.as_bytes(), message.as_slice()].concat()).unwrap();
                 let signature =
                     DecodedValidatorBlockSignature::sign_with_nonce_and_message(secret, nonce, message).unwrap();
-                ValidatorQcSignature {
-                    public_key: CompressedPublicKey::from_secret_key(secret),
-                    signature: ValidatorBlockSignature::new_from_schnorr(signature),
-                }
+                ValidatorBlockSignature::new_from_schnorr(signature)
             })
             .collect();
+        let signatures = QcSignatures::Schnorr {
+            signers: SignerBitmap::from_indices(signers.keys.len(), 0..signers.keys.len()).unwrap(),
+            signatures,
+        };
         QuorumCertificate {
             header_hash,
             parent_id,

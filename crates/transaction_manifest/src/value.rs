@@ -3,6 +3,7 @@
 
 use std::str::FromStr;
 
+use proc_macro2::{TokenStream, TokenTree};
 use syn::{Lit, parse2};
 use tari_bor::{BorError, Serialize};
 use tari_engine_types::substate::SubstateId;
@@ -186,7 +187,11 @@ fn parse_value(s: &str, depth: usize) -> Result<ManifestValue, ManifestParseErro
             Some(ManifestValue::NonFungibleId(id))
         })
         .or_else(|| {
-            let tokens = s.parse().ok()?;
+            let tokens: TokenStream = s.parse().ok()?;
+            // A literal holds no group. Rejecting groups first keeps `syn` from recursing into them.
+            if tokens.clone().into_iter().any(|tt| matches!(tt, TokenTree::Group(_))) {
+                return None;
+            }
             let lit: Lit = parse2(tokens).ok()?;
             // Reject literals that are not supported or have unrecognized suffixes (e.g. hex strings
             // like "044bccd4..." that syn misinterprets as integer + suffix, or "1e23" as float).
@@ -306,6 +311,19 @@ mod tests {
         for invalid in ["[1,,2]", "[,]", "[1", "[[1]", "[\"a]", "[1]]", "[nope]"] {
             assert!(invalid.parse::<ManifestValue>().is_err(), "{invalid} parsed");
         }
+    }
+
+    #[test]
+    fn deeply_grouped_variable_is_rejected() {
+        let depth = 1_000_000;
+        let s = format!("{}1{}", "(".repeat(depth), ")".repeat(depth));
+        let parsed = std::thread::Builder::new()
+            .stack_size(2 * 1024 * 1024)
+            .spawn(move || s.parse::<ManifestValue>().is_ok())
+            .unwrap()
+            .join()
+            .unwrap();
+        assert!(!parsed);
     }
 
     /// A template parameter takes a `TemplateAddress`, so a template address passed by `address!` or by a variable

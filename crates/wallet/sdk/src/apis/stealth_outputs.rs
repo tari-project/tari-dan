@@ -633,8 +633,10 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
         Ok(count)
     }
 
-    pub fn upsert_utxo(&self, utxo: &StealthOutputModel) -> Result<(), StealthOutputsApiError> {
-        self.store.with_write_tx(|tx| {
+    /// Inserts `utxo`, or updates the stored output's burnt and frozen flags and, while it is unspent, its status.
+    /// Returns whether the stored output was inserted or changed.
+    pub fn upsert_utxo(&self, utxo: &StealthOutputModel) -> Result<bool, StealthOutputsApiError> {
+        let changed = self.store.with_write_tx(|tx| {
             // TODO(perf): consider a dedicated exists query
             let maybe_utxo = tx
                 .stealth_outputs_get_by_commitment(&utxo.resource_address, &utxo.commitment)
@@ -646,13 +648,38 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
                     // EDGE-CASE: scanning picks up a local UTXO that we know was spent
                     _ => None,
                 };
+                let changed = new_status.is_some_and(|status| status != prev_utxo.status) ||
+                    prev_utxo.is_burnt != utxo.is_burnt ||
+                    prev_utxo.is_frozen != utxo.is_frozen;
                 let address = utxo.to_utxo_address();
-                tx.stealth_outputs_update(&address, Some(utxo.is_burnt), new_status, Some(utxo.is_frozen))
+                tx.stealth_outputs_update(&address, Some(utxo.is_burnt), new_status, Some(utxo.is_frozen))?;
+                Ok::<_, WalletStorageError>(changed)
             } else {
-                tx.stealth_outputs_insert(utxo)
+                tx.stealth_outputs_insert(utxo)?;
+                Ok(true)
             }
         })?;
-        Ok(())
+        Ok(changed)
+    }
+
+    /// Sets the frozen flag of a stored output. Returns `None` when the wallet holds no output at `address`, and
+    /// otherwise whether the flag changed.
+    pub fn set_utxo_frozen(
+        &self,
+        address: &UtxoAddress,
+        is_frozen: bool,
+    ) -> Result<Option<bool>, StealthOutputsApiError> {
+        let changed = self.store.with_write_tx(|tx| {
+            let Some(prev_utxo) = tx
+                .stealth_outputs_get_by_commitment(address.resource_address(), &address.id().into_commitment_bytes())
+                .optional()?
+            else {
+                return Ok::<_, WalletStorageError>(None);
+            };
+            tx.stealth_outputs_update(address, None, None, Some(is_frozen))?;
+            Ok(Some(prev_utxo.is_frozen != is_frozen))
+        })?;
+        Ok(changed)
     }
 
     pub fn update_utxo_status(

@@ -4,11 +4,16 @@
 use std::num::NonZeroU64;
 
 use log::*;
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{BlockId, Decision, LastVoted, LeafBlock, PcId, ProposalCertificate};
 use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_engine_types::commit_result::{AbortReason, RejectReason};
-use tari_ootle_common_types::{Epoch, ShardGroup, ValidatorSetHash, committee::CommitteeInfo, optional::Optional};
+use tari_ootle_common_types::{
+    Epoch,
+    ShardGroup,
+    ValidatorSetHash,
+    committee::{Committee, CommitteeInfo},
+    optional::Optional,
+};
 use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
@@ -41,7 +46,7 @@ use tari_ootle_storage::{
         index_substate_down_proofs,
     },
 };
-use tari_sidechain::QuorumDecision;
+use tari_sidechain::{FixedHash, QuorumDecision};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::sync::broadcast;
 
@@ -71,6 +76,7 @@ use crate::{
             PledgedTransaction,
             PreparedTransaction,
             TransactionLockConflicts,
+            UncommittedTemplateStore,
         },
     },
     tracing::TraceTimer,
@@ -119,11 +125,16 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
+    pub fn uncommitted_templates(&self) -> &UncommittedTemplateStore {
+        self.transaction_manager.uncommitted_templates()
+    }
+
     pub fn handle(
         &mut self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         valid_block: &ValidBlock,
         local_committee_info: &CommitteeInfo,
+        local_committee: &Committee<TConsensusSpec::Addr>,
         proposer_claim_public_key_bytes: &RistrettoPublicKeyBytes,
         can_propose_epoch_end: bool,
         // Used to ratify what an end-of-epoch block commits the next epoch to before voting. Where this node does
@@ -160,7 +171,14 @@ where TConsensusSpec: ConsensusSpec
             tx,
             |tx, _prev_locked, block, _justify_qc| self.on_lock_block(tx, block),
             |tx, mut commit_block| {
-                let committed = self.on_commit(tx, block_qc, &block_qc_id, &commit_block)?;
+                let committed = self.on_commit(
+                    tx,
+                    local_committee_info,
+                    local_committee,
+                    block_qc,
+                    &block_qc_id,
+                    &commit_block,
+                )?;
                 // NOTE: update the commit QC in the local copy so that foreign proposals can obtain the commit QC
                 // on_commit already sets the persisted commit_qc for the block
                 commit_block.set_commit_qc(block_qc_id);
@@ -208,6 +226,9 @@ where TConsensusSpec: ConsensusSpec
                 change_set
             );
             change_set.save(tx)?;
+            self.transaction_manager
+                .uncommitted_templates()
+                .record(change_set.block(), change_set.local_substate_changes());
         } else {
             warn!(
                 target: LOG_TARGET,
@@ -1246,7 +1267,7 @@ where TConsensusSpec: ConsensusSpec
                 ))
             })?;
             let execution = self.execute_transaction(
-                tx,
+                substate_store,
                 block.as_leaf(),
                 locked_epoch.clone(),
                 transaction,
@@ -1805,7 +1826,7 @@ where TConsensusSpec: ConsensusSpec
 
     fn execute_transaction<TTx: StateStoreReadTransaction>(
         &self,
-        tx: &TTx,
+        substate_store: &PendingSubstateStore<TTx>,
         block: LeafBlock,
         locked_epoch: LockedEpoch,
         transaction: TransactionRecord,
@@ -1817,6 +1838,7 @@ where TConsensusSpec: ConsensusSpec
             transaction.id(),
             block,
         );
+        let tx = substate_store.read_transaction();
         // Might have been executed already in on propose
         if let Some(execution) =
             BlockTransactionExecution::get_pending_for_block(tx, transaction.id(), &block).optional()?
@@ -1832,7 +1854,7 @@ where TConsensusSpec: ConsensusSpec
 
         let execution = self
             .transaction_manager
-            .execute(locked_epoch, block.epoch, pledged)
+            .execute(substate_store, locked_epoch, block.epoch, pledged)
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
 
         Ok(execution.for_block(block, transaction_id))
@@ -1841,11 +1863,20 @@ where TConsensusSpec: ConsensusSpec
     fn on_commit(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        local_committee_info: &CommitteeInfo,
+        local_committee: &Committee<TConsensusSpec::Addr>,
         commit_qc: &ProposalCertificate,
         commit_qc_id: &PcId,
         block: &Block,
     ) -> Result<Vec<TransactionPoolRecord>, HotStuffError> {
-        let committed_transactions = self.finalize_block(tx, commit_qc, commit_qc_id, block)?;
+        let committed_transactions = self.finalize_block(
+            tx,
+            local_committee_info,
+            local_committee,
+            commit_qc,
+            commit_qc_id,
+            block,
+        )?;
         debug!(
             target: LOG_TARGET,
             "✅ COMMIT block {}",
@@ -1896,6 +1927,8 @@ where TConsensusSpec: ConsensusSpec
     fn finalize_block(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        local_committee_info: &CommitteeInfo,
+        local_committee: &Committee<TConsensusSpec::Addr>,
         commit_qc: &ProposalCertificate,
         commit_qc_id: &PcId,
         block: &Block,
@@ -1987,21 +2020,54 @@ where TConsensusSpec: ConsensusSpec
             );
         }
 
+        let signers = justify_signers(block, local_committee_info, local_committee)?;
         let thresholds = self.config.consensus_constants.liveness_thresholds();
         tx.validator_epoch_stats_updates(
             block.justify().epoch(),
             block.height(),
-            block
-                .justify()
-                .signatures()
-                .iter()
-                .map(|s| s.public_key())
+            signers
+                .into_iter()
                 .map(|pk| ValidatorStatsUpdate::new(pk, thresholds).record_vote()),
         )?;
         block.clear_leader_failure_count(tx, thresholds)?;
 
         Ok(finalized_transactions)
     }
+}
+
+/// The public keys of the members who signed the justify of the committed `block`.
+fn justify_signers<'a, TAddr: PartialEq>(
+    block: &Block,
+    local_committee_info: &CommitteeInfo,
+    local_committee: &'a Committee<TAddr>,
+) -> Result<Vec<&'a RistrettoPublicKeyBytes>, HotStuffError> {
+    // The justify's signer bitmap indexes the committee of its epoch, which must be the local committee.
+    let justify = block.justify();
+    if justify.epoch() != local_committee_info.epoch() {
+        return Err(HotStuffError::InvariantError(format!(
+            "Committed block {block} is justified by a certificate from epoch {}, but the local committee is for \
+             epoch {}",
+            justify.epoch(),
+            local_committee_info.epoch()
+        )));
+    }
+    justify
+        .signatures()
+        .signers()
+        .iter()
+        .map(|index| {
+            local_committee
+                .get(index)
+                .map(|member| &member.public_key)
+                .ok_or_else(|| {
+                    HotStuffError::InvariantError(format!(
+                        "Justify of committed block {block} names signer {index}, but the local committee has {} \
+                         members",
+                        local_committee.len()
+                    ))
+                })
+        })
+        .collect()
 }
 
 /// Consensus rule: a block is rejected (no-vote) when its total transaction execution weight exceeds
@@ -2314,7 +2380,7 @@ mod tests {
                     parent.height(),
                     parent.epoch(),
                     ShardGroup::all_shards(NUM_PRESHARDS),
-                    vec![],
+                    ProposalCertificate::genesis_signatures(),
                     QuorumDecision::Accept,
                 );
                 let header = BlockHeader::create_unsigned(

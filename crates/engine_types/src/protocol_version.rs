@@ -27,6 +27,10 @@ pub enum ProtocolVersion {
     /// finalizes, and each leaf of a block's state merkle root commits to its shard as well as its shard root and
     /// state version, so a substate proof can only cite the state of the shard the substate lives in.
     V2 = 2,
+    /// Each leaf of a block's command merkle root commits to the shard groups that a foreign commit proof of the block
+    /// must carry the command in full for, so a foreign proposal that sends one of those shard groups a command as its
+    /// bare hash names that shard group in the authenticated leaf.
+    V3 = 3,
 }
 
 impl ProtocolVersion {
@@ -47,12 +51,12 @@ impl ProtocolVersion {
     /// one.
     const fn activations(network: Network) -> &'static [(Epoch, Self)] {
         match network {
-            Network::MainNet => &[(Epoch(0), Self::V2)],
-            Network::StageNet => &[(Epoch(0), Self::V2)],
-            Network::NextNet => &[(Epoch(0), Self::V2)],
-            Network::Igor => &[(Epoch(0), Self::V2)],
+            Network::MainNet => &[(Epoch(0), Self::V3)],
+            Network::StageNet => &[(Epoch(0), Self::V3)],
+            Network::NextNet => &[(Epoch(0), Self::V3)],
+            Network::Igor => &[(Epoch(0), Self::V3)],
             Network::Esmeralda => &[(Epoch(0), Self::V0), (Epoch(11925), Self::V1), (Epoch(12220), Self::V2)],
-            Network::LocalNet => &[(Epoch(0), Self::V2)],
+            Network::LocalNet => &[(Epoch(0), Self::V3)],
         }
     }
 
@@ -80,6 +84,7 @@ impl ProtocolVersion {
             0 => Some(Self::V0),
             1 => Some(Self::V1),
             2 => Some(Self::V2),
+            3 => Some(Self::V3),
             _ => None,
         }
     }
@@ -281,12 +286,12 @@ mod tests {
     }
 
     #[test]
-    fn every_network_but_esmeralda_starts_at_v2() {
+    fn every_network_but_esmeralda_starts_at_v3() {
         for network in all_networks() {
             let expected = if network == Network::Esmeralda {
                 ProtocolVersion::V0
             } else {
-                ProtocolVersion::V2
+                ProtocolVersion::V3
             };
             assert_eq!(ProtocolVersion::genesis(network), expected, "{network}");
         }

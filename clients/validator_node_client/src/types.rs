@@ -26,7 +26,6 @@ use indexmap::IndexMap;
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use tari_base_node_client::types::BaseLayerValidatorNode;
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{BlockId, Decision};
 use tari_engine_types::{
     commit_result::FinalizeResult,
@@ -51,7 +50,7 @@ use tari_ootle_storage::{
     time::PrimitiveDateTime,
 };
 use tari_ootle_transaction::{Transaction, TransactionId};
-use tari_sidechain::QuorumDecision;
+use tari_sidechain::{FixedHash, QuorumDecision};
 use tari_template_abi::{ArgDef, version::WasmAbiVersion};
 use tari_template_lib_types::{TemplateAddress, crypto::RistrettoPublicKeyBytes};
 

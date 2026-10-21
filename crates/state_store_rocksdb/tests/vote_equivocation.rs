@@ -47,7 +47,7 @@ fn signature(signer_byte: u8, nonce_byte: u8) -> ValidatorSignatureBytes {
 }
 
 fn block_id(byte: u8) -> BlockId {
-    BlockId::new(tari_common_types::types::FixedHash::new([byte; 32]))
+    BlockId::new(tari_sidechain::FixedHash::new([byte; 32]))
 }
 
 fn vote(signer_byte: u8, nonce_byte: u8, block_byte: u8, decision: QuorumDecision) -> ProposalVote {

@@ -17,7 +17,7 @@ use tari_template_lib_types::TemplateAddress;
 use crate::cmap_semaphore;
 
 const LOG_TARGET: &str = "tari::ootle::template_provider::memory_cache";
-const CONCURRENT_ACCESS_LIMIT: isize = 100;
+pub(crate) const CONCURRENT_ACCESS_LIMIT: isize = 100;
 
 /// Multiplier applied to the WASM source byte count when weighing cache
 /// entries. The source size under-estimates the resident footprint of a
@@ -27,7 +27,7 @@ const CONCURRENT_ACCESS_LIMIT: isize = 100;
 /// code. K=4 keeps the bound honest in the typical case and overshoots by at
 /// most ~25% in the worst case — acceptable for a coarse process-memory
 /// budget. Cheaper than serializing each module on insert and infallible.
-const CODE_SIZE_TO_RESIDENT_BYTES_FACTOR: usize = 4;
+pub(crate) const CODE_SIZE_TO_RESIDENT_BYTES_FACTOR: usize = 4;
 
 /// Resident cost of the builtin templates, which are held for the life of a
 /// [`MemoryCacheTemplateProvider`] rather than cached under [`TemplateConfig::max_cache_size_bytes`].

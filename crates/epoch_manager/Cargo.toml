@@ -9,7 +9,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-tari_common_types = { workspace = true }
+tari_sidechain = { workspace = true }
 minotari_app_grpc = { workspace = true }
 tari_ootle_common_types = { workspace = true }
 tari_ootle_storage = { workspace = true }

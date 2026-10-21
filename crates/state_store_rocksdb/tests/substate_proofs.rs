@@ -6,7 +6,6 @@ pub mod helpers;
 use std::collections::HashSet;
 
 use helpers::{PROOF_TEST_TREE_VERSION, build_substate_record, commit_substates, create_rocksdb, num_preshards};
-use tari_common_types::types::FixedHash;
 use tari_engine_types::ProtocolVersion;
 use tari_ootle_common_types::{ShardGroup, SubstateVersion, VersionedSubstateId, shard::Shard};
 use tari_ootle_storage::{
@@ -16,7 +15,7 @@ use tari_ootle_storage::{
     SubstateProofGenerator,
     consensus_models::{EndOfEpochCommand, EpochCheckpoint, SubstateRecord, TreeRootSummary},
 };
-use tari_sidechain::{CommandCommitProof, SidechainBlockCommitProof, SidechainBlockHeader};
+use tari_sidechain::{CommandCommitProof, FixedHash, SidechainBlockCommitProof, SidechainBlockHeader};
 use tari_state_tree::{
     JmtHashScheme,
     SPARSE_MERKLE_PLACEHOLDER_HASH,

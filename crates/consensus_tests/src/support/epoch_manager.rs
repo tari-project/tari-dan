@@ -9,7 +9,6 @@ use std::{
 
 use ootle_byte_type::ToByteType;
 use rand::seq::IteratorRandom;
-use tari_common_types::types::FixedHash;
 use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_epoch_manager::{EpochManagerError, EpochManagerEvent, EpochManagerReader};
 use tari_ootle_common_types::{
@@ -26,6 +25,7 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_storage::{StorageError, global::models::ValidatorNode};
 use tari_ootle_transaction::Network;
+use tari_sidechain::FixedHash;
 use tari_template_lib_types::{Hash32, crypto::RistrettoPublicKeyBytes};
 use tokio::sync::{Mutex, MutexGuard, broadcast};
 
@@ -594,7 +594,8 @@ impl EpochManagerReader for TestEpochManager {
         shard_group: ShardGroup,
     ) -> Result<CommitteeInfo, EpochManagerError> {
         let state = self.state_lock().await;
-        let committee = state.committees.get(&shard_group).ok_or_else(|| {
+        let committees = state.committees_at(epoch);
+        let committee = committees.get(&shard_group).ok_or_else(|| {
             EpochManagerError::StorageError(StorageError::NotFound {
                 item: "committee",
                 key: format!("for shard group {shard_group}"),
@@ -607,7 +608,7 @@ impl EpochManagerReader for TestEpochManager {
         Ok(CommitteeInfo::new(
             TEST_NUM_PRESHARDS,
             num_members as u32,
-            state.committees.len() as u32,
+            committees.len() as u32,
             shard_group,
             epoch,
             total_power,

@@ -31,7 +31,7 @@ fn evidence_against(accused: &TestAddress, height: NodeHeight) -> VoteEquivocati
     let public_key = public_key_of(accused);
     let vote = |block_byte: u8| ProposalVote {
         epoch: Epoch(1),
-        block_id: BlockId::new(tari_common_types::types::FixedHash::new([block_byte; 32])),
+        block_id: BlockId::new(tari_sidechain::FixedHash::new([block_byte; 32])),
         block_height: height,
         decision: QuorumDecision::Accept,
         signature: ValidatorSignatureBytes::new(
@@ -88,6 +88,14 @@ async fn a_node_holding_evidence_withholds_its_vote_and_consensus_continues() {
         .unwrap();
     assert!(holds, "evidence is not readable back");
 
+    // A certificate names its signers by their position in the committee, which is ascending by public key.
+    let mut committee = ["1", "2", "3", "4", "5"].map(|addr| public_key_of(&TestAddress::new(addr)));
+    committee.sort();
+    let accuser_index = committee
+        .iter()
+        .position(|public_key| *public_key == public_key_of(&accuser))
+        .unwrap();
+
     // Long enough for the accused to be the leader of a view, and for the block it proposes to be
     // certified by the block above it.
     let mut checked_a_block_by_the_accused = false;
@@ -112,10 +120,7 @@ async fn a_node_holding_evidence_withholds_its_vote_and_consensus_continues() {
         // The committee certified the block without the accuser: a quorum is 2f+1 of 5, so the four
         // validators that hold no evidence are enough on their own.
         assert!(
-            !certificate
-                .signatures()
-                .iter()
-                .any(|sig| *sig.public_key() == public_key_of(&accuser)),
+            !certificate.signatures().signers().contains(accuser_index),
             "{accuser} signed a block proposed by {accused} it holds evidence against"
         );
         checked_a_block_by_the_accused = true;

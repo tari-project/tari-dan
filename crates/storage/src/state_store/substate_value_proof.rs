@@ -4,7 +4,6 @@
 use std::collections::{HashMap, hash_map::Entry};
 
 use ootle_network::Network;
-use tari_common_types::types::FixedHash;
 use tari_engine_types::{
     ProtocolVersion,
     SubstateVersion,
@@ -12,6 +11,7 @@ use tari_engine_types::{
     substate::{SubstateId, SubstateValue, hash_substate},
 };
 use tari_ootle_common_types::{Epoch, NodeHeight, NumPreshards, ShardGroup, VersionedSubstateId, shard::Shard};
+use tari_sidechain::FixedHash;
 use tari_state_tree::{
     SPARSE_MERKLE_PLACEHOLDER_HASH,
     ShardGroupRootTree,
@@ -399,7 +399,7 @@ pub fn verify_substate_down_proof_against_roots(
 pub fn exclusion_is_shard_bound(protocol_version: ProtocolVersion) -> bool {
     match protocol_version {
         ProtocolVersion::V0 | ProtocolVersion::V1 => false,
-        ProtocolVersion::V2 => true,
+        ProtocolVersion::V2 | ProtocolVersion::V3 => true,
     }
 }
 

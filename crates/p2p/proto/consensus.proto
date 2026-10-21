@@ -49,6 +49,7 @@ message ForeignProposalNotification {
   bytes block_id = 1;
   uint64 epoch = 2;
   repeated uint32 shard_groups = 3;
+  uint32 shard_group = 4;
 }
 
 message ForeignProposalRequest {
@@ -182,13 +183,26 @@ message Evidence {
 
 
 message QuorumCertificate {
+  reserved 5;
   bytes header_hash = 1;
   bytes parent_id = 2;
   uint64 block_height = 3;
   uint64 epoch = 4;
-  repeated tari.ootle.common.SignatureAndPublicKey signatures = 5;
   QuorumDecision decision = 7;
   uint32 shard_group = 8;
+  QcSignatures signatures = 9;
+}
+
+message QcSignatures {
+  oneof scheme {
+    SchnorrQcSignatures schnorr = 1;
+  }
+}
+
+// One signature per committee member whose bit is set in `signers`, in ascending committee order.
+message SchnorrQcSignatures {
+  bytes signers = 1;
+  repeated tari.ootle.common.Signature signatures = 2;
 }
 
 message TimeoutCertificate {

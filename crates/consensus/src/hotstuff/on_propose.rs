@@ -5,7 +5,6 @@ use std::{collections::HashMap, fmt::Display, num::NonZeroU64, time::Instant};
 
 use log::*;
 use ootle_byte_type::ToByteType;
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{
     BlockId,
     Decision,
@@ -55,6 +54,7 @@ use tari_ootle_storage::{
     },
 };
 use tari_ootle_transaction::TransactionId;
+use tari_sidechain::FixedHash;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::task;
 
@@ -1146,7 +1146,13 @@ where TConsensusSpec: ConsensusSpec
 
         let tx = substate_store.read_transaction();
         let transaction = tx_rec.get_transaction(tx)?;
-        let execution = self.execute_transaction(tx, state_anchor, transaction, change_set, locked_epoch.clone())?;
+        let execution = self.execute_transaction(
+            substate_store,
+            state_anchor,
+            transaction,
+            change_set,
+            locked_epoch.clone(),
+        )?;
 
         if execution.decision().is_commit() {
             // Preparing the transaction bounded what its inputs alone may pledge, so only the block budget applies
@@ -1279,12 +1285,13 @@ where TConsensusSpec: ConsensusSpec
 
     fn execute_transaction<TTx: StateStoreReadTransaction>(
         &self,
-        tx: &TTx,
+        substate_store: &PendingSubstateStore<TTx>,
         state_anchor: &LeafBlock,
         transaction: TransactionRecord,
         change_set: &ProposedBlockChangeSet,
         locked_epoch: LockedEpoch,
     ) -> Result<TransactionExecution, HotStuffError> {
+        let tx = substate_store.read_transaction();
         // Should have been executed already if all inputs are local
         if let Some(execution) =
             BlockTransactionExecution::get_pending_for_block(tx, transaction.id(), state_anchor).optional()?
@@ -1310,7 +1317,7 @@ where TConsensusSpec: ConsensusSpec
         );
 
         self.transaction_manager
-            .execute(locked_epoch, state_anchor.epoch, pledged)
+            .execute(substate_store, locked_epoch, state_anchor.epoch, pledged)
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))
     }
 }

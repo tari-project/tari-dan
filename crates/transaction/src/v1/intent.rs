@@ -103,6 +103,7 @@ mod tests {
         Blob,
         Blobs,
         Instruction,
+        MainSigner,
         PrunedTransactionV1,
         TransactionSealSignature,
         TransactionSignature,
@@ -127,7 +128,7 @@ mod tests {
             inputs,
             min_epoch: Some(Epoch(100)),
             max_epoch: Epoch(200),
-            is_seal_signer_authorized: false,
+            main_signer: MainSigner::None,
             dry_run: true,
             blobs: Blobs::from_vec(vec![Blob::from(vec![1, 2, 3])]),
             nonce: 7,
@@ -253,10 +254,12 @@ mod tests {
         u.max_epoch = Epoch(999);
         assert_ne!(commitment_of(u), base_commitment, "max_epoch (value)");
 
-        // is_seal_signer_authorized
-        let mut u = base.clone();
-        u.is_seal_signer_authorized = !u.is_seal_signer_authorized;
-        assert_ne!(commitment_of(u), base_commitment, "is_seal_signer_authorized");
+        // main_signer
+        for main_signer in crate::v1::main_signer::other_main_signers(base.main_signer) {
+            let mut u = base.clone();
+            u.main_signer = main_signer;
+            assert_ne!(commitment_of(u), base_commitment, "main_signer {main_signer:?}");
+        }
 
         // dry_run
         let mut u = base.clone();

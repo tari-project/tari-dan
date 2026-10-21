@@ -16,10 +16,13 @@ use std::{collections::HashSet, time::Duration};
 
 use axum_extra::headers::authorization::Bearer;
 use log::*;
+use ootle_byte_type::ToByteType;
 use tari_ootle_common_types::optional::Optional;
+use tari_ootle_transaction::{MainSigner, UnsignedTransaction};
 use tari_ootle_wallet_sdk::{
     models::{
         EffectiveStatus,
+        KeyId,
         LockOwner,
         OutputStatus,
         TransactionRequestCreatedEvent,
@@ -43,6 +46,7 @@ use tari_ootle_walletd_client::{
         TransactionRequestInfo,
         TransactionRequestListRequest,
         TransactionRequestListResponse,
+        TransactionRequestMainSigner,
         TransactionRequestSubmitRequest,
         TransactionRequestSubmitResponse,
         TransactionRequestValueSummary,
@@ -83,6 +87,18 @@ pub async fn handle_create(
         .validate_blob_references()
         .map_err(|e| invalid_params("transaction.blobs", Some(e.to_string())))?;
     ensure_transaction_signers(&req.seal_signer, &req.other_signers)?;
+    if let TransactionRequestMainSigner::External { public_key } =
+        resolve_main_signer(context, &req.transaction, &req.other_signers)? &&
+        !req.signatures.iter().any(|sig| *sig.public_key() == public_key)
+    {
+        return Err(invalid_params(
+            "transaction.main_signer",
+            Some(format!(
+                "names {public_key} as the main signer, but neither other_signers nor signatures sign with \
+                 {public_key}"
+            )),
+        ));
+    }
 
     // The transaction is stored verbatim: the request path neither detects
     // inputs nor touches any field, so a caller who has already collected
@@ -394,6 +410,9 @@ fn transition(
 fn to_info(context: &HandlerContext, model: TransactionRequestModel) -> Result<TransactionRequestInfo, anyhow::Error> {
     let status = model.effective_status_now();
 
+    let main_signer = resolve_main_signer(context, &model.unsigned_transaction, &model.other_signers)?;
+    let external_signers = model.signatures.iter().map(|sig| *sig.public_key()).collect();
+
     Ok(TransactionRequestInfo {
         request_id: model.id,
         transaction: model.unsigned_transaction,
@@ -403,10 +422,32 @@ fn to_info(context: &HandlerContext, model: TransactionRequestModel) -> Result<T
         status,
         transaction_id: model.transaction_id,
         value_summary: value_summary(context, &model.lock_ids)?,
+        main_signer,
+        external_signers,
         expires_at: model.expires_at.assume_utc().unix_timestamp(),
         approved_at: model.approved_at.map(|t| t.assume_utc().unix_timestamp()),
         created_at: model.created_at.assume_utc().unix_timestamp(),
     })
+}
+
+/// The transaction's declared main signer, placed among the keys of this wallet.
+fn resolve_main_signer(
+    context: &HandlerContext,
+    transaction: &UnsignedTransaction,
+    other_signers: &[KeyId],
+) -> Result<TransactionRequestMainSigner, anyhow::Error> {
+    let public_key = match transaction.main_signer() {
+        MainSigner::SealSigner => return Ok(TransactionRequestMainSigner::SealSigner),
+        MainSigner::None => return Ok(TransactionRequestMainSigner::None),
+        MainSigner::Authorizer(public_key) => *public_key,
+    };
+    let key_manager = context.wallet_sdk().key_manager_api();
+    for key_id in other_signers {
+        if key_manager.get_public_key(*key_id)?.public_key.to_byte_type() == public_key {
+            return Ok(TransactionRequestMainSigner::WalletKey { public_key });
+        }
+    }
+    Ok(TransactionRequestMainSigner::External { public_key })
 }
 
 /// What actually leaves the wallet, derived from the request's locks.
@@ -460,8 +501,8 @@ fn value_summary(
 #[cfg(test)]
 mod tests {
     use tari_ootle_address::Network;
-    use tari_ootle_common_types::{Epoch, optional::IsNotFoundError};
-    use tari_ootle_transaction::UnsignedTransaction;
+    use tari_ootle_common_types::{Epoch, crypto::create_key_pair, optional::IsNotFoundError};
+    use tari_ootle_transaction::{TransactionSignature, UnsignedTransaction};
     use tari_ootle_wallet_sdk::models::{KeyBranch, KeyId, LockOwner, WalletLock};
 
     use super::*;
@@ -535,6 +576,69 @@ mod tests {
             lock_ids,
             ttl_secs: Some(ttl_secs),
         }
+    }
+
+    async fn request_info(daemon: &TestDaemon, request_id: TransactionRequestId) -> TransactionRequestInfo {
+        handle_get(&daemon.context, Some(&daemon.session), TransactionRequestGetRequest {
+            request_id,
+        })
+        .await
+        .unwrap()
+        .request
+    }
+
+    #[tokio::test]
+    async fn the_approver_sees_who_the_transaction_acts_as() {
+        let daemon = TestDaemon::start().await;
+        let tool = daemon.api_key("htlc-swap-tool", "transaction_requests:create");
+        let wallet_key = KeyId::derived(KeyBranch::Account, 0);
+        let wallet_public_key = daemon
+            .context
+            .wallet_sdk()
+            .key_manager_api()
+            .get_public_key(wallet_key)
+            .unwrap()
+            .public_key
+            .to_byte_type();
+        let (external_secret, external_public_key) = create_key_pair();
+        let external_public_key = external_public_key.to_byte_type();
+
+        let mut req = create_request(vec![], 600);
+        req.transaction
+            .set_main_signer(MainSigner::Authorizer(external_public_key));
+        let err = handle_create(&daemon.context, Some(&tool), req.clone())
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("transaction.main_signer"), "{err}");
+
+        req.signatures = vec![TransactionSignature::sign(
+            &external_secret,
+            &wallet_public_key,
+            &req.transaction,
+        )];
+        let request_id = handle_create(&daemon.context, Some(&tool), req)
+            .await
+            .unwrap()
+            .request_id;
+        let info = request_info(&daemon, request_id).await;
+        assert_eq!(info.main_signer, TransactionRequestMainSigner::External {
+            public_key: external_public_key
+        });
+        assert_eq!(info.external_signers, vec![external_public_key]);
+
+        let mut req = create_request(vec![], 600);
+        req.other_signers = vec![wallet_key];
+        req.transaction
+            .set_main_signer(MainSigner::Authorizer(wallet_public_key));
+        let request_id = handle_create(&daemon.context, Some(&tool), req)
+            .await
+            .unwrap()
+            .request_id;
+        let info = request_info(&daemon, request_id).await;
+        assert_eq!(info.main_signer, TransactionRequestMainSigner::WalletKey {
+            public_key: wallet_public_key
+        });
+        assert!(info.external_signers.is_empty());
     }
 
     fn lock_for(daemon: &TestDaemon, owner: LockOwner) -> WalletLockId {

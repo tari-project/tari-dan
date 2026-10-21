@@ -23,6 +23,7 @@
 use std::convert::{TryFrom, TryInto};
 
 use anyhow::{Context, anyhow};
+use tari_common_types::types::CompressedPublicKey;
 use tari_consensus::messages::{
     CatchUpRequestMessage,
     EncodedTransaction,
@@ -49,7 +50,10 @@ use tari_consensus_types::{
     TimeoutCertificate,
     TimeoutVote,
 };
-use tari_crypto::tari_utilities::{ByteArray, hex::to_hex};
+use tari_crypto::{
+    ristretto::RistrettoSecretKey,
+    tari_utilities::{ByteArray, hex::to_hex},
+};
 use tari_engine_types::{
     commit_result::AbortReason,
     fees::ExhaustBurnRate,
@@ -86,6 +90,7 @@ use tari_ootle_storage::{
     },
 };
 use tari_ootle_transaction::TransactionId;
+use tari_sidechain::{QcSignatures, SignerBitmap, ValidatorBlockSignature};
 use tari_template_lib::types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{
@@ -296,6 +301,7 @@ impl From<&ForeignProposalNotificationMessage> for proto::consensus::ForeignProp
             block_id: value.block_id.as_bytes().to_vec(),
             epoch: value.epoch.as_u64(),
             shard_groups: value.shard_groups.iter().map(|sg| sg.encode_as_u32()).collect(),
+            shard_group: value.shard_group.encode_as_u32(),
         }
     }
 }
@@ -307,6 +313,12 @@ impl TryFrom<proto::consensus::ForeignProposalNotification> for ForeignProposalN
         Ok(Self {
             block_id: BlockId::try_from(value.block_id)?,
             epoch: Epoch(value.epoch),
+            shard_group: ShardGroup::decode_from_u32(value.shard_group).ok_or_else(|| {
+                anyhow!(
+                    "Invalid source shard group in foreign proposal notification: {}",
+                    value.shard_group
+                )
+            })?,
             shard_groups: value
                 .shard_groups
                 .into_iter()
@@ -999,7 +1011,7 @@ impl From<&ProposalCertificate> for proto::consensus::QuorumCertificate {
             block_height: source.height().as_u64(),
             epoch: source.epoch().as_u64(),
             shard_group: source.shard_group().encode_as_u32(),
-            signatures: source.signatures().iter().map(Into::into).collect(),
+            signatures: Some(source.signatures().into()),
             decision: i32::from(source.decision().as_u8()),
         }
     }
@@ -1019,11 +1031,56 @@ impl TryFrom<proto::consensus::QuorumCertificate> for ProposalCertificate {
             shard_group,
             value
                 .signatures
-                .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<_, _>>()?,
+                .ok_or_else(|| anyhow!("QC signatures not provided"))?
+                .try_into()?,
             u8::try_from(value.decision)?.try_into()?,
         ))
+    }
+}
+
+impl From<&QcSignatures> for proto::consensus::QcSignatures {
+    fn from(source: &QcSignatures) -> Self {
+        let scheme = match source {
+            QcSignatures::Schnorr { signers, signatures } => {
+                proto::consensus::qc_signatures::Scheme::Schnorr(proto::consensus::SchnorrQcSignatures {
+                    signers: signers.as_bytes().to_vec(),
+                    signatures: signatures
+                        .iter()
+                        .map(|signature| proto::common::Signature {
+                            public_nonce: signature.get_compressed_public_nonce().as_bytes().to_vec(),
+                            signature: signature.get_signature().as_bytes().to_vec(),
+                        })
+                        .collect(),
+                })
+            },
+        };
+        Self { scheme: Some(scheme) }
+    }
+}
+
+impl TryFrom<proto::consensus::QcSignatures> for QcSignatures {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::QcSignatures) -> Result<Self, Self::Error> {
+        match value
+            .scheme
+            .ok_or_else(|| anyhow!("QC signature scheme not provided"))?
+        {
+            proto::consensus::qc_signatures::Scheme::Schnorr(schnorr) => Ok(Self::Schnorr {
+                signers: SignerBitmap::from_bytes(schnorr.signers),
+                signatures: schnorr
+                    .signatures
+                    .into_iter()
+                    .map(|signature| {
+                        let public_nonce = CompressedPublicKey::from_canonical_bytes(&signature.public_nonce)
+                            .map_err(|e| anyhow!("QC signature public nonce: {e}"))?;
+                        let signature = RistrettoSecretKey::from_canonical_bytes(&signature.signature)
+                            .map_err(|e| anyhow!("QC signature scalar: {e}"))?;
+                        Ok(ValidatorBlockSignature::new(public_nonce, signature))
+                    })
+                    .collect::<Result<_, anyhow::Error>>()?,
+            }),
+        }
     }
 }
 
@@ -1271,6 +1328,34 @@ mod tests {
         };
         let err = MissingTransactionsResponse::try_from(response).unwrap_err();
         assert!(err.to_string().contains("at most"), "{err}");
+    }
+
+    #[test]
+    fn a_proposal_certificate_round_trips() {
+        let signature = |seed| {
+            let (secret, public) = tari_ootle_common_types::crypto::create_key_pair_from_seed(seed);
+            ValidatorBlockSignature::new(
+                CompressedPublicKey::from_canonical_bytes(public.as_bytes()).unwrap(),
+                secret,
+            )
+        };
+        let certificate = ProposalCertificate::new(
+            [1u8; 32].into(),
+            BlockId::from([2u8; 32]),
+            NodeHeight(3),
+            Epoch(4),
+            ShardGroup::new(1u32, 8u32),
+            QcSignatures::Schnorr {
+                signers: SignerBitmap::from_indices(10, [1, 9]).unwrap(),
+                signatures: vec![signature(1), signature(2)],
+            },
+            tari_sidechain::QuorumDecision::Accept,
+        );
+
+        let decoded = ProposalCertificate::try_from(proto::consensus::QuorumCertificate::from(&certificate)).unwrap();
+
+        assert_eq!(decoded.signatures(), certificate.signatures());
+        assert_eq!(decoded.calculate_id(), certificate.calculate_id());
     }
 
     mod block_commands {

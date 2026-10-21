@@ -249,7 +249,7 @@ fn to_wire(field: PreimageField) -> SigningField {
         PreimageField::Inputs => SigningField::Inputs,
         PreimageField::MinEpoch => SigningField::MinEpoch,
         PreimageField::MaxEpoch => SigningField::MaxEpoch,
-        PreimageField::IsSealSignerAuthorized => SigningField::IsSealSignerAuthorized,
+        PreimageField::MainSigner => SigningField::MainSigner,
         PreimageField::DryRun => SigningField::DryRun,
         PreimageField::BlobHashes => SigningField::BlobHashes,
         PreimageField::Nonce => SigningField::TransactionNonce,

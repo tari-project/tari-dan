@@ -2,11 +2,19 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_consensus::{
-    hotstuff::substate_store::{InputPledge, LockFailedError, PendingSubstateStore, SubstateStoreError},
+    hotstuff::substate_store::{
+        InputPledge,
+        LockFailedError,
+        PendingSubstateStore,
+        SubstateOverlay,
+        SubstateStoreError,
+    },
     traits::{BlockTransactionExecutorError, CertificateStore, ReadableSubstateStore, WriteableSubstateStore},
 };
 use tari_consensus_types::{BlockId, LeafBlock};
 use tari_engine_types::{
+    ValidatorFeePool,
+    ValidatorFeeWithdrawal,
     component::{Component, ComponentBody, ComponentHeader},
     substate::{Substate, SubstateDiff, SubstateId, SubstateValue},
 };
@@ -15,6 +23,7 @@ use tari_ootle_common_types::{
     NodeHeight,
     NumPreshards,
     ShardGroup,
+    SubstateAddress,
     SubstateLockType,
     SubstateVersion,
     VersionedSubstateId,
@@ -36,7 +45,14 @@ use tari_ootle_storage::{
 };
 use tari_ootle_transaction::Network;
 use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
-use tari_template_lib_types::{ComponentAddress, EntityId, ObjectKey, SubstateOwnerRule};
+use tari_template_lib_types::{
+    ComponentAddress,
+    EntityId,
+    ObjectKey,
+    SubstateOwnerRule,
+    ValidatorFeePoolAddress,
+    crypto::RistrettoPublicKeyBytes,
+};
 use tempfile::TempDir;
 
 use crate::support::{TEST_NUM_PRESHARDS, logging::setup_logger};
@@ -643,6 +659,165 @@ fn inputs_over_the_transaction_limit_are_not_pledged() {
     assert_eq!(store.pledge_bytes(), 0);
 }
 
+#[test]
+fn an_overlay_reads_its_own_writes_across_a_chain_of_diffs() {
+    let (store, _tmp) = create_store();
+    let id = add_substate(&store, 0, SubstateVersion::ZERO);
+
+    let tx = store.create_read_tx().unwrap();
+    let base = create_pending_store::<TestStore>(&tx);
+    let mut overlay = base.overlay();
+
+    overlay.put_diff(&write_diff(&id)).unwrap();
+    let v1 = id.to_next_version();
+    overlay.put_diff(&write_diff(&v1)).unwrap();
+    let v2 = v1.to_next_version();
+
+    assert_eq!(
+        overlay.get_latest_version(id.substate_id()).unwrap().version(),
+        v2.version()
+    );
+    assert_substate_eq(
+        overlay.get(v2.as_versioned_ref()).unwrap(),
+        new_substate(1, v2.version()),
+    );
+    for spent in [&id, &v1] {
+        assert!(matches!(
+            overlay.get(spent.as_versioned_ref()).unwrap_err(),
+            SubstateStoreError::SubstateNotFound { .. }
+        ));
+    }
+    assert_eq!(overlay.changes().len(), 4);
+}
+
+#[test]
+fn an_overlay_reads_the_changes_its_base_made() {
+    let (store, _tmp) = create_store();
+    let id = add_substate(&store, 0, SubstateVersion::ZERO);
+
+    let tx = store.create_read_tx().unwrap();
+    let mut base = create_pending_store::<TestStore>(&tx);
+    base.put_diff(&write_diff(&id)).unwrap();
+    let v1 = id.to_next_version();
+
+    let mut overlay = base.overlay();
+    assert_eq!(
+        overlay.get_latest_version(id.substate_id()).unwrap().version(),
+        v1.version()
+    );
+    overlay.lock_assert_is_up(v1.as_versioned_ref()).unwrap();
+
+    // A diff that spends the version the base already spent no longer applies
+    let err = overlay.put_diff(&write_diff(&id)).unwrap_err();
+    assert!(matches!(
+        err.ok_lock_failed().unwrap(),
+        LockFailedError::SubstateNotFound { .. }
+    ));
+    assert!(overlay.changes().is_empty());
+
+    overlay.put_diff(&write_diff(&v1)).unwrap();
+    assert_eq!(
+        overlay.get_latest_version(id.substate_id()).unwrap().version(),
+        v1.version().next()
+    );
+}
+
+#[test]
+fn an_overlay_leaves_its_base_unchanged() {
+    let (store, _tmp) = create_store();
+    let id = add_substate(&store, 0, SubstateVersion::ZERO);
+
+    let tx = store.create_read_tx().unwrap();
+    let mut base = create_pending_store::<TestStore>(&tx);
+    let other = new_substate_id(1);
+    base.put(SubstateChange::Up {
+        id: other.clone(),
+        shard: Shard::first(),
+        substate: Box::new(new_substate(1, SubstateVersion::ZERO)),
+    })
+    .unwrap();
+    let base_changes = change_addresses(base.changes());
+
+    let mut overlay = base.overlay();
+    overlay.put_diff(&write_diff(&id)).unwrap();
+    let created = new_substate_id(2);
+    overlay
+        .put(SubstateChange::Up {
+            id: created.clone(),
+            shard: Shard::first(),
+            substate: Box::new(new_substate(2, SubstateVersion::ZERO)),
+        })
+        .unwrap();
+    drop(overlay);
+
+    assert_eq!(change_addresses(base.changes()), base_changes);
+    assert_eq!(
+        base.get_latest_version(id.substate_id()).unwrap().version(),
+        id.version()
+    );
+    assert_substate_eq(base.get(id.as_versioned_ref()).unwrap(), new_substate(0, id.version()));
+    assert!(!base.exists(&created).unwrap());
+    assert_eq!(base.max_shard_output_bytes(), 0);
+}
+
+#[test]
+fn an_overlay_withdraws_in_place_from_a_pool_its_base_changed() {
+    // The base and the overlay together must end where the base alone would after both diffs
+    let (store, _tmp) = create_store();
+    let pool = add_fee_pool(&store, 100);
+
+    let tx = store.create_read_tx().unwrap();
+    let mut serial = create_pending_store::<TestStore>(&tx);
+    serial.put_diff(&withdraw_diff(&pool, 10)).unwrap();
+    serial.put_diff(&withdraw_diff(&pool, 5)).unwrap();
+
+    let mut base = create_pending_store::<TestStore>(&tx);
+    base.put_diff(&withdraw_diff(&pool, 10)).unwrap();
+    let mut overlay = base.overlay();
+    overlay.put_diff(&withdraw_diff(&pool, 5)).unwrap();
+
+    let expected = serial.get_latest_change(&pool).unwrap();
+    let speculated = overlay.get_latest_change(&pool).unwrap();
+    assert_eq!(speculated.to_substate_address(), expected.to_substate_address());
+    assert_eq!(fee_pool_amount(&speculated), fee_pool_amount(&expected));
+    assert_eq!(fee_pool_amount(&speculated), 85);
+    assert_eq!(fee_pool_amount(&base.get_latest_change(&pool).unwrap()), 90);
+}
+
+#[test]
+fn overlays_of_one_base_run_on_separate_threads() {
+    fn assert_sync<T: Sync>() {}
+    fn assert_send_sync<T: Send + Sync>() {}
+    type ReadTx<'a> = <TestStore as StateStore>::ReadTransaction<'a>;
+    assert_sync::<PendingSubstateStore<'_, ReadTx<'_>>>();
+    assert_send_sync::<SubstateOverlay<'_, '_, ReadTx<'_>>>();
+
+    let (store, _tmp) = create_store();
+    let ids = (0..4u8)
+        .map(|seed| add_substate(&store, seed, SubstateVersion::ZERO))
+        .collect::<Vec<_>>();
+
+    let tx = store.create_read_tx().unwrap();
+    let base = create_pending_store::<TestStore>(&tx);
+    let changes = std::thread::scope(|scope| {
+        let handles = ids
+            .iter()
+            .map(|id| {
+                let base = &base;
+                scope.spawn(move || {
+                    let mut overlay = base.overlay();
+                    overlay.put_diff(&write_diff(id)).unwrap();
+                    overlay.changes().clone()
+                })
+            })
+            .collect::<Vec<_>>();
+        handles.into_iter().map(|h| h.join().unwrap()).collect::<Vec<_>>()
+    });
+
+    assert!(changes.iter().all(|c| c.len() == 2));
+    assert!(base.changes().is_empty());
+}
+
 /// The diff of a transaction that takes `id` as a WRITE input: it spends the locked version and creates the next.
 fn write_diff(id: &VersionedSubstateId) -> SubstateDiff {
     let mut diff = SubstateDiff::new();
@@ -666,6 +841,43 @@ fn add_substate(store: &TestStore, seed: u8, version: SubstateVersion) -> Versio
         .unwrap();
 
     VersionedSubstateId::new(id, version)
+}
+
+fn add_fee_pool(store: &TestStore, amount: u64) -> SubstateId {
+    let id = SubstateId::from(ValidatorFeePoolAddress::from_array([9; ObjectKey::LENGTH]));
+    let mut batch = SubstateUpdateBatch::new(Network::LocalNet, Epoch::zero());
+    batch.with_transition(Shard::first(), 0).push(SubstateTransition::Up {
+        id: id.clone(),
+        version: SubstateVersion::ZERO,
+        substate_or_hash: SubstateValue::from(ValidatorFeePool::new(RistrettoPublicKeyBytes::default(), amount)).into(),
+    });
+    store
+        .with_write_tx(|tx| SubstateRecord::commit_batch(tx, batch))
+        .unwrap();
+    id
+}
+
+fn withdraw_diff(pool: &SubstateId, amount: u64) -> SubstateDiff {
+    let mut diff = SubstateDiff::new();
+    diff.set_once_fee_withdrawals(vec![ValidatorFeeWithdrawal {
+        address: pool.as_validator_fee_pool_address().unwrap(),
+        amount,
+    }]);
+    diff
+}
+
+fn change_addresses(changes: &[SubstateChange]) -> Vec<(SubstateAddress, bool)> {
+    changes.iter().map(|c| (c.to_substate_address(), c.is_up())).collect()
+}
+
+fn fee_pool_amount(change: &SubstateChange) -> u64 {
+    change
+        .up_substate()
+        .unwrap()
+        .substate_value()
+        .as_validator_fee_pool()
+        .unwrap()
+        .amount()
 }
 
 fn create_store() -> (TestStore, TempDir) {

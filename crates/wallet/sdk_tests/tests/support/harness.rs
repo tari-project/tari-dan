@@ -92,7 +92,12 @@ impl Test {
 
 impl<TNetwork: WalletNetworkInterface> TestWithNetwork<TNetwork> {
     pub fn with_network(network: TNetwork) -> Self {
-        let test = Self::without_accounts(network);
+        Self::with_network_trusting(network, IndexerTrust::Trust)
+    }
+
+    /// A wallet with the test account, which trusts its indexer as far as `indexer_trust` says.
+    pub fn with_network_trusting(network: TNetwork, indexer_trust: IndexerTrust) -> Self {
+        let test = Self::without_accounts_trusting(network, indexer_trust);
         let accounts_api = test.sdk.accounts_api();
         accounts_api
             .add_account(

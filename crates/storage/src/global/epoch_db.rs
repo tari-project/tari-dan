@@ -20,8 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::{Epoch, ShardGroup, ValidatorSetHash};
+use tari_sidechain::FixedHash;
 use tari_template_lib_types::Hash32;
 
 use crate::global::GlobalDbAdapter;

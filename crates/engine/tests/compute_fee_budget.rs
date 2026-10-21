@@ -12,7 +12,7 @@
 use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_engine::fees::FeeTable;
 use tari_engine_types::{
-    commit_result::{ExecutionFailureCode, RejectReason},
+    commit_result::{ExecutionFailureCode, RejectReason, TransactionResult},
     fees::FeeSource,
     limits::FREE_COMPUTE_GRACE_POINTS,
 };
@@ -356,4 +356,105 @@ fn a_dry_run_is_bound_by_the_fee_intents_credit() {
     test.set_dry_run(true);
     let reason = test.execute_expect_failure(tx, vec![owner]);
     assert_fee_intent_credit_exceeded(&reason);
+}
+
+/// Host-only instructions after the last WASM call are charged outside every invocation's
+/// allowance, so a main intent that spends its allowance and then runs them can finish a few
+/// microtari past the payment. The fee intent paid for its own commit, so that commit still settles
+/// and collects the whole payment; the shortfall is no reason to refund the work that already ran.
+#[test]
+fn charges_after_the_last_invocation_still_collect_the_payment() {
+    const TRAILING_HOST_CALLS: u64 = 8;
+
+    let Harness {
+        mut test,
+        bench,
+        account,
+        owner,
+        key,
+        per_round,
+    } = setup();
+    let mut fee_table = test.fee_table().clone();
+    fee_table.per_module_call_cost = 1;
+    test.set_fee_table(fee_table);
+
+    let rounds = ABOVE_GRACE_POINTS / per_round;
+    let tx = |payment: u64| {
+        let mut builder = Transaction::builder_localnet(Epoch(1))
+            .pay_fee_from_component(account, payment)
+            .call_function(bench, "bench_div_u64", args![rounds]);
+        for _ in 0..TRAILING_HOST_CALLS {
+            builder = builder.drop_all_proofs_in_workspace();
+        }
+        builder.build_and_seal(&key)
+    };
+
+    // Both payments encode at the same width, so the two runs meter identically.
+    let funded = test.execute_expect_success(tx(ABOVE_GRACE_POINTS * 2), vec![owner.clone()]);
+    let charged = funded.finalize.fee_receipt.total_fees_charged();
+
+    // Short by less than the trailing calls cost: the WASM call still fits its allowance and
+    // finishes, and only the trailing calls take the total past the payment.
+    let payment = charged - TRAILING_HOST_CALLS / 2;
+    let result = test.try_execute(tx(payment), vec![owner]).unwrap();
+    assert_eq!(
+        result.wasm_execution_points, funded.wasm_execution_points,
+        "the WASM call must run to completion"
+    );
+
+    assert!(
+        result.finalize.is_fee_only(),
+        "expected the fee intent to commit and the rest to be rejected (AcceptFeeRejectRest), got {:?}",
+        result.finalize.result,
+    );
+    assert_insufficient_fees(result.expect_failure());
+    let fee_receipt = &result.finalize.fee_receipt;
+    assert_eq!(fee_receipt.total_fees_paid(), payment, "the whole payment is collected");
+    assert_eq!(
+        fee_receipt.total_fees_charged(),
+        charged,
+        "the receipt reports what was metered"
+    );
+    assert_eq!(fee_receipt.unpaid_debt(), TRAILING_HOST_CALLS / 2);
+}
+
+/// A fee intent whose own commit costs more than it paid still commits nothing, whatever the main
+/// intent did. Its execution is priced only at finalization, so a payment can clear the checkpoint
+/// and still fall short of what the fee intent ran.
+#[test]
+fn a_fee_intent_that_cannot_pay_for_itself_commits_nothing() {
+    // Clears the checkpoint, which prices no execution under this fee table, but not the points the
+    // fee intent's own call ran.
+    const FEE_PAYMENT: u64 = 1_000;
+
+    let Harness {
+        mut test,
+        bench,
+        account,
+        owner,
+        key,
+        per_round,
+    } = setup();
+
+    let rounds = BELOW_GRACE_POINTS / per_round;
+    let tx = Transaction::builder_localnet(Epoch(1))
+        .with_fee_instructions_builder(|builder| {
+            builder
+                .call_function(bench, "bench_div_u64", args![rounds])
+                .pay_fee_from_component(account, FEE_PAYMENT)
+        })
+        .drop_all_proofs_in_workspace()
+        .build_and_seal(&key);
+
+    let result = test.try_execute(tx, vec![owner]).unwrap();
+    assert!(
+        matches!(
+            result.finalize.result,
+            TransactionResult::Reject(RejectReason::InsufficientFeesPaid(_))
+        ),
+        "expected the whole transaction to be rejected, got {:?}",
+        result.finalize.result,
+    );
+    assert_eq!(result.finalize.fee_receipt.total_fees_paid(), 0);
+    assert!(result.finalize.fee_receipt.total_fees_charged() > FEE_PAYMENT);
 }

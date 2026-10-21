@@ -1,0 +1,460 @@
+// Copyright 2024 The Tari Project
+// SPDX-License-Identifier: BSD-3-Clause
+
+use std::fmt::Display;
+
+use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
+use tari_crypto::signatures::{CompressedSchnorrSignature, SchnorrSignature};
+use tari_hashing::ValidatorNodeHashDomain;
+use tari_jellyfish::{JmtHashScheme, LeafKey, SparseMerkleProofExt, TreeHash};
+use tari_utilities::ByteArray;
+
+use super::error::SidechainProofValidationError;
+use crate::{
+    command::{Command, ToCommand},
+    hashing,
+    qc_signatures::{QcSignatures, SigningCommittee},
+    serde::{hex_or_bytes, option_hex_or_bytes},
+    shard_group::ShardGroup,
+    types::{CompressedPublicKey, FixedHash, PrivateKey, UncompressedPublicKey},
+    validations::check_proof_elements,
+};
+
+pub type ValidatorBlockSignature =
+    CompressedSchnorrSignature<UncompressedPublicKey, PrivateKey, ValidatorNodeHashDomain>;
+/// A [`ValidatorBlockSignature`] decoded to curve points, the form it is verified in.
+pub type DecodedValidatorBlockSignature = SchnorrSignature<UncompressedPublicKey, PrivateKey, ValidatorNodeHashDomain>;
+
+/// The JMT hash scheme a sidechain block's `command_merkle_root` was built with, selected by the header's
+/// `protocol_version`. Ootle builds the root, so this mapping must match Ootle's for every protocol version. A new
+/// scheme is a new arm here.
+///
+/// The `0..` arm deliberately maps future versions to `V1`. Once Ootle builds roots for a version under a new scheme,
+/// that version fails closed here (`RootHashMismatch`) until it is mapped, so update this arm in lockstep with Ootle.
+pub fn jmt_hash_scheme(protocol_version: u32) -> JmtHashScheme {
+    match protocol_version {
+        0.. => JmtHashScheme::V1,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, BorshSerialize, BorshDeserialize)]
+pub enum CommandCommitProof<C> {
+    V1(CommandCommitProofV1<C>),
+}
+
+impl<C: ToCommand> CommandCommitProof<C> {
+    pub fn new(command: C, commit_proof: SidechainBlockCommitProof, inclusion_proof: SparseMerkleProofExt) -> Self {
+        Self::V1(CommandCommitProofV1 {
+            command,
+            commit_proof,
+            inclusion_proof,
+        })
+    }
+
+    pub fn command(&self) -> &C {
+        match self {
+            CommandCommitProof::V1(v1) => &v1.command,
+        }
+    }
+
+    pub fn header(&self) -> &SidechainBlockHeader {
+        match self {
+            CommandCommitProof::V1(v1) => &v1.commit_proof.header,
+        }
+    }
+
+    pub fn epoch(&self) -> u64 {
+        match self {
+            CommandCommitProof::V1(v1) => v1.commit_proof.header().epoch,
+        }
+    }
+
+    pub fn shard_group(&self) -> ShardGroup {
+        match self {
+            CommandCommitProof::V1(v1) => v1.commit_proof.header().shard_group,
+        }
+    }
+
+    /// See [`SidechainBlockCommitProof::validate_committed`].
+    pub fn validate_committed(
+        &self,
+        network: u8,
+        quorum_threshold: u64,
+        committee: &dyn SigningCommittee,
+    ) -> Result<(), SidechainProofValidationError> {
+        #[allow(clippy::single_match)]
+        match self {
+            CommandCommitProof::V1(v1) => v1.validate_committed(network, quorum_threshold, committee),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, BorshSerialize, BorshDeserialize)]
+pub struct CommandCommitProofV1<C> {
+    pub command: C,
+    pub commit_proof: SidechainBlockCommitProof,
+    pub inclusion_proof: SparseMerkleProofExt,
+}
+
+impl<C: ToCommand> CommandCommitProofV1<C> {
+    pub fn command(&self) -> &C {
+        &self.command
+    }
+
+    pub fn commit_proof(&self) -> &SidechainBlockCommitProof {
+        &self.commit_proof
+    }
+
+    pub fn inclusion_proof(&self) -> &SparseMerkleProofExt {
+        &self.inclusion_proof
+    }
+
+    fn validate_inclusion_proof(&self, command: &Command) -> Result<(), SidechainProofValidationError> {
+        let command_hash = TreeHash::new(command.hash().into_array());
+        // Command JMT uses an identity mapping between hashes and keys.
+        let key = LeafKey::new(command_hash);
+        let root_hash = TreeHash::new(self.commit_proof.header.command_merkle_root.into_array());
+        self.inclusion_proof.verify_inclusion(
+            jmt_hash_scheme(self.commit_proof.header.protocol_version),
+            &root_hash,
+            &key,
+            &command_hash,
+        )?;
+        Ok(())
+    }
+
+    /// See [`SidechainBlockCommitProof::validate_committed`].
+    pub fn validate_committed(
+        &self,
+        network: u8,
+        quorum_threshold: u64,
+        committee: &dyn SigningCommittee,
+    ) -> Result<(), SidechainProofValidationError> {
+        let command = self.command.to_command();
+        self.validate_inclusion_proof(&command)?;
+        self.commit_proof
+            .validate_committed(network, quorum_threshold, committee)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, BorshSerialize, BorshDeserialize)]
+pub struct SidechainBlockCommitProof {
+    pub header: SidechainBlockHeader,
+    pub proof_elements: Vec<CommitProofElement>,
+}
+
+impl SidechainBlockCommitProof {
+    /// Validates that the header's block committed on `network`, signed by a quorum of `committee`.
+    /// `quorum_threshold` must be positive.
+    ///
+    /// The caller binds the header's epoch and shard group by passing that epoch and shard group's committee.
+    pub fn validate_committed(
+        &self,
+        network: u8,
+        quorum_threshold: u64,
+        committee: &dyn SigningCommittee,
+    ) -> Result<(), SidechainProofValidationError> {
+        check_proof_elements(
+            network,
+            &self.header,
+            &self.proof_elements,
+            committee,
+            QuorumDecision::Accept,
+            quorum_threshold,
+        )?;
+
+        Ok(())
+    }
+
+    pub fn proof_elements(&self) -> &[CommitProofElement] {
+        &self.proof_elements
+    }
+
+    pub fn header(&self) -> &SidechainBlockHeader {
+        &self.header
+    }
+
+    pub fn last_qc(&self) -> Option<&QuorumCertificate> {
+        self.proof_elements
+            .iter()
+            .filter_map(|elem| match elem {
+                CommitProofElement::QuorumCertificate(qc) => Some(qc),
+                _ => None,
+            })
+            .next_back()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, BorshSerialize, BorshDeserialize)]
+pub enum CommitProofElement {
+    QuorumCertificate(QuorumCertificate),
+    ChainLinks(Vec<ChainLink>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, BorshSerialize, BorshDeserialize)]
+pub struct ChainLink {
+    #[serde(with = "hex_or_bytes")]
+    pub header_hash: FixedHash,
+    #[serde(with = "hex_or_bytes")]
+    pub parent_id: FixedHash,
+}
+
+impl ChainLink {
+    pub fn calc_block_id(&self) -> FixedHash {
+        hashing::block_id_hasher()
+            .chain(&self.parent_id)
+            .chain(&self.header_hash)
+            .finalize()
+            .into()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, BorshSerialize, BorshDeserialize)]
+pub struct SidechainBlockHeader {
+    pub network: u8,
+    /// The protocol version the block was produced under. A block is self-describing: [`Self::calculate_hash`]
+    /// selects its hash schema from this field alone, so this crate can hash any block it is given without knowing
+    /// the sidechain's per-network activation schedule.
+    pub protocol_version: u32,
+    #[serde(with = "hex_or_bytes")]
+    pub parent_id: FixedHash,
+    #[serde(with = "hex_or_bytes")]
+    pub justify_id: FixedHash,
+    pub height: u64,
+    pub epoch: u64,
+    #[serde(with = "hex_or_bytes")]
+    pub epoch_hash: FixedHash,
+    pub shard_group: ShardGroup,
+    pub proposed_by: CompressedPublicKey,
+    #[serde(with = "hex_or_bytes")]
+    pub state_merkle_root: FixedHash,
+    #[serde(with = "hex_or_bytes")]
+    pub command_merkle_root: FixedHash,
+    /// A Merkle root over the outcome of each transaction this block finalizes, which lets a client prove that a
+    /// transaction committed or aborted in this block. A block that finalizes no transactions carries none.
+    #[serde(default, with = "option_hex_or_bytes", skip_serializing_if = "Option::is_none")]
+    pub transaction_merkle_root: Option<FixedHash>,
+    /// Signature of block by the proposer.
+    pub signature: ValidatorBlockSignature,
+    pub accumulated_data: ShardGroupAccumulatedData,
+    #[serde(with = "hex_or_bytes")]
+    pub metadata_hash: FixedHash,
+}
+
+impl SidechainBlockHeader {
+    pub fn calculate_hash(&self) -> FixedHash {
+        let fields = match self.protocol_version {
+            protocol_version @ 0.. => BlockHeaderHashFields::V1(BlockHeaderHashFieldsV1 {
+                network: self.network,
+                protocol_version,
+                justify_id: &self.justify_id,
+                height: self.height,
+                epoch: self.epoch,
+                epoch_hash: &self.epoch_hash,
+                shard_group: self.shard_group,
+                proposed_by: self.proposed_by.as_bytes(),
+                state_merkle_root: &self.state_merkle_root,
+                command_merkle_root: &self.command_merkle_root,
+                transaction_merkle_root: self.transaction_merkle_root.as_ref(),
+                accumulated_data: &self.accumulated_data,
+                metadata_hash: &self.metadata_hash,
+            }),
+        };
+
+        hashing::block_header_hasher().chain(&fields).finalize().into()
+    }
+
+    pub fn calculate_block_id(&self) -> FixedHash {
+        let header_hash = self.calculate_hash();
+        hashing::block_id_hasher()
+            .chain(&self.parent_id)
+            .chain(&header_hash)
+            .finalize()
+            .into()
+    }
+
+    pub fn signature(&self) -> &ValidatorBlockSignature {
+        &self.signature
+    }
+
+    pub fn transaction_merkle_root(&self) -> Option<&FixedHash> {
+        self.transaction_merkle_root.as_ref()
+    }
+
+    pub fn accumulated_data(&self) -> &ShardGroupAccumulatedData {
+        &self.accumulated_data
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, BorshSerialize, BorshDeserialize)]
+pub struct ShardGroupAccumulatedData {
+    pub total_exhaust_burn: u128,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, BorshSerialize, BorshDeserialize)]
+pub struct QuorumCertificate {
+    #[serde(with = "hex_or_bytes")]
+    pub header_hash: FixedHash,
+    #[serde(with = "hex_or_bytes")]
+    pub parent_id: FixedHash,
+    /// The protocol version of the block this certificate justifies, which selects the message its members signed.
+    /// A certificate is self-describing for the same reason a header is, and carries its own version because the
+    /// certificates in a proof may justify blocks either side of an activation from the block in its header.
+    pub protocol_version: u32,
+    /// The epoch of the justified block. Each member signs over it, so a mismatch fails signature verification.
+    pub epoch: u64,
+    /// The height of the justified block. See `epoch`.
+    pub height: u64,
+    pub signatures: QcSignatures,
+    pub decision: QuorumDecision,
+}
+
+impl QuorumCertificate {
+    pub fn calculate_justified_block(&self) -> FixedHash {
+        hashing::block_id_hasher()
+            .chain(&self.parent_id)
+            .chain(&self.header_hash)
+            .finalize()
+            .into()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+pub enum QuorumDecision {
+    Accept,
+    Reject,
+}
+
+impl QuorumDecision {
+    pub fn is_accept(&self) -> bool {
+        matches!(self, QuorumDecision::Accept)
+    }
+
+    pub fn is_reject(&self) -> bool {
+        matches!(self, QuorumDecision::Reject)
+    }
+}
+
+impl QuorumDecision {
+    pub fn as_u8(&self) -> u8 {
+        match self {
+            QuorumDecision::Accept => 0,
+            QuorumDecision::Reject => 1,
+        }
+    }
+
+    pub fn from_u8(v: u8) -> Option<Self> {
+        match v {
+            0 => Some(QuorumDecision::Accept),
+            1 => Some(QuorumDecision::Reject),
+            _ => None,
+        }
+    }
+}
+
+impl TryFrom<u8> for QuorumDecision {
+    type Error = InvalidQuorumDecisionByteError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Self::from_u8(value).ok_or(InvalidQuorumDecisionByteError(value))
+    }
+}
+
+impl Display for QuorumDecision {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            QuorumDecision::Accept => write!(f, "Accept"),
+            QuorumDecision::Reject => write!(f, "Reject"),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("Invalid quorum decision byte: {0}")]
+pub struct InvalidQuorumDecisionByteError(u8);
+
+/// The message a proposal vote signs, in the shape the block's protocol version calls for. Signing and verifying
+/// both go through this so that the two cannot select different shapes.
+///
+/// Each variant serialises as its inner fields with no discriminant. Every shape commits to the protocol version, so
+/// no two versions share a message.
+#[derive(Debug)]
+pub enum ProposalVoteMessage<'a> {
+    V1(ProposalCertificateSignatureFieldsV1<'a>),
+}
+
+impl<'a> ProposalVoteMessage<'a> {
+    pub fn new(
+        protocol_version: u32,
+        block_id: &'a FixedHash,
+        decision: QuorumDecision,
+        epoch: u64,
+        height: u64,
+    ) -> Self {
+        match protocol_version {
+            protocol_version @ 0.. => Self::V1(ProposalCertificateSignatureFieldsV1 {
+                protocol_version,
+                block_id,
+                decision,
+                epoch,
+                height,
+            }),
+        }
+    }
+
+    pub fn calculate_hash(&self) -> FixedHash {
+        hashing::proposal_vote_signature_hasher().chain(self).finalize().into()
+    }
+}
+
+impl BorshSerialize for ProposalVoteMessage<'_> {
+    fn serialize<W: borsh::io::Write>(&self, writer: &mut W) -> borsh::io::Result<()> {
+        match self {
+            Self::V1(fields) => fields.serialize(writer),
+        }
+    }
+}
+
+#[derive(Debug, BorshSerialize)]
+pub struct ProposalCertificateSignatureFieldsV1<'a> {
+    /// The version the vote was cast under. Committed to so that two versions sharing this preimage shape still
+    /// produce distinct messages, and a certificate cannot be relabelled to a version its members did not sign.
+    pub protocol_version: u32,
+    pub block_id: &'a FixedHash,
+    pub decision: QuorumDecision,
+    /// The epoch the vote was cast in. Present so that a single signature attributes the vote to a view, which is
+    /// what lets two conflicting votes be proven to be equivocation rather than two votes at different heights.
+    pub epoch: u64,
+    /// The height the vote was cast at. See `epoch`.
+    pub height: u64,
+}
+
+/// The hash preimage schemas for a sidechain block header, one per shape the header has taken. The variant is
+/// selected by [`SidechainBlockHeader::protocol_version`], so the variant index is consensus-bound: entries are
+/// append-only and never reordered.
+#[derive(Debug, BorshSerialize)]
+pub enum BlockHeaderHashFields<'a> {
+    V1(BlockHeaderHashFieldsV1<'a>),
+}
+
+#[derive(Debug, BorshSerialize)]
+pub struct BlockHeaderHashFieldsV1<'a> {
+    pub network: u8,
+    /// Committed to so that two versions sharing this preimage shape still produce distinct block IDs, and the
+    /// version a block claims cannot be altered without invalidating it.
+    pub protocol_version: u32,
+    pub justify_id: &'a FixedHash,
+    pub height: u64,
+    pub epoch: u64,
+    pub epoch_hash: &'a FixedHash,
+    pub shard_group: ShardGroup,
+    pub accumulated_data: &'a ShardGroupAccumulatedData,
+    // NOTE this is borsh encoded as variable length bytes - technically should always be 32
+    pub proposed_by: &'a [u8],
+    pub state_merkle_root: &'a FixedHash,
+    pub command_merkle_root: &'a FixedHash,
+    /// Borsh encodes the `Option` tag, so a header that carries no root and one that carries any root hash apart.
+    pub transaction_merkle_root: Option<&'a FixedHash>,
+    pub metadata_hash: &'a FixedHash,
+}

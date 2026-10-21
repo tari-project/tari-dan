@@ -37,7 +37,7 @@
       "start": 1,
       "end_inclusive": 127
     },
-    "signatures": [],
+    "signatures": { "Schnorr": { "signers": "", "signatures": [] } },
     "leaf_hashes": [],
     "decision": "Accept",
     "is_shares_processed": false

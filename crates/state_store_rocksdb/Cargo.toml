@@ -9,7 +9,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-tari_common_types = { workspace = true } # needed for FixedHash
+tari_sidechain = { workspace = true }
 tari_ootle_storage = { workspace = true }
 tari_ootle_common_types = { workspace = true }
 tari_ootle_transaction = { workspace = true }
@@ -32,11 +32,11 @@ tari_bor = { workspace = true, features = ["serde"] }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+tari_common_types = { workspace = true }
 tempfile = { workspace = true }
 rand = { workspace = true }
 tari_utilities = { workspace = true }
 tari_template_lib = { workspace = true }
-tari_sidechain = { workspace = true }
 # Dev-dep cycle: rollback-only storage primitives moved out of this crate's lib into
 # `tari_validator_rollback::storage`, but the tests that exercise them stay here for
 # the helpers. Cargo permits this because dev-deps don't create a real build cycle.

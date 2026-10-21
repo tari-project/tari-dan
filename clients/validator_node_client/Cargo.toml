@@ -13,7 +13,6 @@ tari_base_node_client = { workspace = true }
 tari_ootle_common_types = { workspace = true }
 tari_ootle_p2p = { workspace = true }
 tari_engine_types = { workspace = true }
-tari_common_types = { workspace = true }
 tari_ootle_transaction = { workspace = true }
 tari_ootle_storage = { workspace = true }
 tari_sidechain = { workspace = true }

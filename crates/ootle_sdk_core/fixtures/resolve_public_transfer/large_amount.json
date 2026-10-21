@@ -2,8 +2,8 @@
   "name": "resolve_public_transfer/large_amount",
   "schema_version": 1,
   "provenance": {
-    "core_version": "0.41.2",
-    "git_rev": "397cfaae8ea3b09ff5a6dcd8be33d85db8c18235",
+    "core_version": "0.47.0",
+    "git_rev": "a25b2ca804a1ae75cb3f1fc1c3860e7cb5073b90",
     "generated_by": "ootle_sdk_core golden-vector generator"
   },
   "operation": "resolve_and_encode_public_transfer",
@@ -153,7 +153,7 @@
                 }
               }
             ],
-            "is_seal_signer_authorized": true,
+            "main_signer": "SealSigner",
             "max_epoch": 10,
             "min_epoch": 1,
             "network": 38,

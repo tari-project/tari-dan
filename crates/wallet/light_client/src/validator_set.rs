@@ -141,9 +141,7 @@ impl TrustedValidatorSet {
             });
         }
         checkpoint
-            .validate(epoch, self.committee.quorum_threshold(), |pk| {
-                Ok(self.committee.vote_power(pk))
-            })
+            .validate(network, epoch, self.committee.quorum_threshold(), &self.committee)
             .map_err(|source| LightClientError::InvalidCheckpoint { epoch, source })?;
 
         let next_set = next_validator_set(&checkpoint)?;
@@ -188,7 +186,10 @@ impl TrustedValidatorSetHash {
     }
 }
 
-fn decode_checkpoint(network: Network, entry: &EpochCheckpointEntry) -> Result<EpochCheckpoint, LightClientError> {
+pub(crate) fn decode_checkpoint(
+    network: Network,
+    entry: &EpochCheckpointEntry,
+) -> Result<EpochCheckpoint, LightClientError> {
     let checkpoint: EpochCheckpoint = tari_bor::decode_with_max_depth(&entry.checkpoint, MAX_CBOR_NESTING_DEPTH)
         .map_err(|e| LightClientError::Decode {
             what: "epoch checkpoint",

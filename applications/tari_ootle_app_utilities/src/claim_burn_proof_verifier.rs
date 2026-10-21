@@ -6,7 +6,7 @@ use std::fmt::Display;
 use blake2::{Blake2b, digest::consts::U32};
 use log::*;
 use ootle_byte_type::ConvertFromByteType;
-use tari_common_types::types::{CompressedCommitment, CompressedPublicKey, CompressedSignature, FixedHash, PrivateKey};
+use tari_common_types::types::{CompressedCommitment, CompressedPublicKey, CompressedSignature, PrivateKey};
 use tari_crypto::{
     commitment::HomomorphicCommitmentFactory,
     ristretto::{RistrettoSchnorr, RistrettoSecretKey, pedersen::PedersenCommitment},
@@ -32,6 +32,7 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_storage::global::{GlobalDb, GlobalDbAdapter};
 use tari_ootle_transaction::Network;
+use tari_sidechain::FixedHash;
 use tari_template_lib::types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
 use tari_transaction_components::{
     MicroMinotari,
@@ -665,7 +666,7 @@ mod burn_output_proof_tests {
     use tari_common_types::{
         burn_proof::{BurnOutputProof, MmrInclusionProof as L1MmrInclusionProof, OutputHashPreimage},
         epoch::VnEpoch,
-        types::{ComAndPubSignature, CompressedCommitment, CompressedPublicKey, FixedHash, PrivateKey},
+        types::{ComAndPubSignature, CompressedCommitment, CompressedPublicKey, PrivateKey},
     };
     use tari_crypto::{
         commitment::HomomorphicCommitmentFactory,
@@ -693,6 +694,7 @@ mod burn_output_proof_tests {
     use tari_ootle_storage_sqlite::{SqliteDbFactory, global::SqliteGlobalDbAdapter};
     use tari_ootle_transaction::Network;
     use tari_script::script;
+    use tari_sidechain::FixedHash;
     use tari_template_lib::types::{
         Hash32,
         crypto::{PedersenCommitmentBytes, RistrettoPublicKeyBytes},
@@ -724,7 +726,7 @@ mod burn_output_proof_tests {
         hash_burn_output,
         verify_output_inclusion,
     };
-    use crate::burn_claim_proof::claim_proof_from_l1;
+    use crate::burn_claim_proof::{burn_output_proof_from_l1, claim_proof_from_l1};
 
     type Adapter = SqliteGlobalDbAdapter<RistrettoPublicKeyBytes>;
     type OutputMmr = MerkleMountainRange<InputMmrHasherBlake256, Vec<Hash>>;
@@ -1013,9 +1015,13 @@ mod burn_output_proof_tests {
             let claim = claim_of(&burn, block_with(&burn.output, 0, 1, 0).0, None);
             let hash = hash_burn_output(network(), &claim).unwrap();
             if burn.output.features.output_type == OutputType::Burn {
-                assert_eq!(hash, burn.output.hash());
+                assert_eq!(hash.into_array(), burn.output.hash().into_array());
             } else {
-                assert_ne!(hash, burn.output.hash(), "a claim cannot express a non-burn output");
+                assert_ne!(
+                    hash.into_array(),
+                    burn.output.hash().into_array(),
+                    "a claim cannot express a non-burn output"
+                );
             }
         }
     }
@@ -1028,7 +1034,10 @@ mod burn_output_proof_tests {
         burn.output.script = script!(Nop Nop PushPubKey(Box::new(random_public_key()))).unwrap();
         burn.output.encrypted_data = EncryptedData::from_bytes(&[7u8; 120]).unwrap();
         let claim = claim_of(&burn, block_with(&burn.output, 0, 1, 0).0, None);
-        assert_eq!(hash_burn_output(network(), &claim).unwrap(), burn.output.hash());
+        assert_eq!(
+            hash_burn_output(network(), &claim).unwrap().into_array(),
+            burn.output.hash().into_array()
+        );
     }
 
     #[test]
@@ -1061,7 +1070,7 @@ mod burn_output_proof_tests {
         chain.add_header(Epoch(4), inclusion.block_hash, block_output_mr);
         let expected = claim_of(&burn, inclusion.clone(), None);
 
-        let fixed = |hash: &Hash32| FixedHash::from(hash.into_array());
+        let fixed = |hash: &Hash32| tari_common_types::types::FixedHash::from(hash.into_array());
         let l1_mmr_proof = |proof: &MmrInclusionProof| L1MmrInclusionProof {
             leaf_index: proof.leaf_index,
             mmr_size: proof.mmr_size,
@@ -1076,11 +1085,13 @@ mod burn_output_proof_tests {
             normal_output_mr: fixed(&inclusion.normal_output_mr),
             block_output_proof: l1_mmr_proof(&inclusion.block_output_proof),
         };
-        output_proof.verify(&block_output_mr).unwrap();
+        output_proof
+            .verify(&tari_common_types::types::FixedHash::from(block_output_mr.into_array()))
+            .unwrap();
         let l1_claim = tari_sidechain::BurnClaimProof {
             burn_public_key: random_public_key(),
             ownership_proof: compressed_signature("ownership proof", &expected.ownership_proof).unwrap(),
-            output_proof,
+            output_proof: burn_output_proof_from_l1(output_proof),
             value: VALUE,
         };
 
@@ -1096,8 +1107,12 @@ mod burn_output_proof_tests {
         for (num_coinbases, num_normal, index) in [(0, 1, 0), (1, 2, 1), (2, 3, 2), (5, 7, 3), (8, 16, 15), (3, 33, 0)]
         {
             let (proof, block_output_mr) = block_with(&burn.output, num_coinbases, num_normal, index);
-            verify_output_inclusion(&proof, &burn.output.hash(), &block_output_mr)
-                .unwrap_or_else(|e| panic!("({num_coinbases}, {num_normal}, {index}): {e}"));
+            verify_output_inclusion(
+                &proof,
+                &FixedHash::from(burn.output.hash().into_array()),
+                &block_output_mr,
+            )
+            .unwrap_or_else(|e| panic!("({num_coinbases}, {num_normal}, {index}): {e}"));
         }
     }
 
@@ -1276,14 +1291,19 @@ mod burn_output_proof_tests {
         let burn = l1_burn(None);
         let (mut proof, block_output_mr) = block_with(&burn.output, 2, 3, 1);
         proof.block_output_proof.leaf_index = 1;
-        let err = verify_output_inclusion(&proof, &burn.output.hash(), &block_output_mr).unwrap_err();
+        let err = verify_output_inclusion(
+            &proof,
+            &FixedHash::from(burn.output.hash().into_array()),
+            &block_output_mr,
+        )
+        .unwrap_err();
         assert!(err.contains("last leaf"), "{err}");
     }
 
     #[test]
     fn malformed_mmr_proofs_are_errors() {
         let burn = l1_burn(None);
-        let hash = burn.output.hash();
+        let hash = FixedHash::from(burn.output.hash().into_array());
         let (proof, block_output_mr) = block_with(&burn.output, 2, 5, 3);
         let tampered = |f: &dyn Fn(&mut BurnOutputInclusionProof)| {
             let mut proof = proof.clone();

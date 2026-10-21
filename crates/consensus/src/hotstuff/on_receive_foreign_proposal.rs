@@ -119,13 +119,13 @@ where TConsensusSpec: ConsensusSpec
 
         let is_saved = self.store.with_write_tx(|tx| {
             if let Err(err) = self.validate_and_save(tx, &proposal, local_committee_info) {
-                if matches!(
-                    err.validation_error(),
-                    Some(ProposalValidationError::ForeignPledgesNotCommitted { .. })
-                ) {
-                    // The pledges travel beside the commit proof, so a bad set says nothing about the block itself.
-                    // Nothing is recorded against the block id, so another copy is still accepted. A pending request
-                    // for the block is retried with another member of the foreign committee when it times out.
+                if err
+                    .validation_error()
+                    .is_some_and(|err| err.rejects_message_not_block())
+                {
+                    // Nothing is recorded against the block id, so another delivery of the block is still accepted. A
+                    // pending request for the block is retried with another member of the foreign committee when it
+                    // times out.
                     warn!(target: LOG_TARGET, "⚠️ Discarding foreign proposal: {}", err);
                     return Ok(false);
                 }
@@ -160,18 +160,11 @@ where TConsensusSpec: ConsensusSpec
     ) -> Result<(), HotStuffError> {
         debug!(
             target: LOG_TARGET,
-            "🌐 Receive FOREIGN PROPOSAL NOTIFICATION from {} for block {}",
+            "🌐 Receive FOREIGN PROPOSAL NOTIFICATION from {} for block {} of shard group {}",
             from,
             message.block_id,
+            message.shard_group,
         );
-        if self.pending_requests.contains(&message.block_id) {
-            info!(
-                target: LOG_TARGET,
-                "🌐 FOREIGN PROPOSAL: Already requested block {}. Ignoring.",
-                message.block_id,
-            );
-            return Ok(());
-        }
 
         // The notification is gossiped on a single network-wide topic, so every validator receives it. Only fetch the
         // foreign proposal if our shard group is in the intended audience.
@@ -181,6 +174,30 @@ where TConsensusSpec: ConsensusSpec
                 "🌐 FOREIGN PROPOSAL: notification for block {} does not target our shard group {}. Ignoring.",
                 message.block_id,
                 local_committee_info.shard_group(),
+            );
+            return Ok(());
+        }
+
+        if message.shard_group == local_committee_info.shard_group() {
+            warn!(
+                target: LOG_TARGET,
+                "❓️ FOREIGN PROPOSAL: notification from {} names our own shard group {} as the source of block {}. \
+                 Ignoring.",
+                from,
+                message.shard_group,
+                message.block_id,
+            );
+            return Ok(());
+        }
+
+        // A request to one shard group does not stand in for a request to another: a notification naming a different
+        // source is followed up even while an earlier one is still awaiting its reply.
+        if self.pending_requests.contains(&message.block_id, message.shard_group) {
+            info!(
+                target: LOG_TARGET,
+                "🌐 FOREIGN PROPOSAL: Already requested block {} from shard group {}. Ignoring.",
+                message.block_id,
+                message.shard_group,
             );
             return Ok(());
         }
@@ -198,13 +215,15 @@ where TConsensusSpec: ConsensusSpec
             return Ok(());
         }
 
-        // Check if the source is in a foreign committee
-        let Some(foreign_committee_info) = self
+        // The request is charged to the notifier, so only a validator registered in the epoch may cause one. The
+        // request goes to the shard group the notification names, whichever committee the notifier sits in.
+        if self
             .epoch_manager
             .get_committee_info_by_validator_address(message.epoch, &from)
             .await
             .optional()?
-        else {
+            .is_none()
+        {
             warn!(
                 target: LOG_TARGET,
                 "❌ FOREIGN PROPOSAL: notification for block {} from {} who is not a registered validator for epoch {}. \
@@ -214,24 +233,33 @@ where TConsensusSpec: ConsensusSpec
                 message.epoch,
             );
             return Ok(());
-        };
-
-        if local_committee_info.shard_group() == foreign_committee_info.shard_group() {
-            warn!(
-                target: LOG_TARGET,
-                "❓️ FOREIGN PROPOSAL: Received foreign proposal notification from a validator in the same shard group. Ignoring."
-            );
-            return Ok(());
         }
 
         // The shard group is from the notification's epoch, whose committee layout may differ from the current one
+        let Some(foreign_committee_info) = self
+            .epoch_manager
+            .get_committee_info(message.epoch, message.shard_group)
+            .await
+            .optional()?
+            .filter(|info| {
+                info.num_shard_group_members() > 0 && info.all_shard_groups_iter().any(|sg| sg == message.shard_group)
+            })
+        else {
+            warn!(
+                target: LOG_TARGET,
+                "❌ FOREIGN PROPOSAL: notification for block {} from {}: no committee for shard group {} in epoch {}. \
+                 Ignoring.",
+                message.block_id,
+                from,
+                message.shard_group,
+                message.epoch,
+            );
+            return Ok(());
+        };
+
         let Some(selected) = self
             .epoch_manager
-            .get_random_committee_member(
-                foreign_committee_info.epoch(),
-                Some(foreign_committee_info.shard_group()),
-                Default::default(),
-            )
+            .get_random_committee_member(message.epoch, Some(message.shard_group), Default::default())
             .await
             .optional()?
         else {
@@ -241,8 +269,8 @@ where TConsensusSpec: ConsensusSpec
                  Ignoring.",
                 message.block_id,
                 from,
-                foreign_committee_info.shard_group(),
-                foreign_committee_info.epoch(),
+                message.shard_group,
+                message.epoch,
             );
             return Ok(());
         };
@@ -250,7 +278,7 @@ where TConsensusSpec: ConsensusSpec
         info!(
             target: LOG_TARGET,
             "🌐 REQUEST foreign proposal {} for block {} from {}",
-            foreign_committee_info.shard_group(),
+            message.shard_group,
             message.block_id,
             selected,
         );
@@ -528,13 +556,15 @@ where TConsensusSpec: ConsensusSpec
             });
         }
 
-        validate_evidence_and_pledges_match(proposal, local_committee_info.shard_group())?;
+        validate_foreign_proposal_contents(proposal, local_committee_info.shard_group())?;
 
         Ok(())
     }
 }
 
-pub(super) fn validate_evidence_and_pledges_match(
+/// Checks what the relayer of an authenticated foreign proposal chose to send for the local shard group: the pledges
+/// match the values the evidence commits to, and every command the local shard group needs is carried in full.
+pub(super) fn validate_foreign_proposal_contents(
     proposal: &ForeignProposal,
     local_shard_group: ShardGroup,
 ) -> Result<(), ProposalValidationError> {
@@ -559,6 +589,14 @@ pub(super) fn validate_evidence_and_pledges_match(
                 shard_group: foreign_shard_group,
                 details: e.into(),
             })?;
+    if let Some(withheld) = proposal.commit_proof().withheld_command_for(local_shard_group) {
+        return Err(ProposalValidationError::ForeignProposalWithholdsCommand {
+            block_id: proposal.calculate_block_id(),
+            shard_group: foreign_shard_group,
+            local_shard_group,
+            command_hash: withheld.hash,
+        });
+    }
     // A rejected proposal is never applied. A transaction waiting on it in LocalPrepared aborts in the first epoch
     // after its max_epoch plus `LOCAL_PREPARED_GRACE_EPOCHS` (see
     // `TransactionPoolRecord::is_local_prepared_expired_at`); one that has already sent its LocalAccept keeps
@@ -653,23 +691,11 @@ fn generate_transaction_commands_commit_proof_for_shard_group<TTx: StateStoreRea
     for_shard_group: ShardGroup,
 ) -> Result<CommandsCommitProof, HotStuffError> {
     let _timer = TraceTimer::info(LOG_TARGET, "generate_transaction_commands_commit_proof_for_shard_group");
-    let applicable_commands = committed_block.commands().iter().map(|cmd| {
-        let is_involved_local_prepare_with_inputs = cmd
-            .local_prepare()
-            .map(|atom| atom.evidence.has_inputs(for_shard_group))
-            .unwrap_or(false);
-
-        let is_involved_local_accept = cmd
-            .local_accept()
-            .map(|atom| atom.evidence.has(&for_shard_group))
-            .unwrap_or(false);
-
-        if is_involved_local_prepare_with_inputs || is_involved_local_accept {
-            CommandOrHash::Command(cmd.clone())
-        } else {
-            CommandOrHash::Hash(cmd.hash(committed_block.header().protocol_version()))
-        }
-    });
+    let protocol_version = committed_block.header().protocol_version();
+    let applicable_commands = committed_block
+        .commands()
+        .iter()
+        .map(|cmd| CommandOrHash::for_shard_group(protocol_version, cmd, for_shard_group));
 
     let proof = generate_block_commit_proof(tx, commit_qc, committed_block)?;
     let command_commit_proof = CommandsCommitProof::new_latest(applicable_commands.collect(), proof);
@@ -682,8 +708,11 @@ fn generate_transaction_commands_commit_proof_for_shard_group<TTx: StateStoreRea
 ///
 /// A foreign proposal is only ever sent in reply to a request, so this is also the record of which peers may send us
 /// which foreign proposals.
+///
+/// A block's requests are kept per shard group named as its source, each retried and exhausted on its own, so a
+/// notification naming a committee that does not hold the block never holds back the request to the one that does.
 struct PendingRequests<TAddr> {
-    pending: HashMap<BlockId, ForeignRequests<TAddr>>,
+    pending: HashMap<BlockId, HashMap<ShardGroup, ForeignRequests<TAddr>>>,
     num_pending_by_notifier: HashMap<TAddr, usize>,
     unretried: UnretriedRequests<TAddr>,
 }
@@ -697,17 +726,23 @@ impl<TAddr: NodeAddressable> PendingRequests<TAddr> {
         }
     }
 
-    pub(self) fn contains(&self, block_id: &BlockId) -> bool {
-        self.pending.contains_key(block_id)
+    pub(self) fn contains(&self, block_id: &BlockId, shard_group: ShardGroup) -> bool {
+        self.pending
+            .get(block_id)
+            .is_some_and(|by_shard_group| by_shard_group.contains_key(&shard_group))
+    }
+
+    fn get_mut(&mut self, block_id: &BlockId, shard_group: ShardGroup) -> Option<&mut ForeignRequests<TAddr>> {
+        self.pending.get_mut(block_id)?.get_mut(&shard_group)
     }
 
     /// Closes the open request that asked `peer` for the foreign proposal of `block_id`, returning whether there was
     /// one. Each request admits a single reply, whether or not that reply turns out to be valid.
     pub(self) fn take_reply(&mut self, block_id: &BlockId, peer: &TAddr) -> bool {
-        let was_pending = self
-            .pending
-            .get_mut(block_id)
-            .is_some_and(|requests| requests.awaiting.remove(peer));
+        let mut was_pending = false;
+        for requests in self.pending.get_mut(block_id).into_iter().flat_map(|r| r.values_mut()) {
+            was_pending |= requests.awaiting.remove(peer);
+        }
         let was_unretried = self.unretried.take(block_id, peer);
         was_pending || was_unretried
     }
@@ -716,7 +751,7 @@ impl<TAddr: NodeAddressable> PendingRequests<TAddr> {
     fn is_awaiting_reply(&self, block_id: &BlockId, peer: &TAddr) -> bool {
         self.pending
             .get(block_id)
-            .is_some_and(|requests| requests.awaiting.contains(peer)) ||
+            .is_some_and(|by_shard_group| by_shard_group.values().any(|requests| requests.awaiting.contains(peer))) ||
             self.unretried.contains(block_id, peer)
     }
 
@@ -735,7 +770,7 @@ impl<TAddr: NodeAddressable> PendingRequests<TAddr> {
         block_id: BlockId,
         committee_info: CommitteeInfo,
     ) -> bool {
-        if let Some(entry) = self.pending.get_mut(&block_id) {
+        if let Some(entry) = self.get_mut(&block_id, committee_info.shard_group()) {
             entry.awaiting.insert(requested_from.clone());
             entry.peers.insert(requested_from);
             entry.at = Instant::now();
@@ -748,13 +783,16 @@ impl<TAddr: NodeAddressable> PendingRequests<TAddr> {
         }
 
         *self.num_pending_by_notifier.entry(notified_by.clone()).or_default() += 1;
-        self.pending.insert(block_id, ForeignRequests {
-            awaiting: HashSet::from([requested_from.clone()]),
-            peers: HashSet::from([requested_from]),
-            charged_to: Some(notified_by),
-            committee_info,
-            at: Instant::now(),
-        });
+        self.pending
+            .entry(block_id)
+            .or_default()
+            .insert(committee_info.shard_group(), ForeignRequests {
+                awaiting: HashSet::from([requested_from.clone()]),
+                peers: HashSet::from([requested_from]),
+                charged_to: Some(notified_by),
+                committee_info,
+                at: Instant::now(),
+            });
         true
     }
 
@@ -772,26 +810,34 @@ impl<TAddr: NodeAddressable> PendingRequests<TAddr> {
         requests.peers.insert(requested_from);
         requests.charged_to = None;
         requests.at = Instant::now();
-        self.pending.insert(block_id, requests);
+        self.pending
+            .entry(block_id)
+            .or_default()
+            .insert(requests.shard_group(), requests);
     }
 
-    pub(self) fn remove(&mut self, block_id: &BlockId) -> Option<ForeignRequests<TAddr>> {
-        let item = self.pending.remove(block_id);
-        if let Some(notifier) = item.as_ref().and_then(|requests| requests.charged_to.as_ref()) {
+    /// Closes every request for `block_id`, whichever shard group it was made to.
+    pub(self) fn remove(&mut self, block_id: &BlockId) {
+        let removed = self.pending.remove(block_id).unwrap_or_default();
+        for notifier in removed.values().filter_map(|requests| requests.charged_to.as_ref()) {
             self.release_notifier(notifier);
         }
         self.unretried.remove_block(block_id);
         if self.pending.capacity() >= 1000 {
             self.pending.shrink_to_fit();
         }
-        item
     }
 
     pub(self) fn drain_timed_out(&mut self, timeout: Duration) -> Vec<(BlockId, ForeignRequests<TAddr>)> {
-        let timed_out = self
-            .pending
-            .extract_if(|_, reqs| reqs.at.elapsed() >= timeout)
-            .collect::<Vec<_>>();
+        let mut timed_out = Vec::new();
+        self.pending.retain(|block_id, by_shard_group| {
+            timed_out.extend(
+                by_shard_group
+                    .extract_if(|_, reqs| reqs.at.elapsed() >= timeout)
+                    .map(|(_, requests)| (*block_id, requests)),
+            );
+            !by_shard_group.is_empty()
+        });
         for notifier in timed_out.iter().filter_map(|(_, requests)| requests.charged_to.clone()) {
             self.release_notifier(&notifier);
         }
@@ -898,20 +944,81 @@ mod tests {
     use super::*;
 
     fn committee_info() -> CommitteeInfo {
-        CommitteeInfo::new(
-            NumPreshards::P64,
-            1,
-            2,
-            ShardGroup::new(0, 31),
-            Epoch(1),
-            VotePower::of(1),
-        )
+        committee_info_for(ShardGroup::new(0, 31))
+    }
+
+    fn committee_info_for(shard_group: ShardGroup) -> CommitteeInfo {
+        CommitteeInfo::new(NumPreshards::P64, 1, 2, shard_group, Epoch(1), VotePower::of(1))
     }
 
     fn block_id(seed: usize) -> BlockId {
         let mut bytes = [0u8; 32];
         bytes[..8].copy_from_slice(&seed.to_le_bytes());
         BlockId::from(bytes)
+    }
+
+    #[test]
+    fn a_request_to_another_shard_group_is_kept_apart_and_outlives_the_first_ones_exhaustion() {
+        let mut pending = PendingRequests::<String>::new();
+        let (named_first, named_second) = (ShardGroup::new(0, 31), ShardGroup::new(32, 63));
+        let (first, second) = ("first".to_string(), "second".to_string());
+        assert!(pending.insert(
+            first.clone(),
+            "foreign1".to_string(),
+            block_id(0),
+            committee_info_for(named_first)
+        ));
+        assert!(!pending.contains(&block_id(0), named_second));
+        assert!(pending.insert(
+            second.clone(),
+            "foreign2".to_string(),
+            block_id(0),
+            committee_info_for(named_second)
+        ));
+        assert!(pending.contains(&block_id(0), named_first));
+        assert!(pending.contains(&block_id(0), named_second));
+
+        // The first shard group's request times out on its own and is dropped as exhausted, as
+        // `handle_timed_out_requests` does once every member has been asked
+        pending.get_mut(&block_id(0), named_first).unwrap().at = Instant::now() - REQUEST_TIMEOUT;
+        let timed_out = pending.drain_timed_out(REQUEST_TIMEOUT);
+        assert_eq!(timed_out.len(), 1);
+        assert_eq!(timed_out[0].1.shard_group(), named_first);
+        assert!(!pending.contains(&block_id(0), named_first));
+        assert!(pending.contains(&block_id(0), named_second));
+        assert!(pending.is_awaiting_reply(&block_id(0), &"foreign2".to_string()));
+
+        assert!(pending.take_reply(&block_id(0), &"foreign2".to_string()));
+        pending.remove(&block_id(0));
+        assert!(!pending.contains(&block_id(0), named_second));
+        assert!(pending.pending.is_empty());
+        assert_eq!(pending.num_notified_by(&first), 0);
+        assert_eq!(pending.num_notified_by(&second), 0);
+    }
+
+    #[test]
+    fn closing_a_block_releases_every_shard_groups_notifier() {
+        let mut pending = PendingRequests::<String>::new();
+        let (first, second) = ("first".to_string(), "second".to_string());
+        pending.insert(
+            first.clone(),
+            "foreign1".to_string(),
+            block_id(0),
+            committee_info_for(ShardGroup::new(0, 31)),
+        );
+        pending.insert(
+            second.clone(),
+            "foreign2".to_string(),
+            block_id(0),
+            committee_info_for(ShardGroup::new(32, 63)),
+        );
+        assert!(pending.take_reply(&block_id(0), &"foreign1".to_string()));
+        assert!(pending.is_awaiting_reply(&block_id(0), &"foreign2".to_string()));
+
+        pending.remove(&block_id(0));
+        assert!(pending.pending.is_empty());
+        assert_eq!(pending.num_notified_by(&first), 0);
+        assert_eq!(pending.num_notified_by(&second), 0);
     }
 
     #[test]
@@ -932,8 +1039,9 @@ mod tests {
 
         assert_eq!(recorded, MAX_PENDING_REQUESTS_PER_NOTIFIER);
         assert_eq!(pending.num_notified_by(&flooder), MAX_PENDING_REQUESTS_PER_NOTIFIER);
-        assert!(pending.contains(&block_id(0)));
-        assert!(!pending.contains(&block_id(num_notifications - 1)));
+        let shard_group = committee_info().shard_group();
+        assert!(pending.contains(&block_id(0), shard_group));
+        assert!(!pending.contains(&block_id(num_notifications - 1), shard_group));
 
         // Another notifier has its own allowance
         let other = "other".to_string();
@@ -973,6 +1081,7 @@ mod tests {
             pending
                 .pending
                 .values()
+                .flat_map(|by_shard_group| by_shard_group.values())
                 .all(|requests| requests.num_unique_peers() == 2 && requests.charged_to.is_none())
         );
 
@@ -1023,7 +1132,10 @@ mod tests {
         assert!(!pending.take_reply(&block_id(0), &asked));
         assert!(pending.take_reply(&block_id(0), &retried));
         assert!(!pending.take_reply(&block_id(0), &retried));
-        assert_eq!(pending.pending[&block_id(0)].num_unique_peers(), 2);
+        assert_eq!(
+            pending.pending[&block_id(0)][&committee_info().shard_group()].num_unique_peers(),
+            2
+        );
     }
 
     #[test]

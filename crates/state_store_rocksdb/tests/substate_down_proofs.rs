@@ -13,7 +13,6 @@ use helpers::{
     num_preshards,
     substate_id_seed,
 };
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::BlockId;
 use tari_engine_types::ProtocolVersion;
 use tari_ootle_common_types::{
@@ -47,7 +46,7 @@ use tari_ootle_storage::{
     },
     verify_substate_down_proof_against_roots,
 };
-use tari_sidechain::{SidechainBlockCommitProof, SidechainBlockHeader};
+use tari_sidechain::{FixedHash, SidechainBlockCommitProof, SidechainBlockHeader};
 use tari_state_store_rocksdb::DatabaseOptions;
 use tari_state_tree::{
     SPARSE_MERKLE_PLACEHOLDER_HASH,

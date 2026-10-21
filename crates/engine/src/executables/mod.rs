@@ -30,7 +30,7 @@ pub trait Executable {
 
     fn all_inputs_iter(&self) -> impl Iterator<Item = InputDeclaration> + '_;
 
-    /// Returns the main signer of the executable, if any.
+    /// Returns the key the executable acts as wherever the engine needs a single signer, if it has one.
     fn main_signer(&self) -> Option<RistrettoPublicKeyBytes> {
         self.signers_iter().next().copied()
     }

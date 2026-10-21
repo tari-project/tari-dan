@@ -32,6 +32,7 @@ use tari_template_lib_types::{
 use crate::{
     Blobs,
     Instruction,
+    MainSigner,
     TransactionIntent,
     TransactionSealSignature,
     TransactionSignature,
@@ -161,14 +162,29 @@ impl Transaction {
         }
     }
 
-    /// Returns the public key of the main signer: the authorized seal signer if present, otherwise
-    /// the first transaction signer. `None` if the transaction has no signers and the seal signer is
-    /// not authorized.
-    pub fn main_signer(&self) -> Option<RistrettoPublicKeyBytes> {
-        if self.is_seal_signer_authorized() {
-            return Some(*self.seal_signature().public_key());
+    pub fn declared_main_signer(&self) -> &MainSigner {
+        match self {
+            Self::V1(tx) => tx.declared_main_signer(),
         }
-        self.signatures().first().map(|sig| *sig.public_key())
+    }
+
+    /// Returns the public key of the main signer the transaction declares, or `None` if it declares none. A declared
+    /// [`MainSigner::Authorizer`] counts only if that key signed the transaction.
+    pub fn main_signer(&self) -> Option<RistrettoPublicKeyBytes> {
+        match self.declared_main_signer() {
+            MainSigner::None => None,
+            MainSigner::SealSigner => Some(*self.seal_signature().public_key()),
+            MainSigner::Authorizer(public_key) => self
+                .signatures()
+                .iter()
+                .any(|sig| sig.public_key() == public_key)
+                .then_some(*public_key),
+        }
+    }
+
+    /// True if the seal signer is authorized or the transaction carries at least one authorization signature.
+    pub fn has_authorizer(&self) -> bool {
+        self.is_seal_signer_authorized() || !self.signatures().is_empty()
     }
 
     pub fn inputs(&self) -> &IndexSet<InputDeclaration> {
@@ -570,9 +586,38 @@ mod tests {
     fn seal_preserves_explicitly_unauthorized_seal_signer() {
         let (k, _) = create_key_pair();
         let subject = create_transaction()
-            .with_seal_signer_authorized(false)
+            .with_main_signer(MainSigner::None)
             .build_and_seal(&k);
         assert!(!subject.is_seal_signer_authorized());
+        assert!(subject.main_signer().is_none());
         assert!(subject.verify_all_signatures());
+    }
+
+    #[test]
+    fn main_signer_is_the_declared_authorizer_wherever_it_signs() {
+        let (seal_secret, _) = create_key_pair();
+        let (main_secret, main_public) = create_key_pair();
+        let (other_secret, _) = create_key_pair();
+        let seal_public = RistrettoPublicKey::from_secret_key(&seal_secret).to_byte_type();
+        let main_public = main_public.to_byte_type();
+
+        let unsigned = create_transaction()
+            .with_main_signer(MainSigner::Authorizer(main_public))
+            .build_unsigned();
+        let main_sig = TransactionSignature::sign(&main_secret, &seal_public, &unsigned);
+        let other_sig = TransactionSignature::sign(&other_secret, &seal_public, &unsigned);
+
+        for signatures in [vec![main_sig.clone(), other_sig.clone()], vec![
+            other_sig.clone(),
+            main_sig.clone(),
+        ]] {
+            let subject = unsigned.clone().with_signatures(signatures).seal(&seal_secret);
+            assert!(subject.verify_all_signatures());
+            assert_eq!(subject.main_signer(), Some(main_public));
+        }
+
+        let subject = unsigned.with_signatures(vec![other_sig]).seal(&seal_secret);
+        assert!(subject.verify_all_signatures());
+        assert_eq!(subject.main_signer(), None);
     }
 }

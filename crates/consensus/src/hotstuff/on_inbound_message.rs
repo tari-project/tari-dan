@@ -403,7 +403,7 @@ impl<TConsensusSpec: ConsensusSpec> MessageBuffer<TConsensusSpec> {
                     "Received valid 2f+1 QC for {} ({} signatures) while consensus view is still in {}: network \
                      rolled over without us — escalating to state sync.",
                     qc_epoch,
-                    qc.signatures().len(),
+                    qc.signatures().num_signatures(),
                     current_epoch,
                 );
                 warn!(target: LOG_TARGET, "🚨 {reason}");
@@ -741,9 +741,8 @@ mod tests {
     use super::*;
 
     mod is_own_chain_ahead {
-        use tari_common_types::types::FixedHash;
         use tari_consensus_types::BlockId;
-        use tari_sidechain::QuorumDecision;
+        use tari_sidechain::{FixedHash, QuorumDecision};
 
         use super::*;
 
@@ -758,7 +757,7 @@ mod tests {
                 NodeHeight(height),
                 Epoch(epoch),
                 shard_group,
-                vec![],
+                ProposalCertificate::genesis_signatures(),
                 QuorumDecision::Accept,
             )
         }

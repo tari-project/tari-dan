@@ -131,6 +131,9 @@ in doubt, update all three; they are cheap.
       ```
       Bump `pyproject.toml`'s version, PR, then tag `v*` — PyPI publishes on the tag via trusted
       publishing.
+- [ ] **Minotari base layer** (only when this release published a breaking `tari_sidechain`): bump
+      its pin in `tari-project/tari`'s root `Cargo.toml` and PR into `development`. A patch release
+      is picked up by the existing pin.
 
 ## 8. Announce
 

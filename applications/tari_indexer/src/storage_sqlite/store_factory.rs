@@ -282,7 +282,7 @@ fn apply_pragmas(conn: &mut SqliteConnection) -> Result<(), diesel::result::Erro
 /// Appends one event per topic to the store at `db_path`, taking the next ids in the order given.
 #[cfg(test)]
 pub(crate) fn insert_test_events(db_path: &std::path::Path, topics: &[&str]) {
-    use tari_common_types::types::FixedHash;
+    use tari_sidechain::FixedHash;
 
     use crate::storage_sqlite::{models::NewEvent, schema::events, serialization::serialize_json};
 
@@ -309,7 +309,6 @@ pub(crate) fn insert_test_events(db_path: &std::path::Path, topics: &[&str]) {
 mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use tari_common_types::types::FixedHash;
     use tari_engine_types::{
         fees::FeeReceiptBuilder,
         substate::SubstateId,
@@ -319,6 +318,7 @@ mod tests {
     use tari_indexer_lib::substate_cache::{FetchWatermark, SubstateCacheEntry, SubstateCacheEntryRef};
     use tari_ootle_common_types::{Epoch, NodeHeight, ShardGroup, StateVersion, SubstateVersion, shard::Shard};
     use tari_ootle_transaction::{Transaction, TransactionId};
+    use tari_sidechain::FixedHash;
     use tari_validator_node_rpc::client::SubstateResult;
 
     use super::*;

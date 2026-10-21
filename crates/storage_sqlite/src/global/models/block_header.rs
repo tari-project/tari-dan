@@ -66,7 +66,7 @@ impl TryFrom<BlockHeaderModel> for global::BlockHeaderModel {
 
 #[cfg(test)]
 mod tests {
-    use tari_common_types::types::FixedHash;
+    use tari_sidechain::FixedHash;
 
     use super::*;
 

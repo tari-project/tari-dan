@@ -95,8 +95,8 @@ pub async fn wait_until_ready(
 
 #[utoipa::path(get, path = "/epoch-manager/stats", description = "Get epoch manager stats",
     responses(
-        (status = 200, body = GetEpochManagerStatsResponse),
-        (status = INTERNAL_SERVER_ERROR, body = ErrorResponse),
+        (status = 200, description = "Epoch manager stats", body = GetEpochManagerStatsResponse),
+        (status = INTERNAL_SERVER_ERROR, description = "Failed to fetch epoch manager stats", body = ErrorResponse),
     ),
 )]
 pub async fn get_epoch_manager_stats(

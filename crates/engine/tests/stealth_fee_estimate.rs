@@ -55,11 +55,11 @@ fn setup() -> Harness {
     let mut test = TemplateTest::new(CRATE_PATH, Vec::<&str>::new());
     let (account, owner, key) = test.create_funded_account();
     test.enable_auto_add_proofs_from_signers();
-    // The harness prices a created substate at 1; the shipped tables price it at 25. Take the
+    // The harness prices a created substate at 1; the shipped tables price it at 250. Take the
     // shipped figure so the slot premium carries the weight it does on a real network, where an
     // extra output costs the most.
     test.set_fee_table(FeeTable {
-        per_substate_create_cost: 25,
+        per_substate_create_cost: 250,
         ..test.fee_table().clone()
     });
     Harness {

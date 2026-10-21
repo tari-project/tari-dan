@@ -2,7 +2,6 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use ootle_byte_type::ToByteType;
-use tari_common_types::types::FixedHash;
 use tari_consensus::hotstuff::{
     LeaderSkipSet,
     calculate_dummy_blocks,
@@ -27,6 +26,7 @@ use tari_ootle_common_types::{
 use tari_ootle_p2p::PeerAddress;
 use tari_ootle_storage::consensus_models::{Block, BlockCommands, BlockHeader};
 use tari_ootle_transaction::Network;
+use tari_sidechain::FixedHash;
 
 use crate::support::{RoundRobinLeaderStrategy, load_json_fixture};
 

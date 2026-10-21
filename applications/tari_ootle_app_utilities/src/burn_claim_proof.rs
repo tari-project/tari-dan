@@ -2,7 +2,6 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use ootle_byte_type::ToByteType;
-use tari_common_types::burn_proof::{BurnOutputProof, MmrInclusionProof};
 use tari_engine_types::confidential::{
     BurnOutput,
     BurnOutputFeatures,
@@ -11,7 +10,7 @@ use tari_engine_types::confidential::{
     MinotariBurnClaimProof,
     MmrInclusionProof as ClaimMmrInclusionProof,
 };
-use tari_sidechain::BurnClaimProof;
+use tari_sidechain::{BurnClaimProof, BurnOutputProof, FixedHash, MmrInclusionProof, OutputHashPreimage};
 use tari_template_lib::types::Hash32;
 use tari_transaction_components::transaction_components::{OutputFeatures, OutputType, SideChainFeatureData};
 
@@ -82,7 +81,7 @@ fn bytes<const N: usize>(field: &str, bytes: Vec<u8>) -> Result<bounded_vec::Bou
 }
 
 fn mmr_proof(proof: &MmrInclusionProof) -> ClaimMmrInclusionProof {
-    let hashes = |hashes: &[tari_common_types::types::FixedHash]| {
+    let hashes = |hashes: &[tari_sidechain::FixedHash]| {
         hashes
             .iter()
             .map(|hash| Hash32::from_array(hash.into_array()))
@@ -96,12 +95,43 @@ fn mmr_proof(proof: &MmrInclusionProof) -> ClaimMmrInclusionProof {
     }
 }
 
+/// Converts the burn output proof a Minotari wallet or base node returns over gRPC into the form a
+/// [`BurnClaimProof`] carries. The two have the same fields and the same JSON encoding.
+pub fn burn_output_proof_from_l1(proof: tari_common_types::burn_proof::BurnOutputProof) -> BurnOutputProof {
+    let hash = |hash: tari_common_types::types::FixedHash| FixedHash::from(hash.into_array());
+    let mmr = |proof: tari_common_types::burn_proof::MmrInclusionProof| MmrInclusionProof {
+        leaf_index: proof.leaf_index,
+        mmr_size: proof.mmr_size,
+        path: proof.path.into_iter().map(hash).collect(),
+        peaks: proof.peaks.into_iter().map(hash).collect(),
+    };
+    let output = proof.output;
+    BurnOutputProof {
+        block_hash: hash(proof.block_hash),
+        block_height: proof.block_height,
+        output: OutputHashPreimage {
+            version: output.version,
+            features: output.features,
+            commitment: output.commitment,
+            rangeproof_hash: hash(output.rangeproof_hash),
+            script: output.script,
+            sender_offset_public_key: output.sender_offset_public_key,
+            metadata_signature: output.metadata_signature,
+            covenant: output.covenant,
+            encrypted_data: output.encrypted_data,
+            minimum_value_promise: output.minimum_value_promise,
+        },
+        normal_output_proof: mmr(proof.normal_output_proof),
+        normal_output_mr: hash(proof.normal_output_mr),
+        block_output_proof: mmr(proof.block_output_proof),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use tari_common_types::{
-        burn_proof::OutputHashPreimage,
         epoch::VnEpoch,
-        types::{CompressedPublicKey, FixedHash, PrivateKey},
+        types::{CompressedPublicKey, PrivateKey},
     };
     use tari_crypto::keys::{PublicKey as _, SecretKey as _};
     use tari_sidechain::CompleteClaimBurnProof;

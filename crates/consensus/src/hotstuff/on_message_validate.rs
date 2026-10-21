@@ -30,7 +30,7 @@ use crate::{
         ProposalValidationError,
         epoch_state::EpochState,
         error::HotStuffError,
-        on_receive_foreign_proposal::{OnReceiveForeignProposalHandler, validate_evidence_and_pledges_match},
+        on_receive_foreign_proposal::{OnReceiveForeignProposalHandler, validate_foreign_proposal_contents},
         on_receive_new_transaction::OnReceiveNewTransaction,
     },
     messages::{
@@ -648,10 +648,10 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         })
     }
 
-    /// The first parked copy of a block holds its slot until it is unparked, so a block is only parked if every
-    /// embedded foreign proposal whose commit proof is not already stored is authenticated by its committee and
-    /// pledges the values its evidence commits to. A copy that fails is turned away, leaving the slot for the genuine
-    /// block.
+    /// The first parked message carrying a block holds its slot until it is unparked, so a block is only parked if
+    /// every embedded foreign proposal whose commit proof is not already stored is authenticated by its committee,
+    /// pledges the values its evidence commits to and carries in full every command the local shard group needs. A
+    /// message that fails is turned away, leaving the slot for another delivery of the block.
     async fn are_embedded_foreign_proposals_parkable(
         &self,
         epoch_state: &EpochState<TConsensusSpec::Addr>,
@@ -672,12 +672,12 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             )
             .await
             {
-                Ok(()) => validate_evidence_and_pledges_match(
+                Ok(()) => validate_foreign_proposal_contents(
                     foreign_proposal,
                     epoch_state.local_committee_info().shard_group(),
                 )
                 .err()
-                .filter(|err| matches!(err, ProposalValidationError::ForeignPledgesNotCommitted { .. })),
+                .filter(|err| err.rejects_message_not_block()),
                 Err(HotStuffError::ProposalValidationError(err)) => Some(err),
                 Err(err) => return Err(err),
             };
@@ -810,10 +810,12 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
                 "⏳ Foreign Block {} has {} missing transactions", msg.proposal, missing_tx_ids.len(),
             );
 
-            // The first parked copy of a block holds its slot until unparked, so a copy whose pledges its evidence does
-            // not commit to is turned away here, leaving the slot for the genuine proposal.
-            if let Err(err @ ProposalValidationError::ForeignPledgesNotCommitted { .. }) =
-                validate_evidence_and_pledges_match(&msg.proposal, epoch_state.local_committee_info().shard_group())
+            // The first parked message carrying a block holds its slot until unparked, so a message that withholds a
+            // command or whose pledges its evidence does not commit to is turned away here, leaving the slot for
+            // another delivery of the block.
+            if let Err(err) =
+                validate_foreign_proposal_contents(&msg.proposal, epoch_state.local_committee_info().shard_group()) &&
+                err.rejects_message_not_block()
             {
                 warn!(target: LOG_TARGET, "⚠️ Discarding foreign proposal from {from}: {err}");
                 return Ok(MessageValidationResult::Discard);

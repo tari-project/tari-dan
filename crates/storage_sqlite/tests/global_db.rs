@@ -4,12 +4,12 @@
 use diesel::{Connection, RunQueryDsl, SqliteConnection, sql_query, sql_types::Integer};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use ootle_byte_type::ToByteType;
-use tari_common_types::types::FixedHash;
 use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey};
 use tari_ootle_common_types::{Epoch, NumPreshards, ShardGroup, SubstateAddress, ValidatorSetHash, VotePower};
 use tari_ootle_p2p::PeerAddress;
 use tari_ootle_storage::global::{BlockHeaderModel, GlobalDb, ValidatorNodeDb};
 use tari_ootle_storage_sqlite::global::SqliteGlobalDbAdapter;
+use tari_sidechain::FixedHash;
 use tari_template_lib::types::Hash32;
 use tari_utilities::ByteArray;
 

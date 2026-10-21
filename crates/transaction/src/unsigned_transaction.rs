@@ -14,6 +14,7 @@ use crate::{
     Blobs,
     Instruction,
     IntoSigned,
+    MainSigner,
     Signable,
     TransactionSignature,
     UnsealedTransactionV1,
@@ -71,14 +72,20 @@ impl UnsignedTransaction {
         self
     }
 
-    /// Set whether the seal signature also authorises the transaction.
-    ///
-    /// The field defaults to `true` and is part of the signing domain; sealing
-    /// never changes it, so the value set here is the one every signature
-    /// commits to and the engine enforces.
-    pub fn set_seal_signer_authorized(&mut self, is_authorized: bool) -> &mut Self {
+    pub fn main_signer(&self) -> &MainSigner {
         match self {
-            Self::V1(tx) => tx.is_seal_signer_authorized = is_authorized,
+            Self::V1(tx) => &tx.main_signer,
+        }
+    }
+
+    /// Sets the transaction's main signer, which also decides whether the seal signature authorises the
+    /// transaction.
+    ///
+    /// The field defaults to [`MainSigner::SealSigner`] and is part of the signing domain; sealing never changes
+    /// it, so the value set here is the one every signature commits to and the engine enforces.
+    pub fn set_main_signer(&mut self, main_signer: MainSigner) -> &mut Self {
+        match self {
+            Self::V1(tx) => tx.main_signer = main_signer,
         }
         self
     }

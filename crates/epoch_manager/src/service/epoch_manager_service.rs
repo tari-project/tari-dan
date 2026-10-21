@@ -27,7 +27,6 @@ use std::{
 };
 
 use log::*;
-use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::{
     Epoch,
     SubstateAddress,
@@ -41,6 +40,7 @@ use tari_ootle_common_types::{
 use tari_ootle_storage::global::GlobalDb;
 use tari_ootle_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_shutdown::ShutdownSignal;
+use tari_sidechain::FixedHash;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::{
     sync::{broadcast, mpsc, oneshot},

@@ -11,7 +11,9 @@ use tari_crypto::{
 };
 use tari_engine::runtime::RuntimeError;
 use tari_engine_types::{
+    commit_result::FinalizeResult,
     crypto::covenant_balance_proof_native_points,
+    fees::FeeSource,
     limits::{self, STEALTH_LIMITS},
     stealth::{MerkleTree, hashlock_digest},
 };
@@ -1038,6 +1040,48 @@ fn spend_rejects_wrong_bound_arg_count() {
 fn spend_rejects_malformed_bound_arg() {
     // `timelock` expects one bound argument; provide one whose bytes are not well-formed CBOR (trailing data).
     assert_spend_rejected("timelock", vec![Bytes::from_vec(vec![0x00, 0x00])], "well-formed CBOR");
+}
+
+/// Mints a UTXO gated by a single no-argument `function` leaf, then spends it revealing that leaf with fees enabled,
+/// paying from a funded account. Returns the finalize result.
+fn spend_leaf_paying_fees(function: &str) -> FinalizeResult {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let (account, owner_token, key) = test.create_funded_account();
+    let script_template = test.get_template_address(SCRIPT_TEMPLATE);
+    let (resx, mint) = mint_utxo(&mut test, script_condition(script_template, function, vec![]));
+
+    test.enable_fees();
+    let transfer = spend_into(&mint, key_path(test.to_public_key_bytes()));
+    test.try_execute(
+        Transaction::builder_localnet(Epoch(1))
+            .pay_fee_from_component(account, 20_000u64)
+            .stealth_transfer(resx, transfer.statement)
+            .build_and_seal(&key),
+        vec![owner_token],
+    )
+    .unwrap()
+    .finalize
+}
+
+#[test]
+fn rejected_leaf_is_charged_the_template_load() {
+    let accepted = spend_leaf_paying_fees("always_ok");
+    assert!(accepted.result.is_accept(), "{:?}", accepted.result.any_reject());
+    let accepted_load = accepted.fee_receipt.fee_breakdown().get(FeeSource::TemplateLoad);
+    assert!(
+        accepted_load > 0,
+        "the accepted spend must be charged the template load"
+    );
+
+    // Leaf validation loads the template before it can find that the function is missing, so the rejected spend pays
+    // the same load as the accepted one.
+    let rejected = spend_leaf_paying_fees("does_not_exist");
+    assert!(rejected.is_fee_only(), "{:?}", rejected.result);
+    assert_reject_reason(rejected.result.any_reject().unwrap(), "not found");
+    assert_eq!(
+        rejected.fee_receipt.fee_breakdown().get(FeeSource::TemplateLoad),
+        accepted_load
+    );
 }
 
 // -------------------------------- Creation-time (T1) validation -------------------------------- //

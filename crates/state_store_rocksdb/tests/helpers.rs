@@ -5,7 +5,6 @@ use std::{collections::BTreeMap, io::Write, ops::Deref};
 
 use rand::{Rng, RngExt};
 use tari_bor::cbor;
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{BlockId, Decision, LeafBlock, PcId, ProposalCertificate, ShardGroupAccumulatedData};
 use tari_engine_types::{
     component::{Component, ComponentBody, ComponentHeader},
@@ -46,7 +45,7 @@ use tari_ootle_storage::{
     },
 };
 use tari_ootle_transaction::{Network, TransactionId};
-use tari_sidechain::{CommitProofElement, QuorumDecision, SidechainBlockCommitProof, SidechainBlockHeader};
+use tari_sidechain::{CommitProofElement, FixedHash, QuorumDecision, SidechainBlockCommitProof, SidechainBlockHeader};
 use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
 use tari_state_tree::{SpreadPrefixStateTree, SubstateTreeChange, Version};
 use tari_template_lib::types::{
@@ -385,7 +384,7 @@ pub fn create_qc(block: &LeafBlock) -> ProposalCertificate {
         block.height(),
         block.epoch(),
         ShardGroup::all_shards(num_preshards()),
-        vec![],
+        ProposalCertificate::genesis_signatures(),
         QuorumDecision::Accept,
     )
 }
@@ -451,7 +450,7 @@ pub fn create_foreign_proposal(parent_id: BlockId, epoch: Epoch) -> ForeignPropo
         NodeHeight(1),
         epoch,
         shard_group,
-        vec![],
+        ProposalCertificate::genesis_signatures(),
         QuorumDecision::Accept,
     );
 
@@ -504,7 +503,7 @@ pub fn create_foreign_proposal(parent_id: BlockId, epoch: Epoch) -> ForeignPropo
                 epoch: foreign_block.epoch().as_u64(),
                 height: foreign_block.height().as_u64(),
                 protocol_version: foreign_block.header().protocol_version().as_u32(),
-                signatures: vec![],
+                signatures: ProposalCertificate::genesis_signatures(),
                 decision: QuorumDecision::Accept,
             },
         )],

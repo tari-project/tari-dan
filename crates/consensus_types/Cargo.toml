@@ -11,6 +11,7 @@ license.workspace = true
 tari_common_types = { workspace = true }
 tari_ootle_common_types = { workspace = true }
 tari_sidechain = { workspace = true }
+ootle-network = { workspace = true }
 tari_hashing = { workspace = true }
 tari_template_lib = { workspace = true }
 tari_engine_types = { workspace = true }

@@ -1,12 +1,10 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::{CompressedPublicKey, FixedHash};
-use tari_crypto::tari_utilities::ByteArray;
+use ootle_network::Network;
 use tari_engine_types::{ProtocolVersion, UnknownProtocolVersionError, limits::MAX_CBOR_NESTING_DEPTH};
 use tari_ootle_common_types::{Epoch, NodeHeight, ShardGroup, VotePower};
-use tari_sidechain::{SidechainBlockCommitProof, SidechainProofValidationError};
-use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
+use tari_sidechain::{FixedHash, SidechainBlockCommitProof, SidechainProofValidationError, SigningCommittee};
 
 /// A commit proof for a single committed block: a block header authenticated by the committed QC
 /// chain of its shard group committee.
@@ -83,24 +81,21 @@ impl CommittedBlockProof {
         })
     }
 
-    /// Validates the commit proof against the shard group committee, returning the verified tip.
+    /// Validates that the commit proof commits a block on `network`, signed by the shard group committee, returning the
+    /// verified tip.
     ///
-    /// `check_vn` must return the voting power of the given validator in the committee expected to
-    /// have signed this proof's QCs (zero if it is not a member). The caller is responsible for
-    /// looking up the committee for [`CommittedBlockProof::epoch`] /
+    /// `committee` must be the committee expected to have signed this proof's QCs. The caller is
+    /// responsible for looking up the committee for [`CommittedBlockProof::epoch`] /
     /// [`CommittedBlockProof::shard_group`] — verifying the proof against the wrong committee will
-    /// (correctly) fail the quorum check.
+    /// (correctly) fail.
     pub fn validate(
         &self,
+        network: Network,
         quorum_threshold: VotePower,
-        check_vn: impl Fn(&RistrettoPublicKeyBytes) -> Result<VotePower, SidechainProofValidationError>,
+        committee: &dyn SigningCommittee,
     ) -> Result<VerifiedBlockTip, CommittedBlockProofError> {
         self.proof
-            .validate_committed(quorum_threshold.value(), &|pk: &CompressedPublicKey| {
-                let pk_bytes = RistrettoPublicKeyBytes::from_bytes(pk.as_bytes())
-                    .map_err(SidechainProofValidationError::internal_error)?;
-                check_vn(&pk_bytes).map(|power| power.value())
-            })?;
+            .validate_committed(network.as_byte(), quorum_threshold.value(), committee)?;
 
         Ok(VerifiedBlockTip {
             epoch: self.epoch(),
@@ -140,6 +135,7 @@ pub enum CommittedBlockProofError {
 
 #[cfg(test)]
 mod tests {
+    use tari_common_types::types::CompressedPublicKey;
     use tari_crypto::ristretto::RistrettoSecretKey;
     use tari_sidechain::{SidechainBlockHeader, ValidatorBlockSignature};
 

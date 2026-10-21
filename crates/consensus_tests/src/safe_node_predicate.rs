@@ -15,7 +15,6 @@
 //! Either rule independently makes the candidate safe. The tests below construct minimal real
 //! chains in a tempdir-backed state store and exercise both rules and the unsafe corner.
 
-use tari_common_types::types::FixedHash;
 use tari_consensus::traits::CertificateStore;
 use tari_consensus_types::{BlockId, LeafBlock, ProposalCertificate, ShardGroupAccumulatedData, TimeoutCertificate};
 use tari_crypto::tari_utilities::epoch_time::EpochTime;
@@ -27,7 +26,7 @@ use tari_ootle_storage::{
     consensus_models::{Block, BlockCommands, BlockHeader, BookkeepingModel},
 };
 use tari_ootle_transaction::Network;
-use tari_sidechain::QuorumDecision;
+use tari_sidechain::{FixedHash, QuorumDecision};
 use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tempfile::TempDir;
@@ -58,7 +57,7 @@ fn qc_of(target: &LeafBlock) -> ProposalCertificate {
         target.height(),
         target.epoch(),
         ShardGroup::all_shards(NUM_PRESHARDS),
-        vec![],
+        ProposalCertificate::genesis_signatures(),
         QuorumDecision::Accept,
     )
 }

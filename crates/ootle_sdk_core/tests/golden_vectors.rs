@@ -2565,7 +2565,7 @@ fn run_golden_vectors() {
         // `run_operation` decodes + re-verifies every signature (via
         // `decode_and_canonicalize_sealed_transfer`, which errors on a verify failure) and nulls the
         // byte-unstable Schnorr scalars, then the runner compares the deterministic decoded fields
-        // (instructions, inputs, signer public keys, `is_seal_signer_authorized` — everything except the
+        // (instructions, inputs, signer public keys, `main_signer` — everything except the
         // nulled scalars).
         const SEALED_SEMANTIC_OPS: &[&str] = &[
             OP_BUILD_AND_ENCODE_PUBLIC_TRANSFER,

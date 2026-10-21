@@ -12,14 +12,19 @@
 //! `check_justify_reaches_timeout_certificate` (`crates/consensus/src/validations/common.rs`): a proposal built on
 //! that timeout certificate must justify from a certificate at least that high, so a leader cannot use a leader
 //! failure to rewind the committee onto an older branch.
+//!
+//! A timeout vote signs the network it was cast on, so a timeout certificate verifies only on the network its
+//! signers voted on, whatever other networks they also validate.
 
-use tari_common_types::types::FixedHash;
+use ootle_byte_type::ToByteType;
 use tari_consensus::{
     check_block_commits_to_timeout_certificate,
     check_justify_reaches_timeout_certificate,
+    check_quorum_certificate_signatures,
     check_timeout_certificate_precedes_block,
     hotstuff::ProposalValidationError,
     messages::NewViewMessage,
+    traits::ValidatorSignerService,
 };
 use tari_consensus_types::{
     BlockId,
@@ -28,14 +33,26 @@ use tari_consensus_types::{
     SignedTimeout,
     TimeoutCertificate,
     TimeoutVote,
+    TimeoutVoteMessage,
     ValidatorSignatureBytes,
 };
 use tari_crypto::tari_utilities::epoch_time::EpochTime;
-use tari_ootle_common_types::{Epoch, ExtraData, NodeHeight, NumPreshards, ProtocolVersion, ShardGroup};
+use tari_ootle_common_types::{
+    Epoch,
+    ExtraData,
+    NodeHeight,
+    NumPreshards,
+    ProtocolVersion,
+    ShardGroup,
+    VotePower,
+    committee::{Committee, CommitteeMember},
+};
 use tari_ootle_storage::consensus_models::{Block, BlockCommands, BlockHeader};
 use tari_ootle_transaction::Network;
-use tari_sidechain::QuorumDecision;
+use tari_sidechain::{FixedHash, QuorumDecision};
 use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
+
+use crate::support::{TestAddress, TestConsensusSpec, TestVoteSignatureService};
 
 const NUM_PRESHARDS: NumPreshards = NumPreshards::P256;
 const NETWORK: Network = Network::LocalNet;
@@ -70,7 +87,7 @@ fn proposal_certificate(height: NodeHeight) -> ProposalCertificate {
         height,
         TEST_EPOCH,
         ShardGroup::all_shards(NUM_PRESHARDS),
-        vec![],
+        ProposalCertificate::genesis_signatures(),
         QuorumDecision::Accept,
     )
 }
@@ -286,4 +303,72 @@ fn a_timeout_claim_above_the_carried_certificate_is_not_matched() {
         timeout: timeout_vote(NodeHeight(9), NodeHeight(5)),
     };
     assert!(message.timeout_claim_matches_high_pc());
+}
+
+/// A timeout certificate for `height` signed by each of `signers` as validators of `network`, and the committee
+/// those signers form.
+fn signed_timeout_certificate(
+    network: Network,
+    height: NodeHeight,
+    signers: &[&str],
+) -> (TimeoutCertificate, Committee<TestAddress>) {
+    let services = signers
+        .iter()
+        .map(|addr| TestVoteSignatureService::new(TestAddress::new(*addr)))
+        .collect::<Vec<_>>();
+    let high_pc_height = NodeHeight(height.as_u64() - 1);
+    let timeouts = services
+        .iter()
+        .map(|service| {
+            let message = TimeoutVoteMessage::new(network, TEST_EPOCH, height, high_pc_height);
+            SignedTimeout {
+                high_pc_height,
+                signature: ValidatorSignatureBytes::new(
+                    service.public_key().to_byte_type(),
+                    service.sign(&message).to_byte_type(),
+                ),
+            }
+        })
+        .collect();
+    let committee = Committee::new(
+        signers
+            .iter()
+            .zip(&services)
+            .map(|(addr, service)| CommitteeMember {
+                address: TestAddress::new(*addr),
+                public_key: service.public_key().to_byte_type(),
+                vote_power: VotePower::of(1),
+            })
+            .collect(),
+    );
+    (TimeoutCertificate::new(TEST_EPOCH, height, timeouts), committee)
+}
+
+#[test]
+fn a_timeout_certificate_signed_on_the_local_network_is_accepted() {
+    let (tc, committee) = signed_timeout_certificate(NETWORK, NodeHeight(9), &["1", "2", "3"]);
+    let verifier = TestVoteSignatureService::new(TestAddress::new("1"));
+
+    check_quorum_certificate_signatures::<TestConsensusSpec>(NETWORK, (&tc).into(), &committee, &verifier).unwrap();
+}
+
+/// Validator keys are registered per network, so the same keys can sit on the committees of two networks. A
+/// timeout signed as a validator of one network attests to nothing about a view of another.
+#[test]
+fn a_timeout_certificate_signed_on_another_network_is_rejected() {
+    let other_network = Network::Igor;
+    assert_eq!(
+        ProtocolVersion::at(other_network, TEST_EPOCH),
+        ProtocolVersion::at(NETWORK, TEST_EPOCH),
+        "the networks must share a protocol version so that only the network differs between the signed messages"
+    );
+    let (tc, committee) = signed_timeout_certificate(other_network, NodeHeight(9), &["1", "2", "3"]);
+    let verifier = TestVoteSignatureService::new(TestAddress::new("1"));
+
+    let err = check_quorum_certificate_signatures::<TestConsensusSpec>(NETWORK, (&tc).into(), &committee, &verifier)
+        .unwrap_err();
+    assert!(
+        matches!(err, ProposalValidationError::QcInvalidSignature { .. }),
+        "unexpected error: {err}"
+    );
 }

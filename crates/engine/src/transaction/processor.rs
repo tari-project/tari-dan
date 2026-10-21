@@ -203,12 +203,13 @@ where
             dry_run,
         );
 
-        let transaction_signer_public_key =
-            executable
-                .main_signer()
-                .ok_or_else(|| TransactionErrorKind::InvariantError {
-                    details: "Transaction must have at least one authorized signature".to_string(),
-                })?;
+        if executable.signers_iter().next().is_none() {
+            return Err(TransactionErrorKind::InvariantError {
+                details: "Transaction must have at least one authorized signature".to_string(),
+            }
+            .into());
+        }
+        let main_signer = executable.main_signer();
 
         let instructions = executable.into_instructions();
 
@@ -217,7 +218,7 @@ where
         let runtime_interface = std::rc::Rc::new(RuntimeInterfaceImpl::initialize(
             tracker,
             template_provider.clone(),
-            transaction_signer_public_key,
+            main_signer,
             entity_id_provider,
             modules,
             claim_burn_proof_verifier,
@@ -475,13 +476,12 @@ where
 
         let component_lock = runtime.interface().lock_component(component_address, LockFlag::Write)?;
 
+        let template_def = template.shared_template_def();
         let migration_function = migrate
             .as_ref()
             .map(|f| {
-                template
-                    .template_def()
+                template_def
                     .get_function(&f.name)
-                    .cloned()
                     .ok_or_else(|| TransactionErrorKind::FunctionNotFound {
                         name: f.name.to_string(),
                     })
@@ -489,7 +489,7 @@ where
                         if f.is_migration {
                             Ok(f)
                         } else {
-                            Err(TransactionErrorKind::NotAMigrationFunction { name: f.name })
+                            Err(TransactionErrorKind::NotAMigrationFunction { name: f.name.clone() })
                         }
                     })
             })
@@ -557,7 +557,7 @@ where
         let returned = migration_function
             .map(|function_def| {
                 let result =
-                    Self::invoke_template(new_template_addr, template, runtime.clone(), &function_def, &final_args)?;
+                    Self::invoke_template(new_template_addr, template, runtime.clone(), function_def, &final_args)?;
                 runtime.interface().validate_return_value(&result)?;
                 Ok::<_, TransactionErrorKind>(result)
             })
@@ -731,13 +731,12 @@ where
                 Ok(Some(IndexedValue::from_type(&account_address)?))
             },
             None => {
-                let function_def = template
-                    .template_def()
-                    .get_function(ACCOUNT_CONSTRUCTOR_FUNCTION)
-                    .cloned()
-                    .ok_or_else(|| TransactionErrorKind::FunctionNotFound {
+                let template_def = template.shared_template_def();
+                let function_def = template_def.get_function(ACCOUNT_CONSTRUCTOR_FUNCTION).ok_or_else(|| {
+                    TransactionErrorKind::FunctionNotFound {
                         name: ACCOUNT_CONSTRUCTOR_FUNCTION.to_string(),
-                    })?;
+                    }
+                })?;
 
                 let mut args = call_args![
                     // the public key NFT is the first argument of the Account template constructor specifying the
@@ -775,7 +774,7 @@ where
                     ACCOUNT_TEMPLATE_ADDRESS,
                     template,
                     runtime.clone(),
-                    &function_def,
+                    function_def,
                     &resolved_args,
                 )?;
 
@@ -816,15 +815,17 @@ where
             .interface()
             .track_template_loaded(template_address, template.code_size())?;
 
-        let function_def = template.template_def().get_function(function).cloned().ok_or_else(|| {
-            TransactionErrorKind::FunctionNotFound {
-                name: function.to_string(),
-            }
-        })?;
+        let template_def = template.shared_template_def();
+        let function_def =
+            template_def
+                .get_function(function)
+                .ok_or_else(|| TransactionErrorKind::FunctionNotFound {
+                    name: function.to_string(),
+                })?;
 
         if function_def.is_migration {
             return Err(TransactionErrorKind::CannotCallMigrationFunctionDirectly {
-                name: function_def.name,
+                name: function_def.name.clone(),
             });
         }
 
@@ -846,7 +847,7 @@ where
             *template_address,
             template,
             runtime.clone(),
-            &function_def,
+            function_def,
             &resolved_args,
         )?;
 
@@ -892,15 +893,16 @@ where
         args: Vec<InstructionArg>,
         restrict_frame_to: Option<FrameWriteMode>,
     ) -> Result<IndexedValue, TransactionErrorKind> {
-        let function_def = template.template_def().get_function(method).cloned().ok_or_else(|| {
-            TransactionErrorKind::FunctionNotFound {
+        let template_def = template.shared_template_def();
+        let function_def = template_def
+            .get_function(method)
+            .ok_or_else(|| TransactionErrorKind::FunctionNotFound {
                 name: method.to_string(),
-            }
-        })?;
+            })?;
 
         if function_def.is_migration {
             return Err(TransactionErrorKind::CannotCallMigrationFunctionDirectly {
-                name: function_def.name,
+                name: function_def.name.clone(),
             });
         }
 
@@ -940,7 +942,7 @@ where
             component.template_address,
             template,
             runtime.clone(),
-            &function_def,
+            function_def,
             &resolved_args,
         )?;
 

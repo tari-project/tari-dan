@@ -3,11 +3,9 @@
 
 use std::fmt::Display;
 
-use borsh::BorshSerialize;
-use tari_common_types::types::FixedHash;
-use tari_hashing::layer2::timeout_vote_signature_hasher;
-use tari_ootle_common_types::{Epoch, NodeHeight};
-use tari_sidechain::QuorumDecision;
+use ootle_network::Network;
+use tari_ootle_common_types::{Epoch, NodeHeight, ProtocolVersion};
+use tari_sidechain::{FixedHash, QuorumDecision, hashing::timeout_vote_signature_hasher};
 use tari_template_lib::types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
 
 use crate::{SignedMessage, SignedTimeout, ToSignatureMessage, Vote, validator_signature::ValidatorSignatureBytes};
@@ -25,6 +23,11 @@ pub struct TimeoutVote {
 impl TimeoutVote {
     pub fn signature(&self) -> &ValidatorSignatureBytes {
         &self.signature
+    }
+
+    /// The message this vote signs as a validator of `network`.
+    pub fn to_message(&self, network: Network) -> TimeoutVoteMessage {
+        TimeoutVoteMessage::new(network, self.epoch, self.height, self.high_pc_height)
     }
 
     pub fn as_signed_timeout(&self) -> SignedTimeout {
@@ -53,17 +56,6 @@ impl Vote for TimeoutVote {
     fn aggregation_key(&self) {}
 }
 
-impl ToSignatureMessage for TimeoutVote {
-    fn to_signature_message(&self) -> FixedHash {
-        TimeoutVoteMessage {
-            epoch: self.epoch,
-            height: self.height,
-            high_pc_height: self.high_pc_height,
-        }
-        .to_signature_message()
-    }
-}
-
 impl SignedMessage for TimeoutVote {
     fn signature(&self) -> &SchnorrSignatureBytes {
         &self.signature.signature
@@ -84,16 +76,34 @@ impl Display for TimeoutVote {
     }
 }
 
-#[derive(BorshSerialize)]
+/// The message a timeout vote signs. The vote carries neither the network nor the protocol version, so the signer and
+/// every verifier supply the network they run on, and [`Self::new`] resolves the version from that network's schedule.
+#[derive(Debug, Clone)]
 pub struct TimeoutVoteMessage {
-    pub epoch: Epoch,
-    pub height: NodeHeight,
-    pub high_pc_height: NodeHeight,
+    network: Network,
+    protocol_version: ProtocolVersion,
+    epoch: Epoch,
+    height: NodeHeight,
+    high_pc_height: NodeHeight,
+}
+
+impl TimeoutVoteMessage {
+    pub fn new(network: Network, epoch: Epoch, height: NodeHeight, high_pc_height: NodeHeight) -> Self {
+        Self {
+            network,
+            protocol_version: ProtocolVersion::at(network, epoch),
+            epoch,
+            height,
+            high_pc_height,
+        }
+    }
 }
 
 impl ToSignatureMessage for TimeoutVoteMessage {
     fn to_signature_message(&self) -> FixedHash {
         timeout_vote_signature_hasher()
+            .chain(&self.network.as_byte())
+            .chain(&self.protocol_version.as_u32())
             .chain(&self.epoch)
             .chain(&self.height)
             .chain(&self.high_pc_height)

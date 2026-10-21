@@ -2,9 +2,9 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_common_types::types::FixedHash;
 use tari_epoch_manager::epoch_event_oracle::{EpochEvent, EpochEventOracle};
 use tari_ootle_common_types::Epoch;
+use tari_sidechain::FixedHash;
 use tokio::sync::mpsc;
 
 use crate::{

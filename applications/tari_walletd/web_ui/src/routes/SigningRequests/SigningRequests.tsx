@@ -207,8 +207,20 @@ function RequestCard({ request }: { request: SigningRequestInfo }) {
         </Field>
         <Field label="Sealed by">
           <span style={{ fontFamily: "monospace" }}>{request.seal_public_key}</span>
-          {v1?.is_seal_signer_authorized && (
+          {v1?.main_signer === "SealSigner" && (
             <Chip label="seal also authorizes" size="small" color="warning" variant="outlined" sx={{ ml: 1 }} />
+          )}
+        </Field>
+        <Field label="Main signer">
+          {v1?.main_signer === "SealSigner" && "the sealer"}
+          {(v1?.main_signer === "None" || v1 === undefined) && "none"}
+          {v1 && typeof v1.main_signer === "object" && (
+            <>
+              <span style={{ fontFamily: "monospace" }}>{v1.main_signer.Authorizer}</span>
+              {v1.main_signer.Authorizer === request.signer_public_key && (
+                <Chip label="this key" size="small" color="warning" variant="outlined" sx={{ ml: 1 }} />
+              )}
+            </>
           )}
         </Field>
         <Field label="Valid epochs">

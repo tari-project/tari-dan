@@ -235,7 +235,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             .protocol_version()
             .map_err(|e| RpcStateSyncError::InvalidResponse(e.into()))? >=
             ProtocolVersion::V1;
-        let validator = CommitteeProofValidator::new(&self.epoch_manager, checkpoint.epoch());
+        let validator = CommitteeProofValidator::new(self.network, &self.epoch_manager, checkpoint.epoch());
         let shard_sync = shard_sync
             .with_version_proofs(&validator)
             .with_trusted_checkpoint_version(checkpoint_commits_state_versions)
@@ -379,9 +379,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
     ) -> Result<(), RpcStateSyncError> {
         let quorum_threshold = committee.quorum_threshold();
         checkpoint
-            .validate(epoch, quorum_threshold, |pk| {
-                Ok(committee.get_power_by_public_key(pk).unwrap_or_else(VotePower::zero))
-            })
+            .validate(self.network, epoch, quorum_threshold, committee)
             .map_err(|err| RpcStateSyncError::InvalidResponse(anyhow!("Checkpoint is not valid: {err}",)))?;
 
         info!(

@@ -52,6 +52,11 @@ def test_latest_skips_yanked():
     assert rel("0.4.0", []).latest is None
 
 
+def test_latest_prefers_a_release_over_its_pre_releases():
+    assert rel("6.2.1", ["6.2.0-pre.0", "6.2.0", "6.2.0-pre.2"]).latest == "6.2.0"
+    assert rel("6.2.1", ["6.1.0", "6.2.0-pre.0"]).latest == "6.2.0-pre.0"
+
+
 def test_taken_counts_yanked():
     # A yanked number is spent — crates.io will not accept it again.
     assert rel("0.3.1", ["0.3.0", "0.3.1!"]).taken

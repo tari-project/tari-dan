@@ -5,7 +5,6 @@ use std::collections::HashMap;
 
 use ootle_byte_type::ConvertFromByteType;
 use tari_crypto::ristretto::RistrettoSecretKey;
-use tari_indexer_client::types::MAX_SUBSTATES_PER_FETCH;
 use tari_ootle_common_types::engine_types::{
     Utxo,
     crypto::{ElgamalVerifiableBalance, ValueLookup},
@@ -220,21 +219,23 @@ impl<Wallet> IndexerProvider<Wallet> {
         }
 
         let vault_substate_ids: Vec<SubstateId> = vault_ids.iter().copied().map(SubstateId::Vault).collect();
-        let mut substates = HashMap::with_capacity(vault_substate_ids.len());
-        for batch in vault_substate_ids.chunks(MAX_SUBSTATES_PER_FETCH) {
-            substates.extend(self.verifier().fetch_substates(batch).await?);
-        }
+        let mut substates = self.verifier().fetch_substates(&vault_substate_ids).await?;
 
-        let mut balances = Vec::with_capacity(substates.len());
-        for (id, substate) in substates {
-            let substate: Substate = substate;
+        // No vault is ever destroyed, so every vault the account references exists and the indexer must serve it.
+        let mut balances = Vec::with_capacity(vault_ids.len());
+        for (vault_id, id) in vault_ids.iter().zip(vault_substate_ids) {
+            let substate = substates.remove(&id).ok_or_else(|| {
+                ProviderError::other(format!(
+                    "The indexer did not serve vault {vault_id}, which account {account} references"
+                ))
+            })?;
             let vault = substate.into_substate_value().into_vault().ok_or_else(|| {
                 ProviderError::other(format!(
                     "Expected vault substate for {id}, but got a different substate type"
                 ))
             })?;
             balances.push(VaultBalance {
-                vault_id: id.as_vault_id().expect("SubstateId::Vault always has a vault id"),
+                vault_id: *vault_id,
                 resource_address: *vault.resource_address(),
                 balance: vault.balance(),
                 locked_balance: vault.locked_balance(),

@@ -11,7 +11,6 @@
 //! certificate proves the views in between failed and the parent is the last of the dummy blocks that every
 //! replica recomputes for them.
 
-use tari_common_types::types::FixedHash;
 use tari_consensus::hotstuff::{
     LeaderSkipSet,
     ProposalValidationError,
@@ -32,7 +31,7 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_storage::consensus_models::{Block, BlockCommands, BlockHeader};
 use tari_ootle_transaction::Network;
-use tari_sidechain::QuorumDecision;
+use tari_sidechain::{FixedHash, QuorumDecision};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::support::{RoundRobinLeaderStrategy, TestAddress};
@@ -61,7 +60,7 @@ fn qc_of(target: &LeafBlock) -> ProposalCertificate {
         target.height(),
         target.epoch(),
         ShardGroup::all_shards(NUM_PRESHARDS),
-        vec![],
+        ProposalCertificate::genesis_signatures(),
         QuorumDecision::Accept,
     )
 }

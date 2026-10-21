@@ -8,6 +8,8 @@
 //! more than one load of the same template). It delegates to an inner [`TemplateProvider`] on miss — the
 //! validator node wraps a disk-cache + raw state store, the indexer wraps an on-demand network fetcher.
 //!
+//! [`UncommittedTemplateCache`] holds compiled templates published in uncommitted blocks, outside that chain.
+//!
 //! [`TemplateProvider`]: tari_ootle_common_types::services::template_provider::TemplateProvider
 
 mod cmap_semaphore;
@@ -20,3 +22,6 @@ pub use memory_cache::{
     TemplateConfig,
     builtin_resident_bytes,
 };
+
+mod uncommitted_cache;
+pub use uncommitted_cache::UncommittedTemplateCache;

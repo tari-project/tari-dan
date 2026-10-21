@@ -1,8 +1,8 @@
 //   Copyright 2025 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::hashing;
+use tari_sidechain::FixedHash;
 
 crate::create_hash_type!(
     /// The ID of a block in the Tari consensus protocol.
@@ -17,7 +17,7 @@ impl BlockId {
             return BlockId::zero();
         }
 
-        hashing::block_hasher()
+        hashing::block_id_hasher()
             .chain(parent_id)
             .chain(header_hash)
             .finalize_into_array()

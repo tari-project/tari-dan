@@ -3,8 +3,8 @@
 
 use std::fmt::Display;
 
-use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::{Epoch, SubstateAddress, SubstateVersion, displayable::Displayable};
+use tari_sidechain::FixedHash;
 use tari_template_lib_types::{Hash32, crypto::RistrettoPublicKeyBytes};
 
 #[derive(Debug)]

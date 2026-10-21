@@ -35,8 +35,12 @@
 //! ## Storage Fees
 //!
 //! - **`per_byte_storage_cost`**: Cost per byte of data written to persistent storage (substates), divided by
-//!   `storage_cost_divisor`. Both shipped tables set that divisor to 1: storage is the only indefinite-liability
+//!   `storage_cost_divisor`. The shipped table sets that divisor to 1: storage is the only indefinite-liability
 //!   category, so the full byte cost stands until a rent or endowment model lands.
+//!
+//! - **`per_substate_create_cost`**: Flat charge per newly-created substate, on top of its bytes. It prices what a
+//!   substate costs the store beyond its value: a record shell and head-index entry that outlive pruning, and a
+//!   state-tree leaf held for as long as the substate is up.
 //!
 //! - **`log_bytes_cost_divisor`**: Divides the per-byte storage rate when charging for a log message
 //!   (`per_byte_storage_cost × message_bytes / log_bytes_cost_divisor`). A log is retained in every validator's
@@ -76,21 +80,24 @@
 use tari_engine_types::fees::{FeeRates, FeeTable};
 use tari_ootle_transaction::Network;
 
-/// Testnet fee table with low, development-friendly fees.
+/// The fee table every network runs on.
 ///
-/// These values are intentionally set low to facilitate testing and development.
-/// Most operations cost 1 unit except signature verification which costs 10 units
-/// to reflect its higher computational cost.
-const TESTNET_FEE_TABLE: FeeTable = FeeTable {
+/// MainNet shares it with the testnets until its economics are modelled; a network that needs its
+/// own rates gets its own table and arm in [`get_fee_table_by_network`].
+const FEE_TABLE: FeeTable = FeeTable {
     per_transaction_weight_cost: 1,
     per_module_call_cost: 1,
     per_byte_storage_cost: 1,
     // Bumped from 1 to better reflect worst-case cold wasmer instantiation: a 2 MiB template (the
     // current cap) costs ~7000 µT to load vs ~700 µT previously.
     per_template_load_cost_unit: 10,
-    // Slot-allocation premium for newly-created substates, on top of `per_byte_storage_cost`.
-    // ~25 µT per new substate (~equivalent to 100 bytes of storage at the effective per-byte rate).
-    per_substate_create_cost: 25,
+    // Slot premium for a newly-created substate, on top of `per_byte_storage_cost`. A created
+    // substate adds a record shell (id, version, state hash, created and destroyed markers) and a
+    // head-index entry that outlive pruning of its value, plus a state-tree leaf with its share of
+    // internal nodes for as long as the substate is up; every syncing node replicates them. That
+    // is roughly 250 bytes, so the premium charges it at the per-byte rate. An update swaps the
+    // leaf for its new version's, and its own byte charge covers the shell it leaves.
+    per_substate_create_cost: 250,
     // µT charged per `wasm_points_cost_divisor` Wasmer metering points. Opcode → point mapping
     // lives in `wasm/metering.rs` (most arithmetic = 1, calls = 4, heavy ops up to 40). Starts at
     // 1 µT per 1000 points; revisit once we have hardware-benchmarked numbers.
@@ -125,42 +132,10 @@ const TESTNET_FEE_TABLE: FeeTable = FeeTable {
     per_template_publish_cost: 250_000,
 };
 
-/// MainNet fee table - production values.
+/// Returns the fee table for the specified network.
 ///
-/// # ⚠️ TODO: Finalize MainNet Fee Values
-///
-/// These values are currently set to the same low rates as testnet but **must be adjusted**
-/// before MainNet deployment based on:
-/// - Economic modeling and tokenomics
-/// - Actual resource costs (CPU, storage, bandwidth)
-/// - Network congestion and spam prevention requirements
-/// - Competitive analysis with other smart contract platforms
-///
-/// **Current Status:** Placeholder values - NOT suitable for production use.
-// TODO: finalize these values
-const MAINNET_FEE_TABLE: FeeTable = FeeTable {
-    per_transaction_weight_cost: 1,
-    per_module_call_cost: 1,
-    per_byte_storage_cost: 1,
-    per_template_load_cost_unit: 10,
-    per_substate_create_cost: 25,
-    per_wasm_point_cost: 1,
-    storage_cost_divisor: 1,
-    template_load_bytes_cost_divisor: 3000,
-    wasm_points_cost_divisor: 1000,
-    log_bytes_cost_divisor: 64,
-    template_size_premium_free_bytes: 96 * 1024,
-    template_size_premium_unit_bytes: 1024,
-    per_template_size_premium_unit_cost: 100,
-    per_template_publish_cost: 250_000,
-};
-
-/// Returns the appropriate fee table for the specified network.
-///
-/// # Networks
-///
-/// - **Testnet networks** (LocalNet, Igor, Esmeralda, StageNet, NextNet): Use low, development-friendly fees
-/// - **MainNet**: Uses production fee table (currently TODO - needs finalization)
+/// Every network currently runs on the same table. The match stays exhaustive so that adding a
+/// network forces a decision about its rates.
 ///
 /// # Example
 ///
@@ -176,12 +151,12 @@ const MAINNET_FEE_TABLE: FeeTable = FeeTable {
 /// ```
 pub const fn get_fee_table_by_network(network: Network) -> &'static FeeTable {
     match network {
-        Network::LocalNet => &TESTNET_FEE_TABLE,
-        Network::Igor => &TESTNET_FEE_TABLE,
-        Network::Esmeralda => &TESTNET_FEE_TABLE,
-        Network::StageNet => &TESTNET_FEE_TABLE,
-        Network::NextNet => &TESTNET_FEE_TABLE,
-        Network::MainNet => &MAINNET_FEE_TABLE,
+        Network::LocalNet |
+        Network::Igor |
+        Network::Esmeralda |
+        Network::StageNet |
+        Network::NextNet |
+        Network::MainNet => &FEE_TABLE,
     }
 }
 

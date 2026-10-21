@@ -7,8 +7,8 @@ use std::{
     time::Duration,
 };
 
-use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::Epoch;
+use tari_sidechain::FixedHash;
 
 use crate::configured::{EpochTicker, EpochTickerData};
 

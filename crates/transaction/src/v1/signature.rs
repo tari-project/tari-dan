@@ -15,6 +15,7 @@ use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureB
 use crate::{
     BlobHashes,
     Instruction,
+    MainSigner,
     UnsealedTransactionV1,
     UnsignedTransaction,
     UnsignedTransactionV1,
@@ -40,7 +41,7 @@ pub enum PreimageField {
     Inputs = 5,
     MinEpoch = 6,
     MaxEpoch = 7,
-    IsSealSignerAuthorized = 8,
+    MainSigner = 8,
     DryRun = 9,
     Nonce = 10,
     BlobHashes = 11,
@@ -175,10 +176,7 @@ impl TransactionSealSignature {
             preimage_segment(PreimageField::Inputs, &unsigned.inputs),
             preimage_segment(PreimageField::MinEpoch, &unsigned.min_epoch),
             preimage_segment(PreimageField::MaxEpoch, &unsigned.max_epoch),
-            preimage_segment(
-                PreimageField::IsSealSignerAuthorized,
-                &unsigned.is_seal_signer_authorized,
-            ),
+            preimage_segment(PreimageField::MainSigner, &unsigned.main_signer),
             preimage_segment(PreimageField::DryRun, &unsigned.dry_run),
             preimage_segment(PreimageField::Nonce, &unsigned.nonce),
             preimage_segment(PreimageField::BlobHashes, &blob_hashes),
@@ -343,10 +341,7 @@ impl TransactionSignature {
             preimage_segment(PreimageField::Inputs, &transaction.inputs),
             preimage_segment(PreimageField::MinEpoch, &transaction.min_epoch),
             preimage_segment(PreimageField::MaxEpoch, &transaction.max_epoch),
-            preimage_segment(
-                PreimageField::IsSealSignerAuthorized,
-                &transaction.is_seal_signer_authorized,
-            ),
+            preimage_segment(PreimageField::MainSigner, &transaction.main_signer),
             preimage_segment(PreimageField::DryRun, &transaction.dry_run),
             preimage_segment(PreimageField::Nonce, &transaction.nonce),
             preimage_segment(PreimageField::BlobHashes, &blob_hashes),
@@ -492,7 +487,7 @@ pub(crate) struct TransactionSignatureFields<'a> {
     inputs: &'a IndexSet<InputDeclaration>,
     min_epoch: Option<Epoch>,
     max_epoch: Epoch,
-    is_seal_signer_authorized: bool,
+    main_signer: MainSigner,
     dry_run: bool,
     nonce: u64,
 }
@@ -506,7 +501,7 @@ impl<'a> From<&'a UnsignedTransactionV1> for TransactionSignatureFields<'a> {
             inputs: &transaction.inputs,
             min_epoch: transaction.min_epoch,
             max_epoch: transaction.max_epoch,
-            is_seal_signer_authorized: transaction.is_seal_signer_authorized,
+            main_signer: transaction.main_signer,
             dry_run: transaction.dry_run,
             nonce: transaction.nonce,
         }
@@ -524,7 +519,7 @@ impl<'a> From<&'a PrunedUnsignedTransactionV1> for TransactionSignatureFields<'a
             inputs: &transaction.inputs,
             min_epoch: transaction.min_epoch,
             max_epoch: transaction.max_epoch,
-            is_seal_signer_authorized: transaction.is_seal_signer_authorized,
+            main_signer: transaction.main_signer,
             dry_run: transaction.dry_run,
             nonce: transaction.nonce,
         }
@@ -564,7 +559,7 @@ mod tests {
             inputs,
             min_epoch: Some(Epoch(100)),
             max_epoch: Epoch(200),
-            is_seal_signer_authorized: false,
+            main_signer: MainSigner::None,
             dry_run: true,
             blobs: crate::Blobs::empty(),
             nonce: 5,
@@ -669,10 +664,12 @@ mod tests {
         tx.max_epoch = Epoch(999);
         assert_ne!(sig_msg(&signer, &tx), base_msg, "max_epoch (value)");
 
-        // is_seal_signer_authorized
-        let mut tx = base.clone();
-        tx.is_seal_signer_authorized = !tx.is_seal_signer_authorized;
-        assert_ne!(sig_msg(&signer, &tx), base_msg, "is_seal_signer_authorized");
+        // main_signer
+        for main_signer in crate::v1::main_signer::other_main_signers(base.main_signer) {
+            let mut tx = base.clone();
+            tx.main_signer = main_signer;
+            assert_ne!(sig_msg(&signer, &tx), base_msg, "main_signer {main_signer:?}");
+        }
 
         // dry_run
         let mut tx = base.clone();
@@ -803,10 +800,12 @@ mod tests {
         u.max_epoch = Epoch(999);
         assert_ne!(seal_msg(&with_body(u)), base_msg, "max_epoch (value)");
 
-        // is_seal_signer_authorized
-        let mut u = base_unsigned.clone();
-        u.is_seal_signer_authorized = !u.is_seal_signer_authorized;
-        assert_ne!(seal_msg(&with_body(u)), base_msg, "is_seal_signer_authorized");
+        // main_signer
+        for main_signer in crate::v1::main_signer::other_main_signers(base_unsigned.main_signer) {
+            let mut u = base_unsigned.clone();
+            u.main_signer = main_signer;
+            assert_ne!(seal_msg(&with_body(u)), base_msg, "main_signer {main_signer:?}");
+        }
 
         // dry_run
         let mut u = base_unsigned.clone();

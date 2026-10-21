@@ -2,8 +2,8 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::{Epoch, SubstateAddress};
+use tari_sidechain::FixedHash;
 use tari_template_lib::types::crypto::RistrettoPublicKeyBytes;
 use tari_transaction_components::{tari_amount::MicroMinotari, transaction_components::TransactionOutput};
 

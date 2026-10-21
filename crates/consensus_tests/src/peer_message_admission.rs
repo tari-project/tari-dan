@@ -53,7 +53,7 @@ use tari_ootle_storage::{
     },
 };
 use tari_ootle_transaction::{Transaction, TransactionId, args};
-use tokio::time::sleep;
+use tokio::{sync::mpsc, time::sleep};
 
 use crate::support::{
     TEST_NUM_PRESHARDS,
@@ -274,11 +274,13 @@ async fn a_notification_from_a_peer_at_its_pending_cap_is_still_followed_up() {
     test.wait_for_all_validators_to_start_consensus().await;
 
     let shard_group = test.get_validator(&victim).shard_group;
+    let source_shard_group = test.get_validator(&TestAddress::new("2")).shard_group;
     let tx_inbound = test.get_validator(&victim).tx_inbound_message.clone();
     let notification = |seed: usize| {
         HotstuffMessage::ForeignProposalNotification(ForeignProposalNotificationMessage {
             block_id: BlockId::from([u8::try_from(seed).unwrap(); 32]),
             epoch: Epoch(1),
+            shard_group: source_shard_group,
             shard_groups: vec![shard_group],
         })
     };
@@ -369,6 +371,7 @@ async fn a_notification_from_an_epoch_with_a_different_committee_layout_does_not
             HotstuffMessage::ForeignProposalNotification(ForeignProposalNotificationMessage {
                 block_id: BlockId::from([1u8; 32]),
                 epoch: Epoch(1),
+                shard_group: shard_groups[1],
                 shard_groups: shard_groups.to_vec(),
             }),
         ))
@@ -775,4 +778,104 @@ async fn foreign_proposals_are_only_served_to_members_of_the_requested_shard_gro
     assert_eq!(proposals_to_foreign_member.load(Ordering::SeqCst), 1);
 
     test.stop();
+}
+
+/// Commits a transaction with inputs on committee 0 and outputs on committee 1 while a validator in the uninvolved
+/// committee 2 delivers each foreign proposal notification to its target before any member of the producing committee
+/// does. With `deliver_honest_copies` unset, the notifier's copy is the only one the target receives, as when gossip
+/// has already seen the same bytes from the notifier.
+async fn commit_with_a_third_committee_notifying_first(deliver_honest_copies: bool) {
+    setup_logger();
+    let notifier = TestAddress::new("5");
+    let committee_0 = [TestAddress::new("1"), TestAddress::new("2")];
+    let committee_1 = [TestAddress::new("3"), TestAddress::new("4")];
+    let inbound = Arc::new(Mutex::new(HashMap::<TestAddress, mpsc::Sender<_>>::new()));
+    let preempted = Arc::new(Mutex::new(HashSet::new()));
+    let mut test = Test::builder()
+        .add_committee(0, vec!["1", "2"])
+        .add_committee(1, vec!["3", "4"])
+        .add_committee(2, vec!["5", "6"])
+        .with_message_filter(Box::new({
+            let notifier = notifier.clone();
+            let inbound = inbound.clone();
+            let preempted = preempted.clone();
+            move |from, to, msg| {
+                let HotstuffMessage::ForeignProposalNotification(notification) = msg else {
+                    return true;
+                };
+                let is_between_involved_committees = (committee_0.contains(from) && committee_1.contains(to)) ||
+                    (committee_1.contains(from) && committee_0.contains(to));
+                if !is_between_involved_committees {
+                    return true;
+                }
+                if preempted.lock().unwrap().insert((notification.block_id, to.clone())) {
+                    let mut forged = notification.clone();
+                    if deliver_honest_copies {
+                        forged.shard_group = committee_number_to_shard_group(TEST_NUM_PRESHARDS, 2, 3);
+                    }
+                    inbound.lock().unwrap()[to]
+                        .try_send((notifier.clone(), HotstuffMessage::ForeignProposalNotification(forged)))
+                        .expect("target inbound channel is full");
+                }
+                deliver_honest_copies
+            }
+        }))
+        .start()
+        .await;
+    inbound.lock().unwrap().extend(
+        test.validators_iter()
+            .map(|vn| (vn.address.clone(), vn.tx_inbound_message.clone())),
+    );
+
+    let inputs = test.create_substates_on_vns(TestVnDestination::Committee(0), 2);
+    let outputs = test.build_outputs_for_committee(1, 1);
+    let tx = build_transaction_from(
+        Transaction::builder_localnet(Epoch(1))
+            .with_inputs(inputs.iter().cloned().map(|i| i.into()))
+            .build_and_seal(&PrivateKey::default()),
+    );
+    test.create_execution_at_destination_for_transaction(
+        TestVnDestination::All,
+        &tx,
+        Decision::Commit,
+        5,
+        inputs
+            .into_iter()
+            .map(|input| (input.substate_id().clone(), SubstateLockType::Write))
+            .collect(),
+        outputs,
+    );
+    test.send_transaction_to_destination(TestVnDestination::All, tx.clone())
+        .await;
+    test.start_epoch(Epoch(1)).await;
+
+    loop {
+        test.on_block_committed().await;
+        if test.is_transaction_pool_empty() {
+            break;
+        }
+        let leaf = test.get_validator(&TestAddress::new("1")).get_leaf_block();
+        assert!(
+            leaf.height <= NodeHeight(30),
+            "Transaction not committed after {} blocks",
+            leaf.height
+        );
+    }
+    test.stop();
+    assert!(
+        !preempted.lock().unwrap().is_empty(),
+        "no foreign proposal notification passed between the committees"
+    );
+    test.assert_destination_has_committed(TestVnDestination::Committee(0), tx.id());
+    test.assert_destination_has_committed(TestVnDestination::Committee(1), tx.id());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_notification_from_a_third_committee_does_not_stop_the_target_fetching_from_the_source() {
+    commit_with_a_third_committee_notifying_first(true).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_copy_of_the_notification_relayed_by_a_third_committee_fetches_from_the_source() {
+    commit_with_a_third_committee_notifying_first(false).await;
 }

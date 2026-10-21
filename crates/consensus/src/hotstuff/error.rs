@@ -1,7 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::FixedHash;
 use tari_consensus_types::{BlockId, LeafBlock, PcId, QcId, TcId};
 use tari_epoch_manager::EpochManagerError;
 use tari_ootle_common_types::{Epoch, NodeHeight, ProtocolVersion, ShardGroup, VersionedSubstateIdError, VotePower};
@@ -15,6 +14,7 @@ use tari_ootle_storage::{
     },
 };
 use tari_ootle_transaction::TransactionId;
+use tari_sidechain::{FixedHash, QcSignaturesError};
 use tari_state_tree::StateTreeError;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::task::JoinError;
@@ -242,6 +242,13 @@ pub enum ProposalValidationError {
     InvalidSignature { block_id: BlockId, height: NodeHeight },
     #[error("QC has invalid signature: {qc}")]
     QcInvalidSignature { qc: QcId },
+    #[error("QC {qc} carries malformed signatures: {source}")]
+    QcMalformedSignatures { qc: QcId, source: QcSignaturesError },
+    #[error("QC {qc} is signed under a scheme that protocol version {protocol_version} does not accept")]
+    QcSignatureSchemeNotAccepted {
+        qc: QcId,
+        protocol_version: ProtocolVersion,
+    },
     #[error("QC has duplicate signature: {qc} by {validator}")]
     QcDuplicateSignature {
         qc: QcId,
@@ -340,6 +347,17 @@ pub enum ProposalValidationError {
         transaction_id: TransactionId,
     },
 
+    #[error(
+        "Foreign proposal for block {block_id} from {shard_group} carries command {command_hash} only by its hash, \
+         but its commit proof names {local_shard_group} as needing that command in full"
+    )]
+    ForeignProposalWithholdsCommand {
+        block_id: BlockId,
+        shard_group: ShardGroup,
+        local_shard_group: ShardGroup,
+        command_hash: FixedHash,
+    },
+
     // TODO: remove some foreign proposal validation variants
     #[error(
         "Foreign node in {shard_group} submitted invalid pledge for block {block}, transaction {transaction_id}: \
@@ -396,4 +414,19 @@ pub enum ProposalValidationError {
         shard_group: ShardGroup,
         details: String,
     },
+}
+
+impl ProposalValidationError {
+    /// True for a foreign proposal error that rejects the message carrying a block and leaves the block id free.
+    ///
+    /// The signed header and the command root fix a foreign proposal's block id. The relayer chooses its pledges and
+    /// which commands it sends in full, so two messages carrying the same block can differ in them. An error in that
+    /// part says nothing about the block, so nothing is recorded against its block id and another delivery of the
+    /// block is still accepted.
+    pub fn rejects_message_not_block(&self) -> bool {
+        matches!(
+            self,
+            Self::ForeignPledgesNotCommitted { .. } | Self::ForeignProposalWithholdsCommand { .. }
+        )
+    }
 }

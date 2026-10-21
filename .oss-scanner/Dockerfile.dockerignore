@@ -1,0 +1,6 @@
+# BuildKit uses this file instead of the repository's .dockerignore, which drops the docs and markdown the scanner
+# reads.
+target
+**/target
+node_modules
+**/node_modules

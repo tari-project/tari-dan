@@ -192,7 +192,8 @@ pub struct RuntimeInterfaceImpl<TStore, TTemplateProvider> {
     tracker: Rc<StateTracker<TStore>>,
     template_provider: Arc<TTemplateProvider>,
     entity_id_provider: Rc<RefCell<EntityIdProvider>>,
-    seal_signer_public_key: RistrettoPublicKeyBytes,
+    /// `None` when the transaction declares no main signer.
+    main_signer: Option<RistrettoPublicKeyBytes>,
     modules: ModulesCollection<TStore>,
     claim_burn_proof_verifier: Arc<dyn ClaimProofVerifier + Send + Sync + 'static>,
     /// Transaction blob payloads, immutable for the duration of execution. Used to resolve
@@ -212,7 +213,7 @@ impl<TStore, TTemplateProvider> Clone for RuntimeInterfaceImpl<TStore, TTemplate
             tracker: self.tracker.clone(),
             template_provider: self.template_provider.clone(),
             entity_id_provider: self.entity_id_provider.clone(),
-            seal_signer_public_key: self.seal_signer_public_key,
+            main_signer: self.main_signer,
             modules: self.modules.clone(),
             claim_burn_proof_verifier: self.claim_burn_proof_verifier.clone(),
             blobs: self.blobs.clone(),
@@ -228,7 +229,7 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
     pub(crate) fn initialize(
         tracker: StateTracker<TStore>,
         template_provider: Arc<TTemplateProvider>,
-        signer_public_key: RistrettoPublicKeyBytes,
+        main_signer: Option<RistrettoPublicKeyBytes>,
         entity_id_provider: EntityIdProvider,
         modules: ModulesCollection<TStore>,
         claim_burn_proof_verifier: Arc<dyn ClaimProofVerifier + Send + Sync + 'static>,
@@ -238,7 +239,7 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
             tracker: Rc::new(tracker),
             template_provider,
             entity_id_provider: Rc::new(RefCell::new(entity_id_provider)),
-            seal_signer_public_key: signer_public_key,
+            main_signer,
             modules,
             claim_burn_proof_verifier,
             blobs,
@@ -247,6 +248,10 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
         };
         runtime.invoke_modules_on_initialize()?;
         Ok(runtime)
+    }
+
+    fn main_signer(&self, needed_for: &'static str) -> Result<RistrettoPublicKeyBytes, RuntimeError> {
+        self.main_signer.ok_or(RuntimeError::NoMainSigner { needed_for })
     }
 
     fn invoke_modules_on_initialize(&self) -> Result<(), RuntimeError> {
@@ -352,6 +357,9 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
     fn invoke_modules_on_before_persist(&self, finalized: &mut FinalizedState<TStore>) -> Result<(), RuntimeError> {
         for module in self.modules.iter() {
             module.on_before_persist(&mut finalized.chargeable_state())?;
+            if let Some(mut fee_intent_state) = finalized.fee_intent_chargeable_state() {
+                module.on_before_persist(&mut fee_intent_state)?;
+            }
         }
         Ok(())
     }
@@ -363,7 +371,7 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
         Ok(())
     }
 
-    pub fn get_template_def(&self, template_address: &TemplateAddress) -> Result<TemplateDef, RuntimeError> {
+    pub fn get_template_def(&self, template_address: &TemplateAddress) -> Result<Arc<TemplateDef>, RuntimeError> {
         let loaded = self
             .template_provider
             .get_template(template_address)
@@ -374,8 +382,9 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
             .ok_or(RuntimeError::TemplateNotFound {
                 template_address: *template_address,
             })?;
+        self.track_template_loaded(template_address, loaded.code_size())?;
 
-        Ok(loaded.into_template_def())
+        Ok(loaded.shared_template_def())
     }
 
     fn validate_return_value(&self, value: &IndexedValue) -> Result<(), RuntimeError> {
@@ -826,7 +835,7 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
     /// per leading (non-`SpendContext`) parameter. Because a condition tree commits only an opaque root, leaves are
     /// hidden at creation; this runs at spend time (T2) when the leaf is revealed. Templates are immutable substates,
     /// so a referenced template must already resolve — there is no "not yet published" skip case.
-    fn validate_template_function(&self, tf: &TemplateFunction) -> Result<FunctionDef, RuntimeError> {
+    fn validate_template_function(&self, tf: &TemplateFunction) -> Result<(), RuntimeError> {
         let template_def = self.get_template_def(&tf.template)?;
         let func = template_def
             .get_function(&tf.function)
@@ -865,7 +874,7 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
             })?;
         }
 
-        Ok(func.clone())
+        Ok(())
     }
 
     /// Authorises every spent input of a transfer before the spend executes, so that a rejection leaves the inputs
@@ -1441,7 +1450,9 @@ where
                 }
 
                 let owner_rule = match owner_rule {
-                    OwnerRule::OwnedBySigner => SubstateOwnerRule::ByPublicKey(self.seal_signer_public_key),
+                    OwnerRule::OwnedBySigner => {
+                        SubstateOwnerRule::ByPublicKey(self.main_signer("OwnerRule::OwnedBySigner")?)
+                    },
                     OwnerRule::None => SubstateOwnerRule::None,
                     OwnerRule::ByAccessRule(rule) => SubstateOwnerRule::ByAccessRule(rule),
                     OwnerRule::ByPublicKey(key) => SubstateOwnerRule::ByPublicKey(key),
@@ -1785,7 +1796,9 @@ where
                 reject_invalid_m_of_n("resource_owner_rule", owner_rule_m_of_n(&arg.owner_rule))?;
 
                 let owner_rule = match arg.owner_rule {
-                    OwnerRule::OwnedBySigner => SubstateOwnerRule::ByPublicKey(self.seal_signer_public_key),
+                    OwnerRule::OwnedBySigner => {
+                        SubstateOwnerRule::ByPublicKey(self.main_signer("OwnerRule::OwnedBySigner")?)
+                    },
                     OwnerRule::ByPublicKey(key) => SubstateOwnerRule::ByPublicKey(key),
                     OwnerRule::None => SubstateOwnerRule::None,
                     OwnerRule::ByAccessRule(rule) => SubstateOwnerRule::ByAccessRule(rule),
@@ -3957,7 +3970,9 @@ where
         match action {
             CallerContextAction::GetCallerPublicKey => {
                 args.assert_no_args("CallerContextAction::GetCallerPublicKey")?;
-                Ok(InvokeResult::encode(&self.seal_signer_public_key)?)
+                Ok(InvokeResult::encode(
+                    &self.main_signer("CallerContext::transaction_signer_public_key")?,
+                )?)
             },
             CallerContextAction::GetComponentAddress => self.tracker.read_with(|state| {
                 args.assert_no_args("CallerContextAction::GetComponentAddress")?;
@@ -3968,9 +3983,10 @@ where
                 Ok(InvokeResult::encode(&maybe_address)?)
             }),
             CallerContextAction::GetSignerProof => {
-                let public_key = args
-                    .get_opt::<RistrettoPublicKeyBytes>(0)?
-                    .unwrap_or(self.seal_signer_public_key);
+                let public_key = match args.get_opt::<RistrettoPublicKeyBytes>(0)? {
+                    Some(public_key) => public_key,
+                    None => self.main_signer("CallerContext::get_main_signer_proof")?,
+                };
 
                 self.tracker.write_with(|state_mut| {
                     let call_scope = state_mut.current_call_scope()?;
@@ -4188,8 +4204,8 @@ where
         self.tracker.write_with(|state_mut| {
             let template_byte_size = template.len();
             let code_hash = hash_template_code(&template);
-            let template_address =
-                PublishedTemplateAddress::from_author_and_binary_hash(&self.seal_signer_public_key, &code_hash);
+            let author = self.main_signer("publishing a template")?;
+            let template_address = PublishedTemplateAddress::from_author_and_binary_hash(&author, &code_hash);
             let epoch = state_mut.get_current_epoch()?;
             let template_name = template_def
                 .template_name()
@@ -4206,7 +4222,7 @@ where
                 SubstateValue::Template(PublishedTemplate {
                     template_name,
                     binary: template,
-                    author: self.seal_signer_public_key,
+                    author,
                     at_epoch: epoch.as_u64(),
                     metadata_hash: metadata_hash.clone(),
                 }),

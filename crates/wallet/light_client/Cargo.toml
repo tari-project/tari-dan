@@ -17,6 +17,7 @@ tari_ootle_transaction = { workspace = true }
 tari_state_tree = { workspace = true }
 tari_template_lib_types = { workspace = true }
 tari_bor = { workspace = true }
+tari_sidechain = { workspace = true }
 
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
@@ -25,11 +26,10 @@ thiserror = { workspace = true }
 indexmap = { workspace = true, optional = true }
 tari_common_types = { workspace = true, optional = true }
 tari_crypto = { workspace = true, optional = true }
-tari_sidechain = { workspace = true, optional = true }
 
 [dev-dependencies]
 tari_ootle_light_client = { path = ".", features = ["test-fixtures"] }
 
 [features]
 # Signed fixtures for tests of crates that verify with the light client.
-test-fixtures = ["dep:indexmap", "dep:tari_common_types", "dep:tari_crypto", "dep:tari_sidechain"]
+test-fixtures = ["dep:indexmap", "dep:tari_common_types", "dep:tari_crypto"]

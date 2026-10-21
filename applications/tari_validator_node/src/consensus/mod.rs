@@ -26,6 +26,7 @@ use crate::{
 
 mod block_transaction_executor;
 mod block_transaction_validator;
+mod chain_template_provider;
 mod handle;
 mod leader_selection;
 mod signer_service;
@@ -33,6 +34,7 @@ pub mod spec;
 
 pub use block_transaction_executor::*;
 pub use block_transaction_validator::*;
+pub use chain_template_provider::*;
 pub use handle::*;
 pub use signer_service::*;
 use tari_consensus::{consensus_constants::ConsensusConstants, hotstuff::HotstuffEvent};
@@ -41,7 +43,7 @@ use tari_template_lib::types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{
     config::ConsensusConfig,
-    consensus::spec::{ValidatorNodeStateStore, ValidatorTransactionProcessor},
+    consensus::spec::{ValidatorNodeStateStore, ValidatorTemplateProvider, ValidatorTransactionProcessor},
     p2p::NopLogger,
 };
 
@@ -58,7 +60,7 @@ pub async fn spawn(
     client_factory: TariValidatorNodeRpcClientFactory,
     hooks: <TariConsensusSpec as ConsensusSpec>::Hooks,
     shutdown_signal: ShutdownSignal,
-    transaction_executor: TariBlockTransactionExecutor<ValidatorTransactionProcessor>,
+    transaction_executor: TariBlockTransactionExecutor<ValidatorTransactionProcessor, ValidatorTemplateProvider>,
     transaction_validator: TariBlockTransactionValidator,
     tx_hotstuff_events: broadcast::Sender<HotstuffEvent>,
     consensus_constants: ConsensusConstants,

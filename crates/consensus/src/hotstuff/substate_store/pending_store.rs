@@ -15,7 +15,6 @@ use tari_engine_types::substate::{Substate, SubstateDiff, SubstateId, SubstateVa
 use tari_ootle_common_types::{
     LockIntent,
     NumPreshards,
-    SubstateAddress,
     SubstateLockType,
     SubstateRequirement,
     SubstateVersion,
@@ -25,7 +24,6 @@ use tari_ootle_common_types::{
     displayable::Displayable,
     optional::Optional,
     shard::Shard,
-    substate_type::SubstateType,
 };
 use tari_ootle_storage::{
     PendingChain,
@@ -35,7 +33,12 @@ use tari_ootle_storage::{
 };
 use tari_ootle_transaction::TransactionId;
 
-use super::error::SubstateStoreError;
+use super::{
+    SubstateOverlay,
+    chain_view::ChainView,
+    change_log::{ChangeLog, SubstateLayer},
+    error::SubstateStoreError,
+};
 use crate::{
     hotstuff::substate_store::LockFailedError,
     traits::{ReadableSubstateStore, WriteableSubstateStore},
@@ -43,14 +46,10 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::ootle::hotstuff::substate_store::pending_store";
 
+/// The substate changes, locks and pledges of the block being built on `parent_block`.
 pub struct PendingSubstateStore<'store, TTx: StateStoreReadTransaction> {
-    store: &'store TTx,
-    /// Map from substate address to the index in the diff list of the corresponding change
-    pending: HashMap<SubstateAddress, usize>,
-    /// Map from substate id to the index in the diff list of the latest change
-    head: HashMap<SubstateId, usize>,
-    /// Append only list of changes ordered oldest to newest
-    changes: Vec<SubstateChange>,
+    chain: ChainView<'store, TTx>,
+    log: ChangeLog,
     /// Encoded bytes of the substates this block puts up and the ids of those it puts down, per shard.
     /// Each shard's total is what the block adds to that shard's next state version.
     shard_output_bytes: HashMap<Shard, usize>,
@@ -62,29 +61,18 @@ pub struct PendingSubstateStore<'store, TTx: StateStoreReadTransaction> {
     /// The most bytes [`Self::pledge_inputs`] lets this block pledge, if it is being proposed.
     max_pledge_bytes: Option<usize>,
     new_locks: IndexMap<SubstateId, Vec<SubstateLock>>,
-    parent_block: LeafBlock,
-    /// Read once for every branch-scoped read at `parent_block`. `store` is borrowed shared for as long as this lives,
-    /// so nothing can write to the pending chain while the store is in use.
-    parent_chain: PendingChain,
-    num_preshards: NumPreshards,
 }
 
 impl<'a, TTx: StateStoreReadTransaction> PendingSubstateStore<'a, TTx> {
     pub fn init(store: &'a TTx, parent_block: LeafBlock, num_preshards: NumPreshards) -> Result<Self, StorageError> {
-        let parent_chain = store.pending_chain_get(parent_block.block_id())?;
         Ok(Self {
-            store,
-            pending: HashMap::new(),
-            head: HashMap::new(),
-            changes: Vec::new(),
+            chain: ChainView::init(store, parent_block, num_preshards)?,
+            log: ChangeLog::new(),
             shard_output_bytes: HashMap::new(),
             pledged_inputs: HashSet::new(),
             pledge_bytes: 0,
             max_pledge_bytes: None,
             new_locks: IndexMap::new(),
-            parent_block,
-            parent_chain,
-            num_preshards,
         })
     }
 
@@ -98,46 +86,21 @@ impl<'a, TTx: StateStoreReadTransaction> PendingSubstateStore<'a, TTx> {
 
     /// The block this store builds on.
     pub fn parent_block(&self) -> LeafBlock {
-        self.parent_block
+        self.chain.parent_block
     }
 
     /// The pending chain ending at the block this store builds on.
     pub fn parent_chain(&self) -> &PendingChain {
-        &self.parent_chain
+        &self.chain.parent_chain
     }
 
     pub fn read_transaction(&self) -> &'a TTx {
-        self.store
+        self.chain.store
     }
 
-    fn get_latest_change_from_store(&self, id: &SubstateId) -> Result<SubstateChange, SubstateStoreError> {
-        if let Some(change) =
-            BlockDiff::get_last_change_for_substate(self.read_transaction(), &self.parent_chain, id).optional()?
-        {
-            return Ok(change);
-        }
-
-        let substate = SubstateRecord::get_latest(self.read_transaction(), id)
-            .optional()?
-            .ok_or_else(|| SubstateStoreError::SubstateNotFound {
-                id: VersionedSubstateId::new(id.clone(), SubstateVersion::ZERO),
-            })?;
-        if substate.is_destroyed() {
-            return Ok(SubstateChange::Down {
-                id: VersionedSubstateId::new(id.clone(), substate.version()),
-                shard: substate.shard(),
-            });
-        }
-        let shard = substate.shard();
-        let version = substate.version();
-        let substate = substate
-            .into_substate()
-            .ok_or_else(|| up_substate_without_value(VersionedSubstateId::new(id.clone(), version)))?;
-        Ok(SubstateChange::Up {
-            id: id.clone(),
-            shard,
-            substate: Box::new(substate),
-        })
+    /// Speculative changes over this store as it stands now.
+    pub fn overlay(&self) -> SubstateOverlay<'_, 'a, TTx> {
+        SubstateOverlay::new(self)
     }
 
     pub(crate) fn update_in_place<TErr, FUpdate, FCreate>(
@@ -151,89 +114,7 @@ impl<'a, TTx: StateStoreReadTransaction> PendingSubstateStore<'a, TTx> {
         FUpdate: FnOnce(&mut SubstateValue) -> Result<(), TErr>,
         FCreate: FnOnce(Option<VersionedSubstateIdRef<'_>>) -> Result<SubstateValue, TErr>,
     {
-        let num_preshards = self.num_preshards;
-        if let Some(head_change_mut) = self.get_head_change_mut(substate_id) {
-            match head_change_mut {
-                SubstateChange::Up { substate, .. } => {
-                    debug!(target: LOG_TARGET, "Updating substate in place: {} v{}", substate_id, substate.version());
-                    return updater(substate.substate_value_mut());
-                },
-                SubstateChange::Down { id, .. } => {
-                    debug!(target: LOG_TARGET, "Creating substate in place: {}", id);
-                    let value = creator(Some(id.as_versioned_ref()))?;
-                    let next_id = id.to_next_version();
-                    let up = SubstateChange::Up {
-                        shard: id.to_shard(num_preshards),
-                        substate: Box::new(Substate::new(next_id.version(), value)),
-                        id: next_id.into_substate_id(),
-                    };
-                    self.insert(up);
-                },
-            }
-            return Ok(());
-        }
-
-        let Some(change) = self.get_latest_change_from_store(substate_id).optional()? else {
-            debug!(target: LOG_TARGET, "Creating substate in place: {} v0", substate_id);
-            let value = creator(None)?;
-            let id = VersionedSubstateIdRef::new(substate_id, SubstateVersion::ZERO);
-            let up = SubstateChange::Up {
-                shard: id.to_shard(num_preshards),
-                substate: Box::new(Substate::new(SubstateVersion::ZERO, value)),
-                id: substate_id.clone(),
-            };
-            self.insert(up);
-            return Ok(());
-        };
-        match change {
-            SubstateChange::Up {
-                substate, id, shard, ..
-            } => {
-                let version = substate.version();
-                let next_version = version
-                    .checked_next()
-                    .ok_or_else(|| SubstateStoreError::InvariantError {
-                        details: format!("Substate {id} version {version} cannot be incremented"),
-                    })?;
-                self.insert(SubstateChange::Down {
-                    id: VersionedSubstateId::new(id.clone(), version),
-                    shard,
-                });
-                let mut substate_value = substate.into_substate_value();
-                debug!(
-                    target: LOG_TARGET,
-                    "Updating substate in place: {} v{} -> v{}",
-                    id,
-                    version,
-                    next_version
-                );
-                updater(&mut substate_value)?;
-                let substate = Substate::new(next_version, substate_value);
-                self.insert(SubstateChange::Up {
-                    id,
-                    shard,
-                    substate: Box::new(substate),
-                });
-            },
-            SubstateChange::Down { id, .. } => {
-                debug!(target: LOG_TARGET, "Re-creating DOWNed substate in place: {}", id);
-                let value = creator(Some(id.as_versioned_ref()))?;
-                let next_version = id
-                    .version()
-                    .checked_next()
-                    .ok_or_else(|| SubstateStoreError::InvariantError {
-                        details: format!("Substate {id} cannot be incremented"),
-                    })?;
-                let next_id = VersionedSubstateId::new(id.into_substate_id(), next_version);
-                let up = SubstateChange::Up {
-                    shard: next_id.to_shard(self.num_preshards),
-                    substate: Box::new(Substate::new(next_id.version(), value)),
-                    id: next_id.into_substate_id(),
-                };
-                self.insert(up);
-            },
-        }
-        Ok(())
+        self.log.update_in_place(&self.chain, substate_id, updater, creator)
     }
 }
 
@@ -241,152 +122,59 @@ impl<'store, TTx: StateStoreReadTransaction> ReadableSubstateStore for PendingSu
     type Error = SubstateStoreError;
 
     fn get(&self, id: VersionedSubstateIdRef<'_>) -> Result<Substate, Self::Error> {
-        let substate_addr = id.to_substate_address();
-        if let Some(change) = self.get_pending(&substate_addr) {
-            return change
-                .up_substate()
-                .cloned()
-                .ok_or_else(|| SubstateStoreError::SubstateNotFound {
-                    id: change.versioned_substate_id().to_owned(),
-                });
-        }
-
-        if let Some(change) =
-            BlockDiff::get_for_versioned_substate(self.read_transaction(), &self.parent_chain, id).optional()?
-        {
-            return change
-                .into_up()
-                .ok_or_else(|| SubstateStoreError::SubstateNotFound { id: id.to_owned() });
-        }
-
-        let Some(substate) = SubstateRecord::get(self.read_transaction(), &substate_addr).optional()? else {
-            return Err(SubstateStoreError::SubstateNotFound { id: id.to_owned() });
-        };
-        if substate.is_destroyed() {
-            return Err(SubstateStoreError::SubstateNotFound { id: id.to_owned() });
-        }
-        substate
-            .into_substate()
-            .ok_or_else(|| up_substate_without_value(id.to_owned()))
-    }
-}
-
-fn up_substate_without_value(id: VersionedSubstateId) -> SubstateStoreError {
-    SubstateStoreError::InvariantError {
-        details: format!("Substate {id} is UP but its value is missing from the store"),
+        self.log.get(&self.chain, id)
     }
 }
 
 impl<'a, TTx: StateStoreReadTransaction> WriteableSubstateStore for PendingSubstateStore<'a, TTx> {
     fn put(&mut self, change: SubstateChange) -> Result<(), Self::Error> {
-        match &change {
-            SubstateChange::Up { id, substate, .. } => {
-                if let Some(v) = substate.previous_version() {
-                    self.assert_is_down(VersionedSubstateIdRef::new(id, v))?;
-                }
-            },
-            SubstateChange::Down { id, .. } => {
-                self.assert_is_up(id.as_versioned_ref())?;
-            },
-        }
-
-        self.insert(change);
-
-        Ok(())
+        self.log.put(&self.chain, change)
     }
 
     fn put_diff(&mut self, diff: &SubstateDiff) -> Result<(), Self::Error> {
-        for (id, version) in diff.down_iter() {
-            let id = VersionedSubstateId::new(id.clone(), *version);
-            let shard = id.to_shard(self.num_preshards);
-            debug!(target: LOG_TARGET, "🔽️ Down: {id} {shard}");
-            let bytes = tari_bor::encoded_len(id.substate_id());
-            self.put(SubstateChange::Down { id, shard })?;
-            self.record_shard_output_bytes(shard, bytes);
-        }
+        let shard_output_bytes = &mut self.shard_output_bytes;
+        self.log.put_diff(&self.chain, diff, |change| {
+            let bytes = match change {
+                SubstateChange::Up { id, substate, .. } => up_encoded_len(id, substate),
+                SubstateChange::Down { id, .. } => tari_bor::encoded_len(id.substate_id()),
+            };
+            let total = shard_output_bytes.entry(change.shard()).or_default();
+            *total = total.saturating_add(bytes);
+        })
+    }
+}
 
-        for (id, substate) in diff.up_iter() {
-            let vid = VersionedSubstateIdRef::new(id, substate.version());
-            let shard = vid.to_shard(self.num_preshards);
-            debug!(target: LOG_TARGET, "🔼️ Up: {} v{} {}", id, substate.version(), shard);
-            self.put(SubstateChange::Up {
-                id: id.clone(),
-                shard,
-                substate: Box::new(substate.clone()),
-            })?;
-            self.record_shard_output_bytes(shard, up_encoded_len(id, substate));
-        }
+/// Reads through to the chain view beneath this store's changes. An overlay sees these changes as made by the block
+/// being built.
+impl<TTx: StateStoreReadTransaction> SubstateLayer for PendingSubstateStore<'_, TTx> {
+    fn num_preshards(&self) -> NumPreshards {
+        self.chain.num_preshards
+    }
 
-        for withdraw in diff.validator_fee_withdrawals() {
-            let id = withdraw.address.into();
-            self.update_in_place(
-                &id,
-                |value_mut| {
-                    let substate_type = SubstateType::from(&*value_mut);
-                    let fee_pool =
-                        value_mut
-                            .as_validator_fee_pool_mut()
-                            .ok_or_else(|| SubstateStoreError::InvariantError {
-                                details: format!(
-                                    "Expected substate {id} to be a ValidatorFeePool but was {substate_type}",
-                                ),
-                            })?;
-                    if !fee_pool.withdraw_direct(withdraw.amount) {
-                        return Err(SubstateStoreError::InvariantError {
-                            details: format!(
-                                "Insufficient balance to withdraw {} from validator fee pool {} (balance: {})",
-                                withdraw.amount,
-                                withdraw.address,
-                                fee_pool.amount()
-                            ),
-                        });
-                    }
-                    Ok(())
-                },
-                // Without a live version there is nothing to withdraw from
-                |maybe_id| match maybe_id {
-                    Some(id) => Err(SubstateStoreError::SubstateNotFound { id: id.to_owned() }),
-                    None => Err(SubstateStoreError::SubstateNotFound {
-                        id: VersionedSubstateId::new(id.clone(), SubstateVersion::ZERO),
-                    }),
-                },
-            )?;
-        }
+    fn get_substate(&self, id: VersionedSubstateIdRef<'_>) -> Result<Substate, SubstateStoreError> {
+        self.log.get(&self.chain, id)
+    }
 
-        Ok(())
+    fn is_version_up(&self, id: VersionedSubstateIdRef<'_>) -> Result<Option<bool>, SubstateStoreError> {
+        self.log.is_version_up(&self.chain, id)
+    }
+
+    fn latest_change(&self, id: &SubstateId) -> Result<SubstateChange, SubstateStoreError> {
+        self.log.latest_change(&self.chain, id)
+    }
+
+    fn latest_version(&self, id: &SubstateId) -> Result<LatestSubstateVersion, SubstateStoreError> {
+        self.log.latest_version(&self.chain, id)
+    }
+
+    fn block_head_change(&self, id: &SubstateId) -> Option<&SubstateChange> {
+        self.log.get_head(id)
     }
 }
 
 impl<'store, TTx: StateStoreReadTransaction> PendingSubstateStore<'store, TTx> {
     pub fn get_latest_version(&self, id: &SubstateId) -> Result<LatestSubstateVersion, SubstateStoreError> {
-        if let Some(ch) = self
-            .head
-            .get(id)
-            .map(|&pos| self.changes.get(pos).expect("diff and head are not in sync"))
-        {
-            return Ok(LatestSubstateVersion {
-                version: ch.versioned_substate_id().version(),
-                is_up: ch.is_up(),
-            });
-        }
-
-        if let Some(change) =
-            BlockDiff::get_last_change_for_substate(self.read_transaction(), &self.parent_chain, id).optional()?
-        {
-            let version = change.versioned_substate_id().version();
-            return Ok(LatestSubstateVersion {
-                version,
-                is_up: change.is_up(),
-            });
-        }
-
-        let (version, is_up) = SubstateRecord::get_latest_version(self.read_transaction(), id)
-            .optional()?
-            .ok_or_else(|| SubstateStoreError::SubstateNotFound {
-                id: VersionedSubstateId::new(id.clone(), SubstateVersion::ZERO),
-            })?;
-
-        Ok(LatestSubstateVersion { version, is_up })
+        self.log.latest_version(&self.chain, id)
     }
 
     pub fn exists(&self, id: &SubstateId) -> Result<bool, SubstateStoreError> {
@@ -398,33 +186,11 @@ impl<'store, TTx: StateStoreReadTransaction> PendingSubstateStore<'store, TTx> {
         &self,
         ids: I,
     ) -> Result<HashMap<SubstateRequirement, Substate>, SubstateStoreError> {
-        let mut substates = HashMap::with_capacity(ids.len());
-        for (req, version) in ids {
-            let substate = self.get(VersionedSubstateIdRef::new(req.substate_id(), version))?;
-            substates.insert(req, substate);
-        }
-
-        Ok(substates)
-    }
-
-    fn get_head_change(&self, id: &SubstateId) -> Option<&SubstateChange> {
-        self.head
-            .get(id)
-            .map(|&pos| self.changes.get(pos).expect("diff and head are not in sync"))
-    }
-
-    fn get_head_change_mut(&mut self, id: &SubstateId) -> Option<&mut SubstateChange> {
-        self.head
-            .get(id)
-            .map(|&pos| self.changes.get_mut(pos).expect("diff and head are not in sync"))
+        self.log.get_many(&self.chain, ids)
     }
 
     pub fn get_latest_change(&self, id: &SubstateId) -> Result<SubstateChange, SubstateStoreError> {
-        if let Some(ch) = self.get_head_change(id) {
-            return Ok(ch.clone());
-        }
-
-        self.get_latest_change_from_store(id)
+        self.log.latest_change(&self.chain, id)
     }
 
     pub fn has_any_conflicting_pledges<'a, I>(
@@ -437,7 +203,7 @@ impl<'store, TTx: StateStoreReadTransaction> PendingSubstateStore<'store, TTx> {
     {
         // TODO(perf): consider optimizing
         let existing = self
-            .store
+            .read_transaction()
             .foreign_substate_pledges_get_write_pledges_to_transaction(transaction_id, substate_ids)?;
 
         if existing.is_empty() {
@@ -799,20 +565,6 @@ impl<'store, TTx: StateStoreReadTransaction> PendingSubstateStore<'store, TTx> {
         Ok(())
     }
 
-    fn get_pending(&self, addr: &SubstateAddress) -> Option<&SubstateChange> {
-        self.pending
-            .get(addr)
-            .map(|&pos| self.changes.get(pos).expect("pending map and diff are out of sync"))
-    }
-
-    fn insert(&mut self, change: SubstateChange) {
-        let index = self.changes.len();
-        self.pending.insert(change.to_substate_address(), index);
-        self.head
-            .insert(change.versioned_substate_id().substate_id().clone(), index);
-        self.changes.push(change)
-    }
-
     pub fn get_latest_lock_by_id(&self, id: &SubstateId) -> Result<Option<Cow<'_, SubstateLock>>, SubstateStoreError> {
         if let Some(lock) = self.new_locks.get(id).and_then(|locks| locks.last()) {
             return Ok(Some(Cow::Borrowed(lock)));
@@ -820,7 +572,7 @@ impl<'store, TTx: StateStoreReadTransaction> PendingSubstateStore<'store, TTx> {
 
         let maybe_lock = self
             .read_transaction()
-            .substate_locks_get_latest_for_substate_in_chain(&self.parent_chain, id)
+            .substate_locks_get_latest_for_substate_in_chain(&self.chain.parent_chain, id)
             .optional()?;
         Ok(maybe_lock.map(Cow::Owned))
     }
@@ -858,84 +610,8 @@ impl<'store, TTx: StateStoreReadTransaction> PendingSubstateStore<'store, TTx> {
         self.new_locks.entry(substate_id).or_default().push(lock);
     }
 
-    fn assert_is_up(&self, id: VersionedSubstateIdRef<'_>) -> Result<(), SubstateStoreError> {
-        trace!(
-            target: LOG_TARGET,
-            "assert_is_up: id: {}, pending: {}, head: {}",
-            id,
-            self.pending.display(),
-            self.head.display()
-        );
-        if let Some(change) = self.get_pending(&id.to_substate_address()) {
-            if change.is_down() {
-                return Err(SubstateStoreError::SubstateNotFound { id: id.to_owned() });
-            }
-            return Ok(());
-        }
-
-        trace!(
-            target: LOG_TARGET,
-            "assert_is_up id: {} not found in pending",
-            id,
-        );
-
-        if let Some(change) =
-            BlockDiff::get_for_versioned_substate(self.read_transaction(), &self.parent_chain, id).optional()?
-        {
-            if change.is_up() {
-                return Ok(());
-            }
-            return Err(SubstateStoreError::SubstateNotFound { id: id.to_owned() });
-        }
-
-        trace!(
-            target: LOG_TARGET,
-            "assert_is_up: id: {} not found in block diff",
-            id,
-        );
-
-        match SubstateRecord::substate_is_up(self.read_transaction(), &id.to_substate_address()).optional()? {
-            Some(true) => Ok(()),
-            Some(false) | None => Err(SubstateStoreError::SubstateNotFound { id: id.to_owned() }),
-        }
-    }
-
     pub fn lock_assert_is_up(&self, id: VersionedSubstateIdRef<'_>) -> Result<(), SubstateStoreError> {
-        match self.assert_is_up(id) {
-            Ok(_) => Ok(()),
-            // Converts a substate store error to a LockFailedError (TODO: improve)
-            Err(SubstateStoreError::SubstateNotFound { id }) => Err(LockFailedError::SubstateNotFound { id }.into()),
-            Err(err) => Err(err),
-        }
-    }
-
-    fn assert_is_down(&self, id: VersionedSubstateIdRef<'_>) -> Result<(), SubstateStoreError> {
-        if let Some(change) = self.get_pending(&id.to_substate_address()) {
-            if change.is_up() {
-                return Err(SubstateStoreError::ExpectedSubstateDown { id: id.to_owned() });
-            }
-            return Ok(());
-        }
-
-        if let Some(change) =
-            BlockDiff::get_for_versioned_substate(self.read_transaction(), &self.parent_chain, id).optional()?
-        {
-            if change.is_up() {
-                return Err(SubstateStoreError::ExpectedSubstateDown { id: id.to_owned() });
-            }
-            return Ok(());
-        }
-
-        let address = id.to_substate_address();
-        let Some(is_up) = SubstateRecord::substate_is_up(self.read_transaction(), &address).optional()? else {
-            debug!(target: LOG_TARGET, "Expected substate {} to be DOWN but it does not exist", address);
-            return Err(SubstateStoreError::SubstateNotFound { id: id.to_owned() });
-        };
-        if is_up {
-            return Err(SubstateStoreError::ExpectedSubstateDown { id: id.to_owned() });
-        }
-
-        Ok(())
+        self.log.lock_assert_is_up(&self.chain, id)
     }
 
     /// Asserts that the exact version `id` names has never existed in this chain.
@@ -944,7 +620,7 @@ impl<'store, TTx: StateStoreReadTransaction> PendingSubstateStore<'store, TTx> {
     /// and `SubstateRecord`s outlive their destruction, so existence, not liveness, is the test. The three sources are
     /// checked cheapest first: the in-memory diff, then a point lookup, then the branch scan.
     fn lock_assert_not_exist(&self, id: VersionedSubstateIdRef<'_>) -> Result<(), SubstateStoreError> {
-        if self.get_pending(&id.to_substate_address()).is_some() {
+        if self.log.get_pending(&id.to_substate_address()).is_some() {
             return Err(LockFailedError::SubstateExists { id: id.to_owned() }.into());
         }
 
@@ -952,7 +628,7 @@ impl<'store, TTx: StateStoreReadTransaction> PendingSubstateStore<'store, TTx> {
             return Err(LockFailedError::SubstateExists { id: id.to_owned() }.into());
         }
 
-        if BlockDiff::contains_versioned_substate(self.read_transaction(), &self.parent_chain, id)? {
+        if BlockDiff::contains_versioned_substate(self.read_transaction(), &self.chain.parent_chain, id)? {
             return Err(LockFailedError::SubstateExists { id: id.to_owned() }.into());
         }
 
@@ -963,11 +639,6 @@ impl<'store, TTx: StateStoreReadTransaction> PendingSubstateStore<'store, TTx> {
         &self.new_locks
     }
 
-    fn record_shard_output_bytes(&mut self, shard: Shard, bytes: usize) {
-        let total = self.shard_output_bytes.entry(shard).or_default();
-        *total = total.saturating_add(bytes);
-    }
-
     /// The most bytes this block writes to any one shard: substates put up and the ids of those put down.
     pub fn max_shard_output_bytes(&self) -> usize {
         self.shard_output_bytes.values().copied().max().unwrap_or(0)
@@ -976,11 +647,11 @@ impl<'store, TTx: StateStoreReadTransaction> PendingSubstateStore<'store, TTx> {
     /// Whether putting `diff` would take any shard past `max_bytes` written in this block.
     pub fn diff_exceeds_shard_output_bytes(&self, diff: &SubstateDiff, max_bytes: usize) -> bool {
         let downs = diff.down_iter().map(|(id, version)| {
-            let shard = VersionedSubstateIdRef::new(id, *version).to_shard(self.num_preshards);
+            let shard = VersionedSubstateIdRef::new(id, *version).to_shard(self.chain.num_preshards);
             (shard, tari_bor::encoded_len(id))
         });
         let ups = diff.up_iter().map(|(id, substate)| {
-            let shard = VersionedSubstateIdRef::new(id, substate.version()).to_shard(self.num_preshards);
+            let shard = VersionedSubstateIdRef::new(id, substate.version()).to_shard(self.chain.num_preshards);
             (shard, up_encoded_len(id, substate))
         });
         let mut totals = HashMap::<Shard, usize>::new();
@@ -1042,11 +713,11 @@ impl<'store, TTx: StateStoreReadTransaction> PendingSubstateStore<'store, TTx> {
     }
 
     pub fn changes(&self) -> &Vec<SubstateChange> {
-        &self.changes
+        self.log.changes()
     }
 
     pub fn generate_shard_state_change_bitmap(&self) -> Vec<bool> {
-        let shard_group = self.parent_block.shard_group();
+        let shard_group = self.chain.parent_block.shard_group();
         let mut bitmap = iter::repeat_n(false, shard_group.len() + 1).collect::<Vec<_>>();
         debug!(
             target: LOG_TARGET,
@@ -1054,7 +725,7 @@ impl<'store, TTx: StateStoreReadTransaction> PendingSubstateStore<'store, TTx> {
             bitmap.len(),
             shard_group,
         );
-        for ch in &self.changes {
+        for ch in self.log.changes() {
             let shard = ch.shard();
             if !shard_group.contains_or_global(&shard) {
                 continue;
@@ -1081,7 +752,7 @@ impl<'store, TTx: StateStoreReadTransaction> PendingSubstateStore<'store, TTx> {
     }
 
     pub fn into_parts(self) -> (Vec<SubstateChange>, IndexMap<SubstateId, Vec<SubstateLock>>) {
-        (self.changes, self.new_locks)
+        (self.log.into_changes(), self.new_locks)
     }
 }
 
@@ -1176,6 +847,10 @@ pub struct LatestSubstateVersion {
 }
 
 impl LatestSubstateVersion {
+    pub(super) fn new(version: SubstateVersion, is_up: bool) -> Self {
+        Self { version, is_up }
+    }
+
     pub fn is_down(&self) -> bool {
         !self.is_up
     }

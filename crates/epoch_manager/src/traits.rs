@@ -26,7 +26,6 @@ use std::{
     sync::Arc,
 };
 
-use tari_common_types::types::FixedHash;
 use tari_ootle_common_types::{
     DerivableFromPublicKey,
     Epoch,
@@ -39,6 +38,7 @@ use tari_ootle_common_types::{
     layer_one_transaction::LayerOneTransactionDef,
 };
 use tari_ootle_storage::global::models::ValidatorNode;
+use tari_sidechain::FixedHash;
 use tari_state_tree::ValidatorSetCommitteeProof;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tokio::sync::broadcast;

@@ -3,9 +3,8 @@
 
 use std::collections::HashMap;
 
-use proc_macro2::{Ident, TokenStream};
+use proc_macro2::{Group, Ident, Span, TokenStream};
 use syn::{
-    Block,
     Expr,
     ExprArray,
     ExprCall,
@@ -14,25 +13,21 @@ use syn::{
     ExprMethodCall,
     ExprPath,
     ExprUnary,
-    Item,
-    ItemFn,
-    ItemUse,
     Lit,
     LitStr,
-    Local,
     Macro,
-    Pat,
-    PatIdent,
-    PatTuple,
+    MacroDelimiter,
     Path,
-    Signature,
-    Stmt,
+    Token,
     UnOp,
-    UseTree,
+    braced,
+    bracketed,
     ext::IdentExt,
+    parenthesized,
     parse::{ParseStream, Parser},
     parse2,
     punctuated::Punctuated,
+    token,
     token::Comma,
 };
 use tari_engine_types::substate::SubstateId;
@@ -192,55 +187,30 @@ impl ManifestParser {
             alias: Ident::new("Account", proc_macro2::Span::call_site()),
         });
 
-        for stmt in Block::parse_within(input)? {
-            match stmt {
-                // use template_hash as TemplateName;
-                Stmt::Item(Item::Use(ItemUse {
-                    tree: UseTree::Rename(rename),
-                    ..
-                })) => {
-                    let template_id = rename.ident.to_string();
-                    let template_address = template_id
-                        .split_once('_')
-                        .and_then(|(_, s)| TemplateAddress::from_hex(s).ok())
-                        .ok_or_else(|| syn::Error::new_spanned(rename.clone(), "Invalid template address"))?;
-
-                    defines.push(ManifestImport {
-                        template_address: Some(template_address),
-                        alias: rename.rename,
-                    });
-                },
-                // use Name; // (predefined template)
-                Stmt::Item(Item::Use(ItemUse {
-                    tree: UseTree::Name(name),
-                    ..
-                })) => {
-                    defines.push(ManifestImport {
-                        template_address: None,
-                        alias: name.ident,
-                    });
-                },
-                Stmt::Item(Item::Fn(ItemFn {
-                    block,
-                    sig: Signature { ident, .. },
-                    ..
-                })) => {
-                    if ident == "fee_main" {
-                        fee_instruction_intents.extend(self.parse_block(*block)?);
-                    } else if ident == "main" {
-                        instruction_intents.extend(self.parse_block(*block)?);
-                    } else {
-                        let name = ident.to_string();
-                        let body = self.parse_block(*block)?;
-                        functions.insert(name, body);
-                    }
-                },
-                _ => {
-                    return Err(syn::Error::new_spanned(
-                        stmt.clone(),
-                        format!("Unsupported outer statement {:?}", stmt),
-                    ));
-                },
+        while !input.is_empty() {
+            skip_attributes(input)?;
+            if input.peek(Token![use]) {
+                defines.push(parse_use(input)?);
+            } else if input.peek(Token![fn]) {
+                input.parse::<Token![fn]>()?;
+                let ident: Ident = input.parse()?;
+                let params;
+                parenthesized!(params in input);
+                if !params.is_empty() {
+                    return Err(params.error("manifest functions take no parameters"));
+                }
+                let body;
+                braced!(body in input);
+                let intents = self.parse_block(&body)?;
+                if ident == "fee_main" {
+                    fee_instruction_intents.extend(intents);
+                } else if ident == "main" {
+                    instruction_intents.extend(intents);
+                } else {
+                    functions.insert(ident.to_string(), intents);
+                }
+            } else {
+                return Err(input.error("expected a `use` declaration or a function"));
             }
         }
 
@@ -252,68 +222,47 @@ impl ManifestParser {
         })
     }
 
-    fn parse_block(&self, block: Block) -> Result<Vec<ManifestIntent>, syn::Error> {
-        block.stmts.into_iter().map(|stmt| self.parse_stmt(stmt)).collect()
-    }
-
-    pub fn parse_stmt(&self, stmt: Stmt) -> Result<ManifestIntent, syn::Error> {
-        match stmt {
-            Stmt::Local(local) => self.handle_local(local),
-            // component.function_name(arg1, arg2);
-            Stmt::Expr(expr, _) => self.handle_semi_expr(expr),
-            Stmt::Macro(mac) => self.handle_macro_stmt(mac),
-            _ => Err(syn::Error::new_spanned(
-                stmt.clone(),
-                format!("Invalid statement {:?}", stmt),
-            )),
+    fn parse_block(&self, input: ParseStream) -> Result<Vec<ManifestIntent>, syn::Error> {
+        let mut intents = vec![];
+        while !input.is_empty() {
+            skip_attributes(input)?;
+            if input.is_empty() {
+                break;
+            }
+            intents.push(self.parse_stmt(input)?);
         }
+        Ok(intents)
     }
 
-    fn handle_macro_stmt(&self, mac: syn::StmtMacro) -> Result<ManifestIntent, syn::Error> {
-        let Macro { path, tokens, .. } = mac.mac;
+    fn parse_stmt(&self, input: ParseStream) -> Result<ManifestIntent, syn::Error> {
+        if input.peek(Token![let]) {
+            input.parse::<Token![let]>()?;
+            let (binding, binding_span) = parse_binding(input)?;
+            input.parse::<Token![=]>()?;
+            let expr = parse_expr(input)?;
+            input.parse::<Token![;]>()?;
+            return self.handle_local(binding, binding_span, expr);
+        }
 
-        let Some(mac_ident) = path.segments.first() else {
-            return Err(syn::Error::new_spanned(path, "macro path must have a single segment"));
-        };
-
-        macro_call(&mac_ident.ident, tokens)
+        let expr = parse_expr(input)?;
+        let is_brace_macro = matches!(&expr, Expr::Macro(m) if matches!(m.mac.delimiter, MacroDelimiter::Brace(_)));
+        if input.peek(Token![;]) {
+            input.parse::<Token![;]>()?;
+        } else if !input.is_empty() && !is_brace_macro {
+            return Err(input.error("expected `;`"));
+        } else {
+            // The last statement of a block, or a brace-delimited macro, ends without a `;`.
+        }
+        self.handle_semi_expr(expr)
     }
 
-    fn handle_local(&self, local: Local) -> Result<ManifestIntent, syn::Error> {
-        // Parse let variable binding
-        let output_binding = match &local.pat {
-            Pat::Ident(PatIdent { ident, .. }) => OutputBinding::Single(ident.clone()),
-            Pat::Tuple(PatTuple { elems, .. }) => {
-                let idents = elems
-                    .iter()
-                    .map(|p| match p {
-                        Pat::Ident(PatIdent { ident, .. }) => Ok(ident.clone()),
-                        _ => Err(syn::Error::new_spanned(
-                            p,
-                            "Only identifiers are supported in tuple destructuring patterns",
-                        )),
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                if idents.is_empty() {
-                    return Err(syn::Error::new_spanned(
-                        &local.pat,
-                        "Empty tuple pattern is not supported",
-                    ));
-                }
-                OutputBinding::Tuple(idents)
-            },
-            p => return Err(syn::Error::new_spanned(p, format!("{:?} pattern is not supported", p))),
-        };
-
-        let expr = local.init.as_ref().map(|init| &init.expr).ok_or_else(|| {
-            syn::Error::new_spanned(
-                local.clone(),
-                // I think this is `let x;`?
-                "let expressions without an assignment are unsupported",
-            )
-        })?;
-
-        let result = match *expr.clone() {
+    fn handle_local(
+        &self,
+        output_binding: OutputBinding,
+        binding_span: Span,
+        expr: Expr,
+    ) -> Result<ManifestIntent, syn::Error> {
+        let result = match expr {
             Expr::Call(call) => {
                 match &*call.func {
                     Expr::Path(path) => {
@@ -364,8 +313,8 @@ impl ManifestParser {
                 let var_ident = match output_binding {
                     OutputBinding::Single(ident) => ident,
                     OutputBinding::Tuple(_) => {
-                        return Err(syn::Error::new_spanned(
-                            &local.pat,
+                        return Err(syn::Error::new(
+                            binding_span,
                             "Tuple destructuring is not supported for macro assignments",
                         ));
                     },
@@ -381,10 +330,10 @@ impl ManifestParser {
                     tokens,
                 )?
             },
-            _ => {
+            other => {
                 return Err(syn::Error::new_spanned(
-                    expr.clone(),
-                    format!("Only function calls are supported in let statements. {:?}", expr),
+                    other,
+                    "Only function calls are supported in let statements",
                 ));
             },
         };
@@ -441,12 +390,184 @@ impl ManifestParser {
 
                 macro_call(&mac.ident, tokens)
             },
-            _ => Err(syn::Error::new_spanned(
-                expr.clone(),
-                format!("Only function calls are supported in let statements. {:?}", expr),
+            other => Err(syn::Error::new_spanned(
+                other,
+                "Only function calls, method calls and macros are supported as statements",
             )),
         }
     }
+}
+
+// The parsers below accept the manifest grammar only. Each consumes a token before it loops, and each recursion
+// descends into a nested group, so the parse depth is bounded by the group depth that `parse_manifest` caps.
+
+/// Skips doc comments and other attributes, which carry no meaning in a manifest.
+fn skip_attributes(input: ParseStream) -> Result<(), syn::Error> {
+    while input.peek(Token![#]) {
+        input.parse::<Token![#]>()?;
+        if input.peek(Token![!]) {
+            input.parse::<Token![!]>()?;
+        }
+        if !input.peek(token::Bracket) {
+            return Err(input.error("expected `[` to open an attribute"));
+        }
+        input.parse::<Group>()?;
+    }
+    Ok(())
+}
+
+/// `use template_<hex> as Alias;` or `use Name;` for a predefined template.
+fn parse_use(input: ParseStream) -> Result<ManifestImport, syn::Error> {
+    input.parse::<Token![use]>()?;
+    let ident: Ident = input.parse()?;
+    let import = if input.peek(Token![as]) {
+        input.parse::<Token![as]>()?;
+        let alias: Ident = input.parse()?;
+        let template_address = ident
+            .to_string()
+            .split_once('_')
+            .and_then(|(_, s)| TemplateAddress::from_hex(s).ok())
+            .ok_or_else(|| syn::Error::new_spanned(&ident, "Invalid template address"))?;
+        ManifestImport {
+            template_address: Some(template_address),
+            alias,
+        }
+    } else {
+        ManifestImport {
+            template_address: None,
+            alias: ident,
+        }
+    };
+    input.parse::<Token![;]>()?;
+    Ok(import)
+}
+
+/// The pattern of a `let`: `x`, `mut x` or a tuple of those.
+fn parse_binding(input: ParseStream) -> Result<(OutputBinding, Span), syn::Error> {
+    fn binding_ident(input: ParseStream) -> Result<Ident, syn::Error> {
+        input.parse::<Option<Token![mut]>>()?;
+        input.parse()
+    }
+
+    if input.peek(token::Paren) {
+        let content;
+        let paren = parenthesized!(content in input);
+        let span = paren.span.join();
+        let idents = Punctuated::<Ident, Comma>::parse_terminated_with(&content, binding_ident)?;
+        if idents.is_empty() {
+            return Err(syn::Error::new(span, "Empty tuple pattern is not supported"));
+        }
+        return Ok((OutputBinding::Tuple(idents.into_iter().collect()), span));
+    }
+
+    let ident = binding_ident(input)?;
+    let span = ident.span();
+    Ok((OutputBinding::Single(ident), span))
+}
+
+/// A statement's expression: `Template::function(args)`, `local_function()`, `component.method(args)` or a macro.
+fn parse_expr(input: ParseStream) -> Result<Expr, syn::Error> {
+    if input.peek(syn::Ident) && input.peek2(Token![!]) {
+        return Ok(Expr::Macro(ExprMacro {
+            attrs: vec![],
+            mac: input.parse()?,
+        }));
+    }
+
+    let path = input.call(Path::parse_mod_style)?;
+    if input.peek(Token![.]) {
+        let dot_token = input.parse()?;
+        let method = input.parse()?;
+        let content;
+        let paren_token = parenthesized!(content in input);
+        return Ok(Expr::MethodCall(ExprMethodCall {
+            attrs: vec![],
+            receiver: Box::new(path_expr(path)),
+            dot_token,
+            method,
+            turbofish: None,
+            paren_token,
+            args: Punctuated::parse_terminated_with(&content, parse_arg)?,
+        }));
+    }
+    if input.peek(token::Paren) {
+        let content;
+        let paren_token = parenthesized!(content in input);
+        return Ok(Expr::Call(ExprCall {
+            attrs: vec![],
+            func: Box::new(path_expr(path)),
+            paren_token,
+            args: Punctuated::parse_terminated_with(&content, parse_arg)?,
+        }));
+    }
+    Err(syn::Error::new_spanned(
+        path,
+        "expected a function call, a method call or a macro",
+    ))
+}
+
+/// A call argument: a literal, a negated integer, a variable, a macro or a list of arguments.
+fn parse_arg(input: ParseStream) -> Result<Expr, syn::Error> {
+    if input.peek(token::Bracket) {
+        let content;
+        let bracket_token = bracketed!(content in input);
+        return Ok(Expr::Array(ExprArray {
+            attrs: vec![],
+            bracket_token,
+            elems: Punctuated::parse_terminated_with(&content, parse_arg)?,
+        }));
+    }
+    if input.peek(Token![-]) {
+        let minus = input.parse()?;
+        if input.peek(Token![-]) || !input.peek(Lit) {
+            return Err(input.error("expected an integer after `-`"));
+        }
+        return Ok(Expr::Unary(ExprUnary {
+            attrs: vec![],
+            op: UnOp::Neg(minus),
+            expr: Box::new(Expr::Lit(ExprLit {
+                attrs: vec![],
+                lit: input.parse()?,
+            })),
+        }));
+    }
+    if input.peek(Lit) {
+        return Ok(Expr::Lit(ExprLit {
+            attrs: vec![],
+            lit: input.parse()?,
+        }));
+    }
+    if input.peek(syn::Ident) && input.peek2(Token![!]) {
+        return Ok(Expr::Macro(ExprMacro {
+            attrs: vec![],
+            mac: input.parse()?,
+        }));
+    }
+    if input.peek(syn::Ident) {
+        let path = input.call(Path::parse_mod_style)?;
+        if input.peek(token::Paren) {
+            // Only parsed far enough for `build_argument` to suggest the macro to use instead.
+            let args: Group = input.parse()?;
+            return Ok(Expr::Call(ExprCall {
+                attrs: vec![],
+                func: Box::new(path_expr(path)),
+                paren_token: token::Paren {
+                    span: args.delim_span(),
+                },
+                args: Punctuated::new(),
+            }));
+        }
+        return Ok(path_expr(path));
+    }
+    Err(input.error("Invalid argument, only literals, lists and variables are supported"))
+}
+
+fn path_expr(path: Path) -> Expr {
+    Expr::Path(ExprPath {
+        attrs: vec![],
+        qself: None,
+        path,
+    })
 }
 
 fn assignment_from_macro(var_name: Ident, mac: &Ident, tokens: TokenStream) -> Result<ManifestIntent, syn::Error> {
@@ -785,10 +906,7 @@ fn extract_single_var_name(expr: &Expr) -> Result<Ident, syn::Error> {
             }
             Ok(segments[0].ident.clone())
         },
-        _ => Err(syn::Error::new_spanned(
-            expr.clone(),
-            format!("Invalid method call {:?}", expr),
-        )),
+        _ => Err(syn::Error::new_spanned(expr, "Invalid method call")),
     }
 }
 
