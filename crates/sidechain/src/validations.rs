@@ -23,7 +23,7 @@ const LOG_TARGET: &str = "c::sidechain::validations";
 
 /// The maximum number of signatures a quorum certificate may contain. A valid quorum certificate contains at most one
 /// signature per committee member, so this is an upper bound for any committee size. Proof validation is the only place
-/// it is enforced, before any signature is verified or duplicates are collected.
+/// it is enforced, before any signature is verified.
 pub const MAX_QC_SIGNATURES: usize = 1000;
 
 /// The maximum number of elements a commit proof may contain. A proof holds the three quorum certificates of the
