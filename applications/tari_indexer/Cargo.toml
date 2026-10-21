@@ -76,6 +76,7 @@ log4rs = { workspace = true, features = [
     "compound_policy",
     "size_trigger",
     "fixed_window_roller",
+    "console_appender",
 ] }
 mime_guess = { workspace = true }
 mediatype = "0.20.0"
