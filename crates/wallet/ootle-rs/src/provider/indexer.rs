@@ -38,6 +38,7 @@ use crate::{
     provider::{
         PendingTransaction,
         Provider,
+        ProviderError,
         ProviderResult,
         StealthUtxoStream,
         StealthUtxoWatchRequest,
@@ -183,11 +184,15 @@ impl<Wallet> IndexerProvider<Wallet> {
         Ok(self.verifier.fetch_substate(&substate_id.into()).await.optional()?)
     }
 
-    /// Fetch a resource by address. The returned [`Resource`] carries its type, optional view key,
-    /// divisibility, and total supply.
+    /// Fetch a resource by address, verified unless the provider trusts its indexer. The returned [`Resource`] carries
+    /// its type, optional view key, divisibility, and total supply.
     pub async fn get_resource(&self, resource_address: ResourceAddress) -> ProviderResult<Resource> {
-        let resp = self.client.get_resource(resource_address).await?;
-        Ok(resp.resource)
+        self.verifier
+            .fetch_substate(&SubstateId::Resource(resource_address))
+            .await?
+            .into_substate_value()
+            .into_resource()
+            .ok_or_else(|| ProviderError::other(format!("Expected resource substate for {resource_address}")))
     }
 
     /// Watch stealth UTXO updates for a resource, resuming from a per-shard cursor.
@@ -324,10 +329,6 @@ impl<Wallet: NetworkWallet + Send + Sync> Provider for IndexerProvider<Wallet> {
         substate_ids: I,
     ) -> ProviderResult<HashMap<SubstateId, Substate>> {
         let substate_ids = substate_ids.into_iter().collect::<Vec<_>>();
-        if substate_ids.is_empty() {
-            // The request API will not allow us to send an empty list, so we short-circuit here
-            return Ok(HashMap::new());
-        }
         Ok(self.verifier.fetch_substates(&substate_ids).await?)
     }
 }
