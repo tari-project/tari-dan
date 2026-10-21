@@ -16,8 +16,8 @@ use crate::error::IndexerRestClientError;
 
 pub static MIME_EVENT_STREAM: HeaderValue = HeaderValue::from_static("text/event-stream");
 
-/// Longest SSE line accepted, excluding its terminator. Indexer events are a few KiB of JSON on one `data:`
-/// line, so this bounds both the read buffer and the data of a single event.
+/// Longest SSE line accepted, excluding its terminator. `poll_next` produces an event after every `data:` line, so
+/// this bounds both the read buffer and the data of a single event.
 const MAX_LINE_LEN: usize = 1024 * 1024;
 
 pub struct SseEventStreamBuilder {
