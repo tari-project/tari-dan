@@ -128,7 +128,8 @@ enum IndexerHealth {
     /// The indexer answered.
     Answered,
     /// The indexer could not be reached or cannot serve: a 502, 503 or 504, whether from the indexer (e.g. still
-    /// syncing) or a gateway in front of it, or an answer that fails the client's checks.
+    /// syncing) or a gateway in front of it, a response longer than the client accepts, or an answer that fails the
+    /// client's checks.
     Unavailable,
     /// Nothing can be concluded, e.g. the indexer is rate limiting this wallet.
     Inconclusive,
@@ -150,7 +151,9 @@ impl IndexerHealth {
                     Some(_) => Self::Answered,
                 }
             },
-            IndexerRestClientError::UnexpectedStatus { .. } => Self::Unavailable,
+            IndexerRestClientError::UnexpectedStatus { .. } | IndexerRestClientError::ResponseTooLarge { .. } => {
+                Self::Unavailable
+            },
             _ => Self::Inconclusive,
         }
     }
@@ -1055,6 +1058,17 @@ mod tests {
             health_of_request_to(spawn_status_server("500 Internal Server Error", "{}").await).await,
             IndexerHealth::Answered
         );
+    }
+
+    #[tokio::test]
+    async fn a_response_longer_than_the_client_accepts_is_unavailable() {
+        let url = spawn_status_server("200 OK", " ".repeat(1024)).await;
+        let client = IndexerRestApiClient::connect(url).unwrap().with_max_response_bytes(512);
+
+        let result = client.get_epoch_manager_stats().await;
+
+        assert!(matches!(result, Err(IndexerRestClientError::ResponseTooLarge { .. })));
+        assert_eq!(IndexerHealth::of(&result), IndexerHealth::Unavailable);
     }
 
     #[tokio::test]

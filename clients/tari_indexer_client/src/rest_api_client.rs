@@ -71,7 +71,12 @@ use crate::{
 pub struct IndexerRestApiClient {
     client: reqwest::Client,
     endpoint: Arc<watch::Sender<Url>>,
+    max_response_bytes: usize,
 }
+
+/// The default bound on a JSON response body. Response types that carry substate state decode into value trees many
+/// times the size of the body, so the bound on the body is what bounds the client's memory.
+pub const DEFAULT_MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
 
 impl IndexerRestApiClient {
     pub fn connect<T: IntoUrl>(endpoint: T) -> Result<Self, IndexerRestClientError> {
@@ -120,7 +125,15 @@ impl IndexerRestApiClient {
         Ok(Self {
             client,
             endpoint: Arc::new(endpoint),
+            max_response_bytes: DEFAULT_MAX_RESPONSE_BYTES,
         })
+    }
+
+    /// Refuses JSON response bodies longer than `max_response_bytes` with
+    /// [`IndexerRestClientError::ResponseTooLarge`]. Defaults to [`DEFAULT_MAX_RESPONSE_BYTES`].
+    pub fn with_max_response_bytes(mut self, max_response_bytes: usize) -> Self {
+        self.max_response_bytes = max_response_bytes;
+        self
     }
 
     /// The indexer URL that requests are currently sent to.
@@ -409,7 +422,7 @@ impl IndexerRestApiClient {
         }
 
         let resp = self.client.get(url).send().await?;
-        handle_json_response(resp, path).await
+        handle_json_response(resp, path, self.max_response_bytes).await
     }
 
     async fn send_post<P: Into<String>, T: Serialize, R: DeserializeOwned>(
@@ -422,7 +435,7 @@ impl IndexerRestApiClient {
         let url = self.url_for(&path);
         let resp = self.client.post(url).json(&request).send().await?;
 
-        handle_json_response(resp, path).await
+        handle_json_response(resp, path, self.max_response_bytes).await
     }
 }
 
@@ -466,6 +479,7 @@ pub(crate) fn require_success_status(resp: reqwest::Response) -> Result<reqwest:
 async fn handle_json_response<T: DeserializeOwned>(
     resp: reqwest::Response,
     path: String,
+    max_response_bytes: usize,
 ) -> Result<T, IndexerRestClientError> {
     if let Some(err) = resp.error_for_status_ref().err() {
         return Err(IndexerRestClientError::ErrorResponse {
@@ -474,10 +488,29 @@ async fn handle_json_response<T: DeserializeOwned>(
         });
     }
     let resp = require_success_status(resp)?;
-    match resp.json().await {
-        Ok(r) => Ok(r),
-        Err(e) => Err(IndexerRestClientError::DeserializeResponse { path, source: e.into() }),
+    let Some(body) = read_body_capped(resp, max_response_bytes).await? else {
+        return Err(IndexerRestClientError::ResponseTooLarge {
+            path,
+            limit: max_response_bytes,
+        });
+    };
+    serde_json::from_slice(&body).map_err(|e| IndexerRestClientError::DeserializeResponse { path, source: e.into() })
+}
+
+/// Reads the body of `resp`, or returns `None` as soon as it is known to be longer than `limit` bytes.
+async fn read_body_capped(mut resp: reqwest::Response, limit: usize) -> Result<Option<Vec<u8>>, reqwest::Error> {
+    let declared = resp.content_length();
+    if declared.is_some_and(|len| len > limit as u64) {
+        return Ok(None);
     }
+    let mut body = Vec::with_capacity(declared.unwrap_or(0) as usize);
+    while let Some(chunk) = resp.chunk().await? {
+        if body.len() + chunk.len() > limit {
+            return Ok(None);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(Some(body))
 }
 
 /// The most of an error response body the client reads. An indexer error body is `{"error": "<message>"}`, so a
@@ -491,20 +524,8 @@ struct ErrorBody {
 
 /// Returns the `error` message of an error response, or `None` if the body is longer than
 /// [`MAX_ERROR_BODY_BYTES`] or is not an object with a string `error` field.
-async fn read_error_details(mut resp: reqwest::Response) -> Option<String> {
-    if resp
-        .content_length()
-        .is_some_and(|len| len > MAX_ERROR_BODY_BYTES as u64)
-    {
-        return None;
-    }
-    let mut body = Vec::new();
-    while let Some(chunk) = resp.chunk().await.ok()? {
-        if body.len() + chunk.len() > MAX_ERROR_BODY_BYTES {
-            return None;
-        }
-        body.extend_from_slice(&chunk);
-    }
+async fn read_error_details(resp: reqwest::Response) -> Option<String> {
+    let body = read_body_capped(resp, MAX_ERROR_BODY_BYTES).await.ok()??;
     serde_json::from_slice::<ErrorBody>(&body).ok()?.error
 }
 
@@ -601,6 +622,69 @@ mod tests {
             },
             other => panic!("expected ErrorResponse, got {other:?}"),
         }
+    }
+
+    /// The start of a `GetConnectionsResponse` whose list runs to `len` bytes.
+    fn connections_body(len: usize) -> Vec<u8> {
+        let mut body = b"{\"connections\":[".to_vec();
+        body.resize(len, b' ');
+        body
+    }
+
+    #[tokio::test]
+    async fn a_response_declared_longer_than_the_limit_is_refused() {
+        let url = serve_once(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 1073741824\r\n\r\n".to_string(),
+            connections_body(1024 * 1024),
+        );
+        let client = IndexerRestApiClient::connect(url).unwrap();
+
+        let err = tokio::time::timeout(Duration::from_secs(10), client.get_connections())
+            .await
+            .expect("the client kept reading a response past its limit")
+            .unwrap_err();
+
+        assert!(
+            matches!(err, IndexerRestClientError::ResponseTooLarge { ref path, .. } if path == "network/connections"),
+            "expected ResponseTooLarge, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_undelimited_response_is_read_only_up_to_the_limit() {
+        let url = serve_once(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n".to_string(),
+            connections_body(1024 * 1024),
+        );
+        let client = IndexerRestApiClient::connect(url)
+            .unwrap()
+            .with_max_response_bytes(64 * 1024);
+
+        let err = tokio::time::timeout(Duration::from_secs(10), client.get_connections())
+            .await
+            .expect("the client kept reading a response past its limit")
+            .unwrap_err();
+
+        assert!(
+            matches!(err, IndexerRestClientError::ResponseTooLarge { limit, .. } if limit == 64 * 1024),
+            "expected ResponseTooLarge, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_response_within_the_limit_is_decoded() {
+        let body = br#"{"connections":[]}"#.to_vec();
+        let head = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        );
+        let client = IndexerRestApiClient::connect(serve_once(head, body.clone()))
+            .unwrap()
+            .with_max_response_bytes(body.len());
+
+        let resp = client.get_connections().await.unwrap();
+
+        assert!(resp.connections.is_empty());
     }
 
     #[test]
