@@ -4,7 +4,7 @@
 use std::{sync::Arc, time::Duration};
 
 use reqwest::{IntoUrl, Url, header, header::HeaderMap};
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tari_engine_types::substate::SubstateId;
 use tari_ootle_transaction::TransactionId;
 use tari_template_lib_types::{ResourceAddress, TemplateAddress, TransactionReceiptAddress};
@@ -468,15 +468,9 @@ async fn handle_json_response<T: DeserializeOwned>(
     path: String,
 ) -> Result<T, IndexerRestClientError> {
     if let Some(err) = resp.error_for_status_ref().err() {
-        if let Ok(err_resp) = resp.json::<serde_json::Value>().await {
-            return Err(IndexerRestClientError::ErrorResponse {
-                source: err,
-                details: err_resp.get("error").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            });
-        }
         return Err(IndexerRestClientError::ErrorResponse {
             source: err,
-            details: None,
+            details: read_error_details(resp).await,
         });
     }
     let resp = require_success_status(resp)?;
@@ -486,11 +480,128 @@ async fn handle_json_response<T: DeserializeOwned>(
     }
 }
 
+/// The most of an error response body the client reads. An indexer error body is `{"error": "<message>"}`, so a
+/// longer body carries nothing the client uses.
+const MAX_ERROR_BODY_BYTES: usize = 64 * 1024;
+
+#[derive(Deserialize)]
+struct ErrorBody {
+    error: Option<String>,
+}
+
+/// Returns the `error` message of an error response, or `None` if the body is longer than
+/// [`MAX_ERROR_BODY_BYTES`] or is not an object with a string `error` field.
+async fn read_error_details(mut resp: reqwest::Response) -> Option<String> {
+    if resp
+        .content_length()
+        .is_some_and(|len| len > MAX_ERROR_BODY_BYTES as u64)
+    {
+        return None;
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = resp.chunk().await.ok()? {
+        if body.len() + chunk.len() > MAX_ERROR_BODY_BYTES {
+            return None;
+        }
+        body.extend_from_slice(&chunk);
+    }
+    serde_json::from_slice::<ErrorBody>(&body).ok()?.error
+}
+
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        time::Duration,
+    };
+
+    use tari_ootle_common_types::optional::IsNotFoundError;
 
     use super::*;
+
+    /// Answers one request with `head` followed by `body`, then holds the connection open until the client closes
+    /// it. Returns the URL to connect to.
+    fn serve_once(head: String, body: Vec<u8>) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            let mut req = [0u8; 4096];
+            let mut received = Vec::new();
+            while !received.windows(4).any(|w| w == b"\r\n\r\n") {
+                let n = sock.read(&mut req).unwrap();
+                assert!(n > 0, "the client closed before sending a request");
+                received.extend_from_slice(&req[..n]);
+            }
+            if sock.write_all(head.as_bytes()).is_err() || sock.write_all(&body).is_err() {
+                return;
+            }
+            while matches!(sock.read(&mut req), Ok(n) if n > 0) {}
+        });
+        format!("http://{addr}")
+    }
+
+    /// An error body that opens a JSON object with an `error` message followed by an array that runs past the read
+    /// bound.
+    fn oversized_error_body() -> Vec<u8> {
+        let mut body = b"{\"error\":\"indexer unavailable\",\"data\":[".to_vec();
+        body.extend(std::iter::repeat_n(b"1,".as_slice(), 512 * 1024).flatten());
+        body
+    }
+
+    async fn expect_error_details(url: String) -> Option<String> {
+        let client = IndexerRestApiClient::connect(url).unwrap();
+        let err = tokio::time::timeout(Duration::from_secs(10), client.get_network_info())
+            .await
+            .expect("the client kept reading an error body past its bound")
+            .unwrap_err();
+        match err {
+            IndexerRestClientError::ErrorResponse { details, .. } => details,
+            other => panic!("expected ErrorResponse, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn an_error_body_declared_longer_than_the_bound_is_not_read() {
+        let url = serve_once(
+            "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: \
+             1073741824\r\n\r\n"
+                .to_string(),
+            oversized_error_body(),
+        );
+        assert_eq!(expect_error_details(url).await, None);
+    }
+
+    #[tokio::test]
+    async fn an_undelimited_error_body_is_read_only_up_to_the_bound() {
+        let url = serve_once(
+            "HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n"
+                .to_string(),
+            oversized_error_body(),
+        );
+        assert_eq!(expect_error_details(url).await, None);
+    }
+
+    #[tokio::test]
+    async fn an_error_body_yields_its_error_message() {
+        let body = br#"{"error":"Substate not found","data":[1,2,3]}"#.to_vec();
+        let head = format!(
+            "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        );
+        let client = IndexerRestApiClient::connect(serve_once(head, body)).unwrap();
+
+        let err = client.get_network_info().await.unwrap_err();
+
+        assert!(err.is_not_found_error());
+        match err {
+            IndexerRestClientError::ErrorResponse { details, .. } => {
+                assert_eq!(details.as_deref(), Some("Substate not found"));
+            },
+            other => panic!("expected ErrorResponse, got {other:?}"),
+        }
+    }
 
     #[test]
     fn set_endpoint_redirects_every_clone() {
