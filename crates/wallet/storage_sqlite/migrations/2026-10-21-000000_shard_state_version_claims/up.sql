@@ -1,8 +1,8 @@
 -- Each shard's stealth scan cursor as an indexer reported it, past the cursor stored in `shard_state_versions`, which
--- is bounded by a verified checkpoint. A scan resumes from the claim until a checkpoint that ended after it shows the
--- network never reached it.
+-- is bounded by a verified checkpoint. A scan resumes from the claim until a verified checkpoint that ended after the
+-- claim began expires it.
 --
--- `verified_epoch` is the epoch of the latest verified checkpoint of the shard when the claim was stored, NULL without
+-- `verified_epoch` is the epoch of the latest verified checkpoint of the shard when the claim began, NULL without
 -- one.
 CREATE TABLE shard_state_version_claims
 (

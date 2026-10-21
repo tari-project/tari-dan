@@ -32,11 +32,12 @@ pub struct EndOfShard {
 }
 
 /// A shard's stealth scan cursor as an indexer reported it, past what a verified checkpoint commits for the shard. A
-/// scan resumes from it until a checkpoint that ended after it was stored commits a lower state version for the shard,
-/// which proves the indexer claimed updates the network never committed.
+/// scan resumes from it, and the shard's verified cursor stays where the claim began, until a verified checkpoint that
+/// ended after the claim began expires it. The shard is then scanned again from the verified cursor, so that an
+/// indexer's claim hides no update for longer than that.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClaimedStateVersion {
     pub state_version: StateVersion,
-    /// The epoch of the latest verified checkpoint of the shard when the claim was stored, or `None` without one.
+    /// The epoch of the latest verified checkpoint of the shard when the claim began, or `None` without one.
     pub verified_epoch: Option<Epoch>,
 }

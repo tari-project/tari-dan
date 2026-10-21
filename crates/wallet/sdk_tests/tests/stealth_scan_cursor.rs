@@ -3,8 +3,9 @@
 
 //! A verifying wallet stores each shard's stealth UTXO scan cursor no further than the state version a verified
 //! end-of-epoch checkpoint commits for the shard, and what an indexer reports past it as a claim. A scan resumes from
-//! the claim until a checkpoint that ended after it was stored commits a lower state version, and then asks again for
-//! every update the network committed after the verified cursor, whatever an indexer claimed before.
+//! the claim, leaving the verified cursor where the claim began, until a verified checkpoint that ended after the claim
+//! began expires it. The next scan then asks again for every update the network committed after the verified cursor,
+//! whatever an indexer claimed before.
 
 mod support;
 
@@ -279,7 +280,62 @@ async fn a_cursor_reported_past_the_verified_state_version_is_stored_at_it_and_c
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_claim_a_later_verified_checkpoint_refutes_is_dropped() {
+async fn a_scan_resumed_from_a_claim_advances_the_claim_but_not_the_verified_cursor() {
+    let (network, test) = anchored_wallet().await;
+    let began_in = Epoch(CHECKPOINT_EPOCH.as_u64() - 1);
+    store_cursor(&test, CHECKPOINT_VERSION - 5);
+    store_claim(&test, CHECKPOINT_VERSION + 5, Some(began_in));
+    serve_utxos(&network, vec![(CHECKPOINT_VERSION + 10, own_utxo(&test))]);
+
+    scan(&scanner(&test)).await;
+
+    assert_eq!(
+        cursor_of(&network.utxo_stream_requests()[0]),
+        StateVersion::from(CHECKPOINT_VERSION + 5)
+    );
+    assert_eq!(queued_utxos(&test), 1);
+    assert_eq!(
+        stored_claims(&test).get(&SHARD),
+        Some(&claim(CHECKPOINT_VERSION + 10, Some(began_in))),
+        "the claim advances and keeps the epoch it began in"
+    );
+    assert_eq!(
+        stored_cursors(&test).get(&SHARD),
+        Some(&StateVersion::from(CHECKPOINT_VERSION - 5)),
+        "the verified cursor stays where the claim began"
+    );
+}
+
+/// A lying indexer claims a cursor just ahead of the network, which the network then overtakes. An update committed
+/// below the claim is never delivered while scans resume from it, so once the claim expires the shard is scanned again
+/// from the verified cursor, where the claim began.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_expired_claim_that_the_network_overtook_is_rescanned_from_the_verified_cursor() {
+    let (network, test) = anchored_wallet().await;
+    store_cursor(&test, CHECKPOINT_VERSION - 5);
+    store_claim(
+        &test,
+        CHECKPOINT_VERSION - 2,
+        Some(Epoch(CHECKPOINT_EPOCH.as_u64() - 2)),
+    );
+    serve_utxos(&network, vec![(CHECKPOINT_VERSION - 3, own_utxo(&test))]);
+
+    scan(&scanner(&test)).await;
+
+    assert_eq!(
+        cursor_of(&network.utxo_stream_requests()[0]),
+        StateVersion::from(CHECKPOINT_VERSION - 5)
+    );
+    assert_eq!(queued_utxos(&test), 1, "the UTXO the claim skipped is found");
+    assert_eq!(stored_claims(&test).get(&SHARD), None);
+    assert_eq!(
+        stored_cursors(&test).get(&SHARD),
+        Some(&StateVersion::from(CHECKPOINT_VERSION - 3))
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_expired_claim_past_the_verified_checkpoint_is_rescanned_from_the_verified_cursor() {
     let (network, test) = anchored_wallet().await;
     store_cursor(&test, CHECKPOINT_VERSION);
     store_claim(&test, u64::MAX, Some(Epoch(CHECKPOINT_EPOCH.as_u64() - 2)));
@@ -300,14 +356,14 @@ async fn a_claim_a_later_verified_checkpoint_refutes_is_dropped() {
     assert_eq!(
         stored_claims(&test).get(&SHARD),
         Some(&claim(CHECKPOINT_VERSION + 1, Some(CHECKPOINT_EPOCH))),
-        "the honest indexer's claim replaces the refuted one"
+        "the honest indexer's claim replaces the expired one"
     );
 }
 
-/// A checkpoint only one epoch after the one the wallet verified when it stored the claim may have ended before the
-/// claim was made, so it does not refute it.
+/// A checkpoint only one epoch after the one the wallet verified when the claim began may have ended before the claim
+/// began, so it does not expire it.
 #[tokio::test(flavor = "multi_thread")]
-async fn a_claim_too_recent_for_the_verified_checkpoint_to_check_is_resumed_from() {
+async fn a_claim_too_recent_for_the_verified_checkpoint_to_expire_is_resumed_from() {
     let (network, test) = anchored_wallet().await;
     let claimed = CHECKPOINT_VERSION + 100;
     store_claim(&test, claimed, Some(Epoch(CHECKPOINT_EPOCH.as_u64() - 1)));
@@ -326,7 +382,7 @@ async fn a_claim_too_recent_for_the_verified_checkpoint_to_check_is_resumed_from
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_claim_stored_without_a_verified_checkpoint_is_checked_against_the_first() {
+async fn a_claim_begun_without_a_verified_checkpoint_expires_at_the_first() {
     let (network, test) = anchored_wallet().await;
     store_cursor(&test, CHECKPOINT_VERSION);
     store_claim(&test, u64::MAX, None);

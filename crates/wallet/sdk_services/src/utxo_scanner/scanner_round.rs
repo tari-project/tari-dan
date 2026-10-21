@@ -1,7 +1,7 @@
 //   Copyright 2025 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use futures::StreamExt;
 use log::{debug, info, trace, warn};
@@ -37,11 +37,11 @@ const LOG_TARGET: &str = "tari::ootle::wallet_services::scanner_round";
 // TODO: either fetch num preshards from the network or we should hardcode it to a single value for all apps
 const NUM_PRESHARDS: NumPreshards = NumPreshards::P256;
 
-/// A claim is checked against a verified checkpoint at least this many epochs after the latest one the wallet had
-/// verified when it stored the claim. The network may have ended one more epoch than the wallet had verified by then,
-/// so the checkpoint after that is the first that certainly ended after the claim, and commits every update an honest
-/// claim covers.
-const CLAIM_CHECK_EPOCHS: u64 = 2;
+/// A claim expires once the wallet verifies a checkpoint at least this many epochs after the latest one it had verified
+/// when the claim began. The network may have ended one more epoch than the wallet had verified by then, so the
+/// checkpoint after that is the first that certainly ended after the claim began, and an honest claim cannot be past
+/// it.
+const CLAIM_EXPIRY_EPOCHS: u64 = 2;
 
 pub struct UtxoScannerRound<'a, TSpec: WalletSdkSpec> {
     network: Network,
@@ -56,8 +56,11 @@ pub struct UtxoScannerRound<'a, TSpec: WalletSdkSpec> {
     /// stored only as far as `stored_cursor_bound` allows, with any progress past it stored as a claim.
     cursors: HashMap<Shard, StateVersion>,
     stored_cursor_bound: StoredCursorBound,
-    /// The stored claims that no verified checkpoint refutes.
+    /// The live claim of each shard.
     claims: HashMap<Shard, ClaimedStateVersion>,
+    /// The shards this round resumed from a claim. Their stored cursors stay where the claim began, so that the scan
+    /// after the claim expires asks again for every update the claim may have skipped.
+    resumed_from_claim: HashSet<Shard>,
     shard_state_versions_to_set: HashMap<Shard, StateVersion>,
     utxos_to_recover: Vec<(ComponentAddress, UtxoUnspent)>,
     utxos_to_spend: Vec<UtxoSpent>,
@@ -84,6 +87,7 @@ where TSpec: WalletSdkSpec
             cursors: HashMap::new(),
             stored_cursor_bound: StoredCursorBound::Unbounded,
             claims: HashMap::new(),
+            resumed_from_claim: HashSet::new(),
             shard_state_versions_to_set: HashMap::new(),
             utxos_to_recover: Vec::new(),
             utxos_to_spend: Vec::new(),
@@ -129,7 +133,7 @@ where TSpec: WalletSdkSpec
     }
 
     /// Loads the stored cursors, lowering any that are past the bound to it, and resumes each shard from its claim
-    /// unless a verified checkpoint refutes it.
+    /// until the claim expires.
     fn load_cursors(&mut self) -> Result<(), StealthScannerApiError> {
         let account = self.account.component_address();
         let (stored, claims) = self.sdk.store().with_read_tx(|tx| {
@@ -143,7 +147,8 @@ where TSpec: WalletSdkSpec
         })?;
 
         let mut lowered = Vec::new();
-        let mut refuted = Vec::new();
+        let mut expired = Vec::new();
+        let mut disproved = 0usize;
         for shard in NUM_PRESHARDS.all_shards_iter() {
             let stored = stored.get(&shard).copied().unwrap_or_else(StateVersion::zero);
             let mut cursor = match self.stored_cursor_bound.ceiling(shard) {
@@ -154,27 +159,37 @@ where TSpec: WalletSdkSpec
                 _ => stored,
             };
             if let Some(claim) = claims.get(&shard) {
-                if self.stored_cursor_bound.refutes(shard, claim) {
-                    refuted.push(shard);
+                if self.stored_cursor_bound.expires(shard, claim) || claim.state_version <= cursor {
+                    if self.stored_cursor_bound.disproves(shard, claim) {
+                        disproved += 1;
+                    }
+                    expired.push(shard);
                 } else {
-                    cursor = cursor.max(claim.state_version);
+                    cursor = claim.state_version;
                     self.claims.insert(shard, *claim);
+                    self.resumed_from_claim.insert(shard);
                 }
             }
             self.cursors.insert(shard, cursor);
         }
 
-        if !refuted.is_empty() {
+        if disproved > 0 {
             warn!(
                 target: LOG_TARGET,
-                "⚠️ {} stealth scan cursor(s) of account {} (resource {}) that an indexer claimed are past the state version a later verified checkpoint commits. Rescanning those shards from the verified cursor.",
-                refuted.len(),
-                account,
+                "⚠️ {disproved} stealth scan cursor(s) of account {account} (resource {}) that an indexer claimed are past the state version a later verified checkpoint commits, so that indexer reported updates the network never committed.",
+                self.resource_address,
+            );
+        }
+        if !expired.is_empty() {
+            debug!(
+                target: LOG_TARGET,
+                "{} claimed stealth scan cursor(s) of account {account} (resource {}) expired. Rescanning those shards from the verified cursor.",
+                expired.len(),
                 self.resource_address,
             );
             self.sdk
                 .store()
-                .with_write_tx(|tx| tx.shard_state_version_claims_remove(account, self.resource_address, refuted))?;
+                .with_write_tx(|tx| tx.shard_state_version_claims_remove(account, self.resource_address, expired))?;
         }
 
         if !lowered.is_empty() {
@@ -345,14 +360,21 @@ where TSpec: WalletSdkSpec
             let mut cursors = Vec::new();
             let mut claims = Vec::new();
             for (shard, version) in self.shard_state_versions_to_set.drain() {
-                if let Some(cursor) = bound.bound(shard, version) {
+                if !self.resumed_from_claim.contains(&shard) &&
+                    let Some(cursor) = bound.bound(shard, version)
+                {
                     cursors.push((shard, cursor));
                 }
-                if let Some(claim) = bound.claim(shard, version) &&
-                    self.claims
-                        .get(&shard)
-                        .is_none_or(|stored| claim.state_version > stored.state_version)
-                {
+                let claim = match self.claims.get(&shard) {
+                    // A claim keeps the epoch it began in as it advances, so that it expires on schedule.
+                    Some(live) if version > live.state_version => Some(ClaimedStateVersion {
+                        state_version: version,
+                        verified_epoch: live.verified_epoch,
+                    }),
+                    Some(_) => None,
+                    None => bound.claim(shard, version),
+                };
+                if let Some(claim) = claim {
                     self.claims.insert(shard, claim);
                     claims.push((shard, claim));
                 }
@@ -463,7 +485,7 @@ impl StoredCursorBound {
         }
     }
 
-    /// The claim to store for `shard` once the indexer reports it read to `version`, if `version` is past what a
+    /// The claim to begin for `shard` once the indexer reports it read to `version`, if `version` is past what a
     /// verified checkpoint commits for the shard.
     fn claim(&self, shard: Shard, version: StateVersion) -> Option<ClaimedStateVersion> {
         let Self::Verified(versions) = self else {
@@ -479,18 +501,30 @@ impl StoredCursorBound {
         })
     }
 
-    /// Whether the verified checkpoint of `shard` proves `claim` past any state version the network committed when it
-    /// was made. A claim stored without a verified checkpoint is checked against the first one.
-    fn refutes(&self, shard: Shard, claim: &ClaimedStateVersion) -> bool {
+    /// The verified checkpoint of `shard` that ended after `claim` began, if any. For a claim that began without a
+    /// verified checkpoint, that is the first one.
+    fn checkpoint_after(&self, shard: Shard, claim: &ClaimedStateVersion) -> Option<&CheckpointStateVersion> {
         let Self::Verified(versions) = self else {
-            return false;
+            return None;
         };
-        versions.get(&shard).is_some_and(|checkpoint| {
-            claim.state_version > checkpoint.state_version &&
-                claim.verified_epoch.is_none_or(|epoch| {
-                    checkpoint.epoch.as_u64() >= epoch.as_u64().saturating_add(CLAIM_CHECK_EPOCHS)
-                })
+        versions.get(&shard).filter(|checkpoint| {
+            claim
+                .verified_epoch
+                .is_none_or(|epoch| checkpoint.epoch.as_u64() >= epoch.as_u64().saturating_add(CLAIM_EXPIRY_EPOCHS))
         })
+    }
+
+    /// Whether `claim` has expired, and its shard is to be scanned again from the stored cursor.
+    fn expires(&self, shard: Shard, claim: &ClaimedStateVersion) -> bool {
+        self.checkpoint_after(shard, claim).is_some()
+    }
+
+    /// Whether a verified checkpoint that certainly ended after `claim` began commits a lower state version than the
+    /// claim, which proves the indexer reported updates the network never committed.
+    fn disproves(&self, shard: Shard, claim: &ClaimedStateVersion) -> bool {
+        claim.verified_epoch.is_some() &&
+            self.checkpoint_after(shard, claim)
+                .is_some_and(|checkpoint| claim.state_version > checkpoint.state_version)
     }
 }
 
