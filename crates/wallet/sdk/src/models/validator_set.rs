@@ -3,6 +3,7 @@
 
 use std::str::FromStr;
 
+use tari_ootle_common_types::{Epoch, StateVersion};
 pub use tari_ootle_light_client::{TrustedValidatorSet, TrustedValidatorSetHash};
 use time::PrimitiveDateTime;
 
@@ -65,4 +66,12 @@ pub struct ValidatorSetStatus {
     pub synced_at: Option<u64>,
     /// Since when the walk has failed on every sync, in seconds since the Unix epoch.
     pub walk_failing_since: Option<u64>,
+}
+
+/// The state version a shard reached at the end of `epoch`, from that epoch's verified end-of-epoch checkpoint of the
+/// shard's group.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CheckpointStateVersion {
+    pub epoch: Epoch,
+    pub state_version: StateVersion,
 }

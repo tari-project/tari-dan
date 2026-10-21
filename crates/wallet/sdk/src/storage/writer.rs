@@ -31,6 +31,7 @@ use crate::{
         AuthoredTemplateModel,
         BalanceChangeSnapshot,
         BalanceChangeSource,
+        ClaimedStateVersion,
         ConfidentialOutputModel,
         ImportedKeyId,
         KeyId,
@@ -345,6 +346,18 @@ pub trait WalletStoreWriter: CommittableStore {
         account: &ComponentAddress,
         resource_address: &ResourceAddress,
         shard_state_versions: I,
+    ) -> Result<(), WalletStorageError>;
+    fn shard_state_version_claims_set_many<I: IntoIterator<Item = (Shard, ClaimedStateVersion)>>(
+        &mut self,
+        account: &ComponentAddress,
+        resource_address: &ResourceAddress,
+        claims: I,
+    ) -> Result<(), WalletStorageError>;
+    fn shard_state_version_claims_remove<I: IntoIterator<Item = Shard>>(
+        &mut self,
+        account: &ComponentAddress,
+        resource_address: &ResourceAddress,
+        shards: I,
     ) -> Result<(), WalletStorageError>;
 
     fn utxo_process_queue_extend<I: IntoIterator<Item = (ComponentAddress, UtxoUnspent)>>(

@@ -13,7 +13,6 @@ use tari_indexer_client::types::EpochCheckpointEntry;
 use tari_ootle_common_types::{
     Epoch,
     ShardGroup,
-    StateVersion,
     ValidatorSetHash,
     optional::{IsNotFoundError, Optional},
     shard::Shard,
@@ -32,6 +31,7 @@ use crate::{
     apis::config::ConfigKey,
     models::{
         AnchoredValidatorSet,
+        CheckpointStateVersion,
         ValidatorSetAnchor,
         ValidatorSetReanchor,
         ValidatorSetReanchoredEvent,
@@ -77,11 +77,11 @@ pub struct ValidatorSetShared {
     /// used only while the set it was verified against is the one the wallet trusts for its epoch.
     committees: Mutex<HashMap<(Epoch, ShardGroup), VerifiedCommittee>>,
     /// The shard state versions last verified, and when. Cleared when the wallet anchors anew.
-    shard_state_versions: Mutex<Option<(Instant, HashMap<Shard, StateVersion>)>>,
+    shard_state_versions: Mutex<Option<(Instant, HashMap<Shard, CheckpointStateVersion>)>>,
 }
 
 impl ValidatorSetShared {
-    fn cached_shard_state_versions(&self) -> Option<HashMap<Shard, StateVersion>> {
+    fn cached_shard_state_versions(&self) -> Option<HashMap<Shard, CheckpointStateVersion>> {
         self.shard_state_versions
             .lock()
             .unwrap()
@@ -90,7 +90,7 @@ impl ValidatorSetShared {
             .map(|(_, versions)| versions.clone())
     }
 
-    fn cache_shard_state_versions(&self, versions: HashMap<Shard, StateVersion>) {
+    fn cache_shard_state_versions(&self, versions: HashMap<Shard, CheckpointStateVersion>) {
         *self.shard_state_versions.lock().unwrap() = Some((Instant::now(), versions));
     }
 
@@ -317,12 +317,15 @@ where
         Ok(Some(committee))
     }
 
-    /// The state version every shard reached at the end of the latest epoch the indexer serves a checkpoint of. Each
-    /// version is read from an end-of-epoch checkpoint that the committee of the shard's group signed, verified
-    /// against the validator set the wallet trusts for that epoch, so none is ahead of what the network committed.
+    /// The state version every shard reached at the end of the latest epoch the indexer serves a checkpoint of, and
+    /// that epoch. Each version is read from an end-of-epoch checkpoint that the committee of the shard's group signed,
+    /// verified against the validator set the wallet trusts for that epoch, so none is ahead of what the network
+    /// committed.
     ///
     /// Empty before the network has ended an epoch. The versions are reused for [`SHARD_STATE_VERSIONS_TTL`].
-    pub async fn verified_shard_state_versions(&self) -> Result<HashMap<Shard, StateVersion>, ValidatorSetApiError> {
+    pub async fn verified_shard_state_versions(
+        &self,
+    ) -> Result<HashMap<Shard, CheckpointStateVersion>, ValidatorSetApiError> {
         if let Some(versions) = self.shared.cached_shard_state_versions() {
             return Ok(versions);
         }
@@ -331,7 +334,9 @@ where
         Ok(versions)
     }
 
-    async fn fetch_verified_shard_state_versions(&self) -> Result<HashMap<Shard, StateVersion>, ValidatorSetApiError> {
+    async fn fetch_verified_shard_state_versions(
+        &self,
+    ) -> Result<HashMap<Shard, CheckpointStateVersion>, ValidatorSetApiError> {
         let trusted = match self.latest()? {
             Some(trusted) => trusted,
             None => self.sync().await?,
@@ -361,12 +366,13 @@ where
                     shard_group: checkpoint.shard_group(),
                 });
             }
-            versions.extend(
-                checkpoint
-                    .shard_group()
-                    .shard_iter()
-                    .filter_map(|shard| Some((shard, checkpoint.shard_state_version(shard)?))),
-            );
+            versions.extend(checkpoint.shard_group().shard_iter().filter_map(|shard| {
+                let state_version = checkpoint.shard_state_version(shard)?;
+                Some((shard, CheckpointStateVersion {
+                    epoch: checkpoint.epoch(),
+                    state_version,
+                }))
+            }));
         }
         Ok(versions)
     }

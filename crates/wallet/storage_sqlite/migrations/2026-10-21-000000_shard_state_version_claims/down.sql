@@ -1,0 +1,1 @@
+DROP TABLE shard_state_version_claims;

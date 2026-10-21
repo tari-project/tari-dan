@@ -161,6 +161,20 @@ diesel::table! {
 }
 
 diesel::table! {
+    shard_state_version_claims (id) {
+        id -> Integer,
+        account_id -> Integer,
+        resource_id -> Integer,
+        shard -> Integer,
+        state_version -> BigInt,
+        first_state_version -> BigInt,
+        verified_epoch -> Nullable<BigInt>,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     shard_state_versions (id) {
         id -> Integer,
         account_id -> Integer,
@@ -370,6 +384,8 @@ diesel::table! {
 diesel::joinable!(confidential_outputs -> accounts (account_id));
 diesel::joinable!(confidential_outputs -> vaults (vault_id));
 diesel::joinable!(non_fungible_tokens -> vaults (vault_id));
+diesel::joinable!(shard_state_version_claims -> accounts (account_id));
+diesel::joinable!(shard_state_version_claims -> resources (resource_id));
 diesel::joinable!(shard_state_versions -> accounts (account_id));
 diesel::joinable!(shard_state_versions -> resources (resource_id));
 diesel::joinable!(stealth_outputs -> accounts (owner_account_id));
@@ -394,6 +410,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     locks,
     non_fungible_tokens,
     resources,
+    shard_state_version_claims,
     shard_state_versions,
     signing_requests,
     stealth_outputs,
