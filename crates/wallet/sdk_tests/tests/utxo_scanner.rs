@@ -164,10 +164,10 @@ fn owned_utxo(test: &TestWithNetwork<ScriptedUtxoNetwork>) -> UtxoUnspent {
     }
 }
 
-fn start_of_shard(max_state_version: u64, utxo: UtxoUnspent) -> UtxoUpdatePayload {
+fn start_of_shard(shard: Shard, max_state_version: u64, utxo: UtxoUnspent) -> UtxoUpdatePayload {
     UtxoUpdatePayload {
         sos: Some(StartOfShard {
-            shard: SHARD,
+            shard,
             max_state_version: StateVersion::from(max_state_version),
             has_more: false,
         }),
@@ -198,13 +198,14 @@ async fn scan(test: &TestWithNetwork<ScriptedUtxoNetwork>) {
         .unwrap();
 }
 
-fn saved_cursor(test: &TestWithNetwork<ScriptedUtxoNetwork>) -> Option<StateVersion> {
+fn saved_cursor(test: &TestWithNetwork<ScriptedUtxoNetwork>, shard: Shard) -> Option<StateVersion> {
     test.sdk()
         .store()
         .with_read_tx(|tx| tx.shard_state_version_get(&Test::test_account_address(), &STEALTH_TARI_RESOURCE_ADDRESS))
         .unwrap()
-        .get(&SHARD)
+        .get(&shard)
         .copied()
+        .filter(|v| *v != StateVersion::zero())
 }
 
 fn num_queued(test: &TestWithNetwork<ScriptedUtxoNetwork>) -> usize {
@@ -225,17 +226,30 @@ async fn a_shard_without_its_end_marker_keeps_its_cursor() {
     let second = owned_utxo(&test);
 
     // The stream ends before the shard's last update and its end marker arrive.
-    network.push_stream(vec![start_of_shard(2, first.clone())]);
+    network.push_stream(vec![start_of_shard(SHARD, 2, first.clone())]);
     scan(&test).await;
     assert_eq!(num_queued(&test), 1);
-    assert!(
-        saved_cursor(&test).is_none_or(|v| v == StateVersion::zero()),
-        "an unterminated shard advanced the cursor to {:?}",
-        saved_cursor(&test)
-    );
+    assert_eq!(saved_cursor(&test, SHARD), None);
 
-    network.push_stream(vec![start_of_shard(2, first), end_of_shard(5, second)]);
+    network.push_stream(vec![start_of_shard(SHARD, 2, first), end_of_shard(5, second)]);
     scan(&test).await;
     assert_eq!(num_queued(&test), 2);
-    assert_eq!(saved_cursor(&test), Some(StateVersion::from(2)));
+    assert_eq!(saved_cursor(&test, SHARD), Some(StateVersion::from(2)));
+}
+
+#[tokio::test]
+async fn a_shard_followed_by_another_before_its_end_marker_keeps_its_cursor() {
+    let network = ScriptedUtxoNetwork::default();
+    let test = TestWithNetwork::with_network(network.clone());
+    let other_shard = Shard::from_u32(1);
+
+    network.push_stream(vec![
+        start_of_shard(SHARD, 2, owned_utxo(&test)),
+        start_of_shard(other_shard, 3, owned_utxo(&test)),
+        end_of_shard(7, owned_utxo(&test)),
+    ]);
+    scan(&test).await;
+    assert_eq!(num_queued(&test), 3);
+    assert_eq!(saved_cursor(&test, SHARD), None);
+    assert_eq!(saved_cursor(&test, other_shard), Some(StateVersion::from(3)));
 }
