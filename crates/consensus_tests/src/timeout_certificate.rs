@@ -356,7 +356,13 @@ fn a_timeout_certificate_signed_on_the_local_network_is_accepted() {
 /// timeout signed as a validator of one network attests to nothing about a view of another.
 #[test]
 fn a_timeout_certificate_signed_on_another_network_is_rejected() {
-    let (tc, committee) = signed_timeout_certificate(Network::Esmeralda, NodeHeight(9), &["1", "2", "3"]);
+    let other_network = Network::Igor;
+    assert_eq!(
+        ProtocolVersion::at(other_network, TEST_EPOCH),
+        ProtocolVersion::at(NETWORK, TEST_EPOCH),
+        "the networks must share a protocol version so that only the network differs between the signed messages"
+    );
+    let (tc, committee) = signed_timeout_certificate(other_network, NodeHeight(9), &["1", "2", "3"]);
     let verifier = TestVoteSignatureService::new(TestAddress::new("1"));
 
     let err = check_quorum_certificate_signatures::<TestConsensusSpec>(NETWORK, (&tc).into(), &committee, &verifier)
