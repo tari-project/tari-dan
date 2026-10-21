@@ -32,6 +32,7 @@ pub use harness::*;
 pub use leader_strategy::*;
 pub use messaging_impls::NetworkSendObserver;
 pub use network::*;
+pub use signing_service::TestVoteSignatureService;
 pub use spec::*;
 use tari_ootle_common_types::NumPreshards;
 pub use transaction::*;

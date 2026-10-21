@@ -5,6 +5,7 @@ use log::*;
 use tari_consensus_types::{HighTc, SignedMessage, TimeoutCertificate, TimeoutVote, Vote};
 use tari_ootle_common_types::{Epoch, NodeHeight};
 use tari_ootle_storage::StateStore;
+use tari_ootle_transaction::Network;
 
 use super::collector::VoteCollector;
 use crate::{
@@ -15,12 +16,14 @@ use crate::{
     },
     tracing::TraceTimer,
     traits::{CertificateStore, ConsensusSpec, ValidatorSignatureVerifierService},
+    validations::signed_vote::SignedTimeoutVote,
 };
 
 const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::timeout_collector";
 
 #[derive(Clone)]
 pub struct TimeoutVoteCollector<TConsensusSpec: ConsensusSpec> {
+    network: Network,
     vote_collector: VoteCollector<TimeoutVote>,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
@@ -31,11 +34,13 @@ impl<TConsensusSpec> TimeoutVoteCollector<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
+        network: Network,
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         vote_signer_service: TConsensusSpec::SignerService,
     ) -> Self {
         Self {
+            network,
             store,
             vote_collector: VoteCollector::new(),
             epoch_manager,
@@ -130,7 +135,11 @@ where TConsensusSpec: ConsensusSpec
             });
         }
 
-        if !self.vote_signer_service.verify(vote) {
+        let signed_vote = SignedTimeoutVote {
+            message: vote.to_message(self.network),
+            signature: &vote.signature,
+        };
+        if !self.vote_signer_service.verify(&signed_vote) {
             return Err(HotStuffError::InvalidVoteSignature {
                 signer_public_key: *vote.public_key(),
             });

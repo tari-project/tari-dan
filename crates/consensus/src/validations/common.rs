@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use log::{debug, warn};
-use tari_consensus_types::{QuorumCertificateRef, TimeoutVote, ValidatorSignatureBytes};
+use tari_consensus_types::{QuorumCertificateRef, TimeoutVoteMessage, ValidatorSignatureBytes};
 use tari_engine_types::fees::ExhaustBurnRate;
 use tari_ootle_common_types::{
     DerivableFromPublicKey,
@@ -24,7 +24,7 @@ use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use crate::{
     hotstuff::{HotstuffConfig, LeaderSkipSet, ProposalValidationError},
     traits::{ConsensusSpec, LeaderStrategy, ValidatorSignatureVerifierService},
-    validations::signed_vote::SignedProposalVote,
+    validations::signed_vote::{SignedProposalVote, SignedTimeoutVote},
 };
 
 const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::validations";
@@ -440,11 +440,9 @@ pub fn check_quorum_certificate_signatures<TConsensusSpec: ConsensusSpec>(
                 account_for(&timeout.signature)?;
                 // Each signer attests to its own high certificate height, so the height it reports is part of what
                 // it signed and a quorum cannot be assembled that hides one.
-                let vote = TimeoutVote {
-                    epoch: tc.epoch(),
-                    height: tc.height(),
-                    high_pc_height: timeout.high_pc_height,
-                    signature: timeout.signature.clone(),
+                let vote = SignedTimeoutVote {
+                    message: TimeoutVoteMessage::new(network, tc.epoch(), tc.height(), timeout.high_pc_height),
+                    signature: &timeout.signature,
                 };
                 if !signing_service.verify(&vote) {
                     return Err(ProposalValidationError::QcInvalidSignature { qc: qc.calculate_id() });
