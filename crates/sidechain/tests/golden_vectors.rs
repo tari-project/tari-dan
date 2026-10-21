@@ -32,11 +32,11 @@ fn version_0_header_hash_and_block_id() {
     let header = fixture_proof().header;
     assert_eq!(
         header.calculate_hash().to_string(),
-        "a4a9ff23103273ad40921d6c32bf23ebc38689d90e4a0b4c28d778a8b78570a1"
+        "83ba92c1bc3e78d755c87aca1e35fb91a880449a959133f613ea829c37764b1a"
     );
     assert_eq!(
         header.calculate_block_id().to_string(),
-        "703578f5cc5b98fe91cf21112c5410a8e0f31c4172fff128b7c6e54c9892f78f"
+        "4e1de1bcc5a2759c941846390d30377b4ee65484a58092dc5b17e5eb8f5030cf"
     );
 }
 
@@ -47,11 +47,11 @@ fn version_1_header_hash_and_block_id() {
     header.transaction_merkle_root = Some(hash(0x11));
     assert_eq!(
         header.calculate_hash().to_string(),
-        "6b3674a1b0ad0321e0222e3c8cfb9fc0270a1c9e078003a4c19d477a1a57537f"
+        "71633e5937b4331f5d1bf6edb1a1a91b73c96db0af904a296941a963ec5d85f4"
     );
     assert_eq!(
         header.calculate_block_id().to_string(),
-        "5616b1bda0fe1dde5b694e2e7079532dfdb24faf17bc8c5506f69c521b2fded4"
+        "9073d7031830373be131aa82161e954bf7fe4ad92298074ee48898c550fb660b"
     );
 }
 
@@ -63,12 +63,12 @@ fn chain_link_and_justified_block_ids() {
     };
     assert_eq!(
         link.calc_block_id().to_string(),
-        "80828e46b202e281e8ef31407c8646ed3dc83166e545896d012bf119612587f2"
+        "566f5cb0b9db5df987eda6aa3ae4856389c2477e5768e1170fc3bd57c5aa751e"
     );
     let proof = fixture_proof();
     assert_eq!(
         proof.last_qc().unwrap().calculate_justified_block().to_string(),
-        "703578f5cc5b98fe91cf21112c5410a8e0f31c4172fff128b7c6e54c9892f78f"
+        "4e1de1bcc5a2759c941846390d30377b4ee65484a58092dc5b17e5eb8f5030cf"
     );
 }
 
