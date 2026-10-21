@@ -78,6 +78,10 @@ struct ProvingNetworkState {
     substate_fetches: usize,
     /// The latest checkpoint of each shard group other than the walked one.
     shard_group_checkpoints: HashMap<ShardGroup, EpochCheckpointEntry>,
+    /// What the indexer lists as the latest checkpoint of each shard group, in place of the checkpoints it serves.
+    listed_shard_group_checkpoints: Option<Vec<EpochCheckpointEntry>>,
+    /// Requests for the latest checkpoint of every shard group.
+    shard_group_checkpoint_requests: usize,
     utxo_stream_answer: Option<UtxoStreamAnswer>,
     /// The shard cursors of each stealth UTXO stream request.
     utxo_stream_requests: Vec<Vec<(Shard, StateVersion)>>,
@@ -119,6 +123,8 @@ impl ProvingNetwork {
                 substate_queries: 0,
                 substate_fetches: 0,
                 shard_group_checkpoints: HashMap::new(),
+                listed_shard_group_checkpoints: None,
+                shard_group_checkpoint_requests: 0,
                 utxo_stream_answer: None,
                 utxo_stream_requests: Vec::new(),
             })),
@@ -178,6 +184,10 @@ impl ProvingNetwork {
         self.state.lock().unwrap().substate_fetches
     }
 
+    pub fn shard_group_checkpoint_requests(&self) -> usize {
+        self.state.lock().unwrap().shard_group_checkpoint_requests
+    }
+
     pub fn walk_requests(&self) -> usize {
         self.state.lock().unwrap().walk_requests
     }
@@ -217,6 +227,11 @@ impl ProvingNetwork {
             .unwrap()
             .shard_group_checkpoints
             .insert(checkpoint.shard_group, checkpoint);
+    }
+
+    /// Lists `checkpoints` as the latest checkpoint of each shard group, whichever shards they hold.
+    pub fn list_shard_group_checkpoints(&self, checkpoints: Vec<EpochCheckpointEntry>) {
+        self.state.lock().unwrap().listed_shard_group_checkpoints = Some(checkpoints);
     }
 
     /// Answers every stealth UTXO stream request with what `answer` returns for the request's shard cursors.
@@ -366,6 +381,36 @@ impl WalletNetworkInterface for ProvingNetwork {
             return Ok(checkpoint.clone());
         }
         Ok(state.checkpoints[latest].clone())
+    }
+
+    /// The latest checkpoint served for the shard group holding each shard, from the first shard up to one that no
+    /// served checkpoint holds.
+    async fn get_latest_shard_group_checkpoints(&self) -> Result<Vec<EpochCheckpointEntry>, Self::Error> {
+        let mut state = self.state.lock().unwrap();
+        if state.unreachable {
+            return Err(ProvingNetworkError::Unreachable);
+        }
+        state.shard_group_checkpoint_requests += 1;
+        if let Some(listed) = &state.listed_shard_group_checkpoints {
+            return Ok(listed.clone());
+        }
+        let Some(latest) = state.latest else {
+            return Ok(vec![]);
+        };
+        let mut checkpoints = Vec::<EpochCheckpointEntry>::new();
+        let mut shard = Shard::first();
+        loop {
+            let Some(checkpoint) = state
+                .shard_group_checkpoints
+                .values()
+                .chain([&state.checkpoints[latest]])
+                .find(|checkpoint| checkpoint.shard_group.contains(&shard))
+            else {
+                return Ok(checkpoints);
+            };
+            shard = Shard::from(checkpoint.shard_group.end().as_u32() + 1);
+            checkpoints.push(checkpoint.clone());
+        }
     }
 
     async fn list_epoch_checkpoints(

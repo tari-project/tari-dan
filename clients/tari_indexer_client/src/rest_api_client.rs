@@ -22,6 +22,7 @@ use crate::{
         GetEpochManagerStatsResponse,
         GetLatestEpochCheckpointRequest,
         GetLatestEpochCheckpointResponse,
+        GetLatestShardGroupCheckpointsResponse,
         GetNetworkEconomicsResponse,
         GetNetworkInfoResponse,
         GetNetworkSyncStateResponse,
@@ -345,6 +346,12 @@ impl IndexerRestApiClient {
         req: GetLatestEpochCheckpointRequest,
     ) -> Result<GetLatestEpochCheckpointResponse, IndexerRestClientError> {
         self.send_get("epoch-checkpoints/latest", req).await
+    }
+
+    pub async fn get_latest_shard_group_checkpoints(
+        &self,
+    ) -> Result<GetLatestShardGroupCheckpointsResponse, IndexerRestClientError> {
+        self.send_get("epoch-checkpoints/latest/shard-groups", ()).await
     }
 
     pub async fn sse_events(&self) -> Result<SseEventStream, IndexerRestClientError> {

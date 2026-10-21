@@ -29,5 +29,7 @@ mod serialization;
 mod store_factory;
 mod writer;
 
+#[cfg(test)]
+pub(crate) use store_factory::tests::{epoch_checkpoint, temp_store};
 pub use store_factory::*;
 pub use writer::*;

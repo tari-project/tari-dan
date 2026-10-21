@@ -6,6 +6,7 @@ use tari_indexer_client::types::{
     EpochCheckpointEntry,
     GetLatestEpochCheckpointRequest,
     GetLatestEpochCheckpointResponse,
+    GetLatestShardGroupCheckpointsResponse,
     ListEpochCheckpointsRequest,
     ListEpochCheckpointsResponse,
 };
@@ -111,6 +112,37 @@ pub async fn get_latest_epoch_checkpoint(
         checkpoint: checkpoint_entry(&context, &checkpoint, committee_shard).await?,
     });
     Ok(context.apply_cache_control(body, RECENT_MAX_AGE_SECS))
+}
+
+#[utoipa::path(
+    get,
+    path = "/epoch-checkpoints/latest/shard-groups",
+    description = "Get the latest epoch checkpoint of the shard group holding each shard, without committees",
+    responses(
+        (status = 200, description = "The latest epoch checkpoint of each shard group", body = GetLatestShardGroupCheckpointsResponse),
+        (status = INTERNAL_SERVER_ERROR, description = "Internal error", body = ErrorResponse),
+    )
+)]
+pub async fn get_latest_shard_group_checkpoints(
+    Extension(context): Extension<HandlerContext>,
+) -> HandlerResult<Response> {
+    let checkpoints = latest_shard_group_checkpoint_entries(context.read_only_store()).await?;
+    let body = Json(GetLatestShardGroupCheckpointsResponse { checkpoints });
+    Ok(context.apply_cache_control(body, RECENT_MAX_AGE_SECS))
+}
+
+/// The latest stored checkpoint of the shard group holding each shard, in its client form. Every wallet asks for the
+/// same response within an epoch, so none carries a committee.
+async fn latest_shard_group_checkpoint_entries(
+    store: &ReadOnlyStore<SqliteIndexerStore>,
+) -> Result<Vec<EpochCheckpointEntry>, ErrorResponse> {
+    store
+        .epoch_checkpoint_get_latest_of_each_shard_group()
+        .await
+        .map_err(ErrorResponse::anyhow)?
+        .iter()
+        .map(|checkpoint| to_checkpoint_entry(checkpoint, None))
+        .collect()
 }
 
 /// The latest stored checkpoint, of the shard group containing `shard` when given. Not found while the store holds
@@ -233,6 +265,42 @@ mod tests {
             let err = latest_stored_checkpoint(&store, shard).await.unwrap_err();
             assert_eq!(err.status, axum::http::StatusCode::NOT_FOUND, "{}", err.error);
         }
+    }
+
+    #[tokio::test]
+    async fn the_latest_checkpoint_of_each_shard_group_is_served_without_committees() {
+        use crate::{
+            storage_sqlite::{epoch_checkpoint, temp_store},
+            store::{IndexerStore, IndexerStoreWriteTransaction},
+        };
+
+        let (_dir, store) = temp_store().await;
+        let low = ShardGroup::new(1u32, 127u32);
+        let high = ShardGroup::new(128u32, 255u32);
+        store
+            .with_write_tx(move |tx| {
+                for checkpoint in [
+                    epoch_checkpoint(1, low, true),
+                    epoch_checkpoint(1, high, true),
+                    epoch_checkpoint(2, low, true),
+                    epoch_checkpoint(2, high, true),
+                ] {
+                    tx.insert_or_ignore_epoch_checkpoint(&checkpoint)?;
+                }
+                Ok::<_, tari_ootle_storage::StorageError>(())
+            })
+            .await
+            .unwrap();
+
+        let entries = latest_shard_group_checkpoint_entries(&ReadOnlyStore::new(store))
+            .await
+            .unwrap();
+        let keys = entries
+            .iter()
+            .map(|entry| (entry.epoch, entry.shard_group))
+            .collect::<Vec<_>>();
+        assert_eq!(keys, vec![(Epoch(2), low), (Epoch(2), high)]);
+        assert!(entries.iter().all(|entry| entry.next_epoch_committee.is_none()));
     }
 
     #[test]

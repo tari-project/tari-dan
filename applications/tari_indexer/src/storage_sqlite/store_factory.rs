@@ -306,7 +306,7 @@ pub(crate) fn insert_test_events(db_path: &std::path::Path, topics: &[&str]) {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use tari_engine_types::{
@@ -783,7 +783,7 @@ mod tests {
         assert!(fetch(2).await.is_empty(), "a spent UTXO is not fetched");
     }
 
-    async fn temp_store() -> (tempfile::TempDir, SqliteIndexerStore) {
+    pub(crate) async fn temp_store() -> (tempfile::TempDir, SqliteIndexerStore) {
         let dir = tempfile::tempdir().unwrap();
         let store = SqliteIndexerStore::try_create(dir.path().join("indexer.db")).unwrap();
         (dir, store)
@@ -2780,7 +2780,7 @@ mod tests {
     }
 
     /// A checkpoint whose header commits to a metadata preimage, which it carries when `carried`.
-    fn epoch_checkpoint(
+    pub(crate) fn epoch_checkpoint(
         epoch: u64,
         shard_group: ShardGroup,
         carried: bool,
@@ -2878,6 +2878,77 @@ mod tests {
             vec![(Epoch(2), low), (Epoch(3), low)]
         );
         assert_eq!(checkpoint_keys(&store, Epoch(0), None).await.len(), 5);
+    }
+
+    async fn latest_of_each_shard_group(store: &SqliteIndexerStore) -> Vec<(Epoch, ShardGroup)> {
+        crate::store::ReadOnlyStore::new(store.clone())
+            .epoch_checkpoint_get_latest_of_each_shard_group()
+            .await
+            .unwrap()
+            .iter()
+            .map(|checkpoint| (checkpoint.epoch(), checkpoint.checked_shard_group().unwrap()))
+            .collect()
+    }
+
+    async fn store_checkpoints(
+        store: &SqliteIndexerStore,
+        checkpoints: Vec<tari_ootle_storage::consensus_models::EpochCheckpoint>,
+    ) {
+        use crate::store::IndexerStoreWriteTransaction;
+        store
+            .with_write_tx(move |tx| {
+                for checkpoint in &checkpoints {
+                    tx.insert_or_ignore_epoch_checkpoint(checkpoint)?;
+                }
+                Ok::<_, StorageError>(())
+            })
+            .await
+            .unwrap();
+    }
+
+    /// Each shard group is at its own latest epoch, so a group whose next checkpoint this indexer has not stored yet is
+    /// served at the epoch before.
+    #[tokio::test]
+    async fn the_latest_checkpoint_of_each_shard_group_is_read_once_in_shard_order() {
+        let (_dir, store) = temp_store().await;
+        assert_eq!(latest_of_each_shard_group(&store).await, vec![]);
+
+        let low = ShardGroup::new(1u32, 127u32);
+        let high = ShardGroup::new(128u32, 255u32);
+        let all = ShardGroup::new(1u32, 255u32);
+        store_checkpoints(&store, vec![
+            epoch_checkpoint(1, all, true),
+            epoch_checkpoint(2, low, true),
+            epoch_checkpoint(2, high, true),
+            epoch_checkpoint(3, low, true),
+            epoch_checkpoint(4, low, false),
+        ])
+        .await;
+        assert_eq!(latest_of_each_shard_group(&store).await, vec![
+            (Epoch(3), low),
+            (Epoch(2), high)
+        ]);
+
+        store_checkpoints(&store, vec![epoch_checkpoint(5, all, true)]).await;
+        assert_eq!(latest_of_each_shard_group(&store).await, vec![(Epoch(5), all)]);
+    }
+
+    /// Where the shard groups split and only some of the new groups' checkpoints are stored, a group of the layout
+    /// before still holds the shards past them.
+    #[tokio::test]
+    async fn the_latest_checkpoints_of_two_shard_group_layouts_can_share_shards() {
+        let (_dir, store) = temp_store().await;
+        let low = ShardGroup::new(1u32, 127u32);
+        let all = ShardGroup::new(1u32, 255u32);
+        store_checkpoints(&store, vec![
+            epoch_checkpoint(1, all, true),
+            epoch_checkpoint(2, low, true),
+        ])
+        .await;
+        assert_eq!(latest_of_each_shard_group(&store).await, vec![
+            (Epoch(2), low),
+            (Epoch(1), all)
+        ]);
     }
 
     /// A checkpoint without its header metadata preimage cannot name the next validator set to a wallet, so it is
