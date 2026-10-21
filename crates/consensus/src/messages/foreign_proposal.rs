@@ -53,6 +53,9 @@ impl Display for ForeignProposalMessage {
 pub struct ForeignProposalNotificationMessage {
     pub block_id: BlockId,
     pub epoch: Epoch,
+    /// The shard group whose committee produced the block in `epoch`. Receivers request the foreign proposal from this
+    /// committee, whichever peer relayed the notification to them.
+    pub shard_group: ShardGroup,
     /// The shard groups this notification is intended for. The notification is gossiped on a single network-wide
     /// topic, so every validator receives it; only validators whose shard group is listed here need to fetch the
     /// foreign proposal.
@@ -63,8 +66,9 @@ impl Display for ForeignProposalNotificationMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "ForeignProposalNotificationMessage({}, {}, [{}])",
+            "ForeignProposalNotificationMessage({}, {}, {}, [{}])",
             self.epoch,
+            self.shard_group,
             self.block_id,
             self.shard_groups
                 .iter()

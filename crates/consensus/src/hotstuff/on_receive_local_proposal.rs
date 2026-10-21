@@ -1184,6 +1184,7 @@ async fn broadcast_foreign_proposal_if_required<TConsensusSpec: ConsensusSpec>(
             ForeignProposalNotificationMessage {
                 block_id: *block.id(),
                 epoch: block.epoch(),
+                shard_group: block.shard_group(),
                 shard_groups,
             },
         ))
