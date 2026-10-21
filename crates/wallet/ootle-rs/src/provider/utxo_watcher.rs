@@ -237,6 +237,11 @@ fn convert_update(update: protobuf::WalletUtxoUpdate) -> Result<StealthUtxoFrame
 /// Seed a fresh monitor with [`ShardCursor::genesis`] (all shards at `StateVersion::zero`), pass
 /// [`ShardCursor::to_pairs`] into a [`StealthUtxoWatchRequest`], and advance it from each
 /// [`StealthUtxoFrame::EndOfShard`] watermark via [`ShardCursor::observe`].
+///
+/// The watermarks are the indexer's claims, and a monitor resumes past every version its cursor holds. A cursor that
+/// outlives one pass must be stored no further than each shard's state version in a verified end-of-epoch checkpoint:
+/// an indexer that claims a version past the shard's real one would otherwise hide every later update of the shard
+/// from each later pass, whichever indexer serves it.
 #[derive(Debug, Clone, Default)]
 pub struct ShardCursor {
     versions: BTreeMap<Shard, StateVersion>,
