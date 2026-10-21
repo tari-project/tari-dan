@@ -13,7 +13,7 @@ use crate::storage_sqlite::schema::template_catalogue;
 #[derive(Debug, Clone, Identifiable, Queryable)]
 #[diesel(table_name = template_catalogue)]
 pub(crate) struct TemplateCatalogueRow {
-    pub id: i32,
+    pub id: i64,
     pub template_address: String,
     pub template_name: String,
     pub author_public_key: String,
@@ -41,7 +41,7 @@ pub(crate) struct NewTemplateCatalogueRow {
 /// Public type exposed through the store trait and REST API.
 #[derive(Debug, Clone)]
 pub struct TemplateCatalogueEntry {
-    pub id: i32,
+    pub id: i64,
     pub template_address: TemplateAddress,
     pub template_name: String,
     pub author_public_key: RistrettoPublicKeyBytes,

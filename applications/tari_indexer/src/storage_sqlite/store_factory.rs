@@ -1096,6 +1096,45 @@ mod tests {
             .unwrap();
     }
 
+    /// AUTOINCREMENT ids never reuse, so a long-running indexer's ids outgrow 32 bits even when
+    /// retention keeps the live row count small. Paging and pruning must hold across that range.
+    #[tokio::test]
+    async fn transaction_ids_beyond_32_bits_page_and_prune() {
+        let (_dir, store) = temp_store().await;
+        store
+            .with_write_tx(|tx| {
+                sql_query("insert into sqlite_sequence (name, seq) values ('transactions', 4294967295)")
+                    .execute(tx.connection())
+                    .map_err(|e| StorageError::general("seed sqlite_sequence", e))
+            })
+            .await
+            .unwrap();
+
+        let ids = insert_transactions(&store, &[Epoch(5), Epoch(6), Epoch(20)]).await;
+
+        let first_page = store
+            .with_read_tx(move |tx| tx.list_recent_transactions(None, 2, None))
+            .await
+            .unwrap();
+        assert_eq!(first_page.iter().map(|e| e.transaction_id).collect::<Vec<_>>(), [
+            ids[2], ids[1]
+        ]);
+        let cursor = first_page[1].transaction_id;
+        let second_page = store
+            .with_read_tx(move |tx| tx.list_recent_transactions(Some(cursor), 2, None))
+            .await
+            .unwrap();
+        assert_eq!(second_page.iter().map(|e| e.transaction_id).collect::<Vec<_>>(), [
+            ids[0]
+        ]);
+
+        let num_pruned = store
+            .with_write_tx(move |tx| tx.prune_transactions_before_epoch(Epoch(10), 100))
+            .await
+            .unwrap();
+        assert_eq!(num_pruned, 2);
+    }
+
     /// A transaction that never commits gets no receipt — mempool rejection and a consensus abort that
     /// commits nothing both leave one — so its `max_epoch` stays its retention key. Without that
     /// fallback these rows, the ones retention exists to bound, would never age out.

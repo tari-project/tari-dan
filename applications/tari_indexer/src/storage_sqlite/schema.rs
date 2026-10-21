@@ -2,7 +2,7 @@
 
 diesel::table! {
     template_catalogue (id) {
-        id -> Integer,
+        id -> BigInt,
         template_address -> Text,
         template_name -> Text,
         author_public_key -> Text,
@@ -16,7 +16,7 @@ diesel::table! {
 
 diesel::table! {
     epoch_checkpoints (id) {
-        id -> Integer,
+        id -> BigInt,
         epoch -> BigInt,
         shard_group -> Text,
         json_data -> Text,
@@ -44,7 +44,7 @@ diesel::table! {
 
 diesel::table! {
     key_values (id) {
-        id -> Integer,
+        id -> BigInt,
         key -> Text,
         value -> Text,
         created_at -> Timestamp,
@@ -54,7 +54,7 @@ diesel::table! {
 
 diesel::table! {
     substates (id) {
-        id -> Integer,
+        id -> BigInt,
         address -> Text,
         version -> BigInt,
         data -> Text,
@@ -67,7 +67,7 @@ diesel::table! {
 
 diesel::table! {
     transaction_receipts (id) {
-        id -> Integer,
+        id -> BigInt,
         address -> Text,
         data -> Text,
         created_at -> Timestamp,
@@ -79,7 +79,7 @@ diesel::table! {
 
 diesel::table! {
     transactions (id) {
-        id -> Integer,
+        id -> BigInt,
         transaction_id -> Text,
         body -> Text,
         created_at -> Timestamp,
@@ -92,7 +92,7 @@ diesel::table! {
 
 diesel::table! {
     watched_substates (id) {
-        id -> Integer,
+        id -> BigInt,
         component_address -> Text,
         template_address -> Text,
         created_at -> Timestamp,
@@ -101,7 +101,7 @@ diesel::table! {
 
 diesel::table! {
     utxos (id) {
-        id -> Integer,
+        id -> BigInt,
         commitment -> Text,
         public_nonce -> Text,
         version -> BigInt,
@@ -120,7 +120,7 @@ diesel::table! {
 
 diesel::table! {
     verified_state_roots (id) {
-        id -> Integer,
+        id -> BigInt,
         epoch -> BigInt,
         shard_group -> Text,
         block_height -> BigInt,

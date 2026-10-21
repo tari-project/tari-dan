@@ -410,7 +410,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
                 let Some(id) = transactions::table
                     .select(transactions::id)
                     .filter(transactions::transaction_id.eq(serialize_hex(last_id)))
-                    .first::<i32>(self.connection())
+                    .first::<i64>(self.connection())
                     .optional()
                     .map_err(|e| StorageError::QueryError {
                         reason: format!("list_recent_transactions: {e}"),
@@ -420,7 +420,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
                 };
                 id
             },
-            None => i32::MAX,
+            None => i64::MAX,
         };
 
         let mut query = transactions::table
@@ -562,7 +562,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
             let cursor = transaction_receipts::table
                 .select(transaction_receipts::id)
                 .filter(transaction_receipts::address.eq(serialize_hex(last_id.as_object_key())))
-                .first::<i32>(self.connection())
+                .first::<i64>(self.connection())
                 .optional()
                 .map_err(|e| StorageError::QueryError {
                     reason: format!("{OPERATION}: {}", e),
@@ -954,7 +954,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
             let cursor_id = template_catalogue::table
                 .select(template_catalogue::id)
                 .filter(template_catalogue::template_address.eq(&after_hex))
-                .first::<i32>(self.connection())
+                .first::<i64>(self.connection())
                 .optional()
                 .map_err(|e| StorageError::QueryError {
                     reason: format!("{OPERATION}: cursor lookup: {e}"),

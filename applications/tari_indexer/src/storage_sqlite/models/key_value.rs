@@ -26,7 +26,7 @@ impl From<KeyValueEntry> for KeyValue<String> {
 #[derive(Debug, Identifiable, Queryable)]
 #[diesel(table_name = key_values)]
 pub(crate) struct KeyValueEntry {
-    pub id: i32,
+    pub id: i64,
     pub key: String,
     pub value: String,
     pub created_at: PrimitiveDateTime,
