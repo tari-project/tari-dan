@@ -1,0 +1,1 @@
+DROP INDEX utxos_resource_public_nonce_utxo_tag_spent_idx;

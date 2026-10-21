@@ -25,6 +25,7 @@ use tari_ootle_transaction::{Transaction, TransactionEnvelope, TransactionId};
 use tari_ootle_wallet_sdk::{
     network::{
         FetchedSubstates,
+        FetchedUtxos,
         SubstateQueryResult,
         TransactionFinalizedStream,
         TransactionQueryResult,
@@ -304,11 +305,11 @@ impl WalletNetworkInterface for ProvingNetwork {
         panic!("ProvingNetwork called")
     }
 
-    async fn get_unspent_utxos(
+    async fn fetch_utxos(
         &self,
         _resource_address: ResourceAddress,
         _tag_and_nonce_pairs: Vec<TagAndPublicNoncePair>,
-    ) -> Result<Vec<(UtxoId, Utxo)>, Self::Error> {
+    ) -> Result<FetchedUtxos, Self::Error> {
         panic!("ProvingNetwork called")
     }
 

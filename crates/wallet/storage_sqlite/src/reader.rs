@@ -61,7 +61,7 @@ use tari_ootle_wallet_sdk::{
         WalletTransaction,
         WebauthnRegistrationPasskeyModel,
     },
-    storage::{TagAndPublicNoncePair, WalletStorageError, WalletStoreReader},
+    storage::{UtxoProcessQueueBatch, UtxoProcessQueueCursor, WalletStorageError, WalletStoreReader},
 };
 use tari_template_lib_types::{
     Amount,
@@ -1852,14 +1852,17 @@ impl WalletStoreReader for ReadTransaction<'_> {
 
     fn utxo_process_queue_fetch_batch(
         &mut self,
+        after: Option<UtxoProcessQueueCursor>,
         batch_size: usize,
-    ) -> Result<HashMap<ResourceAddress, HashMap<TagAndPublicNoncePair, ComponentAddress>>, WalletStorageError> {
+    ) -> Result<UtxoProcessQueueBatch, WalletStorageError> {
         const OPERATION: &str = "utxo_process_queue_fetch_batch";
         use crate::schema::{accounts, utxo_process_queue};
 
+        let after_id = after.map_or(i32::MIN, |cursor| i32::try_from(cursor.0).unwrap_or(i32::MAX));
         let rows = utxo_process_queue::table
             .inner_join(accounts::table.on(accounts::id.eq(utxo_process_queue::account_id)))
             .select((utxo_process_queue::all_columns, accounts::address.assume_not_null()))
+            .filter(utxo_process_queue::id.gt(after_id))
             .order(utxo_process_queue::id.asc())
             .limit(i64::try_from(batch_size).unwrap_or(i64::MAX))
             .get_results::<(models::UtxoProcessQueue, String)>(self.connection())
@@ -1886,7 +1889,10 @@ impl WalletStoreReader for ReadTransaction<'_> {
                 .insert((tag, public_nonce), account_addr);
         }
 
-        Ok(result)
+        Ok(UtxoProcessQueueBatch {
+            entries: result,
+            last: rows.last().map(|(row, _)| UtxoProcessQueueCursor(i64::from(row.id))),
+        })
     }
 
     fn address_book_get(&mut self, name: &str) -> Result<AddressBookEntry, WalletStorageError> {

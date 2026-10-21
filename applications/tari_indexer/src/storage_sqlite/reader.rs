@@ -261,9 +261,36 @@ pub(super) fn unspent_utxos_by_tag_and_nonce_query<'a>(
 ) -> crate::storage_sqlite::schema::utxos::BoxedQuery<'a, diesel::sqlite::Sqlite> {
     use crate::storage_sqlite::schema::utxos;
 
+    utxos::table
+        .filter(utxos::resource_address.eq(resource_address.to_string()))
+        .filter(tag_and_nonce_in(tag_and_nonce_pairs))
+        .filter(is_unspent_utxo())
+        .into_boxed()
+}
+
+/// The spent or burnt UTXOs of `resource_address` matching any of `tag_and_nonce_pairs`. The spent terms are SQL
+/// literals that repeat the condition of the partial index over spent rows, so that SQLite seeks that index.
+pub(super) fn spent_utxos_by_tag_and_nonce_query<'a>(
+    resource_address: &ResourceAddress,
+    tag_and_nonce_pairs: &[(UtxoTag, RistrettoPublicKeyBytes)],
+) -> crate::storage_sqlite::schema::utxos::BoxedQuery<'a, diesel::sqlite::Sqlite> {
+    use crate::storage_sqlite::schema::utxos;
+
+    utxos::table
+        .filter(utxos::resource_address.eq(resource_address.to_string()))
+        .filter(tag_and_nonce_in(tag_and_nonce_pairs))
+        .filter(dsl::sql::<sql_types::Bool>(
+            r#"("utxos"."is_spent" = true OR "utxos"."is_burnt" = true)"#,
+        ))
+        .into_boxed()
+}
+
+/// Restricts `utxos` to rows matching any of `tag_and_nonce_pairs`. The row value follows the column order of the
+/// `(resource_address, public_nonce, utxo_tag)` indexes, which lets SQLite seek an index for each pair.
+fn tag_and_nonce_in(
+    tag_and_nonce_pairs: &[(UtxoTag, RistrettoPublicKeyBytes)],
+) -> diesel::expression::SqlLiteral<sql_types::Bool> {
     // Diesel does not support tuple IN queries, so we have to use raw SQL here (https://github.com/diesel-rs/diesel/issues/3222#issuecomment-2088239186)
-    // The row value follows the column order of the unique (resource_address, public_nonce,
-    // utxo_tag) index, which lets SQLite seek that index for each pair.
     let mut tag_and_nonce_query = String::with_capacity(29 + tag_and_nonce_pairs.len() * 50);
     tag_and_nonce_query.push_str("(public_nonce,utxo_tag) IN (");
     for (i, (tag, nonce)) in tag_and_nonce_pairs.iter().enumerate() {
@@ -281,12 +308,7 @@ pub(super) fn unspent_utxos_by_tag_and_nonce_query<'a>(
         }
     }
     tag_and_nonce_query.push(')');
-
-    utxos::table
-        .filter(utxos::resource_address.eq(resource_address.to_string()))
-        .filter(dsl::sql::<sql_types::Bool>(&tag_and_nonce_query))
-        .filter(is_unspent_utxo())
-        .into_boxed()
+    dsl::sql::<sql_types::Bool>(&tag_and_nonce_query)
 }
 
 fn decode_event_row(row: EventRecord) -> Result<(i64, TransactionId, Event), StorageError> {
@@ -925,6 +947,27 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         }
 
         Ok(utxos)
+    }
+
+    fn utxos_get_spent_public_nonce_and_tag(
+        &mut self,
+        resource_address: &ResourceAddress,
+        tag_and_nonce_pairs: &[(UtxoTag, RistrettoPublicKeyBytes)],
+    ) -> Result<Vec<(UtxoTag, RistrettoPublicKeyBytes)>, StorageError> {
+        const OPERATION: &str = "utxos_get_spent_public_nonce_and_tag";
+        use crate::storage_sqlite::schema::utxos;
+
+        let rows = spent_utxos_by_tag_and_nonce_query(resource_address, tag_and_nonce_pairs)
+            .select((utxos::utxo_tag, utxos::public_nonce))
+            .distinct()
+            .get_results::<(i32, String)>(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("{OPERATION}: {}", e),
+            })?;
+
+        rows.into_iter()
+            .map(|(tag, public_nonce)| Ok((UtxoTag::new(tag as u32), deserialize_hex_try_from(public_nonce)?)))
+            .collect()
     }
 
     fn list_template_catalogue(

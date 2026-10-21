@@ -13,7 +13,6 @@ use tari_consensus_types::Decision;
 use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_engine_types::{
     Epoch,
-    Utxo,
     commit_result::{ExecuteResult, FinalizeResult, TransactionResult},
     component::{Component, ComponentBody, ComponentHeader},
     fees::FeeReceipt,
@@ -28,6 +27,7 @@ use tari_ootle_wallet_sdk::{
     models::TransactionStatus,
     network::{
         FetchedSubstates,
+        FetchedUtxos,
         SubstateQueryResult,
         TransactionFinalizedResult,
         TransactionFinalizedStream,
@@ -273,11 +273,11 @@ impl WalletNetworkInterface for FixedSubstateNetwork {
         panic!("FixedSubstateNetwork called")
     }
 
-    async fn get_unspent_utxos(
+    async fn fetch_utxos(
         &self,
         _resource_address: ResourceAddress,
         _tag_and_nonce_pairs: Vec<TagAndPublicNoncePair>,
-    ) -> Result<Vec<(UtxoId, Utxo)>, Self::Error> {
+    ) -> Result<FetchedUtxos, Self::Error> {
         panic!("FixedSubstateNetwork called")
     }
 

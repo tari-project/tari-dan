@@ -1,7 +1,7 @@
 //   Copyright 2025 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{array, time::Duration};
+use std::{array, collections::HashSet, time::Duration};
 
 use log::*;
 use tari_engine_types::UtxoOutput;
@@ -20,7 +20,7 @@ use tari_ootle_wallet_sdk::{
         UtxoRecoveryStartedEvent,
         WalletEvent,
     },
-    network::WalletNetworkInterface,
+    network::{FetchedUtxos, WalletNetworkInterface},
     storage::{ReadableWalletStore, WalletStorageError, WalletStoreReader, WalletStoreWriter, WriteableWalletStore},
 };
 use tari_template_lib_types::{ComponentAddress, ResourceAddress, UtxoAddress, UtxoId};
@@ -29,6 +29,10 @@ use tokio::sync::watch;
 use crate::{notify::Notify, utxo_scanner::StealthScannerApiError};
 
 const LOG_TARGET: &str = "tari::ootle::wallet_services::utxo_recovery";
+
+const BATCH_SIZE: usize = 100;
+/// How long queued UTXOs the indexer did not know wait to be asked for again, unless a scan wakes recovery sooner.
+const UNRESOLVED_RETRY_INTERVAL: Duration = Duration::from_secs(60);
 
 pub struct UtxoRecovery<TSpec: WalletSdkSpec> {
     sdk: WalletSdk<TSpec>,
@@ -59,8 +63,9 @@ where
         loop {
             // Process the UTXO validation queue until empty. NOTE: this comes before waiting on the waker so that we
             // check the queue on startup
-            if let Err(err) = self.process_utxo_validation_queue().await {
-                match &err {
+            let num_unresolved = match self.process_utxo_validation_queue().await {
+                Ok(num_unresolved) => num_unresolved,
+                Err(err) => match &err {
                     // Perhaps intermittent network issue, just log and continue
                     StealthScannerApiError::NetworkInterfaceError(_) |
                     StealthScannerApiError::UnexpectedResponse { .. } => {
@@ -76,10 +81,18 @@ where
                         // CRASH
                         return Err(err.into());
                     },
-                }
-            }
+                },
+            };
 
-            if waker.changed().await.is_err() {
+            let woken = if num_unresolved == 0 {
+                waker.changed().await
+            } else {
+                match tokio::time::timeout(UNRESOLVED_RETRY_INTERVAL, waker.changed()).await {
+                    Ok(woken) => woken,
+                    Err(_) => Ok(()),
+                }
+            };
+            if woken.is_err() {
                 info!(target: LOG_TARGET, "🔕 UTXO recovery process terminating because the notification channel closed");
                 break;
             }
@@ -93,20 +106,26 @@ where
         }
     }
 
+    /// Processes each queued UTXO once and returns the number left queued, because the indexer that answered neither
+    /// returned them nor reported them spent.
     #[allow(clippy::too_many_lines)]
-    pub async fn process_utxo_validation_queue(&mut self) -> Result<(), StealthScannerApiError> {
+    pub async fn process_utxo_validation_queue(&mut self) -> Result<usize, StealthScannerApiError> {
         let mut start_event_published = false;
         let mut num_recovered = 0;
+        let mut num_unresolved = 0;
+        let mut cursor = None;
         loop {
             let batch = self
                 .sdk
                 .store()
-                .with_read_tx(|tx| tx.utxo_process_queue_fetch_batch(100))?;
+                .with_read_tx(|tx| tx.utxo_process_queue_fetch_batch(cursor, BATCH_SIZE))?;
 
-            if batch.is_empty() {
-                debug!(target: LOG_TARGET, "✅ No more UTXOs to process");
-                return Ok(());
-            }
+            let Some(last) = batch.last else {
+                debug!(target: LOG_TARGET, "✅ No more UTXOs to process ({} unresolved)", num_unresolved);
+                return Ok(num_unresolved);
+            };
+            // Unresolved entries stay queued, so each batch starts after the last entry of the one before
+            cursor = Some(last);
 
             if !start_event_published {
                 self.round_id += 1;
@@ -116,7 +135,7 @@ where
                 start_event_published = true;
             }
 
-            for (resource_addr, tag_and_nonce_to_view_key_map) in &batch {
+            for (resource_addr, tag_and_nonce_to_view_key_map) in &batch.entries {
                 if tag_and_nonce_to_view_key_map.is_empty() {
                     error!(target: LOG_TARGET, "❓️ NEVER HAPPEN: Asked indexer for zero UTXOs for resource {}.", resource_addr);
                 }
@@ -127,47 +146,46 @@ where
                 // downstream (previous bug caused spent to be marked as unspent).
 
                 // max 3.3kB per request (excl underlying protocol overhead *cough* json + hex)
-                let utxos = self
+                let FetchedUtxos { unspent: utxos, spent } = self
                     .sdk
                     .get_network_interface()
-                    .get_unspent_utxos(*resource_addr, tag_and_nonce_pairs)
+                    .fetch_utxos(*resource_addr, tag_and_nonce_pairs)
                     .await
                     .map_err(|e| StealthScannerApiError::NetworkInterfaceError(e.into()))?;
 
-                self.sdk.store().with_write_tx(|tx| {
-                    // We're trusting that the indexer is up to date and accurate. If any UTXOs we asked for are not
-                    // returned, remove them from the queue to avoid retrying forever because they are presumably spent.
-                    let missing_utxos = tag_and_nonce_to_view_key_map
-                        .keys()
-                        .filter(|(tag, nonce)| {
-                            !utxos.iter().any(|(_, utxo)| {
-                                utxo.output.as_ref().is_some_and(|output| utxo.tag() == Some(*tag) && output.output.public_nonce == *nonce)
-                            })
-                        });
+                let returned = utxos
+                    .iter()
+                    .filter_map(|(_, utxo)| utxo.output())
+                    .map(|output| (output.tag, output.output.public_nonce))
+                    .collect::<HashSet<_>>();
+                let spent = spent
+                    .into_iter()
+                    .filter(|pair| tag_and_nonce_to_view_key_map.contains_key(pair) && !returned.contains(pair))
+                    .collect::<HashSet<_>>();
 
-                    let mut count = 0usize;
-                    for (tag, nonce) in missing_utxos {
-                        count += 1;
+                self.sdk.store().with_write_tx(|tx| {
+                    for (tag, nonce) in &spent {
                         tx.utxo_process_queue_remove_item(*resource_addr, *tag, *nonce)?;
-                    }
-                    if count > 0 {
-                        debug!(target: LOG_TARGET, "❓️ Removed {} missing UTXOs from the processing queue for resource {} as they were not returned by the indexer.", count, resource_addr);
                     }
                     Ok::<_, WalletStorageError>(())
                 })?;
-
-                if utxos.is_empty() {
-                    // We asked for some UTXOs but got none back. This could happen if the UTXOs were all spent later.
-                    // Ignore this and continue syncing.
-                    continue;
+                if !spent.is_empty() {
+                    debug!(target: LOG_TARGET, "Removed {} spent UTXOs from the processing queue for resource {}", spent.len(), resource_addr);
                 }
 
-                if utxos.len() != tag_and_nonce_to_view_key_map.len() {
-                    // We could error as above, but let's process what we got
-                    warn!(target: LOG_TARGET, "⚠️ Mismatch in number of UTXOs queried ({}) vs returned by indexer ({}).",
-                        tag_and_nonce_to_view_key_map.len(),
-                        utxos.len(),
-                    );
+                // A pair the indexer neither returned nor reported spent may be one it has not indexed yet, so it
+                // stays queued for a later round.
+                let unresolved = tag_and_nonce_to_view_key_map
+                    .keys()
+                    .filter(|pair| !returned.contains(*pair) && !spent.contains(*pair))
+                    .count();
+                if unresolved > 0 {
+                    debug!(target: LOG_TARGET, "❓️ The indexer does not know {} queued UTXOs for resource {}. Retrying them later.", unresolved, resource_addr);
+                    num_unresolved += unresolved;
+                }
+
+                if utxos.is_empty() {
+                    continue;
                 }
 
                 // Group by account key index

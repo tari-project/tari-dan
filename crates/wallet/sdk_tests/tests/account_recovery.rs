@@ -15,7 +15,7 @@ use std::{
 use futures::StreamExt;
 use ootle_byte_type::ToByteType;
 use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey};
-use tari_engine_types::{Epoch, Utxo, substate::SubstateId};
+use tari_engine_types::{Epoch, substate::SubstateId};
 use tari_indexer_client::types::{EpochCheckpointEntry, ValidatorSetCommittee, WatchedSubstateItem};
 use tari_ootle_common_types::{
     StateVersion,
@@ -30,6 +30,7 @@ use tari_ootle_wallet_sdk::{
     models::{KeyBranch, KeyId, StartOfShard, UtxoUnspent, UtxoUpdatePayload, WalletUtxoUpdate},
     network::{
         FetchedSubstates,
+        FetchedUtxos,
         SubstateQueryResult,
         TransactionFinalizedStream,
         TransactionQueryResult,
@@ -50,7 +51,6 @@ use tari_template_lib::types::{
     ComponentAddress,
     ResourceAddress,
     TemplateAddress,
-    UtxoId,
     constants::STEALTH_TARI_RESOURCE_ADDRESS,
     crypto::UtxoTag,
 };
@@ -184,12 +184,12 @@ impl WalletNetworkInterface for OneUtxoNetwork {
         panic!("OneUtxoNetwork::list_watched_substates called")
     }
 
-    async fn get_unspent_utxos(
+    async fn fetch_utxos(
         &self,
         _: ResourceAddress,
         _: Vec<TagAndPublicNoncePair>,
-    ) -> Result<Vec<(UtxoId, Utxo)>, Self::Error> {
-        panic!("OneUtxoNetwork::get_unspent_utxos called")
+    ) -> Result<FetchedUtxos, Self::Error> {
+        panic!("OneUtxoNetwork::fetch_utxos called")
     }
 
     async fn get_latest_epoch_checkpoint(&self, _shard: Shard) -> Result<EpochCheckpointEntry, Self::Error> {

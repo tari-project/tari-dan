@@ -119,11 +119,13 @@ pub trait WalletNetworkInterface {
         unspent_only: bool,
     ) -> impl Future<Output = Result<UtxoUpdateStream<Self::Error>, Self::Error>> + Send;
 
-    fn get_unspent_utxos(
+    /// Fetches the unspent UTXOs of `resource_address` matching `tag_and_nonce_pairs`, and which of the pairs are spent
+    /// or burnt.
+    fn fetch_utxos(
         &self,
         resource_address: ResourceAddress,
         tag_and_nonce_pairs: Vec<(UtxoTag, RistrettoPublicKeyBytes)>,
-    ) -> impl Future<Output = Result<Vec<(UtxoId, Utxo)>, Self::Error>> + Send;
+    ) -> impl Future<Output = Result<FetchedUtxos, Self::Error>> + Send;
 
     fn list_watched_substates(
         &self,
@@ -180,6 +182,15 @@ pub struct FetchedSubstates {
     /// The proof of each substate in `substates` that was asked for and served.
     #[serde(default)]
     pub proofs: HashMap<SubstateId, SubstateProof>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct FetchedUtxos {
+    /// The unspent UTXOs matching a requested tag and nonce pair.
+    pub unspent: Vec<(UtxoId, Utxo)>,
+    /// The requested tag and nonce pairs whose UTXO is spent or burnt. A requested pair in neither list is unknown to
+    /// the indexer that answered, which may not yet have indexed it.
+    pub spent: Vec<(UtxoTag, RistrettoPublicKeyBytes)>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
