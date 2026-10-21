@@ -25,7 +25,7 @@ use tari_ootle_wallet_sdk::{
 };
 use tari_ootle_wallet_sdk_services::{
     notify::Notify,
-    utxo_scanner::{StealthUtxoScannerWorker, UtxoScanRoundStats},
+    utxo_scanner::{StealthScannerApiError, StealthUtxoScannerWorker, UtxoScanRoundStats},
 };
 use tari_template_lib::types::{
     Amount,
@@ -116,12 +116,15 @@ fn report_spent(network: &ProvingNetwork, output: &StealthOutputModel, version: 
     });
 }
 
-async fn scan(test: &TestWithNetwork<ProvingNetwork>) -> UtxoScanRoundStats {
+async fn try_scan(test: &TestWithNetwork<ProvingNetwork>) -> Result<UtxoScanRoundStats, StealthScannerApiError> {
     let (_join, scanner) = StealthUtxoScannerWorker::new(test.sdk().clone(), Notify::new(100)).spawn();
     scanner
         .scan(Test::test_account_address(), STEALTH_TARI_RESOURCE_ADDRESS)
         .await
-        .unwrap()
+}
+
+async fn scan(test: &TestWithNetwork<ProvingNetwork>) -> UtxoScanRoundStats {
+    try_scan(test).await.unwrap()
 }
 
 fn stored_status(test: &TestWithNetwork<ProvingNetwork>, output: &StealthOutputModel) -> &'static str {
@@ -212,6 +215,26 @@ async fn a_proven_spend_marks_the_output_spent() {
     let proof = substate_down_proof(&sets[1], &sets[4], &id, VERSION);
     network.serve_down_substate(id, VERSION, Some(proof));
     report_spent(&network, &output, VERSION);
+
+    let stats = scan(&test).await;
+    assert_eq!(stats.num_spent, 1);
+    assert_eq!(stored_status(&test, &output), SPENT);
+    assert_eq!(unspent_balance(&test), Amount::zero());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_spend_whose_proof_could_not_be_fetched_is_applied_by_the_next_scan() {
+    let output = held_output(OutputStatus::Unspent);
+    let (sets, network, test) = wallet_holding(&output, IndexerTrust::Verify).await;
+    let id = substate_id(&output);
+    let proof = substate_down_proof(&sets[4], &sets[4], &id, VERSION);
+    network.serve_down_substate(id, VERSION, Some(proof));
+    report_spent(&network, &output, VERSION);
+    network.fail_substate_queries(1);
+
+    let err = try_scan(&test).await.unwrap_err();
+    assert!(matches!(err, StealthScannerApiError::SubstateApiError(_)), "{err}");
+    assert_eq!(stored_status(&test, &output), UNSPENT);
 
     let stats = scan(&test).await;
     assert_eq!(stats.num_spent, 1);

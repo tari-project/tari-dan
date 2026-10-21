@@ -420,7 +420,10 @@ where TSpec: WalletSdkSpec
     }
 
     /// Drops each reported spend of an output the wallet holds as not spent, unless the indexer proves that the output
-    /// has gone down at the reported version. A dropped spend is not retried: the output stays as it is.
+    /// has gone down at the reported version. A spend is dropped only when the answer refuses it for good: the indexer
+    /// serves no proof, a proof that does not verify, or one the wallet can never trust. The output then stays as it is
+    /// and the spend is not asked for again. Any other failure fails the round before it stores its progress, so the
+    /// next scan asks for the spend again.
     ///
     /// A spend of an output the wallet already holds as spent needs no proof, as the wallet settled that spend from its
     /// own verified transaction.
@@ -443,8 +446,13 @@ where TSpec: WalletSdkSpec
             let address = UtxoAddress::new(*self.resource_address, spent.id);
             match substate_api.verify_down(&address.clone().into(), spent.version).await {
                 Ok(()) => retained.push(spent),
-                Err(SubstateApiError::StoreError(err)) => return Err(err.into()),
-                Err(err) => {
+                Err(
+                    err @ (SubstateApiError::SubstateDoesNotExist { .. } |
+                    SubstateApiError::SubstateNotDown { .. } |
+                    SubstateApiError::SubstateUnproven { .. } |
+                    SubstateApiError::SubstateUnverified { .. } |
+                    SubstateApiError::SubstateProvenBeforeAnchor { .. }),
+                ) => {
                     warn!(
                         target: LOG_TARGET,
                         "⚠️ The indexer reported stealth output {} spent at v{} without proving it ({}). Keeping the output.",
@@ -453,6 +461,7 @@ where TSpec: WalletSdkSpec
                         err
                     );
                 },
+                Err(err) => return Err(err.into()),
             }
         }
         self.utxos_to_spend = retained;
