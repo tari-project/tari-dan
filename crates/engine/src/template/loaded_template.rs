@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::sync::Arc;
+
 use tari_template_abi::TemplateDef;
 
 use crate::wasm::LoadedWasmTemplate;
@@ -47,6 +49,12 @@ impl LoadedTemplate {
     pub fn into_template_def(self) -> TemplateDef {
         match self {
             LoadedTemplate::Wasm(wasm) => wasm.into_template_def(),
+        }
+    }
+
+    pub fn into_shared_template_def(self) -> Arc<TemplateDef> {
+        match self {
+            LoadedTemplate::Wasm(wasm) => wasm.into_shared_template_def(),
         }
     }
 

@@ -368,7 +368,7 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
         Ok(())
     }
 
-    pub fn get_template_def(&self, template_address: &TemplateAddress) -> Result<TemplateDef, RuntimeError> {
+    pub fn get_template_def(&self, template_address: &TemplateAddress) -> Result<Arc<TemplateDef>, RuntimeError> {
         let loaded = self
             .template_provider
             .get_template(template_address)
@@ -381,7 +381,7 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
             })?;
         self.track_template_loaded(template_address, loaded.code_size())?;
 
-        Ok(loaded.into_template_def())
+        Ok(loaded.into_shared_template_def())
     }
 
     fn validate_return_value(&self, value: &IndexedValue) -> Result<(), RuntimeError> {
