@@ -78,10 +78,12 @@ impl SignerBitmap {
     ) -> Result<Self, QcSignaturesError> {
         let mut bytes = vec![0u8; committee_size.div_ceil(8)];
         for index in indices {
+            if index >= committee_size {
+                return Err(QcSignaturesError::SignerOutsideCommittee { index, committee_size });
+            }
             let byte = bytes
                 .get_mut(index / 8)
-                .filter(|_| index < committee_size)
-                .ok_or(QcSignaturesError::SignerOutsideCommittee { index, committee_size })?;
+                .expect("a member's byte is within a bitmap sized for its committee");
             *byte |= bit_mask(index);
         }
         Ok(Self(bytes))
