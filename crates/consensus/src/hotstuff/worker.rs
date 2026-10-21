@@ -14,6 +14,7 @@ use tari_consensus_types::{
     HighPc,
     HighTc,
     HighestSeenBlock,
+    LastExecuted,
     LastProposed,
     LastSentVote,
     LeafBlock,
@@ -87,7 +88,7 @@ use crate::{
         pacemaker_handle::PaceMakerHandle,
         state_tree_gc::StateTreeGc,
         substate_store::ShardedStateTree,
-        transaction_manager::ConsensusTransactionManager,
+        transaction_manager::{ConsensusTransactionManager, UncommittedTemplateStore},
         vote_collector::{ProposalVoteCollector, TimeoutVoteCollector},
     },
     messages::{HotstuffMessage, ProposalMessage},
@@ -141,6 +142,7 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     worker_state: WorkerState<TConsensusSpec::Addr>,
 
     state_store: TConsensusSpec::StateStore,
+    uncommitted_templates: UncommittedTemplateStore,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
 
@@ -189,6 +191,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             config.consensus_constants.max_transaction_validity_epochs,
             config.consensus_constants.max_block_pledge_bytes,
         );
+        let uncommitted_templates = transaction_manager.uncommitted_templates().clone();
 
         Self {
             local_validator_addr: local_validator_addr.clone(),
@@ -282,6 +285,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             worker_state: WorkerState::default(),
 
             state_store,
+            uncommitted_templates,
             leader_strategy,
             epoch_manager,
             transaction_pool,
@@ -365,6 +369,14 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         let local_committee_info = self.epoch_manager.get_local_committee_info(current_epoch).await?;
 
         self.create_genesis_block_if_required(current_epoch, current_epoch_hash, local_committee_info.shard_group())?;
+        // Blocks saved before a restart are still uncommitted, and their templates are in no durable state.
+        self.state_store.with_read_tx(|tx| {
+            if let Some(committed) = LastExecuted::get(tx, current_epoch).optional()? {
+                self.uncommitted_templates.prune_to(committed.epoch, committed.height);
+                self.uncommitted_templates.rebuild(tx, &committed.block_id)?;
+            }
+            Ok::<_, HotStuffError>(())
+        })?;
         // Resume pacemaker from the last epoch/height
         let (current_height, leaf_height) = self.state_store.with_read_tx(|tx| {
             let height = get_highest_seen_justified_view(tx, current_epoch)?;

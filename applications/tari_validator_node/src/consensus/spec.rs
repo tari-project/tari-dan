@@ -30,7 +30,7 @@ use crate::{
 pub type ValidatorNodeStateStore = tari_state_store_rocksdb::RocksDbStateStore<PeerAddress>;
 pub type ValidatorTemplateProvider =
     MemoryCacheTemplateProvider<tari_engine::wasm::DiskCachedWasmTemplateProvider<ValidatorNodeStateStore>>;
-pub type ValidatorTransactionProcessor = TariTransactionProcessor<ReadOnlyMemoryStateStore, ValidatorTemplateProvider>;
+pub type ValidatorTransactionProcessor = TariTransactionProcessor<ReadOnlyMemoryStateStore>;
 #[derive(Clone)]
 pub struct TariConsensusSpec;
 
@@ -49,6 +49,6 @@ impl ConsensusSpec for TariConsensusSpec {
     type SignerService = TariSignatureService;
     type StateStore = ValidatorNodeStateStore;
     type SyncManager = RpcStateSyncClientProtocol<Self>;
-    type TransactionExecutor = TariBlockTransactionExecutor<ValidatorTransactionProcessor>;
+    type TransactionExecutor = TariBlockTransactionExecutor<ValidatorTransactionProcessor, ValidatorTemplateProvider>;
     type TransactionValidator = TariBlockTransactionValidator;
 }

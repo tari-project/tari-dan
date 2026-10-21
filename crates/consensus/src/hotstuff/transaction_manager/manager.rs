@@ -39,7 +39,7 @@ use tari_ootle_storage::{
 };
 use tari_ootle_transaction::{Transaction, TransactionId};
 
-use super::{PledgedTransaction, PreparedTransaction};
+use super::{PledgedTransaction, PreparedTransaction, UncommittedTemplateStore};
 use crate::{
     hotstuff::{
         block_change_set::ProposedBlockChangeSet,
@@ -54,6 +54,7 @@ const LOG_TARGET: &str = "tari::ootle::consensus::hotstuff::block_transaction_ex
 #[derive(Debug, Clone)]
 pub struct ConsensusTransactionManager<TExecutor, TStateStore> {
     executor: TExecutor,
+    uncommitted_templates: UncommittedTemplateStore,
     max_transaction_validity_epochs: u64,
     max_transaction_pledge_bytes: usize,
     _store: PhantomData<TStateStore>,
@@ -65,10 +66,15 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
     pub fn new(executor: TExecutor, max_transaction_validity_epochs: u64, max_transaction_pledge_bytes: usize) -> Self {
         Self {
             executor,
+            uncommitted_templates: UncommittedTemplateStore::default(),
             max_transaction_validity_epochs,
             max_transaction_pledge_bytes,
             _store: PhantomData,
         }
+    }
+
+    pub fn uncommitted_templates(&self) -> &UncommittedTemplateStore {
+        &self.uncommitted_templates
     }
 
     /// Adds the transaction's local inputs to what the block pledges to foreign shard groups, before they are
@@ -330,8 +336,9 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         })
     }
 
-    pub fn execute(
+    pub fn execute<TTx: StateStoreReadTransaction>(
         &self,
+        store: &PendingSubstateStore<TTx>,
         execution_epoch: LockedEpoch,
         block_epoch: Epoch,
         pledged_transaction: PledgedTransaction,
@@ -370,6 +377,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
             pledged_transaction.transaction.transaction(),
             execution_epoch,
             &resolved_inputs,
+            &self.uncommitted_templates.templates_for(store)?,
         )
     }
 
@@ -413,8 +421,12 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
             "👨‍🔧 PREPARE: Executing transaction {}",
             transaction.id(),
         );
-        self.executor
-            .execute(transaction.transaction(), execution_locked_epoch, resolved_inputs)
+        self.executor.execute(
+            transaction.transaction(),
+            execution_locked_epoch,
+            resolved_inputs,
+            &self.uncommitted_templates.templates_for(store)?,
+        )
     }
 
     pub fn fetch_execution<TTx: StateStoreReadTransaction>(
@@ -933,7 +945,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::traits::WriteableSubstateStore;
+    use crate::traits::{UncommittedChainTemplates, WriteableSubstateStore};
 
     /// Stands in for the engine: any transaction that reaches it fails, so a test can tell an
     /// execution from an abort consensus decided before executing.
@@ -945,6 +957,7 @@ mod tests {
             _transaction: &Transaction,
             _locked_epoch: LockedEpoch,
             _resolved_inputs: &HashMap<SubstateRequirement, Substate>,
+            _templates: &UncommittedChainTemplates,
         ) -> Result<TransactionExecution, BlockTransactionExecutorError> {
             Err(BlockTransactionExecutorError::ExecutionThreadFailure(
                 "reached the engine".to_string(),
@@ -971,10 +984,29 @@ mod tests {
         LockedEpoch::new(Epoch(epoch), Default::default(), Default::default())
     }
 
+    /// Executes `pledged` in a block of `block_epoch` that builds on an empty chain.
+    fn execute_in_block_of(
+        execution_epoch: LockedEpoch,
+        block_epoch: Epoch,
+        pledged: PledgedTransaction,
+    ) -> Result<TransactionExecution, BlockTransactionExecutorError> {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RocksDbStateStore::<String>::open(dir.path().join("db"), Default::default()).unwrap();
+        let block = LeafBlock {
+            block_id: BlockId::zero(),
+            height: Default::default(),
+            epoch: block_epoch,
+            shard_group: ShardGroup::all_shards(NumPreshards::P256),
+        };
+        store.with_read_tx(|tx| {
+            let substate_store = PendingSubstateStore::init(tx, block, NumPreshards::P256)?;
+            manager().execute(&substate_store, execution_epoch, block_epoch, pledged)
+        })
+    }
+
     #[test]
     fn a_governance_call_executing_after_its_pinned_epoch_aborts() {
-        let execution = manager()
-            .execute(pinned_to(5), Epoch(6), calling(BURN_RATE_GOVERNANCE_COMPONENT_ADDRESS))
+        let execution = execute_in_block_of(pinned_to(5), Epoch(6), calling(BURN_RATE_GOVERNANCE_COMPONENT_ADDRESS))
             .expect("aborts before reaching the engine");
         assert_eq!(
             execution.decision().abort_reason(),
@@ -1014,7 +1046,7 @@ mod tests {
 
     #[test]
     fn a_governance_call_executing_in_its_pinned_epoch_executes() {
-        let result = manager().execute(pinned_to(5), Epoch(5), calling(BURN_RATE_GOVERNANCE_COMPONENT_ADDRESS));
+        let result = execute_in_block_of(pinned_to(5), Epoch(5), calling(BURN_RATE_GOVERNANCE_COMPONENT_ADDRESS));
         assert!(matches!(
             result,
             Err(BlockTransactionExecutorError::ExecutionThreadFailure(_))
@@ -1024,7 +1056,7 @@ mod tests {
     #[test]
     fn an_ordinary_call_executing_after_its_pinned_epoch_executes() {
         let component = ComponentAddress::new(ObjectKey::from_array([1; 32]));
-        let result = manager().execute(pinned_to(5), Epoch(6), calling(component));
+        let result = execute_in_block_of(pinned_to(5), Epoch(6), calling(component));
         assert!(matches!(
             result,
             Err(BlockTransactionExecutorError::ExecutionThreadFailure(_))

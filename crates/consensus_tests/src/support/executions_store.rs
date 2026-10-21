@@ -7,7 +7,7 @@ use std::{
 };
 
 use tari_consensus_types::Decision;
-use tari_engine_types::{ValidatorFeeWithdrawal, substate::SubstateId};
+use tari_engine_types::{ValidatorFeeWithdrawal, published_template::PublishedTemplateAddress, substate::SubstateId};
 use tari_ootle_common_types::SubstateLockType;
 use tari_ootle_transaction::{Transaction, TransactionId};
 
@@ -46,4 +46,7 @@ pub struct ExecuteSpec {
     pub input_locks: Vec<(SubstateId, SubstateLockType)>,
     pub new_outputs: Vec<SubstateId>,
     pub validator_fee_withdrawals: Vec<ValidatorFeeWithdrawal>,
+    /// A template the transaction calls. Execution aborts unless the template resolves, from the uncommitted
+    /// ancestors of the block it executes in or from durably committed state.
+    pub calls_template: Option<PublishedTemplateAddress>,
 }

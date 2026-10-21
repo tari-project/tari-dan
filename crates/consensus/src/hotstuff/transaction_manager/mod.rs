@@ -7,7 +7,9 @@ pub use manager::*;
 mod lock_deps;
 mod pledged;
 mod prepared;
+mod uncommitted_templates;
 
 pub use lock_deps::*;
 pub use pledged::*;
 pub use prepared::*;
+pub use uncommitted_templates::*;

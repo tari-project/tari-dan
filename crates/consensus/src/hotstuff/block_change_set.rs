@@ -284,6 +284,15 @@ impl ProposedBlockChangeSet {
         matches!(self.quorum_decision, Some(QuorumDecision::Accept))
     }
 
+    pub fn block(&self) -> &LeafBlock {
+        &self.block
+    }
+
+    /// The local substate changes the block makes, saved as its block diff.
+    pub fn local_substate_changes(&self) -> &[SubstateChange] {
+        &self.local_substate_changes
+    }
+
     pub fn quorum_decision(&self) -> Option<QuorumDecision> {
         self.quorum_decision
     }

@@ -70,6 +70,7 @@ use crate::{
             PledgedTransaction,
             PreparedTransaction,
             TransactionLockConflicts,
+            UncommittedTemplateStore,
         },
     },
     tracing::TraceTimer,
@@ -116,6 +117,10 @@ where TConsensusSpec: ConsensusSpec
             tx_events,
             transaction_manager,
         }
+    }
+
+    pub fn uncommitted_templates(&self) -> &UncommittedTemplateStore {
+        self.transaction_manager.uncommitted_templates()
     }
 
     pub fn handle(
@@ -207,6 +212,9 @@ where TConsensusSpec: ConsensusSpec
                 change_set
             );
             change_set.save(tx)?;
+            self.transaction_manager
+                .uncommitted_templates()
+                .record(change_set.block(), change_set.local_substate_changes());
         } else {
             warn!(
                 target: LOG_TARGET,
@@ -1245,7 +1253,7 @@ where TConsensusSpec: ConsensusSpec
                 ))
             })?;
             let execution = self.execute_transaction(
-                tx,
+                substate_store,
                 block.as_leaf(),
                 locked_epoch.clone(),
                 transaction,
@@ -1804,7 +1812,7 @@ where TConsensusSpec: ConsensusSpec
 
     fn execute_transaction<TTx: StateStoreReadTransaction>(
         &self,
-        tx: &TTx,
+        substate_store: &PendingSubstateStore<TTx>,
         block: LeafBlock,
         locked_epoch: LockedEpoch,
         transaction: TransactionRecord,
@@ -1816,6 +1824,7 @@ where TConsensusSpec: ConsensusSpec
             transaction.id(),
             block,
         );
+        let tx = substate_store.read_transaction();
         // Might have been executed already in on propose
         if let Some(execution) =
             BlockTransactionExecution::get_pending_for_block(tx, transaction.id(), &block).optional()?
@@ -1831,7 +1840,7 @@ where TConsensusSpec: ConsensusSpec
 
         let execution = self
             .transaction_manager
-            .execute(locked_epoch, block.epoch, pledged)
+            .execute(substate_store, locked_epoch, block.epoch, pledged)
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
 
         Ok(execution.for_block(block, transaction_id))

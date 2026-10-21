@@ -2,7 +2,12 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_engine_types::published_template::{PublishedTemplate, PublishedTemplateAddress};
-use tari_ootle_common_types::{SubstateAddress, SubstateVersion, services::template_provider::TemplateProvider};
+use tari_ootle_common_types::{
+    SubstateAddress,
+    SubstateVersion,
+    optional::Optional,
+    services::template_provider::TemplateProvider,
+};
 use tari_ootle_storage::StorageError;
 use tari_template_lib_types::TemplateAddress;
 
@@ -17,11 +22,12 @@ impl<TAddr: Send + Sync + 'static> TemplateProvider for RocksDbStateStore<TAddr>
         let tx = self.read_view();
         let cf = tx.db().cf(SubstateCf)?;
         let address = template_address_to_substate_address(*id);
-        let substate = cf.get(&address, OPERATION)?;
-        let value = substate.into_substate_value().ok_or_else(|| StorageError::NotFound {
-            item: "template substate",
-            key: format!("Template substate not found: {}", address),
-        })?;
+        let Some(substate) = cf.get(&address, OPERATION).optional()? else {
+            return Ok(None);
+        };
+        let Some(value) = substate.into_substate_value() else {
+            return Ok(None);
+        };
 
         let template = value.into_template().ok_or_else(|| StorageError::DataInconsistency {
             details: format!("Template substate does not contain a published template: {}", address),

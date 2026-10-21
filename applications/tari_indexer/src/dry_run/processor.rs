@@ -142,11 +142,11 @@ impl DryRunTransactionProcessor {
         // execute the payload in the WASM engine and return the result
         let processor = TariTransactionProcessor::new(
             self.network,
-            self.template_provider.clone(),
             self.fee_table.clone(),
             true,
             self.claim_burn_proof_verifier.clone(),
         );
+        let template_provider = self.template_provider.clone();
         let slot = tokio::time::timeout(EXECUTION_SLOT_WAIT, self.execution_slots.clone().acquire_owned())
             .await
             .map_err(|_| {
@@ -156,7 +156,13 @@ impl DryRunTransactionProcessor {
             .expect("execution_slots is never closed");
         let exec_output = task::spawn_blocking(move || {
             let _slot = slot;
-            processor.execute(&transaction, state_store.into_read_only(), virtual_substates, burn_rate)
+            processor.execute(
+                &transaction,
+                template_provider,
+                state_store.into_read_only(),
+                virtual_substates,
+                burn_rate,
+            )
         })
         .await??;
 
