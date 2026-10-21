@@ -30,7 +30,7 @@ pub struct ConfidentialOutputModel {
     pub lock_id: Option<WalletLockId>,
 }
 
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum OutputStatus {
     /// The output is available for spending

@@ -12,8 +12,10 @@ use tari_ootle_wallet_sdk::{
     NetworkInterfaceError,
     WalletSdk,
     WalletSdkSpec,
+    apis::validator_set::ValidatorSetApiError,
     models::{
         AccountWithAddress,
+        OutputStatus,
         StartOfShard,
         UtxoSpent,
         UtxoSpentEvent,
@@ -42,6 +44,10 @@ pub struct UtxoScannerRound<'a, TSpec: WalletSdkSpec> {
     sdk: &'a WalletSdk<TSpec>,
     stats: UtxoScanRoundStats,
 
+    /// The cursor each shard's next batch is requested from. It follows the indexer's answers within the round, and is
+    /// stored only as far as `stored_cursor_bound` allows.
+    cursors: HashMap<Shard, StateVersion>,
+    stored_cursor_bound: StoredCursorBound,
     shard_state_versions_to_set: HashMap<Shard, StateVersion>,
     utxos_to_recover: Vec<(ComponentAddress, UtxoUnspent)>,
     utxos_to_spend: Vec<UtxoSpent>,
@@ -65,6 +71,8 @@ where TSpec: WalletSdkSpec
             account,
             view_key,
             resource_address,
+            cursors: HashMap::new(),
+            stored_cursor_bound: StoredCursorBound::Unbounded,
             shard_state_versions_to_set: HashMap::new(),
             utxos_to_recover: Vec::new(),
             utxos_to_spend: Vec::new(),
@@ -74,6 +82,8 @@ where TSpec: WalletSdkSpec
     }
 
     pub async fn scan_for_utxo_updates(&mut self) -> Result<(), StealthScannerApiError> {
+        self.stored_cursor_bound = self.load_stored_cursor_bound().await?;
+        self.load_cursors()?;
         loop {
             if !self.process_next_batch().await? {
                 break;
@@ -87,24 +97,68 @@ where TSpec: WalletSdkSpec
         self.stats
     }
 
-    #[allow(clippy::too_many_lines)]
-    async fn process_next_batch(&mut self) -> Result<bool, StealthScannerApiError> {
-        let mut shard_state_versions = self
+    /// Under [`IndexerTrust::Verify`](tari_ootle_wallet_sdk::IndexerTrust::Verify) the stored cursors are bounded by
+    /// the shard state versions of the latest verified end-of-epoch checkpoints. Without them the stored cursors stay
+    /// where they are, and this round reads past them without storing its progress.
+    async fn load_stored_cursor_bound(&self) -> Result<StoredCursorBound, StealthScannerApiError> {
+        if !self.sdk.sdk_config().indexer_trust.is_verify() {
+            return Ok(StoredCursorBound::Unbounded);
+        }
+        match self.sdk.validator_set_api().verified_shard_state_versions().await {
+            Ok(versions) => Ok(StoredCursorBound::Verified(versions)),
+            Err(ValidatorSetApiError::StoreError(err)) => Err(err.into()),
+            Err(err) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "⚠️ No verified shard state versions to bound the stealth scan cursors by: {err}. The scan will not store its progress."
+                );
+                Ok(StoredCursorBound::Verified(HashMap::new()))
+            },
+        }
+    }
+
+    /// Loads the stored cursors, lowering any that are past the bound to it.
+    fn load_cursors(&mut self) -> Result<(), StealthScannerApiError> {
+        let stored = self
             .sdk
             .store()
             .with_read_tx(|tx| tx.shard_state_version_get(self.account.component_address(), self.resource_address))?;
 
-        // Populate any missing shards with zero because we want to scan all shards
+        let mut lowered = Vec::new();
         for shard in NUM_PRESHARDS.all_shards_iter() {
-            shard_state_versions.entry(shard).or_insert_with(StateVersion::zero);
+            let stored = stored.get(&shard).copied().unwrap_or_else(StateVersion::zero);
+            let cursor = match self.stored_cursor_bound.ceiling(shard) {
+                Some(ceiling) if stored > ceiling => {
+                    lowered.push((shard, ceiling));
+                    ceiling
+                },
+                _ => stored,
+            };
+            self.cursors.insert(shard, cursor);
         }
 
+        if !lowered.is_empty() {
+            warn!(
+                target: LOG_TARGET,
+                "⚠️ {} stored stealth scan cursor(s) of account {} (resource {}) were past the verified shard state version. Rescanning those shards from it.",
+                lowered.len(),
+                self.account.component_address(),
+                self.resource_address,
+            );
+            self.sdk.store().with_write_tx(|tx| {
+                tx.shard_state_version_set_many(self.account.component_address(), self.resource_address, lowered)
+            })?;
+        }
+        Ok(())
+    }
+
+    async fn process_next_batch(&mut self) -> Result<bool, StealthScannerApiError> {
         info!(
             target: LOG_TARGET,
             "🔍️ Scanning for stealth outputs (account {}, resource {}, num shards {})",
             self.account.component_address(),
             self.resource_address,
-            shard_state_versions.len(),
+            self.cursors.len(),
         );
 
         let live_output_count = self
@@ -120,10 +174,10 @@ where TSpec: WalletSdkSpec
                 *self.resource_address,
                 // NOTE that this will request shards in a random order (HashMap). This is good to avoid always
                 // starting with the same shard.
-                shard_state_versions.into_iter().collect(),
+                self.cursors.iter().map(|(shard, cursor)| (*shard, *cursor)).collect(),
                 // Optimisation: with no unspent or locked outputs there is no spend left for the wallet to
                 // learn of, so only unspent updates are needed. The indexer moves the cursor past the spent
-                // updates this skips, so they are not delivered on a later pass either.
+                // updates this skips, so a later pass from that cursor does not deliver them either.
                 live_output_count == 0,
             )
             .await
@@ -161,14 +215,16 @@ where TSpec: WalletSdkSpec
                     self.commit_progress()?;
                 }
 
-                self.shard_state_versions_to_set
-                    .entry(recv_sos.shard)
-                    .and_modify(|v| {
-                        if recv_sos.max_state_version > *v {
-                            *v = recv_sos.max_state_version
-                        }
-                    })
-                    .or_insert(recv_sos.max_state_version);
+                for versions in [&mut self.cursors, &mut self.shard_state_versions_to_set] {
+                    versions
+                        .entry(recv_sos.shard)
+                        .and_modify(|v| {
+                            if recv_sos.max_state_version > *v {
+                                *v = recv_sos.max_state_version
+                            }
+                        })
+                        .or_insert(recv_sos.max_state_version);
+                }
 
                 has_more |= recv_sos.has_more;
 
@@ -245,13 +301,14 @@ where TSpec: WalletSdkSpec
                 tx.utxo_process_queue_extend(self.resource_address, self.utxos_to_recover.drain(..))?;
             }
 
-            // Update shard state versions
-            if !self.shard_state_versions_to_set.is_empty() {
-                tx.shard_state_version_set_many(
-                    self.account.component_address(),
-                    self.resource_address,
-                    self.shard_state_versions_to_set.drain(),
-                )?;
+            let bound = &self.stored_cursor_bound;
+            let cursors = self
+                .shard_state_versions_to_set
+                .drain()
+                .filter_map(|(shard, version)| Some((shard, bound.bound(shard, version)?)))
+                .collect::<Vec<_>>();
+            if !cursors.is_empty() {
+                tx.shard_state_version_set_many(self.account.component_address(), self.resource_address, cursors)?;
             }
             Ok::<_, StealthScannerApiError>(())
         })?;
@@ -299,21 +356,48 @@ where TSpec: WalletSdkSpec
         resource_address: &ResourceAddress,
         spent: &UtxoSpent,
     ) -> Result<bool, WalletStorageError> {
-        match tx
-            .stealth_outputs_mark_as_spent(resource_address, &spent.id)
+        let Some(output) = tx
+            .stealth_outputs_get_by_commitment(resource_address, &spent.id.into_commitment_bytes())
             .optional()?
-        {
-            Some(_) => {
-                info!(target: LOG_TARGET, "Marked stealth output {} as spent", spent.id);
-                Ok(true)
-            },
-            None => {
-                debug!(
-                    target: LOG_TARGET,
-                    "Spent UTXO {} not found in wallet store (likely not our output)", spent.id
-                );
-                Ok(false)
-            },
+        else {
+            debug!(
+                target: LOG_TARGET,
+                "Spent UTXO {} not found in wallet store (likely not our output)", spent.id
+            );
+            return Ok(false);
+        };
+        if output.status == OutputStatus::Spent {
+            debug!(target: LOG_TARGET, "Stealth output {} is already spent", spent.id);
+            return Ok(false);
+        }
+        tx.stealth_outputs_mark_as_spent(resource_address, &spent.id)?;
+        info!(target: LOG_TARGET, "Marked stealth output {} as spent", spent.id);
+        Ok(true)
+    }
+}
+
+/// How far a round may move the cursors it stores.
+enum StoredCursorBound {
+    /// Every cursor is stored as the indexer reports it.
+    Unbounded,
+    /// Each shard's cursor is stored no further than its state version in a verified end-of-epoch checkpoint, which
+    /// the network committed. A shard without one keeps the cursor already stored.
+    Verified(HashMap<Shard, StateVersion>),
+}
+
+impl StoredCursorBound {
+    fn ceiling(&self, shard: Shard) -> Option<StateVersion> {
+        match self {
+            Self::Unbounded => None,
+            Self::Verified(versions) => versions.get(&shard).copied(),
+        }
+    }
+
+    /// The cursor to store for `shard` once the indexer reports it read to `version`, if any.
+    fn bound(&self, shard: Shard, version: StateVersion) -> Option<StateVersion> {
+        match self {
+            Self::Unbounded => Some(version),
+            Self::Verified(versions) => versions.get(&shard).map(|ceiling| version.min(*ceiling)),
         }
     }
 }

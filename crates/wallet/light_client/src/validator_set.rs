@@ -188,7 +188,10 @@ impl TrustedValidatorSetHash {
     }
 }
 
-fn decode_checkpoint(network: Network, entry: &EpochCheckpointEntry) -> Result<EpochCheckpoint, LightClientError> {
+pub(crate) fn decode_checkpoint(
+    network: Network,
+    entry: &EpochCheckpointEntry,
+) -> Result<EpochCheckpoint, LightClientError> {
     let checkpoint: EpochCheckpoint = tari_bor::decode_with_max_depth(&entry.checkpoint, MAX_CBOR_NESTING_DEPTH)
         .map_err(|e| LightClientError::Decode {
             what: "epoch checkpoint",

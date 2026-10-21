@@ -38,6 +38,7 @@ use tari_ootle_storage::consensus_models::{
     CommittedBlockProof,
     EndOfEpochCommand,
     EpochCheckpoint,
+    TreeRootSummary,
 };
 use tari_sidechain::{
     ChainLink,
@@ -211,6 +212,9 @@ pub struct CheckpointSpec<'a> {
     /// Whether the checkpoint carries the header metadata preimage.
     pub carry_preimage: bool,
     pub next_epoch_committee: Option<ValidatorSetCommittee>,
+    /// The state version each of these shards of `shard_group` reached at the end of the epoch. Every other shard is
+    /// at version zero.
+    pub shard_state_versions: Vec<(Shard, u64)>,
 }
 
 impl<'a> CheckpointSpec<'a> {
@@ -224,6 +228,7 @@ impl<'a> CheckpointSpec<'a> {
             next_set: next.hash(),
             carry_preimage: true,
             next_epoch_committee: Some(next.committee(low())),
+            shard_state_versions: vec![],
         }
     }
 }
@@ -246,10 +251,20 @@ pub fn checkpoint_entry(spec: CheckpointSpec<'_>) -> EpochCheckpointEntry {
     header.command_merkle_root = FixedHash::new(compute_merkle_root_for_hashes([command_hash]).unwrap().into_array());
     header.metadata_hash = metadata.calculate_hash();
 
+    let shard_tree_summary = spec
+        .shard_state_versions
+        .iter()
+        .map(|&(shard, state_version)| {
+            (shard, TreeRootSummary {
+                root_hash: SPARSE_MERKLE_PLACEHOLDER_HASH,
+                state_version,
+            })
+        })
+        .collect::<IndexMap<_, _>>();
     let build = |commit_proof: SidechainBlockCommitProof| {
         EpochCheckpoint::new(
             CommandCommitProof::new(command.clone(), commit_proof, inclusion_proof.clone()),
-            IndexMap::new(),
+            shard_tree_summary.clone(),
             spec.carry_preimage.then(|| metadata.clone()),
         )
     };
