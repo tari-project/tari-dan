@@ -374,6 +374,7 @@ impl<TStore: StateReader + Clone + 'static, TTemplateProvider: TemplateProvider<
             .ok_or(RuntimeError::TemplateNotFound {
                 template_address: *template_address,
             })?;
+        self.track_template_loaded(template_address, loaded.code_size())?;
 
         Ok(loaded.into_template_def())
     }
