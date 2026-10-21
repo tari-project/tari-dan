@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use log::*;
 use tari_epoch_manager::EpochManagerReader;
-use tari_ootle_common_types::{ProtocolVersion, VotePower, committee::Committee, optional::Optional};
+use tari_ootle_common_types::{ProtocolVersion, committee::Committee, optional::Optional};
 use tari_ootle_storage::{
     StateStoreReadTransaction,
     consensus_models::{CommandsCommitProof, ForeignProposal, ForeignProposalRecord},
@@ -186,11 +186,7 @@ pub fn check_commit_proof<TConsensusSpec: ConsensusSpec>(
     foreign_committee: &Committee<TConsensusSpec::Addr>,
 ) -> Result<(), ProposalValidationError> {
     let quorum_threshold = foreign_committee.quorum_threshold();
-    proof.validate_committed(network, quorum_threshold, &|pk| {
-        Ok(foreign_committee
-            .get_power_by_public_key(pk)
-            .unwrap_or_else(VotePower::zero))
-    })?;
+    proof.validate_committed(network, quorum_threshold, foreign_committee)?;
     Ok(())
 }
 
@@ -202,6 +198,7 @@ mod tests {
         ExtraData,
         ExtraFieldKey,
         ShardGroup,
+        VotePower,
         committee::CommitteeMember,
         crypto::create_key_pair_from_seed,
     };

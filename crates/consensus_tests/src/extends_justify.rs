@@ -60,7 +60,7 @@ fn qc_of(target: &LeafBlock) -> ProposalCertificate {
         target.height(),
         target.epoch(),
         ShardGroup::all_shards(NUM_PRESHARDS),
-        vec![],
+        ProposalCertificate::genesis_signatures(),
         QuorumDecision::Accept,
     )
 }

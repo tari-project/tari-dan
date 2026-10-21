@@ -810,11 +810,10 @@ fn get_or_sequence_transaction<TTx: StateStoreReadTransaction>(
 /// The id that evidence records for the certificate justifying `proposal`'s block, or `None` if its proof carries
 /// no certificate.
 ///
-/// Valid commit proofs of one block differ in their certificates: signatures come in any order, a certificate may
-/// carry any subset of signers that meets the quorum, and the proof may end on a certificate for a different block in
-/// the chain. Only the proven header and the decision that validation requires of every certificate are common to all
-/// of them, so the id derives from those alone. Every replica then records the same evidence for the block, whichever
-/// copy it received.
+/// Valid commit proofs of one block differ in their certificates: a certificate may carry any subset of signers that
+/// meets the quorum, and the proof may end on a certificate for a different block in the chain. Only the proven header
+/// and the decision that validation requires of every certificate are common to all of them, so the id derives from
+/// those alone. Every replica then records the same evidence for the block, whichever copy it received.
 fn foreign_justify_qc_id(proposal: &ForeignProposal) -> Option<PcId> {
     let qc = proposal.get_justify_qc()?;
     let id = foreign_quorum_certificate_id_hasher()
@@ -844,7 +843,14 @@ fn foreign_locked_epoch(proposal: &ForeignProposal) -> Result<LockedEpoch, Propo
 mod tests {
     use tari_common_types::types::PrivateKey;
     use tari_crypto::{keys::SecretKey, tari_utilities::ByteArray};
-    use tari_ootle_common_types::{Epoch, ExtraData, ExtraFieldKey, NumPreshards};
+    use tari_ootle_common_types::{
+        Epoch,
+        ExtraData,
+        ExtraFieldKey,
+        NumPreshards,
+        VotePower,
+        committee::{Committee, CommitteeMember},
+    };
     use tari_ootle_storage::consensus_models::{BlockHeaderMetadata, BlockPledge, CommandsCommitProof};
     use tari_ootle_transaction::{Network, Transaction};
     use tari_sidechain::{
@@ -854,13 +860,15 @@ mod tests {
         DecodedValidatorBlockSignature,
         FixedHash,
         ProposalVoteMessage,
+        QcSignatures,
         QuorumCertificate,
         QuorumDecision,
         SidechainBlockCommitProof,
         SidechainBlockHeader,
+        SignerBitmap,
         ValidatorBlockSignature,
-        ValidatorQcSignature,
     };
+    use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
     use super::*;
 
@@ -915,12 +923,37 @@ mod tests {
         tari_sidechain::PrivateKey::from_uniform_bytes(&[i; 64]).unwrap()
     }
 
-    /// The 3-chain of certificates, each signed by every one of `validators`, that commits `header`.
+    /// The secret keys of test validators 1 to 4, in ascending order of public key, which is committee order.
+    fn committee_secrets() -> Vec<tari_sidechain::PrivateKey> {
+        let mut secrets = (1..=4u8).map(validator_secret).collect::<Vec<_>>();
+        secrets.sort_by_key(|secret| CompressedPublicKey::from_secret_key(secret).as_bytes().to_vec());
+        secrets
+    }
+
+    fn committee_of(secrets: &[tari_sidechain::PrivateKey]) -> Committee<()> {
+        Committee::new(
+            secrets
+                .iter()
+                .map(|secret| CommitteeMember {
+                    address: (),
+                    public_key: RistrettoPublicKeyBytes::from_bytes(
+                        CompressedPublicKey::from_secret_key(secret).as_bytes(),
+                    )
+                    .unwrap(),
+                    vote_power: VotePower::of(1),
+                })
+                .collect(),
+        )
+    }
+
+    /// The 3-chain of certificates that commits `header`. Every member of the committee `secrets` signs the first two,
+    /// and the members at `last_signers` sign the one that justifies `header`.
     fn committing_qcs(
         header: &SidechainBlockHeader,
-        validators: &[tari_sidechain::PrivateKey],
+        secrets: &[tari_sidechain::PrivateKey],
+        last_signers: &[usize],
     ) -> Vec<CommitProofElement> {
-        let certify = |header_hash: FixedHash, parent_id: FixedHash, height: u64| {
+        let certify = |header_hash: FixedHash, parent_id: FixedHash, height: u64, signers: &[usize]| {
             let block_id = ChainLink { header_hash, parent_id }.calc_block_id();
             let message = ProposalVoteMessage::new(
                 header.protocol_version,
@@ -930,17 +963,15 @@ mod tests {
                 height,
             )
             .calculate_hash();
-            let signatures = validators
+            let signatures = signers
                 .iter()
-                .map(|secret| {
+                .map(|&index| {
+                    let secret = &secrets[index];
                     let nonce_seed = [secret.as_bytes(), message.as_slice()].concat();
                     let nonce = tari_sidechain::PrivateKey::from_uniform_bytes(&nonce_seed).unwrap();
                     let signature =
                         DecodedValidatorBlockSignature::sign_with_nonce_and_message(secret, nonce, message).unwrap();
-                    ValidatorQcSignature {
-                        public_key: CompressedPublicKey::from_secret_key(secret),
-                        signature: ValidatorBlockSignature::new_from_schnorr(signature),
-                    }
+                    ValidatorBlockSignature::new_from_schnorr(signature)
                 })
                 .collect();
             CommitProofElement::QuorumCertificate(QuorumCertificate {
@@ -949,11 +980,15 @@ mod tests {
                 protocol_version: header.protocol_version,
                 epoch: header.epoch,
                 height,
-                signatures,
+                signatures: QcSignatures::Schnorr {
+                    signers: SignerBitmap::from_indices(secrets.len(), signers.iter().copied()).unwrap(),
+                    signatures,
+                },
                 decision: QuorumDecision::Accept,
             })
         };
 
+        let everyone = (0..secrets.len()).collect::<Vec<_>>();
         let block_id = header.calculate_block_id();
         let child_hash = FixedHash::from([0xc1; 32]);
         let child_id = ChainLink {
@@ -962,57 +997,54 @@ mod tests {
         }
         .calc_block_id();
         vec![
-            certify(FixedHash::from([0xc2; 32]), child_id, header.height.saturating_add(2)),
-            certify(child_hash, block_id, header.height.saturating_add(1)),
-            certify(header.calculate_hash(), header.parent_id, header.height),
+            certify(
+                FixedHash::from([0xc2; 32]),
+                child_id,
+                header.height.saturating_add(2),
+                &everyone,
+            ),
+            certify(child_hash, block_id, header.height.saturating_add(1), &everyone),
+            certify(header.calculate_hash(), header.parent_id, header.height, last_signers),
         ]
     }
 
-    fn last_qc_mut(proof_elements: &mut [CommitProofElement]) -> &mut QuorumCertificate {
-        match proof_elements.last_mut() {
-            Some(CommitProofElement::QuorumCertificate(qc)) => qc,
-            _ => panic!("the proof must end with a quorum certificate"),
-        }
-    }
-
-    /// The signatures in a valid commit proof may come in any order, and its certificates may carry any subset of
-    /// signers that meets the quorum. Every replica must still record the same evidence for the foreign block,
-    /// because the AllAccept vote compares evidence for equality.
+    /// A commit proof's certificates may carry any subset of signers that meets the quorum. Every replica must still
+    /// record the same evidence for the foreign block, because the AllAccept vote compares evidence for equality.
     #[test]
     fn every_valid_proof_of_a_foreign_block_records_the_same_qc_id() {
         let num_preshards = NumPreshards::P256;
         let shard_group = ShardGroup::new(0u32, num_preshards.as_u32() / 2 - 1);
-        let validators = (1..=4u8).map(validator_secret).collect::<Vec<_>>();
+        let secrets = committee_secrets();
+        let committee = committee_of(&secrets);
         let quorum_threshold = 3;
 
-        let honest = proposal_proven_by(shard_group, 5, 500, |header| committing_qcs(header, &validators));
-        let permuted = proposal_proven_by(shard_group, 5, 500, |header| {
-            let mut elements = committing_qcs(header, &validators);
-            last_qc_mut(&mut elements).signatures.reverse();
-            elements
-        });
-        let trimmed = proposal_proven_by(shard_group, 5, 500, |header| {
-            let mut elements = committing_qcs(header, &validators);
-            last_qc_mut(&mut elements).signatures.pop();
-            elements
-        });
+        let proven_by = |last_signers: &[usize]| {
+            proposal_proven_by(shard_group, 5, 500, |header| {
+                committing_qcs(header, &secrets, last_signers)
+            })
+        };
+        let everyone = proven_by(&[0, 1, 2, 3]);
+        let first_three = proven_by(&[0, 1, 2]);
+        let last_three = proven_by(&[1, 2, 3]);
 
-        for proposal in [&honest, &permuted, &trimmed] {
+        for proposal in [&everyone, &first_three, &last_three] {
             proposal
                 .commit_proof()
                 .sidechain_block_commit_proof()
-                .validate_committed(Network::MainNet.as_byte(), quorum_threshold, &|_| Ok(1))
+                .validate_committed(Network::MainNet.as_byte(), quorum_threshold, &committee)
                 .unwrap();
-            assert_eq!(proposal.calculate_block_id(), honest.calculate_block_id());
+            assert_eq!(proposal.calculate_block_id(), everyone.calculate_block_id());
         }
-        assert_ne!(honest.get_justify_qc(), permuted.get_justify_qc());
-        assert_ne!(honest.get_justify_qc(), trimmed.get_justify_qc());
+        assert_ne!(everyone.get_justify_qc(), first_three.get_justify_qc());
+        assert_ne!(first_three.get_justify_qc(), last_three.get_justify_qc());
 
-        let qc_id = foreign_justify_qc_id(&honest).unwrap();
-        assert_eq!(foreign_justify_qc_id(&permuted), Some(qc_id));
-        assert_eq!(foreign_justify_qc_id(&trimmed), Some(qc_id));
+        let qc_id = foreign_justify_qc_id(&everyone).unwrap();
+        assert_eq!(foreign_justify_qc_id(&first_three), Some(qc_id));
+        assert_eq!(foreign_justify_qc_id(&last_three), Some(qc_id));
 
-        let other_block = proposal_proven_by(shard_group, 5, 700, |header| committing_qcs(header, &validators));
+        let other_block = proposal_proven_by(shard_group, 5, 700, |header| {
+            committing_qcs(header, &secrets, &[0, 1, 2, 3])
+        });
         assert_ne!(foreign_justify_qc_id(&other_block), Some(qc_id));
     }
 

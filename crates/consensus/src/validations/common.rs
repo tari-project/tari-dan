@@ -3,7 +3,14 @@
 use std::collections::HashSet;
 
 use log::{debug, warn};
-use tari_consensus_types::{QuorumCertificateRef, TimeoutVoteMessage, ValidatorSignatureBytes};
+use tari_consensus_types::{
+    ProposalCertificate,
+    QcId,
+    QuorumCertificateRef,
+    TimeoutCertificate,
+    TimeoutVoteMessage,
+    ValidatorSignatureBytes,
+};
 use tari_engine_types::fees::ExhaustBurnRate;
 use tari_ootle_common_types::{
     DerivableFromPublicKey,
@@ -18,11 +25,11 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_storage::consensus_models::{Block, BlockHeader};
 use tari_ootle_transaction::Network;
-use tari_sidechain::{FixedHash, ProposalVoteMessage};
+use tari_sidechain::{FixedHash, ProposalVoteMessage, QcSignatures, QcSignaturesError};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{
-    hotstuff::{HotstuffConfig, LeaderSkipSet, ProposalValidationError},
+    hotstuff::{HotstuffConfig, LeaderSkipSet, ProposalValidationError, commit_proofs::to_signature_bytes},
     traits::{ConsensusSpec, LeaderStrategy, ValidatorSignatureVerifierService},
     validations::signed_vote::{SignedProposalVote, SignedTimeoutVote},
 };
@@ -385,22 +392,128 @@ pub fn check_quorum_certificate_signatures<TConsensusSpec: ConsensusSpec>(
     // everything else - including a `TimeoutCertificate` - falls through to the checks below.
     if let Some(pc) = qc.as_proposal_certificate() &&
         pc.height().is_zero() &&
-        pc.signatures().is_empty() &&
+        *pc.signatures() == ProposalCertificate::genesis_signatures() &&
         pc.justifies_zero_block() &&
         pc.parent_id().is_zero()
     {
         return Ok(());
     }
 
-    let mut check_dups = HashSet::with_capacity(qc.num_signatures());
+    match qc {
+        QuorumCertificateRef::ProposalCertificate(pc) => {
+            check_proposal_certificate_signatures::<TConsensusSpec>(network, pc, committee, signing_service)
+        },
+        QuorumCertificateRef::TimeoutCertificate(tc) => {
+            check_timeout_certificate_signatures::<TConsensusSpec>(network, tc, committee, signing_service)
+        },
+    }
+}
+
+fn check_proposal_certificate_signatures<TConsensusSpec: ConsensusSpec>(
+    network: Network,
+    pc: &ProposalCertificate,
+    committee: &Committee<TConsensusSpec::Addr>,
+    signing_service: &TConsensusSpec::SignerService,
+) -> Result<(), ProposalValidationError> {
+    let qc_id = || QcId::from(pc.calculate_id());
+    // `check_protocol_version` pins a block's version to `at(network, header.epoch())` before any vote is cast on it,
+    // so resolving from the schedule here yields the version the signers used.
+    let protocol_version = ProtocolVersion::at(network, pc.epoch());
+    if !is_qc_signature_scheme_accepted(protocol_version, pc.signatures()) {
+        return Err(ProposalValidationError::QcSignatureSchemeNotAccepted {
+            qc: qc_id(),
+            protocol_version,
+        });
+    }
+    // Bounds the signature work below by the committee size before any signature is verified.
+    pc.signatures()
+        .check_well_formed(committee.len())
+        .map_err(|source| ProposalValidationError::QcMalformedSignatures { qc: qc_id(), source })?;
+
+    match pc.signatures() {
+        QcSignatures::Schnorr { signers, signatures } => {
+            let members = signers
+                .iter()
+                .map(|index| {
+                    committee
+                        .get(index)
+                        .ok_or_else(|| ProposalValidationError::QcMalformedSignatures {
+                            qc: qc_id(),
+                            source: QcSignaturesError::SignerOutsideCommittee {
+                                index,
+                                committee_size: committee.len(),
+                            },
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            // A bitmap names each member at most once, so this is the power of distinct signers. It is checked first
+            // so that a QC short of quorum costs no signature verification.
+            let total_vote_power = members
+                .iter()
+                .fold(VotePower::zero(), |acc, member| acc.saturating_add(member.vote_power));
+            if total_vote_power < committee.quorum_threshold() {
+                return Err(ProposalValidationError::QuorumWasNotReached {
+                    qc: qc_id(),
+                    got: total_vote_power,
+                    required: committee.quorum_threshold(),
+                });
+            }
+
+            let block_id = pc.calculate_block_id();
+            for (member, signature) in members.into_iter().zip(signatures) {
+                let signature = to_signature_bytes(signature)
+                    .map(|signature| ValidatorSignatureBytes::new(member.public_key, signature))
+                    .ok_or_else(|| ProposalValidationError::QcInvalidSignature { qc: qc_id() })?;
+                let message = ProposalVoteMessage::new(
+                    protocol_version.as_u32(),
+                    block_id.hash(),
+                    pc.decision(),
+                    pc.epoch().as_u64(),
+                    pc.height().as_u64(),
+                );
+                let vote = SignedProposalVote {
+                    message,
+                    signature: &signature,
+                };
+                if !signing_service.verify(&vote) {
+                    return Err(ProposalValidationError::QcInvalidSignature { qc: qc_id() });
+                }
+            }
+        },
+    }
+
+    Ok(())
+}
+
+/// Whether `protocol_version` accepts certificates signed under the scheme of `signatures`. A protocol version that
+/// activates a new scheme names it here.
+fn is_qc_signature_scheme_accepted(protocol_version: ProtocolVersion, signatures: &QcSignatures) -> bool {
+    match (protocol_version, signatures) {
+        (
+            ProtocolVersion::V0 | ProtocolVersion::V1 | ProtocolVersion::V2 | ProtocolVersion::V3,
+            QcSignatures::Schnorr { .. },
+        ) => true,
+    }
+}
+
+fn check_timeout_certificate_signatures<TConsensusSpec: ConsensusSpec>(
+    network: Network,
+    tc: &TimeoutCertificate,
+    committee: &Committee<TConsensusSpec::Addr>,
+    signing_service: &TConsensusSpec::SignerService,
+) -> Result<(), ProposalValidationError> {
+    let qc_id = || QcId::from(tc.calculate_id());
+    let mut check_dups = HashSet::with_capacity(tc.num_signatures());
     let mut total_vote_power = VotePower::zero();
-    let mut account_for = |signature: &ValidatorSignatureBytes| -> Result<(), ProposalValidationError> {
+    for timeout in tc.timeouts() {
+        let signature = &timeout.signature;
         let Some(power) = committee.get_power_by_public_key(signature.public_key()) else {
             return Err(ProposalValidationError::ValidatorNotInCommittee {
                 validator: signature.public_key().to_string(),
                 details: format!(
                     "QC {} signed with validator {} that is not in committee",
-                    qc,
+                    qc_id(),
                     signature.public_key(),
                 ),
             });
@@ -408,52 +521,24 @@ pub fn check_quorum_certificate_signatures<TConsensusSpec: ConsensusSpec>(
         total_vote_power += power;
         if !check_dups.insert(*signature.public_key()) {
             return Err(ProposalValidationError::QcDuplicateSignature {
-                qc: qc.calculate_id(),
+                qc: qc_id(),
                 validator: *signature.public_key(),
             });
         }
-        Ok(())
-    };
-
-    match qc {
-        QuorumCertificateRef::ProposalCertificate(pc) => {
-            let block_id = pc.calculate_block_id();
-            for signature in pc.signatures() {
-                account_for(signature)?;
-                // `check_protocol_version` pins a block's version to `at(network, header.epoch())` before any vote
-                // is cast on it, so resolving from the schedule here yields the version the signers used.
-                let message = ProposalVoteMessage::new(
-                    ProtocolVersion::at(network, pc.epoch()).as_u32(),
-                    block_id.hash(),
-                    pc.decision(),
-                    pc.epoch().as_u64(),
-                    pc.height().as_u64(),
-                );
-                let vote = SignedProposalVote { message, signature };
-                if !signing_service.verify(&vote) {
-                    return Err(ProposalValidationError::QcInvalidSignature { qc: qc.calculate_id() });
-                }
-            }
-        },
-        QuorumCertificateRef::TimeoutCertificate(tc) => {
-            for timeout in tc.timeouts() {
-                account_for(&timeout.signature)?;
-                // Each signer attests to its own high certificate height, so the height it reports is part of what
-                // it signed and a quorum cannot be assembled that hides one.
-                let vote = SignedTimeoutVote {
-                    message: TimeoutVoteMessage::new(network, tc.epoch(), tc.height(), timeout.high_pc_height),
-                    signature: &timeout.signature,
-                };
-                if !signing_service.verify(&vote) {
-                    return Err(ProposalValidationError::QcInvalidSignature { qc: qc.calculate_id() });
-                }
-            }
-        },
+        // Each signer attests to its own high certificate height, so the height it reports is part of what
+        // it signed and a quorum cannot be assembled that hides one.
+        let vote = SignedTimeoutVote {
+            message: TimeoutVoteMessage::new(network, tc.epoch(), tc.height(), timeout.high_pc_height),
+            signature,
+        };
+        if !signing_service.verify(&vote) {
+            return Err(ProposalValidationError::QcInvalidSignature { qc: qc_id() });
+        }
     }
 
     if total_vote_power < committee.quorum_threshold() {
         return Err(ProposalValidationError::QuorumWasNotReached {
-            qc: qc.calculate_id(),
+            qc: qc_id(),
             got: total_vote_power,
             required: committee.quorum_threshold(),
         });

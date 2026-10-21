@@ -47,13 +47,14 @@ use tari_sidechain::{
     DecodedValidatorBlockSignature,
     FixedHash,
     ProposalVoteMessage,
+    QcSignatures,
     QuorumCertificate,
     QuorumDecision,
     SidechainBlockCommitProof,
     SidechainBlockHeader,
+    SignerBitmap,
     ToCommand,
     ValidatorBlockSignature,
-    ValidatorQcSignature,
 };
 use tari_state_tree::{
     SPARSE_MERKLE_PLACEHOLDER_HASH,
@@ -333,19 +334,22 @@ fn sign(header: SidechainBlockHeader, signers: &Signers) -> SidechainBlockCommit
             height,
         )
         .calculate_hash();
-        let signatures = signers
-            .keys
-            .iter()
+        // Every member signs, so signatures follow committee order: ascending by public key.
+        let mut keys = signers.keys.iter().collect::<Vec<_>>();
+        keys.sort_by_key(|secret| public_key_bytes(secret));
+        let signatures = keys
+            .into_iter()
             .map(|secret| {
                 let nonce = PrivateKey::from_uniform_bytes(&[secret.as_bytes(), message.as_slice()].concat()).unwrap();
                 let signature =
                     DecodedValidatorBlockSignature::sign_with_nonce_and_message(secret, nonce, message).unwrap();
-                ValidatorQcSignature {
-                    public_key: CompressedPublicKey::from_secret_key(secret),
-                    signature: ValidatorBlockSignature::new_from_schnorr(signature),
-                }
+                ValidatorBlockSignature::new_from_schnorr(signature)
             })
             .collect();
+        let signatures = QcSignatures::Schnorr {
+            signers: SignerBitmap::from_indices(signers.keys.len(), 0..signers.keys.len()).unwrap(),
+            signatures,
+        };
         QuorumCertificate {
             header_hash,
             parent_id,

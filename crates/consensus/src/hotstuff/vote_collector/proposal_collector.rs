@@ -3,17 +3,18 @@
 
 use log::*;
 use tari_consensus_types::{HighPc, ProposalCertificate, ProposalVote, ValidatorSignatureBytes};
-use tari_ootle_common_types::{Epoch, NodeHeight, ProtocolVersion, optional::Optional};
+use tari_ootle_common_types::{Epoch, NodeHeight, ProtocolVersion, committee::Committee, optional::Optional};
 use tari_ootle_storage::{
     StateStore,
     consensus_models::{Block, VoteEquivocation},
 };
 use tari_ootle_transaction::Network;
-use tari_sidechain::{ProposalVoteMessage, QuorumDecision};
+use tari_sidechain::{ProposalVoteMessage, QcSignatures, QuorumDecision, SignerBitmap};
 
 use super::collector::VoteCollector;
 use crate::{
     hotstuff::{
+        commit_proofs::convert_validator_block_signature,
         epoch_state::EpochState,
         error::HotStuffError,
         vote_collector::{
@@ -132,6 +133,7 @@ where TConsensusSpec: ConsensusSpec
                     return Ok(None);
                 };
                 let signatures = quorum_votes.into_iter().map(|vote| vote.signature).collect();
+                let signatures = qc_signatures(epoch_state.local_committee(), signatures)?;
                 let new_qc = create_proposal_certificate(signatures, quorum_decision, block);
                 let high_qc = self.store.with_write_tx(|tx| new_qc.update_highest(tx))?;
                 if new_qc.calculate_id() == *high_qc.id() {
@@ -201,15 +203,41 @@ where TConsensusSpec: ConsensusSpec
     }
 }
 
-/// Signatures are ordered by public key so that a node builds the same certificate from the same votes. The order is
-/// applied here rather than in `ProposalCertificate::new`, which also decodes received certificates: those must keep
-/// the order their proposer committed to, or their recomputed ids would differ from the signed ones.
+/// The certificate signatures of `signatures`, each a verified vote by a member of `committee`.
+fn qc_signatures<TAddr: PartialEq>(
+    committee: &Committee<TAddr>,
+    signatures: Vec<ValidatorSignatureBytes>,
+) -> Result<QcSignatures, HotStuffError> {
+    let mut signers = signatures
+        .into_iter()
+        .map(|signature| {
+            let index = committee.index_of_public_key(signature.public_key()).ok_or_else(|| {
+                HotStuffError::InvariantError(format!(
+                    "Vote signer {} is not a member of the committee",
+                    signature.public_key()
+                ))
+            })?;
+            Ok((index, signature.signature))
+        })
+        .collect::<Result<Vec<_>, HotStuffError>>()?;
+    signers.sort_by_key(|(index, _)| *index);
+    let bitmap = SignerBitmap::from_indices(committee.len(), signers.iter().map(|(index, _)| *index))
+        .map_err(|e| HotStuffError::InvariantError(format!("Vote signers do not index the committee: {e}")))?;
+    let signatures = signers
+        .iter()
+        .map(|(_, signature)| convert_validator_block_signature(signature))
+        .collect::<Result<_, _>>()?;
+    Ok(QcSignatures::Schnorr {
+        signers: bitmap,
+        signatures,
+    })
+}
+
 fn create_proposal_certificate(
-    mut signatures: Vec<ValidatorSignatureBytes>,
+    signatures: QcSignatures,
     quorum_decision: QuorumDecision,
     block: Block,
 ) -> ProposalCertificate {
-    signatures.sort_by(|a, b| a.public_key().cmp(b.public_key()));
     ProposalCertificate::new(
         block.header().calculate_hash(),
         *block.parent(),
@@ -223,32 +251,58 @@ fn create_proposal_certificate(
 
 #[cfg(test)]
 mod tests {
-    use tari_ootle_common_types::NumPreshards;
-    use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
+    use tari_ootle_common_types::{VotePower, committee::CommitteeMember};
+    use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, Scalar32Bytes, SchnorrSignatureBytes};
 
     use super::*;
 
+    fn public_key(byte: u8) -> RistrettoPublicKeyBytes {
+        RistrettoPublicKeyBytes::from_bytes(&[byte; 32]).unwrap()
+    }
+
     fn signature(byte: u8) -> ValidatorSignatureBytes {
-        let public_key = RistrettoPublicKeyBytes::from_bytes(&[byte; 32]).unwrap();
-        ValidatorSignatureBytes::new(public_key, SchnorrSignatureBytes::zero())
+        let mut scalar = [0u8; 32];
+        scalar[0] = byte;
+        let signature = SchnorrSignatureBytes::new(public_key(0), Scalar32Bytes::from_bytes(&scalar).unwrap());
+        ValidatorSignatureBytes::new(public_key(byte), signature)
+    }
+
+    fn committee(bytes: &[u8]) -> Committee<RistrettoPublicKeyBytes> {
+        bytes
+            .iter()
+            .map(|b| CommitteeMember {
+                address: public_key(*b),
+                public_key: public_key(*b),
+                vote_power: VotePower::of(1),
+            })
+            .collect()
     }
 
     #[test]
-    fn it_orders_signatures_by_public_key() {
-        let block = Block::zero_block(Network::LocalNet, NumPreshards::P1);
+    fn it_indexes_signers_by_committee_position() {
+        let committee = committee(&[4, 2, 3, 1]);
         let orders = [[3, 1, 2], [1, 2, 3], [2, 3, 1]];
         let certificates = orders
             .iter()
-            .map(|order| {
-                let signatures = order.iter().map(|b| signature(*b)).collect();
-                create_proposal_certificate(signatures, QuorumDecision::Accept, block.clone())
-            })
+            .map(|order| qc_signatures(&committee, order.iter().map(|b| signature(*b)).collect()).unwrap())
             .collect::<Vec<_>>();
 
-        let expected = [signature(1), signature(2), signature(3)];
+        let expected = QcSignatures::Schnorr {
+            signers: SignerBitmap::from_indices(4, [0, 1, 2]).unwrap(),
+            signatures: [1, 2, 3]
+                .iter()
+                .map(|b| convert_validator_block_signature(&signature(*b).signature).unwrap())
+                .collect(),
+        };
         for certificate in &certificates {
-            assert_eq!(certificate.signatures(), expected);
-            assert_eq!(certificate.calculate_id(), certificates[0].calculate_id());
+            assert_eq!(*certificate, expected);
+            certificate.check_well_formed(committee.len()).unwrap();
         }
+    }
+
+    #[test]
+    fn it_rejects_a_signer_outside_the_committee() {
+        let err = qc_signatures(&committee(&[1, 2, 3]), vec![signature(1), signature(5)]).unwrap_err();
+        assert!(matches!(err, HotStuffError::InvariantError(_)), "{err}");
     }
 }

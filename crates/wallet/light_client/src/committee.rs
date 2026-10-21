@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tari_indexer_client::types::{EpochCheckpointEntry, ValidatorSetCommittee};
 use tari_ootle_common_types::{Epoch, NumPreshards, ShardGroup, ValidatorSetHash, ValidatorSetMember, VotePower};
 use tari_ootle_storage::consensus_models::{CommittedBlockProof, VerifiedBlockTip};
+use tari_sidechain::SigningCommittee;
 use tari_state_tree::ValidatorSetCommitteeProof;
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
@@ -147,7 +148,7 @@ impl VerifiedCommittee {
                 found: shard_group,
             });
         }
-        let tip = commit_proof.validate(self.network, self.quorum_threshold(), |pk| Ok(self.vote_power(pk)))?;
+        let tip = commit_proof.validate(self.network, self.quorum_threshold(), self)?;
         Ok(tip)
     }
 
@@ -173,11 +174,21 @@ impl VerifiedCommittee {
             });
         }
         checkpoint
-            .validate(self.network, epoch, self.quorum_threshold(), |pk| {
-                Ok(self.vote_power(pk))
-            })
+            .validate(self.network, epoch, self.quorum_threshold(), self)
             .map_err(|source| LightClientError::InvalidCheckpoint { epoch, source })?;
         Ok(VerifiedCheckpoint::new(shard_group, checkpoint))
+    }
+}
+
+impl SigningCommittee for VerifiedCommittee {
+    fn len(&self) -> usize {
+        self.members.len()
+    }
+
+    fn member(&self, index: usize) -> Option<(&[u8], u64)> {
+        self.members
+            .get(index)
+            .map(|member| (member.public_key.as_bytes(), member.vote_power.value()))
     }
 }
 

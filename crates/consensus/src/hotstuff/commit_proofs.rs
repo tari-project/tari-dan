@@ -17,9 +17,8 @@ use tari_sidechain::{
     SidechainBlockCommitProof,
     SidechainBlockHeader,
     ValidatorBlockSignature,
-    ValidatorQcSignature,
 };
-use tari_template_lib_types::crypto::SchnorrSignatureBytes;
+use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, Scalar32Bytes, SchnorrSignatureBytes};
 
 use crate::hotstuff::HotStuffError;
 
@@ -243,30 +242,13 @@ fn convert_qc_to_proof_element(
             epoch: qc.epoch().as_u64(),
             height: qc.height().as_u64(),
             protocol_version: justified.header().protocol_version().as_u32(),
-            signatures: qc
-                .signatures()
-                .iter()
-                .map(|s| {
-                    Ok(ValidatorQcSignature {
-                        public_key: CompressedPublicKey::from_canonical_bytes(s.public_key.as_bytes()).map_err(
-                            |_| {
-                                HotStuffError::InvariantError(format!(
-                                    "RistrettoPublicKey non-canonical bytes for public key, in \
-                                     convert_qc_to_proof_element ({:?})",
-                                    s.public_key,
-                                ))
-                            },
-                        )?,
-                        signature: convert_validator_block_signature(&s.signature)?,
-                    })
-                })
-                .collect::<Result<_, HotStuffError>>()?,
+            signatures: qc.signatures().clone(),
             decision: qc.decision(),
         },
     ))
 }
 
-fn convert_validator_block_signature(
+pub(crate) fn convert_validator_block_signature(
     signature: &SchnorrSignatureBytes,
 ) -> Result<ValidatorBlockSignature, HotStuffError> {
     let public_nonce =
@@ -284,6 +266,13 @@ fn convert_validator_block_signature(
     })?;
 
     Ok(ValidatorBlockSignature::new(public_nonce, signature))
+}
+
+/// The inverse of [`convert_validator_block_signature`].
+pub(crate) fn to_signature_bytes(signature: &ValidatorBlockSignature) -> Option<SchnorrSignatureBytes> {
+    let public_nonce = RistrettoPublicKeyBytes::from_bytes(signature.get_compressed_public_nonce().as_bytes()).ok()?;
+    let signature = Scalar32Bytes::from_bytes(signature.get_signature().as_bytes()).ok()?;
+    Some(SchnorrSignatureBytes::new(public_nonce, signature))
 }
 
 #[cfg(test)]
@@ -313,7 +302,7 @@ mod tests {
         consensus_models::{BlockCommands, Command, LocalOnlyAtom, MultiShardAtom},
     };
     use tari_ootle_transaction::{Network, TransactionId};
-    use tari_sidechain::{FixedHash, ProposalVoteMessage, QuorumDecision, ValidatorQcSignature, check_proof_structure};
+    use tari_sidechain::{FixedHash, ProposalVoteMessage, QuorumDecision, check_proof_structure};
     use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
 
     use super::*;
@@ -336,7 +325,7 @@ mod tests {
             block.height(),
             block.epoch(),
             shard_group(),
-            vec![],
+            ProposalCertificate::genesis_signatures(),
             QuorumDecision::Accept,
         )
     }
@@ -536,7 +525,7 @@ mod tests {
             NodeHeight(1),
             Epoch(1),
             shard_group,
-            vec![],
+            ProposalCertificate::genesis_signatures(),
             QuorumDecision::Accept,
         );
 
@@ -581,18 +570,20 @@ mod tests {
             ValidatorSchnorrSignature::sign_with_nonce_and_message(&secret, nonce, message.to_signature_message())
                 .expect("signing is infallible for a valid key");
 
-        let qc_signature = ValidatorQcSignature {
-            public_key: CompressedPublicKey::from_canonical_bytes(public.as_bytes()).unwrap(),
-            signature: ValidatorBlockSignature::new(
-                CompressedPublicKey::from_canonical_bytes(signature.get_public_nonce().as_bytes()).unwrap(),
-                signature.get_signature().clone(),
-            ),
+        let qc_signature = ValidatorBlockSignature::new(
+            CompressedPublicKey::from_canonical_bytes(signature.get_public_nonce().as_bytes()).unwrap(),
+            signature.get_signature().clone(),
+        )
+        .to_schnorr_signature()
+        .unwrap();
+        let verifies_under = |version: u32| {
+            let message = ProposalVoteMessage::new(version, &block_id, decision, epoch, height).calculate_hash();
+            qc_signature.verify(&public, message)
         };
 
-        assert!(qc_signature.verify(protocol_version.as_u32(), &block_id, decision, epoch, height));
+        assert!(verifies_under(protocol_version.as_u32()));
         // The version selects the message, so a certificate cannot claim a version its members did not sign under.
-        let other_version = protocol_version.as_u32() ^ 1;
-        assert!(!qc_signature.verify(other_version, &block_id, decision, epoch, height));
+        assert!(!verifies_under(protocol_version.as_u32() ^ 1));
     }
 
     fn assert_hashes_identically_to_sidechain_header(

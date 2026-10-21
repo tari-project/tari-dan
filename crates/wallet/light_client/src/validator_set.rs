@@ -141,9 +141,7 @@ impl TrustedValidatorSet {
             });
         }
         checkpoint
-            .validate(network, epoch, self.committee.quorum_threshold(), |pk| {
-                Ok(self.committee.vote_power(pk))
-            })
+            .validate(network, epoch, self.committee.quorum_threshold(), &self.committee)
             .map_err(|source| LightClientError::InvalidCheckpoint { epoch, source })?;
 
         let next_set = next_validator_set(&checkpoint)?;

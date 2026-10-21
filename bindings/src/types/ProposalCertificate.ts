@@ -2,7 +2,6 @@
 import type { Epoch } from "./Epoch";
 import type { NodeHeight } from "./NodeHeight";
 import type { ShardGroup } from "./ShardGroup";
-import type { ValidatorSignatureBytes } from "./ValidatorSignatureBytes";
 
 export type ProposalCertificate = {
   height: NodeHeight;
@@ -10,6 +9,6 @@ export type ProposalCertificate = {
   parent_id: string;
   epoch: Epoch;
   shard_group: ShardGroup;
-  signatures: Array<ValidatorSignatureBytes>;
+  signatures: { Schnorr: { signers: string; signatures: Array<{ public_nonce: string; signature: string }> } };
   decision: string;
 };

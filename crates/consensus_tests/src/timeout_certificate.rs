@@ -87,7 +87,7 @@ fn proposal_certificate(height: NodeHeight) -> ProposalCertificate {
         height,
         TEST_EPOCH,
         ShardGroup::all_shards(NUM_PRESHARDS),
-        vec![],
+        ProposalCertificate::genesis_signatures(),
         QuorumDecision::Accept,
     )
 }
