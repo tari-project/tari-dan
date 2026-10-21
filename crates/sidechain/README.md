@@ -18,7 +18,8 @@ on it.
 | `CommandCommitProof<C>`      | A command, the proof that its block committed, and its inclusion in that block           |
 | `SidechainBlockCommitProof`  | A block header and the 3-chain of quorum certificates that commits it                    |
 | `SidechainBlockHeader`       | The header fields a commit proof binds, including `network`, `epoch` and `shard_group`   |
-| `QuorumCertificate`          | A committee's signatures over a block                                                    |
+| `QuorumCertificate`          | A committee's signatures over a block, its signers named by a `SignerBitmap`             |
+| `SigningCommittee`           | The committee a proof is checked against, in ascending order of public key               |
 | `Command`, `EndEpochAtom`    | Commands a sidechain block can contain                                                   |
 | `BurnClaimProof`             | Proves ownership of a base layer burn output and its inclusion in a mined block          |
 | `BurnOutputProof`            | The burn output and its two-level MMR inclusion proof against `block_output_mr`          |
@@ -29,30 +30,31 @@ and clients.
 
 ## Validating a commit proof
 
-The caller supplies the committee for the proof's epoch and shard group. `check_vn` returns a validator's voting power,
-or 0 if it is not a member. `quorum_threshold` must be positive.
+The caller supplies the committee for the proof's epoch and shard group as a `SigningCommittee`: its members'
+32-byte compressed public keys and voting power, in ascending lexicographic order of key. Each quorum certificate names
+its signers by their indices in that order. `quorum_threshold` must be positive.
 
 ```rust
-use tari_sidechain::{CommandCommitProof, CompressedPublicKey, EndEpochAtom, SidechainProofValidationError};
+use tari_sidechain::{CommandCommitProof, EndEpochAtom, SidechainProofValidationError, SigningCommittee};
 
 fn validate(
     proof: &CommandCommitProof<EndEpochAtom>,
     network: u8,
     quorum_threshold: u64,
-    voting_power: impl Fn(&CompressedPublicKey) -> u64,
+    committee: &dyn SigningCommittee,
 ) -> Result<(), SidechainProofValidationError> {
-    // `quorum_threshold` and `voting_power` must describe the committee of `proof.epoch()` and `proof.shard_group()`.
-    proof.validate_committed(network, quorum_threshold, &|pk| Ok(voting_power(pk)))
+    // `quorum_threshold` and `committee` must describe the committee of `proof.epoch()` and `proof.shard_group()`.
+    proof.validate_committed(network, quorum_threshold, committee)
 }
 ```
 
-Validation checks the proof's structure, the network, signer membership and quorum before verifying any signature,
+Validation checks the proof's structure, the network, each signer bitmap and quorum before verifying any signature,
 so an invalid proof costs little to reject.
 
 ## Stability
 
-Hash domains, labels and the serde and borsh encodings of proof types are consensus-critical and never change once
-released. `tests/golden_vectors.rs` pins them.
+Hash domains, labels and the serde and borsh encodings of proof types are consensus-critical and change only at a
+network reset. `tests/golden_vectors.rs` pins them.
 
 ## License
 

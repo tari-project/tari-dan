@@ -33,7 +33,7 @@ use tari_ootle_common_types::{
     hashing,
 };
 use tari_ootle_transaction::Network;
-use tari_sidechain::{BlockHeaderHashFields, BlockHeaderHashFieldsV1, BlockHeaderHashFieldsV2, FixedHash};
+use tari_sidechain::{BlockHeaderHashFields, BlockHeaderHashFieldsV1, FixedHash};
 use tari_state_tree::{TreeHash, compute_merkle_root_for_hashes};
 use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
 
@@ -362,7 +362,7 @@ impl BlockHeader {
             return BlockId::zero();
         }
 
-        hashing::block_hasher()
+        hashing::block_id_hasher()
             .chain(parent_id)
             .chain(header_hash)
             .finalize_into_array()
@@ -416,14 +416,15 @@ impl BlockHeader {
             end_inclusive: self.shard_group.end().as_u32(),
         };
 
-        // This selection must stay identical to `tari_sidechain::SidechainBlockHeader::calculate_hash`, which is what
-        // the base layer uses to verify a commit proof against the block ID a committee signed.
+        // This selection must stay identical to `tari_sidechain::SidechainBlockHeader::calculate_hash`, which hashes
+        // the header a commit proof carries to the block ID its committee signed.
         let fields = match self.protocol_version {
-            // `tari_sidechain` maps version 0 to the preimage that carries no version. A later version must commit
-            // to itself through `BlockHeaderHashFields::V2`, so that two versions sharing a preimage shape still
-            // produce distinct block IDs and the version a block claims cannot be altered without invalidating it.
-            ProtocolVersion::V0 => BlockHeaderHashFields::V1(BlockHeaderHashFieldsV1 {
+            protocol_version @ (ProtocolVersion::V0 |
+            ProtocolVersion::V1 |
+            ProtocolVersion::V2 |
+            ProtocolVersion::V3) => BlockHeaderHashFields::V1(BlockHeaderHashFieldsV1 {
                 network: self.network.as_byte(),
+                protocol_version: protocol_version.as_u32(),
                 justify_id: self.justify_id.hash(),
                 height: self.height.as_u64(),
                 epoch: self.epoch.as_u64(),
@@ -433,28 +434,12 @@ impl BlockHeader {
                 state_merkle_root: &self.state_merkle_root,
                 command_merkle_root: &self.command_merkle_root,
                 accumulated_data: &accumulated_data,
+                transaction_merkle_root: self.transaction_merkle_root.as_ref(),
                 metadata_hash: &metadata_hash,
             }),
-            protocol_version @ (ProtocolVersion::V1 | ProtocolVersion::V2 | ProtocolVersion::V3) => {
-                BlockHeaderHashFields::V2(BlockHeaderHashFieldsV2 {
-                    network: self.network.as_byte(),
-                    protocol_version: protocol_version.as_u32(),
-                    justify_id: self.justify_id.hash(),
-                    height: self.height.as_u64(),
-                    epoch: self.epoch.as_u64(),
-                    epoch_hash: &self.epoch_hash,
-                    shard_group,
-                    proposed_by: self.proposed_by.as_bytes(),
-                    state_merkle_root: &self.state_merkle_root,
-                    command_merkle_root: &self.command_merkle_root,
-                    accumulated_data: &accumulated_data,
-                    transaction_merkle_root: self.transaction_merkle_root.as_ref(),
-                    metadata_hash: &metadata_hash,
-                })
-            },
         };
 
-        hashing::block_hasher().chain(&fields).finalize().into()
+        hashing::block_header_hasher().chain(&fields).finalize().into()
     }
 
     pub fn is_genesis(&self) -> bool {

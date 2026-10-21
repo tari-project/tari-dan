@@ -17,7 +17,7 @@ impl BlockId {
             return BlockId::zero();
         }
 
-        hashing::block_hasher()
+        hashing::block_id_hasher()
             .chain(parent_id)
             .chain(header_hash)
             .finalize_into_array()

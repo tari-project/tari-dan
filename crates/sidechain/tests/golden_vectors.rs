@@ -1,12 +1,12 @@
 // Copyright 2026 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Hashes and encodings that validators, the base layer and stored proofs already depend on. Every expected value was
-//! produced by `tari_sidechain` 6.2.0, so a failure here means a consensus hash or wire format changed.
+//! Hashes and encodings that validators and stored proofs depend on. A failure here means a consensus hash or wire
+//! format changed, which only a network reset allows.
 
 mod support;
 
-use support::load_fixture;
+use support::{fixture_proof, load_fixture};
 use tari_sidechain::{
     BurnClaimProof,
     BurnOutputProof,
@@ -23,10 +23,6 @@ use tari_sidechain::{
     TransactionAtom,
 };
 
-fn fixture_proof() -> SidechainBlockCommitProof {
-    load_fixture("commit_proof.json")
-}
-
 fn hash(n: u8) -> FixedHash {
     FixedHash::from([n; 32])
 }
@@ -36,11 +32,11 @@ fn version_0_header_hash_and_block_id() {
     let header = fixture_proof().header;
     assert_eq!(
         header.calculate_hash().to_string(),
-        "386694d688ba886e253bbd1c3014ac334af1f5ec61a2e6f471efaf4e3803f4d8"
+        "83ba92c1bc3e78d755c87aca1e35fb91a880449a959133f613ea829c37764b1a"
     );
     assert_eq!(
         header.calculate_block_id().to_string(),
-        "de20d47e42ab85620d5623c4ab526b55ae5919b962238c63e29782027a3208a5"
+        "4e1de1bcc5a2759c941846390d30377b4ee65484a58092dc5b17e5eb8f5030cf"
     );
 }
 
@@ -51,11 +47,11 @@ fn version_1_header_hash_and_block_id() {
     header.transaction_merkle_root = Some(hash(0x11));
     assert_eq!(
         header.calculate_hash().to_string(),
-        "7293001c8ccb4acedec1667eddfcdc8756f964330e9fe46d79f2a53b211efad0"
+        "71633e5937b4331f5d1bf6edb1a1a91b73c96db0af904a296941a963ec5d85f4"
     );
     assert_eq!(
         header.calculate_block_id().to_string(),
-        "9d96d6cae893aff0e6ec8002dc409c29be2d7bb71c087780a76d6dd653ac740c"
+        "9073d7031830373be131aa82161e954bf7fe4ad92298074ee48898c550fb660b"
     );
 }
 
@@ -67,12 +63,12 @@ fn chain_link_and_justified_block_ids() {
     };
     assert_eq!(
         link.calc_block_id().to_string(),
-        "80828e46b202e281e8ef31407c8646ed3dc83166e545896d012bf119612587f2"
+        "566f5cb0b9db5df987eda6aa3ae4856389c2477e5768e1170fc3bd57c5aa751e"
     );
     let proof = fixture_proof();
     assert_eq!(
         proof.last_qc().unwrap().calculate_justified_block().to_string(),
-        "de20d47e42ab85620d5623c4ab526b55ae5919b962238c63e29782027a3208a5"
+        "4e1de1bcc5a2759c941846390d30377b4ee65484a58092dc5b17e5eb8f5030cf"
     );
 }
 
@@ -83,7 +79,7 @@ fn proposal_vote_messages() {
         ProposalVoteMessage::new(0, &block_id, QuorumDecision::Accept, 5, 6)
             .calculate_hash()
             .to_string(),
-        "bf85f03d74f768592c8ff4a8630dde285462204887c144da8cc7dba7224e0095"
+        "775fee04e0286b738814b9213e433e5617032c600f0776256739ac99c4215b06"
     );
     assert_eq!(
         ProposalVoteMessage::new(1, &block_id, QuorumDecision::Reject, 5, 6)
@@ -110,7 +106,7 @@ fn command_hashes() {
 #[test]
 fn commit_proof_encodings() {
     let proof = fixture_proof();
-    let expected_json: serde_json::Value = load_fixture("commit_proof.reserialized.json");
+    let expected_json: serde_json::Value = load_fixture("commit_proof.json");
     assert_eq!(serde_json::to_value(&proof).unwrap(), expected_json);
 
     let expected_borsh = std::fs::read_to_string("tests/fixtures/commit_proof.borsh.hex").unwrap();

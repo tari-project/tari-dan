@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 //! The consensus hashers of the Ootle sidechain. Validators, the base layer and every client that verifies a commit
-//! proof hash with these, so a domain, version or label never changes once released.
+//! proof hash with these, so a domain, version or label changes only at a network reset.
 
 use digest::consts::U32;
 use tari_crypto::hash_domain;
@@ -16,8 +16,14 @@ pub fn tari_consensus_hasher(label: &'static str) -> TariConsensusHasher {
     TariConsensusHasher::new_with_label(label)
 }
 
-pub fn block_hasher() -> TariConsensusHasher {
-    tari_consensus_hasher("Block")
+/// Hashes a block header's fields into the header hash.
+pub fn block_header_hasher() -> TariConsensusHasher {
+    tari_consensus_hasher("BlockHeader")
+}
+
+/// Hashes a block's parent id and header hash into its block id.
+pub fn block_id_hasher() -> TariConsensusHasher {
+    tari_consensus_hasher("BlockId")
 }
 
 pub fn block_metadata_hasher() -> TariConsensusHasher {
@@ -54,14 +60,19 @@ mod tests {
         assert_eq!(TariDanConsensusHashDomain::version(), 0);
     }
 
-    /// Digests pinned in `tari_hashing` 6.2.0's `tests/vectors.json`, where these hashers lived.
+    /// Known-answer digests. Every hasher but `block_header_hasher` and `block_id_hasher` matches `tari_hashing`
+    /// 6.2.0's `tests/vectors.json`, where those hashers lived.
     #[test]
-    fn hashers_match_tari_hashing_vectors() {
+    fn hashers_match_known_answer_digests() {
         let input = input();
         let cases = [
             (
-                block_hasher(),
-                "f05946eebffad9c503cd20dccdd138d98235293b981ba4b17b7ca356da993509",
+                block_header_hasher(),
+                "349bf77f7738a5cd00f4ab28dfc200bd878b67710fa29a9d996829610488c4d6",
+            ),
+            (
+                block_id_hasher(),
+                "f2cb0fc426295a160acbc5557ba9af8951c99d68c18a4177d966b60789592332",
             ),
             (
                 block_metadata_hasher(),
