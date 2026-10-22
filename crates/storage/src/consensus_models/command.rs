@@ -298,7 +298,7 @@ impl Command {
     ///
     /// The leaf of every command except `EndEpoch` commits to
     /// [`Self::full_command_shard_groups`] alongside the command hash, so a foreign commit proof that carries the
-    /// command as a [`TrimmedCommand`](super::TrimmedCommand) must name, in an authenticated leaf, every shard group it
+    /// command as a [`PrunedCommand`](super::PrunedCommand) must name, in an authenticated leaf, every shard group it
     /// owes the full command. The `EndEpoch` leaf stays the bare command hash because the base layer recomputes it
     /// from [`tari_sidechain::Command`] when verifying an end-of-epoch inclusion proof; a foreign commit proof always
     /// carries that command in full.

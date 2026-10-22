@@ -47,12 +47,10 @@ impl CommandsCommitProof {
 
     /// The first command the proof carries only by its hash although `shard_group` needs it in full. The command's
     /// leaf authenticates the shard groups it names, so a proof that withholds a command cannot hide it.
-    pub fn withheld_command_for(&self, shard_group: ShardGroup) -> Option<&TrimmedCommand> {
+    pub fn withheld_command_for(&self, shard_group: ShardGroup) -> Option<&PrunedCommand> {
         self.commands().iter().find_map(|cmd| match cmd {
-            CommandOrHash::Trimmed(trimmed) if trimmed.full_command_shard_groups.contains(&shard_group) => {
-                Some(trimmed)
-            },
-            CommandOrHash::Command(_) | CommandOrHash::Trimmed(_) => None,
+            CommandOrHash::Pruned(pruned) if pruned.full_command_shard_groups.contains(&shard_group) => Some(pruned),
+            CommandOrHash::Command(_) | CommandOrHash::Pruned(_) => None,
         })
     }
 
@@ -242,9 +240,9 @@ pub enum CommandOrHash {
     /// The full command data
     #[n(0)]
     Command(#[n(0)] Command),
-    /// A command the proof does not carry in full.
+    /// A command pruned from the proof, carried by its hash and the shard groups the proof must carry it in full for.
     #[n(1)]
-    Trimmed(#[n(0)] TrimmedCommand),
+    Pruned(#[n(0)] PrunedCommand),
 }
 
 impl CommandOrHash {
@@ -263,7 +261,7 @@ impl CommandOrHash {
                 Command::LocalAccept(_) |
                 Command::AllAccept(_) |
                 Command::SomeAccept(_) |
-                Command::ForeignProposal(_) => Self::Trimmed(TrimmedCommand {
+                Command::ForeignProposal(_) => Self::Pruned(PrunedCommand {
                     hash: command.hash(protocol_version),
                     full_command_shard_groups,
                 }),
@@ -275,8 +273,8 @@ impl CommandOrHash {
     pub fn merkle_leaf(&self, protocol_version: ProtocolVersion) -> FixedHash {
         match (self, protocol_version) {
             (Self::Command(cmd), _) => cmd.merkle_leaf(protocol_version),
-            (Self::Trimmed(trimmed), ProtocolVersion::V0) => {
-                command_leaf(&trimmed.hash, &trimmed.full_command_shard_groups)
+            (Self::Pruned(pruned), ProtocolVersion::V0) => {
+                command_leaf(&pruned.hash, &pruned.full_command_shard_groups)
             },
         }
     }
@@ -284,14 +282,14 @@ impl CommandOrHash {
     pub fn command(&self) -> Option<&Command> {
         match self {
             Self::Command(cmd) => Some(cmd),
-            Self::Trimmed(_) => None,
+            Self::Pruned(_) => None,
         }
     }
 
     pub fn into_command(self) -> Option<Command> {
         match self {
             Self::Command(cmd) => Some(cmd),
-            Self::Trimmed(_) => None,
+            Self::Pruned(_) => None,
         }
     }
 }
@@ -300,7 +298,7 @@ impl CommandOrHash {
 /// for. The merkle leaf commits to both, so a proof that names a shard group here withholds a command that shard group
 /// needs.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode, CborLen)]
-pub struct TrimmedCommand {
+pub struct PrunedCommand {
     #[n(0)]
     #[cbor(with = "tari_bor::adapters::serde_bridge")]
     pub hash: FixedHash,
@@ -420,7 +418,7 @@ mod tests {
         proof
     }
 
-    fn withheld_command_for(proof: &CommandsCommitProofV1, shard_group: ShardGroup) -> Option<TrimmedCommand> {
+    fn withheld_command_for(proof: &CommandsCommitProofV1, shard_group: ShardGroup) -> Option<PrunedCommand> {
         CommandsCommitProof::V1(proof.clone())
             .withheld_command_for(shard_group)
             .cloned()
@@ -448,11 +446,11 @@ mod tests {
     #[test]
     fn a_proof_that_trims_a_needed_command_names_the_shard_group_it_withholds_it_from() {
         let local_accept = &commands()[1];
-        let trimmed = CommandOrHash::Trimmed(TrimmedCommand {
+        let pruned = CommandOrHash::Pruned(PrunedCommand {
             hash: local_accept.hash(ProtocolVersion::V0),
             full_command_shard_groups: local_accept.full_command_shard_groups(),
         });
-        let proof = with_entry(honest_proof(ProtocolVersion::V0, output_group()), 1, trimmed);
+        let proof = with_entry(honest_proof(ProtocolVersion::V0, output_group()), 1, pruned);
 
         proof.validate_command_merkle_root().unwrap();
         assert_eq!(
@@ -462,14 +460,14 @@ mod tests {
     }
 
     #[test]
-    fn a_trimmed_command_that_leaves_out_a_shard_group_does_not_authenticate() {
+    fn a_pruned_command_that_leaves_out_a_shard_group_does_not_authenticate() {
         let local_accept = &commands()[1];
         for full_command_shard_groups in [vec![input_group()], vec![], vec![output_group(), input_group()]] {
-            let trimmed = CommandOrHash::Trimmed(TrimmedCommand {
+            let pruned = CommandOrHash::Pruned(PrunedCommand {
                 hash: local_accept.hash(ProtocolVersion::V0),
                 full_command_shard_groups: full_command_shard_groups.clone(),
             });
-            let proof = with_entry(honest_proof(ProtocolVersion::V0, output_group()), 1, trimmed);
+            let proof = with_entry(honest_proof(ProtocolVersion::V0, output_group()), 1, pruned);
             assert!(
                 matches!(
                     proof.validate_command_merkle_root(),
