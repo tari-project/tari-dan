@@ -368,7 +368,7 @@ Use the `-p` flag to override individual configuration properties:
 ./tari_indexer \
     -p indexer.api_listen_address=0.0.0.0:8080 \
     -p indexer.block_scanning_interval=5 \
-    -p epoch_oracle.base_layer.base_node_grpc_url=http://localhost:18142
+    -g http://localhost:18142
 ```
 
 ## Common Configuration Patterns

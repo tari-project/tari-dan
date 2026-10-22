@@ -155,6 +155,12 @@ impl ConfigOverrideProvider for Cli {
                 "epoch_oracle.base_layer.base_node_grpc_url".to_string(),
                 url.to_string(),
             ));
+            // Network presets set this key in `[<network>.epoch_oracle.base_layer]`, which the loader merges over the
+            // root section after these overrides are applied.
+            overrides.push((
+                format!("{}.epoch_oracle.base_layer.base_node_grpc_url", network),
+                url.to_string(),
+            ));
         }
         // `epoch_oracle_config` is applied after the config is loaded (see main) so it can override an inline
         // `config_json` shipped in a network preset without tripping the "both set" error.
@@ -170,4 +176,38 @@ pub enum Subcommand {
     CompactDb,
     /// Generate an identity keypair if one does not exist and exit
     GenerateIdentity,
+}
+
+#[cfg(test)]
+mod tests {
+    use tari_ootle_app_utilities::configuration::{
+        get_default_config,
+        load_configuration_with_overrides,
+        write_config_to,
+    };
+    use tari_validator_node::ApplicationConfig;
+
+    use super::*;
+
+    #[test]
+    fn grpc_url_flag_overrides_the_network_preset() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config.toml");
+        write_config_to(&config_path, &get_default_config()).unwrap();
+        let cli = Cli::parse_from([
+            "tari_validator_node",
+            "--network",
+            "esmeralda",
+            "-g",
+            "http://my-node:18142",
+        ]);
+
+        let cfg = load_configuration_with_overrides(&config_path, &cli, Some(cli.network())).unwrap();
+        let config = ApplicationConfig::load_from(&cfg).unwrap();
+
+        assert_eq!(
+            config.epoch_oracle.base_layer.base_node_grpc_url.unwrap().as_str(),
+            "http://my-node:18142/"
+        );
+    }
 }
