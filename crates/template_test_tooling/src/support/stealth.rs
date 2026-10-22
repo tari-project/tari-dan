@@ -270,7 +270,7 @@ where
 /// Generates a non-zero test sender nonce keypair for testing purposes.
 /// This is not secure (it is a hardcoded value) and should only be used for testing scenarios.
 pub fn test_sender_nonce_keypair() -> (RistrettoSecretKey, RistrettoPublicKey) {
-    let sender_nonce = RistrettoSecretKey::from(123);
+    let sender_nonce = RistrettoSecretKey::from(123u64);
     let sender_public_nonce = RistrettoPublicKey::from_secret_key(&sender_nonce);
     (sender_nonce, sender_public_nonce)
 }

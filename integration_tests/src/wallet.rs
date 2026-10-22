@@ -241,6 +241,8 @@ pub fn run_wallet(runtime: Runtime, config: &mut ApplicationConfig, shutdown: &m
         skip_recovery: false,
         print_env: false,
         burn_proof_out: None,
+        // In-process: the test harness owns shutdown, so the wallet must not install its own signal handlers.
+        install_grpc_signal_handler: false,
     };
 
     run_wallet_with_cli(shutdown, runtime, config, cli)?;

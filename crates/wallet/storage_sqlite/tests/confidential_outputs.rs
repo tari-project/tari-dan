@@ -97,7 +97,7 @@ fn setup_locked_transfer() -> (SqliteWalletStore, WalletLockId) {
     let store = SqliteWalletStore::try_open(":memory:").unwrap();
     store.run_migrations().unwrap();
 
-    let owner_public_key = RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::from(1000)).to_byte_type();
+    let owner_public_key = RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::from(1000u64)).to_byte_type();
     let mut tx = store.create_write_tx().unwrap();
     tx.accounts_insert(
         Some("test"),

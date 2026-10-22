@@ -30,6 +30,7 @@ tari_common_types = { workspace = true }
 tari_common_sqlite = { workspace = true }
 tari_shutdown = { workspace = true }
 tari_sidechain = { workspace = true }
+tari_sidechain_l1 = { workspace = true }
 
 tari_crypto = { workspace = true }
 tari_ootle_app_utilities = { workspace = true, features = ["consensus_constants", "epoch_oracle", "p2p"] }
@@ -47,12 +48,12 @@ tari_ootle_wallet_sdk = { workspace = true }
 ootle_byte_type = { workspace = true }
 
 # Minotari
-minotari_console_wallet = "6.2.0"
-minotari_node = "6.2.0"
-minotari_wallet = "6.2.0"
-tari_comms = "6.2.0"
-tari_comms_dht = "6.2.0"
-tari_p2p = "6.2.0"
+minotari_console_wallet = "6.3.0-pre.1"
+minotari_node = "6.3.0-pre.1"
+minotari_wallet = "6.3.0-pre.1"
+tari_comms = "6.3.0-pre.1"
+tari_comms_dht = "6.3.0-pre.1"
+tari_p2p = "6.3.0-pre.1"
 
 anyhow = { workspace = true }
 config = { workspace = true }

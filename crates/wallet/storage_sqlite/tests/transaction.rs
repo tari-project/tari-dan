@@ -18,7 +18,7 @@ use tari_ootle_wallet_storage_sqlite::SqliteWalletStore;
 use tari_template_lib_types::ComponentAddress;
 
 fn build_transaction() -> Transaction {
-    let key = RistrettoSecretKey::from(123);
+    let key = RistrettoSecretKey::from(123u64);
     Transaction::builder_localnet(Epoch(1))
         .allocate_component_address("component")
         .put_last_instruction_output_on_workspace("bucket")

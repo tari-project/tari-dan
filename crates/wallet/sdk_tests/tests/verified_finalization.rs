@@ -67,7 +67,7 @@ fn build_transaction_valid_until(max_epoch: Epoch) -> Transaction {
         .allocate_component_address("component")
         .put_last_instruction_output_on_workspace("bucket")
         .call_method("component", "new", args!["bucket"])
-        .build_and_seal(&RistrettoSecretKey::from(1))
+        .build_and_seal(&RistrettoSecretKey::from(1u64))
 }
 
 /// The result of `transaction_id` committing in `set`'s epoch, with its receipt proven at a block that `set`'s
