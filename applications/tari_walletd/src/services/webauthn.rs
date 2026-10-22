@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use tari_ootle_wallet_sdk::storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter};
 use thiserror::Error;
-use webauthn_rs::prelude::{AuthenticationResult, Passkey, PasskeyAuthentication, PasskeyRegistration};
+use webauthn_rs::prelude::{AuthenticationResult, Credential, Passkey, PasskeyAuthentication, PasskeyRegistration};
 
 use crate::services::{SessionData, SessionStore, SessionStoreError};
 
@@ -25,6 +25,11 @@ pub enum WebauthnServiceError {
     AlreadyEnrolled,
     #[error("The credential that authenticated is not enrolled in this wallet")]
     UnknownCredential,
+    #[error(
+        "The authenticator's signature counter ({presented}) is not above the last one this wallet saw ({stored}). \
+         The credential may have been cloned"
+    )]
+    CounterNotAdvanced { presented: u32, stored: u32 },
 }
 
 /// Registration session data
@@ -157,9 +162,14 @@ where TStore: WalletStore
         Ok(self.auth_sessions.get(session_id).await?.passkey_auth.clone())
     }
 
-    /// Stores what a successful authentication reveals about its credential, chiefly the
-    /// authenticator's signature counter. A ceremony refuses a counter that is not above the stored
-    /// one, so this is what lets a cloned authenticator be detected.
+    /// Checks a verified assertion's signature counter against the stored credential and stores the
+    /// advanced counter. The login must be refused on error.
+    ///
+    /// A ceremony checks the counter against the credential as it stood when the ceremony started,
+    /// and ceremonies stay open for the session TTL. A login completed in between advances the stored
+    /// counter, so this check against the stored value is the one that catches an assertion from a
+    /// cloned authenticator. As in the WebAuthn rule, a credential whose counter is zero on both
+    /// sides has no counter, as is usual for synced passkeys, and is not checked.
     pub fn record_authentication(&self, result: &AuthenticationResult) -> Result<(), WebauthnServiceError> {
         self.wallet_store.with_write_tx(|tx| {
             let mut passkey = tx
@@ -167,6 +177,11 @@ where TStore: WalletStore
                 .into_iter()
                 .find(|passkey| passkey.cred_id() == result.cred_id())
                 .ok_or(WebauthnServiceError::UnknownCredential)?;
+            let stored = Credential::from(passkey.clone()).counter;
+            let presented = result.counter();
+            if (presented > 0 || stored > 0) && presented <= stored {
+                return Err(WebauthnServiceError::CounterNotAdvanced { presented, stored });
+            }
             if passkey.update_credential(result) == Some(true) {
                 tx.webauthn_reg_update_passkey(&passkey)?;
             }
@@ -185,7 +200,7 @@ mod tests {
     use tari_ootle_wallet_storage_sqlite::SqliteWalletStore;
     use url::Url;
     use uuid::Uuid;
-    use webauthn_rs::WebauthnBuilder;
+    use webauthn_rs::{WebauthnBuilder, prelude::CredentialID};
 
     use super::*;
 
@@ -266,7 +281,7 @@ mod tests {
     }
 
     /// What `finish_passkey_authentication` reports for a ceremony by `cred_id` at `counter`.
-    fn authentication_result(cred_id: &str, counter: u32) -> AuthenticationResult {
+    fn authentication_result(cred_id: &CredentialID, counter: u32) -> AuthenticationResult {
         serde_json::from_value(serde_json::json!({
             "cred_id": cred_id,
             "needs_update": true,
@@ -279,12 +294,15 @@ mod tests {
         .unwrap()
     }
 
-    fn stored_counter(service: &WebauthnService<SqliteWalletStore>) -> u64 {
+    /// A ceremony by the enrolled credential at `counter`.
+    fn enrolled_at(counter: u32) -> AuthenticationResult {
+        authentication_result(passkey().cred_id(), counter)
+    }
+
+    fn stored_counter(service: &WebauthnService<SqliteWalletStore>) -> u32 {
         let passkeys = service.passkeys("owner".to_string()).unwrap();
         assert_eq!(passkeys.len(), 1);
-        serde_json::to_value(&passkeys[0]).unwrap()["cred"]["counter"]
-            .as_u64()
-            .unwrap()
+        Credential::from(passkeys[0].clone()).counter
     }
 
     #[tokio::test]
@@ -293,15 +311,39 @@ mod tests {
         enrol(&service, "owner").await.unwrap();
         assert_eq!(stored_counter(&service), 0);
 
-        service
-            .record_authentication(&authentication_result("AAECAwQFBgcICQoLDA0ODw", 5))
-            .unwrap();
+        service.record_authentication(&enrolled_at(5)).unwrap();
         assert_eq!(stored_counter(&service), 5);
+        service.record_authentication(&enrolled_at(6)).unwrap();
+        assert_eq!(stored_counter(&service), 6);
+    }
 
-        service
-            .record_authentication(&authentication_result("AAECAwQFBgcICQoLDA0ODw", 3))
-            .unwrap();
-        assert_eq!(stored_counter(&service), 5, "the stored counter never moves back");
+    /// A ceremony started before a later login completed checked its counter against the credential
+    /// as it stood at its start. Completing it with a counter at or below the one that login stored
+    /// is what a cloned authenticator does, and must be refused.
+    #[tokio::test]
+    async fn a_counter_at_or_below_the_stored_one_is_refused() {
+        let (service, _temp) = service();
+        enrol(&service, "owner").await.unwrap();
+        service.record_authentication(&enrolled_at(10)).unwrap();
+
+        for counter in [3, 10] {
+            let err = service.record_authentication(&enrolled_at(counter)).unwrap_err();
+            assert!(
+                matches!(err, WebauthnServiceError::CounterNotAdvanced { presented, stored: 10 } if presented == counter),
+                "{counter}: {err}"
+            );
+        }
+        assert_eq!(stored_counter(&service), 10);
+    }
+
+    #[tokio::test]
+    async fn a_credential_without_a_counter_is_not_checked() {
+        let (service, _temp) = service();
+        enrol(&service, "owner").await.unwrap();
+
+        service.record_authentication(&enrolled_at(0)).unwrap();
+        service.record_authentication(&enrolled_at(0)).unwrap();
+        assert_eq!(stored_counter(&service), 0);
     }
 
     #[tokio::test]
@@ -309,8 +351,9 @@ mod tests {
         let (service, _temp) = service();
         enrol(&service, "owner").await.unwrap();
 
+        let unknown = CredentialID::from(vec![0xff; 16]);
         let err = service
-            .record_authentication(&authentication_result("AQIDBAUGBwgJCgsMDQ4PEA", 5))
+            .record_authentication(&authentication_result(&unknown, 5))
             .unwrap_err();
         assert!(matches!(err, WebauthnServiceError::UnknownCredential));
         assert_eq!(stored_counter(&service), 0);

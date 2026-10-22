@@ -47,9 +47,10 @@ impl AllowedHosts {
 
     /// True if a request naming `host` (without a port) may be served.
     ///
-    /// An IP literal is always accepted: a browser sends one only when the page itself was loaded
-    /// from that address, so it names no domain whose resolution someone else controls. The same
-    /// holds for `localhost` and its subdomains, which resolve to loopback by definition.
+    /// An IP literal is always accepted: it names no domain whose resolution someone else controls,
+    /// so a page reaching the daemon by it is either served from that address or cross-origin and
+    /// held to CORS. The same holds for `localhost` and its subdomains, which resolve to loopback by
+    /// definition.
     pub fn permits(&self, host: &str) -> bool {
         if self.any {
             return true;
