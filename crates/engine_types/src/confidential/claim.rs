@@ -261,7 +261,7 @@ pub struct ClaimBurnOutputData {
 /// On the wire encodes as a CBOR byte string (matches the canonical bytes encoding).
 mod bounded_vec_bytes {
     use bounded_vec::BoundedVec;
-    use minicbor::{CborLen, Decoder, Encoder};
+    use minicbor::{Decoder, Encoder};
 
     pub fn encode<C, W, const LOW: usize, const HIGH: usize>(
         v: &BoundedVec<u8, LOW, HIGH>,
@@ -285,7 +285,7 @@ mod bounded_vec_bytes {
     }
 
     pub fn cbor_len<C, const LOW: usize, const HIGH: usize>(v: &BoundedVec<u8, LOW, HIGH>, ctx: &mut C) -> usize {
-        <[u8] as CborLen<C>>::cbor_len(v.as_slice(), ctx)
+        minicbor::bytes::cbor_len(v.as_slice(), ctx)
     }
 }
 
@@ -396,6 +396,19 @@ mod tests {
             path: vec![Hash32::from_array([1; 32]); path],
             peaks: vec![Hash32::from_array([2; 32]); peaks],
         }
+    }
+
+    #[test]
+    fn bounded_vec_bytes_cbor_len_matches_the_encoding() {
+        #[derive(minicbor::Encode, minicbor::CborLen)]
+        struct Wrapper(
+            #[n(0)]
+            #[cbor(with = "super::bounded_vec_bytes")]
+            bounded_vec::BoundedVec<u8, 1, 64>,
+        );
+
+        let value = Wrapper(bounded_vec::BoundedVec::<u8, 1, 64>::from_vec(vec![0xff; 64]).unwrap());
+        assert_eq!(minicbor::len(&value), tari_bor::encode(&value).unwrap().len());
     }
 
     #[test]

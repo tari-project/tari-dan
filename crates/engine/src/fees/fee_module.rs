@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_bor::{ByteCounter, encode_into_writer};
+use tari_bor::encoded_len;
 use tari_engine_types::{fees::FeeSource, substate::SubstateValue};
 use tari_template_lib::types::TemplateAddress;
 
@@ -56,7 +56,7 @@ impl FeeModule {
         &self,
         state: &mut ChargeableState<'_, TStore>,
     ) -> Result<(), RuntimeModuleError> {
-        let mut counter = ByteCounter::new();
+        let mut substate_bytes = 0usize;
         let mut template_base_bytes = 0u64;
         let mut template_charge = 0u64;
         for substate in state.substates_to_persist().values() {
@@ -73,7 +73,9 @@ impl FeeModule {
                 })?;
                 continue;
             }
-            encode_into_writer(substate, &mut counter)?;
+            substate_bytes = substate_bytes
+                .checked_add(encoded_len(substate))
+                .ok_or_else(|| RuntimeModuleError::Overflow("Overflow accumulating storage bytes".to_string()))?;
         }
 
         // Finalization persists the transaction receipt on top of the mutated substates. It carries
@@ -83,8 +85,7 @@ impl FeeModule {
         let receipt_bytes = state
             .transaction_receipt_size()
             .map_err(|e| RuntimeModuleError::Runtime(e.to_string()))?;
-        let total_storage = counter
-            .get()
+        let total_storage = substate_bytes
             .checked_add(receipt_bytes)
             .ok_or_else(|| RuntimeModuleError::Overflow("Overflow accumulating storage bytes".to_string()))?;
 
