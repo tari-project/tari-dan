@@ -5,8 +5,10 @@ use indexmap::{IndexMap, map::Entry};
 use serde::{Deserialize, Serialize};
 
 mod burn_rate_schedule;
+mod fee_scale;
 mod fee_table;
 pub use burn_rate_schedule::{ExhaustBurnRateSchedule, ExhaustBurnRateSource, resolve_exhaust_burn_rate};
+pub use fee_scale::{FeeScale, FeeScaleSchedule};
 pub use fee_table::{FeeTable, WasmMeteringRate};
 
 /// Inline literal args carry their bytes directly in the instruction, so they are priced by size,
@@ -97,6 +99,8 @@ pub struct FeeRates {
     pub input_load_bytes_cost_divisor: u64,
     /// Must be non-zero; a zero divisor reads as `1`, matching `FeeTable`.
     pub input_fanout_bytes_cost_divisor: u64,
+    /// The multiplier the engine applies to every charge priced from the rates above.
+    pub fee_scale: FeeScale,
 }
 
 impl FeeRates {
@@ -139,6 +143,12 @@ impl FeeRates {
             .saturating_mul(input_bytes)
             .saturating_mul(u64::from(input_fanout)) /
             non_zero(self.input_fanout_bytes_cost_divisor)
+    }
+
+    /// `unscaled`, a sum of charges priced from these rates, at [`Self::fee_scale`]. Rounds up, so it
+    /// is never below what the engine charges for the same terms.
+    pub fn scale_total(&self, unscaled: u64) -> u64 {
+        self.fee_scale.apply_ceil(unscaled)
     }
 }
 
@@ -510,6 +520,19 @@ impl FeeBreakdown {
 
     pub fn get(&self, source: FeeSource) -> u64 {
         self.breakdown.get(&source).copied().unwrap_or_default()
+    }
+
+    /// This breakdown with each source's charge at `scale`, rounded down. A source that scales to
+    /// zero is left absent, as [`Self::set`] leaves it.
+    pub fn scaled(&self, scale: FeeScale) -> Self {
+        if scale.is_one() {
+            return self.clone();
+        }
+        let mut scaled = Self::default();
+        for (source, amount) in self.iter() {
+            scaled.set(*source, scale.apply(*amount));
+        }
+        scaled
     }
 }
 

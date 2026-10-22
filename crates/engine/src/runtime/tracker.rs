@@ -244,8 +244,11 @@ impl<TStore: StateReader> StateTracker<TStore> {
             let unspent = fee_state.total_payments().saturating_sub(fee_state.total_charges());
             Some(ComputeAllowance {
                 // `prices_execution` above is the only case that yields no figure, so nothing here
-                // may widen the allowance by failing to produce one.
-                points: rate.points_funded_by(unspent).unwrap_or(0),
+                // may widen the allowance by failing to produce one. The rate is the fee table's, so
+                // the payment is taken back to fee-table terms before it is converted.
+                points: rate
+                    .points_funded_by(fee_state.fee_scale().unapply(unspent))
+                    .unwrap_or(0),
                 funding: ComputeFunding::Payment,
             })
         })
@@ -676,7 +679,7 @@ impl<TStore: StateReader> StateTracker<TStore> {
 
     /// A copy of the charges metered so far.
     pub fn fee_charges(&self) -> FeeBreakdown {
-        self.read_with(|state| state.fee_state().fee_charges().clone())
+        self.read_with(|state| state.fee_state().fee_charges())
     }
 
     pub fn total_fee_charges(&self) -> u64 {

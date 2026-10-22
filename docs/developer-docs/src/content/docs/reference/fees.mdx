@@ -399,6 +399,20 @@ The exhaust burn is not a source: it is settled over the total paid and recorded
 `exhaust_burn` field. `FeeSource::Reserved` holds the slot the surcharge occupied, only so receipts
 persisted before the share model still decode; nothing writes it.
 
+### The fee scale
+
+Every rate above is multiplied by the network's **fee scale**, a basis-point multiplier where
+10 000 bps charges the table as written. Every network is at 10 000 bps today. The scale moves the
+whole table at once: a release changes it by scheduling a new scale from an activation epoch
+(`FeeScaleSchedule`), so it takes effect on every validator in the same epoch.
+
+The engine scales each source's total and rounds it down. The receipt's breakdown and
+`total_fees_charged` are already scaled, so a dry run's `required_fees()` needs no adjustment.
+
+An end-of-epoch block names the scale the next epoch charges at under the `NextEpochFeeScale` header
+field. That lets a client following the signed end-of-epoch blocks learn the scale without carrying
+the schedule.
+
 ---
 
 ## Estimating what to submit

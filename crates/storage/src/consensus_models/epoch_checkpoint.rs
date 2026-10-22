@@ -9,7 +9,7 @@ use indexmap::IndexMap;
 use minicbor::{CborLen, Decode, Encode};
 use ootle_network::Network;
 use serde::{Deserialize, Serialize};
-use tari_engine_types::ProtocolVersion;
+use tari_engine_types::{ProtocolVersion, fees::FeeScale};
 use tari_ootle_common_types::{Epoch, ShardGroup, ValidatorSetHash, VotePower, shard::Shard};
 use tari_sidechain::{
     CommandCommitProof,
@@ -80,6 +80,13 @@ impl EpochCheckpoint {
     /// must treat `None` as a failure.
     pub fn next_epoch_validator_set_hash(&self) -> Option<ValidatorSetHash> {
         self.header_metadata.as_ref()?.next_epoch_validator_set_hash()
+    }
+
+    /// The fee scale the end-of-epoch block names for the next epoch, read from [`Self::header_metadata`]. It is the
+    /// committed value only once the checkpoint validates, and `None` proves nothing, for the reason
+    /// [`Self::next_epoch_validator_set_hash`] gives.
+    pub fn next_epoch_fee_scale(&self) -> Option<FeeScale> {
+        self.header_metadata.as_ref()?.next_epoch_fee_scale()
     }
 
     pub fn proof(&self) -> &CommandCommitProof<EndOfEpochCommand> {

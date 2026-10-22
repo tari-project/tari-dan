@@ -15,7 +15,7 @@ use tari_consensus_types::{
     TimeoutCertificate,
 };
 use tari_crypto::tari_utilities::epoch_time::EpochTime;
-use tari_engine_types::commit_result::RejectReason;
+use tari_engine_types::{commit_result::RejectReason, fees::FeeScaleSchedule};
 use tari_epoch_manager::EpochManagerReader;
 use tari_ootle_common_types::{
     Epoch,
@@ -754,17 +754,22 @@ where TConsensusSpec: ConsensusSpec
         // additionally names the rate the next epoch opens at: that is the value the quorum committing it
         // ratifies, and the next epoch's genesis block carries it forward from there. It also names the next
         // epoch's validator set hash, which the same quorum ratifies, so that each end-of-epoch block hands the
-        // chain over from one epoch's committees to the next.
+        // chain over from one epoch's committees to the next, and the fee scale the next epoch charges at.
         let mut extra_data = ExtraData::new();
         extra_data.insert_bps(
             ExtraFieldKey::ExhaustBurnRate,
             highest_seen_block.exhaust_burn_rate().as_bps(),
         );
         if let Some(end_epoch) = end_epoch {
-            let next_epoch_rate = resolve_epoch_exhaust_burn_rate(tx, self.config.network, epoch + Epoch(1))?;
+            let next_epoch = epoch + Epoch(1);
+            let next_epoch_rate = resolve_epoch_exhaust_burn_rate(tx, self.config.network, next_epoch)?;
             extra_data
                 .insert_bps(ExtraFieldKey::NextEpochExhaustBurnRate, next_epoch_rate.as_bps())
-                .insert_validator_set_hash(ExtraFieldKey::NextEpochValidatorSetHash, &end_epoch.validator_set_hash);
+                .insert_validator_set_hash(ExtraFieldKey::NextEpochValidatorSetHash, &end_epoch.validator_set_hash)
+                .insert_bps(
+                    ExtraFieldKey::NextEpochFeeScale,
+                    FeeScaleSchedule::at(self.config.network, next_epoch).as_bps(),
+                );
         }
 
         let mut header = BlockHeader::create_unsigned(

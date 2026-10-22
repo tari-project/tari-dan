@@ -310,6 +310,28 @@ pub enum ProposalValidationError {
         invalid_rate_bps: u16,
     },
 
+    #[error(
+        "End-of-epoch block {block_id} does not name the fee scale {next_epoch} charges at, which is \
+         {local_scale_bps}bps here"
+    )]
+    EndOfEpochBlockNamesNoFeeScale {
+        block_id: BlockId,
+        next_epoch: Epoch,
+        local_scale_bps: u16,
+    },
+    #[error(
+        "End-of-epoch block {block_id} names a fee scale of {proposed_scale_bps}bps for {next_epoch}, which this \
+         release schedules at {local_scale_bps}bps"
+    )]
+    InvalidNextEpochFeeScale {
+        block_id: BlockId,
+        next_epoch: Epoch,
+        local_scale_bps: u16,
+        proposed_scale_bps: u16,
+    },
+    #[error("Block {block_id} names a next-epoch fee scale but does not end its epoch")]
+    FeeScaleOutsideEndOfEpoch { block_id: BlockId },
+
     #[error("Foreign node in {shard_group} submitted invalid proposal for block {block_id}: {details}")]
     ForeignProposalInvalid {
         block_id: BlockId,

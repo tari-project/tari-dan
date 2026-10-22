@@ -88,7 +88,7 @@
 //! is a share of what a transaction paid, split off at settlement between leaders and the burn, so it neither
 //! raises what a transaction is charged nor enters a fee estimate.
 
-use tari_engine_types::fees::{FeeRates, FeeTable};
+use tari_engine_types::fees::{FeeRates, FeeScaleSchedule, FeeTable};
 use tari_ootle_transaction::Network;
 
 /// The fee table every network runs on.
@@ -180,9 +180,10 @@ pub const fn get_fee_table_by_network(network: Network) -> &'static FeeTable {
     }
 }
 
-/// The rates a static estimate of a transaction's cost on `network` is computed from.
+/// The rates a static estimate of a transaction's cost on `network` is computed from, at the newest
+/// fee scale this release schedules for it (see [`FeeScaleSchedule::latest`]).
 pub fn fee_rates_by_network(network: Network) -> FeeRates {
-    get_fee_table_by_network(network).to_rates()
+    get_fee_table_by_network(network).to_rates(FeeScaleSchedule::latest(network))
 }
 
 #[cfg(test)]
@@ -202,16 +203,19 @@ mod tests {
     ];
 
     /// `FEE_ESTIMATE_ALLOWANCE` is restated in `tari_engine_types`, which cannot see a `FeeTable`.
-    /// Every shipped table must come in under it, or a dry run under-states what a real submission
-    /// costs.
+    /// Every shipped table must come in under it at every fee scale its network is scheduled at, or
+    /// a dry run under-states what a real submission costs.
     #[test]
     fn fee_estimate_allowance_covers_every_shipped_network() {
         for network in NETWORKS {
-            let derived = get_fee_table_by_network(network).fee_estimate_allowance();
-            assert!(
-                derived <= FEE_ESTIMATE_ALLOWANCE,
-                "{network} needs an allowance of {derived}, above the restated {FEE_ESTIMATE_ALLOWANCE}"
-            );
+            for scale in FeeScaleSchedule::scheduled(network) {
+                let derived = get_fee_table_by_network(network).fee_estimate_allowance_at(scale);
+                assert!(
+                    derived <= FEE_ESTIMATE_ALLOWANCE,
+                    "{network} at {}bps needs an allowance of {derived}, above the restated {FEE_ESTIMATE_ALLOWANCE}",
+                    scale.as_bps()
+                );
+            }
         }
     }
 }
