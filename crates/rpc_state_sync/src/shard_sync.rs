@@ -344,8 +344,23 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
     /// True if the shard's local state at `version` is the checkpoint's: the same root reached through the same
     /// transitions.
     pub fn local_state_matches_checkpoint(&self, version: Option<Version>) -> Result<bool, RpcStateSyncError> {
-        Ok(self.local_state_root(version)? == self.checkpoint_shard_root &&
-            self.local_transition_acc(version)? == self.checkpoint_transition_acc)
+        self.store
+            .with_read_tx(|tx| self.state_matches_checkpoint_in(tx, version))
+    }
+
+    fn state_matches_checkpoint_in<TTx: StateStoreReadTransaction>(
+        &self,
+        tx: &TTx,
+        version: Option<Version>,
+    ) -> Result<bool, RpcStateSyncError> {
+        if calculate_state_root_for_shard(tx, self.shard, version)? != self.checkpoint_shard_root {
+            return Ok(false);
+        }
+        let transition_acc = match version {
+            Some(version) => tx.state_transitions_get_accumulator(self.shard, version)?,
+            None => TransitionAccumulator::zero(),
+        };
+        Ok(transition_acc == self.checkpoint_transition_acc)
     }
 
     /// Rewinds the versions of the shard that an earlier sync committed but never verified against its checkpoint,
@@ -360,7 +375,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
             let mut rewind_point = tx.state_sync_rewind_point_get(shard)?;
             if let Some((_, created_at)) = tx.state_sync_missing_values_get_earliest(shard, 0)? {
                 let latest = tx.state_tree_versions_get_latest(shard)?;
-                if calculate_state_root_for_shard(&**tx, shard, latest)? == self.checkpoint_shard_root {
+                if self.state_matches_checkpoint_in(&**tx, latest)? {
                     let below_creation = created_at.saturating_sub(1);
                     rewind_point = Some(rewind_point.map_or(below_creation, |point| point.min(below_creation)));
                 }

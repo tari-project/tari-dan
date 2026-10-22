@@ -741,7 +741,7 @@ impl Block {
                 "🌳 COMMIT block {} with no substate change(s)", self
             );
 
-            // No diff to commit
+            self.check_transition_accumulators(&**tx, version_updates)?;
             return Ok(vec![]);
         };
 
@@ -795,22 +795,35 @@ impl Block {
             })?;
 
         let downed = batch.downed_iter().collect();
-        let accumulators = SubstateRecord::commit_batch(tx, batch)?;
-        for ((shard, state_version), transition_acc) in accumulators {
-            let committed = version_updates.get(&shard).map(|committed| committed.transition_acc);
-            if committed != Some(transition_acc) {
+        SubstateRecord::commit_batch(tx, batch)?;
+        self.check_transition_accumulators(&**tx, version_updates)?;
+
+        Ok(downed)
+    }
+
+    /// Checks that every shard the block's tree diffs moved holds, in its committed transitions, the accumulator its
+    /// state merkle root commits. The leaf of a shard whose transitions did not all reach the store would commit an
+    /// accumulator no record holds, and every later block would extend from the stored one.
+    fn check_transition_accumulators<TTx: StateStoreReadTransaction>(
+        &self,
+        tx: &TTx,
+        version_updates: &HashMap<Shard, CommittedShardVersion>,
+    ) -> Result<(), StorageError> {
+        for (shard, committed) in version_updates {
+            let stored = tx.state_transitions_get_accumulator(*shard, committed.version)?;
+            if stored != committed.transition_acc {
                 return Err(StorageError::DataInconsistency {
                     details: format!(
-                        "Transitions of {shard} at v{state_version} committed by block {} extend the transition \
-                         accumulator to {transition_acc}, but its state merkle root commits {}",
+                        "The transitions of {shard} at v{} committed by block {} extend the transition accumulator to \
+                         {stored}, but its state merkle root commits {}",
+                        committed.version,
                         self.id(),
-                        committed.display()
+                        committed.transition_acc
                     ),
                 });
             }
         }
-
-        Ok(downed)
+        Ok(())
     }
 
     pub fn get_diff<TTx: StateStoreReadTransaction>(&self, tx: &TTx) -> Result<BlockDiff, StorageError> {
