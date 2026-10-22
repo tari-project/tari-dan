@@ -1869,6 +1869,18 @@ mod tests {
         checkpoint_epoch: Epoch,
         responses: Vec<Result<SyncStateResponse, RpcStatus>>,
     ) -> Result<Option<Version>, RpcStateSyncError> {
+        sync_with_proofs_against(store, checkpoint, acc_after(checkpoint), checkpoint_epoch, responses).await
+    }
+
+    /// [`sync_with_proofs_at`] against a checkpoint whose accumulator is `checkpoint_acc`, for versions committed at
+    /// epochs other than [`EPOCH`]: a destroy leaves the root alone but its epoch is bound into the accumulator.
+    async fn sync_with_proofs_against<TStore: StateStore>(
+        store: &TStore,
+        checkpoint: &Versions,
+        checkpoint_acc: TransitionAccumulator,
+        checkpoint_epoch: Epoch,
+        responses: Vec<Result<SyncStateResponse, RpcStatus>>,
+    ) -> Result<Option<Version>, RpcStateSyncError> {
         let validator = AcceptAll;
         let sync = ShardSync::new(
             NETWORK,
@@ -1876,7 +1888,7 @@ mod tests {
             store,
             shard(),
             root_after(checkpoint),
-            acc_after(checkpoint),
+            checkpoint_acc,
             version_after(checkpoint),
             checkpoint_epoch,
             UP_VERSION_LOOKBACK,
@@ -2113,7 +2125,8 @@ mod tests {
         assert!(substate(&store, HONEST).is_some_and(|s| s.is_up()));
 
         let (store, _tmp) = create_store();
-        sync_with_proofs_at(&store, &checkpoint, later_epoch, responses(later_epoch))
+        let checkpoint_acc = acc_after_at(&checkpoint, |version| if version == 2 { later_epoch } else { EPOCH });
+        sync_with_proofs_against(&store, &checkpoint, checkpoint_acc, later_epoch, responses(later_epoch))
             .await
             .unwrap();
         assert_eq!(local_version(&store), Some(2));
