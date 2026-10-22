@@ -110,7 +110,7 @@ pub(crate) fn build_default_store_opts(options: &DatabaseOptions) -> (rocksdb::O
     // they belong inside the shared cache where they are accounted for and evictable.
     bb_opts.set_cache_index_and_filter_blocks(true);
     bb_opts.set_pin_l0_filter_and_index_blocks_in_cache(true);
-    bb_opts.set_format_version(6);
+    bb_opts.set_format_version(7);
     bb_opts.set_ribbon_filter(10.0);
     bb_opts.set_optimize_filters_for_memory(true);
     bb_opts.set_block_cache(budget.cache());

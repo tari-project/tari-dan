@@ -11,7 +11,7 @@
 //! Not every term is enforced the same way. The queues drop on arrival, so they are hard. The state
 //! store enforces by triggering flushes and evicting, so it is a soft ceiling: memtable memory can
 //! run past its share by as much as the buffers already in flight while those flushes complete, and
-//! an LRU cache admits before it evicts. The overshoot is bounded — it is a multiple of
+//! the block cache admits before it evicts. The overshoot is bounded — it is a multiple of
 //! `write_buffer_bytes`, not of traffic — but "cap" here means "the level enforcement acts at", not
 //! "a level allocation cannot reach".
 //!
