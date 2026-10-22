@@ -6,7 +6,7 @@ use minicbor::{CborLen, Decode, Encode};
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PrivateKey;
 use tari_crypto::{ristretto::RistrettoPublicKey, signatures::SchnorrSignature};
-use tari_hashing::ValidatorNodeHashDomain;
+use tari_sidechain::hashing::ValidatorNodeHashDomain;
 use tari_template_lib::types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
 
 pub type ValidatorSchnorrSignature = SchnorrSignature<RistrettoPublicKey, PrivateKey, ValidatorNodeHashDomain>;
