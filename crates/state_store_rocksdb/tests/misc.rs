@@ -27,7 +27,7 @@ use tari_ootle_storage::{
 use tari_ootle_transaction::Network;
 use tari_sidechain::{CommandCommitProof, FixedHash, QuorumDecision, SidechainBlockCommitProof, SidechainBlockHeader};
 use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
-use tari_state_tree::{TreeHash, compute_proof_for_hashes};
+use tari_state_tree::{TransitionAccumulator, TreeHash, compute_proof_for_hashes};
 use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
 
 use crate::helpers::num_preshards;
@@ -168,6 +168,7 @@ fn miscellaneous_rocksdb() {
     shard_summary.insert(shard_group.start(), TreeRootSummary {
         root_hash: TreeHash::zero(),
         state_version: 0,
+        transition_acc: TransitionAccumulator::zero(),
     });
     let key = TreeHash::new([1; 32]);
     let (_, inclusion_proof) = compute_proof_for_hashes([key].into_iter(), key).unwrap();

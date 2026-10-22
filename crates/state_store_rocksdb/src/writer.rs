@@ -101,7 +101,16 @@ use tari_ootle_storage::{
     time,
 };
 use tari_ootle_transaction::TransactionId;
-use tari_state_tree::{Children, Node, NodeKey, NodeType, StaleTreeNode, StateTreePayload, Version};
+use tari_state_tree::{
+    Children,
+    Node,
+    NodeKey,
+    NodeType,
+    StaleTreeNode,
+    StateTreePayload,
+    TransitionAccumulator,
+    Version,
+};
 
 use crate::{
     block_diff_table::BlockDiffEntry,
@@ -1313,7 +1322,10 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         self.remove_block_lock_set(block_id, OPERATION)
     }
 
-    fn substates_commit_batch(&mut self, update_batch: SubstateUpdateBatch) -> Result<(), StorageError> {
+    fn substates_commit_batch(
+        &mut self,
+        update_batch: SubstateUpdateBatch,
+    ) -> Result<IndexMap<(Shard, Version), TransitionAccumulator>, StorageError> {
         const OPERATION: &str = "substates_commit_batch";
 
         let db = self.db();
@@ -1321,9 +1333,26 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         let cf = db.cf(SubstateCf)?;
         let head_cf = db.cf(substate::HeadIndex)?;
         let unpruned_cf = db.cf(substate::UnprunedDownedValuesIndex)?;
+        let mut accumulators = IndexMap::new();
 
         for (shard, updates) in update_batch.updates {
             for (state_version, updates) in updates {
+                // The record of a version with no transition is never written, so the accumulator below this version
+                // is that of the shard's last transition record, whatever version it is at.
+                let previous_acc = match state_version.checked_sub(1) {
+                    Some(below) => self.state_transitions_get_accumulator(shard, below)?,
+                    None => TransitionAccumulator::zero(),
+                };
+                let tree_changes = updates
+                    .iter()
+                    .map(|transition| transition.to_tree_change(update_batch.network, update_batch.epoch))
+                    .collect::<Vec<_>>();
+                let transition_acc = previous_acc
+                    .extend(update_batch.epoch, state_version, &tree_changes)
+                    .map_err(|e| StorageError::DataInconsistency {
+                        details: format!("substates_commit_batch: {shard} at v{state_version}: {e}"),
+                    })?;
+
                 let mut transitions = Vec::with_capacity(updates.len());
                 let mut downed_substate_addresses = vec![];
 
@@ -1395,14 +1424,16 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
                     epoch: update_batch.epoch,
                     state_version,
                     transitions,
+                    transition_acc,
                 };
 
                 db.cf(StateTransitionCf)?
                     .put(&(shard, state_version), &transition, OPERATION)?;
+                accumulators.insert((shard, state_version), transition_acc);
             }
         }
 
-        Ok(())
+        Ok(accumulators)
     }
 
     fn substates_prune_downed_values(&mut self, epoch: Epoch, limit: usize) -> Result<usize, StorageError> {

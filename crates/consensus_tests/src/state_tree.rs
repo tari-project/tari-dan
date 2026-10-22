@@ -268,12 +268,16 @@ fn assert_state_versions_are_provable<TTx: StateStoreReadTransaction>(
             let shard_root = SpreadPrefixStateTree::new(&mut store)
                 .get_root_hash(proof.state_version)
                 .unwrap();
+            let transition_acc = tx
+                .state_transitions_get_accumulator(shard, proof.state_version)
+                .unwrap();
             verify_state_version_leaf(
                 Network::LocalNet,
                 &commit_proof,
                 shard,
                 proof.state_version,
                 &shard_root,
+                &transition_acc,
                 &proof.shard_root_proof,
             )
             .unwrap();

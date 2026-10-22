@@ -19,6 +19,7 @@ use tari_state_tree::{
     JmtHashScheme,
     SPARSE_MERKLE_PLACEHOLDER_HASH,
     SpreadPrefixStateTree,
+    TransitionAccumulator,
     TreeHash,
     Version,
     compute_shard_group_root,
@@ -35,11 +36,12 @@ fn shard_states(tx: &impl StateStoreReadTransaction, shard_group: ShardGroup) ->
         .shard_iter_with_global()
         .map(|shard| {
             let Some(version) = tx.state_tree_versions_get_latest(shard).unwrap() else {
-                return (shard, SPARSE_MERKLE_PLACEHOLDER_HASH, 0);
+                return (shard, SPARSE_MERKLE_PLACEHOLDER_HASH, 0, TransitionAccumulator::zero());
             };
             let mut store = ShardScopedTreeStoreReader::new(tx, shard);
             let root = SpreadPrefixStateTree::new(&mut store).get_root_hash(version).unwrap();
-            (shard, root, version)
+            let acc = tx.state_transitions_get_accumulator(shard, version).unwrap();
+            (shard, root, version, acc)
         })
         .collect()
 }

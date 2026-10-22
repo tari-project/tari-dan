@@ -12,6 +12,7 @@ use tari_state_tree::{
     SpreadPrefixStateTree,
     SubstateDownProof,
     SubstateValueProof,
+    TransitionAccumulator,
     TreeHash,
     Version,
 };
@@ -48,6 +49,8 @@ pub struct SubstateDownProofRecord {
     pub leaf_proof: SparseMerkleProofExt,
     /// The shard root at `u`.
     pub shard_root: TreeHash,
+    /// The shard's transition accumulator at `u`.
+    pub transition_acc: TransitionAccumulator,
     /// Level-2 proof of the shard's leaf in the state merkle root of the block that committed `u`.
     pub shard_root_proof: SparseMerkleProofExt,
 }
@@ -61,6 +64,7 @@ impl SubstateDownProofRecord {
             up: SubstateValueProof::new(
                 self.shard_root,
                 self.state_version,
+                self.transition_acc,
                 self.shard_root_proof,
                 self.leaf_proof,
             ),
@@ -210,6 +214,7 @@ impl<F> UpVersionSources<F> {
                 value_hash,
                 leaf_proof,
                 shard_root,
+                transition_acc: tx.state_transitions_get_accumulator(downed.shard, state_version)?,
                 shard_root_proof: candidate.shard_root_proof,
             }));
         }

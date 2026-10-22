@@ -1387,6 +1387,8 @@ mod tests {
     use super::*;
     use crate::substate_cache::{FetchWatermark, SubstateCacheError};
 
+    const ZERO_ACC: tari_state_tree::TransitionAccumulator = tari_state_tree::TransitionAccumulator::zero();
+
     type Addr = String;
 
     /// A single-member network holding `live` and answering batches for all of it except `omitted_from_batches`,
@@ -2005,6 +2007,7 @@ mod tests {
     /// vouches for both roots but not for the heights their headers claim, so the heights must come from validated
     /// commit proofs, which these unsigned ones are not.
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn a_down_proof_with_forged_heights_is_rejected_even_for_trusted_roots() {
         use tari_ootle_common_types::{ToSubstateAddress, VersionedSubstateId};
         use tari_state_tree::{
@@ -2043,8 +2046,9 @@ mod tests {
                     tari_ootle_common_types::shard::Shard::global(),
                     SPARSE_MERKLE_PLACEHOLDER_HASH,
                     0,
+                    ZERO_ACC,
                 ),
-                (shard, root, version),
+                (shard, root, version, ZERO_ACC),
             ])
             .unwrap()
         };
@@ -2055,10 +2059,22 @@ mod tests {
         let (_, _, early_leaf) = SpreadPrefixStateTree::new(&mut store).get_proof(1, &live).unwrap();
         let down_commit_proof = unsigned_commit_proof(shard_group, 10, early.root());
         let down_proof = tari_bor::serde_codec::to_vec(&SubstateDownProof {
-            up: SubstateValueProof::new(late_shard_root, 2, late.get_proof(shard).unwrap().1, late_leaf),
+            up: SubstateValueProof::new(
+                late_shard_root,
+                2,
+                ZERO_ACC,
+                late.get_proof(shard).unwrap().1,
+                late_leaf,
+            ),
             up_value_hash: value.unwrap().0,
             up_commit_proof: unsigned_commit_proof(shard_group, 1, late.root()),
-            down: SubstateValueProof::new(early_shard_root, 1, early.get_proof(shard).unwrap().1, early_leaf),
+            down: SubstateValueProof::new(
+                early_shard_root,
+                1,
+                ZERO_ACC,
+                early.get_proof(shard).unwrap().1,
+                early_leaf,
+            ),
         })
         .unwrap();
 
@@ -2144,8 +2160,9 @@ mod tests {
         let r2_shard_root = SpreadPrefixStateTree::new(&mut store)
             .put_substate_changes(Some(1), 2, vec![SubstateTreeChange::Down { id: target.clone() }])
             .unwrap();
-        let tree =
-            |root, version| ShardGroupRootTree::build(protocol_version, [(Shard::global(), root, version)]).unwrap();
+        let tree = |root, version| {
+            ShardGroupRootTree::build(protocol_version, [(Shard::global(), root, version, ZERO_ACC)]).unwrap()
+        };
         let r1 = tree(r1_shard_root, 1);
         let r2 = tree(r2_shard_root, 2);
         let (_, value, up_leaf) = SpreadPrefixStateTree::new(&mut store).get_proof(1, &target).unwrap();
@@ -2159,10 +2176,22 @@ mod tests {
             &CommittedBlockProof::from_bytes(&up_commit_proof).unwrap(),
         ));
         let proof = tari_bor::serde_codec::to_vec(&SubstateDownProof {
-            up: SubstateValueProof::new(r1_shard_root, 1, r1.get_proof(Shard::global()).unwrap().1, up_leaf),
+            up: SubstateValueProof::new(
+                r1_shard_root,
+                1,
+                ZERO_ACC,
+                r1.get_proof(Shard::global()).unwrap().1,
+                up_leaf,
+            ),
             up_value_hash: value.unwrap().0,
             up_commit_proof,
-            down: SubstateValueProof::new(r2_shard_root, 2, r2.get_proof(Shard::global()).unwrap().1, down_leaf),
+            down: SubstateValueProof::new(
+                r2_shard_root,
+                2,
+                ZERO_ACC,
+                r2.get_proof(Shard::global()).unwrap().1,
+                down_leaf,
+            ),
         })
         .unwrap();
         (id, proof, up_root, r2.root())
@@ -2987,13 +3016,14 @@ mod tests {
         let tree = ShardGroupRootTree::build(
             tari_engine_types::ProtocolVersion::at(Network::LocalNet, PROOF_EPOCH),
             [
-                (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0),
-                (shard, shard_root, 1),
+                (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0, ZERO_ACC),
+                (shard, shard_root, 1, ZERO_ACC),
             ],
         )
         .unwrap();
         let (_, _, leaf_proof) = SpreadPrefixStateTree::new(&mut store).get_proof(1, &versioned).unwrap();
-        let value_proof = SubstateValueProof::new(shard_root, 1, tree.get_proof(shard).unwrap().1, leaf_proof);
+        let value_proof =
+            SubstateValueProof::new(shard_root, 1, ZERO_ACC, tree.get_proof(shard).unwrap().1, leaf_proof);
         (
             substate,
             tari_bor::serde_codec::to_vec(&value_proof).unwrap(),

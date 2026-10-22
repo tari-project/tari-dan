@@ -99,7 +99,7 @@ use tari_ootle_storage::{
     time::PrimitiveDateTime,
 };
 use tari_ootle_transaction::TransactionId;
-use tari_state_tree::{Node, NodeKey, StateTreePayload, Version};
+use tari_state_tree::{Node, NodeKey, StateTreePayload, TransitionAccumulator, Version};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{
@@ -1892,6 +1892,25 @@ impl<'tx, TAddr: NodeAddressable + Serialize + DeserializeOwned + 'tx, R: RocksR
             .next()
             .transpose()?;
         Ok(latest.map(|(_, data)| data.epoch))
+    }
+
+    fn state_transitions_get_accumulator(
+        &self,
+        shard: Shard,
+        state_version: Version,
+    ) -> Result<TransitionAccumulator, StorageError> {
+        const OPERATION: &str = "state_transitions_get_accumulator";
+
+        let transitions_cf = self.db().cf(state_transition::StateTransitionCf)?;
+        if let Some(data) = transitions_cf.get(&(shard, state_version), OPERATION).optional()? {
+            return Ok(data.transition_acc);
+        }
+        let query = self.db().cf(state_transition::ByShardAndStateVersionQuery)?;
+        let latest = query
+            .query_range_iterator(Ordering::Descending, (shard, 0)..(shard, state_version))
+            .next()
+            .transpose()?;
+        Ok(latest.map_or_else(TransitionAccumulator::zero, |(_, data)| data.transition_acc))
     }
 
     fn state_tree_nodes_get(&self, shard: Shard, key: &NodeKey) -> Result<Node<StateTreePayload>, StorageError> {

@@ -14,9 +14,17 @@ use tari_jellyfish::{
     Version,
 };
 use tari_ootle_common_types::{NumPreshards, ToSubstateAddress, VersionedSubstateId, shard::Shard};
-use tari_state_tree::{ShardGroupRootTree, StateTreeError, compute_shard_group_root, memory_store::MemoryTreeStore};
+use tari_state_tree::{
+    ShardGroupRootTree,
+    StateTreeError,
+    TransitionAccumulator,
+    compute_shard_group_root,
+    memory_store::MemoryTreeStore,
+};
 
 use crate::support::{HashTreeTester, change, hash_value_from_seed, make_value};
+
+const ZERO_ACC: TransitionAccumulator = TransitionAccumulator::zero();
 mod support;
 
 #[test]
@@ -249,9 +257,9 @@ fn shard_group_root_and_proof(
 ) -> (TreeHash, SparseMerkleProofExt) {
     let shard = substate.to_shard(NUM_PRESHARDS);
     let tree = ShardGroupRootTree::build(protocol_version, [
-        (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0),
-        (shard, shard_root, state_version),
-        (sibling_of(shard), hash_value_from_seed(99), 5),
+        (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0, ZERO_ACC),
+        (shard, shard_root, state_version, ZERO_ACC),
+        (sibling_of(shard), hash_value_from_seed(99), 5, ZERO_ACC),
     ])
     .unwrap();
     let (_, shard_root_proof) = tree.get_proof(shard).unwrap();
@@ -261,8 +269,8 @@ fn shard_group_root_and_proof(
 #[test]
 fn a_shard_listed_twice_is_rejected() {
     let result = compute_shard_group_root(ProtocolVersion::V0, [
-        (Shard::from_u32(1), hash_value_from_seed(1), 1),
-        (Shard::from_u32(1), hash_value_from_seed(2), 2),
+        (Shard::from_u32(1), hash_value_from_seed(1), 1, ZERO_ACC),
+        (Shard::from_u32(1), hash_value_from_seed(2), 2, ZERO_ACC),
     ]);
     assert!(
         matches!(
@@ -278,13 +286,13 @@ fn shard_group_root_commits_to_the_shard_of_each_root() {
     let a = hash_value_from_seed(1);
     let b = hash_value_from_seed(2);
     let root = compute_shard_group_root(ProtocolVersion::V0, [
-        (Shard::from_u32(1), a, 1),
-        (Shard::from_u32(2), b, 1),
+        (Shard::from_u32(1), a, 1, ZERO_ACC),
+        (Shard::from_u32(2), b, 1, ZERO_ACC),
     ])
     .unwrap();
     let swapped = compute_shard_group_root(ProtocolVersion::V0, [
-        (Shard::from_u32(1), b, 1),
-        (Shard::from_u32(2), a, 1),
+        (Shard::from_u32(1), b, 1, ZERO_ACC),
+        (Shard::from_u32(2), a, 1, ZERO_ACC),
     ])
     .unwrap();
     assert_ne!(root, swapped);
@@ -295,17 +303,18 @@ fn empty_shard_has_no_leaf_in_the_shard_group_root() {
     let root = hash_value_from_seed(1);
     assert_eq!(
         compute_shard_group_root(ProtocolVersion::V0, [
-            (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0),
-            (Shard::first(), root, 1)
+            (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0, ZERO_ACC),
+            (Shard::first(), root, 1, ZERO_ACC)
         ])
         .unwrap(),
-        compute_shard_group_root(ProtocolVersion::V0, [(Shard::first(), root, 1)]).unwrap()
+        compute_shard_group_root(ProtocolVersion::V0, [(Shard::first(), root, 1, ZERO_ACC)]).unwrap()
     );
     assert_eq!(
         compute_shard_group_root(ProtocolVersion::V0, [(
             Shard::global(),
             SPARSE_MERKLE_PLACEHOLDER_HASH,
-            0
+            0,
+            ZERO_ACC
         )])
         .unwrap(),
         SPARSE_MERKLE_PLACEHOLDER_HASH
@@ -316,7 +325,8 @@ fn empty_shard_has_no_leaf_in_the_shard_group_root() {
         compute_shard_group_root(ProtocolVersion::V0, [(
             Shard::first(),
             SPARSE_MERKLE_PLACEHOLDER_HASH,
-            3
+            3,
+            ZERO_ACC
         )])
         .unwrap(),
         SPARSE_MERKLE_PLACEHOLDER_HASH
@@ -339,8 +349,8 @@ fn assert_substate_in_an_empty_shard_is_provably_absent(protocol_version: Protoc
     let (_, _, empty_leaf_proof) = SpreadPrefixStateTree::new(&mut empty).get_proof(1, &substate).unwrap();
 
     let empty_group = ShardGroupRootTree::build(protocol_version, [
-        (own_shard, SPARSE_MERKLE_PLACEHOLDER_HASH, 0),
-        (sibling_shard, hash_value_from_seed(99), 1),
+        (own_shard, SPARSE_MERKLE_PLACEHOLDER_HASH, 0, ZERO_ACC),
+        (sibling_shard, hash_value_from_seed(99), 1, ZERO_ACC),
     ])
     .unwrap();
     let (value, absent_proof) = empty_group.get_proof(own_shard).unwrap();
@@ -348,6 +358,7 @@ fn assert_substate_in_an_empty_shard_is_provably_absent(protocol_version: Protoc
     SubstateValueProof::new(
         SPARSE_MERKLE_PLACEHOLDER_HASH,
         0,
+        ZERO_ACC,
         absent_proof,
         empty_leaf_proof.clone(),
     )
@@ -364,14 +375,15 @@ fn assert_substate_in_an_empty_shard_is_provably_absent(protocol_version: Protoc
     // when every substate in it has gone down.
     for own_state in [(hash_value_from_seed(1), 1), (SPARSE_MERKLE_PLACEHOLDER_HASH, 3)] {
         let populated_group = ShardGroupRootTree::build(protocol_version, [
-            (own_shard, own_state.0, own_state.1),
-            (sibling_shard, hash_value_from_seed(99), 1),
+            (own_shard, own_state.0, own_state.1, ZERO_ACC),
+            (sibling_shard, hash_value_from_seed(99), 1, ZERO_ACC),
         ])
         .unwrap();
         let (_, present_proof) = populated_group.get_proof(own_shard).unwrap();
         SubstateValueProof::new(
             SPARSE_MERKLE_PLACEHOLDER_HASH,
             0,
+            ZERO_ACC,
             present_proof,
             empty_leaf_proof.clone(),
         )
@@ -416,7 +428,7 @@ fn two_level_substate_inclusion_proof() {
     // Level 2: shard root within the shard-group root.
     let (group_root, shard_root_proof) = shard_group_root_and_proof(ProtocolVersion::V0, &make_value(2), shard_root, 3);
 
-    let proof = SubstateValueProof::new(shard_root, 3, shard_root_proof, leaf_proof);
+    let proof = SubstateValueProof::new(shard_root, 3, ZERO_ACC, shard_root_proof, leaf_proof);
 
     // Verifies against the trusted group root.
     proof
@@ -485,7 +497,7 @@ fn two_level_substate_exclusion_proof() {
     assert!(proof_value.is_none());
 
     let (group_root, shard_root_proof) = shard_group_root_and_proof(ProtocolVersion::V0, &make_value(4), shard_root, 3);
-    let proof = SubstateValueProof::new(shard_root, 3, shard_root_proof, leaf_proof);
+    let proof = SubstateValueProof::new(shard_root, 3, ZERO_ACC, shard_root_proof, leaf_proof);
 
     // The absent substate is provably absent under the trusted group root...
     proof
@@ -539,9 +551,9 @@ fn assert_exclusion_proof_against_another_shards_root_is_rejected(protocol_versi
     let (_, _, empty_leaf_proof) = SpreadPrefixStateTree::new(&mut empty).get_proof(1, &substate).unwrap();
 
     let tree = ShardGroupRootTree::build(protocol_version, [
-        (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0),
-        (own_shard, own_root, 1),
-        (sibling_shard, sibling_root, 1),
+        (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0, ZERO_ACC),
+        (own_shard, own_root, 1, ZERO_ACC),
+        (sibling_shard, sibling_root, 1, ZERO_ACC),
     ])
     .unwrap();
     let group_root = tree.root();
@@ -551,7 +563,7 @@ fn assert_exclusion_proof_against_another_shards_root_is_rejected(protocol_versi
 
     // The substate is present in its own shard.
     let (_, proof_value, own_leaf_proof) = SpreadPrefixStateTree::new(&mut own).get_proof(1, &substate).unwrap();
-    SubstateValueProof::new(own_root, 1, own_root_proof.clone(), own_leaf_proof)
+    SubstateValueProof::new(own_root, 1, ZERO_ACC, own_root_proof.clone(), own_leaf_proof)
         .verify_inclusion(
             JmtHashScheme::V1,
             protocol_version,
@@ -563,17 +575,23 @@ fn assert_exclusion_proof_against_another_shards_root_is_rejected(protocol_versi
         .unwrap();
 
     // A sibling shard's root, with the proof of its own place in the group root.
-    SubstateValueProof::new(sibling_root, 1, sibling_root_proof, sibling_leaf_proof.clone())
-        .verify_exclusion(
-            JmtHashScheme::V1,
-            protocol_version,
-            &group_root,
-            NUM_PRESHARDS,
-            &substate,
-        )
-        .unwrap_err();
+    SubstateValueProof::new(
+        sibling_root,
+        1,
+        ZERO_ACC,
+        sibling_root_proof,
+        sibling_leaf_proof.clone(),
+    )
+    .verify_exclusion(
+        JmtHashScheme::V1,
+        protocol_version,
+        &group_root,
+        NUM_PRESHARDS,
+        &substate,
+    )
+    .unwrap_err();
     // A sibling shard's root, with the proof of the substate's shard's place in the group root.
-    SubstateValueProof::new(sibling_root, 1, own_root_proof, sibling_leaf_proof)
+    SubstateValueProof::new(sibling_root, 1, ZERO_ACC, own_root_proof, sibling_leaf_proof)
         .verify_exclusion(
             JmtHashScheme::V1,
             protocol_version,
@@ -583,15 +601,21 @@ fn assert_exclusion_proof_against_another_shards_root_is_rejected(protocol_versi
         )
         .unwrap_err();
     // The global shard's empty root.
-    SubstateValueProof::new(SPARSE_MERKLE_PLACEHOLDER_HASH, 0, global_root_proof, empty_leaf_proof)
-        .verify_exclusion(
-            JmtHashScheme::V1,
-            protocol_version,
-            &group_root,
-            NUM_PRESHARDS,
-            &substate,
-        )
-        .unwrap_err();
+    SubstateValueProof::new(
+        SPARSE_MERKLE_PLACEHOLDER_HASH,
+        0,
+        ZERO_ACC,
+        global_root_proof,
+        empty_leaf_proof,
+    )
+    .verify_exclusion(
+        JmtHashScheme::V1,
+        protocol_version,
+        &group_root,
+        NUM_PRESHARDS,
+        &substate,
+    )
+    .unwrap_err();
 }
 
 #[test]
@@ -621,7 +645,7 @@ fn two_level_substate_inclusion_proof_for_genesis_version_zero() {
 
     // Level 2: shard root within the shard-group root.
     let (group_root, shard_root_proof) = shard_group_root_and_proof(ProtocolVersion::V0, &make_value(1), shard_root, 3);
-    let proof = SubstateValueProof::new(shard_root, 3, shard_root_proof, leaf_proof);
+    let proof = SubstateValueProof::new(shard_root, 3, ZERO_ACC, shard_root_proof, leaf_proof);
 
     // The genesis substate committed at version 0 is provably included under the trusted group root.
     proof
@@ -694,7 +718,7 @@ fn shard_leaf_proof_binds_the_shard_state_version() {
     let value_hash = proof_value.unwrap().0;
 
     let (group_root, shard_root_proof) = shard_group_root_and_proof(ProtocolVersion::V0, &make_value(1), shard_root, 1);
-    let proof = SubstateValueProof::new(shard_root, 1, shard_root_proof.clone(), leaf_proof.clone());
+    let proof = SubstateValueProof::new(shard_root, 1, ZERO_ACC, shard_root_proof.clone(), leaf_proof.clone());
     proof
         .verify_inclusion(
             JmtHashScheme::V1,
@@ -706,7 +730,7 @@ fn shard_leaf_proof_binds_the_shard_state_version() {
         )
         .unwrap();
     // The same root claimed at another state version is not what the quorum signed.
-    SubstateValueProof::new(shard_root, 2, shard_root_proof, leaf_proof.clone())
+    SubstateValueProof::new(shard_root, 2, ZERO_ACC, shard_root_proof, leaf_proof.clone())
         .verify_inclusion(
             JmtHashScheme::V1,
             ProtocolVersion::V0,

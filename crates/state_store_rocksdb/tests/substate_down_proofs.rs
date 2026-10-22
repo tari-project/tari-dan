@@ -53,6 +53,7 @@ use tari_state_tree::{
     ShardGroupRootTree,
     SpreadPrefixStateTree,
     SubstateTreeChange,
+    TransitionAccumulator,
     TreeHash,
     Version,
 };
@@ -79,11 +80,12 @@ fn protocol_version() -> ProtocolVersion {
 fn group_tree(tx: &impl StateStoreReadTransaction, shard_group: ShardGroup) -> ShardGroupRootTree {
     let states = shard_group.shard_iter_with_global().map(|shard| {
         let Some(version) = tx.state_tree_versions_get_latest(shard).unwrap() else {
-            return (shard, SPARSE_MERKLE_PLACEHOLDER_HASH, 0);
+            return (shard, SPARSE_MERKLE_PLACEHOLDER_HASH, 0, TransitionAccumulator::zero());
         };
         let mut store = ShardScopedTreeStoreReader::new(tx, shard);
         let root = SpreadPrefixStateTree::new(&mut store).get_root_hash(version).unwrap();
-        (shard, root, version)
+        let acc = tx.state_transitions_get_accumulator(shard, version).unwrap();
+        (shard, root, version, acc)
     });
     ShardGroupRootTree::build(protocol_version(), states.collect::<Vec<_>>()).unwrap()
 }

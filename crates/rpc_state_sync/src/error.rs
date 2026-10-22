@@ -7,7 +7,7 @@ use tari_epoch_manager::EpochManagerError;
 use tari_ootle_common_types::{Epoch, SubstateAddress, ValidatorSetHash};
 use tari_ootle_storage::{StorageError, consensus_models::TransactionPoolError};
 use tari_rpc_framework::{RpcError, RpcStatus};
-use tari_state_tree::{JmtStorageError, TreeHash, Version};
+use tari_state_tree::{JmtStorageError, TransitionAccumulator, TreeHash, Version};
 use tari_validator_node_rpc::ValidatorNodeRpcClientError;
 
 #[derive(Debug, thiserror::Error)]
@@ -37,6 +37,12 @@ pub enum RpcStateSyncError {
     ConflictsWithCheckpoint(anyhow::Error),
     #[error("State root mismatch. Expected: {expected}, actual: {actual}")]
     StateRootMismatch { expected: TreeHash, actual: TreeHash },
+    /// The stream reached the checkpoint's root through transitions the committee did not commit.
+    #[error("Transition accumulator mismatch. Expected: {expected}, actual: {actual}")]
+    TransitionAccumulatorMismatch {
+        expected: TransitionAccumulator,
+        actual: TransitionAccumulator,
+    },
     #[error("Checkpoint for epoch {epoch} is not yet available from the previous committee")]
     CheckpointNotAvailable { epoch: Epoch },
     #[error("No committees found for epoch {0}")]
@@ -72,6 +78,7 @@ impl RpcStateSyncError {
             self,
             RpcStateSyncError::InvalidResponse(_) |
                 RpcStateSyncError::StateRootMismatch { .. } |
+                RpcStateSyncError::TransitionAccumulatorMismatch { .. } |
                 RpcStateSyncError::ConflictsWithCheckpoint(_) |
                 RpcStateSyncError::StateTreeError(_)
         )

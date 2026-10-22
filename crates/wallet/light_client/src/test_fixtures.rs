@@ -64,6 +64,7 @@ use tari_state_tree::{
     SubstateDownProof,
     SubstateTreeChange,
     SubstateValueProof,
+    TransitionAccumulator,
     TreeHash,
     ValidatorSetTree,
     compute_merkle_root_for_hashes,
@@ -260,6 +261,7 @@ pub fn checkpoint_entry(spec: CheckpointSpec<'_>) -> EpochCheckpointEntry {
             (shard, TreeRootSummary {
                 root_hash: SPARSE_MERKLE_PLACEHOLDER_HASH,
                 state_version,
+                transition_acc: TransitionAccumulator::zero(),
             })
         })
         .collect::<IndexMap<_, _>>();
@@ -401,7 +403,13 @@ pub fn substate_proof(
     let (_, _, leaf_proof) = SpreadPrefixStateTree::new(&mut store)
         .get_proof(1, &versioned_id)
         .unwrap();
-    let value_proof = SubstateValueProof::new(shard_root, 1, group_tree.get_proof(shard).unwrap().1, leaf_proof);
+    let value_proof = SubstateValueProof::new(
+        shard_root,
+        1,
+        TransitionAccumulator::zero(),
+        group_tree.get_proof(shard).unwrap().1,
+        leaf_proof,
+    );
 
     SubstateProof {
         anchor: SubstateProofAnchor {
@@ -458,10 +466,22 @@ pub fn substate_down_proof(
     let (_, _, down_leaf) = SpreadPrefixStateTree::new(&mut store)
         .get_proof(2, &versioned_id)
         .unwrap();
-    let down = SubstateValueProof::new(down_root, 2, down_tree.get_proof(shard).unwrap().1, down_leaf);
+    let down = SubstateValueProof::new(
+        down_root,
+        2,
+        TransitionAccumulator::zero(),
+        down_tree.get_proof(shard).unwrap().1,
+        down_leaf,
+    );
 
     let down_proof = SubstateDownProof {
-        up: SubstateValueProof::new(up_root, 1, up_tree.get_proof(shard).unwrap().1, up_leaf),
+        up: SubstateValueProof::new(
+            up_root,
+            1,
+            TransitionAccumulator::zero(),
+            up_tree.get_proof(shard).unwrap().1,
+            up_leaf,
+        ),
         up_value_hash: up_value.unwrap().0,
         up_commit_proof: block_commit_proof(
             up_set.network,
@@ -504,8 +524,13 @@ pub fn shard_group_root_tree(
     version: u64,
 ) -> ShardGroupRootTree {
     ShardGroupRootTree::build(ProtocolVersion::at(network, epoch), [
-        (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0),
-        (shard, shard_root, version),
+        (
+            Shard::global(),
+            SPARSE_MERKLE_PLACEHOLDER_HASH,
+            0,
+            TransitionAccumulator::zero(),
+        ),
+        (shard, shard_root, version, TransitionAccumulator::zero()),
     ])
     .unwrap()
 }

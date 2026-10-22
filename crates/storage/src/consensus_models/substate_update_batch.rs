@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use ootle_network::Network;
 use tari_engine_types::{SubstateVersion, substate::SubstateId};
 use tari_ootle_common_types::{Epoch, VersionedSubstateId, shard::Shard};
-use tari_state_tree::Version;
+use tari_state_tree::{SubstateTreeChange, Version};
 
 use crate::consensus_models::SubstateValueOrHash;
 
@@ -67,6 +67,22 @@ pub enum SubstateTransition {
 }
 
 impl SubstateTransition {
+    /// The change this transition makes to the shard's state tree: an up with the value hash its leaf holds, which
+    /// binds `network` and the `epoch` it is committed at, or a down.
+    pub fn to_tree_change(&self, network: Network, epoch: Epoch) -> SubstateTreeChange {
+        match self {
+            Self::Up {
+                id,
+                version,
+                substate_or_hash,
+            } => SubstateTreeChange::Up {
+                id: VersionedSubstateId::new(id.clone(), *version),
+                value_hash: substate_or_hash.to_value_hash(network, *version, epoch),
+            },
+            Self::Down { id } => SubstateTreeChange::Down { id: id.clone() },
+        }
+    }
+
     pub fn down(&self) -> Option<&VersionedSubstateId> {
         match self {
             Self::Down { id } => Some(id),

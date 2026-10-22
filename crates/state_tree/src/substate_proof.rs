@@ -8,6 +8,7 @@ use tari_ootle_common_types::{NumPreshards, VersionedSubstateId};
 
 use crate::{
     ShardGroupLeaf,
+    TransitionAccumulator,
     key_mapper::{DbKeyMapper, SpreadPrefixKeyMapper},
 };
 
@@ -37,12 +38,15 @@ pub struct SubstateValueProof {
     pub leaf_proof: SparseMerkleProofExt,
     /// The shard's state version at `shard_root`, which the shard's leaf commits to.
     pub shard_state_version: Version,
+    /// The shard's transition accumulator at `shard_root`, which the shard's leaf commits to.
+    pub shard_transition_acc: TransitionAccumulator,
 }
 
 impl SubstateValueProof {
     pub fn new(
         shard_root: TreeHash,
         shard_state_version: Version,
+        shard_transition_acc: TransitionAccumulator,
         shard_root_proof: SparseMerkleProofExt,
         leaf_proof: SparseMerkleProofExt,
     ) -> Self {
@@ -51,6 +55,7 @@ impl SubstateValueProof {
             shard_root_proof,
             leaf_proof,
             shard_state_version,
+            shard_transition_acc,
         }
     }
 
@@ -106,7 +111,13 @@ impl SubstateValueProof {
         versioned_id: &VersionedSubstateId,
     ) -> Result<(), SubstateValueProofError> {
         let shard = versioned_id.to_shard(num_preshards);
-        let leaf = ShardGroupLeaf::new(protocol_version, shard, &self.shard_root, self.shard_state_version);
+        let leaf = ShardGroupLeaf::new(
+            protocol_version,
+            shard,
+            &self.shard_root,
+            self.shard_state_version,
+            &self.shard_transition_acc,
+        );
         let result = match leaf.value {
             Some(value) => self
                 .shard_root_proof

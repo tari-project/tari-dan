@@ -85,6 +85,7 @@ fn cite(store: &RocksDbStateStore<String>, epoch: Epoch, shard: Shard, state_ver
         value_hash: TreeHash::new([2; 32]),
         leaf_proof: proof_ext(),
         shard_root: TreeHash::new([3; 32]),
+        transition_acc: tari_state_tree::TransitionAccumulator::zero(),
         shard_root_proof: proof_ext(),
     };
     store

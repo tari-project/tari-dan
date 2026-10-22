@@ -44,7 +44,7 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_transaction::{Network, TransactionId};
 use tari_sidechain::FixedHash;
-use tari_state_tree::{SparseMerkleProofExt, StateTreeError, TreeHash, Version, compute_proof_for_hashes};
+use tari_state_tree::{SparseMerkleProofExt, StateTreeError, TreeHash, compute_proof_for_hashes};
 use tari_template_lib_types::{
     TransactionReceiptAddress,
     crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes},
@@ -79,6 +79,7 @@ use crate::{
         SubstateUpdateProof,
         TransactionRecord,
         block_header::BlockHeader,
+        state_tree_diff::CommittedShardVersion,
         substate_update_batch::{DownedSubstate, SubstateUpdateBatch},
     },
 };
@@ -709,11 +710,15 @@ impl Block {
         Ok(())
     }
 
+    /// Commits the block's substate changes at the state versions `version_updates` says its tree diffs moved each
+    /// shard to. The transitions written must extend each shard's [`TransitionAccumulator`] to the value the block's
+    /// state merkle root commits, which `version_updates` carries: the hashed and the stored history are the same
+    /// record, so a divergence between them is an invariant failure, never something to commit.
     pub fn commit_block<TTx>(
         &self,
         tx: &mut TTx,
         commit_qc_id: &PcId,
-        version_updates: &HashMap<Shard, Version>,
+        version_updates: &HashMap<Shard, CommittedShardVersion>,
     ) -> Result<Vec<DownedSubstate>, StorageError>
     where
         TTx: StateStoreWriteTransaction + Deref,
@@ -772,7 +777,7 @@ impl Block {
                 let Some(state_version) =
                     version_updates
                         .get(&change.shard())
-                        .copied() else {
+                        .map(|committed| committed.version) else {
                     // A panic may be more appropriate here, this should never happen
                     return Err(StorageError::DataInconsistency {
                         details: format!(
@@ -790,7 +795,20 @@ impl Block {
             })?;
 
         let downed = batch.downed_iter().collect();
-        SubstateRecord::commit_batch(tx, batch)?;
+        let accumulators = SubstateRecord::commit_batch(tx, batch)?;
+        for ((shard, state_version), transition_acc) in accumulators {
+            let committed = version_updates.get(&shard).map(|committed| committed.transition_acc);
+            if committed != Some(transition_acc) {
+                return Err(StorageError::DataInconsistency {
+                    details: format!(
+                        "Transitions of {shard} at v{state_version} committed by block {} extend the transition \
+                         accumulator to {transition_acc}, but its state merkle root commits {}",
+                        self.id(),
+                        committed.display()
+                    ),
+                });
+            }
+        }
 
         Ok(downed)
     }

@@ -6,13 +6,13 @@ use std::{collections::HashMap, ops::Deref};
 use indexmap::IndexMap;
 use log::*;
 use tari_engine_types::ProtocolVersion;
-use tari_ootle_common_types::{ShardGroup, shard::Shard};
+use tari_ootle_common_types::{Epoch, ShardGroup, shard::Shard};
 use tari_ootle_storage::{
     ShardScopedTreeStoreReader,
     ShardScopedTreeStoreWriter,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
-    consensus_models::PendingShardStateTreeDiff,
+    consensus_models::{CommittedShardVersion, PendingShardStateTreeDiff},
 };
 use tari_state_tree::{
     JmtStorageError,
@@ -23,6 +23,7 @@ use tari_state_tree::{
     StateTreeError,
     StateTreePayload,
     SubstateTreeChange,
+    TransitionAccumulator,
     TreeHash,
     Version,
     compute_shard_group_root,
@@ -76,15 +77,36 @@ impl<TTx: StateStoreReadTransaction> ShardedStateTree<&TTx> {
         Ok(maybe_version)
     }
 
+    /// The transition accumulator of `shard` after the pending diffs, or its committed one if there are none.
+    fn get_current_transition_acc(&self, shard: Shard) -> Result<TransitionAccumulator, StateTreeError> {
+        if let Some(acc) = self
+            .pending_diffs
+            .get(&shard)
+            .and_then(|diffs| diffs.last())
+            .map(|diff| diff.transition_acc)
+        {
+            return Ok(acc);
+        }
+
+        let Some(version) = self.get_current_version(shard)? else {
+            return Ok(TransitionAccumulator::zero());
+        };
+        self.tx
+            .state_transitions_get_accumulator(shard, version)
+            .map_err(|e| StateTreeError::JmtStorageError(JmtStorageError::UnexpectedError(e.to_string())))
+    }
+
     pub fn into_shard_tree_diffs(self) -> IndexMap<Shard, PendingShardStateTreeDiff> {
         self.shard_tree_diffs
     }
 
-    /// Applies `changes` and returns the resulting shard group state merkle root, formed under `protocol_version`.
+    /// Applies `changes`, committed at `epoch`, and returns the resulting shard group state merkle root, formed under
+    /// `protocol_version`.
     pub fn put_substate_tree_changes(
         &mut self,
         protocol_version: ProtocolVersion,
         shard_group: ShardGroup,
+        epoch: Epoch,
         changes: IndexMap<Shard, Vec<SubstateTreeChange>>,
     ) -> Result<TreeHash, StateTreeError> {
         let mut shard_state_roots = HashMap::with_capacity(changes.len());
@@ -96,6 +118,9 @@ impl<TTx: StateStoreReadTransaction> ShardedStateTree<&TTx> {
                     .ok_or(StateTreeError::VersionExhausted { current_version })?,
                 None => 1,
             };
+            let transition_acc = self
+                .get_current_transition_acc(shard)?
+                .extend(epoch, next_version, &changes)?;
 
             // Read only state store that is scoped to the shard
             let scoped_store = ShardScopedTreeStoreReader::new(self.tx, shard);
@@ -120,9 +145,11 @@ impl<TTx: StateStoreReadTransaction> ShardedStateTree<&TTx> {
             let mut state_tree = SpreadPrefixStateTree::new(&mut store);
             debug!(target: LOG_TARGET, "v{next_version} contains {} new tree change(s) for shard {shard}", changes.len());
             let shard_state_hash = state_tree.put_substate_changes(current_version, next_version, changes)?;
-            shard_state_roots.insert(shard, (shard_state_hash, next_version));
-            self.shard_tree_diffs
-                .insert(shard, PendingShardStateTreeDiff::new(next_version, store.into_diff()));
+            shard_state_roots.insert(shard, (shard_state_hash, next_version, transition_acc));
+            self.shard_tree_diffs.insert(
+                shard,
+                PendingShardStateTreeDiff::new(next_version, transition_acc, store.into_diff()),
+            );
         }
 
         let root_hash = self.get_shard_group_root(protocol_version, shard_group, shard_state_roots)?;
@@ -137,31 +164,34 @@ impl<TTx: StateStoreReadTransaction> ShardedStateTree<&TTx> {
         self.get_shard_group_root(protocol_version, shard_group, HashMap::new())
     }
 
-    /// `shard_state_roots` holds the root and state version of each shard this block changes. Every other shard
-    /// contributes its current root and version.
+    /// `shard_state_roots` holds the root, state version and transition accumulator of each shard this block changes.
+    /// Every other shard contributes its current ones.
     fn get_shard_group_root(
         &self,
         protocol_version: ProtocolVersion,
         shard_group: ShardGroup,
-        mut shard_state_roots: HashMap<Shard, (TreeHash, Version)>,
+        mut shard_state_roots: HashMap<Shard, (TreeHash, Version, TransitionAccumulator)>,
     ) -> Result<TreeHash, StateTreeError> {
         let mut shard_states = Vec::with_capacity(shard_group.len() + 1);
         for shard in shard_group.shard_iter_with_global() {
-            let (root, version) = match shard_state_roots.remove(&shard) {
+            let (root, version, transition_acc) = match shard_state_roots.remove(&shard) {
                 Some(state) => state,
                 None => self.get_state_root_for_shard(shard)?,
             };
-            shard_states.push((shard, root, version));
+            shard_states.push((shard, root, version, transition_acc));
         }
         let hash = compute_shard_group_root(protocol_version, shard_states)?;
         Ok(hash)
     }
 
-    /// The current root and state version of `shard`. A shard with no state changes is at version 0 with the empty
-    /// tree root.
-    fn get_state_root_for_shard(&self, shard: Shard) -> Result<(TreeHash, Version), StateTreeError> {
+    /// The current root, state version and transition accumulator of `shard`. A shard with no state changes is at
+    /// version 0 with the empty tree root.
+    fn get_state_root_for_shard(
+        &self,
+        shard: Shard,
+    ) -> Result<(TreeHash, Version, TransitionAccumulator), StateTreeError> {
         let Some(version) = self.get_current_version(shard)? else {
-            return Ok((SPARSE_MERKLE_PLACEHOLDER_HASH, 0));
+            return Ok((SPARSE_MERKLE_PLACEHOLDER_HASH, 0, TransitionAccumulator::zero()));
         };
 
         let scoped_store = ShardScopedTreeStoreReader::new(self.tx, shard);
@@ -174,7 +204,7 @@ impl<TTx: StateStoreReadTransaction> ShardedStateTree<&TTx> {
         let state_tree = SpreadPrefixStateTree::new(&mut store);
 
         let root_hash = state_tree.get_root_hash(version)?;
-        Ok((root_hash, version))
+        Ok((root_hash, version, self.get_current_transition_acc(shard)?))
     }
 }
 
@@ -183,10 +213,12 @@ where
     TTx: StateStoreWriteTransaction + Deref,
     TTx::Target: StateStoreReadTransaction,
 {
+    /// Commits the pending diffs to the tree and returns the version, with its transition accumulator, each shard is
+    /// at once they apply.
     pub fn commit_diffs(
         &mut self,
         diffs: IndexMap<Shard, Vec<PendingShardStateTreeDiff>>,
-    ) -> Result<HashMap<Shard, Version>, StateTreeError> {
+    ) -> Result<HashMap<Shard, CommittedShardVersion>, StateTreeError> {
         debug!(
             target: LOG_TARGET,
             "Committing {} pending diff(s) for {} shard(s)",
@@ -197,7 +229,7 @@ where
         let mut state_versions = HashMap::with_capacity(diffs.len());
         for (shard, pending_diffs) in diffs {
             for pending_diff in pending_diffs {
-                state_versions.insert(shard, pending_diff.version);
+                state_versions.insert(shard, pending_diff.committed_version());
                 self.commit_diff(shard, pending_diff.version, &pending_diff.diff)?;
             }
         }
@@ -243,12 +275,13 @@ mod tests {
         let tx = store.create_read_tx().unwrap();
         let shard = Shard::first();
         let mut tree = ShardedStateTree::new(&tx).with_pending_diffs(HashMap::from([(shard, vec![
-            PendingShardStateTreeDiff::new(Version::MAX, StateHashTreeDiff::new()),
+            PendingShardStateTreeDiff::new(Version::MAX, TransitionAccumulator::zero(), StateHashTreeDiff::new()),
         ])]));
 
         let result = tree.put_substate_tree_changes(
             ProtocolVersion::V0,
             ShardGroup::all_shards(NumPreshards::P256),
+            Epoch(1),
             IndexMap::from([(shard, vec![])]),
         );
 

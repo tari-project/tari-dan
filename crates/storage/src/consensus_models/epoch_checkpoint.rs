@@ -19,7 +19,14 @@ use tari_sidechain::{
     SigningCommittee,
     ToCommand,
 };
-use tari_state_tree::{SPARSE_MERKLE_PLACEHOLDER_HASH, StateTreeError, TreeHash, Version, compute_shard_group_root};
+use tari_state_tree::{
+    SPARSE_MERKLE_PLACEHOLDER_HASH,
+    StateTreeError,
+    TransitionAccumulator,
+    TreeHash,
+    Version,
+    compute_shard_group_root,
+};
 
 use crate::{
     StateStoreReadTransaction,
@@ -44,6 +51,8 @@ pub struct EpochCheckpoint {
     header_metadata: Option<BlockHeaderMetadata>,
 }
 
+/// A shard's state as the end-of-epoch block's state merkle root commits it (see
+/// [`shard_state_leaf`](tari_state_tree::shard_state_leaf)).
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, CborLen)]
 pub struct TreeRootSummary {
     #[n(0)]
@@ -51,6 +60,20 @@ pub struct TreeRootSummary {
     pub root_hash: TreeHash,
     #[n(1)]
     pub state_version: Version,
+    #[n(2)]
+    #[cbor(with = "tari_bor::adapters::serde_bridge")]
+    pub transition_acc: TransitionAccumulator,
+}
+
+impl TreeRootSummary {
+    /// The summary of a shard that has no state.
+    pub fn empty() -> Self {
+        Self {
+            root_hash: SPARSE_MERKLE_PLACEHOLDER_HASH,
+            state_version: 0,
+            transition_acc: TransitionAccumulator::zero(),
+        }
+    }
 }
 
 impl EpochCheckpoint {
@@ -122,6 +145,13 @@ impl EpochCheckpoint {
             .unwrap_or_default()
     }
 
+    pub fn get_shard_transition_acc(&self, shard: Shard) -> TransitionAccumulator {
+        self.shard_tree_summary
+            .get(&shard)
+            .map(|summary| summary.transition_acc)
+            .unwrap_or_default()
+    }
+
     /// The protocol version of the end-of-epoch block, which selects how its state merkle root's leaves are formed.
     pub fn protocol_version(&self) -> Result<ProtocolVersion, EpochCheckpointValidationError> {
         ProtocolVersion::try_from(self.header().protocol_version)
@@ -140,9 +170,14 @@ impl EpochCheckpoint {
         protocol_version: ProtocolVersion,
     ) -> Result<TreeHash, EpochCheckpointValidationError> {
         let shard_group = self.checked_shard_group()?;
-        let shard_states = shard_group
-            .shard_iter_with_global()
-            .map(|shard| (shard, self.get_shard_root(shard), self.get_shard_state_version(shard)));
+        let shard_states = shard_group.shard_iter_with_global().map(|shard| {
+            (
+                shard,
+                self.get_shard_root(shard),
+                self.get_shard_state_version(shard),
+                self.get_shard_transition_acc(shard),
+            )
+        });
         let root = compute_shard_group_root(protocol_version, shard_states)?;
         Ok(root)
     }
