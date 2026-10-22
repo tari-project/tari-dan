@@ -61,7 +61,7 @@ curl -fsS http://127.0.0.1:5100/health
 |---|---|---|---|
 | `TARI_NETWORK` | `--network` | `esmeralda` | Network to join |
 | `TARI_BASE_DIR` | `--base-path` / `-b` | `/data` | Data directory; the wallet uses `<base>/<network>/` |
-| `JRPC_LISTEN_ON` | `--listen-on` | `127.0.0.1:5100` | JSON-RPC, web UI and `/health` listener. Set `0.0.0.0:<port>` only to publish the port outside the container's network namespace (`docker run -p`); containers in one ECS `awsvpc` task share loopback |
+| `JRPC_LISTEN_ON` | `--listen-on` | `127.0.0.1:5100` | JSON-RPC, web UI and `/health` listener. Set `0.0.0.0:<port>` only when something outside the container's network namespace must reach it (`docker run -p`, ECS `bridge` mode); see [Running headless in ECS](#running-headless-in-ecs) |
 | `OOTLE_WALLETD_INDEXER_API_URL` | `--indexer-api-url` / `-i` | the network preset (Esmeralda: the two public Tari indexers) | Comma-separated indexer URLs; one is picked at random, the rest are failovers |
 | `OOTLE_WALLETD_KEYRING_PASSWORD` | `--override-keyring-password` | none | Password that encrypts the wallet seed. **Required in a container** |
 | `OOTLE_WALLETD_AUTHENTICATION` | `--authentication` | `webauthn` | `webauthn` or `none` |
@@ -102,9 +102,19 @@ with this password, so the same password must be given on every later start.
   `OOTLE_WALLETD_AUTHENTICATION=none`, but then anything that reaches the port can spend the
   wallet's funds, including a web page through DNS rebinding when the port is published on a
   desktop. Keep it on loopback inside the task (the image default).
+- Network mode (prefer `awsvpc` for this task):
+  - `awsvpc`: containers in one task share loopback, so keep walletd on `127.0.0.1` and give each
+    wallet a distinct port.
+  - `bridge`: each container has its own loopback. Reaching walletd from another container needs
+    `0.0.0.0`, which exposes it to every container on the host's `docker0` bridge. Never combine
+    `authentication=none` with a non-loopback bind, and never map a `hostPort` for the wallet port.
 - For a cold and a hot wallet in one task, give each its own `JRPC_LISTEN_ON` port (e.g.
   `127.0.0.1:5100` and `127.0.0.1:5101`) and its own health-check port. If the port is taken the
   daemon silently binds a random port instead, so two wallets on 5100 conflict.
+- Cold and hot wallets must not share a data directory: two containers with the same
+  `TARI_BASE_DIR` open the same `wallet.sqlite` and seed, and nothing locks it. Give each wallet
+  its own volume, or its own `TARI_BASE_DIR` (e.g. `/data/cold`, `/data/hot`) and `XDG_DATA_HOME`
+  (e.g. `/data/cold/share`), plus its own keyring password secret.
 
 Burn proofs are read from `/data/share/tari/<network>/burn_proofs` (the image sets
 `XDG_DATA_HOME=/data/share`), so pending proofs survive a container replacement.
@@ -143,7 +153,8 @@ image against the release tag ref:
 
 ```bash
 cosign verify ghcr.io/tari-project/ootle-walletd:vX.Y.Z \
-  --certificate-identity-regexp '^https://github\.com/tari-project/tari-ootle/\.github/workflows/build_dockers\.yml@refs/tags/v' \
+  --certificate-identity-regexp '^https://github\.com/tari-project/tari-ootle/\.github/workflows/build_dockers\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
+  --certificate-github-workflow-trigger push \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
