@@ -737,7 +737,6 @@ where
                         substate_value_proof,
                         commit_proof,
                         proof_epoch: substate.proof_epoch,
-                        // A batch answers with heads, which a down proof cannot settle, so it carries none.
                         substate_down_proof: None,
                         destroyed_at_state_version: None,
                     },
