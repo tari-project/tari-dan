@@ -134,8 +134,8 @@ fn check_schema_version(store: &RocksDbStateStore<PeerAddress>) -> anyhow::Resul
         std::cmp::Ordering::Equal => Ok(()),
         std::cmp::Ordering::Less => bail!(
             "State db is at schema version {version}, which is older than the {CURRENT_SCHEMA_VERSION} this tool \
-             writes. A validator from this release refuses it too; delete the database and resync instead of rolling \
-             back."
+             writes. A validator from this release refuses it too; delete the validator's data directory and resync \
+             instead of rolling back."
         ),
         std::cmp::Ordering::Greater => bail!(
             "State db is at schema version {version}, which is newer than the {CURRENT_SCHEMA_VERSION} this tool \

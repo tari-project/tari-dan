@@ -41,8 +41,7 @@ pub enum KeyPrefix {
     ForeignProposalMissingTransactions = 28,
     MissingTransactionBlockIdIndex = 29,
     ParkedBlocks = 30,
-    // 31 is unused
-    // 32 to 35 are unused
+    // 31 to 35 are unused
     Substates = 36,
     SubstatesHeadIndex = 37,
     SubstatesUnprunedDownedValuesIndex = 38,

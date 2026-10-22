@@ -5,10 +5,9 @@
 //!
 //! Migrations upgrade the persisted state of *already-running* nodes when a change would otherwise
 //! only take effect for freshly bootstrapped databases. Each database records the schema version it
-//! was last brought up to ([`DatabaseMigrationVersion`]); [`migrate`] runs the steps between that
-//! stored version and [`CURRENT_VERSION`]. A fresh database skips migrations entirely - it is stamped
-//! directly with `CURRENT_VERSION` once the genesis state is laid down. No migration is defined, so
-//! a node refuses a database at any version other than `CURRENT_VERSION`.
+//! was last brought up to ([`DatabaseMigrationVersion`]). [`migrate`] upgrades a stored version for which a
+//! migration step exists and refuses any other version below [`CURRENT_VERSION`]. A fresh database skips migrations
+//! entirely - it is stamped directly with `CURRENT_VERSION` once the genesis state is laid down.
 //!
 //! # Adding a migration
 //!
@@ -84,7 +83,7 @@ pub fn migrate<TAddr: NodeAddressable + 'static>(
         Some(version) => {
             anyhow::bail!(
                 "Database schema version {version} is older than this binary's {CURRENT_VERSION}, and no migration \
-                 upgrades it. Delete the database and resync."
+                 upgrades it. Delete the validator's data directory and resync."
             );
         },
         // A fresh database: lay down the genesis state and stamp the current version.
@@ -154,7 +153,11 @@ mod tests {
     fn a_database_older_than_the_binary_is_refused() {
         let (db, _tmp) = store_stamped(CURRENT_VERSION - 1);
         let err = run_migrate(&db).unwrap_err();
-        assert!(err.to_string().contains("Delete the database and resync"), "{err}");
+        assert!(
+            err.to_string()
+                .contains("Delete the validator's data directory and resync"),
+            "{err}"
+        );
         assert_eq!(stored_version(&db), CURRENT_VERSION - 1);
     }
 
