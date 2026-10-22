@@ -718,12 +718,8 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
         Ok(outputs)
     }
 
-    #[allow(clippy::too_many_lines)]
-    pub fn verify_and_update_outputs<'i, I: IntoIterator<Item = (UtxoAddress, &'i Utxo)>>(
-        &self,
-        outputs: I,
-    ) -> Result<HashSet<(ComponentAddress, ResourceAddress)>, StealthOutputsApiError> {
-        let mut all_used_view_only_keys = self
+    fn all_used_view_only_keys(&self) -> Result<Vec<AccountAndViewKeys>, StealthOutputsApiError> {
+        let mut keys = self
             .key_manager_api
             .get_all_derived_keys(KeyBranch::ViewOnlyKey)?
             .into_iter()
@@ -754,12 +750,22 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
                 .owner_key_id
                 .map(|key_id| self.key_manager_api.get_key(key_id))
                 .transpose()?;
-            all_used_view_only_keys.push(AccountAndViewKeys {
+            keys.push(AccountAndViewKeys {
                 account_public_key: account.owner_public_key,
                 account_key,
                 view_only_key: self.key_manager_api.get_key(account.view_only_key_id)?,
             });
         }
+        Ok(keys)
+    }
+
+    #[allow(clippy::too_many_lines)]
+    pub fn verify_and_update_outputs<'i, I: IntoIterator<Item = (UtxoAddress, &'i Utxo)>>(
+        &self,
+        outputs: I,
+    ) -> Result<HashSet<(ComponentAddress, ResourceAddress)>, StealthOutputsApiError> {
+        // Loading the keys decrypts every imported key, so it is only done once an output needs validating
+        let mut all_used_view_only_keys = None;
         let network = self.config_api.get_network()?;
 
         let mut found_utxos_count = 0usize;
@@ -774,6 +780,10 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
                 "Validating UTXO for address: {}",
                 addr,
             );
+
+            if all_used_view_only_keys.is_none() && utxo.output().is_some() && !self.utxo_exists(&addr)? {
+                all_used_view_only_keys = Some(self.all_used_view_only_keys()?);
+            }
 
             let mut tx = self.store.create_write_tx()?;
             match tx
@@ -817,7 +827,7 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
 
                     // Output does not exist. Validate it and add it to the store
                     match self.validate_utxo(
-                        &all_used_view_only_keys,
+                        all_used_view_only_keys.as_deref().unwrap_or_default(),
                         network,
                         *resource_address,
                         commitment,

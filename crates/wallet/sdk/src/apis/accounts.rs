@@ -3,7 +3,7 @@
 
 use std::collections::HashSet;
 
-use ootle_byte_type::{FromByteType, ToByteType};
+use ootle_byte_type::{ConvertFromByteType, FromByteType, ToByteType};
 use tari_crypto::{
     keys::PublicKey as _,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
@@ -164,11 +164,20 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
         birthday_epoch: Option<Epoch>,
         is_default: bool,
     ) -> Result<AccountWithAddress, AccountsApiError> {
+        RistrettoPublicKey::convert_from_byte_type(account_public_key)
+            .map_err(|e| AccountsApiError::InvalidAccountPublicKey { details: e.to_string() })?;
         let account_address = self.derive_account_address_from_public_key(account_public_key);
         if self.has_account(&account_address)? {
             return Err(AccountsApiError::AccountAlreadyExists {
                 address: account_address,
             });
+        }
+        if let Some(name) = account_name &&
+            self.store
+                .with_read_tx(|tx| tx.accounts_get_by_name(name).optional())?
+                .is_some()
+        {
+            return Err(AccountsApiError::AccountNameAlreadyExists { name: name.to_string() });
         }
 
         let view_public_key = RistrettoPublicKey::from_secret_key(view_secret_key);
@@ -705,6 +714,8 @@ pub enum AccountsApiError {
     AccountNameAlreadyExists { name: String },
     #[error("Account already exists: {address}")]
     AccountAlreadyExists { address: ComponentAddress },
+    #[error("Invalid account public key: {details}")]
+    InvalidAccountPublicKey { details: String },
     #[error("Config API error: {0}")]
     ConfigApiError(#[from] ConfigApiError),
 }
@@ -716,6 +727,10 @@ impl AccountsApiError {
 
     pub fn is_account_exists_error(&self) -> bool {
         matches!(self, Self::AccountAlreadyExists { .. })
+    }
+
+    pub fn is_invalid_account_public_key_error(&self) -> bool {
+        matches!(self, Self::InvalidAccountPublicKey { .. })
     }
 }
 

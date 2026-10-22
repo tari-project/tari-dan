@@ -275,21 +275,16 @@ pub async fn handle_import_view_only(
     let sdk = context.wallet_sdk();
     let accounts_api = sdk.accounts_api();
 
-    let set_as_default = req
-        .is_default
-        .map(Ok)
-        .unwrap_or_else(|| accounts_api.any_accounts_exist().map(|b| !b))?;
-
     let acc = accounts_api
         .add_view_only_account(
             Some(&req.account_name),
             &req.account_public_key,
             &req.view_secret_key,
             req.birthday_epoch,
-            set_as_default,
+            req.is_default.unwrap_or(false),
         )
         .map_err(|e| {
-            if e.is_name_exists_error() || e.is_account_exists_error() {
+            if e.is_name_exists_error() || e.is_account_exists_error() || e.is_invalid_account_public_key_error() {
                 invalid_request(e)
             } else {
                 general_error(e)
@@ -2542,6 +2537,7 @@ mod create_stealth_transfer_statement_handler_tests {
             HandlerContext,
             auth::{create_authenticator, jwt::AuthError},
         },
+        server::ApplicationErrorCode,
     };
 
     /// A ready-to-use handler context for `account`, with a stealth resource cached locally so `fetch_resource`
@@ -3217,6 +3213,52 @@ mod create_stealth_transfer_statement_handler_tests {
     }
 
     #[tokio::test]
+    async fn view_only_import_rejects_invalid_key_and_taken_name() {
+        let test = setup().await;
+        let admin = test.bearer("admin");
+        let import_request = AccountsImportViewOnlyRequest {
+            account_name: "stealth".to_string(),
+            account_public_key: RistrettoPublicKeyBytes::from_bytes(&[0xff; 32]).unwrap(),
+            view_secret_key: RistrettoSecretKey::random(&mut rand::rng()),
+            birthday_epoch: None,
+            is_default: None,
+        };
+
+        let mut invalid_key = import_request.clone();
+        invalid_key.account_name = "invalid".to_string();
+        let err = handle_import_view_only(&test.context, Some(&admin), invalid_key)
+            .await
+            .expect_err("an account public key that is not a valid point must be rejected");
+        let rpc = err
+            .downcast_ref::<JsonRpcError>()
+            .unwrap_or_else(|| panic!("expected a JsonRpcError, got: {err}"));
+        assert!(
+            matches!(
+                rpc.error_reason(),
+                JsonRpcErrorReason::ApplicationError(code) if code == ApplicationErrorCode::InvalidRequest as i32
+            ),
+            "{:?}",
+            rpc.error_reason()
+        );
+        assert!(rpc.to_string().contains("Invalid account public key"), "{rpc}");
+        let listed = handle_list(&test.context, Some(&admin), AccountsListRequest {
+            offset: 0,
+            limit: 10,
+        })
+        .await
+        .unwrap();
+        assert_eq!(listed.accounts.len(), 1);
+
+        let mut name_taken = import_request;
+        name_taken.account_public_key =
+            RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::random(&mut rand::rng())).to_byte_type();
+        let err = handle_import_view_only(&test.context, Some(&admin), name_taken)
+            .await
+            .expect_err("importing with a taken name must be rejected");
+        assert!(err.to_string().contains("Account name already exists"), "{err}");
+    }
+
+    #[tokio::test]
     async fn view_only_account_is_imported_exported_and_cannot_transfer() {
         use tari_ootle_wallet_sdk::apis::{
             confidential_transfer::UtxoInputSelection,
@@ -3233,7 +3275,7 @@ mod create_stealth_transfer_statement_handler_tests {
             account_public_key,
             view_secret_key: view_secret_key.clone(),
             birthday_epoch: Some(Epoch(7)),
-            is_default: Some(false),
+            is_default: None,
         };
 
         let imported = handle_import_view_only(&test.context, Some(&admin), import_request.clone())
@@ -3253,6 +3295,10 @@ mod create_stealth_transfer_statement_handler_tests {
             *account.address().view_only_key(),
             RistrettoPublicKey::from_secret_key(&view_secret_key).to_byte_type()
         );
+
+        // The default account pays fees, so an import only becomes the default when asked to
+        let default_account = test.context.wallet_sdk().accounts_api().get_default().unwrap();
+        assert_eq!(*default_account.component_address(), test.account);
 
         let mut duplicate = import_request;
         duplicate.account_name = "watch2".to_string();

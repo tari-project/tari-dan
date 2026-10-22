@@ -66,7 +66,10 @@ The response is the account's component address: `{ "account_address": "componen
 
 - `birthday_epoch` is the epoch to start scanning from. Pass the exported value so earlier deposits are found. If it is
   omitted, scanning starts at the current epoch.
-- The import is rejected if the wallet already has an account with this public key or name.
+- `is_default` defaults to `false`. The default account pays fees and signs transactions, which a watch-only account
+  cannot do, so only set it when you mean to.
+- The import is rejected if the wallet already has an account with this public key or name, or if
+  `account_public_key` is not a valid public key.
 
 The account's Ootle address (from `accounts.get`) is the same as on the cold daemon, so you can hand it out as a
 deposit address from either machine.
@@ -79,6 +82,13 @@ The online daemon scans for the account like any other account. These calls work
 - `stealth_utxos.list` — each output with its `value`, `memo` and `sender_address`. A payment reference is carried in
   the memo, and in `sender_address` when the sender attached their address.
 - `accounts.get_balance_changes` — the balance history.
+
+<Aside type="caution">
+Without the spend key the daemon cannot check that an output's one-time spend key belongs to the account. Anyone who
+knows the account's address can create an output that decrypts with the view key but is spendable by someone else, and
+the watch-only daemon reports it like any other deposit. Confirm deposits on the cold daemon, which does check the
+spend key, before treating them as final.
+</Aside>
 
 ### Payments cannot be sent
 

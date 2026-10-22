@@ -13,5 +13,9 @@ export type AccountsImportViewOnlyRequest = {
    * The epoch to start scanning for outputs from. Defaults to the current epoch.
    */
   birthday_epoch: Epoch | null;
+  /**
+   * Makes the account the wallet's default account. Defaults to false, because the default account pays fees and
+   * signs transactions, which a view-only account cannot do.
+   */
   is_default: boolean | null;
 };
