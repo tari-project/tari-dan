@@ -1,3 +1,4 @@
+drop table substate_cache_proofs;
 drop table substate_cache_invalidations;
 drop table substate_cache;
 drop table verified_state_roots;
@@ -9,5 +10,4 @@ drop table key_values;
 drop table transactions;
 drop table transaction_receipts;
 drop table events;
-drop table substate_transitions;
 drop table substates;

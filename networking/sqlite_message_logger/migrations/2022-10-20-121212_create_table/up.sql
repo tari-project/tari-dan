@@ -11,3 +11,13 @@ create table outbound_messages
     message_tag        text      not null,
     sent_at            timestamp not null default current_timestamp
 );
+
+create table inbound_messages
+(
+    id           integer primary key autoincrement,
+    from_pubkey  text      not null,
+    message_type text      not null,
+    message_json text      not null,
+    message_tag  text      not null,
+    received_at  timestamp not null default current_timestamp
+);
