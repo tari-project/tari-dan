@@ -208,8 +208,6 @@ message ShardCursor {
 }
 
 message SyncStateRequest {
-  reserved 1, 2;
-  reserved "start_state_version", "shard";
   // Optional - If not provided, state will be streamed until the current epoch
   tari.ootle.common.Epoch until_epoch = 3;
   // Bitflags representing which substates to return.
