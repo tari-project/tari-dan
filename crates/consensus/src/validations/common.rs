@@ -528,26 +528,23 @@ fn quorum_signers<'a, TAddr: PartialEq>(
     signers: &SignerBitmap,
     committee: &'a Committee<TAddr>,
 ) -> Result<Vec<&'a CommitteeMember<TAddr>>, ProposalValidationError> {
-    let members = signers
-        .iter()
-        .map(|index| {
-            committee
-                .get(index)
-                .ok_or_else(|| ProposalValidationError::QcMalformedSignatures {
-                    qc: qc_id(),
-                    source: QcSignaturesError::SignerOutsideCommittee {
-                        index,
-                        committee_size: committee.len(),
-                    },
-                })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
     // A bitmap names each member at most once, so this is the power of distinct signers. It is checked before any
     // signature so that a certificate short of quorum costs no signature verification.
-    let total_vote_power = members
-        .iter()
-        .fold(VotePower::zero(), |acc, member| acc.saturating_add(member.vote_power));
+    let mut members = Vec::with_capacity(signers.count());
+    let mut total_vote_power = VotePower::zero();
+    for index in signers.iter() {
+        let member = committee
+            .get(index)
+            .ok_or_else(|| ProposalValidationError::QcMalformedSignatures {
+                qc: qc_id(),
+                source: QcSignaturesError::SignerOutsideCommittee {
+                    index,
+                    committee_size: committee.len(),
+                },
+            })?;
+        total_vote_power = total_vote_power.saturating_add(member.vote_power);
+        members.push(member);
+    }
     if total_vote_power < committee.quorum_threshold() {
         return Err(ProposalValidationError::QuorumWasNotReached {
             qc: qc_id(),
