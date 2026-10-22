@@ -1,19 +1,19 @@
 [package]
 name = "tari_jellyfish"
 description = "Jellyfish Merkle Tree implementation for Tari"
-version = "6.2.1"
+version = "7.0.0"
 edition.workspace = true
 authors.workspace = true
 repository.workspace = true
 license.workspace = true
 
 [dependencies]
-tari_hashing = { workspace = true }
 tari_crypto = { workspace = true }
 
 serde = { workspace = true, features = ["std", "derive"] }
 borsh = { workspace = true, features = ["std", "derive"] }
 digest = { workspace = true }
+blake2 = { workspace = true }
 thiserror = { workspace = true }
 minicbor = { workspace = true, optional = true }
 

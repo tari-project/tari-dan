@@ -6,9 +6,17 @@
 
 use digest::consts::U32;
 use tari_crypto::hash_domain;
-use tari_hashing::layer2::TariDomainHasher;
+use tari_jellyfish::TariDomainHasher;
 
 hash_domain!(TariDanConsensusHashDomain, "com.tari.consensus", 0);
+
+// The domain of validator node signatures, `tari_hashing::ValidatorNodeHashDomain` in Minotari. Only the name and
+// version reach the signature challenge, so they must match it exactly.
+hash_domain!(
+    ValidatorNodeHashDomain,
+    "com.tari.base_layer.core.transactions.side_chain.validator_node",
+    0
+);
 
 pub type TariConsensusHasher = TariDomainHasher<TariDanConsensusHashDomain, U32>;
 
@@ -58,6 +66,15 @@ mod tests {
     fn the_domain_matches_tari_hashing_vectors() {
         assert_eq!(TariDanConsensusHashDomain::domain(), "com.tari.consensus");
         assert_eq!(TariDanConsensusHashDomain::version(), 0);
+    }
+
+    #[test]
+    fn the_validator_node_domain_matches_minotari() {
+        assert_eq!(
+            ValidatorNodeHashDomain::domain(),
+            "com.tari.base_layer.core.transactions.side_chain.validator_node"
+        );
+        assert_eq!(ValidatorNodeHashDomain::version(), 0);
     }
 
     /// Known-answer digests. Every hasher but `block_header_hasher` and `block_id_hasher` matches `tari_hashing`

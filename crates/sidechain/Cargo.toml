@@ -1,14 +1,13 @@
 [package]
 name = "tari_sidechain"
 description = "Tari Ootle sidechain commit proofs, burn claim proofs and consensus hashers"
-version = "7.0.0"
+version = "8.0.0"
 edition.workspace = true
 authors.workspace = true
 repository.workspace = true
 license.workspace = true
 
 [dependencies]
-tari_hashing = { workspace = true }
 tari_crypto = { workspace = true, features = ["borsh"] }
 tari_utilities = { workspace = true }
 tari_jellyfish = { workspace = true }

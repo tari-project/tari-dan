@@ -6,7 +6,6 @@ use std::fmt::Display;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use tari_crypto::signatures::{CompressedSchnorrSignature, SchnorrSignature};
-use tari_hashing::ValidatorNodeHashDomain;
 use tari_jellyfish::{JmtHashScheme, LeafKey, SparseMerkleProofExt, TreeHash};
 use tari_utilities::ByteArray;
 
@@ -14,6 +13,7 @@ use super::error::SidechainProofValidationError;
 use crate::{
     command::{Command, ToCommand},
     hashing,
+    hashing::ValidatorNodeHashDomain,
     qc_signatures::{QcSignatures, SigningCommittee},
     serde::{hex_or_bytes, option_hex_or_bytes},
     shard_group::ShardGroup,

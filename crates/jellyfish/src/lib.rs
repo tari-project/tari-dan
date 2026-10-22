@@ -40,6 +40,9 @@
 mod hash;
 pub use hash::*;
 
+mod hasher;
+pub use hasher::*;
+
 mod tree;
 pub use tree::*;
 
