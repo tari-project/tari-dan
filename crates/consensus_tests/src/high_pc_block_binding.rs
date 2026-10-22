@@ -36,7 +36,7 @@ fn create_store() -> (TestStore, tempfile::TempDir) {
 fn genesis_block() -> Block {
     Block::genesis(
         Network::LocalNet,
-        ProtocolVersion::V2,
+        ProtocolVersion::V0,
         TEST_EPOCH,
         FixedHash::zero(),
         ShardGroup::new(0, 127),

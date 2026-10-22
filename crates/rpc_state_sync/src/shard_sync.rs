@@ -9,7 +9,7 @@ use log::*;
 use ootle_network::Network;
 use prost::Message;
 use tari_consensus::hotstuff::commit_proofs::committed_block_commit_proof;
-use tari_engine_types::{ProtocolVersion, limits::MAX_CBOR_NESTING_DEPTH};
+use tari_engine_types::limits::MAX_CBOR_NESTING_DEPTH;
 use tari_ootle_common_types::{
     Epoch,
     NumPreshards,
@@ -107,9 +107,6 @@ pub(crate) struct ShardSync<'a, TStore, TValidator = NoVersionProofs> {
     checkpoint_state_version: Version,
     /// The epoch of the checkpoint, which no streamed version can have been committed after.
     checkpoint_epoch: Epoch,
-    /// Whether `checkpoint_state_version` is trusted as this shard's version. Only then is a batch above it rejected:
-    /// an untrusted version may be lower than the versions an honest peer streams.
-    checkpoint_state_version_is_trusted: bool,
     /// The base time the stream has to complete each version, counted from the last version it committed or proved.
     /// A zero timeout sets no limit.
     progress_timeout: Option<Duration>,
@@ -141,7 +138,6 @@ impl<'a, TStore: StateStore> ShardSync<'a, TStore> {
             checkpoint_shard_root,
             checkpoint_state_version,
             checkpoint_epoch,
-            checkpoint_state_version_is_trusted: false,
             progress_timeout: None,
             min_throughput_bytes_per_sec: 0,
             up_version_lookback,
@@ -161,7 +157,6 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
             checkpoint_shard_root: self.checkpoint_shard_root,
             checkpoint_state_version: self.checkpoint_state_version,
             checkpoint_epoch: self.checkpoint_epoch,
-            checkpoint_state_version_is_trusted: self.checkpoint_state_version_is_trusted,
             progress_timeout: self.progress_timeout,
             min_throughput_bytes_per_sec: self.min_throughput_bytes_per_sec,
             up_version_lookback: self.up_version_lookback,
@@ -183,24 +178,11 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
         self
     }
 
-    /// Rejects any batch above the checkpoint's state version if `is_trusted`. The checkpoint's quorum signatures
-    /// must cover that version.
-    pub fn with_trusted_checkpoint_version(mut self, is_trusted: bool) -> Self {
-        self.checkpoint_state_version_is_trusted = is_trusted;
-        self
-    }
-
-    /// The proof schedule for a stream starting at `start_state_version`, if the stream carries proofs. A network
-    /// launched at V1 or later has every version since genesis proven, so it is held to the schedule from the
-    /// start.
+    /// The proof schedule for a stream starting at `start_state_version`, if the stream carries proofs. Every version
+    /// since genesis is proven, so the stream is held to the schedule from the start.
     fn proof_schedule(&self, start_state_version: Version) -> Option<ProofSchedule> {
-        self.version_proofs.map(|_| {
-            ProofSchedule::new(
-                ProtocolVersion::genesis(self.network) >= ProtocolVersion::V1,
-                start_state_version,
-                self.checkpoint_state_version,
-            )
-        })
+        self.version_proofs
+            .map(|_| ProofSchedule::new(start_state_version, self.checkpoint_state_version))
     }
 
     /// Verifies that `proof` proves the shard at `proof.state_version` with the root of `written_version`, the last
@@ -284,10 +266,8 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
     ///
     /// A shard's trailing versions can change its tree without changing any substate, so the last version a stream
     /// writes can lie below the checkpoint's version while already holding the checkpoint's root. Every node that
-    /// ran consensus is at the checkpoint's version, and from [`ProtocolVersion::V1`] the state merkle root commits
-    /// to each shard's version, so a node left below it computes a different root for every block.
-    ///
-    /// [`ProtocolVersion::V1`]: tari_engine_types::ProtocolVersion::V1
+    /// ran consensus is at the checkpoint's version, and the state merkle root commits to each shard's version, so a
+    /// node left below it computes a different root for every block.
     pub fn align_to_checkpoint_version(
         &self,
         verified_version: Option<Version>,
@@ -628,7 +608,7 @@ impl<'a, TStore: StateStore, TValidator: CommitProofValidator> ShardSync<'a, TSt
                     start_state_version
                 )));
             }
-            if self.checkpoint_state_version_is_trusted && batch.state_version > self.checkpoint_state_version {
+            if batch.state_version > self.checkpoint_state_version {
                 return Err(RpcStateSyncError::ConflictsWithCheckpoint(anyhow!(
                     "Received state version {} that is above the checkpoint state version {}.",
                     batch.state_version,
@@ -962,6 +942,7 @@ impl VersionBuffer {
 mod tests {
     use futures::{FutureExt, stream};
     use tari_engine_types::{
+        ProtocolVersion,
         confidential::ClaimedOutputTombstone,
         substate::{SubstateId, SubstateValue},
     };
@@ -1740,7 +1721,7 @@ mod tests {
             proposed_by: Default::default(),
             state_merkle_root: FixedHash::from(state_merkle_root.into_array()),
             command_merkle_root: FixedHash::zero(),
-            transaction_merkle_root: None,
+            transaction_merkle_root: FixedHash::zero(),
             signature: Default::default(),
             accumulated_data: Default::default(),
             metadata_hash: FixedHash::zero(),
@@ -2033,8 +2014,7 @@ mod tests {
             version_after(&checkpoint),
             EPOCH,
             UP_VERSION_LOOKBACK,
-        )
-        .with_trusted_checkpoint_version(true);
+        );
         let mut stats = StateSyncStats::default();
 
         let err = sync
@@ -2056,40 +2036,6 @@ mod tests {
         );
         assert_eq!(stats.total_transitions, 1);
         assert!(substate(&store, POISON).is_none());
-        assert_eq!(local_version(&store), None);
-    }
-
-    #[tokio::test]
-    async fn an_untrusted_checkpoint_version_does_not_bound_the_stream() {
-        let (store, _tmp) = create_store();
-        let checkpoint = vec![(1, vec![create(HONEST)])];
-        let sync = ShardSync::new(
-            NETWORK,
-            NUM_PRESHARDS,
-            &store,
-            shard(),
-            root_after(&checkpoint),
-            version_after(&checkpoint),
-            EPOCH,
-            UP_VERSION_LOOKBACK,
-        );
-        let mut stats = StateSyncStats::default();
-
-        let err = sync
-            .sync_from_stream(
-                &mut stats,
-                None,
-                stream::iter(vec![
-                    batch(1, vec![create(HONEST)]),
-                    batch(2, vec![create(POISON)]),
-                    complete(2),
-                ]),
-            )
-            .await
-            .unwrap_err();
-
-        assert!(matches!(err, RpcStateSyncError::StateRootMismatch { .. }), "{err}");
-        assert_eq!(stats.total_transitions, 2);
         assert_eq!(local_version(&store), None);
     }
 

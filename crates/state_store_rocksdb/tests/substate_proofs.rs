@@ -13,22 +13,20 @@ use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
     SubstateProofGenerator,
-    consensus_models::{EndOfEpochCommand, EpochCheckpoint, SubstateRecord, TreeRootSummary},
+    consensus_models::SubstateRecord,
 };
-use tari_sidechain::{CommandCommitProof, FixedHash, SidechainBlockCommitProof, SidechainBlockHeader};
 use tari_state_tree::{
     JmtHashScheme,
     SPARSE_MERKLE_PLACEHOLDER_HASH,
     SpreadPrefixStateTree,
     TreeHash,
     Version,
-    compute_proof_for_hashes,
     compute_shard_group_root,
 };
 
 use crate::helpers::substate_id_seed;
 
-const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion::V2;
+const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion::V0;
 
 /// Each shard's committed root and state version, global shard included, with a shard that has no
 /// state tree at the empty root and version 0.
@@ -46,71 +44,9 @@ fn shard_states(tx: &impl StateStoreReadTransaction, shard_group: ShardGroup) ->
         .collect()
 }
 
-/// The shard-group state merkle root a block header commits under `protocol_version`.
-fn shard_group_root_at(
-    tx: &impl StateStoreReadTransaction,
-    shard_group: ShardGroup,
-    protocol_version: ProtocolVersion,
-) -> TreeHash {
-    compute_shard_group_root(protocol_version, shard_states(tx, shard_group)).unwrap()
-}
-
+/// The shard-group state merkle root a block header commits.
 fn shard_group_root(tx: &impl StateStoreReadTransaction, shard_group: ShardGroup) -> TreeHash {
-    shard_group_root_at(tx, shard_group, PROTOCOL_VERSION)
-}
-
-/// An end-of-epoch checkpoint of the store's current state, from a block produced under
-/// `protocol_version`. Its commit proof is not signed, so it serves root computation only.
-fn checkpoint_of(
-    tx: &impl StateStoreReadTransaction,
-    shard_group: ShardGroup,
-    protocol_version: ProtocolVersion,
-) -> EpochCheckpoint {
-    let shard_states = shard_states(tx, shard_group);
-    let state_merkle_root = compute_shard_group_root(protocol_version, shard_states.clone()).unwrap();
-    let header = SidechainBlockHeader {
-        network: 0,
-        protocol_version: protocol_version.as_u32(),
-        parent_id: Default::default(),
-        justify_id: Default::default(),
-        height: 0,
-        epoch: 0,
-        epoch_hash: Default::default(),
-        shard_group: tari_sidechain::ShardGroup {
-            start: shard_group.start().as_u32(),
-            end_inclusive: shard_group.end().as_u32(),
-        },
-        proposed_by: Default::default(),
-        state_merkle_root: FixedHash::new(state_merkle_root.into_array()),
-        command_merkle_root: Default::default(),
-        transaction_merkle_root: None,
-        signature: Default::default(),
-        accumulated_data: Default::default(),
-        metadata_hash: Default::default(),
-    };
-    let command_hash = TreeHash::new([1; 32]);
-    let (_, inclusion_proof) = compute_proof_for_hashes([command_hash].into_iter(), command_hash).unwrap();
-    let summary = shard_states
-        .into_iter()
-        .map(|(shard, root_hash, state_version)| {
-            (shard, TreeRootSummary {
-                root_hash,
-                state_version,
-            })
-        })
-        .collect();
-    EpochCheckpoint::new(
-        CommandCommitProof::new(
-            EndOfEpochCommand::new(FixedHash::default()),
-            SidechainBlockCommitProof {
-                header,
-                proof_elements: vec![],
-            },
-            inclusion_proof,
-        ),
-        summary,
-        None,
-    )
+    compute_shard_group_root(PROTOCOL_VERSION, shard_states(tx, shard_group)).unwrap()
 }
 
 /// The leaf value hash a verifier re-derives from the substate value to bind it to the committed leaf.
@@ -338,108 +274,4 @@ fn a_shard_with_no_committed_state_proves_nothing() {
             .unwrap()
             .is_none()
     );
-}
-
-/// Across a V1 to V2 activation the shard states stay as they are and only the group root over them
-/// changes, so the same store answers for anchors on either side. Each proof holds only at the version
-/// of the root it was generated for.
-#[test]
-fn a_proof_verifies_only_at_the_version_of_its_anchor() {
-    let (db, _tmp) = create_rocksdb();
-    let shard_group = ShardGroup::all_shards(num_preshards());
-    let substates = substates_spanning_shards(4, 2);
-    commit_substates(&db, &substates);
-
-    let tx = db.create_read_tx().unwrap();
-    let v1_root = shard_group_root_at(&tx, shard_group, ProtocolVersion::V1);
-    let v2_root = shard_group_root_at(&tx, shard_group, ProtocolVersion::V2);
-    assert_ne!(v1_root, v2_root);
-    let mut v1_generator = SubstateProofGenerator::new(&tx, shard_group, num_preshards(), ProtocolVersion::V1).unwrap();
-    let mut v2_generator = SubstateProofGenerator::new(&tx, shard_group, num_preshards(), ProtocolVersion::V2).unwrap();
-
-    for substate in &substates {
-        let versioned_id = substate.to_versioned_substate_id();
-        let value_hash = value_hash(substate);
-        let v1_proof = v1_generator.generate(&versioned_id).unwrap().expect("shard has state");
-        let v2_proof = v2_generator.generate(&versioned_id).unwrap().expect("shard has state");
-
-        v1_proof
-            .verify_inclusion(
-                JmtHashScheme::V1,
-                ProtocolVersion::V1,
-                &v1_root,
-                num_preshards(),
-                &versioned_id,
-                &value_hash,
-            )
-            .unwrap();
-        v2_proof
-            .verify_inclusion(
-                JmtHashScheme::V1,
-                ProtocolVersion::V2,
-                &v2_root,
-                num_preshards(),
-                &versioned_id,
-                &value_hash,
-            )
-            .unwrap();
-        v1_proof
-            .verify_inclusion(
-                JmtHashScheme::V1,
-                ProtocolVersion::V2,
-                &v2_root,
-                num_preshards(),
-                &versioned_id,
-                &value_hash,
-            )
-            .unwrap_err();
-        v2_proof
-            .verify_inclusion(
-                JmtHashScheme::V1,
-                ProtocolVersion::V1,
-                &v1_root,
-                num_preshards(),
-                &versioned_id,
-                &value_hash,
-            )
-            .unwrap_err();
-    }
-}
-
-/// At the activation, the first V2 epoch's genesis block commits the last V1 end-of-epoch
-/// checkpoint re-rooted under V2. That root must be the one V2 proofs over the same state verify
-/// against.
-#[test]
-fn a_v1_checkpoint_re_rooted_at_v2_anchors_v2_proofs() {
-    let (db, _tmp) = create_rocksdb();
-    let shard_group = ShardGroup::all_shards(num_preshards());
-    let substates = substates_spanning_shards(4, 2);
-    commit_substates(&db, &substates);
-
-    let tx = db.create_read_tx().unwrap();
-    let checkpoint = checkpoint_of(&tx, shard_group, ProtocolVersion::V1);
-    assert_eq!(
-        checkpoint.compute_state_merkle_root().unwrap(),
-        shard_group_root_at(&tx, shard_group, ProtocolVersion::V1)
-    );
-    let genesis_root = checkpoint.compute_state_merkle_root_as(ProtocolVersion::V2).unwrap();
-    assert_eq!(genesis_root, shard_group_root_at(&tx, shard_group, ProtocolVersion::V2));
-
-    let mut generator = SubstateProofGenerator::new(&tx, shard_group, num_preshards(), ProtocolVersion::V2).unwrap();
-    for substate in &substates {
-        let versioned_id = substate.to_versioned_substate_id();
-        generator
-            .generate(&versioned_id)
-            .unwrap()
-            .expect("shard has state")
-            .verify_inclusion(
-                JmtHashScheme::V1,
-                ProtocolVersion::V2,
-                &genesis_root,
-                num_preshards(),
-                &versioned_id,
-                &value_hash(substate),
-            )
-            .unwrap();
-    }
 }

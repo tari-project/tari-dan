@@ -128,8 +128,7 @@ impl EpochCheckpoint {
             .map_err(|e| EpochCheckpointValidationError::InvalidEpochCheckpoint(e.into()))
     }
 
-    /// From [`ProtocolVersion::V1`] the root commits to each shard's state version as well as its root, so a
-    /// checkpoint that validates fixes both.
+    /// The root commits to each shard's state version as well as its root, so a checkpoint that validates fixes both.
     pub fn compute_state_merkle_root(&self) -> Result<TreeHash, EpochCheckpointValidationError> {
         self.compute_state_merkle_root_as(self.protocol_version()?)
     }
@@ -383,7 +382,7 @@ mod tests {
             proposed_by: Default::default(),
             state_merkle_root: Default::default(),
             command_merkle_root: Default::default(),
-            transaction_merkle_root: None,
+            transaction_merkle_root: Default::default(),
             signature: Default::default(),
             accumulated_data: Default::default(),
             metadata_hash: committed.calculate_hash(),

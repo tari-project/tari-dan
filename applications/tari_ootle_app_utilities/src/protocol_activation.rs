@@ -39,25 +39,27 @@ where
     let last_known_epoch: Option<Epoch> = metadata
         .get_metadata(MetadataKey::EpochManagerCurrentEpoch.as_key_bytes())
         .map_err(db_error)?;
-    // Absent means V0: every binary predating this key launched every network at V0.
-    let recorded_genesis: ProtocolVersion = metadata
+    let recorded_genesis: Option<ProtocolVersion> = metadata
         .get_metadata(MetadataKey::ProtocolGenesisVersion.as_key_bytes())
-        .map_err(db_error)?
-        .unwrap_or(ProtocolVersion::V0);
+        .map_err(db_error)?;
 
     let genesis = ProtocolVersion::genesis(network);
-    let to_record =
-        match ProtocolVersion::check_activation_schedule(network, &recorded, recorded_genesis, last_known_epoch) {
-            Ok(schedule) => schedule,
-            Err(err) if allow_past_activation => {
-                warn!(target: LOG_TARGET, "⚠️ {err} Continuing because allow_past_protocol_activation is set.");
-                ProtocolVersion::scheduled_activation_epochs(network)
-            },
-            Err(err) => {
-                error!(target: LOG_TARGET, "🛑 {err}");
-                return Err(ExitError::new(ExitCode::DbInconsistentState, err));
-            },
-        };
+    let to_record = match ProtocolVersion::check_activation_schedule(
+        network,
+        &recorded,
+        recorded_genesis.unwrap_or(genesis),
+        last_known_epoch,
+    ) {
+        Ok(schedule) => schedule,
+        Err(err) if allow_past_activation => {
+            warn!(target: LOG_TARGET, "⚠️ {err} Continuing because allow_past_protocol_activation is set.");
+            ProtocolVersion::scheduled_activation_epochs(network)
+        },
+        Err(err) => {
+            error!(target: LOG_TARGET, "🛑 {err}");
+            return Err(ExitError::new(ExitCode::DbInconsistentState, err));
+        },
+    };
 
     if to_record != recorded {
         info!(target: LOG_TARGET, "Recording protocol schema activation schedule: {to_record:?}");
@@ -65,7 +67,7 @@ where
             .set_metadata(MetadataKey::ProtocolActivationSchedule.as_key_bytes(), &to_record)
             .map_err(db_error)?;
     }
-    if genesis != recorded_genesis {
+    if recorded_genesis != Some(genesis) {
         info!(target: LOG_TARGET, "Recording genesis protocol version: {genesis}");
         metadata
             .set_metadata(MetadataKey::ProtocolGenesisVersion.as_key_bytes(), &genesis)

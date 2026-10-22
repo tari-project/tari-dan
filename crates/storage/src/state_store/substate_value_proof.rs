@@ -293,12 +293,9 @@ pub fn decode_substate_down_proof(proof_bytes: &[u8]) -> Result<SubstateDownProo
 /// shard-group roots: `up_root`, which the proof's `up_commit_proof` commits, and `down_root`, the root of the commit
 /// proof the proof was served with.
 ///
-/// The proof holds when `down_root` was committed under V2 or later, both roots' shard groups contain the
-/// substate's shard, `up_root` is strictly earlier than `down_root`, the substate is included at `up_root` and
-/// excluded at `down_root`. Each root is verified under the protocol version of its own epoch. Exclusion against an
-/// earlier root is not bound to the substate's shard (see [`exclusion_is_shard_bound`]), so such a proof is reported
-/// as [`SubstateProofVerifyError::DownProofExclusionNotShardBound`]: it does not prove the Down, nor show the proof
-/// dishonest.
+/// The proof holds when both roots' shard groups contain the substate's shard, `up_root` is strictly earlier than
+/// `down_root`, the substate is included at `up_root` and excluded at `down_root`. Each root is verified under the
+/// protocol version of its own epoch.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_substate_down_proof_against_roots(
     proof_bytes: &[u8],
@@ -309,14 +306,6 @@ pub fn verify_substate_down_proof_against_roots(
     up_root: &DownProofAnchor,
     down_root: &DownProofAnchor,
 ) -> Result<(), SubstateProofVerifyError> {
-    // Whatever else the proof holds, an exclusion against such a root cannot show the substate went down.
-    let down_protocol_version = ProtocolVersion::at(network, down_root.epoch());
-    if !exclusion_is_shard_bound(down_protocol_version) {
-        return Err(SubstateProofVerifyError::DownProofExclusionNotShardBound {
-            protocol_version: down_protocol_version,
-        });
-    }
-
     let proof = decode_substate_down_proof(proof_bytes)?;
 
     // `up_root` must be the root of the commit proof the proof carries, not one the caller established for another
@@ -364,6 +353,7 @@ pub fn verify_substate_down_proof_against_roots(
     }
 
     let up_protocol_version = ProtocolVersion::at(network, up_root.epoch());
+    let down_protocol_version = ProtocolVersion::at(network, down_root.epoch());
     proof
         .up
         .verify_inclusion(
@@ -388,19 +378,6 @@ pub fn verify_substate_down_proof_against_roots(
         .map_err(SubstateProofVerifyError::DownProofNotDown)?;
 
     Ok(())
-}
-
-/// Whether an exclusion proof against a root committed under `protocol_version` can only cite the substate's own
-/// shard.
-///
-/// From V2 the shard-group tree keys each leaf by its shard, so a proof's level-2 path pins the shard it speaks for.
-/// Before that a leaf is keyed by its value alone, and any shard's genuine root and state version prove the absence
-/// of a substate that is live in another shard. Inclusion is unaffected: a substate's leaf key is unique to its shard.
-pub fn exclusion_is_shard_bound(protocol_version: ProtocolVersion) -> bool {
-    match protocol_version {
-        ProtocolVersion::V0 | ProtocolVersion::V1 => false,
-        ProtocolVersion::V2 | ProtocolVersion::V3 => true,
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -442,11 +419,6 @@ pub enum SubstateProofVerifyError {
         up_shard_group: ShardGroup,
         down_shard_group: ShardGroup,
     },
-    #[error(
-        "down proof's exclusion root was committed under {protocol_version}, whose shard-group leaves do not name \
-         their shard"
-    )]
-    DownProofExclusionNotShardBound { protocol_version: ProtocolVersion },
     #[error("down proof's inclusion root is not the root of the commit proof it carries")]
     DownProofAnchorMismatch,
     #[error("down proof does not show the substate was committed: {0}")]
@@ -503,11 +475,11 @@ mod tests {
             (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0),
             (other_shard, TreeHash::new([7; 32]), 1),
         ];
-        let other_group_root = compute_shard_group_root(ProtocolVersion::V2, other_group_states).unwrap();
+        let other_group_root = compute_shard_group_root(ProtocolVersion::V0, other_group_states).unwrap();
         // The substate's shard has no leaf in the other group's root, so the proof that its key is
         // absent - the proof an empty shard gets - verifies against that root.
         let with_own_shard_empty = ShardGroupRootTree::build(
-            ProtocolVersion::V2,
+            ProtocolVersion::V0,
             other_group_states
                 .into_iter()
                 .chain([(own_shard, SPARSE_MERKLE_PLACEHOLDER_HASH, 0)]),
@@ -526,7 +498,7 @@ mod tests {
         proof
             .verify_exclusion(
                 JmtHashScheme::V1,
-                ProtocolVersion::V2,
+                ProtocolVersion::V0,
                 &other_group_root,
                 NUM_PRESHARDS,
                 &versioned_id,
@@ -579,7 +551,6 @@ mod tests {
 
         use super::*;
 
-        /// V2 on every epoch.
         const NETWORK: Network = Network::LocalNet;
         const EPOCH: Epoch = Epoch(1);
 
@@ -639,7 +610,7 @@ mod tests {
                 proposed_by: Default::default(),
                 state_merkle_root: FixedHash::new(root.into_array()),
                 command_merkle_root: FixedHash::zero(),
-                transaction_merkle_root: None,
+                transaction_merkle_root: FixedHash::zero(),
                 signature: Default::default(),
                 accumulated_data: Default::default(),
                 metadata_hash: FixedHash::zero(),
@@ -810,7 +781,7 @@ mod tests {
         }
 
         /// A live substate is absent from every shard but its own, so a sibling shard's genuine tree "proves" its
-        /// absence. Under V2 that tree's leaf names the sibling, so the proof fails.
+        /// absence. That tree's leaf names the sibling, so the proof fails.
         #[test]
         fn an_exclusion_lifted_from_another_shard_is_rejected() {
             let mut scenario = Scenario::new(false, |_| vec![]);
@@ -892,8 +863,8 @@ mod tests {
             );
         }
 
-        /// Destroying the only substate of a shard leaves the shard at the empty-tree root, which its V2 leaf binds to
-        /// the shard and its state version.
+        /// Destroying the only substate of a shard leaves the shard at the empty-tree root, which its leaf binds to the
+        /// shard and its state version.
         #[test]
         fn a_shard_emptied_by_the_destruction_proves_it_down() {
             let mut scenario = Scenario::new(true, |target| vec![down(target)]);
@@ -984,47 +955,6 @@ mod tests {
                 );
                 verify(group_a, epoch).unwrap();
             }
-        }
-
-        /// Before V2 another shard's genuine root proves any substate absent, so a down proof whose exclusion root
-        /// precedes V2 shows nothing. Esmeralda runs V0 then V1 and has not scheduled V2.
-        #[test]
-        fn an_exclusion_root_before_v2_does_not_prove_a_down() {
-            let mut scenario = Scenario::new(false, destroyed_and_replaced);
-            let target = scenario.target.clone();
-            let proof = tari_bor::serde_codec::to_vec(scenario.honest(&target)).unwrap();
-            for epoch in [Epoch(1), Epoch(11925)] {
-                let protocol_version = ProtocolVersion::at(Network::Esmeralda, epoch);
-                assert!(matches!(protocol_version, ProtocolVersion::V0 | ProtocolVersion::V1));
-                let mut up_tip = scenario.r1_tip(2);
-                let mut down_tip = scenario.r2_tip();
-                up_tip.epoch = epoch;
-                down_tip.epoch = epoch;
-                let (up_root, down_root) = (DownProofAnchor::from(up_tip), DownProofAnchor::from(down_tip));
-                let result = verify_substate_down_proof_against_roots(
-                    &proof,
-                    target.substate_id(),
-                    target.version(),
-                    Network::Esmeralda,
-                    NUM_PRESHARDS,
-                    &up_root,
-                    &down_root,
-                );
-                assert!(
-                    matches!(
-                        result,
-                        Err(SubstateProofVerifyError::DownProofExclusionNotShardBound { .. })
-                    ),
-                    "{epoch}: {result:?}"
-                );
-            }
-        }
-
-        #[test]
-        fn shard_bound_exclusion_starts_at_v2() {
-            assert!(!exclusion_is_shard_bound(ProtocolVersion::V0));
-            assert!(!exclusion_is_shard_bound(ProtocolVersion::V1));
-            assert!(exclusion_is_shard_bound(ProtocolVersion::V2));
         }
 
         /// Groups of one epoch do not overlap, so no honest pair of roots of one epoch holds the substate's shard in

@@ -328,7 +328,7 @@ mod tests {
         NumPreshards::try_from(4u32).unwrap()
     }
 
-    const VERSION: ProtocolVersion = ProtocolVersion::V2;
+    const VERSION: ProtocolVersion = ProtocolVersion::V0;
 
     fn key(scheme: u16, bytes: &[u8]) -> MemberKey {
         MemberKey {
@@ -375,7 +375,7 @@ mod tests {
     #[test]
     fn the_leaf_hash_is_the_documented_preimage() {
         let mut body = Vec::new();
-        body.extend_from_slice(&2u32.to_le_bytes());
+        body.extend_from_slice(&0u32.to_le_bytes());
         body.extend_from_slice(&2u32.to_le_bytes());
         body.extend_from_slice(&3u32.to_le_bytes());
         body.extend_from_slice(&2u32.to_le_bytes());
@@ -394,7 +394,7 @@ mod tests {
     #[test]
     fn the_leaf_hash_of_additional_keys_is_the_documented_preimage() {
         let mut body = Vec::new();
-        body.extend_from_slice(&2u32.to_le_bytes());
+        body.extend_from_slice(&0u32.to_le_bytes());
         body.extend_from_slice(&2u32.to_le_bytes());
         body.extend_from_slice(&3u32.to_le_bytes());
         body.extend_from_slice(&1u32.to_le_bytes());
@@ -479,12 +479,6 @@ mod tests {
         assert_ne!(leaf(&[("c", 3, 1), ("d", 4, 1)], shard_group), sample);
         assert_ne!(leaf(&[("c", 3, 2), ("d", 5, 1)], shard_group), sample);
         assert_ne!(leaf(&[("c", 3, 2)], shard_group), sample);
-        assert_ne!(
-            committee(&[("c", 3, 2), ("d", 4, 1)])
-                .calculate_validator_set_leaf_hash(ProtocolVersion::V1, &shard_group)
-                .unwrap(),
-            sample
-        );
     }
 
     #[test]

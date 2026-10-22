@@ -310,12 +310,10 @@ impl RootProofTree {
 /// Where a shard's state sits in its shard group's root tree: the key of its leaf, and the leaf's
 /// value, or `None` when the tree holds no leaf for the shard.
 ///
-/// - [`ProtocolVersion::V0`] and [`ProtocolVersion::V1`]: the leaf is [`shard_state_leaf`], keyed by its own hash. The
-///   tree is a set of leaves, so a proof against such a root shows only that a leaf is one of the group's.
-/// - [`ProtocolVersion::V2`] and later: the leaf is keyed by the shard, so a proof names the shard a leaf belongs to,
-///   and the leaf value commits to the shard as well (see [`shard_state_leaf`]). A shard with no state - the empty-tree
-///   root at state version 0 - has no leaf, and the absence of its key proves its state. This keeps the tree, and the
-///   cost of building it for every block, proportional to the shards that hold state.
+/// The leaf is keyed by the shard, so a proof names the shard a leaf belongs to, and the leaf value commits to the
+/// shard as well (see [`shard_state_leaf`]). A shard with no state - the empty-tree root at state version 0 - has no
+/// leaf, and the absence of its key proves its state. This keeps the tree, and the cost of building it for every
+/// block, proportional to the shards that hold state.
 #[derive(Debug, Clone)]
 pub struct ShardGroupLeaf {
     pub key: LeafKey,
@@ -326,11 +324,7 @@ impl ShardGroupLeaf {
     pub fn new(protocol_version: ProtocolVersion, shard: Shard, shard_root: &TreeHash, state_version: Version) -> Self {
         let value = shard_state_leaf(protocol_version, shard, shard_root, state_version);
         match protocol_version {
-            ProtocolVersion::V0 | ProtocolVersion::V1 => Self {
-                key: HashIdentityKeyMapper::map_to_leaf_key(&value),
-                value: Some(value),
-            },
-            ProtocolVersion::V2 | ProtocolVersion::V3 => {
+            ProtocolVersion::V0 => {
                 let has_state = *shard_root != SPARSE_MERKLE_PLACEHOLDER_HASH || state_version != 0;
                 Self {
                     key: ShardKeyMapper::map_to_leaf_key(&shard),
@@ -351,8 +345,7 @@ pub struct ShardGroupRootTree {
 }
 
 impl ShardGroupRootTree {
-    /// Builds the tree over `(shard, shard root, state version)` entries, in the canonical
-    /// `[global, shard_0, ...]` order a V0 root is formed in. Fails if a shard appears more than once.
+    /// Builds the tree over `(shard, shard root, state version)` entries. Fails if a shard appears more than once.
     pub fn build<I: IntoIterator<Item = (Shard, TreeHash, Version)>>(
         protocol_version: ProtocolVersion,
         shard_states: I,
@@ -392,8 +385,8 @@ impl ShardGroupRootTree {
         self.root
     }
 
-    /// Proves the leaf the tree holds for `shard`, or under [`ProtocolVersion::V2`] that it holds
-    /// none - which is the proof that the shard has no state.
+    /// Proves the leaf the tree holds for `shard`, or that it holds none - which is the proof that the shard has no
+    /// state.
     pub fn get_proof(&self, shard: Shard) -> Result<(Option<ProofValue<()>>, SparseMerkleProofExt), StateTreeError> {
         let leaf = self
             .leaves

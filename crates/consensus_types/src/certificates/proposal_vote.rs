@@ -17,10 +17,9 @@ pub struct ProposalVote {
     pub epoch: Epoch,
     #[n(1)]
     pub block_id: BlockId,
-    /// The height of the view change - this should correspond to the height of the block. From protocol version 1
-    /// it is part of the signed preimage. Safety here rests on bucketing: votes aggregate by
-    /// `(epoch, block_height)`, so one carrying a height that disagrees with the block lands in its own bucket and
-    /// can never be folded into an honest quorum.
+    /// The height of the view change - this should correspond to the height of the block. It is part of the signed
+    /// preimage. Safety here rests on bucketing: votes aggregate by `(epoch, block_height)`, so one carrying a height
+    /// that disagrees with the block lands in its own bucket and can never be folded into an honest quorum.
     #[n(2)]
     pub block_height: NodeHeight,
     // QuorumDecision is foreign (tari_sidechain) — bridge through serde.

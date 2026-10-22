@@ -27,11 +27,11 @@ use tari_state_tree::{
 use tari_template_lib_types::{Hash32, crypto::RistrettoPublicKeyBytes};
 
 /// The [`ValidatorSetHash`] of [`sample_tree`].
-const SAMPLE_SET_HASH: &str = "51286cc96931bdbd98b66298cf19cafcf4dddd0eb6cbc209aac39101c74e4899";
+const SAMPLE_SET_HASH: &str = "88e94d0a4bf396e1adf8f64bdaf33c59179ef652a1f72cd3f3de0f20de1d95c3";
 /// The committee root of [`sample_tree`].
-const SAMPLE_COMMITTEE_ROOT: &str = "87a6dd69d45139b9ec5661a4139b95d949c6d699690aad30564f83fef80e5e95";
+const SAMPLE_COMMITTEE_ROOT: &str = "8ac4362d6fee82b2448147f057f285587affab4aadacb8c8097f2adad9237c13";
 /// The CBOR encoding of the Merkle proof for shard group 0-1 of [`sample_tree`].
-const SAMPLE_PROOF_CBOR: &str = "8282582085e0fbe3f7469cf36076378d541a98ff75229484bceda9bbde30a821f5fb0be958204f97c0dc9ecb339cc5be79ab28988388453a584effd3f6239b018a23fdda86d88182008258205207a5c228122830b01276579c669167430ce311fdd5448360324677db7a99be5820e8bff52d3d6676765940fca78fcee6c92d27534ef2f8645c09839f33b79621b8";
+const SAMPLE_PROOF_CBOR: &str = "8282582085e0fbe3f7469cf36076378d541a98ff75229484bceda9bbde30a821f5fb0be95820b909558531ce60e7970f6764f7cbdaf4b9823bb55a96bc99adc3793e935428418182008258205207a5c228122830b01276579c669167430ce311fdd5448360324677db7a99be5820aeb225a6b419e4fab15769ff55f3a65e8134680be0d705da43871b598f02f7bc";
 
 fn pk(byte: u8) -> RistrettoPublicKeyBytes {
     RistrettoPublicKeyBytes::from_bytes(&[byte; 32]).unwrap()

@@ -15,30 +15,27 @@ use crate::{
 /// `state_merkle_root` committed in an L2 block header):
 ///   1. the substate leaf is included in (or excluded from) its shard's JMT, rooted at `shard_root`;
 ///   2. the shard's state is committed in the shard-group root tree, rooted at the block header's `state_merkle_root`
-///      (see [`ShardGroupLeaf`] for how each protocol version lays that tree out).
+///      (see [`ShardGroupLeaf`] for how that tree is laid out).
 ///
 /// Verifying both levels against a *trusted* group root proves the substate's committed value (via
 /// [`SubstateValueProof::verify_inclusion`]) or its absence (via
-/// [`SubstateValueProof::verify_exclusion`]) without trusting the node that produced the proof. From
-/// [`ProtocolVersion::V2`] the verifier derives the substate's shard itself and checks the shard's own
-/// leaf, so the proof can only cite that shard's state. The caller is responsible for obtaining a
-/// trusted `group_root` (e.g. from a verified committed block proof), for checking that the
-/// substate's shard is one of the shards that root's group covers, and, for inclusion, for binding
-/// `value_hash` to the returned substate value. Under V2 a shard outside the group has no leaf, the
-/// same as an empty shard, so without the group check an exclusion proof against another group's
-/// root verifies.
+/// [`SubstateValueProof::verify_exclusion`]) without trusting the node that produced the proof. The
+/// verifier derives the substate's shard itself and checks the shard's own leaf, so the proof can
+/// only cite that shard's state. The caller is responsible for obtaining a trusted `group_root`
+/// (e.g. from a verified committed block proof), for checking that the substate's shard is one of
+/// the shards that root's group covers, and, for inclusion, for binding `value_hash` to the
+/// returned substate value. A shard outside the group has no leaf, the same as an empty shard, so
+/// without the group check an exclusion proof against another group's root verifies.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubstateValueProof {
     /// The substate's shard JMT root.
     pub shard_root: TreeHash,
-    /// Proof of the shard's leaf in the shard-group root tree, or under [`ProtocolVersion::V2`] of
-    /// its absence when the shard has no state.
+    /// Proof of the shard's leaf in the shard-group root tree, or of its absence when the shard has
+    /// no state.
     pub shard_root_proof: SparseMerkleProofExt,
     /// Proof for the substate leaf within its shard JMT (inclusion or exclusion).
     pub leaf_proof: SparseMerkleProofExt,
-    /// The shard's state version at `shard_root`, which the shard's leaf commits to from
-    /// [`ProtocolVersion::V1`].
-    #[serde(default)]
+    /// The shard's state version at `shard_root`, which the shard's leaf commits to.
     pub shard_state_version: Version,
 }
 
@@ -98,9 +95,8 @@ impl SubstateValueProof {
     /// substate's shard.
     ///
     /// A substate is absent from every shard but its own, so an exclusion proof is only meaningful
-    /// against its own shard's root. Under [`ProtocolVersion::V2`] the shard is derived from the
-    /// substate being proved, never taken from the prover, and a shard with no state is proved by
-    /// the absence of its leaf.
+    /// against its own shard's root. The shard is derived from the substate being proved, never
+    /// taken from the prover, and a shard with no state is proved by the absence of its leaf.
     fn verify_shard_root(
         &self,
         scheme: JmtHashScheme,

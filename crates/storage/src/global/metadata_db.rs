@@ -62,7 +62,7 @@ pub enum MetadataKey {
     ProtocolActivationSchedule,
     /// The genesis protocol version the node last started with. A network that has not launched may
     /// have its genesis version changed; this catches a node with history whose binary makes that
-    /// change under it. Absent means V0, which is what every binary predating this key ran under.
+    /// change under it. Absent on a node that has never started, which records it on first start.
     ProtocolGenesisVersion,
 }
 

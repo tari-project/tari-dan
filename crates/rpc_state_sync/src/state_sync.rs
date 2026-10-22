@@ -16,7 +16,6 @@ use tari_consensus::{
     traits::{ConsensusSpec, SyncManager, SyncStatus},
 };
 use tari_consensus_types::{LeafBlock, ProposalCertificate};
-use tari_engine_types::ProtocolVersion;
 use tari_epoch_manager::EpochManagerReader;
 use tari_ootle_common_types::{
     Epoch,
@@ -230,15 +229,9 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             checkpoint.epoch(),
             self.state_history_length,
         );
-        // A V0 checkpoint commits no state versions, so only from V1 does its version bound the stream.
-        let checkpoint_commits_state_versions = checkpoint
-            .protocol_version()
-            .map_err(|e| RpcStateSyncError::InvalidResponse(e.into()))? >=
-            ProtocolVersion::V1;
         let validator = CommitteeProofValidator::new(self.network, &self.epoch_manager, checkpoint.epoch());
         let shard_sync = shard_sync
             .with_version_proofs(&validator)
-            .with_trusted_checkpoint_version(checkpoint_commits_state_versions)
             .with_progress_timeout(self.progress_timeout)
             .with_min_throughput(self.min_throughput_bytes_per_sec);
         let maybe_persisted_state_version = shard_sync.discard_unverified_state()?;

@@ -1453,7 +1453,7 @@ mod tests {
             let shard_group = ShardGroup::all_shards(NumPreshards::P64);
             consensus_models::Block::create(
                 Network::LocalNet,
-                ProtocolVersion::V2,
+                ProtocolVersion::V0,
                 BlockId::zero(),
                 ProposalCertificate::genesis(Epoch(1), shard_group),
                 None,

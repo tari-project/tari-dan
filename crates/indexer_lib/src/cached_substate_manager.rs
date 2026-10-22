@@ -30,10 +30,7 @@ use async_trait::async_trait;
 use futures::{FutureExt, StreamExt, TryStreamExt, stream};
 use log::*;
 use ootle_network::Network;
-use tari_engine_types::{
-    ProtocolVersion,
-    substate::{Substate, SubstateId, SubstateValue},
-};
+use tari_engine_types::substate::{Substate, SubstateId, SubstateValue};
 use tari_epoch_manager::EpochManagerReader;
 use tari_ootle_common_types::{
     Epoch,
@@ -55,7 +52,6 @@ use tari_ootle_storage::{
     TrustedStateRoot,
     consensus_models::{CommittedBlockProof, VerifiedBlockTip},
     decode_substate_down_proof,
-    exclusion_is_shard_bound,
     verify_substate_down_proof_against_roots,
     verify_substate_value_proof_against_root,
 };
@@ -1086,13 +1082,6 @@ where
         down_proof: &[u8],
         down_commit_proof: &[u8],
     ) -> Result<bool, IndexerError> {
-        // An exclusion against a root committed before V2 cannot prove a Down, so such a proof is unproven whatever
-        // its commit proofs hold, and validating them would be wasted work. A member that names an earlier epoch than
-        // its anchor's only makes its own Down unproven; naming a later one fails validation below.
-        let down_epoch = decode_commit_proof(down_commit_proof)?.epoch();
-        if !exclusion_is_shard_bound(ProtocolVersion::at(self.network, down_epoch)) {
-            return Ok(false);
-        }
         let Some(down_root) = self.establish_down_proof_root(down_commit_proof, substate_id).await? else {
             return Ok(false);
         };
@@ -1121,11 +1110,9 @@ where
 
     /// Checks a down proof against its two established roots.
     ///
-    /// Two kinds of proof verify yet leave the Down unproven rather than refuted, since an honest node serves them:
-    /// - a global substate proved with roots of two shard groups: each group commits the global shard on its own chain,
-    ///   and a node that spans a reshard serves exactly such a proof;
-    /// - an exclusion root committed before V2, whose leaves do not name their shard, so that any shard's root proves
-    ///   the substate absent.
+    /// A global substate proved with roots of two shard groups verifies yet leaves the Down unproven rather than
+    /// refuted, since an honest node serves it: each group commits the global shard on its own chain, and a node that
+    /// spans a reshard serves exactly such a proof.
     fn check_down_proof(
         &self,
         substate_id: &SubstateId,
@@ -1144,10 +1131,7 @@ where
             down_root,
         ) {
             Ok(()) => Ok(true),
-            Err(
-                e @ (SubstateProofVerifyError::DownProofGlobalAcrossShardGroups { .. } |
-                SubstateProofVerifyError::DownProofExclusionNotShardBound { .. }),
-            ) => {
+            Err(e @ SubstateProofVerifyError::DownProofGlobalAcrossShardGroups { .. }) => {
                 debug!(target: LOG_TARGET, "Down of {substate_id}v{version} is unproven: {e}");
                 Ok(false)
             },
@@ -2015,7 +1999,7 @@ mod tests {
             proposed_by: Default::default(),
             state_merkle_root: FixedHash::new(root.into_array()),
             command_merkle_root: FixedHash::zero(),
-            transaction_merkle_root: None,
+            transaction_merkle_root: FixedHash::zero(),
             signature: Default::default(),
             accumulated_data: Default::default(),
             metadata_hash: FixedHash::zero(),
@@ -2216,24 +2200,6 @@ mod tests {
             .into()
     }
 
-    /// Before V2 a shard-group leaf is keyed by its value, so another shard's root proves any substate absent. Such a
-    /// proof leaves the Down unproven without disqualifying the member.
-    #[tokio::test]
-    async fn a_down_proved_against_a_pre_v2_root_is_unproven_not_invalid() {
-        let (mut manager, _) = manager(FakeNetwork::default());
-        manager.network = Network::Esmeralda;
-        assert!(matches!(
-            tari_engine_types::ProtocolVersion::at(Network::Esmeralda, PROOF_EPOCH),
-            tari_engine_types::ProtocolVersion::V0 | tari_engine_types::ProtocolVersion::V1
-        ));
-        let manager = manager.with_substate_proof_verification(true);
-        let (id, proof, up_root, r2_root) = global_down_proof(group(1, 2));
-        let proven = manager
-            .check_down_proof(&id, SubstateVersion::ZERO, &proof, &up_root, &r2_anchor(r2_root))
-            .unwrap();
-        assert!(!proven);
-    }
-
     /// A committee of `keys` (`vn0`, `vn1`, ...) of which `vn0` serves an honest down proof of a global substate,
     /// both of its commit proofs signed by all but the last member, and `failing` fail every proven read. Verification
     /// is on.
@@ -2388,51 +2354,6 @@ mod tests {
         }
         // One lookup for each of the two commit proofs a down proof cites.
         assert_eq!(lookups.load(Ordering::Relaxed), 2);
-    }
-
-    /// A down proof anchored before V2 cannot prove the Down, so it is left unproven before any committee is asked to
-    /// validate its commit proofs.
-    #[tokio::test]
-    async fn a_down_proof_anchored_before_v2_is_unproven_without_validation() {
-        let (id, proof, _, r2_root) = global_down_proof(group(1, 2));
-        for (network, consulted) in [(Network::Esmeralda, false), (Network::LocalNet, true)] {
-            let (mut manager, _) = manager(FakeNetwork {
-                down_with_proof: [(
-                    id.clone(),
-                    (SubstateVersion::ZERO, SubstateProofData {
-                        substate_value_proof: vec![],
-                        commit_proof: unsigned_commit_proof(group(1, 2), 4, r2_root),
-                        proof_epoch: 0,
-                        substate_down_proof: Some(proof.clone()),
-                        destroyed_at_state_version: Some(2),
-                    }),
-                )]
-                .into(),
-                ..Default::default()
-            });
-            manager.network = network;
-            let lookups = manager.committee_provider.2.clone();
-            let manager = manager.with_substate_proof_verification(true);
-            let result = manager
-                .get_substate_from_vn(
-                    &"vn".to_string(),
-                    SubstateRequirementRef::new(&id, Some(SubstateVersion::ZERO)),
-                )
-                .await;
-            if consulted {
-                // These commit proofs are unsigned, so validating them fails.
-                assert!(
-                    matches!(result, Err(IndexerError::SubstateProofVerificationFailed { .. })),
-                    "{network}: {result:?}"
-                );
-                assert!(lookups.load(Ordering::Relaxed) > 0, "{network}");
-            } else {
-                let (result, proof) = result.unwrap();
-                assert!(matches!(result, SubstateResult::Down { .. }));
-                assert!(proof.is_none());
-                assert_eq!(lookups.load(Ordering::Relaxed), 0, "{network}");
-            }
-        }
     }
 
     /// A head read cannot be settled by a down proof, so its down proof is not checked: an invalid one is an unproven

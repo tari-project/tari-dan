@@ -28,30 +28,15 @@ fn hash(n: u8) -> FixedHash {
 }
 
 #[test]
-fn version_0_header_hash_and_block_id() {
+fn header_hash_and_block_id() {
     let header = fixture_proof().header;
     assert_eq!(
         header.calculate_hash().to_string(),
-        "83ba92c1bc3e78d755c87aca1e35fb91a880449a959133f613ea829c37764b1a"
+        "27dc0822d624a548cb96b3cf8571e5d7fed0df8b50042f10fe66c8e93eb9b728"
     );
     assert_eq!(
         header.calculate_block_id().to_string(),
-        "4e1de1bcc5a2759c941846390d30377b4ee65484a58092dc5b17e5eb8f5030cf"
-    );
-}
-
-#[test]
-fn version_1_header_hash_and_block_id() {
-    let mut header = fixture_proof().header;
-    header.protocol_version = 1;
-    header.transaction_merkle_root = Some(hash(0x11));
-    assert_eq!(
-        header.calculate_hash().to_string(),
-        "71633e5937b4331f5d1bf6edb1a1a91b73c96db0af904a296941a963ec5d85f4"
-    );
-    assert_eq!(
-        header.calculate_block_id().to_string(),
-        "9073d7031830373be131aa82161e954bf7fe4ad92298074ee48898c550fb660b"
+        "6ea15995e1dae9c6117ee13bf2a907aecf33dd581fc27e83d589eb0bc348485d"
     );
 }
 
@@ -68,7 +53,7 @@ fn chain_link_and_justified_block_ids() {
     let proof = fixture_proof();
     assert_eq!(
         proof.last_qc().unwrap().calculate_justified_block().to_string(),
-        "4e1de1bcc5a2759c941846390d30377b4ee65484a58092dc5b17e5eb8f5030cf"
+        "6ea15995e1dae9c6117ee13bf2a907aecf33dd581fc27e83d589eb0bc348485d"
     );
 }
 

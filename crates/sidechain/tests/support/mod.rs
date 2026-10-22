@@ -43,7 +43,7 @@ pub fn fixture_committee() -> TestCommittee {
 
 /// The proof in `commit_proof.json`.
 pub fn fixture_proof() -> SidechainBlockCommitProof {
-    signed_proof(&fixture_committee(), 1..=4, test_header(None))
+    signed_proof(&fixture_committee(), 1..=4, test_header())
 }
 
 /// The secret key of test validator `i`.
@@ -61,7 +61,7 @@ pub fn test_committee(validators: impl IntoIterator<Item = u8>, power_of: impl F
 }
 
 /// A header at [`PROTOCOL_VERSION`] proposed by test validator 1.
-pub fn test_header(transaction_merkle_root: Option<FixedHash>) -> SidechainBlockHeader {
+pub fn test_header() -> SidechainBlockHeader {
     SidechainBlockHeader {
         network: 16,
         protocol_version: PROTOCOL_VERSION,
@@ -77,7 +77,7 @@ pub fn test_header(transaction_merkle_root: Option<FixedHash>) -> SidechainBlock
         proposed_by: validator_public_key(1),
         state_merkle_root: FixedHash::from([0x04; 32]),
         command_merkle_root: FixedHash::from([0x05; 32]),
-        transaction_merkle_root,
+        transaction_merkle_root: FixedHash::from([0x07; 32]),
         signature: ValidatorBlockSignature::default(),
         accumulated_data: ShardGroupAccumulatedData::default(),
         metadata_hash: FixedHash::from([0x06; 32]),

@@ -664,9 +664,8 @@ pub struct EvidenceInputLockData {
     /// Hash of the value the input was locked on. The evidence is part of the command that the shard group's commit
     /// proof covers, so this is what authenticates the value when it is pledged to another shard group.
     ///
-    /// The command hash covers it from [`ProtocolVersion::V2`](tari_engine_types::ProtocolVersion::V2) only, through
-    /// [`Evidence::pledged_value_hashes`], so that blocks from earlier versions keep the preimage they were signed
-    /// with.
+    /// The command hash covers it through [`Evidence::pledged_value_hashes`], as a trailer after the command, so it
+    /// is outside the borsh encoding.
     #[borsh(skip)]
     #[n(2)]
     pub pledged_value_hash: Option<Hash32>,

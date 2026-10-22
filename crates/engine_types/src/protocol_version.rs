@@ -17,20 +17,13 @@ use crate::Epoch;
 #[borsh(use_discriminant = true)]
 #[serde(into = "u32", try_from = "u32")]
 pub enum ProtocolVersion {
-    /// The genesis schema, which every network starts under.
+    /// The genesis schema, which every network starts under. Block IDs and votes commit to the version; each leaf of
+    /// a block's state merkle root commits to its shard, shard root and state version; each header commits to a
+    /// transaction merkle root over the decision it reached for every transaction it finalizes; and each leaf of a
+    /// block's command merkle root commits to the shard groups that a foreign commit proof of the block must carry the
+    /// command in full for.
     #[default]
     V0 = 0,
-    /// Each leaf of a block's state merkle root commits to its shard's state version as well as its shard root, so
-    /// a quorum-signed header fixes the version every shard of the group is at. Block IDs commit to the version.
-    V1 = 1,
-    /// Each block header commits to a transaction merkle root over the decision it reached for every transaction it
-    /// finalizes, and each leaf of a block's state merkle root commits to its shard as well as its shard root and
-    /// state version, so a substate proof can only cite the state of the shard the substate lives in.
-    V2 = 2,
-    /// Each leaf of a block's command merkle root commits to the shard groups that a foreign commit proof of the block
-    /// must carry the command in full for, so a foreign proposal that sends one of those shard groups a command as its
-    /// bare hash names that shard group in the authenticated leaf.
-    V3 = 3,
 }
 
 impl ProtocolVersion {
@@ -51,12 +44,12 @@ impl ProtocolVersion {
     /// one.
     const fn activations(network: Network) -> &'static [(Epoch, Self)] {
         match network {
-            Network::MainNet => &[(Epoch(0), Self::V3)],
-            Network::StageNet => &[(Epoch(0), Self::V3)],
-            Network::NextNet => &[(Epoch(0), Self::V3)],
-            Network::Igor => &[(Epoch(0), Self::V3)],
-            Network::Esmeralda => &[(Epoch(0), Self::V0), (Epoch(11925), Self::V1), (Epoch(12220), Self::V2)],
-            Network::LocalNet => &[(Epoch(0), Self::V3)],
+            Network::MainNet => &[(Epoch(0), Self::V0)],
+            Network::StageNet => &[(Epoch(0), Self::V0)],
+            Network::NextNet => &[(Epoch(0), Self::V0)],
+            Network::Igor => &[(Epoch(0), Self::V0)],
+            Network::Esmeralda => &[(Epoch(0), Self::V0)],
+            Network::LocalNet => &[(Epoch(0), Self::V0)],
         }
     }
 
@@ -82,9 +75,6 @@ impl ProtocolVersion {
     pub const fn from_u32(v: u32) -> Option<Self> {
         match v {
             0 => Some(Self::V0),
-            1 => Some(Self::V1),
-            2 => Some(Self::V2),
-            3 => Some(Self::V3),
             _ => None,
         }
     }
@@ -286,14 +276,9 @@ mod tests {
     }
 
     #[test]
-    fn every_network_but_esmeralda_starts_at_v3() {
+    fn every_network_starts_at_v0() {
         for network in all_networks() {
-            let expected = if network == Network::Esmeralda {
-                ProtocolVersion::V0
-            } else {
-                ProtocolVersion::V3
-            };
-            assert_eq!(ProtocolVersion::genesis(network), expected, "{network}");
+            assert_eq!(ProtocolVersion::genesis(network), ProtocolVersion::V0, "{network}");
         }
     }
 

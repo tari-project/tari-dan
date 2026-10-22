@@ -2915,7 +2915,7 @@ pub(crate) mod tests {
                 proposed_by: Default::default(),
                 state_merkle_root: FixedHash::zero(),
                 command_merkle_root: FixedHash::zero(),
-                transaction_merkle_root: None,
+                transaction_merkle_root: FixedHash::zero(),
                 signature: Default::default(),
                 accumulated_data: Default::default(),
                 metadata_hash: header_metadata.calculate_hash(),

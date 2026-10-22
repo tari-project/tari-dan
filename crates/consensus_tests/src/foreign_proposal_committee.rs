@@ -108,7 +108,7 @@ fn proposal(proposed_by: &'static str, shard_group: tari_sidechain::ShardGroup) 
             proposed_by: CompressedPublicKey::new_from_pk(proposer),
             state_merkle_root: Default::default(),
             command_merkle_root: Default::default(),
-            transaction_merkle_root: None,
+            transaction_merkle_root: Default::default(),
             signature: Default::default(),
             accumulated_data: Default::default(),
             metadata_hash: block_metadata.calculate_hash(),
@@ -205,9 +205,15 @@ fn only_a_stored_commit_proof_counts_as_authenticated() {
     let store = TestStore::open(&temp_dir, DatabaseOptions::default()).unwrap();
 
     let stored = with_commands(&proposal("b1", to_header_shard_group(group_b)), vec![
-        CommandOrHash::Hash(FixedHash::new([1u8; 32])),
+        CommandOrHash::Trimmed(TrimmedCommand {
+            hash: FixedHash::new([1u8; 32]),
+            full_command_shard_groups: vec![],
+        }),
     ]);
-    let same_block_id = with_commands(&stored, vec![CommandOrHash::Hash(FixedHash::new([2u8; 32]))]);
+    let same_block_id = with_commands(&stored, vec![CommandOrHash::Trimmed(TrimmedCommand {
+        hash: FixedHash::new([2u8; 32]),
+        full_command_shard_groups: vec![],
+    })]);
     assert_eq!(stored.calculate_block_id(), same_block_id.calculate_block_id());
 
     store
