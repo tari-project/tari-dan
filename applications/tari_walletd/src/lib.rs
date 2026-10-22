@@ -105,7 +105,7 @@ pub async fn run_tari_ootle_walletd(
     // Insert genesis resources
     let (xtr_addr, xtr_resx) = get_stealth_tari_resource(wallet_sdk.network());
     wallet_sdk.resources_api().upsert_resource(&xtr_addr, &xtr_resx)?;
-    let (addr, resx) = get_public_identity_resource(wallet_sdk.network());
+    let (addr, resx) = get_public_identity_resource();
     wallet_sdk.resources_api().upsert_resource(&addr, &resx)?;
 
     let notify = Notify::new(100);

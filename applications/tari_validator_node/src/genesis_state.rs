@@ -83,7 +83,7 @@ where
 
     let mut substates: Vec<(SubstateId, SubstateValue)> = Vec::new();
 
-    let (public_identity_address, resource) = get_public_identity_resource(network);
+    let (public_identity_address, resource) = get_public_identity_resource();
     substates.push((public_identity_address.into(), resource.into()));
 
     let (xtr_address, xtr_resource) = get_stealth_tari_resource(network);
@@ -95,7 +95,7 @@ where
         // Create tXTR faucet
         substates.extend(xtr_faucet_substates(network));
         // Create NFT faucet
-        substates.extend(nft_faucet_substates(network));
+        substates.extend(nft_faucet_substates());
     }
 
     commit_genesis_substates(tx, network, num_preshards, substates)?;
@@ -151,7 +151,7 @@ fn xtr_faucet_substates(network: Network) -> Vec<(SubstateId, SubstateValue)> {
         ),
     };
 
-    let (claim_resource_address, claim_resource) = get_xtr_faucet_claim_resource(network);
+    let (claim_resource_address, claim_resource) = get_xtr_faucet_claim_resource();
 
     vec![
         (XTR_FAUCET_VAULT_ADDRESS.into(), vault.into()),
@@ -160,7 +160,7 @@ fn xtr_faucet_substates(network: Network) -> Vec<(SubstateId, SubstateValue)> {
     ]
 }
 
-fn nft_faucet_substates(network: Network) -> Vec<(SubstateId, SubstateValue)> {
+fn nft_faucet_substates() -> Vec<(SubstateId, SubstateValue)> {
     let component = Component {
         header: ComponentHeader {
             template_address: tari_template_builtin::NFT_FAUCET_TEMPLATE_ADDRESS,
@@ -173,7 +173,7 @@ fn nft_faucet_substates(network: Network) -> Vec<(SubstateId, SubstateValue)> {
         ),
     };
 
-    let (resource_address, resource) = get_nft_faucet_resource(network);
+    let (resource_address, resource) = get_nft_faucet_resource();
 
     vec![
         (NFT_FAUCET_COMPONENT_ADDRESS.into(), component.into()),
