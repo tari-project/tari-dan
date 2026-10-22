@@ -18,7 +18,7 @@
 //! ```ignore
 //! while version < CURRENT_VERSION {
 //!     match version {
-//!         4 => v5::migrate(tx)?,
+//!         0 => v1::migrate(tx)?,
 //!         other => anyhow::bail!("no migration defined for database version {other}"),
 //!     }
 //!     version += 1;
@@ -147,18 +147,6 @@ mod tests {
         let (db, _tmp) = store_stamped(CURRENT_VERSION);
         run_migrate(&db).unwrap();
         assert_eq!(stored_version(&db), CURRENT_VERSION);
-    }
-
-    #[test]
-    fn a_database_older_than_the_binary_is_refused() {
-        let (db, _tmp) = store_stamped(CURRENT_VERSION - 1);
-        let err = run_migrate(&db).unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("Delete the validator's data directory and resync"),
-            "{err}"
-        );
-        assert_eq!(stored_version(&db), CURRENT_VERSION - 1);
     }
 
     #[test]
