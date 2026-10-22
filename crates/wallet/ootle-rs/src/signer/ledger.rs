@@ -41,6 +41,10 @@ use crate::{
     wallet::TransactionAuthorization,
 };
 
+/// The oldest device app whose stealth keys this signer can use. Earlier apps tweak the account key
+/// with `H(k·R)`, which matches no output a current sender creates.
+const MIN_APP_VERSION: (u64, u64, u64) = (0, 3, 0);
+
 /// A signer backed by an Ootle Ledger device over an arbitrary APDU transport `T`.
 pub struct LedgerSigner<T> {
     client: LedgerClient<T>,
@@ -54,9 +58,11 @@ where
     T: Exchange,
     T::Error: core::fmt::Display,
 {
-    /// Connect to a device-backed signer: fetch the account and view-only public keys for
-    /// `(account, index)` and derive the wallet [`Address`].
+    /// Connect to a device-backed signer: check the device app is new enough, fetch the account and
+    /// view-only public keys for `(account, index)` and derive the wallet [`Address`].
     pub async fn connect(client: LedgerClient<T>, network: Network, account: u64, index: u64) -> signer::Result<Self> {
+        let app_version = client.get_app_version().await.map_err(map_client_err)?;
+        check_app_version(&app_version)?;
         let account_pk = client
             .get_public_key(account, index, KeyType::Account, None)
             .await
@@ -75,7 +81,10 @@ where
     }
 
     /// Construct directly from an already-known address (skips the device round-trips). The caller
-    /// is responsible for ensuring `address` corresponds to `(account, index)` on the device.
+    /// is responsible for ensuring `address` corresponds to `(account, index)` on the device: both its
+    /// account key and its view key must be the device's keys at that path, because the device tweaks
+    /// stealth spend keys with its own view key. The caller is also responsible for the device running
+    /// an app this signer supports (see [`Self::connect`]).
     pub fn with_address(client: LedgerClient<T>, address: Address, account: u64, index: u64) -> Self {
         Self {
             client,
@@ -226,6 +235,28 @@ where
     }
 }
 
+fn check_app_version(version: &str) -> signer::Result<()> {
+    let parsed = version
+        .split('.')
+        .map(|part| part.parse::<u64>().ok())
+        .collect::<Option<Vec<_>>>()
+        .filter(|parts| parts.len() == 3)
+        .map(|parts| (parts[0], parts[1], parts[2]));
+    match parsed {
+        Some(found) if found >= MIN_APP_VERSION => Ok(()),
+        Some(_) => {
+            let (major, minor, patch) = MIN_APP_VERSION;
+            Err(SignerError::other(format!(
+                "Ledger app {version} derives stealth keys this wallet cannot use; update the Ootle Ledger app to \
+                 {major}.{minor}.{patch} or later"
+            )))
+        },
+        None => Err(SignerError::other(format!(
+            "Ledger app reported an unrecognised version {version:?}"
+        ))),
+    }
+}
+
 fn map_client_err<E: core::fmt::Display>(err: LedgerClientError<E>) -> SignerError {
     SignerError::other(err.to_string())
 }
@@ -321,5 +352,16 @@ mod tests {
             .seal_transaction_with_stealth(&nonce, &unsealed)
             .await
             .expect_err("a transaction from another network must not be sealed");
+    }
+
+    #[test]
+    fn app_versions_below_the_minimum_are_rejected() {
+        assert!(check_app_version("0.3.0").is_ok());
+        assert!(check_app_version("0.3.1").is_ok());
+        assert!(check_app_version("1.0.0").is_ok());
+        assert!(check_app_version("0.2.9").is_err());
+        assert!(check_app_version("0.2.0").is_err());
+        assert!(check_app_version("0.3").is_err());
+        assert!(check_app_version("not-a-version").is_err());
     }
 }

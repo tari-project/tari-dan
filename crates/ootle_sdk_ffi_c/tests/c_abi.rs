@@ -1218,7 +1218,8 @@ fn abi_version_is_the_stable_tag() {
     let s = unsafe { CStr::from_ptr(p) }.to_str().unwrap();
     assert_eq!(
         s, "ootle-sdk-ffi-c/19",
-        "the ABI tag every host binding asserts against (bumped when the co-sign exports gained the main signer)"
+        "the ABI tag every host binding asserts against (bumped when the stealth key bundles gained `view_secret` and \
+         the scan exports took `account_public_key`)"
     );
     // Static pointer — explicitly NOT freed (freeing it would be UB).
 }

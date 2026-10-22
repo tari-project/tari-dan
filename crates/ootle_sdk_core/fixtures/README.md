@@ -64,7 +64,10 @@ single 32-byte **build seed**, never per-nonce material:
 - **Public-transfer / resolve / cosign-seal vectors** carry `keys` (`account_secret`, `seed`, optional
   `seal_secret`); the cosign add-signature vector additionally carries the co-signer's
   `cosign_signer_secret` (signing key) and `cosign_signer_seed` (its nonce seed).
-- **Stealth-transfer / stealth-seal vectors** carry `stealth_keys` (`account_secret`, `seed`).
+- **Stealth-transfer / stealth-seal vectors** carry `stealth_keys` (`account_secret`, `view_secret`, `seed`).
+  The view secret keys each spent input's one-time spend key `H(v·R)·G + A`.
+- **Stealth-scan vectors** carry `stealth_scan_input` (`network`, `view_secret`, `account_public_key`, `output`,
+  `skip_memo`). The scan confirms ownership from the view secret and the account public key alone.
 - **Stealth-outputs-statement vectors** carry a bare `stealth_seed`.
 - **Key-derivation vectors** (`keys/`) carry a bare `seed` — the host input to the deterministic keygen.
 

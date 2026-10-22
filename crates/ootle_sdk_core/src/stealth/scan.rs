@@ -368,7 +368,7 @@ mod tests {
             false,
         );
 
-        // Scan with a different view secret (view-key-only mode).
+        // Scan with a different view secret.
         let other_view = scalar(99);
         let got = scan_stealth_output(net, &secret_bytes(&other_view), &pk_bytes(&account_pk), &utxo, false).unwrap();
         assert!(got.is_none(), "wrong view key must be Ok(None)");
@@ -486,6 +486,36 @@ mod tests {
         let scan_err =
             scan_stealth_output(net, &secret_bytes(&view_sk), &pk_bytes(&account_pk), &utxo, false).unwrap_err();
         assert_eq!(scan_err.code(), "PARSE");
+    }
+
+    // A non-canonical account public key → Err with code() == "PARSE".
+    #[test]
+    fn malformed_account_public_key_is_parse_error() {
+        let net = Network::LocalNet;
+        let view_sk = scalar(75);
+        let view_pk = RistrettoPublicKey::from_secret_key(&view_sk);
+        let account_pk = RistrettoPublicKey::from_secret_key(&scalar(76));
+
+        let utxo = make_inbound(
+            net,
+            &account_pk,
+            &view_pk,
+            &scalar(77),
+            &scalar(78),
+            5,
+            None,
+            true,
+            true,
+        );
+        let err = scan_stealth_output(
+            net,
+            &secret_bytes(&view_sk),
+            &PublicKeyBytes::from_array([0xff; 32]),
+            &utxo,
+            false,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), "PARSE");
     }
 
     // (g) Encrypted data too short (< min_size) → Err with code() == "PARSE".

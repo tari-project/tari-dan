@@ -110,7 +110,7 @@ fn sign_random(secret: &RistrettoSecretKey, message: &[u8; 64]) -> Result<Schnor
     Ok(sig.to_byte_type())
 }
 
-/// Parses a boundary secret scalar (account secret) into the internal scalar.
+/// Parses a boundary secret scalar (account or view secret) into the internal scalar.
 fn parse_secret(bytes: &SecretKeyBytes) -> Result<RistrettoSecretKey, OotleSdkError> {
     RistrettoSecretKey::from_canonical_bytes(bytes.as_bytes())
         .map_err(|e| OotleSdkError::Key(format!("invalid secret key: {e}")))
@@ -530,7 +530,7 @@ mod tests {
             tag: UtxoTag::new(0),
         });
 
-        // The owner account secret: we use the test account secret (so c+k = H(net,acct,R)+acct).
+        // The owner account secret: we use the test account secret (so c+k = H(net, v·R) + acct).
         let owner_account_secret = fixed_scalar(11);
         let owner_pk = RistrettoPublicKey::from_secret_key(&owner_account_secret);
         let owner_pk_bytes = PublicKeyBytes::from_bytes(owner_pk.as_bytes()).unwrap();
@@ -732,6 +732,14 @@ mod tests {
     #[test]
     fn malformed_account_secret_is_key_error() {
         let bad = StealthKeys::new(SecretKeyBytes::from_array([0xff; 32]), secret(VIEW_SECRET_SEED));
+        let err = seal_and_encode_stealth_transfer(NETWORK, ephemeral_partial(), &bad).unwrap_err();
+        assert_eq!(err.code(), "KEY");
+    }
+
+    // (i) Malformed view secret ⇒ KEY error, never a panic.
+    #[test]
+    fn malformed_view_secret_is_key_error() {
+        let bad = StealthKeys::new(secret(11), SecretKeyBytes::from_array([0xff; 32]));
         let err = seal_and_encode_stealth_transfer(NETWORK, ephemeral_partial(), &bad).unwrap_err();
         assert_eq!(err.code(), "KEY");
     }
