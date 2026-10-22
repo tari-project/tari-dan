@@ -198,6 +198,7 @@ fn resolving_a_template_definition_does_not_copy_it() {
     builder.add_template_from_code(small_addr, small_code).unwrap();
     builder.add_template_from_code(big_addr, big_code).unwrap();
     let mut test = TemplateTest::from_package(builder.build());
+    test.bootstrap_state();
 
     let small = measure(&mut test, small_addr);
     let big = measure(&mut test, big_addr);

@@ -89,6 +89,7 @@ where
         &self,
         transaction: &Transaction,
         locked_epoch: LockedEpoch,
+        input_fanout: u32,
         resolved_inputs: &HashMap<SubstateRequirement, Substate>,
         templates: &UncommittedChainTemplates,
     ) -> Result<TransactionExecution, BlockTransactionExecutorError> {
@@ -127,6 +128,7 @@ where
                 state_db.into_read_only(),
                 virtual_substates,
                 burn_rate,
+                input_fanout,
             )
             .map_err(|e| BlockTransactionExecutorError::ExecutionThreadFailure(e.to_string()))?;
 
@@ -202,6 +204,7 @@ mod tests {
             _state_store: ReadOnlyMemoryStateStore,
             _virtual_substates: VirtualSubstates,
             _burn_rate: ExhaustBurnRate,
+            _input_fanout: u32,
         ) -> Result<ExecutionOutput, Self::Error> {
             let finalize = if template_provider.get_template(&CALLED).unwrap().is_some() {
                 FinalizeResult::new(
@@ -270,6 +273,7 @@ mod tests {
             &executor,
             &transaction,
             LockedEpoch::new(Epoch(1), Default::default(), Default::default()),
+            0,
             &HashMap::new(),
             &chain(publishes),
         )

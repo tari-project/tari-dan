@@ -52,6 +52,10 @@ impl Executable for WrappedTransaction {
             .chain(extra.cloned())
     }
 
+    fn charged_inputs_iter(&self) -> impl Iterator<Item = InputDeclaration> + '_ {
+        self.transaction.all_inputs_iter().map(|decl| decl.to_owned())
+    }
+
     fn main_signer(&self) -> Option<RistrettoPublicKeyBytes> {
         self.transaction.main_signer()
     }

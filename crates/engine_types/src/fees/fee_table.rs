@@ -58,6 +58,17 @@ pub struct FeeTable {
     /// it is priced well below a persisted byte. Must be non-zero; a zero divisor is treated as
     /// `1`.
     pub log_bytes_cost_divisor: u64,
+    /// Divisor applied to the encoded bytes of a transaction's declared inputs when charging for
+    /// loading them (`per_byte_storage_cost × input_bytes / input_load_bytes_cost_divisor`). Every
+    /// executing validator reads and decodes each input once, so this prices a one-off read rather
+    /// than a retained byte. Must be non-zero; a zero divisor is treated as `1`.
+    pub input_load_bytes_cost_divisor: u64,
+    /// Divisor applied to the encoded bytes of a transaction's declared inputs, multiplied by the
+    /// number of other shard groups they are pledged to, when charging for that pledge traffic
+    /// (`per_byte_storage_cost × input_bytes × input_fanout / input_fanout_bytes_cost_divisor`).
+    /// Pledged bytes draw on each block's bounded pledge budget. Must be non-zero; a zero divisor is
+    /// treated as `1`.
+    pub input_fanout_bytes_cost_divisor: u64,
     /// Divisor applied to consumed Wasmer points when computing WASM execution units
     /// (`per_wasm_point_cost × (points_consumed / wasm_points_cost_divisor)`). Lower values make
     /// metering more aggressive. Must be non-zero; a zero divisor is treated as `1`.
@@ -93,6 +104,8 @@ impl FeeTable {
             storage_cost_divisor: 1,
             template_load_bytes_cost_divisor: 1,
             log_bytes_cost_divisor: 1,
+            input_load_bytes_cost_divisor: 1,
+            input_fanout_bytes_cost_divisor: 1,
             wasm_points_cost_divisor: 1,
             template_size_premium_free_bytes: 0,
             template_size_premium_unit_bytes: 1,
@@ -131,6 +144,8 @@ impl FeeTable {
             per_wasm_point_cost: self.per_wasm_point_cost(),
             storage_cost_divisor: self.storage_cost_divisor(),
             wasm_points_cost_divisor: self.wasm_points_cost_divisor(),
+            input_load_bytes_cost_divisor: self.input_load_bytes_cost_divisor(),
+            input_fanout_bytes_cost_divisor: self.input_fanout_bytes_cost_divisor(),
         }
     }
 
@@ -172,6 +187,14 @@ impl FeeTable {
 
     pub fn log_bytes_cost_divisor(&self) -> u64 {
         non_zero(self.log_bytes_cost_divisor)
+    }
+
+    pub fn input_load_bytes_cost_divisor(&self) -> u64 {
+        non_zero(self.input_load_bytes_cost_divisor)
+    }
+
+    pub fn input_fanout_bytes_cost_divisor(&self) -> u64 {
+        non_zero(self.input_fanout_bytes_cost_divisor)
     }
 
     pub fn template_size_premium_free_bytes(&self) -> u64 {

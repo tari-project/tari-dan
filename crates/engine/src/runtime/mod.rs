@@ -111,7 +111,7 @@ use tari_template_lib::{
         stealth::StealthTransferStatement,
     },
 };
-pub use tracker::{ComputeAllowance, ComputeFunding, FinalizedState, StateTracker};
+pub use tracker::{ComputeAllowance, ComputeFunding, DeclaredInputLoad, FinalizedState, StateTracker};
 pub use working_state::ChargeableState;
 
 use crate::{

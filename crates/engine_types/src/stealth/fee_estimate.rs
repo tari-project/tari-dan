@@ -76,6 +76,13 @@ pub struct MergedStealthTransferShape {
     /// The weight of the transaction this shape builds into. Weight is defined by
     /// `tari_ootle_transaction`, downstream of this crate, so the builder supplies it.
     pub transaction_weight: u64,
+    /// Encoded bytes of the values of the transaction's declared inputs, global ones excepted —
+    /// the spent UTXOs and the resource the transfer moves. The builder measures them from the
+    /// substates it declared.
+    pub input_bytes: u64,
+    /// The other shard groups the declared inputs are pledged to, as `Transaction::input_fanout`
+    /// computes it for the layout the builder expects the transaction to execute under.
+    pub input_fanout: u32,
 }
 
 impl MergedStealthTransferShape {
@@ -90,8 +97,8 @@ impl MergedStealthTransferShape {
     /// An upper bound, in microtari, on what the engine charges a transaction of this shape.
     ///
     /// Sums the charges the engine takes over a shape — transaction weight, host calls, native
-    /// verification, persisted storage and substate creation. The exhaust burn is a share of what
-    /// is paid, not a charge, so it does not enter the price.
+    /// verification, loading and pledging its inputs, persisted storage and substate creation. The
+    /// exhaust burn is a share of what is paid, not a charge, so it does not enter the price.
     pub fn estimate_fee(&self, rates: &FeeRates) -> u64 {
         let weight_cost = self
             .transaction_weight
@@ -109,9 +116,14 @@ impl MergedStealthTransferShape {
             .saturating_add(1)
             .saturating_mul(rates.per_substate_create_cost());
 
+        let input_cost = rates
+            .input_load_cost(self.input_bytes)
+            .saturating_add(rates.input_fanout_cost(self.input_bytes, self.input_fanout));
+
         weight_cost
             .saturating_add(runtime_call_cost)
             .saturating_add(native_cost)
+            .saturating_add(input_cost)
             .saturating_add(storage_cost)
             .saturating_add(create_cost)
     }
@@ -158,6 +170,13 @@ pub struct ClaimBurnShape {
     /// The weight of the transaction this shape builds into, which the builder supplies for the same
     /// reason [`MergedStealthTransferShape::transaction_weight`] does.
     pub transaction_weight: u64,
+    /// Encoded bytes of the values of the transaction's declared inputs, measured as for
+    /// [`MergedStealthTransferShape::input_bytes`]. A claim declares no input of its own, but every
+    /// transaction declares the TARI resource.
+    pub input_bytes: u64,
+    /// The other shard groups the declared inputs are pledged to, the tombstone's group among them,
+    /// as for [`MergedStealthTransferShape::input_fanout`].
+    pub input_fanout: u32,
 }
 
 impl ClaimBurnShape {
@@ -180,10 +199,14 @@ impl ClaimBurnShape {
         let storage_cost = rates.storage_cost(self.persisted_bytes_upper_bound() as u64);
         // The tombstone, the output and the receipt each occupy a created slot.
         let create_cost = 3u64.saturating_mul(rates.per_substate_create_cost());
+        let input_cost = rates
+            .input_load_cost(self.input_bytes)
+            .saturating_add(rates.input_fanout_cost(self.input_bytes, self.input_fanout));
 
         weight_cost
             .saturating_add(runtime_call_cost)
             .saturating_add(native_cost)
+            .saturating_add(input_cost)
             .saturating_add(storage_cost)
             .saturating_add(create_cost)
     }
@@ -235,6 +258,12 @@ pub fn persisted_utxo_bytes(output: &StealthUnspentOutput) -> usize {
     encoded_len(&SubstateValue::Utxo(utxo))
 }
 
+/// The bytes the engine charges a declared input for loading and pledging, measured from its value
+/// the way the engine measures it.
+pub fn declared_input_bytes(value: &SubstateValue) -> u64 {
+    encoded_len(value) as u64
+}
+
 /// A UTXO address at the width every UTXO address takes — its parts are all fixed-size arrays, so
 /// the content is immaterial and only the shape of the encoding matters.
 fn widest_utxo_address() -> UtxoAddress {
@@ -259,6 +288,8 @@ mod tests {
             per_wasm_point_cost: 1,
             storage_cost_divisor: 1,
             wasm_points_cost_divisor: 1000,
+            input_load_bytes_cost_divisor: 64,
+            input_fanout_bytes_cost_divisor: 4,
         }
     }
 
@@ -272,6 +303,8 @@ mod tests {
             persisted_output_bytes: num_outputs * TYPICAL_OUTPUT_BYTES,
             has_view_key: false,
             transaction_weight: 150,
+            input_bytes: 0,
+            input_fanout: 0,
         }
     }
 
@@ -324,6 +357,25 @@ mod tests {
             ..plain
         };
         assert_eq!(with_memo.estimate_fee(&rates()) - plain.estimate_fee(&rates()), 100);
+    }
+
+    #[test]
+    fn inputs_are_paid_for_by_the_byte_and_by_each_further_group() {
+        let plain = shape(1, 1);
+        let loaded = MergedStealthTransferShape {
+            input_bytes: 6400,
+            ..plain
+        };
+        assert_eq!(loaded.estimate_fee(&rates()) - plain.estimate_fee(&rates()), 6400 / 64);
+
+        let pledged = MergedStealthTransferShape {
+            input_fanout: 2,
+            ..loaded
+        };
+        assert_eq!(
+            pledged.estimate_fee(&rates()) - loaded.estimate_fee(&rates()),
+            6400 * 2 / 4
+        );
     }
 
     /// The estimate has to move with the shape monotonically, or a settling loop that raises its fee

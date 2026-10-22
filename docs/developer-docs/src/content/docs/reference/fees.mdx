@@ -146,6 +146,17 @@ The first charges land as soon as the runtime initialises, before any instructio
   a floor of `INVOCATION_FLOOR` (30) on any instruction that invokes a template — an argument-free
   call weighs nothing by its arguments, but still instantiates the template. It prices what the
   network must gossip, store and validate regardless of what execution does.
+- **`InputLoad`** — the encoded bytes of every declared input × `per_byte_storage_cost` /
+  `input_load_bytes_cost_divisor`. It prices reading each input from storage, whether or not
+  execution touches it. Global substates (templates, network governance) are not counted, since every
+  shard group already holds them.
+- **`InputFanout`** — the same bytes × the transaction's *input fanout* × `per_byte_storage_cost` /
+  `input_fanout_bytes_cost_divisor`. The input fanout is the number of shard groups holding the
+  transaction's declared inputs (and, for a burn claim, its claim tombstone), less one: the groups
+  each input has to be pledged to beyond its own. Every transaction declares the TARI resource, so a
+  transaction whose other inputs sit in another group pays a fanout of at least one.
+
+Both input charges land before the fee intent runs, so they stand whatever the main intent does.
 
 ---
 
@@ -361,6 +372,8 @@ to be finalised.
 |---|---|---|
 | `Initial` | runtime init | 0 |
 | `TransactionWeight` | runtime init | 1 µT per weight unit |
+| `InputLoad` | runtime init | 1 µT per 64 bytes of declared inputs |
+| `InputFanout` | runtime init | 1 µT per 4 bytes of declared inputs, × input fanout |
 | `RuntimeCall` | every engine host call | 1 µT, plus 1 µT per 64 bytes of a log message |
 | `TemplateLoad` | first load of each template | 10 µT per 3 KB |
 | `Storage` | finalisation | 1 µT per byte |

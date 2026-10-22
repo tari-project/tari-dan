@@ -65,10 +65,15 @@ pub trait BlockTransactionExecutor<TStateStore: StateStore> {
     /// Executes `transaction` in a block whose uncommitted ancestors publish `templates`. The execution resolves a
     /// template from `templates`, then from durably committed state, so that every validator executing the block
     /// resolves the same templates however far it has committed.
+    ///
+    /// `input_fanout` is [`Transaction::input_fanout`] under the executing block's shard layout, which every shard
+    /// group involved shares: a cross-shard transaction is drained before an epoch that changes the number of
+    /// committees.
     fn execute(
         &self,
         transaction: &Transaction,
         locked_epoch: LockedEpoch,
+        input_fanout: u32,
         resolved_inputs: &HashMap<SubstateRequirement, Substate>,
         templates: &UncommittedChainTemplates,
     ) -> Result<TransactionExecution, BlockTransactionExecutorError>;

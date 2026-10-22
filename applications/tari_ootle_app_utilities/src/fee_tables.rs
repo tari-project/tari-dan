@@ -46,6 +46,17 @@
 //!   (`per_byte_storage_cost × message_bytes / log_bytes_cost_divisor`). A log is retained in every validator's
 //!   execution record but is not consensus state and is prunable, so it is priced below a persisted byte.
 //!
+//! ## Input Fees
+//!
+//! Every declared input is loaded by each validator that executes the transaction, and pledged to every other shard
+//! group the transaction's inputs fall in. Both are priced by the encoded size of the inputs' values, global
+//! substates excepted, and charged before the fee intent runs, so they stand even when the main intent is rejected.
+//!
+//! - **`input_load_bytes_cost_divisor`**: `per_byte_storage_cost × input_bytes / input_load_bytes_cost_divisor`.
+//! - **`input_fanout_bytes_cost_divisor`**: `per_byte_storage_cost × input_bytes × input_fanout /
+//!   input_fanout_bytes_cost_divisor`, where `input_fanout` is `Transaction::input_fanout` for the executing shard
+//!   layout. A transaction whose inputs all fall in one shard group pays none.
+//!
 //! ## Template Publishing Fees
 //!
 //! A published template's binary is priced by its own model instead of the flat per-byte storage rate, since it is
@@ -116,6 +127,15 @@ const FEE_TABLE: FeeTable = FeeTable {
     // ~0.13 tTARI, against ~8.4 tTARI for the same bytes in a substate. An ordinary diagnostic line
     // costs about as much as the host call that emits it.
     log_bytes_cost_divisor: 64,
+    // A declared input byte costs a 64th of a persisted byte to load: every executing validator reads
+    // and decodes it once, and retains none of it. A 1 MiB input is ~16,000 µT, which the native
+    // execution points price as roughly two milliseconds of CPU. Provisional until loading a large
+    // input is measured.
+    input_load_bytes_cost_divisor: 64,
+    // A declared input byte costs a quarter of a persisted byte for each other shard group it is
+    // pledged to. The pledge is carried rather than stored, but it draws on each block's bounded
+    // pledge budget: a 1 MiB input pledged to one other group is ~262,000 µT. Provisional.
+    input_fanout_bytes_cost_divisor: 4,
     // First 96 KiB of a template binary are priced at the per-byte storage rate; beyond that the
     // quadratic publish premium applies. A published template carries ~25 KiB of fixed
     // `template_lib` machinery before any author code, and a minimal component template optimised

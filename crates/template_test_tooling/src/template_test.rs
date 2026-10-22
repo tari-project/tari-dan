@@ -126,6 +126,7 @@ pub struct TemplateTest {
     claim_proof_verifier: Arc<dyn ClaimProofVerifier + Send + Sync>,
     fee_table: FeeTable,
     burn_rate: ExhaustBurnRate,
+    input_fanout: u32,
     virtual_substates: HashMap<VirtualSubstateId, VirtualSubstate>,
     key_seed: u8,
     auto_add_proofs_from_signers: bool,
@@ -290,12 +291,15 @@ impl TemplateTest {
                 template_load_bytes_cost_divisor: 3000,
                 wasm_points_cost_divisor: 1000,
                 log_bytes_cost_divisor: 64,
+                input_load_bytes_cost_divisor: 64,
+                input_fanout_bytes_cost_divisor: 4,
                 template_size_premium_free_bytes: 96 * 1024,
                 template_size_premium_unit_bytes: 1024,
                 per_template_size_premium_unit_cost: 100,
                 per_template_publish_cost: 250_000,
             },
             burn_rate: ExhaustBurnRate::new(0),
+            input_fanout: 0,
             key_seed: 1,
             auto_add_proofs_from_signers: true,
         }
@@ -413,6 +417,13 @@ impl TemplateTest {
         self
     }
 
+    /// Sets how many other shard groups a transaction's declared inputs are taken to be pledged to.
+    /// Defaults to zero, as though every substate sat in one shard group.
+    pub fn set_input_fanout(&mut self, input_fanout: u32) -> &mut Self {
+        self.input_fanout = input_fanout;
+        self
+    }
+
     /// Sets a virtual substate (e.g. `CurrentEpoch`) that is available to transactions during execution.
     pub fn set_virtual_substate(&mut self, address: VirtualSubstateId, value: VirtualSubstate) -> &mut Self {
         self.virtual_substates.insert(address, value);
@@ -427,6 +438,26 @@ impl TemplateTest {
     pub fn remove_virtual_substate(&mut self, address: VirtualSubstateId) -> &mut Self {
         self.virtual_substates.remove(&address);
         self
+    }
+
+    /// The encoded bytes of `transaction`'s own declared inputs, global ones excepted, as this
+    /// harness holds them: what the engine charges the transaction for loading and pledging its
+    /// inputs, and what a wallet measures to estimate that charge.
+    pub fn declared_input_bytes(&self, transaction: &Transaction) -> u64 {
+        transaction
+            .all_inputs_iter()
+            .map(|input| input.substate_id().clone())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .filter(|id| !id.is_global())
+            .map(|id| {
+                let substate = self
+                    .state_store
+                    .get_state(&id)
+                    .unwrap_or_else(|err| panic!("declared input {id} is not in the state store: {err}"));
+                tari_engine_types::stealth::declared_input_bytes(substate.substate_value())
+            })
+            .sum()
     }
 
     /// Returns a read-only view of the current state store, useful for inspecting component state
@@ -863,6 +894,7 @@ impl TemplateTest {
             self.claim_proof_verifier.clone(),
             wasm_metering_rate,
             self.burn_rate,
+            self.input_fanout,
             Network::LocalNet,
             self.dry_run,
         );
@@ -928,6 +960,7 @@ impl TemplateTest {
             fee_table: self.enable_fees.then(|| self.fee_table.clone()),
             virtual_substates: self.virtual_substates.clone(),
             burn_rate: self.burn_rate,
+            input_fanout: self.input_fanout,
             dry_run: self.dry_run,
             claim_proof_verifier: self.claim_proof_verifier.clone(),
             auto_add_proofs_from_signers: self.auto_add_proofs_from_signers,
@@ -1127,6 +1160,7 @@ pub struct SnapshotExecutor {
     fee_table: Option<FeeTable>,
     virtual_substates: HashMap<VirtualSubstateId, VirtualSubstate>,
     burn_rate: ExhaustBurnRate,
+    input_fanout: u32,
     dry_run: bool,
     claim_proof_verifier: Arc<dyn ClaimProofVerifier + Send + Sync>,
     auto_add_proofs_from_signers: bool,
@@ -1172,6 +1206,7 @@ impl SnapshotExecutor {
             self.claim_proof_verifier.clone(),
             wasm_metering_rate,
             self.burn_rate,
+            self.input_fanout,
             Network::LocalNet,
             self.dry_run,
         );

@@ -339,6 +339,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
     pub fn execute<TTx: StateStoreReadTransaction>(
         &self,
         store: &PendingSubstateStore<TTx>,
+        local_committee_info: &CommitteeInfo,
         execution_epoch: LockedEpoch,
         block_epoch: Epoch,
         pledged_transaction: PledgedTransaction,
@@ -373,9 +374,11 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                     )
                 })
             .collect();
+        let transaction = pledged_transaction.transaction.transaction();
         self.executor.execute(
-            pledged_transaction.transaction.transaction(),
+            transaction,
             execution_epoch,
+            input_fanout(transaction, local_committee_info),
             &resolved_inputs,
             &self.uncommitted_templates.templates_for(store)?,
         )
@@ -384,6 +387,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
     pub fn execute_or_fetch<TTx: StateStoreReadTransaction>(
         &self,
         store: &mut PendingSubstateStore<TTx>,
+        local_committee_info: &CommitteeInfo,
         transaction: &TransactionRecord,
         resolved_inputs: &HashMap<SubstateRequirement, Substate>,
         block: &LeafBlock,
@@ -424,6 +428,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         self.executor.execute(
             transaction.transaction(),
             execution_locked_epoch,
+            input_fanout(transaction.transaction(), local_committee_info),
             resolved_inputs,
             &self.uncommitted_templates.templates_for(store)?,
         )
@@ -549,7 +554,14 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                 .iter()
                 .map(|(req, v)| (req.to_substate_requirement_ref().to_owned(), *v)),
         )?;
-        let execution = self.execute_or_fetch(store, transaction, &local_inputs, &block, execution_locked_epoch)?;
+        let execution = self.execute_or_fetch(
+            store,
+            local_committee_info,
+            transaction,
+            &local_inputs,
+            &block,
+            execution_locked_epoch,
+        )?;
 
         let is_outputs_local_only = local_committee_info.is_all_local(execution.resulting_outputs());
         if is_outputs_local_only {
@@ -807,7 +819,14 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
             )));
         }
 
-        let execution = self.execute_or_fetch(store, transaction, &resolved_inputs, &block, execution_locked_epoch)?;
+        let execution = self.execute_or_fetch(
+            store,
+            local_committee_info,
+            transaction,
+            &resolved_inputs,
+            &block,
+            execution_locked_epoch,
+        )?;
         info!(
             target: LOG_TARGET,
             "👨‍🔧 PREPARE: Output-Only Executed transaction {} with {} decision",
@@ -890,6 +909,14 @@ fn declared_lock_intent(decl: &InputDeclarationRef<'_>, version: SubstateVersion
     }
 }
 
+/// [`Transaction::input_fanout`] under the shard layout of the block executing the transaction.
+fn input_fanout(transaction: &Transaction, local_committee_info: &CommitteeInfo) -> u32 {
+    transaction.input_fanout(
+        local_committee_info.num_preshards(),
+        local_committee_info.num_committees(),
+    )
+}
+
 /// The abort a transaction declaring the burn rate governance component earns for executing in a
 /// later epoch than the one it was pinned to, or `None` if it may execute.
 ///
@@ -956,6 +983,7 @@ mod tests {
             &self,
             _transaction: &Transaction,
             _locked_epoch: LockedEpoch,
+            _input_fanout: u32,
             _resolved_inputs: &HashMap<SubstateRequirement, Substate>,
             _templates: &UncommittedChainTemplates,
         ) -> Result<TransactionExecution, BlockTransactionExecutorError> {
@@ -984,6 +1012,18 @@ mod tests {
         LockedEpoch::new(Epoch(epoch), Default::default(), Default::default())
     }
 
+    /// The committee of a network with one shard group, in `epoch`.
+    fn single_committee(epoch: Epoch) -> CommitteeInfo {
+        CommitteeInfo::new(
+            NumPreshards::P256,
+            1,
+            1,
+            ShardGroup::all_shards(NumPreshards::P256),
+            epoch,
+            VotePower::of(1),
+        )
+    }
+
     /// Executes `pledged` in a block of `block_epoch` that builds on an empty chain.
     fn execute_in_block_of(
         execution_epoch: LockedEpoch,
@@ -1000,7 +1040,13 @@ mod tests {
         };
         store.with_read_tx(|tx| {
             let substate_store = PendingSubstateStore::init(tx, block, NumPreshards::P256)?;
-            manager().execute(&substate_store, execution_epoch, block_epoch, pledged)
+            manager().execute(
+                &substate_store,
+                &single_committee(block_epoch),
+                execution_epoch,
+                block_epoch,
+                pledged,
+            )
         })
     }
 
@@ -1031,6 +1077,7 @@ mod tests {
                 let mut substate_store = PendingSubstateStore::init(tx, block, NumPreshards::P256)?;
                 manager().execute_or_fetch(
                     &mut substate_store,
+                    &single_committee(Epoch(6)),
                     &pledged.transaction,
                     &HashMap::new(),
                     &block,

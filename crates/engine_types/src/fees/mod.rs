@@ -93,6 +93,10 @@ pub struct FeeRates {
     pub storage_cost_divisor: u64,
     /// Must be non-zero; a zero divisor reads as `1`, matching `FeeTable`.
     pub wasm_points_cost_divisor: u64,
+    /// Must be non-zero; a zero divisor reads as `1`, matching `FeeTable`.
+    pub input_load_bytes_cost_divisor: u64,
+    /// Must be non-zero; a zero divisor reads as `1`, matching `FeeTable`.
+    pub input_fanout_bytes_cost_divisor: u64,
 }
 
 impl FeeRates {
@@ -121,6 +125,20 @@ impl FeeRates {
     /// WASM or from native verification.
     pub fn execution_cost(&self, points: u64) -> u64 {
         (points / non_zero(self.wasm_points_cost_divisor)).saturating_mul(self.per_wasm_point_cost)
+    }
+
+    /// The charge for loading `input_bytes` of declared inputs, the encoded size of their values
+    /// summed.
+    pub fn input_load_cost(&self, input_bytes: u64) -> u64 {
+        self.per_byte_storage_cost.saturating_mul(input_bytes) / non_zero(self.input_load_bytes_cost_divisor)
+    }
+
+    /// The charge for pledging `input_bytes` of declared inputs to `input_fanout` other shard groups.
+    pub fn input_fanout_cost(&self, input_bytes: u64, input_fanout: u32) -> u64 {
+        self.per_byte_storage_cost
+            .saturating_mul(input_bytes)
+            .saturating_mul(u64::from(input_fanout)) /
+            non_zero(self.input_fanout_bytes_cost_divisor)
     }
 }
 
@@ -387,12 +405,19 @@ pub enum FeeSource {
     /// breakdown the per-point rate already makes comparable.
     #[n(8)]
     NativeExecution = 8,
+    /// Loading the transaction's declared inputs, priced by the encoded size of their values.
+    #[n(9)]
+    InputLoad = 9,
+    /// Pledging the transaction's declared inputs to the other shard groups it involves, priced by
+    /// their encoded size times the number of those groups.
+    #[n(10)]
+    InputFanout = 10,
 }
 
 impl FeeSource {
     /// Every variant. `fee_source_all_is_exhaustive` fails to compile if a variant is added without
     /// being listed here.
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 11] = [
         Self::Initial,
         Self::RuntimeCall,
         Self::Storage,
@@ -402,6 +427,8 @@ impl FeeSource {
         Self::WasmExecution,
         Self::TemplatePublish,
         Self::NativeExecution,
+        Self::InputLoad,
+        Self::InputFanout,
     ];
 }
 
@@ -526,7 +553,9 @@ mod tests {
                 FeeSource::SubstateCreate |
                 FeeSource::WasmExecution |
                 FeeSource::TemplatePublish |
-                FeeSource::NativeExecution => {},
+                FeeSource::NativeExecution |
+                FeeSource::InputLoad |
+                FeeSource::InputFanout => {},
             }
         }
     }

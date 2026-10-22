@@ -99,6 +99,7 @@ fn setup(shared: &SharedState) -> BenchTxProcessor {
         shared.claim_burn_proof_verifier.clone(),
         WasmMeteringRate::unmetered(),
         ExhaustBurnRate::new(0),
+        0,
         Network::LocalNet,
         false,
     )
