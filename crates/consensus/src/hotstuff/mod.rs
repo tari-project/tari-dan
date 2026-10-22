@@ -28,6 +28,7 @@ mod epoch_state;
 mod exhaust_burn_rate;
 mod foreign_proposal_processor;
 mod leader_skip;
+mod local_command_validator;
 mod on_catch_up_sync;
 mod on_message_validate;
 mod pacemaker;
