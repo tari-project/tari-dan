@@ -5,7 +5,18 @@ use std::time::{Duration, Instant};
 
 use tari_ootle_wallet_sdk::storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter};
 use thiserror::Error;
-use webauthn_rs::prelude::{AuthenticationResult, Credential, Passkey, PasskeyAuthentication, PasskeyRegistration};
+use webauthn_rs::{
+    Webauthn,
+    prelude::{
+        AuthenticationResult,
+        Credential,
+        Passkey,
+        PasskeyAuthentication,
+        PasskeyRegistration,
+        RequestChallengeResponse,
+        WebauthnError,
+    },
+};
 
 use crate::services::{SessionData, SessionStore, SessionStoreError};
 
@@ -30,6 +41,10 @@ pub enum WebauthnServiceError {
          The credential may have been cloned"
     )]
     CounterNotAdvanced { presented: u32, stored: u32 },
+    #[error("This wallet has no enrolled credential to log in with. Register one first")]
+    NotEnrolled,
+    #[error("Webauthn error: {0}")]
+    Webauthn(#[from] WebauthnError),
 }
 
 /// Registration session data
@@ -145,17 +160,26 @@ where TStore: WalletStore
         })
     }
 
-    /// Fetch passkeys for a username.
-    pub fn passkeys(&self, username: String) -> Result<Vec<Passkey>, WebauthnServiceError> {
+    /// Every passkey this wallet holds.
+    pub fn wallet_passkeys(&self) -> Result<Vec<Passkey>, WebauthnServiceError> {
         let mut tx = self.wallet_store.create_read_tx()?;
-        Ok(tx.webauthn_reg_fetch_passkeys(username)?)
+        Ok(tx.webauthn_reg_fetch_all_passkeys()?)
     }
 
+    /// Start a login ceremony that any of this wallet's passkeys can complete, returning the challenge
+    /// and the session ID that finishes it. The wallet is single-user, so the ceremony is the wallet's
+    /// and nothing the caller supplies selects the credentials it offers.
     pub async fn start_authentication(
         &self,
-        passkey_auth: PasskeyAuthentication,
-    ) -> Result<String, WebauthnServiceError> {
-        Ok(self.auth_sessions.add(AuthSessionData::new(passkey_auth)).await?)
+        webauthn: &Webauthn,
+    ) -> Result<(RequestChallengeResponse, String), WebauthnServiceError> {
+        let passkeys = self.wallet_passkeys()?;
+        if passkeys.is_empty() {
+            return Err(WebauthnServiceError::NotEnrolled);
+        }
+        let (challenge, passkey_auth) = webauthn.start_passkey_authentication(passkeys.as_slice())?;
+        let session_id = self.auth_sessions.add(AuthSessionData::new(passkey_auth)).await?;
+        Ok((challenge, session_id))
     }
 
     pub async fn auth_passkey(&self, session_id: &str) -> Result<PasskeyAuthentication, WebauthnServiceError> {
@@ -234,14 +258,17 @@ mod tests {
         .unwrap()
     }
 
+    fn webauthn() -> Webauthn {
+        WebauthnBuilder::new("localhost", &Url::parse("http://localhost:5100").unwrap())
+            .unwrap()
+            .build()
+            .unwrap()
+    }
+
     /// The in-progress registration state a real `reg_start` produces. The service only carries it
     /// from session to session, it never inspects it.
     fn passkey_reg(username: &str) -> PasskeyRegistration {
-        let webauthn = WebauthnBuilder::new("localhost", &Url::parse("http://localhost:5100").unwrap())
-            .unwrap()
-            .build()
-            .unwrap();
-        let (_, passkey_reg) = webauthn
+        let (_, passkey_reg) = webauthn()
             .start_passkey_registration(Uuid::new_v4(), username, username, None)
             .unwrap();
         passkey_reg
@@ -270,6 +297,33 @@ mod tests {
         assert!(service.is_enrolled().unwrap());
     }
 
+    fn allowed_credential_ids(challenge: &RequestChallengeResponse) -> Vec<serde_json::Value> {
+        challenge
+            .public_key
+            .allow_credentials
+            .iter()
+            .map(|allowed| serde_json::to_value(&allowed.id).unwrap())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn login_challenge_offers_the_wallet_credential() {
+        let (service, _temp) = service();
+        enrol(&service, "owner").await.unwrap();
+
+        let (challenge, _) = service.start_authentication(&webauthn()).await.unwrap();
+        assert_eq!(allowed_credential_ids(&challenge), vec![
+            serde_json::to_value(passkey().cred_id()).unwrap()
+        ]);
+    }
+
+    #[tokio::test]
+    async fn login_is_refused_before_enrolment() {
+        let (service, _temp) = service();
+        let err = service.start_authentication(&webauthn()).await.unwrap_err();
+        assert!(matches!(err, WebauthnServiceError::NotEnrolled));
+    }
+
     #[tokio::test]
     async fn enrolment_under_another_username_is_refused() {
         let (service, _temp) = service();
@@ -277,7 +331,7 @@ mod tests {
 
         let err = enrol(&service, "attacker").await.unwrap_err();
         assert!(matches!(err, WebauthnServiceError::AlreadyEnrolled));
-        assert!(service.passkeys("attacker".to_string()).unwrap().is_empty());
+        assert_eq!(service.wallet_passkeys().unwrap().len(), 1);
     }
 
     /// What `finish_passkey_authentication` reports for a ceremony by `cred_id` at `counter`.
@@ -300,7 +354,7 @@ mod tests {
     }
 
     fn stored_counter(service: &WebauthnService<SqliteWalletStore>) -> u32 {
-        let passkeys = service.passkeys("owner".to_string()).unwrap();
+        let passkeys = service.wallet_passkeys().unwrap();
         assert_eq!(passkeys.len(), 1);
         Credential::from(passkeys[0].clone()).counter
     }
@@ -386,9 +440,6 @@ mod tests {
             1,
             "exactly one of the two enrolments must be accepted"
         );
-        assert!(
-            service.passkeys("owner".to_string()).unwrap().is_empty() !=
-                service.passkeys("attacker".to_string()).unwrap().is_empty()
-        );
+        assert_eq!(service.wallet_passkeys().unwrap().len(), 1);
     }
 }

@@ -23,7 +23,7 @@ The daemon supports two authentication modes configured via `WalletDaemonAuth`:
 WebAuthn requires a browser-based passkey interaction (biometric, hardware key, etc.) that **cannot be performed by an agent directly**. The full protocol flow is:
 
 1. **Check method:** `auth.method`
-2. **Start auth challenge:** `webauthn.auth_start` with `{"username": "..."}`
+2. **Start auth challenge:** `webauthn.auth_start` with `{}`
 3. **Complete auth:** Use the challenge to produce a WebAuthn credential response (requires browser/passkey device)
 4. **Login:** `auth.request` with `{"permissions": [...], "credentials": {"WebAuthN": <response>}}`
 5. **Use token:** Same as above

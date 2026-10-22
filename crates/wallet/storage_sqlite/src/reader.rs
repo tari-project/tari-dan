@@ -1719,32 +1719,23 @@ impl WalletStoreReader for ReadTransaction<'_> {
         .map_err(|e| WalletStorageError::general("webauthn_has_any_registration", e))
     }
 
-    fn webauthn_reg_fetch_passkeys(&mut self, username: String) -> Result<Vec<Passkey>, WalletStorageError> {
-        use crate::schema::{webauthn_registration_passkeys, webauthn_registrations};
-        Ok(webauthn_registration_passkeys::table
-            .inner_join(webauthn_registrations::table)
-            .filter(webauthn_registrations::username.eq(username))
-            .select(WebauthnRegistrationPasskey::as_select())
-            .load::<WebauthnRegistrationPasskey>(self.connection())
-            .map_err(|e| WalletStorageError::general("webauthn_reg_fetch", e))?
-            .iter()
-            .filter_map(|model| match WebauthnRegistrationPasskeyModel::try_from(model) {
-                Ok(value) => Some(value.passkey),
-                Err(_) => None,
-            })
-            .collect::<Vec<Passkey>>())
-    }
-
     fn webauthn_reg_fetch_all_passkeys(&mut self) -> Result<Vec<Passkey>, WalletStorageError> {
         use crate::schema::webauthn_registration_passkeys;
-        Ok(webauthn_registration_passkeys::table
+        webauthn_registration_passkeys::table
             .select(WebauthnRegistrationPasskey::as_select())
             .load::<WebauthnRegistrationPasskey>(self.connection())
             .map_err(|e| WalletStorageError::general("webauthn_reg_fetch_all_passkeys", e))?
             .iter()
-            .filter_map(|model| WebauthnRegistrationPasskeyModel::try_from(model).ok())
-            .map(|model| model.passkey)
-            .collect())
+            .map(|model| {
+                WebauthnRegistrationPasskeyModel::try_from(model)
+                    .map(|value| value.passkey)
+                    .map_err(|e| WalletStorageError::DecodingError {
+                        operation: "webauthn_reg_fetch_all_passkeys",
+                        item: "webauthn passkey",
+                        details: e.to_string(),
+                    })
+            })
+            .collect()
     }
 
     fn authored_templates_exists_by_address(&mut self, address: &TemplateAddress) -> Result<bool, WalletStorageError> {
@@ -2144,5 +2135,30 @@ impl Drop for ReadTransaction<'_> {
         {
             error!(target: LOG_TARGET, "Failed to rollback transaction: {}", err);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tari_ootle_wallet_sdk::storage::ReadableWalletStore;
+
+    use super::*;
+    use crate::SqliteWalletStore;
+
+    #[test]
+    fn an_undecodable_passkey_is_an_error() {
+        let store = SqliteWalletStore::try_open(":memory:").unwrap();
+        store.run_migrations().unwrap();
+        let mut tx = store.create_read_tx().unwrap();
+        sql_query("INSERT INTO webauthn_registrations (id, username) VALUES (1, 'owner')")
+            .execute(tx.connection())
+            .unwrap();
+        sql_query("INSERT INTO webauthn_registration_passkeys (registration_id, passkey) VALUES (1, x'00')")
+            .execute(tx.connection())
+            .unwrap();
+
+        assert!(tx.webauthn_has_any_registration().unwrap());
+        let err = tx.webauthn_reg_fetch_all_passkeys().unwrap_err();
+        assert!(matches!(err, WalletStorageError::DecodingError { .. }), "{err}");
     }
 }

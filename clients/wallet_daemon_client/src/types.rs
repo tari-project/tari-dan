@@ -1717,9 +1717,7 @@ pub struct WebauthnFinishRegisterResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
-pub struct WebauthnStartAuthRequest {
-    pub username: String,
-}
+pub struct WebauthnStartAuthRequest {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
