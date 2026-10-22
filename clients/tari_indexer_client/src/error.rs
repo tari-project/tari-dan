@@ -77,6 +77,8 @@ pub enum IndexerRestClientError {
     RequestFailedWithStatus { code: i64, message: String },
     #[error("Invalid response: {message}")]
     InvalidResponse { message: String },
+    #[error("Response for path {path} exceeds the client's limit of {limit} bytes")]
+    ResponseTooLarge { path: String, limit: usize },
     #[error("Unable to construct request due to unsatisfied invariant: {details}")]
     RequestInvariant { details: String },
 }
