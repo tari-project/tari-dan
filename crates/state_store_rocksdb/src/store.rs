@@ -158,8 +158,8 @@ impl<TAddr> RocksDbStateStore<TAddr, TransactionDB> {
     /// This is not typically needed but can be useful for experimentation.
     pub fn compact_all<P: AsRef<Path>>(path: P) -> Result<(), StorageError> {
         let (options, _budget) = build_default_store_opts(&DatabaseOptions::default());
-        let cf_names = all_column_families_iter();
-        let db = DB::open_cf(&options, path, cf_names).map_err(|e| StorageError::ConnectionError {
+        let cf_names = all_column_families_iter().map(|name| ColumnFamilyDescriptor::new(name, options.clone()));
+        let db = DB::open_cf_descriptors(&options, path, cf_names).map_err(|e| StorageError::ConnectionError {
             reason: e.into_string(),
         })?;
         for name in all_column_families_iter() {
