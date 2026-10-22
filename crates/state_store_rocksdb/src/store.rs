@@ -22,16 +22,14 @@ use rocksdb::{
     WriteOptions,
 };
 use serde::{Serialize, de::DeserializeOwned};
-use tari_ootle_common_types::{NodeAddressable, optional::Optional};
+use tari_ootle_common_types::NodeAddressable;
 use tari_ootle_storage::{Ordering, StateStore, StorageError};
 
 use crate::{
     block_diff_table::{BlockDiffEntry, BlockDiffTable},
     cf_api::DbContext,
-    codecs::ByteColumn,
     column_families::{
         block_diff::BlockDiffRecordCf,
-        bookkeeping::DatabaseMigrationVersion,
         cf_names,
         pending_state_tree_diff::PendingStateTreeDiffRecordCf,
         substate_locks::BlockLockSetCf,
@@ -274,21 +272,13 @@ fn load_pending_state(db: &TransactionDB) -> Result<PendingState, StorageError> 
         block_diffs.insert(block_id, Arc::new(BlockDiffEntry::new(changes)));
     }
 
-    // Tree diff records written before schema version 3 are in an older encoding. The migration to version 3 rewrites
-    // them and adds them to the table.
     let mut tree_diffs = TreeDiffTable::default();
-    let schema_version = ctx
-        .cf(DatabaseMigrationVersion)?
-        .get(&ByteColumn, OPERATION)
-        .optional()?;
-    if schema_version.is_none_or(|version| version >= 3) {
-        for result in ctx
-            .cf(PendingStateTreeDiffRecordCf)?
-            .iterator(Ordering::Ascending, OPERATION)
-        {
-            let (block_id, diffs) = result?;
-            tree_diffs.insert(block_id, diffs.into());
-        }
+    for result in ctx
+        .cf(PendingStateTreeDiffRecordCf)?
+        .iterator(Ordering::Ascending, OPERATION)
+    {
+        let (block_id, diffs) = result?;
+        tree_diffs.insert(block_id, diffs.into());
     }
 
     Ok(PendingState {

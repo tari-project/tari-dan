@@ -1,7 +1,6 @@
 //   Copyright 2025 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-mod block_diff;
 mod bytes;
 mod column;
 mod minicbor;
@@ -14,13 +13,11 @@ mod shard_group;
 mod small_bytes;
 mod state_tree;
 mod substate_id;
-mod substate_lock;
 mod tuple;
 mod versioned;
 
 use std::io;
 
-pub use block_diff::*;
 pub use bytes::*;
 pub use column::*;
 pub use minicbor::*;
@@ -31,7 +28,6 @@ pub use serde_bridge_codec::*;
 pub use shard_group::ShardGroupCodec;
 pub use state_tree::*;
 pub use substate_id::*;
-pub use substate_lock::*;
 pub use versioned::*;
 
 use crate::error::RocksDbStorageError;

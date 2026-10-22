@@ -80,12 +80,10 @@ impl BookKeepingKey {
 /// must check the stored [`DatabaseMigrationVersion`] against it first: writing through the current key encodings to a
 /// database still at an older version silently misses the rows that a pending migration has yet to rewrite.
 ///
-/// A node refuses a stored version above this one, and migrates one below it. The numbering restarted with the v0.42.0
-/// network reset at the same values the schema used before it (0 to 2), so a database written before v0.42.0 cannot be
-/// told apart from an older post-reset one by its stored version and is not refused by this check. Any future reset or
-/// other incompatible on-disk change must bump this, so that the node refuses databases it cannot use rather than
-/// reading them under the wrong schema.
-pub const CURRENT_SCHEMA_VERSION: u64 = 3;
+/// A node refuses a stored version above this one. It migrates one below it where a migration from that version
+/// exists, and refuses it otherwise. Any incompatible on-disk change must bump this, so that the node refuses databases
+/// it cannot use rather than reading them under the wrong schema.
+pub const CURRENT_SCHEMA_VERSION: u64 = 0;
 
 pub struct DatabaseMigrationVersion;
 

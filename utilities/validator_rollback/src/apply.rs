@@ -112,10 +112,8 @@ pub struct ApplyOutcome {
 
 /// Refuses to operate on a database whose schema version is not the one this build encodes.
 ///
-/// The rollback primitives write through the current key encodings. Against an older database those encodings do not
-/// match what is on disk, so a cascade silently misses the rows a pending migration has yet to rewrite - leaving
-/// orphans that the migration then promotes into live entries referring to rolled-back blocks. Against a newer
-/// database the encodings are simply unknown to this build.
+/// The rollback primitives write through the current key encodings, which match only a database at this version: a
+/// cascade through them silently misses rows stored under any other encoding.
 fn check_schema_version(store: &RocksDbStateStore<PeerAddress>) -> anyhow::Result<()> {
     let version = store.with_read_tx(|tx| -> anyhow::Result<_> {
         let version = tx
@@ -135,12 +133,14 @@ fn check_schema_version(store: &RocksDbStateStore<PeerAddress>) -> anyhow::Resul
     match version.cmp(&CURRENT_SCHEMA_VERSION) {
         std::cmp::Ordering::Equal => Ok(()),
         std::cmp::Ordering::Less => bail!(
-            "State db is at schema version {version} but this tool writes version {CURRENT_SCHEMA_VERSION}. Start the \
-             validator once to migrate the database, stop it again, then re-run the rollback."
+            "State db is at schema version {version}, which is older than the {CURRENT_SCHEMA_VERSION} this tool \
+             writes. A validator from this release refuses it too; delete the validator's data directory and resync \
+             instead of rolling back."
         ),
         std::cmp::Ordering::Greater => bail!(
             "State db is at schema version {version}, which is newer than the {CURRENT_SCHEMA_VERSION} this tool \
-             understands. Use a rollback tool built from the same release as the validator."
+             understands. Use a rollback tool built from the release that wrote it, or if that release is \
+             incompatible with this network, delete the validator's data directory and resync."
         ),
     }
 }

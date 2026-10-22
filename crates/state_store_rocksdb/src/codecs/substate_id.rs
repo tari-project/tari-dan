@@ -86,24 +86,13 @@ impl<'a> DbEncoder<VersionedSubstateIdRef<'a>> for SubstateIdCodec {
 
 #[cfg(test)]
 mod tests {
-    use tari_consensus_types::BlockId;
-    use tari_ootle_common_types::SubstateVersion;
-    use tari_sidechain::FixedHash;
     use tari_template_lib_types::{ComponentAddress, ObjectKey};
 
     use super::*;
-    use crate::{
-        codecs::{BlockDiffKeyCodec, SubstateIdBlockIdVersionSeq},
-        column_families::block_diff::legacy::BlockDiffKey,
-    };
 
     fn new_substate_id(seed: u8) -> SubstateId {
         let component = ComponentAddress::from_array([seed; ObjectKey::LENGTH]);
         SubstateId::Component(component)
-    }
-
-    fn new_block_id(seed: u8) -> BlockId {
-        BlockId::new(FixedHash::from([seed; FixedHash::byte_size()]))
     }
 
     #[test]
@@ -113,29 +102,5 @@ mod tests {
         let encoded = codec.encode(&substate_id).unwrap();
         let decoded: SubstateId = codec.decode_exact(&encoded).unwrap();
         assert_eq!(substate_id, decoded);
-    }
-
-    #[test]
-    fn check_with_prefix() {
-        // This codec happens to encode {len}||{substate_id} as a prefix
-        let block_diff_codec = BlockDiffKeyCodec::<SubstateIdBlockIdVersionSeq>::default();
-        let key = BlockDiffKey {
-            block_id: new_block_id(1),
-            substate_id: new_substate_id(2),
-            version: SubstateVersion::new(3),
-            is_up: true,
-            sequence: 0,
-        };
-
-        let compound_encoding = block_diff_codec.encode(&key).unwrap();
-        let codec = SubstateIdCodec;
-        let encoded = codec.encode(&key.substate_id).unwrap();
-        assert_eq!(&compound_encoding.as_slice()[..encoded.len()], encoded.as_slice());
-        let decoded = block_diff_codec.decode_exact(&compound_encoding).unwrap();
-        assert_eq!(key.substate_id, decoded.substate_id);
-        assert_eq!(key.version, decoded.version);
-        assert_eq!(key.is_up, decoded.is_up);
-        assert_eq!(key.sequence, decoded.sequence);
-        assert_eq!(key.block_id, decoded.block_id);
     }
 }

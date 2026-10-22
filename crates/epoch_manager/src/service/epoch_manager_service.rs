@@ -127,7 +127,6 @@ impl<TSpec: EpochManagerSpec> EpochManagerService<TSpec> {
         info!(target: LOG_TARGET, "🚀 Starting epoch manager");
         // first, load initial state
         self.inner.load_initial_state()?;
-        self.inner.ensure_unlocked_validator_sets()?;
 
         loop {
             tokio::select! {

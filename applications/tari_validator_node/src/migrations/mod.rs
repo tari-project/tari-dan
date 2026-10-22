@@ -5,23 +5,20 @@
 //!
 //! Migrations upgrade the persisted state of *already-running* nodes when a change would otherwise
 //! only take effect for freshly bootstrapped databases. Each database records the schema version it
-//! was last brought up to ([`DatabaseMigrationVersion`]); [`migrate`] runs the steps between that
-//! stored version and [`CURRENT_VERSION`]. A fresh database skips migrations entirely - it is stamped
-//! directly with `CURRENT_VERSION` once the genesis state is laid down.
+//! was last brought up to ([`DatabaseMigrationVersion`]). [`migrate`] upgrades a stored version for which a
+//! migration step exists and refuses any other version below [`CURRENT_VERSION`]. A fresh database skips migrations
+//! entirely - it is stamped directly with `CURRENT_VERSION` once the genesis state is laid down.
 //!
 //! # Adding a migration
 //!
-//! To take the schema from version `N` to `N + 1`:
-//!
-//! 1. Add `v{N+1}.rs` with `pub fn migrate(...) -> ...` performing the upgrade, and declare it here with `mod v{N+1};`.
-//! 2. Bump `CURRENT_SCHEMA_VERSION` (in the state store, beside `DatabaseMigrationVersion`) to `N + 1`.
-//! 3. Apply it from [`migrate`]'s step loop, in an arm keyed by the version it upgrades *from*. The loop steps the
-//!    stored version up one migration at a time, persisting each version it reaches:
+//! To take the schema from version `N` to `N + 1`, add `v{N+1}.rs` with `pub fn migrate(...)`, bump
+//! `CURRENT_SCHEMA_VERSION` (in the state store, beside `DatabaseMigrationVersion`), and step the stored version up
+//! one migration at a time in [`migrate`], persisting each version it reaches:
 //!
 //! ```ignore
 //! while version < CURRENT_VERSION {
 //!     match version {
-//!         2 => v3::migrate(tx)?,
+//!         0 => v1::migrate(tx)?,
 //!         other => anyhow::bail!("no migration defined for database version {other}"),
 //!     }
 //!     version += 1;
@@ -53,10 +50,6 @@ use tari_state_store_rocksdb::{
 
 use crate::genesis_state::create_genesis_state;
 
-mod v1;
-mod v2;
-mod v3;
-
 const LOG_TARGET: &str = "tari::validator_node::migrations";
 
 pub fn migrate<TAddr: NodeAddressable + 'static>(
@@ -83,31 +76,16 @@ pub fn migrate<TAddr: NodeAddressable + 'static>(
         },
         Some(version) if version > CURRENT_VERSION => {
             anyhow::bail!(
-                "Database schema version {version} is newer than this binary's {CURRENT_VERSION}; upgrade the binary \
-                 or delete the database"
+                "Database schema version {version} is newer than this binary's {CURRENT_VERSION}. Upgrade the binary, \
+                 or if a release incompatible with this network wrote the database, delete the validator's data \
+                 directory and resync."
             );
         },
-        Some(mut version) => {
-            while version < CURRENT_VERSION {
-                info!(
-                    target: LOG_TARGET,
-                    "Migrating database from version {version} to {}", version + 1
-                );
-                match version {
-                    0 => v1::migrate(tx)?,
-                    1 => v2::migrate(tx)?,
-                    2 => v3::migrate(tx)?,
-                    other => anyhow::bail!(
-                        "Database is at migration version {other}, and no migration upgrades it to version {}. Delete \
-                         the database and resync.",
-                        other + 1
-                    ),
-                }
-                version += 1;
-                tx.db()
-                    .cf(DatabaseMigrationVersion)?
-                    .put(&ByteColumn, &version, OPERATION)?;
-            }
+        Some(version) => {
+            anyhow::bail!(
+                "Database schema version {version} is older than this binary's {CURRENT_VERSION}, and no migration \
+                 upgrades it. Delete the validator's data directory and resync."
+            );
         },
         // A fresh database: lay down the genesis state and stamp the current version.
         None => {
