@@ -130,6 +130,8 @@ fn basic_transfer() {
         .collect::<Vec<_>>();
     assert_eq!(utxos.len(), 1);
     assert!(utxos[0].output().is_some());
+
+    test.assert_substate_lengths_match_encoding();
 }
 
 /// Two independent transfers, both valid on their own, for the fee-intent cap tests. Each spends a different minted
@@ -711,6 +713,8 @@ fn mint_with_view_key() {
     let total_balance =
         try_brute_force_stealth_balance(&utxos, &view_key_secret, &GenerateValueLookup::new(0..=200)).unwrap();
     assert_eq!(total_balance, Some(1000));
+
+    test.assert_substate_lengths_match_encoding();
 }
 
 #[test]
@@ -791,6 +795,8 @@ fn freeze_then_attempt_spend() {
         .collect::<Vec<_>>();
     assert_eq!(utxos.len(), 1);
     assert!(utxos[0].output().is_some());
+
+    test.assert_substate_lengths_match_encoding();
 }
 
 #[test]
@@ -851,6 +857,8 @@ fn burn_then_attempt_spend() {
             .unwrap();
         assert!(utxo.is_burnt());
     }
+
+    test.assert_substate_lengths_match_encoding();
 }
 
 #[test]

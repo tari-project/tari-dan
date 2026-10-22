@@ -1176,4 +1176,85 @@ mod tests {
             );
         }
     }
+
+    mod encoded_len {
+        use tari_ootle_template_metadata::MetadataHashWriter;
+        use tari_template_lib::types::{
+            EncryptedData,
+            crypto::{RistrettoPublicKeyBytes, UtxoTag},
+            stealth::SpendAuthorization,
+        };
+
+        use super::*;
+        use crate::{
+            UtxoOutput,
+            crypto::{ElgamalVerifiableBalanceBytes, OutputBody},
+            validator_fee::ValidatorFeePool,
+        };
+
+        fn output_body(memo_len: usize, viewable: bool) -> OutputBody {
+            OutputBody {
+                public_nonce: RistrettoPublicKeyBytes::zero(),
+                encrypted_data: EncryptedData::try_from(vec![7u8; EncryptedData::min_size() + memo_len]).unwrap(),
+                minimum_value_promise: u64::MAX,
+                viewable_balance: viewable.then(|| ElgamalVerifiableBalanceBytes {
+                    encrypted: RistrettoPublicKeyBytes::zero(),
+                    public_nonce: RistrettoPublicKeyBytes::zero(),
+                }),
+            }
+        }
+
+        /// The storage charge sizes each persisted substate by its `CborLen`, so that length must equal
+        /// the bytes the substate actually encodes to. Component, resource, vault, NFT and receipt
+        /// substates are checked against real executions in `tari_engine`'s `fees.rs`.
+        #[test]
+        fn it_matches_the_encoding_of_every_leaf_substate() {
+            let mut frozen_utxo = Utxo::new(UtxoOutput {
+                output: output_body(EncryptedData::MAX_MEMO_SIZE, true),
+                auth: SpendAuthorization::KeyAndScript {
+                    spend_key: RistrettoPublicKeyBytes::zero(),
+                    condition_root: [3u8; 32].into(),
+                },
+                tag: UtxoTag::new(u32::MAX),
+            });
+            frozen_utxo.freeze();
+            let mut burnt_utxo = frozen_utxo.clone();
+            burnt_utxo.burn();
+            let mut frozen_output = ConfidentialOutput::new(output_body(EncryptedData::MAX_MEMO_SIZE, true));
+            frozen_output.freeze();
+
+            let values = [
+                SubstateValue::Utxo(Utxo::new(UtxoOutput {
+                    output: output_body(0, false),
+                    auth: SpendAuthorization::Key(RistrettoPublicKeyBytes::zero()),
+                    tag: UtxoTag::new(0),
+                })),
+                SubstateValue::Utxo(frozen_utxo),
+                SubstateValue::Utxo(burnt_utxo),
+                SubstateValue::ConfidentialOutput(ConfidentialOutput::new(output_body(0, false))),
+                SubstateValue::ConfidentialOutput(frozen_output),
+                SubstateValue::ClaimedOutputTombstone(ClaimedOutputTombstone { value: 0 }),
+                SubstateValue::ClaimedOutputTombstone(ClaimedOutputTombstone { value: u64::MAX }),
+                SubstateValue::ValidatorFeePool(ValidatorFeePool::new(RistrettoPublicKeyBytes::zero(), u64::MAX)),
+                SubstateValue::Template(PublishedTemplate {
+                    template_name: "Template".try_into().unwrap(),
+                    author: RistrettoPublicKeyBytes::zero(),
+                    binary: vec![0u8; 70_000].try_into().unwrap(),
+                    at_epoch: u64::MAX,
+                    metadata_hash: Some(MetadataHashWriter::new().finalize()),
+                }),
+                SubstateValue::Template(PublishedTemplate {
+                    template_name: Default::default(),
+                    author: RistrettoPublicKeyBytes::zero(),
+                    binary: vec![0u8; 10].try_into().unwrap(),
+                    at_epoch: 0,
+                    metadata_hash: None,
+                }),
+            ];
+
+            for value in &values {
+                assert_eq!(tari_bor::encoded_len(value), encode(value).unwrap().len(), "{value:?}");
+            }
+        }
+    }
 }

@@ -22,6 +22,7 @@
 //! [`ClaimBurnShape::estimate_fee`] prices an L1 burn claim the same way, so a claimant has a figure
 //! of its own to bound the fee it reveals by. `claim_burn.rs` in the same suite holds it.
 
+use tari_bor::encoded_len;
 use tari_template_lib::types::{
     ClaimedOutputTombstoneAddress,
     ObjectKey,
@@ -241,11 +242,6 @@ fn widest_utxo_address() -> UtxoAddress {
         ResourceAddress::new([0xff; 32].into()),
         UtxoId::from_array([0xff; UtxoId::LENGTH]),
     )
-}
-
-/// The bytes a value occupies in persisted state, measured the way the fee module tallies storage.
-fn encoded_len<T: minicbor::Encode<()>>(value: &T) -> usize {
-    tari_bor::encoded_len_via_writer(value).expect("encoding a canonical value into a byte counter cannot fail")
 }
 
 #[cfg(test)]

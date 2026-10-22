@@ -1186,3 +1186,24 @@ fn a_fee_account_declared_as_a_read_still_pays_the_fee() {
     );
     assert!(result.finalize.fee_receipt.is_paid_in_full());
 }
+
+/// The storage charge sizes each persisted substate by its `CborLen`, so that length must equal the
+/// bytes the substate actually encodes to. Richer state is checked the same way at the end of the
+/// stealth, confidential, metadata, NFT-data and event tests, and the leaf substate variants in
+/// `tari_engine_types`.
+#[test]
+fn persisted_substate_lengths_match_their_encoding() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let (account, owner_token, private_key) = test.create_funded_account();
+
+    test.enable_fees();
+    test.execute_expect_success(
+        Transaction::builder_localnet(Epoch(1))
+            .pay_fee_from_component(account, 2000u64)
+            .call_function(test.get_template_address("State"), "new", args![])
+            .build_and_seal(&private_key),
+        vec![owner_token],
+    );
+
+    test.assert_substate_lengths_match_encoding();
+}

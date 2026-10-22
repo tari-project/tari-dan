@@ -54,6 +54,8 @@ fn update_metadata_succeeds() {
     let resource = test.read_only_state_store().get_resource(&resource_address).unwrap();
     assert_eq!(resource.metadata().get_str("description"), Some("A fine token"));
     assert_eq!(resource.metadata().get_str("SYMBOL"), Some("FOO"));
+
+    test.assert_substate_lengths_match_encoding();
 }
 
 #[test]

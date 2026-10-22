@@ -139,7 +139,7 @@ impl<'b, C> minicbor::Decode<'b, C> for MetadataHash {
 impl<C> minicbor::CborLen<C> for MetadataHash {
     fn cbor_len(&self, ctx: &mut C) -> usize {
         let bytes = self.to_bytes();
-        <[u8] as minicbor::CborLen<C>>::cbor_len(bytes.as_slice(), ctx)
+        minicbor::bytes::cbor_len(bytes.as_slice(), ctx)
     }
 }
 
@@ -277,6 +277,12 @@ mod tests {
         let cbor = tari_bor::encode(&hash).unwrap();
         let parsed: MetadataHash = tari_bor::decode(&cbor).unwrap();
         assert_eq!(hash, parsed);
+    }
+
+    #[test]
+    fn cbor_len_matches_the_encoding() {
+        let hash = hash_data(b"test");
+        assert_eq!(minicbor::len(&hash), tari_bor::encode(&hash).unwrap().len());
     }
 
     #[test]
