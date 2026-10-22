@@ -116,9 +116,7 @@ fn declared_input_bytes<'a, TStore: StateReader, I: IntoIterator<Item = &'a Subs
                 .map_err(|err| TransactionErrorKind::InvariantError {
                     details: format!("Declared input {id} was not resolved before execution: {err}"),
                 })?;
-            let len =
-                tari_bor::encoded_len_via_writer(substate.substate_value()).map_err(TransactionErrorKind::from)?;
-            Ok(total.saturating_add(len as u64))
+            Ok(total.saturating_add(tari_bor::encoded_len(substate.substate_value()) as u64))
         })
 }
 
