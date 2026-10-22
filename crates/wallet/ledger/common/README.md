@@ -24,8 +24,9 @@ All commands use APDU class byte `0x80`.
 ### `GetPublicKey`
 
 `GetPublicKeyRequest` names a derivation path and may carry a `StealthTweak` (network + the spent
-UTXO's sender public nonce). With the tweak the device returns the stealth one-time key `(c + k)·G`
-— the key it also signs with when the same nonce is given in a `SignTransaction` header — so a host
+UTXO's sender public nonce `R`). With the tweak the device returns the stealth one-time key
+`(c + k)·G`, where `c = H(v·R)` and `v` is the view key it derives at the same path — the key it also
+signs with when the same nonce is given in a `SignTransaction` header — so a host
 can resolve the seal key of a stealth input before binding any signature to it.
 
 ### `SignTransaction` streaming

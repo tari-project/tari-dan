@@ -1,0 +1,32 @@
+{
+  "name": "stealth_scan/foreign_spend_key",
+  "schema_version": 1,
+  "provenance": {
+    "core_version": "0.47.0",
+    "git_rev": "4096f43913407b2ffe5ef8e44d821683bcf8b58b",
+    "generated_by": "ootle_sdk_core golden-vector generator"
+  },
+  "operation": "scan_stealth_output",
+  "input": {
+    "stealth_scan_input": {
+      "network": "esmeralda",
+      "view_secret": "7800000000000000000000000000000000000000000000000000000000000000",
+      "account_public_key": "e2bf41576c1f0fcb1b7fdd5980f8f1f57f6d3f132fd44ec03c75e42360a42029",
+      "output": {
+        "commitment": "6438fe484f0cdbf98d56021c2506ad583370a68c0ecda45f28e7182f3180e76e",
+        "encrypted_data": "508d2e58d93664aff5c99ff5964c0d3ea9a4b3d0210a488839e0865ed3de1fc8d638478e4e89c20dea13e13739c3b0b2c2379b62f359cfad7942034d9002e4c7d46ee4108c8d2ce59d8cca9c5cbaef87",
+        "sender_public_nonce": "a4a5adac6d68d700b188603360e5a705ee6e1022847799b1ed1923955dbcc911",
+        "pay_to": "StealthPublicKey",
+        "spend_public_key": "16ba85b3cbbbfc27500b0a52d8a52887cecaee74fc3500bf61d03d4889b39940",
+        "utxo_tag": "a132e1ef",
+        "resource_address": "resource_0101010101010101010101010101010101010101010101010101010101010101"
+      },
+      "skip_memo": true
+    }
+  },
+  "expected": {
+    "decrypted": {
+      "$none": true
+    }
+  }
+}

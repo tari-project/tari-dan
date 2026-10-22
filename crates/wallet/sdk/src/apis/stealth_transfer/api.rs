@@ -800,6 +800,7 @@ impl<'a, TSpec: WalletSdkSpec> StealthTransferApi<'a, TSpec> {
                 .chain(&fee_inputs_to_spend.inputs)
                 .map(|i| StealthUtxoSpendKeyId {
                     account_key_id,
+                    view_key_id: owner_account.view_only_key_id(),
                     public_nonce: i.public_nonce,
                 })
                 .collect();

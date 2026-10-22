@@ -58,7 +58,7 @@ use ootle_sdk_core::{
     seal_and_encode_stealth_transfer,
     stealth::build_stealth_outputs_statement_with_seed,
     types::{
-        bytes::{BuildSeed, SecretKeyBytes},
+        bytes::{BuildSeed, PublicKeyBytes, SecretKeyBytes},
         stealth::{InboundStealthOutput, StealthTransferIntent},
     },
 };
@@ -133,6 +133,7 @@ pub(crate) enum StealthHandleState {
 #[derive(Debug, Deserialize)]
 struct StealthKeysJson {
     account_secret: SecretKeyBytes,
+    view_secret: SecretKeyBytes,
     seed: BuildSeed,
 }
 
@@ -143,31 +144,31 @@ impl StealthKeysJson {
     }
 
     fn into_core(self) -> StealthKeys {
-        StealthKeys::new(self.account_secret)
+        StealthKeys::new(self.account_secret, self.view_secret)
     }
 }
 
-/// Random-path keys mirror: only `account_secret` is needed — the construction entropy is drawn from a
-/// fresh OS-RNG seed (see [`seal_and_encode_stealth_transfer`]).
+/// Random-path keys mirror: only the account and view secrets are needed — the construction entropy
+/// is drawn from a fresh OS-RNG seed (see [`seal_and_encode_stealth_transfer`]).
 #[derive(Debug, Deserialize)]
 struct StealthProductionKeysJson {
     account_secret: SecretKeyBytes,
+    view_secret: SecretKeyBytes,
 }
 
 impl StealthProductionKeysJson {
     fn into_core(self) -> StealthKeys {
-        StealthKeys::new(self.account_secret)
+        StealthKeys::new(self.account_secret, self.view_secret)
     }
 }
 
-/// Wire mirror of the scan-side argument bundle for [`scan_stealth_output`]. `view_secret` is
-/// required; `account_secret` is optional (supplied only when the caller can also verify ownership —
-/// when absent the tag + spend-condition checks are skipped). `skip_memo` defaults to `false`.
+/// Wire mirror of the scan-side argument bundle for [`scan_stealth_output`]. `view_secret` and
+/// `account_public_key` are required: together they confirm the tag and the one-time spend key.
+/// `skip_memo` defaults to `false`.
 #[derive(Debug, Deserialize)]
 struct StealthScanKeysJson {
     view_secret: SecretKeyBytes,
-    #[serde(default)]
-    account_secret: Option<SecretKeyBytes>,
+    account_public_key: PublicKeyBytes,
     #[serde(default)]
     skip_memo: bool,
 }
@@ -204,7 +205,7 @@ fn ready_or_err(state: StealthHandleState) -> Result<StealthPartialTransaction, 
 ///   wanted `utxo_<…>` ids are a pure function of each input's resource + commitment).
 /// - `spend_secrets_json` — a JSON array of lowercase-hex secret scalars, one **positional** per `intent.inputs`, used
 ///   to decrypt each input's spend mask.
-/// - `keys_json` — `{account_secret}` (lowercase hex).
+/// - `keys_json` — `{account_secret, view_secret}` (lowercase hex).
 ///
 /// On success `data_json` is the `EncodedPublicTransfer` (`{encoded_transaction, transaction_id}`,
 /// lowercase hex; the wire shape is shared with the public path). The bytes/id are **not** reproducible
@@ -248,7 +249,7 @@ pub unsafe extern "C" fn ootle_build_and_encode_stealth_transfer(
 }
 
 /// Seed-reproducible counterpart of [`ootle_build_and_encode_stealth_transfer`]. The single build seed
-/// in `keys_json` (`{account_secret, seed}`, lowercase hex) expands into **both** the account-key
+/// in `keys_json` (`{account_secret, view_secret, seed}`, lowercase hex) expands into **both** the account-key
 /// authorization + seal nonces and the proof + seal-side entropy, so the result is reproducible from
 /// the seed + intent (except the aggregated bulletproof, which is never byte-stable — compare
 /// *semantically*).
@@ -397,8 +398,8 @@ pub unsafe extern "C" fn ootle_build_stealth_unsigned_with_seed(
 /// # Safety
 /// `handle` must be a non-null pointer previously returned by [`ootle_build_stealth_unsigned`] /
 /// [`ootle_build_stealth_unsigned_with_seed`] / this fn and not yet consumed. `fetched_json`,
-/// `spend_secrets_json` and `keys_json` (`{account_secret}`, lowercase hex — assembly names the revealed output's
-/// receiver, which is the key that will seal) must each be a valid NUL-terminated UTF-8 C string. The returned
+/// `spend_secrets_json` and `keys_json` (`{account_secret, view_secret}`, lowercase hex — assembly names the revealed
+/// output's receiver, which is the key that will seal) must each be a valid NUL-terminated UTF-8 C string. The returned
 /// envelope must be freed with [`ootle_result_free`](crate::ootle_result_free).
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ootle_apply_fetched_substates_stealth(
@@ -473,7 +474,7 @@ pub unsafe extern "C" fn ootle_apply_fetched_substates_stealth(
 ///
 /// **Consumes** `handle` (taken by value — treat the pointer you passed as invalid afterwards, even on
 /// error). `network` must be the transfer's network (the partial does not carry it; different networks
-/// yield different stealth keys). `keys_json` is `{account_secret}`; the seal nonces are expanded from
+/// yield different stealth keys). `keys_json` is `{account_secret, view_secret}`; the seal nonces are expanded from
 /// a fresh OS-RNG seed. On success `data_json` is the `EncodedPublicTransfer`. No handle is returned.
 /// The bytes/id are not reproducible (random-nonce seal).
 ///
@@ -524,8 +525,8 @@ pub unsafe extern "C" fn ootle_seal_and_encode_stealth(
 /// **Stateless — returns no handle.**
 ///
 /// - `network` — the L1 network discriminant byte.
-/// - `scan_keys_json` — `{view_secret, account_secret?, skip_memo?}` (secrets lowercase hex; `account_secret` optional
-///   — when absent the tag + spend-condition ownership checks are skipped; `skip_memo` defaults to `false`).
+/// - `scan_keys_json` — `{view_secret, account_public_key, skip_memo?}` (lowercase hex; `skip_memo` defaults to
+///   `false`).
 /// - `inbound_output_json` — an `InboundStealthOutput` (the on-the-wire shape of a created stealth output).
 ///
 /// `data_json` on success is **always** a JSON object:
@@ -556,7 +557,7 @@ pub unsafe extern "C" fn ootle_scan_stealth_output(
             match scan_stealth_output(
                 network,
                 &scan_keys.view_secret,
-                scan_keys.account_secret.as_ref(),
+                &scan_keys.account_public_key,
                 &output,
                 scan_keys.skip_memo,
             ) {
@@ -617,9 +618,8 @@ pub unsafe extern "C" fn ootle_decode_stealth_utxo(
 /// `data_json`: not-mine ⇒ `{"is_mine":false}`, not an error.
 ///
 /// - `network` — the L1 network discriminant byte.
-/// - `scan_keys_json` — `{view_secret, account_secret?, skip_memo?}` (the same bundle [`ootle_scan_stealth_output`]
-///   takes; secrets lowercase hex; `account_secret` optional — when absent the tag + spend-condition ownership checks
-///   are skipped; `skip_memo` defaults to `false`).
+/// - `scan_keys_json` — `{view_secret, account_public_key, skip_memo?}` (the same bundle [`ootle_scan_stealth_output`]
+///   takes; lowercase hex; `skip_memo` defaults to `false`).
 /// - `substate_id_json` — the UTXO's canonical address string. A JSON string.
 /// - `substate_value_json` — the `SubstateValue` JSON the indexer returned, verbatim.
 ///
@@ -655,7 +655,7 @@ pub unsafe extern "C" fn ootle_scan_stealth_substate(
             match scan_stealth_substate(
                 network,
                 &scan_keys.view_secret,
-                scan_keys.account_secret.as_ref(),
+                &scan_keys.account_public_key,
                 &substate_id,
                 &substate_value,
                 scan_keys.skip_memo,

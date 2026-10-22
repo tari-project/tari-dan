@@ -354,6 +354,9 @@ impl TryFrom<KeyId> for DerivedKeyId {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
 pub struct StealthUtxoSpendKeyId {
     pub account_key_id: KeyId,
+    /// The view key of the account that received the UTXO. The one-time spend key is tweaked by
+    /// `H(v·R)`, so spending needs it alongside the account key.
+    pub view_key_id: KeyId,
     pub public_nonce: RistrettoPublicKeyBytes,
 }
 

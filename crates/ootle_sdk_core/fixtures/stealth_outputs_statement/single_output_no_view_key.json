@@ -2,8 +2,8 @@
   "name": "stealth_outputs_statement/single_output_no_view_key",
   "schema_version": 1,
   "provenance": {
-    "core_version": "0.41.2",
-    "git_rev": "f1de8633ae83fa2801be7c31c8a53a46cc0cb921",
+    "core_version": "0.47.0",
+    "git_rev": "4096f43913407b2ffe5ef8e44d821683bcf8b58b",
     "generated_by": "ootle_sdk_core golden-vector generator"
   },
   "operation": "build_stealth_outputs_statement",
@@ -44,7 +44,7 @@
       "outputs": [
         {
           "auth": {
-            "Key": "e8c5ae61d10d9d7c9e745733fbf748da7dafed082b6a3bb26bb88f36ee68102d"
+            "Key": "d6f721b040476fda3dc2762b869d5430bf1954b72217cf06d40a18863dd07319"
           },
           "output": {
             "commitment": "1acc86f1e32afd260b2fff7b24a887a8d42151ec6d3ba81012251a2d17dde713",

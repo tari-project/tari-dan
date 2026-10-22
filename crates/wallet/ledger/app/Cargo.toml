@@ -1,7 +1,7 @@
 [workspace]
 [package]
 name = "ootle-ledger-app"
-version = "0.2.0"
+version = "0.3.0"
 description = "Ootle Ledger App"
 edition = "2024"
 authors = ["Tari Development Community"]

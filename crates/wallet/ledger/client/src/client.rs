@@ -214,7 +214,7 @@ mod tests {
         let client = LedgerClient::new(speculos_transport());
 
         let version = client.get_app_version().await.unwrap();
-        assert_eq!(version, "0.2.0");
+        assert_eq!(version, "0.3.0");
 
         let app_name = client.get_app_name().await.unwrap();
         assert_eq!(app_name, "Tari Ootle");
@@ -359,6 +359,12 @@ mod tests {
             .await
             .unwrap();
         let account_pk = RistrettoPublicKey::from_canonical_bytes(&account_pk_bytes[..]).unwrap();
+        // The view key at the same path keys the stealth tweak.
+        let view_pk_bytes = client
+            .get_public_key(account, index, KeyType::ViewOnlyKey, None)
+            .await
+            .unwrap();
+        let view_pk = RistrettoPublicKey::from_canonical_bytes(&view_pk_bytes[..]).unwrap();
         let r = RistrettoSecretKey::random(&mut rand::rng());
         let r_pub = RistrettoPublicKey::from_secret_key(&r);
         let mut nonce = [0u8; 32];
@@ -387,9 +393,9 @@ mod tests {
             "device signed with the account key"
         );
 
-        // The returned key must equal the recipient-derivable stealth address for this network.
+        // The returned key must equal the sender-derived stealth address for this network.
         let network = Network::try_from(tx.network).unwrap();
-        let expected = owner_stealth_dh_stealth_address(network, &account_pk, &r);
+        let expected = owner_stealth_dh_stealth_address(network, &account_pk, &view_pk, &r);
         assert_eq!(
             &response.public_key[..],
             expected.as_bytes(),

@@ -2,4 +2,12 @@
 import type { RistrettoPublicKeyBytes } from "../RistrettoPublicKeyBytes";
 import type { KeyId } from "./KeyId";
 
-export type StealthUtxoSpendKeyId = { account_key_id: KeyId; public_nonce: RistrettoPublicKeyBytes };
+export type StealthUtxoSpendKeyId = {
+  account_key_id: KeyId;
+  /**
+   * The view key of the account that received the UTXO. The one-time spend key is tweaked by
+   * `H(v·R)`, so spending needs it alongside the account key.
+   */
+  view_key_id: KeyId;
+  public_nonce: RistrettoPublicKeyBytes;
+};

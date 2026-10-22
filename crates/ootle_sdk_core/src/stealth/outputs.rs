@@ -162,7 +162,7 @@ pub fn build_stealth_output_witness(
     let auth = match output_spec.pay_to {
         StealthPayTo::StealthPublicKey => {
             let owner_public_key =
-                crypto.derive_stealth_owner_public_key(internal_network, &account_key, &nonce_secret);
+                crypto.derive_stealth_owner_public_key(internal_network, &account_key, &view_key, &nonce_secret);
             SpendAuthorization::Key(owner_public_key.to_byte_type())
         },
         // An `AccessRule::AllowAll` output is gated by a single-leaf condition tree; commit its root.

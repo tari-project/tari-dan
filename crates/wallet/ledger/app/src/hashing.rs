@@ -90,23 +90,24 @@ pub fn sign_message(secret: &Scalar, message: &[u8; 64]) -> Result<([u8; 32], [u
 }
 
 /// Derive the stealth signing scalar `c + k` for a confidential transfer, where
-/// `c = H_stealth_owner(network, k·R)` and `R` is the spent UTXO's sender public nonce. Mirrors
-/// `tari_ootle_wallet_crypto::kdfs::owner_stealth_dh_secret`: the DH point `k·R` is compressed and
-/// fed borsh-encoded (`u32_le(len) || bytes`) into a `com.tari.ootle.wallet` / `stealth_owner.n{net}`
-/// domain-separated Blake2b-512. Pinned by the host reference test in the ledger client crate.
+/// `c = H_stealth_owner(network, v·R)`, `v` is the account's view secret and `R` is the spent UTXO's
+/// sender public nonce. Mirrors `tari_ootle_wallet_crypto::kdfs::owner_stealth_dh_secret`: the DH
+/// point `v·R` is compressed and fed borsh-encoded (`u32_le(len) || bytes`) into a `com.tari.ootle.wallet` /
+/// `stealth_owner.n{net}` domain-separated Blake2b-512. Pinned by the host reference test in the ledger client crate.
 pub fn derive_stealth_secret(
     network_byte: u8,
     account_secret: &Scalar,
+    view_secret: &Scalar,
     public_nonce: &[u8; 32],
 ) -> Result<Scalar, AppStatus> {
     let r = CompressedRistretto(*public_nonce)
         .decompress()
         .ok_or(AppStatus::OotleStatusWord(OotleStatusWord::BadRequest))?;
-    // The identity yields a DH point independent of the account key, so the resulting key belongs to no UTXO.
+    // The identity yields a DH point independent of the view key, so the resulting key belongs to no UTXO.
     if r.is_identity() {
         return Err(AppStatus::OotleStatusWord(OotleStatusWord::BadRequest));
     }
-    let dh = (account_secret * r).compress().0;
+    let dh = (view_secret * r).compress().0;
 
     let label = format!("{STEALTH_OWNER_LABEL}.n{network_byte}");
     let mut hasher = Blake2b_512::new();

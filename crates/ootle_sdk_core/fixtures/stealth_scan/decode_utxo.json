@@ -2,8 +2,8 @@
   "name": "stealth_scan/decode_utxo",
   "schema_version": 1,
   "provenance": {
-    "core_version": "0.41.2",
-    "git_rev": "f1de8633ae83fa2801be7c31c8a53a46cc0cb921",
+    "core_version": "0.47.0",
+    "git_rev": "4096f43913407b2ffe5ef8e44d821683bcf8b58b",
     "generated_by": "ootle_sdk_core golden-vector generator"
   },
   "operation": "decode_stealth_utxo",
@@ -14,10 +14,10 @@
         "is_frozen": false,
         "output": {
           "auth": {
-            "Key": "6e4eaba42d4e84c0526aafab5683514df34cd3b3ee3f69b5f5aeb88cb39bb31f"
+            "Key": "42830d43ddefdc28878544ea3591c46745a09e3c15ba036768767ead0cb33770"
           },
           "output": {
-            "encrypted_data": "3093605ce12bacb93d506e58caed462c46f1ee49500107712345a19fd8ee2bca587189eb0c007880a5e5da283379e6d116110340a7106968ed5d0589c7ac8a9ea388a4500d2e94a950c09ad2523c0cbb",
+            "encrypted_data": "e6c793457e58587c715124f63b3408770d6be3fc757a9e25355561913026bfc60c8b72f2c49ab7119f7738d49f9f3e65e41d4ae32eb8a4ab0b5518c22cd706b5da2e76265db359f882254b75f956cfac",
             "minimum_value_promise": 0,
             "public_nonce": "a4a5adac6d68d700b188603360e5a705ee6e1022847799b1ed1923955dbcc911",
             "viewable_balance": null
@@ -30,11 +30,11 @@
   "expected": {
     "inbound_output": {
       "commitment": "6438fe484f0cdbf98d56021c2506ad583370a68c0ecda45f28e7182f3180e76e",
-      "encrypted_data": "3093605ce12bacb93d506e58caed462c46f1ee49500107712345a19fd8ee2bca587189eb0c007880a5e5da283379e6d116110340a7106968ed5d0589c7ac8a9ea388a4500d2e94a950c09ad2523c0cbb",
+      "encrypted_data": "e6c793457e58587c715124f63b3408770d6be3fc757a9e25355561913026bfc60c8b72f2c49ab7119f7738d49f9f3e65e41d4ae32eb8a4ab0b5518c22cd706b5da2e76265db359f882254b75f956cfac",
       "pay_to": "StealthPublicKey",
       "resource_address": "resource_0101010101010101010101010101010101010101010101010101010101010101",
       "sender_public_nonce": "a4a5adac6d68d700b188603360e5a705ee6e1022847799b1ed1923955dbcc911",
-      "spend_public_key": "6e4eaba42d4e84c0526aafab5683514df34cd3b3ee3f69b5f5aeb88cb39bb31f",
+      "spend_public_key": "42830d43ddefdc28878544ea3591c46745a09e3c15ba036768767ead0cb33770",
       "utxo_tag": "a132e1ef"
     }
   }

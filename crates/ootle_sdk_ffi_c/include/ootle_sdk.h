@@ -423,7 +423,7 @@ void ootle_partial_transaction_free(OotlePartialTransaction *handle);
  *   wanted `utxo_<…>` ids are a pure function of each input's resource + commitment).
  * - `spend_secrets_json` — a JSON array of lowercase-hex secret scalars, one **positional** per `intent.inputs`, used
  *   to decrypt each input's spend mask.
- * - `keys_json` — `{account_secret}` (lowercase hex).
+ * - `keys_json` — `{account_secret, view_secret}` (lowercase hex).
  *
  * On success `data_json` is the `EncodedPublicTransfer` (`{encoded_transaction, transaction_id}`,
  * lowercase hex; the wire shape is shared with the public path). The bytes/id are **not** reproducible
@@ -443,7 +443,7 @@ OotleResult ootle_build_and_encode_stealth_transfer(uint8_t network,
 
 /**
  * Seed-reproducible counterpart of [`ootle_build_and_encode_stealth_transfer`]. The single build seed
- * in `keys_json` (`{account_secret, seed}`, lowercase hex) expands into **both** the account-key
+ * in `keys_json` (`{account_secret, view_secret, seed}`, lowercase hex) expands into **both** the account-key
  * authorization + seal nonces and the proof + seal-side entropy, so the result is reproducible from
  * the seed + intent (except the aggregated bulletproof, which is never byte-stable — compare
  * *semantically*).
@@ -519,8 +519,8 @@ OotleResult ootle_build_stealth_unsigned_with_seed(uint8_t network,
  * # Safety
  * `handle` must be a non-null pointer previously returned by [`ootle_build_stealth_unsigned`] /
  * [`ootle_build_stealth_unsigned_with_seed`] / this fn and not yet consumed. `fetched_json`,
- * `spend_secrets_json` and `keys_json` (`{account_secret}`, lowercase hex — assembly names the revealed output's
- * receiver, which is the key that will seal) must each be a valid NUL-terminated UTF-8 C string. The returned
+ * `spend_secrets_json` and `keys_json` (`{account_secret, view_secret}`, lowercase hex — assembly names the revealed
+ * output's receiver, which is the key that will seal) must each be a valid NUL-terminated UTF-8 C string. The returned
  * envelope must be freed with [`ootle_result_free`](crate::ootle_result_free).
  */
 OotleResult ootle_apply_fetched_substates_stealth(OotleStealthPartialTransaction *handle,
@@ -534,7 +534,7 @@ OotleResult ootle_apply_fetched_substates_stealth(OotleStealthPartialTransaction
  *
  * **Consumes** `handle` (taken by value — treat the pointer you passed as invalid afterwards, even on
  * error). `network` must be the transfer's network (the partial does not carry it; different networks
- * yield different stealth keys). `keys_json` is `{account_secret}`; the seal nonces are expanded from
+ * yield different stealth keys). `keys_json` is `{account_secret, view_secret}`; the seal nonces are expanded from
  * a fresh OS-RNG seed. On success `data_json` is the `EncodedPublicTransfer`. No handle is returned.
  * The bytes/id are not reproducible (random-nonce seal).
  *
@@ -557,8 +557,8 @@ OotleResult ootle_seal_and_encode_stealth(OotleStealthPartialTransaction *handle
  * **Stateless — returns no handle.**
  *
  * - `network` — the L1 network discriminant byte.
- * - `scan_keys_json` — `{view_secret, account_secret?, skip_memo?}` (secrets lowercase hex; `account_secret` optional
- *   — when absent the tag + spend-condition ownership checks are skipped; `skip_memo` defaults to `false`).
+ * - `scan_keys_json` — `{view_secret, account_public_key, skip_memo?}` (lowercase hex; `skip_memo` defaults to
+ *   `false`).
  * - `inbound_output_json` — an `InboundStealthOutput` (the on-the-wire shape of a created stealth output).
  *
  * `data_json` on success is **always** a JSON object:
@@ -605,9 +605,8 @@ OotleResult ootle_decode_stealth_utxo(const char *substate_id_json,
  * `data_json`: not-mine ⇒ `{"is_mine":false}`, not an error.
  *
  * - `network` — the L1 network discriminant byte.
- * - `scan_keys_json` — `{view_secret, account_secret?, skip_memo?}` (the same bundle [`ootle_scan_stealth_output`]
- *   takes; secrets lowercase hex; `account_secret` optional — when absent the tag + spend-condition ownership checks
- *   are skipped; `skip_memo` defaults to `false`).
+ * - `scan_keys_json` — `{view_secret, account_public_key, skip_memo?}` (the same bundle [`ootle_scan_stealth_output`]
+ *   takes; lowercase hex; `skip_memo` defaults to `false`).
  * - `substate_id_json` — the UTXO's canonical address string. A JSON string.
  * - `substate_value_json` — the `SubstateValue` JSON the indexer returned, verbatim.
  *

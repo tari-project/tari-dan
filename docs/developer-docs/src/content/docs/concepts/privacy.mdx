@@ -160,29 +160,31 @@ invented" — without any party learning an amount.
 Confidential amounts below still leave one thing visible: *which vault*. Stealth transfers remove
 that by never writing the recipient's real key on-chain.
 
-For each output, the sender performs a Diffie-Hellman exchange with the recipient's public key $K$
-and derives a one-time address:
+An address carries two public keys: the account key $K = k \cdot G$ and the view key
+$V = v \cdot G$. For each output, the sender performs a Diffie-Hellman exchange with the view key and
+derives a one-time address on top of the account key:
 
 | Step | Expression | Code |
 |---|---|---|
-| Shared secret | $c = H(r \cdot K)$ | `stealth_owner_dh` |
+| Shared secret | $c = H(r \cdot V)$ | `stealth_owner_dh` |
 | Stealth public key | $P = c \cdot G + K$ | `owner_stealth_dh_stealth_address` |
 | Spending key (recipient) | $p = c + k$ | `owner_stealth_dh_secret` |
 | Ephemeral nonce | $R = r \cdot G$ | stored as `sender_public_nonce` |
 
 All of these live in `crates/wallet/crypto/src/kdfs.rs`. The public entry points take a `Network`,
 and the domain hasher mixes it into the derivation, so a key derived for one network does not carry
-over to another. Only the recipient, who knows $k$, can
-recompute $c$ from $R$ and derive the spending key $p$; a third party sees $P$ and $R$ and cannot
-connect either to the recipient's public key. The output carries $R$ so the recipient can scan.
+over to another. Only the recipient, who knows $v$, can
+recompute $c$ from $R$; deriving the spending key $p$ also takes $k$. A third party sees $P$ and $R$
+and cannot connect either to the recipient's public keys. The output carries $R$ so the recipient can
+scan.
 
-The trick that makes this work is a single algebraic identity. The sender forms $r \cdot K$; the
-recipient forms $k \cdot R$. Because $K = k \cdot G$ and $R = r \cdot G$,
+The trick that makes this work is a single algebraic identity. The sender forms $r \cdot V$; the
+recipient forms $v \cdot R$. Because $V = v \cdot G$ and $R = r \cdot G$,
 
-$$r \cdot K \;=\; r \cdot (k \cdot G) \;=\; k \cdot (r \cdot G) \;=\; k \cdot R$$
+$$r \cdot V \;=\; r \cdot (v \cdot G) \;=\; v \cdot (r \cdot G) \;=\; v \cdot R$$
 
 so both sides are computing the *same group element* from different secrets. Neither the sender
-(which knows $r$ but not $k$) nor the recipient (which knows $k$ but not $r$) can reach it alone, yet
+(which knows $r$ but not $v$) nor the recipient (which knows $v$ but not $r$) can reach it alone, yet
 each can reach it with its own key and the other's public value. Hashing that shared point gives $c$ —
 and $c$ is what both hides the recipient and lets only them spend.
 
@@ -195,9 +197,9 @@ and $c$ is what both hides the recipient and lets only them spend.
   {/* Sender */}
   <rect x="30" y="80" width="250" height="190" rx="8" fill="#161b22" stroke="#388bfd" stroke-width="1"/>
   <text x="155" y="106" text-anchor="middle" fill="#388bfd" font-size="12" font-weight="bold">Sender</text>
-  <text x="155" y="128" text-anchor="middle" fill="#6e7681" font-size="10">knows r, and the recipient's K</text>
+  <text x="155" y="128" text-anchor="middle" fill="#6e7681" font-size="10">knows r, and the recipient's V and K</text>
   <text x="155" y="160" text-anchor="middle" fill="#8b949e" font-size="11">R = r&#183;G</text>
-  <text x="155" y="186" text-anchor="middle" fill="#e6edf3" font-size="11">c = H(r&#183;K)</text>
+  <text x="155" y="186" text-anchor="middle" fill="#e6edf3" font-size="11">c = H(r&#183;V)</text>
   <text x="155" y="212" text-anchor="middle" fill="#8b949e" font-size="11">P = c&#183;G + K</text>
   <text x="155" y="244" text-anchor="middle" fill="#6e7681" font-size="10">publishes R and P</text>
 
@@ -205,16 +207,16 @@ and $c$ is what both hides the recipient and lets only them spend.
   <rect x="325" y="80" width="250" height="190" rx="8" fill="#12171f" stroke="#484f58" stroke-width="1"/>
   <text x="450" y="106" text-anchor="middle" fill="#f85149" font-size="12" font-weight="bold">Observer</text>
   <text x="450" y="128" text-anchor="middle" fill="#6e7681" font-size="10">sees R, P, and the ciphertext</text>
-  <text x="450" y="160" text-anchor="middle" fill="#8b949e" font-size="11">has neither r nor k</text>
-  <text x="450" y="186" text-anchor="middle" fill="#8b949e" font-size="11">cannot form r&#183;K or k&#183;R</text>
+  <text x="450" y="160" text-anchor="middle" fill="#8b949e" font-size="11">has neither r nor v</text>
+  <text x="450" y="186" text-anchor="middle" fill="#8b949e" font-size="11">cannot form r&#183;V or v&#183;R</text>
   <text x="450" y="212" text-anchor="middle" fill="#8b949e" font-size="11">cannot link P to K</text>
   <text x="450" y="244" text-anchor="middle" fill="#6e7681" font-size="10">amount and owner stay hidden</text>
 
   {/* Recipient */}
   <rect x="620" y="80" width="250" height="190" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="1"/>
   <text x="745" y="106" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="bold">Recipient</text>
-  <text x="745" y="128" text-anchor="middle" fill="#6e7681" font-size="10">knows k (so K = k&#183;G)</text>
-  <text x="745" y="160" text-anchor="middle" fill="#e6edf3" font-size="11">c = H(k&#183;R) &#8212; the same c</text>
+  <text x="745" y="128" text-anchor="middle" fill="#6e7681" font-size="10">knows v and k</text>
+  <text x="745" y="160" text-anchor="middle" fill="#e6edf3" font-size="11">c = H(v&#183;R) &#8212; the same c</text>
   <text x="745" y="186" text-anchor="middle" fill="#8b949e" font-size="11">p = c + k  (spending key)</text>
   <text x="745" y="212" text-anchor="middle" fill="#8b949e" font-size="11">checks P = c&#183;G + K</text>
   <text x="745" y="244" text-anchor="middle" fill="#6e7681" font-size="10">scans using R</text>
@@ -225,9 +227,12 @@ and $c$ is what both hides the recipient and lets only them spend.
   <text x="450" y="338" text-anchor="middle" fill="#8b949e" font-size="10">R and P travel in the clear &#8212; and the observer, tapping that wire, still learns nothing</text>
 </svg>
 
-A **view-only key** can be baked into an address, letting a holder see incoming funds without being
-able to spend them. That is what supports auditable-but-private accounts; the address type carries it
-as `OotleAddress { view_only_key, .. }` (`crates/ootle_address/src/ootle_address.rs`).
+Because $c$ comes from the view key, the **view-only key** alone lets a holder see incoming funds and
+confirm they are spendable by the account: it recomputes $P = H(v \cdot R) \cdot G + K$
+(`owner_stealth_dh_public_key`) and compares it with the output's key, without being able to spend.
+A sender that encrypts an output to $V$ but commits a spend key of its own fails that check. That is
+what supports auditable-but-private accounts; the address type carries the view key as
+`OotleAddress { view_only_key, .. }` (`crates/ootle_address/src/ootle_address.rs`).
 
 ---
 

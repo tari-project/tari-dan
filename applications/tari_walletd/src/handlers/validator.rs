@@ -371,9 +371,12 @@ async fn build_self_stealth_statement(
         &STEALTH_TARI_RESOURCE_ADDRESS,
     );
 
-    let stealth_owner_public_key =
-        sdk.stealth_crypto_api()
-            .derive_stealth_owner_public_key(network, account_owner.public_key(), &nonce);
+    let stealth_owner_public_key = sdk.stealth_crypto_api().derive_stealth_owner_public_key(
+        network,
+        account_owner.public_key(),
+        view_only.public_key(),
+        &nonce,
+    );
 
     let output_witness = StealthOutputWitness {
         witness: OutputWitness {

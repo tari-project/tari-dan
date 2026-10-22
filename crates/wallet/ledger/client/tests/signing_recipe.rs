@@ -131,15 +131,21 @@ fn sign(secret: &Scalar, m: &[u8; 64]) -> ([u8; 32], [u8; 64]) {
 }
 
 /// The stealth signing-key tweak applied before signing a confidential transfer (mirrors
-/// `derive_stealth_secret` in `src/hashing.rs`): `c + k` where `c = H_stealth_owner(network, k·R)`
-/// and `R` is the spent UTXO's sender public nonce. The DH point is compressed and fed
-/// borsh-encoded (`u32_le(len) || bytes`), matching `DomainSeparatedBorshHasher::update_consensus_encode`
-/// on a byte slice in `tari_ootle_wallet_crypto::kdfs::dh_kdf_aead`.
-fn derive_stealth_secret(network_byte: u8, account_secret: &Scalar, public_nonce: &[u8; 32]) -> Scalar {
+/// `derive_stealth_secret` in `src/hashing.rs`): `c + k` where `c = H_stealth_owner(network, v·R)`,
+/// `v` is the account's view secret and `R` is the spent UTXO's sender public nonce. The DH point is
+/// compressed and fed borsh-encoded (`u32_le(len) || bytes`), matching
+/// `DomainSeparatedBorshHasher::update_consensus_encode` on a byte slice in
+/// `tari_ootle_wallet_crypto::kdfs::dh_kdf_aead`.
+fn derive_stealth_secret(
+    network_byte: u8,
+    account_secret: &Scalar,
+    view_secret: &Scalar,
+    public_nonce: &[u8; 32],
+) -> Scalar {
     let r = CompressedRistretto(*public_nonce)
         .decompress()
         .expect("public nonce is a valid Ristretto point");
-    let dh = (account_secret * r).compress().0;
+    let dh = (view_secret * r).compress().0;
 
     let label = format!("{STEALTH_OWNER_LABEL}.n{network_byte}");
     let mut h = Blake2b512::new();
@@ -290,23 +296,26 @@ fn stealth_recipe_matches_and_verifies() {
 
     let network = Network::LocalNet;
     let mut rng = rand::rng();
-    // Account spend key k, and the sender ephemeral nonce (r, R) carried by the spent UTXO.
+    // Account spend key k, view key v, and the sender ephemeral nonce (r, R) carried by the spent UTXO.
     let k = RistrettoSecretKey::random(&mut rng);
     let k_pub = RistrettoPublicKey::from_secret_key(&k);
+    let v = RistrettoSecretKey::random(&mut rng);
+    let v_pub = RistrettoPublicKey::from_secret_key(&v);
     let r = RistrettoSecretKey::random(&mut rng);
     let r_pub = RistrettoPublicKey::from_secret_key(&r);
 
-    // Device inputs: the account scalar and the compressed public nonce R.
+    // Device inputs: the account and view scalars and the compressed public nonce R.
     let k_scalar = Scalar::from_bytes_mod_order(<[u8; 32]>::try_from(k.as_bytes()).unwrap());
+    let v_scalar = Scalar::from_bytes_mod_order(<[u8; 32]>::try_from(v.as_bytes()).unwrap());
     let r_bytes = <[u8; 32]>::try_from(r_pub.as_bytes()).unwrap();
 
     // (1) device tweak == owner_stealth_dh_secret
-    let got = derive_stealth_secret(network.as_byte(), &k_scalar, &r_bytes);
-    let expected = owner_stealth_dh_secret(network, &k, &r_pub);
+    let got = derive_stealth_secret(network.as_byte(), &k_scalar, &v_scalar, &r_bytes);
+    let expected = owner_stealth_dh_secret(network, &k, &v, &r_pub);
     assert_eq!(&got.as_bytes()[..], expected.as_bytes(), "stealth secret mismatch");
 
-    // (2) returned public key == the recipient-derivable stealth address C = c.G + k.G
-    let stealth_address = owner_stealth_dh_stealth_address(network, &k_pub, &r);
+    // (2) returned public key == the sender-derived stealth address C = H(r·V)·G + k·G
+    let stealth_address = owner_stealth_dh_stealth_address(network, &k_pub, &v_pub, &r);
     assert_eq!(
         public_key(&got),
         <[u8; 32]>::try_from(stealth_address.as_bytes()).unwrap(),
@@ -342,7 +351,12 @@ fn stealth_recipe_matches_and_verifies() {
     };
     let decoded: GetPublicKeyRequest = borsh::from_slice(&borsh::to_vec(&request).unwrap()).unwrap();
     let tweak = decoded.stealth.expect("stealth tweak survives the wire");
-    let returned = public_key(&derive_stealth_secret(tweak.network, &k_scalar, &tweak.public_nonce));
+    let returned = public_key(&derive_stealth_secret(
+        tweak.network,
+        &k_scalar,
+        &v_scalar,
+        &tweak.public_nonce,
+    ));
     assert_eq!(
         returned,
         <[u8; 32]>::try_from(stealth_address.as_bytes()).unwrap(),
@@ -354,7 +368,12 @@ fn stealth_recipe_matches_and_verifies() {
     let other_network = Network::Igor;
     assert_ne!(
         returned,
-        public_key(&derive_stealth_secret(other_network.as_byte(), &k_scalar, &r_bytes)),
+        public_key(&derive_stealth_secret(
+            other_network.as_byte(),
+            &k_scalar,
+            &v_scalar,
+            &r_bytes
+        )),
         "stealth key is not bound to the network"
     );
     let other_nonce =
@@ -362,7 +381,12 @@ fn stealth_recipe_matches_and_verifies() {
             .unwrap();
     assert_ne!(
         returned,
-        public_key(&derive_stealth_secret(network.as_byte(), &k_scalar, &other_nonce)),
+        public_key(&derive_stealth_secret(
+            network.as_byte(),
+            &k_scalar,
+            &v_scalar,
+            &other_nonce
+        )),
         "stealth key is not bound to the public nonce"
     );
 }

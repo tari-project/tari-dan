@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provenance": {
     "core_version": "0.47.0",
-    "git_rev": "a25b2ca804a1ae75cb3f1fc1c3860e7cb5073b90",
+    "git_rev": "4096f43913407b2ffe5ef8e44d821683bcf8b58b",
     "generated_by": "ootle_sdk_core golden-vector generator"
   },
   "operation": "build_and_encode_stealth_transfer",
@@ -19,10 +19,10 @@
             "is_frozen": false,
             "output": {
               "auth": {
-                "Script": "aa5779a908eb9e0f4a1f1f83634c0917594bd67e408f1aca6f32d352d1974fa1"
+                "Script": "80f99f89e23d732ee3df15970372cfd021af656bcad8ef51887f5cb4e796b9ab"
               },
               "output": {
-                "encrypted_data": "4a570beacf475a2e9aeefa60249eabcaa46f1d5b51961b59729c9f956a2c80b840318bb6c4ee6c1b594f092ea29c53ac931d709f0dbc3124b9200231a5b73cd9c9434f091d7fa24c74d280b05a556e68",
+                "encrypted_data": "73ae2069453fd3ee46ecd243ca54924dfe4d5b2ba0bb179df57cd9cd906ff2f2cd4f76241c6959b531ec34fe052584b094652527de3106a7cbbdc2ea253db7206d1d20af46bb06a8547bcb0c212d7809",
                 "minimum_value_promise": 0,
                 "public_nonce": "f2cce6415ff090eea8d0f041e356f28f3be3aa53ccc69867288e7432028fca23",
                 "viewable_balance": null
@@ -66,6 +66,7 @@
     },
     "stealth_keys": {
       "account_secret": "0b00000000000000000000000000000000000000000000000000000000000000",
+      "view_secret": "a200000000000000000000000000000000000000000000000000000000000000",
       "seed": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
     },
     "spend_secrets": [
@@ -126,7 +127,7 @@
                       "outputs": [
                         {
                           "auth": {
-                            "Key": "e461b029fa778a1fabfcfd1f4945bb1ee7543c14bb679d58c16ae6056c0af376"
+                            "Key": "90c2dad63cf53f57349b2563ac3cc81312d7f69e667079dbda35959444b1c41a"
                           },
                           "output": {
                             "commitment": "a422410dd4430276a8b3ac9e2352b2787db57548187895157914eb621dbe4c59",
@@ -152,7 +153,7 @@
           }
         },
         "seal_signature": {
-          "public_key": "8e7d51d6426c66815606efad91f3bcf78efa0bf678af35bffec65b993b33280f",
+          "public_key": "b6a3a6e1ae6444574f65060c6bfe37c73cb613c6dbb3840188a101e060d23959",
           "signature": null
         }
       }

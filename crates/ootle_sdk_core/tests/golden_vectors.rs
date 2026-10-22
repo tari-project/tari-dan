@@ -783,6 +783,8 @@ const STEALTH_TRANSFER_VECTORS: &[VectorCase] = &[
 fn stealth_send_keys(seed_byte: u8) -> VectorStealthKeys {
     VectorStealthKeys {
         account_secret: SecretKeyBytes::from_array(fixed_scalar_bytes(11)),
+        // The view secret the send vectors' stealth input is encrypted to.
+        view_secret: SecretKeyBytes::from_array(fixed_scalar_bytes(162)),
         // The build seed expands into both the account-key nonces and the proof entropy; a distinct
         // byte per fixture keeps the vectors independent.
         seed: BuildSeed::from_array([seed_byte; 32]),
@@ -1020,6 +1022,10 @@ fn stealth_send_revealed_output_multi_seed() -> Fixture {
 const STEALTH_SCAN_VECTORS: &[VectorCase] = &[
     ("stealth_scan/mine_basic.json", stealth_scan_mine_basic_seed),
     ("stealth_scan/not_mine.json", stealth_scan_not_mine_seed),
+    (
+        "stealth_scan/foreign_spend_key.json",
+        stealth_scan_foreign_spend_key_seed,
+    ),
 ];
 
 /// Builds an inbound stealth UTXO addressed to (`view_pk`, `account_pk`) for `amount`, using the
@@ -1054,7 +1060,7 @@ fn stealth_scan_inbound(
 
     let resource = stealth_resource();
     let resource_internal = resource.to_internal().unwrap();
-    let owner_pk = crypto.derive_stealth_owner_public_key(internal_network, account_pk, nonce_secret);
+    let owner_pk = crypto.derive_stealth_owner_public_key(internal_network, account_pk, view_pk, nonce_secret);
     let owner_pk_bytes = PublicKeyBytes::from_bytes(owner_pk.as_bytes()).expect("32-byte pk");
     let tag = crypto.derive_stealth_output_tag(internal_network, nonce_secret, view_pk, &resource_internal);
 
@@ -1112,7 +1118,7 @@ fn stealth_scan_mine_basic_seed() -> Fixture {
     let scan = StealthScanInput {
         network: net,
         view_secret: SecretKeyBytes::from_bytes(view_secret.as_bytes()).expect("32-byte secret"),
-        account_secret: Some(SecretKeyBytes::from_bytes(account_secret.as_bytes()).expect("32-byte secret")),
+        account_public_key: PublicKeyBytes::from_bytes(account_pk.as_bytes()).expect("32-byte pk"),
         output,
         skip_memo: true,
     };
@@ -1131,11 +1137,33 @@ fn stealth_scan_not_mine_seed() -> Fixture {
     let scan = StealthScanInput {
         network: net,
         view_secret: SecretKeyBytes::from_bytes(other_view.as_bytes()).expect("32-byte secret"),
-        account_secret: None,
+        account_public_key: PublicKeyBytes::from_bytes(account_pk.as_bytes()).expect("32-byte pk"),
         output,
         skip_memo: true,
     };
     stealth_scan_fixture_seed("stealth_scan/not_mine", scan)
+}
+
+/// Vector 3 — `foreign_spend_key`: a UTXO that decrypts under the scanner's view key and carries the
+/// right tag, but whose spend key pays another account ⇒ `Ok(None)`. A sender can build this to make
+/// a view-only wallet credit funds it cannot spend.
+fn stealth_scan_foreign_spend_key_seed() -> Fixture {
+    let net = Network::Esmeralda;
+    let (view_secret, account_secret, nonce_secret, mask) = stealth_scan_keys();
+    let view_pk = RistrettoPublicKey::from_secret_key(&view_secret);
+    let account_pk = RistrettoPublicKey::from_secret_key(&account_secret);
+    let foreign_account_pk = RistrettoPublicKey::from_secret_key(
+        &RistrettoSecretKey::from_canonical_bytes(&fixed_scalar_bytes(201)).expect("canonical"),
+    );
+    let output = stealth_scan_inbound(net, &foreign_account_pk, &view_pk, &nonce_secret, &mask, 1_234_567);
+    let scan = StealthScanInput {
+        network: net,
+        view_secret: SecretKeyBytes::from_bytes(view_secret.as_bytes()).expect("32-byte secret"),
+        account_public_key: PublicKeyBytes::from_bytes(account_pk.as_bytes()).expect("32-byte pk"),
+        output,
+        skip_memo: true,
+    };
+    stealth_scan_fixture_seed("stealth_scan/foreign_spend_key", scan)
 }
 
 // --- Stealth UTXO decode vectors ------------------------------------------------------
@@ -1181,7 +1209,7 @@ fn stealth_decode_utxo_seed() -> Fixture {
     let encrypted_data = encrypt_data(amount, &mask, &encryption_key, None).expect("encrypt");
     let commitment = commit_u64_amount(&mask, amount).to_byte_type();
     let commitment_hex = hex::encode(commitment.as_bytes());
-    let owner_pk = crypto.derive_stealth_owner_public_key(internal_network, &account_pk, &nonce_secret);
+    let owner_pk = crypto.derive_stealth_owner_public_key(internal_network, &account_pk, &view_pk, &nonce_secret);
     let tag = crypto.derive_stealth_output_tag(internal_network, &nonce_secret, &view_pk, &resource_internal);
 
     let output_body = OutputBody {

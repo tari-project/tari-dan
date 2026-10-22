@@ -96,19 +96,33 @@ impl StealthCryptoApi {
     pub fn derive_stealth_owner_public_key(
         &self,
         network: Network,
-        public_key: &RistrettoPublicKey,
+        account_public_key: &RistrettoPublicKey,
+        view_public_key: &RistrettoPublicKey,
         nonce_secret: &RistrettoSecretKey,
     ) -> RistrettoPublicKey {
-        kdfs::owner_stealth_dh_stealth_address(network, public_key, nonce_secret)
+        kdfs::owner_stealth_dh_stealth_address(network, account_public_key, view_public_key, nonce_secret)
     }
 
     pub fn derive_stealth_owner_secret(
         &self,
         network: Network,
-        secret_key: &RistrettoSecretKey,
+        account_secret: &RistrettoSecretKey,
+        view_secret: &RistrettoSecretKey,
         public_nonce: &RistrettoPublicKey,
     ) -> RistrettoSecretKey {
-        kdfs::owner_stealth_dh_secret(network, secret_key, public_nonce)
+        kdfs::owner_stealth_dh_secret(network, account_secret, view_secret, public_nonce)
+    }
+
+    /// Recipient-side view-only derivation of an output's one-time spend public key. See
+    /// [`kdfs::owner_stealth_dh_public_key`].
+    pub fn derive_stealth_owner_public_key_from_view_key(
+        &self,
+        network: Network,
+        account_public_key: &RistrettoPublicKey,
+        view_secret: &RistrettoSecretKey,
+        public_nonce: &RistrettoPublicKey,
+    ) -> RistrettoPublicKey {
+        kdfs::owner_stealth_dh_public_key(network, account_public_key, view_secret, public_nonce)
     }
 
     /// Derive `s = H(p·R) + p` using L1's exact `stealth_address` hash domain. Use only on L1

@@ -897,33 +897,40 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
 
             let (value, memo, status) = match unblinded_result {
                 Ok(decrypted) => {
-                    if let Some(ref owner_key) = keys.account_key {
-                        let stealth_secret = self.crypto_api.derive_stealth_owner_secret(
-                            network,
-                            &owner_key.secret,
-                            &output_stealth_public_nonce,
-                        );
-                        let stealth_address = RistrettoPublicKey::from_secret_key(&stealth_secret).to_byte_type();
-                        // A key-path output is owned only if its spend_key is our derived stealth address. A
-                        // condition-tree output (no spend_key) is recognised as viewable but not key-spendable here.
-                        if output.auth.spend_key().is_none_or(|pk| *pk == stealth_address) {
-                            (decrypted.value(), decrypted.memo, OutputStatus::Unspent)
-                        } else {
-                            warn!(
-                                target: LOG_TARGET,
-                                "⚠️ Output owner public key does not match the expected stealth address. (expected: {}, actual: {}). Utxo cannot be spent by this wallet and will be stored as invalid.",
-                                stealth_address,
-                                output.auth.spend_key().as_ref().display()
-                            );
-                            (decrypted.value(), decrypted.memo, OutputStatus::Invalid)
+                    let account_public_key = keys.account_public_key.try_from_byte_type().map_err(|e| {
+                        StealthOutputsApiError::InvalidParameter {
+                            param: "account_public_key",
+                            reason: format!("Invalid account public key bytes: {}", e),
                         }
-                    } else {
-                        info!(
-                            target: LOG_TARGET,
-                            "Output can only be viewed, not spent, as there is no owner key for view key {}",
-                            keys.view_only_key.key_id,
-                        );
+                    })?;
+                    let stealth_address = self
+                        .crypto_api
+                        .derive_stealth_owner_public_key_from_view_key(
+                            network,
+                            &account_public_key,
+                            &keys.view_only_key.secret,
+                            &output_stealth_public_nonce,
+                        )
+                        .to_byte_type();
+                    // A key-path output is owned only if its spend_key is our derived stealth address. A
+                    // condition-tree output (no spend_key) is recognised as viewable but not key-spendable here.
+                    if output.auth.spend_key().is_none_or(|pk| *pk == stealth_address) {
+                        if keys.account_key.is_none() {
+                            info!(
+                                target: LOG_TARGET,
+                                "Output can only be viewed, not spent, as there is no owner key for view key {}",
+                                keys.view_only_key.key_id,
+                            );
+                        }
                         (decrypted.value(), decrypted.memo, OutputStatus::Unspent)
+                    } else {
+                        warn!(
+                            target: LOG_TARGET,
+                            "⚠️ Output owner public key does not match the expected stealth address. (expected: {}, actual: {}). Utxo cannot be spent by this account and will be stored as invalid.",
+                            stealth_address,
+                            output.auth.spend_key().as_ref().display()
+                        );
+                        (decrypted.value(), decrypted.memo, OutputStatus::Invalid)
                     }
                 },
                 Err(e) => {
@@ -998,7 +1005,12 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
         let auth = pay_to_output_authorization(&pay_to, || {
             // Create stealth address that the destination can use at spend time
             self.crypto_api
-                .derive_stealth_owner_public_key(destination.network(), destination.account_key(), &nonce_secret)
+                .derive_stealth_owner_public_key(
+                    destination.network(),
+                    destination.account_key(),
+                    destination.view_only_key(),
+                    &nonce_secret,
+                )
                 .to_byte_type()
         })?;
 

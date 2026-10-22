@@ -10,30 +10,26 @@
 //!    send-side `(nonce_secret, view_public_key)` derivation (DH commutativity).
 //! 2. `unblind_output(commitment, encrypted_data, aead_key, skip_memo)` decrypts and re-checks the commitment,
 //!    recovering the value + mask (+ optional memo).
-//! 3. When an account secret is supplied, the UTXO scanning tag and the one-time spend public key are re-derived
-//!    receiver-side and compared, confirming the output is addressed to that account.
+//! 3. The UTXO scanning tag and the one-time spend public key `H(v·R)·G + A` are re-derived receiver-side from the view
+//!    secret and the account **public** key and compared, confirming the output is spendable by that account.
 //!
 //! ## Return semantics
 //!
-//! - `Ok(Some(DecryptedOutput { is_mine: true, .. }))` — the AEAD decrypt succeeded **and**, when a tag / account
-//!   secret are present, the tag + spend key matched.
+//! - `Ok(Some(DecryptedOutput { is_mine: true, .. }))` — the AEAD decrypt succeeded, the tag (when present) matched
+//!   and, for a `StealthPublicKey` output, the spend key matched.
 //! - `Ok(None)` — **not ours**. An AEAD failure, a commitment mismatch, a tag mismatch, or a spend-key mismatch are all
 //!   **normal** for UTXOs addressed to another recipient — never errors.
 //! - `Err(OotleSdkError::Parse)` — structurally malformed inputs only (wrong byte widths, a non-canonical public key,
 //!   an encrypted-data length out of the valid `[80, 335]` range).
 //!
-//! ## View-key-only mode
-//!
-//! When `account_secret` is `None`, the tag + spend-condition checks are **skipped** entirely and
-//! any successfully-decrypted UTXO is returned. A C-ABI / Go caller that only holds a view key
-//! passes `None`.
+//! Every check needs only the view secret and the account public key, so a view-only wallet confirms
+//! ownership as fully as a spending one.
 //!
 //! This module calls **no** RNG — decryption is the deterministic inverse of encryption, so the scan
 //! output is byte-stable.
 
 use ootle_network::Network as InternalNetwork;
 use tari_crypto::{
-    keys::PublicKey as _,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
     tari_utilities::ByteArray,
 };
@@ -57,10 +53,10 @@ fn parse_view_secret(secret: &SecretKeyBytes) -> Result<RistrettoSecretKey, Ootl
         .map_err(|e| OotleSdkError::Parse(format!("invalid view secret: {e}")))
 }
 
-/// Parses a boundary account secret into the internal [`RistrettoSecretKey`].
-fn parse_account_secret(secret: &SecretKeyBytes) -> Result<RistrettoSecretKey, OotleSdkError> {
-    RistrettoSecretKey::from_canonical_bytes(secret.as_bytes())
-        .map_err(|e| OotleSdkError::Parse(format!("invalid account secret: {e}")))
+/// Parses a boundary account public key into the internal [`RistrettoPublicKey`].
+fn parse_account_public_key(pk: &PublicKeyBytes) -> Result<RistrettoPublicKey, OotleSdkError> {
+    RistrettoPublicKey::from_canonical_bytes(pk.as_bytes())
+        .map_err(|e| OotleSdkError::Parse(format!("invalid account public key: {e}")))
 }
 
 /// Parses the sender's ephemeral public nonce into the internal [`RistrettoPublicKey`].
@@ -115,10 +111,8 @@ fn boundary_memo_from_internal(memo: &Memo) -> StealthMemo {
 /// - `network` — the network whose hash domains parameterize the tag / spend-key derivation.
 /// - `view_secret` — the recipient's view-only secret. Paired with `output.sender_public_nonce` to re-derive the AEAD
 ///   key (DH commutativity with the sender's `(nonce_secret, view_public_key)`).
-/// - `account_secret` — the recipient's **account** secret, supplied only when the caller can also verify ownership.
-///   When `Some`, the scanning tag (if present) and the one-time spend public key (for a `Signed` output) are
-///   re-derived and compared. When `None` (view-key-only mode), those checks are skipped and any successfully-decrypted
-///   UTXO is returned.
+/// - `account_public_key` — the recipient's **account** public key. With the view secret it re-derives the one-time
+///   spend public key of a `StealthPublicKey` output, which must match the on-chain key.
 /// - `output` — the inbound UTXO to scan.
 /// - `skip_memo` — when `true`, the memo region is **not** decoded and the result's `memo` is `None` even if the
 ///   payload carries one (mirrors `unblind_output`'s `skip_memo`).
@@ -128,12 +122,13 @@ fn boundary_memo_from_internal(memo: &Memo) -> StealthMemo {
 pub fn scan_stealth_output(
     network: Network,
     view_secret: &SecretKeyBytes,
-    account_secret: Option<&SecretKeyBytes>,
+    account_public_key: &PublicKeyBytes,
     output: &InboundStealthOutput,
     skip_memo: bool,
 ) -> Result<Option<DecryptedOutput>, OotleSdkError> {
     // Parse inputs (fail fast — only malformed bytes produce Err).
     let view_key = parse_view_secret(view_secret)?;
+    let account_key = parse_account_public_key(account_public_key)?;
     let sender_nonce = parse_sender_nonce(&output.sender_public_nonce)?;
     let commitment = parse_commitment(&output.commitment)?;
     let enc_data = parse_encrypted_data(&output.encrypted_data)?;
@@ -149,43 +144,41 @@ pub fn scan_stealth_output(
         Err(_) => return Ok(None),
     };
 
-    // Ownership checks, only when the caller supplied their account secret (otherwise view-key-only
-    // mode: any successfully-decrypted UTXO is returned).
-    if let Some(account_sec) = account_secret {
-        let internal_network: InternalNetwork = network.into();
-        let crypto = StealthCryptoApi::new();
+    let internal_network: InternalNetwork = network.into();
+    let crypto = StealthCryptoApi::new();
 
-        // Tag check (only when the UTXO carries a tag). Receiver-side derivation mirrors the
-        // sender's `derive_stealth_output_tag` but with `secret = view_secret`,
-        // `public_key = sender_public_nonce` (the DH product is the same by commutativity).
-        if let Some(tag_bytes) = &output.utxo_tag {
-            let resource_address: ResourceAddress = output
-                .resource_address
-                .to_internal()
-                .map_err(|e| OotleSdkError::Parse(format!("invalid resource address: {e}")))?;
-            let expected_tag =
-                crypto.derive_stealth_output_tag(internal_network, &view_key, &sender_nonce, &resource_address);
-            if expected_tag != UtxoTag::new(tag_bytes.to_u32()) {
-                return Ok(None); // tag mismatch — not mine
-            }
+    // Tag check (only when the UTXO carries a tag). Receiver-side derivation mirrors the sender's
+    // `derive_stealth_output_tag` but with `secret = view_secret`, `public_key = sender_public_nonce`
+    // (the DH product is the same by commutativity).
+    if let Some(tag_bytes) = &output.utxo_tag {
+        let resource_address: ResourceAddress = output
+            .resource_address
+            .to_internal()
+            .map_err(|e| OotleSdkError::Parse(format!("invalid resource address: {e}")))?;
+        let expected_tag =
+            crypto.derive_stealth_output_tag(internal_network, &view_key, &sender_nonce, &resource_address);
+        if expected_tag != UtxoTag::new(tag_bytes.to_u32()) {
+            return Ok(None); // tag mismatch — not mine
         }
+    }
 
-        // Authorisation check for a `StealthPublicKey` output carrying a one-time spend key.
-        // The receiver re-derives the one-time spend secret `s = H(account_sk·R) + account_sk`
-        // via `derive_stealth_owner_secret(network, account_sk, sender_nonce)` and compares its
-        // public key to the on-chain `SpendAuthorization::Key(..)` key. A `StealthPublicKey` output
-        // ALWAYS carries the one-time spend key on the wire; its absence is malformed input.
-        if output.pay_to == StealthPayTo::StealthPublicKey {
-            let spend_pk_bytes = output.spend_public_key.as_ref().ok_or_else(|| {
-                OotleSdkError::Parse("StealthPublicKey output is missing its spend_public_key".to_string())
-            })?;
-            let account_key = parse_account_secret(account_sec)?;
-            let stealth_secret = crypto.derive_stealth_owner_secret(internal_network, &account_key, &sender_nonce);
-            let derived_spend_pk = RistrettoPublicKey::from_secret_key(&stealth_secret);
-            let expected_spend_pk = parse_spend_public_key(spend_pk_bytes)?;
-            if derived_spend_pk != expected_spend_pk {
-                return Ok(None); // spend-key mismatch — not addressed to us
-            }
+    // Authorisation check for a `StealthPublicKey` output carrying a one-time spend key `H(v·R)·G + A`.
+    // A sender can encrypt to our view key while committing a spend key it controls, so a successful
+    // decrypt alone does not make the output ours. A `StealthPublicKey` output ALWAYS carries the
+    // one-time spend key on the wire; its absence is malformed input.
+    if output.pay_to == StealthPayTo::StealthPublicKey {
+        let spend_pk_bytes = output.spend_public_key.as_ref().ok_or_else(|| {
+            OotleSdkError::Parse("StealthPublicKey output is missing its spend_public_key".to_string())
+        })?;
+        let derived_spend_pk = crypto.derive_stealth_owner_public_key_from_view_key(
+            internal_network,
+            &account_key,
+            &view_key,
+            &sender_nonce,
+        );
+        let expected_spend_pk = parse_spend_public_key(spend_pk_bytes)?;
+        if derived_spend_pk != expected_spend_pk {
+            return Ok(None); // spend-key mismatch — not addressed to us
         }
     }
 
@@ -221,13 +214,13 @@ pub fn scan_stealth_output(
 pub fn scan_stealth_substate(
     network: Network,
     view_secret: &SecretKeyBytes,
-    account_secret: Option<&SecretKeyBytes>,
+    account_public_key: &PublicKeyBytes,
     substate_id: &str,
     substate_value: &serde_json::Value,
     skip_memo: bool,
 ) -> Result<Option<DecryptedOutput>, OotleSdkError> {
     let inbound = crate::stealth::decode::decode_stealth_utxo(substate_id, substate_value)?;
-    scan_stealth_output(network, view_secret, account_secret, &inbound, skip_memo)
+    scan_stealth_output(network, view_secret, account_public_key, &inbound, skip_memo)
 }
 
 #[cfg(test)]
@@ -292,8 +285,7 @@ mod tests {
         let resource_internal = resource.to_internal().unwrap();
 
         let (pay_to, spend_public_key) = if with_spend_key {
-            // Sender-side spend key: derive_stealth_owner_public_key(network, account_pk, nonce_secret).
-            let owner_pk = crypto.derive_stealth_owner_public_key(internal_network, account_pk, nonce_secret);
+            let owner_pk = crypto.derive_stealth_owner_public_key(internal_network, account_pk, view_pk, nonce_secret);
             (
                 StealthPayTo::StealthPublicKey,
                 Some(pk_bytes(
@@ -345,15 +337,9 @@ mod tests {
             true,
         );
 
-        let got = scan_stealth_output(
-            net,
-            &secret_bytes(&view_sk),
-            Some(&secret_bytes(&account_sk)),
-            &utxo,
-            false,
-        )
-        .unwrap()
-        .expect("should be mine");
+        let got = scan_stealth_output(net, &secret_bytes(&view_sk), &pk_bytes(&account_pk), &utxo, false)
+            .unwrap()
+            .expect("should be mine");
         assert!(got.is_mine);
         assert_eq!(got.value, amount);
         assert_eq!(got.mask, secret_bytes(&mask));
@@ -384,13 +370,13 @@ mod tests {
 
         // Scan with a different view secret (view-key-only mode).
         let other_view = scalar(99);
-        let got = scan_stealth_output(net, &secret_bytes(&other_view), None, &utxo, false).unwrap();
+        let got = scan_stealth_output(net, &secret_bytes(&other_view), &pk_bytes(&account_pk), &utxo, false).unwrap();
         assert!(got.is_none(), "wrong view key must be Ok(None)");
     }
 
-    // (c) View-key-only mode: the correct view key decrypts without an account secret.
+    // (c) The view key and account public key alone confirm a tagged, key-path output.
     #[test]
-    fn view_key_only_mode_decrypts() {
+    fn view_key_confirms_ownership() {
         let net = Network::LocalNet;
         let view_sk = scalar(40);
         let view_pk = RistrettoPublicKey::from_secret_key(&view_sk);
@@ -399,7 +385,6 @@ mod tests {
         let mask = scalar(43);
         let amount = 7_000u64;
 
-        // Even with a tag + spend key present, view-key-only mode skips those checks.
         let utxo = make_inbound(
             net,
             &account_pk,
@@ -412,9 +397,9 @@ mod tests {
             true,
         );
 
-        let got = scan_stealth_output(net, &secret_bytes(&view_sk), None, &utxo, false)
+        let got = scan_stealth_output(net, &secret_bytes(&view_sk), &pk_bytes(&account_pk), &utxo, false)
             .unwrap()
-            .expect("view-key-only decrypt");
+            .expect("view key confirms ownership");
         assert_eq!(got.value, amount);
         assert_eq!(got.mask, secret_bytes(&mask));
     }
@@ -442,7 +427,7 @@ mod tests {
             false,
         );
 
-        let got = scan_stealth_output(net, &secret_bytes(&view_sk), None, &utxo, false)
+        let got = scan_stealth_output(net, &secret_bytes(&view_sk), &pk_bytes(&account_pk), &utxo, false)
             .unwrap()
             .expect("mine");
         assert_eq!(got.memo, Some(StealthMemo::Message("gm ser".to_string())));
@@ -471,7 +456,7 @@ mod tests {
             false,
         );
 
-        let got = scan_stealth_output(net, &secret_bytes(&view_sk), None, &utxo, true)
+        let got = scan_stealth_output(net, &secret_bytes(&view_sk), &pk_bytes(&account_pk), &utxo, true)
             .unwrap()
             .expect("mine");
         assert!(got.memo.is_none(), "skip_memo must drop the memo");
@@ -498,7 +483,8 @@ mod tests {
         // A non-canonical sender nonce (all-0xff is not a canonical Ristretto point) → PARSE.
         let mut utxo = make_inbound(net, &account_pk, &view_pk, &nonce_secret, &mask, 5, None, false, false);
         utxo.sender_public_nonce = PublicKeyBytes::from_array([0xff; 32]);
-        let scan_err = scan_stealth_output(net, &secret_bytes(&view_sk), None, &utxo, false).unwrap_err();
+        let scan_err =
+            scan_stealth_output(net, &secret_bytes(&view_sk), &pk_bytes(&account_pk), &utxo, false).unwrap_err();
         assert_eq!(scan_err.code(), "PARSE");
     }
 
@@ -514,7 +500,7 @@ mod tests {
 
         let mut utxo = make_inbound(net, &account_pk, &view_pk, &nonce_secret, &mask, 5, None, false, false);
         utxo.encrypted_data = EncryptedDataBytes::from_bytes(&[0u8; 10]); // < 80
-        let err = scan_stealth_output(net, &secret_bytes(&view_sk), None, &utxo, false).unwrap_err();
+        let err = scan_stealth_output(net, &secret_bytes(&view_sk), &pk_bytes(&account_pk), &utxo, false).unwrap_err();
         assert_eq!(err.code(), "PARSE");
     }
 
@@ -532,18 +518,12 @@ mod tests {
         let mut utxo = make_inbound(net, &account_pk, &view_pk, &nonce_secret, &mask, 5, None, true, true);
         // Corrupt the tag.
         utxo.utxo_tag = Some(UtxoTagBytes::from_u32(0xDEAD_BEEF));
-        let got = scan_stealth_output(
-            net,
-            &secret_bytes(&view_sk),
-            Some(&secret_bytes(&account_sk)),
-            &utxo,
-            false,
-        )
-        .unwrap();
+        let got = scan_stealth_output(net, &secret_bytes(&view_sk), &pk_bytes(&account_pk), &utxo, false).unwrap();
         assert!(got.is_none(), "tag mismatch must be Ok(None)");
     }
 
-    // Spend-key mismatch → Ok(None): tag matches but the on-chain spend key is for another account.
+    // Spend-key mismatch → Ok(None): the output decrypts and its tag matches, but the on-chain spend key
+    // is one the sender chose rather than ours.
     #[test]
     fn spend_key_mismatch_is_not_mine() {
         let net = Network::LocalNet;
@@ -558,19 +538,12 @@ mod tests {
         // Replace the spend key with one for a different account.
         let other = RistrettoPublicKey::from_secret_key(&scalar(199));
         utxo.spend_public_key = Some(pk_bytes(&other));
-        let got = scan_stealth_output(
-            net,
-            &secret_bytes(&view_sk),
-            Some(&secret_bytes(&account_sk)),
-            &utxo,
-            false,
-        )
-        .unwrap();
+        let got = scan_stealth_output(net, &secret_bytes(&view_sk), &pk_bytes(&account_pk), &utxo, false).unwrap();
         assert!(got.is_none(), "spend-key mismatch must be Ok(None)");
     }
 
-    // A StealthPublicKey output missing its on-chain spend key (with account_secret supplied) is
-    // structurally malformed → Err with code() == "PARSE", not a false-positive is_mine.
+    // A StealthPublicKey output missing its on-chain spend key is structurally malformed → Err with code() == "PARSE",
+    // not a false-positive is_mine.
     #[test]
     fn stealth_public_key_without_spend_key_is_parse_error() {
         let net = Network::LocalNet;
@@ -583,14 +556,7 @@ mod tests {
 
         let mut utxo = make_inbound(net, &account_pk, &view_pk, &nonce_secret, &mask, 5, None, false, true);
         utxo.spend_public_key = None; // StealthPublicKey but no key on the wire — malformed.
-        let err = scan_stealth_output(
-            net,
-            &secret_bytes(&view_sk),
-            Some(&secret_bytes(&account_sk)),
-            &utxo,
-            false,
-        )
-        .unwrap_err();
+        let err = scan_stealth_output(net, &secret_bytes(&view_sk), &pk_bytes(&account_pk), &utxo, false).unwrap_err();
         assert_eq!(err.code(), "PARSE");
     }
 
@@ -606,22 +572,8 @@ mod tests {
         let mask = scalar(113);
 
         let utxo = make_inbound(net, &account_pk, &view_pk, &nonce_secret, &mask, 42, None, true, true);
-        let a = scan_stealth_output(
-            net,
-            &secret_bytes(&view_sk),
-            Some(&secret_bytes(&account_sk)),
-            &utxo,
-            false,
-        )
-        .unwrap();
-        let b = scan_stealth_output(
-            net,
-            &secret_bytes(&view_sk),
-            Some(&secret_bytes(&account_sk)),
-            &utxo,
-            false,
-        )
-        .unwrap();
+        let a = scan_stealth_output(net, &secret_bytes(&view_sk), &pk_bytes(&account_pk), &utxo, false).unwrap();
+        let b = scan_stealth_output(net, &secret_bytes(&view_sk), &pk_bytes(&account_pk), &utxo, false).unwrap();
         assert_eq!(a, b);
     }
 }

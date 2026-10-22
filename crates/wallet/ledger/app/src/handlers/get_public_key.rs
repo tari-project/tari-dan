@@ -23,7 +23,14 @@ pub fn get_public_key(_state_mut: &mut State, request: GetPublicKeyRequest) -> R
         Some(_) if !matches!(request.key_type, KeyType::Account) => {
             return Err(AppStatus::OotleStatusWord(OotleStatusWord::BadRequest));
         },
-        Some(tweak) => Zeroizing::new(derive_stealth_secret(tweak.network, &k, &tweak.public_nonce)?),
+        Some(tweak) => {
+            let v = Zeroizing::new(derive_from_bip32_key(
+                request.account,
+                request.index,
+                KeyType::ViewOnlyKey,
+            )?);
+            Zeroizing::new(derive_stealth_secret(tweak.network, &k, &v, &tweak.public_nonce)?)
+        },
         None => k,
     };
     let pk = public_key_from_scalar(&secret);

@@ -241,7 +241,7 @@ impl<TNetwork: WalletNetworkInterface> TestWithNetwork<TNetwork> {
             .unwrap();
         let stealth_owner_public_key = sdk
             .stealth_crypto_api()
-            .derive_stealth_owner_public_key(sdk.network(), &owner_public_key, &nonce_secret)
+            .derive_stealth_owner_public_key(sdk.network(), &owner_public_key, &view_public_key, &nonce_secret)
             .to_byte_type();
 
         let utxo = Utxo::new(UtxoOutput {

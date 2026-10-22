@@ -164,7 +164,7 @@ pub fn create_stealth_output_witness(params: CreateStealthOutputWitnessParams<'_
 
     let auth = pay_to_output_authorization(&pay_to, || {
         crypto
-            .derive_stealth_owner_public_key(network, &account_key, &nonce_secret)
+            .derive_stealth_owner_public_key(network, &account_key, &view_key, &nonce_secret)
             .to_byte_type()
     })
     .map_err(|e| OotleWasmError::Stealth(e.to_string()))?;
@@ -367,6 +367,7 @@ mod tests {
         let stealth_secret_bytes = crate::stealth::kdfs::stealth_dh_secret(
             network.as_byte(),
             account_sk.as_bytes(),
+            view_sk.as_bytes(),
             witness.witness.sender_public_nonce.as_bytes(),
         )
         .unwrap();
