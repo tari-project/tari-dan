@@ -18,6 +18,7 @@ use tari_ootle_wallet_sdk::{
     IndexerTrust,
     models::{
         ClaimedStateVersion,
+        EndOfShard,
         KeyBranch,
         KeyId,
         OutputStatus,
@@ -108,6 +109,12 @@ fn start_of_shard(max_state_version: u64, has_more: bool) -> StartOfShard {
     }
 }
 
+fn end_of_shard(max_state_version: u64) -> Option<EndOfShard> {
+    Some(EndOfShard {
+        max_state_version: StateVersion::from(max_state_version),
+    })
+}
+
 fn cursor_of(cursors: &[(Shard, StateVersion)]) -> StateVersion {
     cursors
         .iter()
@@ -137,6 +144,9 @@ fn serve_utxos(network: &ProvingNetwork, utxos: Vec<(u64, UtxoUnspent)>) {
             })
             .collect::<Vec<_>>();
         payloads[0].sos = Some(start_of_shard(max_version, false));
+        if let Some(last) = payloads.last_mut() {
+            last.eos = end_of_shard(max_version);
+        }
         payloads
     });
 }
@@ -454,7 +464,7 @@ async fn a_scan_pages_past_the_verified_state_version_without_storing_past_it() 
         vec![UtxoUpdatePayload {
             sos: Some(start_of_shard(max_version, has_more)),
             update: Some(WalletUtxoUpdate::Unspent(utxo.clone())),
-            eos: None,
+            eos: end_of_shard(max_version),
         }]
     });
 
@@ -513,7 +523,7 @@ async fn a_spend_delivered_again_is_reported_once() {
         vec![UtxoUpdatePayload {
             sos: Some(start_of_shard(CHECKPOINT_VERSION + 1, false)),
             update: Some(WalletUtxoUpdate::Spent(spent.clone())),
-            eos: None,
+            eos: end_of_shard(CHECKPOINT_VERSION + 1),
         }]
     });
     let notify = Notify::new(100);

@@ -27,7 +27,7 @@ use tari_ootle_common_types::{
 use tari_ootle_transaction::{Transaction, TransactionEnvelope, TransactionId};
 use tari_ootle_wallet_sdk::{
     apis::config::ConfigKey,
-    models::{KeyBranch, KeyId, StartOfShard, UtxoUnspent, UtxoUpdatePayload, WalletUtxoUpdate},
+    models::{EndOfShard, KeyBranch, KeyId, StartOfShard, UtxoUnspent, UtxoUpdatePayload, WalletUtxoUpdate},
     network::{
         FetchedSubstates,
         SubstateQueryResult,
@@ -170,7 +170,9 @@ impl WalletNetworkInterface for OneUtxoNetwork {
                 has_more: false,
             }),
             update: Some(WalletUtxoUpdate::Unspent(utxo)),
-            eos: None,
+            eos: Some(EndOfShard {
+                max_state_version: StateVersion::from(1),
+            }),
         };
         Ok(futures::stream::iter([Ok(payload)]).boxed())
     }

@@ -251,42 +251,19 @@ where TSpec: WalletSdkSpec
         let mut has_more = false;
 
         while let Some(result) = stream.next().await {
-            let update = result.map_err(|e| StealthScannerApiError::NetworkInterfaceError(e.into()))?;
-            if let Some(recv_sos) = update.sos {
+            let payload = result.map_err(|e| StealthScannerApiError::NetworkInterfaceError(e.into()))?;
+            if let Some(recv_sos) = payload.sos {
                 debug!(target: LOG_TARGET, "Received StartOfShard for {}", recv_sos.shard);
-                // Commit the previous progress and start with the next shard
-                if let Some(sos) = sos.take() {
-                    if num_received > 0 {
-                        debug!(
-                            target: LOG_TARGET,
-                            "🔍️ Scan complete for account {}: No more stealth outputs found in shard {} (max state version {})",
-                            self.account.component_address(),
-                            sos.shard,
-                            sos.max_state_version
-                        );
-                    }
-                    self.stats.num_received += num_received;
-                    num_received = 0;
-                    self.commit_progress()?;
+                if let Some(unterminated) = sos.replace(recv_sos) {
+                    warn!(
+                        target: LOG_TARGET,
+                        "⚠️ Shard {} ended without an EndOfShard. Its scan cursor is left in place.",
+                        unterminated.shard
+                    );
                 }
-
-                for versions in [&mut self.cursors, &mut self.shard_state_versions_to_set] {
-                    versions
-                        .entry(recv_sos.shard)
-                        .and_modify(|v| {
-                            if recv_sos.max_state_version > *v {
-                                *v = recv_sos.max_state_version
-                            }
-                        })
-                        .or_insert(recv_sos.max_state_version);
-                }
-
-                has_more |= recv_sos.has_more;
-
-                sos = Some(recv_sos);
             }
 
-            if let Some(update) = update.update {
+            if let Some(update) = payload.update {
                 num_received += 1;
                 match update {
                     WalletUtxoUpdate::Unspent(unspent) => {
@@ -312,6 +289,44 @@ where TSpec: WalletSdkSpec
                     },
                 }
             }
+
+            if payload.eos.is_some() {
+                // The shard's cursor advances only once every update up to its max state version has been received.
+                let Some(sos) = sos.take() else {
+                    warn!(target: LOG_TARGET, "⚠️ Received an EndOfShard without a StartOfShard. Ignoring it.");
+                    continue;
+                };
+                debug!(
+                    target: LOG_TARGET,
+                    "🔍️ Scanned shard {} for account {} up to state version {}",
+                    sos.shard,
+                    self.account.component_address(),
+                    sos.max_state_version
+                );
+                for versions in [&mut self.cursors, &mut self.shard_state_versions_to_set] {
+                    versions
+                        .entry(sos.shard)
+                        .and_modify(|v| {
+                            if sos.max_state_version > *v {
+                                *v = sos.max_state_version
+                            }
+                        })
+                        .or_insert(sos.max_state_version);
+                }
+                has_more |= sos.has_more;
+
+                self.stats.num_received += num_received;
+                num_received = 0;
+                self.commit_progress()?;
+            }
+        }
+
+        if let Some(unterminated) = sos {
+            warn!(
+                target: LOG_TARGET,
+                "⚠️ Shard {} ended without an EndOfShard. Its scan cursor is left in place.",
+                unterminated.shard
+            );
         }
 
         self.commit_progress()?;
