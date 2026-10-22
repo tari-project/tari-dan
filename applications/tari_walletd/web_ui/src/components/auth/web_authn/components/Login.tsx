@@ -1,7 +1,7 @@
 // Copyright 2025 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-import { APP_NAME, DEFAULT_PERMISSIONS, WebauthnProps } from "@components/auth/web_authn/Webauthn";
+import { DEFAULT_PERMISSIONS, WebauthnProps } from "@components/auth/web_authn/Webauthn";
 import Loading from "@components/Loading";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -39,7 +39,7 @@ function WebauthnLogin(props: WebauthnProps) {
 
     try {
       // start authentication by getting challenge
-      const startAuthResponse = await webauthnStartAuth({ username: APP_NAME });
+      const startAuthResponse = await webauthnStartAuth();
 
       if (!startAuthResponse) {
         throw new Error("Failed to start authentication");

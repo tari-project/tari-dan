@@ -1719,22 +1719,6 @@ impl WalletStoreReader for ReadTransaction<'_> {
         .map_err(|e| WalletStorageError::general("webauthn_has_any_registration", e))
     }
 
-    fn webauthn_reg_fetch_passkeys(&mut self, username: String) -> Result<Vec<Passkey>, WalletStorageError> {
-        use crate::schema::{webauthn_registration_passkeys, webauthn_registrations};
-        Ok(webauthn_registration_passkeys::table
-            .inner_join(webauthn_registrations::table)
-            .filter(webauthn_registrations::username.eq(username))
-            .select(WebauthnRegistrationPasskey::as_select())
-            .load::<WebauthnRegistrationPasskey>(self.connection())
-            .map_err(|e| WalletStorageError::general("webauthn_reg_fetch", e))?
-            .iter()
-            .filter_map(|model| match WebauthnRegistrationPasskeyModel::try_from(model) {
-                Ok(value) => Some(value.passkey),
-                Err(_) => None,
-            })
-            .collect::<Vec<Passkey>>())
-    }
-
     fn webauthn_reg_fetch_all_passkeys(&mut self) -> Result<Vec<Passkey>, WalletStorageError> {
         use crate::schema::webauthn_registration_passkeys;
         Ok(webauthn_registration_passkeys::table

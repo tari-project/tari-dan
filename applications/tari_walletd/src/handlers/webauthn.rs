@@ -136,15 +136,20 @@ pub async fn handle_finish_registration(
     ))
 }
 
+/// Start a login ceremony for this wallet. The wallet is single-user, so every caller is offered the
+/// wallet's own credentials.
 pub async fn handle_start_auth(
     context: &HandlerContext,
     _token: Option<&Bearer>,
-    request: WebauthnStartAuthRequest,
+    _request: WebauthnStartAuthRequest,
 ) -> Result<WebauthnStartAuthResponse, anyhow::Error> {
     let webauthn = webauthn(context)?;
-    let webauthn_service = webauthn_service(context)?;
-    let passkeys = webauthn_service.passkeys(request.username)?;
-    let (challenge, passkey_auth) = webauthn.start_passkey_authentication(passkeys.as_slice())?;
-    let session_id = webauthn_service.start_authentication(passkey_auth).await?;
+    let (challenge, session_id) = webauthn_service(context)?
+        .start_authentication(webauthn)
+        .await
+        .map_err(|e| match e {
+            WebauthnServiceError::NotEnrolled => invalid_request(e),
+            e => e.into(),
+        })?;
     Ok(WebauthnStartAuthResponse { session_id, challenge })
 }

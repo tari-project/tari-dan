@@ -143,7 +143,6 @@ import type {
   WebauthnAlreadyRegisteredResponse,
   WebauthnFinishRegisterRequest,
   WebauthnFinishRegisterResponse,
-  WebauthnStartAuthRequest,
   WebauthnStartAuthResponse,
   WebauthnStartRegisterRequest,
   WebauthnStartRegisterResponse,
@@ -203,8 +202,8 @@ export const webauthnFinishRegistration = (
   request: WebauthnFinishRegisterRequest,
 ): Promise<WebauthnFinishRegisterResponse> => client().then((c) => c.webauthnFinishRegistration(request));
 
-export const webauthnStartAuth = (request: WebauthnStartAuthRequest): Promise<WebauthnStartAuthResponse> =>
-  client().then((c) => c.webauthnAuthStart(request));
+export const webauthnStartAuth = (): Promise<WebauthnStartAuthResponse> =>
+  client().then((c) => c.webauthnAuthStart({}));
 
 export const authRevoke = (request: AuthRevokeTokenRequest): Promise<AuthRevokeTokenResponse> =>
   client().then((c) => c.authRevoke(request));
