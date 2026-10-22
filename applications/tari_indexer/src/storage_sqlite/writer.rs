@@ -429,7 +429,7 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
             .filter(transactions::retention_epoch.lt(encode_retention_epoch(cutoff)))
             .order_by(transactions::retention_epoch.asc())
             .limit(limit as i64)
-            .load::<i32>(self.connection())
+            .load::<i64>(self.connection())
             .map_err(|e| StorageError::general(OPERATION, e))?;
 
         if ids.is_empty() {
@@ -454,7 +454,7 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
             .filter(transaction_receipts::epoch.lt(encode_retention_epoch(cutoff)))
             .order_by(transaction_receipts::epoch.asc())
             .limit(limit as i64)
-            .load::<i32>(self.connection())
+            .load::<i64>(self.connection())
             .map_err(|e| StorageError::general(OPERATION, e))?;
 
         if ids.is_empty() {

@@ -38,7 +38,7 @@ use crate::{
 #[derive(Debug, Identifiable, Queryable)]
 #[diesel(table_name = substates)]
 pub struct SubstateRecord {
-    pub id: i32,
+    pub id: i64,
     pub address: String,
     pub version: i64,
     pub data: String,

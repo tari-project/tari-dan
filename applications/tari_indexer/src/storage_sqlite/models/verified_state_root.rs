@@ -11,7 +11,7 @@ use crate::storage_sqlite::schema::verified_state_roots;
 #[diesel(table_name = verified_state_roots)]
 pub(crate) struct VerifiedStateRootRow {
     #[allow(dead_code)]
-    pub id: i32,
+    pub id: i64,
     // Redundant with the query filter; reads echo the caller's epoch/shard_group rather than re-parse.
     #[allow(dead_code)]
     pub epoch: i64,

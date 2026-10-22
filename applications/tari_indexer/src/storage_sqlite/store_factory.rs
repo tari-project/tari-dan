@@ -1096,6 +1096,53 @@ pub(crate) mod tests {
             .unwrap();
     }
 
+    /// Starts `table`'s AUTOINCREMENT counter at `u32::MAX`, so its next ids need more than 32 bits.
+    async fn seed_ids_beyond_32_bits(store: &SqliteIndexerStore, table: &'static str) {
+        store
+            .with_write_tx(move |tx| {
+                sql_query(format!(
+                    "insert into sqlite_sequence (name, seq) values ('{table}', {})",
+                    u32::MAX
+                ))
+                .execute(tx.connection())
+                .map_err(|e| StorageError::general("seed sqlite_sequence", e))
+            })
+            .await
+            .unwrap();
+    }
+
+    /// AUTOINCREMENT ids never reuse, so a long-running indexer's ids outgrow 32 bits even when
+    /// retention keeps the live row count small. Paging and pruning must hold across that range.
+    #[tokio::test]
+    async fn transaction_ids_beyond_32_bits_page_and_prune() {
+        let (_dir, store) = temp_store().await;
+        seed_ids_beyond_32_bits(&store, "transactions").await;
+
+        let ids = insert_transactions(&store, &[Epoch(5), Epoch(6), Epoch(20)]).await;
+
+        let first_page = store
+            .with_read_tx(move |tx| tx.list_recent_transactions(None, 2, None))
+            .await
+            .unwrap();
+        assert_eq!(first_page.iter().map(|e| e.transaction_id).collect::<Vec<_>>(), [
+            ids[2], ids[1]
+        ]);
+        let cursor = first_page[1].transaction_id;
+        let second_page = store
+            .with_read_tx(move |tx| tx.list_recent_transactions(Some(cursor), 2, None))
+            .await
+            .unwrap();
+        assert_eq!(second_page.iter().map(|e| e.transaction_id).collect::<Vec<_>>(), [
+            ids[0]
+        ]);
+
+        let num_pruned = store
+            .with_write_tx(move |tx| tx.prune_transactions_before_epoch(Epoch(10), 100))
+            .await
+            .unwrap();
+        assert_eq!(num_pruned, 2);
+    }
+
     /// A transaction that never commits gets no receipt — mempool rejection and a consensus abort that
     /// commits nothing both leave one — so its `max_epoch` stays its retention key. Without that
     /// fallback these rows, the ones retention exists to bound, would never age out.
@@ -1721,6 +1768,35 @@ pub(crate) mod tests {
             .unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].0, receipt_address(3));
+    }
+
+    #[tokio::test]
+    async fn receipt_ids_beyond_32_bits_page_and_prune() {
+        let (_dir, store) = temp_store().await;
+        seed_ids_beyond_32_bits(&store, "transaction_receipts").await;
+        insert_receipts(&store, vec![
+            (1, receipt_at(Epoch(5))),
+            (2, receipt_at(Epoch(6))),
+            (3, receipt_at(Epoch(20))),
+        ])
+        .await;
+
+        let page = store
+            .with_read_tx(|tx| {
+                tx.list_transaction_receipts(Some(receipt_address(1)), 10, tari_ootle_storage::Ordering::Ascending)
+            })
+            .await
+            .unwrap();
+        assert_eq!(page.iter().map(|(address, _)| *address).collect::<Vec<_>>(), [
+            receipt_address(2),
+            receipt_address(3)
+        ]);
+
+        let num_pruned = store
+            .with_write_tx(move |tx| tx.prune_transaction_receipts_before_epoch(Epoch(10), 100))
+            .await
+            .unwrap();
+        assert_eq!(num_pruned, 2);
     }
 
     #[tokio::test]

@@ -3,3 +3,6 @@
 
 [print_schema]
 file = "schema.rs"
+
+# Rowids are 64-bit; the default `Integer` mapping truncates them to i32 on read.
+sqlite_integer_primary_key_is_bigint = true
