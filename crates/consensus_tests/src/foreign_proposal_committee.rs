@@ -42,7 +42,7 @@ use tari_ootle_storage::{
         CommandsCommitProof,
         ForeignProposal,
         ForeignProposalRecord,
-        TrimmedCommand,
+        PrunedCommand,
     },
 };
 use tari_ootle_transaction::{Network, Transaction};
@@ -108,7 +108,7 @@ fn proposal(proposed_by: &'static str, shard_group: tari_sidechain::ShardGroup) 
             proposed_by: CompressedPublicKey::new_from_pk(proposer),
             state_merkle_root: Default::default(),
             command_merkle_root: Default::default(),
-            transaction_merkle_root: None,
+            transaction_merkle_root: Default::default(),
             signature: Default::default(),
             accumulated_data: Default::default(),
             metadata_hash: block_metadata.calculate_hash(),
@@ -205,9 +205,15 @@ fn only_a_stored_commit_proof_counts_as_authenticated() {
     let store = TestStore::open(&temp_dir, DatabaseOptions::default()).unwrap();
 
     let stored = with_commands(&proposal("b1", to_header_shard_group(group_b)), vec![
-        CommandOrHash::Hash(FixedHash::new([1u8; 32])),
+        CommandOrHash::Pruned(PrunedCommand {
+            hash: FixedHash::new([1u8; 32]),
+            full_command_shard_groups: vec![],
+        }),
     ]);
-    let same_block_id = with_commands(&stored, vec![CommandOrHash::Hash(FixedHash::new([2u8; 32]))]);
+    let same_block_id = with_commands(&stored, vec![CommandOrHash::Pruned(PrunedCommand {
+        hash: FixedHash::new([2u8; 32]),
+        full_command_shard_groups: vec![],
+    })]);
     assert_eq!(stored.calculate_block_id(), same_block_id.calculate_block_id());
 
     store
@@ -441,25 +447,25 @@ fn involves(command: &Command, shard_group: ShardGroup) -> bool {
 
 /// The same proposal with every command that involves `shard_group` carried only by its hash, in the form that leaves
 /// the commit proof's command merkle root unchanged.
-fn with_commands_trimmed_for(proposal: &ForeignProposal, shard_group: ShardGroup) -> ForeignProposal {
-    with_commands_trimmed_for_up_to(proposal, shard_group, usize::MAX)
+fn with_commands_pruned_for(proposal: &ForeignProposal, shard_group: ShardGroup) -> ForeignProposal {
+    with_commands_pruned_for_up_to(proposal, shard_group, usize::MAX)
 }
 
-/// As [`with_commands_trimmed_for`], trimming at most `max_trimmed` commands.
-fn with_commands_trimmed_for_up_to(
+/// As [`with_commands_pruned_for`], pruning at most `max_pruned` commands.
+fn with_commands_pruned_for_up_to(
     proposal: &ForeignProposal,
     shard_group: ShardGroup,
-    max_trimmed: usize,
+    max_pruned: usize,
 ) -> ForeignProposal {
     let protocol_version = proposal.protocol_version().unwrap();
-    let mut num_trimmed = 0;
+    let mut num_pruned = 0;
     let commands = proposal
         .commands()
         .iter()
         .map(|entry| match entry {
-            CommandOrHash::Command(command) if num_trimmed < max_trimmed && involves(command, shard_group) => {
-                num_trimmed += 1;
-                CommandOrHash::Trimmed(TrimmedCommand {
+            CommandOrHash::Command(command) if num_pruned < max_pruned && involves(command, shard_group) => {
+                num_pruned += 1;
+                CommandOrHash::Pruned(PrunedCommand {
                     hash: command.hash(protocol_version),
                     full_command_shard_groups: command.full_command_shard_groups(),
                 })
@@ -467,7 +473,7 @@ fn with_commands_trimmed_for_up_to(
             entry => entry.clone(),
         })
         .collect();
-    assert!(num_trimmed > 0, "no command involves {shard_group}");
+    assert!(num_pruned > 0, "no command involves {shard_group}");
     with_commands(proposal, commands)
 }
 
@@ -518,7 +524,7 @@ async fn an_embedded_foreign_proposal_withholding_a_command_does_not_take_its_sl
         foreign_proposals: proposal
             .foreign_proposals
             .iter()
-            .map(|fp| with_commands_trimmed_for(fp, local_shard_group))
+            .map(|fp| with_commands_pruned_for(fp, local_shard_group))
             .collect(),
     };
     let tx_inbound = test.get_validator(&replica).tx_inbound_message.clone();
@@ -666,7 +672,7 @@ async fn a_foreign_proposal_reply_withholding_a_command_does_not_take_its_slot_w
     tx_inbound
         .send((
             sender,
-            HotstuffMessage::ForeignProposal(with_commands_trimmed_for_up_to(&genuine, local_shard_group, 1).into()),
+            HotstuffMessage::ForeignProposal(with_commands_pruned_for_up_to(&genuine, local_shard_group, 1).into()),
         ))
         .await
         .unwrap();

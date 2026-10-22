@@ -94,13 +94,6 @@ pub enum BlockError {
     #[error("Merke proof generation command index out of bounds: {index}/{len}")]
     MerkleProofGenerationCommandIndexOutOfBounds { index: usize, len: usize },
     #[error(
-        "Block {block_id} was produced under protocol version {protocol_version}, which has no transaction merkle root"
-    )]
-    NoTransactionMerkleRoot {
-        block_id: BlockId,
-        protocol_version: ProtocolVersion,
-    },
-    #[error(
         "Block {block_id} header commits to transaction merkle root {header_root}, but its commands build \
          {computed_root}"
     )]
@@ -536,12 +529,7 @@ impl Block {
         &self,
         transaction_id: &TransactionId,
     ) -> Result<(Option<FinalizedTransactionLeaf<'_>>, SparseMerkleProofExt), BlockError> {
-        let Some(header_root) = self.header.transaction_merkle_root() else {
-            return Err(BlockError::NoTransactionMerkleRoot {
-                block_id: *self.id(),
-                protocol_version: self.header.protocol_version(),
-            });
-        };
+        let header_root = self.header.transaction_merkle_root();
         let tree = build_finalized_transaction_tree(&self.commands)?;
         let computed_root = FixedHash::from(tree.root().into_array());
         if computed_root != *header_root {

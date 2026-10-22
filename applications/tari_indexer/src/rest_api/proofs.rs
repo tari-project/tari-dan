@@ -175,7 +175,7 @@ pub(crate) mod tests {
                 proposed_by: CompressedPublicKey::default(),
                 state_merkle_root: FixedHash::new([7u8; 32]),
                 command_merkle_root: FixedHash::zero(),
-                transaction_merkle_root: None,
+                transaction_merkle_root: FixedHash::zero(),
                 signature: ValidatorBlockSignature::new(CompressedPublicKey::default(), RistrettoSecretKey::default()),
                 accumulated_data: Default::default(),
                 metadata_hash: FixedHash::zero(),

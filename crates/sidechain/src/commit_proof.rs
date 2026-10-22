@@ -15,7 +15,7 @@ use crate::{
     hashing,
     hashing::ValidatorNodeHashDomain,
     qc_signatures::{QcSignatures, SigningCommittee},
-    serde::{hex_or_bytes, option_hex_or_bytes},
+    serde::hex_or_bytes,
     shard_group::ShardGroup,
     types::{CompressedPublicKey, FixedHash, PrivateKey, UncompressedPublicKey},
     validations::check_proof_elements,
@@ -232,9 +232,9 @@ pub struct SidechainBlockHeader {
     #[serde(with = "hex_or_bytes")]
     pub command_merkle_root: FixedHash,
     /// A Merkle root over the outcome of each transaction this block finalizes, which lets a client prove that a
-    /// transaction committed or aborted in this block. A block that finalizes no transactions carries none.
-    #[serde(default, with = "option_hex_or_bytes", skip_serializing_if = "Option::is_none")]
-    pub transaction_merkle_root: Option<FixedHash>,
+    /// transaction committed or aborted in this block.
+    #[serde(with = "hex_or_bytes")]
+    pub transaction_merkle_root: FixedHash,
     /// Signature of block by the proposer.
     pub signature: ValidatorBlockSignature,
     pub accumulated_data: ShardGroupAccumulatedData,
@@ -256,7 +256,7 @@ impl SidechainBlockHeader {
                 proposed_by: self.proposed_by.as_bytes(),
                 state_merkle_root: &self.state_merkle_root,
                 command_merkle_root: &self.command_merkle_root,
-                transaction_merkle_root: self.transaction_merkle_root.as_ref(),
+                transaction_merkle_root: &self.transaction_merkle_root,
                 accumulated_data: &self.accumulated_data,
                 metadata_hash: &self.metadata_hash,
             }),
@@ -278,8 +278,8 @@ impl SidechainBlockHeader {
         &self.signature
     }
 
-    pub fn transaction_merkle_root(&self) -> Option<&FixedHash> {
-        self.transaction_merkle_root.as_ref()
+    pub fn transaction_merkle_root(&self) -> &FixedHash {
+        &self.transaction_merkle_root
     }
 
     pub fn accumulated_data(&self) -> &ShardGroupAccumulatedData {
@@ -454,7 +454,6 @@ pub struct BlockHeaderHashFieldsV1<'a> {
     pub proposed_by: &'a [u8],
     pub state_merkle_root: &'a FixedHash,
     pub command_merkle_root: &'a FixedHash,
-    /// Borsh encodes the `Option` tag, so a header that carries no root and one that carries any root hash apart.
-    pub transaction_merkle_root: Option<&'a FixedHash>,
+    pub transaction_merkle_root: &'a FixedHash,
     pub metadata_hash: &'a FixedHash,
 }

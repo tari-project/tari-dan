@@ -316,7 +316,7 @@ fn header(network: Network, epoch: Epoch, shard_group: ShardGroup, height: u64) 
         proposed_by: CompressedPublicKey::default(),
         state_merkle_root: FixedHash::zero(),
         command_merkle_root: FixedHash::zero(),
-        transaction_merkle_root: None,
+        transaction_merkle_root: FixedHash::zero(),
         signature: ValidatorBlockSignature::default(),
         accumulated_data: Default::default(),
         metadata_hash: FixedHash::zero(),

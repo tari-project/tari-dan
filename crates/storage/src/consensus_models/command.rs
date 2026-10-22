@@ -275,17 +275,16 @@ impl Command {
         }
     }
 
-    /// The command's hash in a block proposed under `protocol_version`. Before [`ProtocolVersion::V3`] it is also the
-    /// command's leaf in the block's command merkle root (see [`Self::merkle_leaf`]).
+    /// The command's hash in a block proposed under `protocol_version`. The command's leaf in the block's command
+    /// merkle root is derived from it (see [`Self::merkle_leaf`]).
     ///
-    /// From [`ProtocolVersion::V2`] the preimage of a command that carries evidence also commits to the pledged value
-    /// hash of every input. The borsh encoding of the command fixes the number and order of the inputs, so the list
-    /// that follows it is unambiguous.
+    /// The preimage of a command that carries evidence also commits to the pledged value hash of every input. The
+    /// borsh encoding of the command fixes the number and order of the inputs, so the list that follows it is
+    /// unambiguous.
     pub fn hash(&self, protocol_version: ProtocolVersion) -> FixedHash {
         let hasher = command_hasher().chain(self);
         match protocol_version {
-            ProtocolVersion::V0 | ProtocolVersion::V1 => hasher.finalize().into(),
-            ProtocolVersion::V2 | ProtocolVersion::V3 => match self {
+            ProtocolVersion::V0 => match self {
                 Command::LocalPrepare(atom) |
                 Command::LocalAccept(atom) |
                 Command::AllAccept(atom) |
@@ -297,17 +296,16 @@ impl Command {
 
     /// The command's leaf in the command merkle root of a block proposed under `protocol_version`.
     ///
-    /// From [`ProtocolVersion::V3`] the leaf of every command except `EndEpoch` commits to
+    /// The leaf of every command except `EndEpoch` commits to
     /// [`Self::full_command_shard_groups`] alongside the command hash, so a foreign commit proof that carries the
-    /// command as a [`TrimmedCommand`](super::TrimmedCommand) must name, in an authenticated leaf, every shard group it
+    /// command as a [`PrunedCommand`](super::PrunedCommand) must name, in an authenticated leaf, every shard group it
     /// owes the full command. The `EndEpoch` leaf stays the bare command hash because the base layer recomputes it
     /// from [`tari_sidechain::Command`] when verifying an end-of-epoch inclusion proof; a foreign commit proof always
     /// carries that command in full.
     pub fn merkle_leaf(&self, protocol_version: ProtocolVersion) -> FixedHash {
         let hash = self.hash(protocol_version);
         match protocol_version {
-            ProtocolVersion::V0 | ProtocolVersion::V1 | ProtocolVersion::V2 => hash,
-            ProtocolVersion::V3 => match self {
+            ProtocolVersion::V0 => match self {
                 Command::EndEpoch(_) => hash,
                 Command::LocalOnly(_) |
                 Command::LocalPrepare(_) |
@@ -448,7 +446,7 @@ impl Command {
     }
 }
 
-/// The [`ProtocolVersion::V3`] command merkle leaf of a command with hash `command_hash` that a foreign commit proof
+/// The command merkle leaf of a command with hash `command_hash` that a foreign commit proof
 /// must carry in full for `full_command_shard_groups`.
 pub(super) fn command_leaf(command_hash: &FixedHash, full_command_shard_groups: &[ShardGroup]) -> FixedHash {
     command_leaf_hasher()
@@ -701,17 +699,10 @@ mod borsh_discriminant_tests {
     fn an_end_epoch_command_hashes_identically_on_both_sides() {
         let next_epoch_hash = FixedHash::zero();
 
-        for protocol_version in [
-            ProtocolVersion::V0,
-            ProtocolVersion::V1,
-            ProtocolVersion::V2,
-            ProtocolVersion::V3,
-        ] {
-            assert_eq!(
-                Command::EndEpoch(EndEpochAtom::new(next_epoch_hash)).merkle_leaf(protocol_version),
-                tari_sidechain::Command::EndEpoch(tari_sidechain::EndEpochAtom::new(next_epoch_hash)).hash(),
-            );
-        }
+        assert_eq!(
+            Command::EndEpoch(EndEpochAtom::new(next_epoch_hash)).merkle_leaf(ProtocolVersion::V0),
+            tari_sidechain::Command::EndEpoch(tari_sidechain::EndEpochAtom::new(next_epoch_hash)).hash(),
+        );
     }
 }
 
@@ -741,7 +732,8 @@ mod pledged_value_hash_tests {
         })
     }
 
-    /// Blocks proposed before V2 were signed over this layout, so it must not change.
+    /// The pledged value hash is outside the borsh encoding of a lock: [`Command::hash`] commits to it as a trailer
+    /// after the command.
     #[test]
     fn an_input_lock_encodes_as_its_write_flag_and_version() {
         let lock = EvidenceInputLockData {
@@ -756,25 +748,14 @@ mod pledged_value_hash_tests {
     }
 
     #[test]
-    fn a_command_hash_before_v2_does_not_cover_the_pledged_value_hash() {
-        for protocol_version in [ProtocolVersion::V0, ProtocolVersion::V1] {
-            assert_eq!(
-                local_prepare(None).hash(protocol_version),
-                local_prepare(Some(Hash32::from_array([1; 32]))).hash(protocol_version),
-            );
-        }
-    }
-
-    #[test]
-    fn a_v2_command_hash_covers_the_pledged_value_hash() {
+    fn a_command_hash_covers_the_pledged_value_hash() {
         let hashes = [
-            local_prepare(None).hash(ProtocolVersion::V2),
-            local_prepare(Some(Hash32::from_array([1; 32]))).hash(ProtocolVersion::V2),
-            local_prepare(Some(Hash32::from_array([2; 32]))).hash(ProtocolVersion::V2),
+            local_prepare(None).hash(ProtocolVersion::V0),
+            local_prepare(Some(Hash32::from_array([1; 32]))).hash(ProtocolVersion::V0),
+            local_prepare(Some(Hash32::from_array([2; 32]))).hash(ProtocolVersion::V0),
         ];
         assert_ne!(hashes[0], hashes[1]);
         assert_ne!(hashes[0], hashes[2]);
         assert_ne!(hashes[1], hashes[2]);
-        assert_ne!(hashes[0], local_prepare(None).hash(ProtocolVersion::V1));
     }
 }

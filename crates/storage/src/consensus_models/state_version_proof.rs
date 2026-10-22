@@ -102,11 +102,6 @@ pub fn verify_state_version_leaf(
     let protocol_version = commit_proof
         .protocol_version()
         .map_err(|e| StateVersionProofError::InvalidHeader(e.to_string()))?;
-    // A leaf commits to the shard's state version only from V1. Before that it is the bare root, which proves no
-    // version at all.
-    if protocol_version < ProtocolVersion::V1 {
-        return Err(StateVersionProofError::VersionNotCommitted { protocol_version });
-    }
     let scheduled = ProtocolVersion::at(network, commit_proof.epoch());
     if protocol_version != scheduled {
         return Err(StateVersionProofError::InvalidHeader(format!(
@@ -135,8 +130,6 @@ pub fn verify_state_version_leaf(
 pub enum StateVersionProofError {
     #[error("proof is for a block of network byte {header_network}, not {network}")]
     WrongNetwork { network: Network, header_network: u8 },
-    #[error("proof block runs protocol {protocol_version}, whose state root does not commit shard state versions")]
-    VersionNotCommitted { protocol_version: ProtocolVersion },
     #[error("proof block header is invalid: {0}")]
     InvalidHeader(String),
     #[error("proof block of {shard_group} does not commit {shard}")]
@@ -168,8 +161,7 @@ where
     TTx::Target: StateStoreReadTransaction,
 {
     let protocol_version = block.header().protocol_version();
-    // Only a V1 or later root commits each shard's state version, so only it can prove one.
-    if version_updates.is_empty() || protocol_version < ProtocolVersion::V1 {
+    if version_updates.is_empty() {
         return Ok(false);
     }
     let mut shard_states = Vec::with_capacity(block.shard_group().len() + 1);
@@ -265,7 +257,7 @@ mod tests {
             proposed_by: Default::default(),
             state_merkle_root: FixedHash::from(root.into_array()),
             command_merkle_root: FixedHash::zero(),
-            transaction_merkle_root: None,
+            transaction_merkle_root: FixedHash::zero(),
             signature: Default::default(),
             accumulated_data: Default::default(),
             metadata_hash: FixedHash::zero(),
@@ -291,29 +283,16 @@ mod tests {
         ));
     }
 
-    /// From V2 a leaf proves the state of its own shard only, however equal another shard's state is.
+    /// A leaf proves the state of its own shard only, however equal another shard's state is.
     #[test]
     fn a_shard_keyed_leaf_proves_its_own_shard_only() {
         let root = TreeHash::new([7; 32]);
         let network = Network::LocalNet;
-        assert_eq!(ProtocolVersion::genesis(network), ProtocolVersion::V3);
-        let (commit_proof, leaf_proof) = proof_of_leaf(network, ProtocolVersion::V3, Shard::from(3u32), root, 64);
+        let protocol_version = ProtocolVersion::genesis(network);
+        let (commit_proof, leaf_proof) = proof_of_leaf(network, protocol_version, Shard::from(3u32), root, 64);
         assert!(matches!(
             verify_state_version_leaf(network, &commit_proof, Shard::from(4u32), 64, &root, &leaf_proof),
             Err(StateVersionProofError::LeafNotIncluded { .. })
         ));
-    }
-
-    #[test]
-    fn a_v0_block_proves_no_state_version() {
-        let root = TreeHash::new([7; 32]);
-        let shard = Shard::from(3u32);
-        let (commit_proof, leaf_proof) = proof_of_leaf(Network::Esmeralda, ProtocolVersion::V0, shard, root, 64);
-        for claimed in [64, 96] {
-            assert!(matches!(
-                verify_state_version_leaf(Network::Esmeralda, &commit_proof, shard, claimed, &root, &leaf_proof),
-                Err(StateVersionProofError::VersionNotCommitted { .. })
-            ));
-        }
     }
 }

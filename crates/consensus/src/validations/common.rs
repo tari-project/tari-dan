@@ -463,10 +463,7 @@ fn check_proposal_certificate_signatures<TConsensusSpec: ConsensusSpec>(
 /// activates a new scheme names it here.
 fn is_qc_signature_scheme_accepted(protocol_version: ProtocolVersion, signatures: &QcSignatures) -> bool {
     match (protocol_version, signatures) {
-        (
-            ProtocolVersion::V0 | ProtocolVersion::V1 | ProtocolVersion::V2 | ProtocolVersion::V3,
-            QcSignatures::Schnorr { .. },
-        ) => true,
+        (ProtocolVersion::V0, QcSignatures::Schnorr { .. }) => true,
     }
 }
 
@@ -514,10 +511,7 @@ fn check_timeout_certificate_signatures<TConsensusSpec: ConsensusSpec>(
 /// that activates a new scheme names it here.
 fn is_tc_signature_scheme_accepted(protocol_version: ProtocolVersion, signatures: &TcSignatures) -> bool {
     match (protocol_version, signatures) {
-        (
-            ProtocolVersion::V0 | ProtocolVersion::V1 | ProtocolVersion::V2 | ProtocolVersion::V3,
-            TcSignatures::Schnorr { .. },
-        ) => true,
+        (ProtocolVersion::V0, TcSignatures::Schnorr { .. }) => true,
     }
 }
 
@@ -633,40 +627,18 @@ mod tests {
     }
 
     #[test]
-    fn esmeralda_requires_the_version_its_schedule_names() {
-        let v1_activation = Epoch(11925);
-        let before = Epoch(v1_activation.as_u64() - 1);
-        assert!(!is_rejected(Network::Esmeralda, ProtocolVersion::V0, before));
-        assert!(is_rejected(Network::Esmeralda, ProtocolVersion::V1, before));
-        assert!(!is_rejected(Network::Esmeralda, ProtocolVersion::V1, v1_activation));
-        assert!(is_rejected(Network::Esmeralda, ProtocolVersion::V0, v1_activation));
-        assert!(is_rejected(Network::Esmeralda, ProtocolVersion::V2, v1_activation));
-
-        let v2_activation = Epoch(12220);
-        let before = Epoch(v2_activation.as_u64() - 1);
-        assert!(!is_rejected(Network::Esmeralda, ProtocolVersion::V1, before));
-        assert!(is_rejected(Network::Esmeralda, ProtocolVersion::V2, before));
-        assert!(!is_rejected(Network::Esmeralda, ProtocolVersion::V2, v2_activation));
-        assert!(is_rejected(Network::Esmeralda, ProtocolVersion::V1, v2_activation));
-        assert!(is_rejected(Network::Esmeralda, ProtocolVersion::V3, v2_activation));
-    }
-
-    #[test]
-    fn other_networks_require_v3_from_genesis() {
+    fn every_network_requires_v0_from_genesis() {
         for network in [
             Network::MainNet,
             Network::StageNet,
             Network::NextNet,
             Network::Igor,
+            Network::Esmeralda,
             Network::LocalNet,
         ] {
-            for protocol_version in [ProtocolVersion::V0, ProtocolVersion::V1, ProtocolVersion::V2] {
-                assert!(
-                    is_rejected(network, protocol_version, Epoch(0)),
-                    "{network} {protocol_version}"
-                );
+            for epoch in [Epoch(0), Epoch(1000)] {
+                assert!(!is_rejected(network, ProtocolVersion::V0, epoch), "{network} {epoch}");
             }
-            assert!(!is_rejected(network, ProtocolVersion::V3, Epoch(0)), "{network}");
         }
     }
 }

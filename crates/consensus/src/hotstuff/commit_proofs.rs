@@ -222,7 +222,7 @@ pub fn convert_block_to_sidechain_block_header(header: &BlockHeader) -> Result<S
         })?,
         state_merkle_root: *header.state_merkle_root(),
         command_merkle_root: *header.command_merkle_root(),
-        transaction_merkle_root: header.transaction_merkle_root().copied(),
+        transaction_merkle_root: *header.transaction_merkle_root(),
         metadata_hash: header.calculate_metadata_hash(),
         signature,
         accumulated_data: (*header.accumulated_data()).into(),
@@ -498,16 +498,9 @@ mod tests {
             }),
         ])
         .unwrap();
-        for protocol_version in [
-            ProtocolVersion::V0,
-            ProtocolVersion::V1,
-            ProtocolVersion::V2,
-            ProtocolVersion::V3,
-        ] {
-            for timeout_certificate_id in [None, Some(TcId::from([4u8; 32]))] {
-                for commands in [BlockCommands::empty(), finalizing.clone()] {
-                    assert_hashes_identically_to_sidechain_header(protocol_version, timeout_certificate_id, &commands);
-                }
+        for timeout_certificate_id in [None, Some(TcId::from([4u8; 32]))] {
+            for commands in [BlockCommands::empty(), finalizing.clone()] {
+                assert_hashes_identically_to_sidechain_header(ProtocolVersion::V0, timeout_certificate_id, &commands);
             }
         }
     }
@@ -607,7 +600,7 @@ mod tests {
             proposed_by: Default::default(),
             state_merkle_root: Default::default(),
             command_merkle_root: *block.command_merkle_root(),
-            transaction_merkle_root: block.transaction_merkle_root().copied(),
+            transaction_merkle_root: *block.transaction_merkle_root(),
             signature: ValidatorBlockSignature::new(
                 CompressedPublicKey::from_canonical_bytes(block.signature().unwrap().public_nonce().as_bytes())
                     .unwrap(),

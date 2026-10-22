@@ -200,7 +200,7 @@ fn it_rejects_a_proof_with_more_elements_than_a_commit_needs() {
 
 #[test]
 fn the_block_id_commits_to_the_protocol_version() {
-    let mut header = test_header(None);
+    let mut header = test_header();
     let id = header.calculate_block_id();
     header.protocol_version = PROTOCOL_VERSION + 1;
     assert_ne!(id, header.calculate_block_id());
@@ -237,43 +237,25 @@ fn it_rejects_a_qc_that_claims_another_protocol_version() {
 }
 
 #[test]
-fn a_header_that_omits_the_transaction_merkle_root_carries_none() {
-    let proof = load_fixture::<SidechainBlockCommitProof>("commit_proof.json");
-    assert_eq!(proof.header().transaction_merkle_root(), None);
-}
-
-#[test]
 fn the_block_id_commits_to_the_transaction_merkle_root() {
-    let mut header = test_header(None);
-    let without_root = header.calculate_block_id();
-
-    header.transaction_merkle_root = Some(FixedHash::zero());
+    let mut header = test_header();
+    header.transaction_merkle_root = FixedHash::zero();
     let zero_root = header.calculate_block_id();
-    header.transaction_merkle_root = Some(FixedHash::from([1u8; 32]));
+    header.transaction_merkle_root = FixedHash::from([1u8; 32]);
     let other_root = header.calculate_block_id();
 
-    assert_ne!(without_root, zero_root, "carrying a root must change the block ID");
     assert_ne!(zero_root, other_root, "the root must be part of the block ID");
 }
 
 #[test]
-fn it_validates_a_proof_that_carries_a_transaction_merkle_root() {
-    let root = FixedHash::from([1u8; 32]);
+fn it_rejects_a_proof_whose_transaction_merkle_root_was_altered() {
     let committee = fixture_committee();
-    let proof = signed_proof(&committee, 1..=4, test_header(Some(root)));
+    let proof = signed_proof(&committee, 1..=4, test_header());
     proof.validate_committed(FIXTURE_NETWORK, 4, &committee).unwrap();
 
-    let mut tampered = proof.clone();
-    tampered.header.transaction_merkle_root = Some(FixedHash::from([2u8; 32]));
+    let mut tampered = proof;
+    tampered.header.transaction_merkle_root = FixedHash::from([2u8; 32]);
     let err = tampered.validate_committed(FIXTURE_NETWORK, 4, &committee).unwrap_err();
-    assert!(
-        err.to_string().contains("does not match the block ID in the header"),
-        "Expected the block ID mismatch error, got: {err}"
-    );
-
-    let mut stripped = proof;
-    stripped.header.transaction_merkle_root = None;
-    let err = stripped.validate_committed(FIXTURE_NETWORK, 4, &committee).unwrap_err();
     assert!(
         err.to_string().contains("does not match the block ID in the header"),
         "Expected the block ID mismatch error, got: {err}"
@@ -295,7 +277,7 @@ mod weighted_committee {
     fn it_rejects_a_qc_with_a_supermajority_of_signers_but_too_little_power() {
         // Five of seven members, more than two thirds by count, but only 14 of 34 power.
         let committee = committee();
-        let proof = signed_proof(&committee, 1..=5, test_header(None));
+        let proof = signed_proof(&committee, 1..=5, test_header());
         let err = proof
             .validate_committed(FIXTURE_NETWORK, QUORUM_POWER, &committee)
             .unwrap_err();
@@ -310,7 +292,7 @@ mod weighted_committee {
     fn it_accepts_a_qc_with_few_signers_holding_enough_power() {
         // Three of seven members, but 30 of 34 power.
         let committee = committee();
-        let proof = signed_proof(&committee, 5..=7, test_header(None));
+        let proof = signed_proof(&committee, 5..=7, test_header());
         proof
             .validate_committed(FIXTURE_NETWORK, QUORUM_POWER, &committee)
             .unwrap();
@@ -390,7 +372,7 @@ mod signer_bitmap {
     #[test]
     fn it_attributes_signatures_to_the_members_the_bitmap_marks() {
         let committee = test_committee(1..=5, |_| 1);
-        let mut proof = signed_proof(&committee, 1..=4, test_header(None));
+        let mut proof = signed_proof(&committee, 1..=4, test_header());
         proof.validate_committed(FIXTURE_NETWORK, 4, &committee).unwrap();
 
         // Validator 5 did not sign. Moving any signer's bit to it misattributes that signature.
@@ -460,7 +442,8 @@ mod signer_bitmap {
 
 #[test]
 fn the_transaction_merkle_root_round_trips() {
-    let mut header = test_header(Some(FixedHash::from([1u8; 32])));
+    let mut header = test_header();
+    header.transaction_merkle_root = FixedHash::from([1u8; 32]);
 
     let json = serde_json::to_value(&header).unwrap();
     assert_eq!(
@@ -471,11 +454,6 @@ fn the_transaction_merkle_root_round_trips() {
 
     let bytes = borsh::to_vec(&header).unwrap();
     assert_eq!(borsh::from_slice::<SidechainBlockHeader>(&bytes).unwrap(), header);
-
-    header.transaction_merkle_root = None;
-    let json = serde_json::to_value(&header).unwrap();
-    assert!(json.get("transaction_merkle_root").is_none());
-    assert_eq!(serde_json::from_value::<SidechainBlockHeader>(json).unwrap(), header);
 }
 
 #[test]

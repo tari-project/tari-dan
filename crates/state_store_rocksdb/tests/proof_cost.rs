@@ -50,7 +50,7 @@ fn proof_cost() {
     // One generator per substate: what the batch would cost without hoisting.
     let t = Instant::now();
     for s in &substates {
-        SubstateProofGenerator::new(&tx, shard_group, num_preshards(), ProtocolVersion::V1)
+        SubstateProofGenerator::new(&tx, shard_group, num_preshards(), ProtocolVersion::V0)
             .unwrap()
             .generate(&s.to_versioned_substate_id())
             .unwrap()
@@ -60,7 +60,7 @@ fn proof_cost() {
 
     // Hoisted: one generator for the whole batch.
     let t = Instant::now();
-    let mut generator = SubstateProofGenerator::new(&tx, shard_group, num_preshards(), ProtocolVersion::V1).unwrap();
+    let mut generator = SubstateProofGenerator::new(&tx, shard_group, num_preshards(), ProtocolVersion::V0).unwrap();
     let construct = t.elapsed();
     let t = Instant::now();
     for s in &substates {
@@ -75,7 +75,7 @@ fn proof_cost() {
 
     // A single-substate request pays the whole fixed cost too.
     let t = Instant::now();
-    SubstateProofGenerator::new(&tx, shard_group, num_preshards(), ProtocolVersion::V1)
+    SubstateProofGenerator::new(&tx, shard_group, num_preshards(), ProtocolVersion::V0)
         .unwrap()
         .generate(&substates[0].to_versioned_substate_id())
         .unwrap()

@@ -45,14 +45,12 @@ impl CommandsCommitProof {
         self.commands().iter().filter_map(|cmd| cmd.command())
     }
 
-    /// The first command the proof carries only by its hash although `shard_group` needs it in full. Only a proof of
-    /// a block proposed from [`ProtocolVersion::V3`], whose leaves authenticate the shard groups, can show this.
-    pub fn withheld_command_for(&self, shard_group: ShardGroup) -> Option<&TrimmedCommand> {
+    /// The first command the proof carries only by its hash although `shard_group` needs it in full. The command's
+    /// leaf authenticates the shard groups it names, so a proof that withholds a command cannot hide it.
+    pub fn withheld_command_for(&self, shard_group: ShardGroup) -> Option<&PrunedCommand> {
         self.commands().iter().find_map(|cmd| match cmd {
-            CommandOrHash::Trimmed(trimmed) if trimmed.full_command_shard_groups.contains(&shard_group) => {
-                Some(trimmed)
-            },
-            CommandOrHash::Command(_) | CommandOrHash::Hash(_) | CommandOrHash::Trimmed(_) => None,
+            CommandOrHash::Pruned(pruned) if pruned.full_command_shard_groups.contains(&shard_group) => Some(pruned),
+            CommandOrHash::Command(_) | CommandOrHash::Pruned(_) => None,
         })
     }
 
@@ -168,12 +166,7 @@ impl CommandsCommitProofV1 {
         let command_hashes = self
             .commands
             .iter()
-            .map(|cmd| {
-                cmd.merkle_leaf(protocol_version)
-                    .map(|leaf| TreeHash::new(leaf.into_array()))
-                    .ok_or(ForeignProposalCommitProofError::CommandFormNotInProtocolVersion { protocol_version })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|cmd| TreeHash::new(cmd.merkle_leaf(protocol_version).into_array()));
         let root_hash = compute_merkle_root_for_hashes(command_hashes)?;
         if FixedHash::from(root_hash.into_array()) != self.commit_proof.header.command_merkle_root {
             return Err(ForeignProposalCommitProofError::InvalidCommandMerkleRoot {
@@ -247,18 +240,9 @@ pub enum CommandOrHash {
     /// The full command data
     #[n(0)]
     Command(#[n(0)] Command),
-    /// A hash of a command, which is its merkle leaf. Only a proof of a block proposed before
-    /// [`ProtocolVersion::V3`] carries this form.
+    /// A command pruned from the proof, carried by its hash and the shard groups the proof must carry it in full for.
     #[n(1)]
-    Hash(
-        #[n(0)]
-        #[cbor(with = "tari_bor::adapters::serde_bridge")]
-        FixedHash,
-    ),
-    /// A command the proof does not carry in full. Only a proof of a block proposed from [`ProtocolVersion::V3`]
-    /// carries this form.
-    #[n(2)]
-    Trimmed(#[n(0)] TrimmedCommand),
+    Pruned(#[n(0)] PrunedCommand),
 }
 
 impl CommandOrHash {
@@ -270,17 +254,14 @@ impl CommandOrHash {
             return Self::Command(command.clone());
         }
         match protocol_version {
-            ProtocolVersion::V0 | ProtocolVersion::V1 | ProtocolVersion::V2 => {
-                Self::Hash(command.hash(protocol_version))
-            },
-            ProtocolVersion::V3 => match command {
+            ProtocolVersion::V0 => match command {
                 Command::EndEpoch(_) => Self::Command(command.clone()),
                 Command::LocalOnly(_) |
                 Command::LocalPrepare(_) |
                 Command::LocalAccept(_) |
                 Command::AllAccept(_) |
                 Command::SomeAccept(_) |
-                Command::ForeignProposal(_) => Self::Trimmed(TrimmedCommand {
+                Command::ForeignProposal(_) => Self::Pruned(PrunedCommand {
                     hash: command.hash(protocol_version),
                     full_command_shard_groups,
                 }),
@@ -288,16 +269,12 @@ impl CommandOrHash {
         }
     }
 
-    /// The entry's leaf in the command merkle root of a block proposed under `protocol_version`, or `None` if a proof
-    /// of such a block cannot carry an entry of this form.
-    pub fn merkle_leaf(&self, protocol_version: ProtocolVersion) -> Option<FixedHash> {
+    /// The entry's leaf in the command merkle root of a block proposed under `protocol_version`.
+    pub fn merkle_leaf(&self, protocol_version: ProtocolVersion) -> FixedHash {
         match (self, protocol_version) {
-            (Self::Command(cmd), _) => Some(cmd.merkle_leaf(protocol_version)),
-            (Self::Hash(hash), ProtocolVersion::V0 | ProtocolVersion::V1 | ProtocolVersion::V2) => Some(*hash),
-            (Self::Hash(_), ProtocolVersion::V3) => None,
-            (Self::Trimmed(_), ProtocolVersion::V0 | ProtocolVersion::V1 | ProtocolVersion::V2) => None,
-            (Self::Trimmed(trimmed), ProtocolVersion::V3) => {
-                Some(command_leaf(&trimmed.hash, &trimmed.full_command_shard_groups))
+            (Self::Command(cmd), _) => cmd.merkle_leaf(protocol_version),
+            (Self::Pruned(pruned), ProtocolVersion::V0) => {
+                command_leaf(&pruned.hash, &pruned.full_command_shard_groups)
             },
         }
     }
@@ -305,14 +282,14 @@ impl CommandOrHash {
     pub fn command(&self) -> Option<&Command> {
         match self {
             Self::Command(cmd) => Some(cmd),
-            Self::Hash(_) | Self::Trimmed(_) => None,
+            Self::Pruned(_) => None,
         }
     }
 
     pub fn into_command(self) -> Option<Command> {
         match self {
             Self::Command(cmd) => Some(cmd),
-            Self::Hash(_) | Self::Trimmed(_) => None,
+            Self::Pruned(_) => None,
         }
     }
 }
@@ -321,7 +298,7 @@ impl CommandOrHash {
 /// for. The merkle leaf commits to both, so a proof that names a shard group here withholds a command that shard group
 /// needs.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Encode, Decode, CborLen)]
-pub struct TrimmedCommand {
+pub struct PrunedCommand {
     #[n(0)]
     #[cbor(with = "tari_bor::adapters::serde_bridge")]
     pub hash: FixedHash,
@@ -382,7 +359,7 @@ mod tests {
                     proposed_by: CompressedPublicKey::default(),
                     state_merkle_root: FixedHash::zero(),
                     command_merkle_root,
-                    transaction_merkle_root: None,
+                    transaction_merkle_root: FixedHash::zero(),
                     signature: ValidatorBlockSignature::new(
                         CompressedPublicKey::default(),
                         RistrettoSecretKey::default(),
@@ -441,7 +418,7 @@ mod tests {
         proof
     }
 
-    fn withheld_command_for(proof: &CommandsCommitProofV1, shard_group: ShardGroup) -> Option<TrimmedCommand> {
+    fn withheld_command_for(proof: &CommandsCommitProofV1, shard_group: ShardGroup) -> Option<PrunedCommand> {
         CommandsCommitProof::V1(proof.clone())
             .withheld_command_for(shard_group)
             .cloned()
@@ -457,7 +434,7 @@ mod tests {
             (uninvolved_group(), &[][..]),
         ];
         for (shard_group, needed) in cases {
-            let proof = honest_proof(ProtocolVersion::V3, shard_group);
+            let proof = honest_proof(ProtocolVersion::V0, shard_group);
             proof.validate_command_merkle_root().unwrap();
             assert_eq!(withheld_command_for(&proof, shard_group), None, "{shard_group}");
             for index in needed {
@@ -467,30 +444,30 @@ mod tests {
     }
 
     #[test]
-    fn a_proof_that_trims_a_needed_command_names_the_shard_group_it_withholds_it_from() {
+    fn a_proof_that_prunes_a_needed_command_names_the_shard_group_it_withholds_it_from() {
         let local_accept = &commands()[1];
-        let trimmed = CommandOrHash::Trimmed(TrimmedCommand {
-            hash: local_accept.hash(ProtocolVersion::V3),
+        let pruned = CommandOrHash::Pruned(PrunedCommand {
+            hash: local_accept.hash(ProtocolVersion::V0),
             full_command_shard_groups: local_accept.full_command_shard_groups(),
         });
-        let proof = with_entry(honest_proof(ProtocolVersion::V3, output_group()), 1, trimmed);
+        let proof = with_entry(honest_proof(ProtocolVersion::V0, output_group()), 1, pruned);
 
         proof.validate_command_merkle_root().unwrap();
         assert_eq!(
             withheld_command_for(&proof, output_group()).map(|t| t.hash),
-            Some(local_accept.hash(ProtocolVersion::V3))
+            Some(local_accept.hash(ProtocolVersion::V0))
         );
     }
 
     #[test]
-    fn a_trimmed_command_that_leaves_out_a_shard_group_does_not_authenticate() {
+    fn a_pruned_command_that_leaves_out_a_shard_group_does_not_authenticate() {
         let local_accept = &commands()[1];
         for full_command_shard_groups in [vec![input_group()], vec![], vec![output_group(), input_group()]] {
-            let trimmed = CommandOrHash::Trimmed(TrimmedCommand {
-                hash: local_accept.hash(ProtocolVersion::V3),
+            let pruned = CommandOrHash::Pruned(PrunedCommand {
+                hash: local_accept.hash(ProtocolVersion::V0),
                 full_command_shard_groups: full_command_shard_groups.clone(),
             });
-            let proof = with_entry(honest_proof(ProtocolVersion::V3, output_group()), 1, trimmed);
+            let proof = with_entry(honest_proof(ProtocolVersion::V0, output_group()), 1, pruned);
             assert!(
                 matches!(
                     proof.validate_command_merkle_root(),
@@ -502,46 +479,14 @@ mod tests {
     }
 
     #[test]
-    fn a_v3_proof_carrying_a_bare_hash_does_not_authenticate() {
-        let local_accept = &commands()[1];
-        // Neither the leaf nor the command hash authenticates as a bare hash entry, since either would name no shard
-        // group
-        for hash in [
-            local_accept.merkle_leaf(ProtocolVersion::V3),
-            local_accept.hash(ProtocolVersion::V3),
-        ] {
-            let proof = with_entry(
-                honest_proof(ProtocolVersion::V3, output_group()),
-                1,
-                CommandOrHash::Hash(hash),
-            );
-            assert!(matches!(
-                proof.validate_command_merkle_root(),
-                Err(ForeignProposalCommitProofError::CommandFormNotInProtocolVersion { .. })
-            ));
-        }
-    }
-
-    #[test]
     fn an_end_epoch_command_keeps_its_bare_hash_leaf_and_is_carried_in_full() {
         let end_epoch = &commands()[3];
         assert_eq!(
-            end_epoch.merkle_leaf(ProtocolVersion::V3),
-            end_epoch.hash(ProtocolVersion::V3)
+            end_epoch.merkle_leaf(ProtocolVersion::V0),
+            end_epoch.hash(ProtocolVersion::V0)
         );
-        let proof = honest_proof(ProtocolVersion::V3, uninvolved_group());
+        let proof = honest_proof(ProtocolVersion::V0, uninvolved_group());
         assert_eq!(proof.commands[3], CommandOrHash::Command(end_epoch.clone()));
-    }
-
-    #[test]
-    fn a_pre_v3_proof_trims_to_the_bare_hash() {
-        for protocol_version in [ProtocolVersion::V0, ProtocolVersion::V1, ProtocolVersion::V2] {
-            let proof = honest_proof(protocol_version, uninvolved_group());
-            proof.validate_command_merkle_root().unwrap();
-            for (entry, command) in proof.commands.iter().zip(commands()) {
-                assert_eq!(*entry, CommandOrHash::Hash(command.hash(protocol_version)));
-            }
-        }
     }
 }
 
@@ -553,8 +498,6 @@ pub enum ForeignProposalCommitProofError {
     InvalidCommandMerkleRoot { calculated: TreeHash, expected: FixedHash },
     #[error("Foreign proposal block: {0}")]
     UnknownProtocolVersion(#[from] UnknownProtocolVersionError),
-    #[error("The commit proof carries a command in a form that a proof of a {protocol_version} block cannot carry")]
-    CommandFormNotInProtocolVersion { protocol_version: ProtocolVersion },
     #[error("Sidechain Proof Validation Error: {0}")]
     SidechainProofValidationError(#[from] SidechainProofValidationError),
     #[error("The foreign proposal was invalid: {0}")]

@@ -96,9 +96,6 @@ impl BlockPledge {
 
     /// The pledge for `substate_id` if it is the version and value that the evidence commits to. The pledge values
     /// travel outside the commit proof, so the evidence's value hash is the only thing that authenticates them.
-    ///
-    /// Before [`ProtocolVersion::V2`] the command hash does not cover the value hash, so a pledge is matched on its
-    /// version alone.
     fn get_committed_pledge(
         &self,
         protocol_version: ProtocolVersion,
@@ -110,18 +107,18 @@ impl BlockPledge {
             return None;
         }
         match protocol_version {
-            ProtocolVersion::V0 | ProtocolVersion::V1 => return Some(substate),
-            ProtocolVersion::V2 | ProtocolVersion::V3 => {},
-        }
-        let committed_hash = ev.pledged_value_hash?;
-        if hash_pledged_substate_value(substate.substate_value()) != committed_hash {
-            debug!(
-                target: LOG_TARGET,
-                "Pledged value for {} v{} does not match the value hash in the evidence",
-                substate_id,
-                ev.version,
-            );
-            return None;
+            ProtocolVersion::V0 => {
+                let committed_hash = ev.pledged_value_hash?;
+                if hash_pledged_substate_value(substate.substate_value()) != committed_hash {
+                    debug!(
+                        target: LOG_TARGET,
+                        "Pledged value for {} v{} does not match the value hash in the evidence",
+                        substate_id,
+                        ev.version,
+                    );
+                    return None;
+                }
+            },
         }
         Some(substate)
     }
@@ -372,7 +369,7 @@ mod tests {
         // Outputs are not applicable and are ignored
         evidence.insert(id3.substate_id().clone(), id3.version(), SubstateLockType::Output, None);
 
-        assert!(pledge.has_all_input_substate_values_for(ProtocolVersion::V2, &evidence));
+        assert!(pledge.has_all_input_substate_values_for(ProtocolVersion::V0, &evidence));
 
         evidence.insert(
             id3.substate_id().clone(),
@@ -380,7 +377,7 @@ mod tests {
             SubstateLockType::Write,
             Some(hash_pledged_substate_value(&substate_value(3))),
         );
-        assert!(!pledge.has_all_input_substate_values_for(ProtocolVersion::V2, &evidence));
+        assert!(!pledge.has_all_input_substate_values_for(ProtocolVersion::V0, &evidence));
     }
 
     #[test]
@@ -394,9 +391,9 @@ mod tests {
 
         let mut honest = BlockPledge::new();
         honest.add_substate_pledge(id.substate_id().clone(), id.version(), locked_value.clone());
-        assert!(honest.has_all_input_substate_values_for(ProtocolVersion::V2, &evidence));
+        assert!(honest.has_all_input_substate_values_for(ProtocolVersion::V0, &evidence));
         let pledges = honest
-            .get_all_pledges_for_evidence(ProtocolVersion::V2, &evidence)
+            .get_all_pledges_for_evidence(ProtocolVersion::V0, &evidence)
             .unwrap();
         let (_, value) = pledges.into_iter().next().unwrap().into_input().unwrap();
         assert_eq!(
@@ -407,31 +404,12 @@ mod tests {
         // Same substate and version, different value
         let mut substituted = BlockPledge::new();
         substituted.add_substate_pledge(id.substate_id().clone(), id.version(), substate_value(2));
-        assert!(!substituted.has_all_input_substate_values_for(ProtocolVersion::V2, &evidence));
+        assert!(!substituted.has_all_input_substate_values_for(ProtocolVersion::V0, &evidence));
         assert!(
             substituted
-                .get_all_pledges_for_evidence(ProtocolVersion::V2, &evidence)
+                .get_all_pledges_for_evidence(ProtocolVersion::V0, &evidence)
                 .is_none()
         );
-    }
-
-    #[test]
-    fn a_pledge_is_matched_on_version_alone_before_v2() {
-        let id = create_substate_id(1);
-        let mut evidence = ShardGroupEvidence::default();
-        evidence.insert(id.substate_id().clone(), id.version(), SubstateLockType::Write, None);
-
-        let mut pledge = BlockPledge::new();
-        pledge.add_substate_pledge(id.substate_id().clone(), id.version(), substate_value(2));
-        for protocol_version in [ProtocolVersion::V0, ProtocolVersion::V1] {
-            assert!(pledge.has_all_input_substate_values_for(protocol_version, &evidence));
-            assert!(
-                pledge
-                    .get_all_pledges_for_evidence(protocol_version, &evidence)
-                    .is_some()
-            );
-        }
-        assert!(!pledge.has_all_input_substate_values_for(ProtocolVersion::V2, &evidence));
     }
 
     #[test]
@@ -443,10 +421,10 @@ mod tests {
 
         let mut pledge = BlockPledge::new();
         pledge.add_substate_pledge(id.substate_id().clone(), id.version(), value);
-        assert!(!pledge.has_all_input_substate_values_for(ProtocolVersion::V2, &evidence));
+        assert!(!pledge.has_all_input_substate_values_for(ProtocolVersion::V0, &evidence));
         assert!(
             pledge
-                .get_all_pledges_for_evidence(ProtocolVersion::V2, &evidence)
+                .get_all_pledges_for_evidence(ProtocolVersion::V0, &evidence)
                 .is_none()
         );
     }

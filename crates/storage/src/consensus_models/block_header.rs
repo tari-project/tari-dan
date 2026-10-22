@@ -119,13 +119,12 @@ pub struct BlockHeader {
     #[n(17)]
     timeout_certificate_id: Option<TcId>,
     /// A Merkle root over the outcome of each transaction this block finalizes, keyed by transaction id (see
-    /// [`FinalizedTransactionLeaf`](super::FinalizedTransactionLeaf)). Present from protocol version 2, where the
-    /// block id commits to it.
-    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
-    #[serde(default, with = "ootle_serde::hex::option")]
+    /// [`FinalizedTransactionLeaf`](super::FinalizedTransactionLeaf)). The block id commits to it.
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[serde(with = "ootle_serde::hex")]
     #[n(18)]
     #[cbor(with = "tari_bor::adapters::serde_bridge")]
-    transaction_merkle_root: Option<FixedHash>,
+    transaction_merkle_root: FixedHash,
 }
 
 impl BlockHeader {
@@ -282,7 +281,11 @@ impl BlockHeader {
             accumulated_data: ShardGroupAccumulatedData::default(),
             extra_data: ExtraData::new(),
             timeout_certificate_id: None,
-            transaction_merkle_root: None,
+            transaction_merkle_root: BlockHeader::compute_transaction_merkle_root(
+                ProtocolVersion::at(network, Epoch::zero()),
+                &BlockCommands::empty(),
+            )
+            .expect("compute_transaction_merkle_root is infallible for empty commands"),
         }
     }
 
@@ -419,10 +422,7 @@ impl BlockHeader {
         // This selection must stay identical to `tari_sidechain::SidechainBlockHeader::calculate_hash`, which hashes
         // the header a commit proof carries to the block ID its committee signed.
         let fields = match self.protocol_version {
-            protocol_version @ (ProtocolVersion::V0 |
-            ProtocolVersion::V1 |
-            ProtocolVersion::V2 |
-            ProtocolVersion::V3) => BlockHeaderHashFields::V1(BlockHeaderHashFieldsV1 {
+            protocol_version @ ProtocolVersion::V0 => BlockHeaderHashFields::V1(BlockHeaderHashFieldsV1 {
                 network: self.network.as_byte(),
                 protocol_version: protocol_version.as_u32(),
                 justify_id: self.justify_id.hash(),
@@ -434,7 +434,7 @@ impl BlockHeader {
                 state_merkle_root: &self.state_merkle_root,
                 command_merkle_root: &self.command_merkle_root,
                 accumulated_data: &accumulated_data,
-                transaction_merkle_root: self.transaction_merkle_root.as_ref(),
+                transaction_merkle_root: &self.transaction_merkle_root,
                 metadata_hash: &metadata_hash,
             }),
         };
@@ -544,8 +544,8 @@ impl BlockHeader {
         &self.command_merkle_root
     }
 
-    pub fn transaction_merkle_root(&self) -> Option<&FixedHash> {
-        self.transaction_merkle_root.as_ref()
+    pub fn transaction_merkle_root(&self) -> &FixedHash {
+        &self.transaction_merkle_root
     }
 
     pub fn is_dummy(&self) -> bool {
@@ -625,16 +625,15 @@ impl BlockHeader {
         Ok(FixedHash::from(hash.into_array()))
     }
 
-    /// The root over the transactions `commands` finalize, which a header carries from protocol version 2.
+    /// The root over the transactions `commands` finalize, which a header carries.
     pub fn compute_transaction_merkle_root(
         protocol_version: ProtocolVersion,
         commands: &BlockCommands,
-    ) -> Result<Option<FixedHash>, BlockError> {
+    ) -> Result<FixedHash, BlockError> {
         match protocol_version {
-            ProtocolVersion::V0 | ProtocolVersion::V1 => Ok(None),
-            ProtocolVersion::V2 | ProtocolVersion::V3 => {
+            ProtocolVersion::V0 => {
                 let root = build_finalized_transaction_tree(commands)?.root();
-                Ok(Some(FixedHash::from(root.into_array())))
+                Ok(FixedHash::from(root.into_array()))
             },
         }
     }
@@ -779,24 +778,11 @@ mod tests {
         .unwrap()
     }
 
-    #[test]
-    fn a_header_without_a_transaction_merkle_root_encodes_as_before_the_field_existed() {
-        let header = header_with_timeout_certificate(ProtocolVersion::V0, Some(TcId::from([4u8; 32])));
-        let bytes = tari_bor::encode(&header).unwrap();
-
-        // Fields 0 to 17, so a header stored before field 18 existed has this shape and decodes to the same header.
-        let len = minicbor::Decoder::new(&bytes).array().unwrap();
-        assert_eq!(len, Some(18));
-        let decoded: BlockHeader = tari_bor::decode(&bytes).unwrap();
-        assert_eq!(decoded.transaction_merkle_root(), None);
-        assert_eq!(decoded.calculate_hash(), header.calculate_hash());
-    }
-
     fn header_with_extra_data(extra_data: ExtraData, timeout_certificate_id: Option<TcId>) -> BlockHeader {
         let shard_group = ShardGroup::all_shards(NumPreshards::P64);
         BlockHeader::create(
             Network::LocalNet,
-            ProtocolVersion::V2,
+            ProtocolVersion::V0,
             BlockId::zero(),
             ProposalCertificate::genesis(Epoch(1), shard_group).calculate_id(),
             timeout_certificate_id,
@@ -831,7 +817,7 @@ mod tests {
     #[test]
     fn the_metadata_preimage_hashes_to_the_header_metadata_hash() {
         for header in [
-            header(ProtocolVersion::V2),
+            header(ProtocolVersion::V0),
             header_with_extra_data(eoe_extra_data(), None),
             header_with_extra_data(eoe_extra_data(), Some(TcId::from([4u8; 32]))),
         ] {
@@ -851,7 +837,7 @@ mod tests {
         assert_eq!(eoe.next_epoch_validator_set_hash(), expected);
         assert_eq!(eoe.metadata().next_epoch_validator_set_hash(), expected);
         assert_eq!(
-            header(ProtocolVersion::V2).metadata().next_epoch_validator_set_hash(),
+            header(ProtocolVersion::V0).metadata().next_epoch_validator_set_hash(),
             None
         );
     }

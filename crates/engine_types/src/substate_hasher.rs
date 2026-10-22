@@ -25,18 +25,12 @@ use crate::{
 #[derive(Debug, Clone, Copy, borsh::BorshSerialize)]
 pub enum SubstateHashMessage<'a> {
     V0(SubstateValueHashMessage<'a>),
-    V1(SubstateValueHashMessage<'a>),
-    V2(SubstateValueHashMessage<'a>),
-    V3(SubstateValueHashMessage<'a>),
 }
 
 impl<'a> SubstateHashMessage<'a> {
     pub fn new(protocol_version: ProtocolVersion, value: &'a SubstateValue) -> Self {
         match protocol_version {
             ProtocolVersion::V0 => Self::V0(value.into()),
-            ProtocolVersion::V1 => Self::V1(value.into()),
-            ProtocolVersion::V2 => Self::V2(value.into()),
-            ProtocolVersion::V3 => Self::V3(value.into()),
         }
     }
 }
