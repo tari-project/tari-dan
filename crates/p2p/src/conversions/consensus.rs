@@ -801,9 +801,6 @@ impl TryFrom<proto::consensus::Command> for Command {
             proto::consensus::command::Command::ForeignProposal(foreign_proposal) => {
                 Command::ForeignProposal(foreign_proposal.try_into()?)
             },
-            proto::consensus::command::Command::EvictNode(_) => {
-                return Err(anyhow!("EvictNode command is no longer supported"));
-            },
             proto::consensus::command::Command::EndEpoch(atom) => Command::EndEpoch(atom.try_into()?),
         })
     }

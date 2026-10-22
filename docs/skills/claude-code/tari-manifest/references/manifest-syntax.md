@@ -252,7 +252,7 @@ MyTemplate::create([1u8, 2u8], [], [["a"], [amount!(3), None, TARI]]);
 
 ### TARI
 
-Constant representing the native Tari token resource address. Use `TARI` in all new manifests. `XTR` is a deprecated alias that still works but should not be used.
+Constant representing the native Tari token resource address.
 
 ```rust
 let bucket = account.withdraw(TARI, 1000);

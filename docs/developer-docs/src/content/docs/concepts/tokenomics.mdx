@@ -48,12 +48,10 @@ Being a stealth resource, TARI does not live in vaults — it exists as UTXOs wi
 one-time addresses, which is why network fees are paid via a revealed output (see
 <a href={basePath("/concepts/privacy/")}>Privacy</a>).
 
-<Aside type="caution">
-`XTR` and `ONE_XTR` are **deprecated aliases** (`#[deprecated(since = "0.24.5", note = "Use
-TARI_TOKEN instead")]`). They still resolve, but new code should use **`TARI_TOKEN`** for the resource
-and **`TARI`** for the unit, and refer to the token as **TARI**. The faucet constants
-(`XTR_FAUCET_*`) and the built-in template name `XtrFaucet` are *not* deprecated — they retain their
-historical spelling.
+<Aside type="note">
+Use **`TARI_TOKEN`** for the resource and **`TARI`** for the unit, and refer to the token as **TARI**.
+The faucet constants (`XTR_FAUCET_*`) and the built-in template name `XtrFaucet` keep their historical
+spelling.
 </Aside>
 
 ---
@@ -261,7 +259,7 @@ the only rate limiting present is an unrelated wallet API-key limit.
 ## Summary
 
 - The L2 native token is **TARI**, a **stealth** resource addressed by `TARI_TOKEN` /
-  `STEALTH_TARI_RESOURCE_ADDRESS`; `XTR`/`ONE_XTR` are deprecated aliases.
+  `STEALTH_TARI_RESOURCE_ADDRESS`.
 - Divisibility is 6; `1 TARI = 1_000_000` microtari.
 - Value enters by **burning a base-layer coin and claiming an L2 UTXO** — a strictly **one-way**
   bridge with no peg-out.

@@ -67,7 +67,7 @@ pub enum ConfigKey {
     Network,
     /// The cipher seed used to encrypt the wallet. type: Vec<u8>
     CipherSeed,
-    /// The indexer URLs the wallet may use. type: Vec<Url>, or a single Url as stored by earlier versions
+    /// The indexer URLs the wallet may use. type: Vec<Url>
     IndexerUrls,
     /// Indicates whether the wallet needs to be recovered. type: bool
     RecoveryNeeded,

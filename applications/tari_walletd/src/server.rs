@@ -182,7 +182,7 @@ async fn handler(
             "get" => call_handler(context, value, token, transaction::handle_get).await,
             "get_result" => call_handler(context, value, token, transaction::handle_get_result).await,
             "wait_result" => call_handler(context, value, token, transaction::handle_wait_result).await,
-            "list" | "get_all" => call_handler(context, value, token, transaction::handle_get_all).await,
+            "list" => call_handler(context, value, token, transaction::handle_list).await,
             _ => value.method_not_found(&value.method).into_response(),
         },
         Some(("transaction_requests", method)) => match method {

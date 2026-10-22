@@ -33,7 +33,7 @@ invariants, the reason for a non-obvious approach, tricky edge cases. They must 
 ### Token Amounts
 
 - All amounts in code/manifests are in **microtari**: 1 TARI = 1,000,000 microtari
-- In manifests, use `TARI` as the resource identifier (not `XTR`, which is deprecated)
+- In manifests, use `TARI` as the resource identifier
 - User-facing: use **tTARI** (testnet) or **$TARI** (mainnet)
 
 ### Transaction Manifests

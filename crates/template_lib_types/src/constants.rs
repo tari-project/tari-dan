@@ -53,13 +53,9 @@ pub const STEALTH_TARI_RESOURCE_ADDRESS: ResourceAddress =
 
 /// Shorthand version of the `STEALTH_TARI_RESOURCE_ADDRESS` constant
 pub const TARI_TOKEN: ResourceAddress = STEALTH_TARI_RESOURCE_ADDRESS;
-#[deprecated(since = "0.24.5", note = "Use TARI_TOKEN instead")]
-pub const XTR: ResourceAddress = STEALTH_TARI_RESOURCE_ADDRESS;
-/// One XTR in the smallest divisible units i.e. 1 TARI = 1,000,000 micro TARI
+/// One TARI in the smallest divisible units i.e. 1 TARI = 1,000,000 micro TARI
 /// For example: 10 * TARI = 10 TARI = 10,000,000 micro TARI
 pub const TARI: u64 = 1_000_000;
-#[deprecated(since = "0.24.5", note = "Use TARI instead")]
-pub const ONE_XTR: u64 = TARI;
 
 /// Address of testnet faucet component
 pub const XTR_FAUCET_COMPONENT_ADDRESS: ComponentAddress = ComponentAddress::new(ObjectKey::from_array([

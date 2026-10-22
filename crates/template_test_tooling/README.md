@@ -12,7 +12,7 @@ required.
 
 ```rust
 use tari_ootle_transaction::{Transaction, args};
-use tari_template_lib_types::constants::XTR;
+use tari_template_lib_types::constants::TARI_TOKEN;
 use tari_template_test_tooling::TemplateTest;
 
 #[test]
@@ -20,13 +20,13 @@ fn transfer_between_accounts() {
     // Compiles and loads the template from the current crate (i.e. template located at ./src, test located at ./tests)
     let mut test = TemplateTest::my_crate();
 
-    // Create two funded accounts (each receives XTR from the built-in faucet)
+    // Create two funded accounts (each receives TARI from the built-in faucet)
     let (sender, sender_proof, sender_secret) = test.create_funded_account();
     let (receiver, _, _) = test.create_empty_account();
 
     test.execute_expect_success(
         test.transaction()
-            .call_method(sender, "withdraw", args![XTR, 100])
+            .call_method(sender, "withdraw", args![TARI_TOKEN, 100])
             .put_last_instruction_output_on_workspace("bucket")
             .call_method(receiver, "deposit", args![Workspace("bucket")])
             .finish()
