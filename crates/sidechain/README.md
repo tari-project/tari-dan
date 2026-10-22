@@ -8,8 +8,9 @@ Types and verification for Tari Ootle sidechain proofs, shared by Ootle and the 
 - Commit proofs, which prove that a command (such as an end of epoch) was committed by an Ootle validator committee.
 - Burn claim proofs, which Minotari wallets build for funds burnt on the base layer and Ootle verifies to mint them.
 
-Apart from `tari_hashing` and `tari_jellyfish`, it depends on no Minotari or Ootle crates, so either side can depend
-on it.
+Apart from `tari_jellyfish`, it depends on no Minotari or Ootle crates, so either side can depend on it. It does not
+depend on `tari_hashing`, so Minotari can publish pre-releases of that crate without breaking its own dependency on
+this one.
 
 ## Key types
 
