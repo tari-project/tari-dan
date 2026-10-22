@@ -21,6 +21,7 @@ mod on_receive_request_missing_transactions;
 mod on_receive_vote;
 // mod on_sync_response;
 mod block_change_set;
+mod command_derivation;
 pub mod commit_proofs;
 mod epoch_end_drain;
 mod epoch_gc;

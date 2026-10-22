@@ -31,6 +31,7 @@ use crate::{
         abort_if_local_prepared_expired,
         abort_local_prepared_for_epoch_end,
         block_change_set::ProposedBlockChangeSet,
+        command_derivation::{DerivedCommand, derive_local_only_command, local_only_disagreement},
         error::HotStuffError,
         filter_diff_for_committee,
         local_pledged_inputs,
@@ -39,7 +40,6 @@ use crate::{
         transaction_manager::{
             ConsensusTransactionManager,
             EvidenceOrExecution,
-            LocalPreparedTransaction,
             PledgedTransaction,
             PreparedTransaction,
         },
@@ -111,9 +111,8 @@ where
                 expected: TransactionPoolStage::New,
             }));
         }
-        let locked_epoch = block.to_locked_epoch();
         // LocalOnly so we can lock the epoch here
-        pool_tx.update_locked_epoch(locked_epoch.clone());
+        pool_tx.update_locked_epoch(block.to_locked_epoch());
 
         let prepared = self
             .transaction_manager
@@ -126,176 +125,8 @@ where
             )
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
 
-        match prepared {
-            PreparedTransaction::LocalOnly(local) => {
-                match *local {
-                    LocalPreparedTransaction::Accept { execution, .. } => {
-                        pool_tx
-                            .set_local_decision(execution.decision())
-                            .set_transaction_fee(execution.transaction_fee())
-                            .set_exhaust_burn(execution.exhaust_burn())
-                            .set_evidence(execution.to_evidence(
-                                local_committee_info.num_preshards(),
-                                local_committee_info.num_committees(),
-                            ));
-
-                        info!(
-                            target: LOG_TARGET,
-                            "👨‍🔧 LocalOnly: Prepare for transaction {} ({}) in block {}",
-                            pool_tx.id(),
-                            pool_tx.current_decision(),
-                            block,
-                        );
-
-                        // If the leader proposed to commit a transaction that we want to abort, we abstain from voting
-                        if pool_tx.current_decision() != atom.decision {
-                            // If we disagree with any local decision we abstain from voting
-                            warn!(
-                                target: LOG_TARGET,
-                                "❌ Prepare decision disagreement for tx {} in block {}. Leader proposed {}, we decided {}",
-                                pool_tx.id(),
-                                block,
-                                atom.decision,
-                                pool_tx.current_decision()
-                            );
-                            return Ok(Some(NoVoteReason::DecisionDisagreement {
-                                local: pool_tx.current_decision(),
-                                remote: atom.decision,
-                            }));
-                        }
-
-                        if pool_tx.transaction_fee() != atom.transaction_fee {
-                            warn!(
-                                target: LOG_TARGET,
-                                "❌ LocalOnly transaction fee disagreement for block {}. Leader proposed {}, we calculated {}",
-                                block,
-                                atom.transaction_fee,
-                                pool_tx.transaction_fee()
-                            );
-                            return Ok(Some(NoVoteReason::FeeDisagreement));
-                        }
-
-                        if pool_tx.current_decision().is_commit() {
-                            if let Some(diff) = execution.result().finalize.any_accept() &&
-                                let Err(err) = substate_store.put_diff(diff)
-                            {
-                                // An honest proposer skips a transaction whose diff fails to apply with a lock
-                                // failure, so a block that sequences one must not be voted for. Any other store
-                                // error is fatal.
-                                let lock_err = err.ok_lock_failed()?;
-                                warn!(
-                                    target: LOG_TARGET,
-                                    "❌ LocalOnly transaction {} in block {} has a state diff that does not apply, which an honest proposer skips: {}. Not voting on block.",
-                                    pool_tx.id(),
-                                    block,
-                                    lock_err,
-                                );
-                                return Ok(Some(NoVoteReason::ConflictingTransactionProposed {
-                                    transaction_id: *pool_tx.id(),
-                                    details: lock_err.to_string(),
-                                }));
-                            }
-
-                            if atom.leader_fee.is_none() {
-                                warn!(
-                                    target: LOG_TARGET,
-                                    "❌ Leader fee for tx {} is None for LocalOnly command in block {}",
-                                    atom.id,
-                                    block,
-                                );
-                                return Ok(Some(NoVoteReason::NoLeaderFee));
-                            }
-
-                            let calculated_leader_fee =
-                                pool_tx.calculate_leader_fee(NonZeroU64::new(1).expect("1 > 0"));
-                            if calculated_leader_fee != *atom.leader_fee.as_ref().expect("None already checked") {
-                                warn!(
-                                    target: LOG_TARGET,
-                                    "❌ LocalOnly leader fee disagreement for block {}. Leader proposed {}, we calculated {}",
-                                    block,
-                                    atom.leader_fee.as_ref().expect("None already checked"),
-                                    calculated_leader_fee
-                                );
-
-                                return Ok(Some(NoVoteReason::LeaderFeeDisagreement));
-                            }
-
-                            *total_leader_fee =
-                                total_leader_fee
-                                    .checked_add(calculated_leader_fee.fee())
-                                    .ok_or_else(|| {
-                                        HotStuffError::InvariantError(
-                                            "Leader fee overflow when summing for block".to_string(),
-                                        )
-                                    })?;
-                            // A LocalOnly transaction's evidence must contain exactly the local shard group, so its
-                            // portion of the exhaust burn is the entire burn.
-                            if pool_tx.evidence().num_shard_groups() != 1 {
-                                warn!(
-                                    target: LOG_TARGET,
-                                    "❌ NO VOTE: LocalOnly transaction {} in block {} has evidence for {} shard groups",
-                                    pool_tx.id(),
-                                    block,
-                                    pool_tx.evidence().num_shard_groups(),
-                                );
-                                return Ok(Some(NoVoteReason::LocalOnlyProposedForMultiShard));
-                            }
-                            let Some(exhaust_burn_portion) = pool_tx.evidence().exhaust_burn_portion(
-                                calculated_leader_fee.exhaust_burn(),
-                                local_committee_info.shard_group(),
-                            ) else {
-                                warn!(
-                                    target: LOG_TARGET,
-                                    "❌ NO VOTE: local shard group {} is not in the evidence for LocalOnly transaction {} in block {}",
-                                    local_committee_info.shard_group(),
-                                    pool_tx.id(),
-                                    block,
-                                );
-                                return Ok(Some(NoVoteReason::InvalidEvidence {
-                                    reason: InvalidEvidenceReason::MissingInvolvedShardGroup {
-                                        shard_group: local_committee_info.shard_group(),
-                                    },
-                                }));
-                            };
-                            *total_exhaust_burn += u128::from(exhaust_burn_portion);
-                        }
-
-                        proposed_block_change_set.add_transaction_execution(*pool_tx.id(), execution)?;
-                    },
-                    LocalPreparedTransaction::EarlyAbort { execution, .. } => {
-                        if atom.decision.is_commit() {
-                            warn!(
-                                target: LOG_TARGET,
-                                "❌ Failed to lock inputs/outputs for transaction {} but leader proposed COMMIT. Not voting for block {}",
-                                pool_tx.id(),
-                                block,
-                            );
-                            return Ok(Some(NoVoteReason::DecisionDisagreement {
-                                local: Decision::Abort(AbortReason::LockInputsOutputsFailed),
-                                remote: Decision::Commit,
-                            }));
-                        }
-
-                        // They want to ABORT a successfully executed transaction because of a lock conflict, which
-                        // we also have.
-                        info!(
-                            target: LOG_TARGET,
-                            "⚠️ Proposer chose to ABORT and we chose to ABORT due to lock conflict for transaction {} in block {}",
-                            block,
-                            pool_tx.id(),
-                        );
-                        pool_tx
-                            .set_local_decision(execution.decision())
-                            .set_transaction_fee(execution.transaction_fee())
-                            .set_exhaust_burn(execution.exhaust_burn())
-                            .set_evidence(execution.to_evidence(
-                                local_committee_info.num_preshards(),
-                                local_committee_info.num_committees(),
-                            ));
-                        proposed_block_change_set.add_transaction_execution(*pool_tx.id(), execution)?;
-                    },
-                }
-            },
+        let local = match prepared {
+            PreparedTransaction::LocalOnly(local) => *local,
             PreparedTransaction::PledgeBudgetReached { .. } => {
                 return Err(HotStuffError::InvariantError(format!(
                     "Transaction {} in block {} was deferred for the pledge budget, which only a proposing store has",
@@ -319,10 +150,71 @@ where
                 );
                 return Ok(Some(NoVoteReason::LocalOnlyProposedForMultiShard));
             },
+        };
+
+        let derived = match derive_local_only_command(pool_tx, local, local_committee_info) {
+            Ok(derived) => derived,
+            Err(refusal) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "❌ NO VOTE: LocalOnly transaction {} in block {} cannot be sequenced: {refusal}",
+                    atom.id(),
+                    block,
+                );
+                return Ok(Some(refusal.into()));
+            },
+        };
+        info!(
+            target: LOG_TARGET,
+            "👨‍🔧 LocalOnly: Prepare for transaction {} ({}) in block {}",
+            atom.id(),
+            derived.atom.decision,
+            block,
+        );
+
+        if let Some(reason) = local_only_disagreement(&derived.atom, atom) {
+            warn!(
+                target: LOG_TARGET,
+                "❌ NO VOTE: {reason} for LocalOnly transaction {} in block {}. Leader proposed {atom}, we derived {}",
+                atom.id(),
+                block,
+                derived.atom,
+            );
+            return Ok(Some(reason));
         }
 
-        pool_tx.set_next_stage_and_readiness(TransactionPoolStage::LocalOnly, block.shard_group())?;
-        proposed_block_change_set.set_next_transaction_update(pool_tx)?;
+        if let Some(diff) = derived.committed_diff() &&
+            let Err(err) = substate_store.put_diff(diff)
+        {
+            // An honest proposer skips a transaction whose diff fails to apply with a lock failure, so a block that
+            // sequences one must not be voted for. Any other store error is fatal.
+            let lock_err = err.ok_lock_failed()?;
+            warn!(
+                target: LOG_TARGET,
+                "❌ LocalOnly transaction {} in block {} has a state diff that does not apply, which an honest proposer skips: {}. Not voting on block.",
+                atom.id(),
+                block,
+                lock_err,
+            );
+            return Ok(Some(NoVoteReason::ConflictingTransactionProposed {
+                transaction_id: *atom.id(),
+                details: lock_err.to_string(),
+            }));
+        }
+
+        *total_leader_fee = total_leader_fee
+            .checked_add(derived.leader_fee)
+            .ok_or_else(|| HotStuffError::InvariantError("Leader fee overflow when summing for block".to_string()))?;
+        *total_exhaust_burn += u128::from(derived.exhaust_burn);
+
+        let DerivedCommand {
+            mut pool_record,
+            execution,
+            ..
+        } = derived;
+        proposed_block_change_set.add_transaction_execution(*pool_record.id(), execution)?;
+        pool_record.set_next_stage_and_readiness(TransactionPoolStage::LocalOnly, block.shard_group())?;
+        proposed_block_change_set.set_next_transaction_update(pool_record)?;
         Ok(None)
     }
 
