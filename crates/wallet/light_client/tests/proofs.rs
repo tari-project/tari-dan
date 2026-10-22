@@ -12,7 +12,7 @@ use tari_engine_types::{
     transaction_receipt::{DiffSummary, FinalizeOutcome, TransactionReceipt},
 };
 use tari_indexer_client::types::{ProvenTransactionReceipt, SubstateProof};
-use tari_ootle_common_types::{Epoch, VersionedSubstateId};
+use tari_ootle_common_types::Epoch;
 use tari_ootle_light_client::{
     LightClientError,
     TrustedValidatorSet,
@@ -24,15 +24,7 @@ use tari_ootle_light_client::{
     verify_down_proof,
 };
 use tari_ootle_transaction::TransactionId;
-use tari_state_tree::{
-    SPARSE_MERKLE_PLACEHOLDER_HASH,
-    SpreadPrefixStateTree,
-    StateTreePayload,
-    SubstateDownProof,
-    SubstateTreeChange,
-    SubstateValueProof,
-    memory_store::MemoryTreeStore,
-};
+use tari_state_tree::SPARSE_MERKLE_PLACEHOLDER_HASH;
 use tari_template_lib_types::{ClaimedOutputTombstoneAddress, Hash32, Metadata};
 
 const EPOCH: Epoch = Epoch(2);
@@ -337,56 +329,8 @@ fn a_result_that_differs_from_the_receipt_is_rejected() {
 /// A down proof of `id`, up at height 5 of its shard group's chain in `up_set`'s epoch and absent at height 9 in
 /// `down_set`'s, each signed by its set's committee.
 fn down_proof(up_set: &ValidatorSetFixture, down_set: &ValidatorSetFixture, id: &SubstateId) -> (Vec<u8>, Vec<u8>) {
-    let versioned_id = VersionedSubstateId::new(id.clone(), SubstateVersion::ZERO);
-    let shard = versioned_id.to_shard(NUM_PRESHARDS);
-    let shard_group = shard_group_of(shard);
-    let value_hash = Hash32::from_array([5; 32]);
-
-    let mut store = MemoryTreeStore::<StateTreePayload>::new();
-    let up_root = SpreadPrefixStateTree::new(&mut store)
-        .put_substate_changes(None, 1, vec![SubstateTreeChange::Up {
-            id: versioned_id.clone(),
-            value_hash,
-        }])
-        .unwrap();
-    let down_root = SpreadPrefixStateTree::new(&mut store)
-        .put_substate_changes(Some(1), 2, vec![SubstateTreeChange::Down {
-            id: versioned_id.clone(),
-        }])
-        .unwrap();
-    let up_tree = shard_group_root_tree(NETWORK, EPOCH, shard, up_root, 1);
-    let down_tree = shard_group_root_tree(NETWORK, EPOCH, shard, down_root, 2);
-    let (_, value, up_leaf) = SpreadPrefixStateTree::new(&mut store)
-        .get_proof(1, &versioned_id)
-        .unwrap();
-    let (_, _, down_leaf) = SpreadPrefixStateTree::new(&mut store)
-        .get_proof(2, &versioned_id)
-        .unwrap();
-
-    let proof = SubstateDownProof {
-        up: SubstateValueProof::new(up_root, 1, up_tree.get_proof(shard).unwrap().1, up_leaf),
-        up_value_hash: value.unwrap().0,
-        up_commit_proof: block_commit_proof(
-            NETWORK,
-            up_set.epoch,
-            shard_group,
-            5,
-            up_tree.root(),
-            up_set.signers(shard_group),
-        ),
-        down: SubstateValueProof::new(down_root, 2, down_tree.get_proof(shard).unwrap().1, down_leaf),
-    };
-    (
-        tari_bor::serde_codec::to_vec(&proof).unwrap(),
-        block_commit_proof(
-            NETWORK,
-            down_set.epoch,
-            shard_group,
-            9,
-            down_tree.root(),
-            down_set.signers(shard_group),
-        ),
-    )
+    let proof = substate_down_proof(up_set, down_set, id, SubstateVersion::ZERO);
+    (proof.down_proof.unwrap(), proof.commit_proof)
 }
 
 #[test]

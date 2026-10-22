@@ -21,7 +21,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateDiff, SubstateId, SubstateValue},
     vault::Vault,
 };
-use tari_indexer_client::types::{EpochCheckpointEntry, ValidatorSetCommittee, WatchedSubstateItem};
+use tari_indexer_client::types::{EpochCheckpointEntry, SubstateState, ValidatorSetCommittee, WatchedSubstateItem};
 use tari_ootle_common_types::{StateVersion, SubstateVersion, shard::Shard};
 use tari_ootle_transaction::{Transaction, TransactionEnvelope, TransactionId, args};
 use tari_ootle_wallet_sdk::{
@@ -211,7 +211,9 @@ impl WalletNetworkInterface for FixedSubstateNetwork {
     ) -> Result<SubstateQueryResult, Self::Error> {
         Ok(SubstateQueryResult {
             version: SubstateVersion::new(1),
-            substate: self.substate.clone(),
+            state: SubstateState::Up {
+                substate: Box::new(self.substate.clone()),
+            },
             proof: None,
         })
     }

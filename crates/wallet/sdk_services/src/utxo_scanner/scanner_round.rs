@@ -1,7 +1,10 @@
 //   Copyright 2025 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    mem,
+};
 
 use futures::StreamExt;
 use log::{debug, info, trace, warn};
@@ -12,7 +15,7 @@ use tari_ootle_wallet_sdk::{
     NetworkInterfaceError,
     WalletSdk,
     WalletSdkSpec,
-    apis::validator_set::ValidatorSetApiError,
+    apis::{substate::SubstateApiError, validator_set::ValidatorSetApiError},
     models::{
         AccountWithAddress,
         CheckpointStateVersion,
@@ -317,7 +320,7 @@ where TSpec: WalletSdkSpec
 
                 self.stats.num_received += num_received;
                 num_received = 0;
-                self.commit_progress()?;
+                self.commit_progress().await?;
             }
         }
 
@@ -329,7 +332,7 @@ where TSpec: WalletSdkSpec
             );
         }
 
-        self.commit_progress()?;
+        self.commit_progress().await?;
         self.stats.num_received += num_received;
 
         if !has_more {
@@ -343,12 +346,16 @@ where TSpec: WalletSdkSpec
         Ok(has_more)
     }
 
-    fn commit_progress(&mut self) -> Result<bool, StealthScannerApiError> {
+    async fn commit_progress(&mut self) -> Result<bool, StealthScannerApiError> {
         if self.utxos_to_recover.is_empty() &&
             self.utxos_to_spend.is_empty() &&
             self.shard_state_versions_to_set.is_empty()
         {
             return Ok(false);
+        }
+
+        if self.sdk.sdk_config().indexer_trust.is_verify() {
+            self.retain_proven_spends().await?;
         }
 
         let mut num_spent = 0;
@@ -410,6 +417,55 @@ where TSpec: WalletSdkSpec
 
         self.stats.num_spent += num_spent;
         Ok(true)
+    }
+
+    /// Drops each reported spend of an output the wallet holds as not spent, unless the indexer proves that the output
+    /// has gone down at the reported version. A spend is dropped only when the answer refuses it for good: the indexer
+    /// serves no proof, a proof that does not verify, or one the wallet can never trust. The output then stays as it is
+    /// and the spend is not asked for again. Any other failure fails the round before it stores its progress, so the
+    /// next scan asks for the spend again.
+    ///
+    /// A spend of an output the wallet already holds as spent needs no proof, as the wallet settled that spend from its
+    /// own verified transaction.
+    async fn retain_proven_spends(&mut self) -> Result<(), StealthScannerApiError> {
+        let substate_api = self.sdk.substate_api();
+        let mut retained = Vec::with_capacity(self.utxos_to_spend.len());
+        for spent in mem::take(&mut self.utxos_to_spend) {
+            let held = self
+                .sdk
+                .store()
+                .with_read_tx(|tx| {
+                    tx.stealth_outputs_get_by_commitment(self.resource_address, &spent.id.into_commitment_bytes())
+                })
+                .optional()?;
+            if held.is_none_or(|output| matches!(output.status, OutputStatus::Spent)) {
+                retained.push(spent);
+                continue;
+            }
+
+            let address = UtxoAddress::new(*self.resource_address, spent.id);
+            match substate_api.verify_down(&address.clone().into(), spent.version).await {
+                Ok(()) => retained.push(spent),
+                Err(
+                    err @ (SubstateApiError::SubstateDoesNotExist { .. } |
+                    SubstateApiError::SubstateNotDown { .. } |
+                    SubstateApiError::SubstateUnproven { .. } |
+                    SubstateApiError::SubstateUnverified { .. } |
+                    SubstateApiError::SubstateProvenBeforeAnchor { .. }),
+                ) => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "⚠️ The indexer reported stealth output {} spent at v{} without proving it ({}). Keeping the output.",
+                        address,
+                        spent.version,
+                        err
+                    );
+                },
+                Err(err) => return Err(err.into()),
+            }
+        }
+        self.utxos_to_spend = retained;
+        Ok(())
     }
 
     fn check_if_tag_matches(&self, unspent: &UtxoUnspent) -> Result<bool, StealthScannerApiError> {

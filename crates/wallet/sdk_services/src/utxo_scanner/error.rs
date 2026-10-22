@@ -8,6 +8,7 @@ use tari_ootle_wallet_sdk::{
         config::ConfigApiError,
         key_manager::KeyManagerApiError,
         stealth_outputs::StealthOutputsApiError,
+        substate::SubstateApiError,
     },
     storage::WalletStorageError,
 };
@@ -28,6 +29,8 @@ pub enum StealthScannerApiError {
     KeyManagerError(#[from] KeyManagerApiError),
     #[error("Account API error: {0}")]
     AccountApiError(#[from] AccountsApiError),
+    #[error("Substate API error: {0}")]
+    SubstateApiError(#[from] SubstateApiError),
     #[error("The UTXO scanner has shut down")]
     ScannerShutdown,
     #[error("The UTXO scan did not finish within {timeout:.0?}")]
