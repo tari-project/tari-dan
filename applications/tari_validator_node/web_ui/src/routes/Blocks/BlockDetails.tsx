@@ -341,7 +341,7 @@ export default function BlockDetails() {
                             <TableCell>Timeout Height</TableCell>
                             <DataTableCell>
                               {block!.timeout_certificate
-                                ? `${block!.timeout_certificate.height} (${block!.timeout_certificate.timeouts.length} signatures)`
+                                ? `${block!.timeout_certificate.height} (${block!.timeout_certificate.signatures.Schnorr.timeouts.length} signatures)`
                                 : "--"}
                             </DataTableCell>
                           </TableRow>

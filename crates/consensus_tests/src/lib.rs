@@ -51,4 +51,6 @@ mod template_visibility;
 #[cfg(test)]
 mod timeout_certificate;
 #[cfg(test)]
+mod timeout_certificate_signatures;
+#[cfg(test)]
 mod vote_equivocation_withholding;

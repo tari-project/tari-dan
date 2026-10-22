@@ -47,6 +47,7 @@ use tari_consensus_types::{
     ShardGroupAccumulatedData,
     SignedTimeout,
     TcId,
+    TcSignatures,
     TimeoutCertificate,
     TimeoutVote,
 };
@@ -667,7 +668,7 @@ impl From<&TimeoutCertificate> for proto::consensus::TimeoutCertificate {
         Self {
             epoch: value.epoch().as_u64(),
             block_height: value.height().as_u64(),
-            timeouts: value.timeouts().iter().map(Into::into).collect(),
+            signatures: Some(value.signatures().into()),
         }
     }
 }
@@ -680,12 +681,45 @@ impl TryFrom<proto::consensus::TimeoutCertificate> for TimeoutCertificate {
             Epoch(value.epoch),
             NodeHeight(value.block_height),
             value
-                .timeouts
-                .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<Vec<_>, _>>()
-                .context("invalid encoding of timeouts")?,
+                .signatures
+                .ok_or_else(|| anyhow!("TC signatures not provided"))?
+                .try_into()?,
         ))
+    }
+}
+
+impl From<&TcSignatures> for proto::consensus::TcSignatures {
+    fn from(source: &TcSignatures) -> Self {
+        let scheme = match source {
+            TcSignatures::Schnorr { signers, timeouts } => {
+                proto::consensus::tc_signatures::Scheme::Schnorr(proto::consensus::SchnorrTcSignatures {
+                    signers: signers.as_bytes().to_vec(),
+                    timeouts: timeouts.iter().map(Into::into).collect(),
+                })
+            },
+        };
+        Self { scheme: Some(scheme) }
+    }
+}
+
+impl TryFrom<proto::consensus::TcSignatures> for TcSignatures {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::TcSignatures) -> Result<Self, Self::Error> {
+        match value
+            .scheme
+            .ok_or_else(|| anyhow!("TC signature scheme not provided"))?
+        {
+            proto::consensus::tc_signatures::Scheme::Schnorr(schnorr) => Ok(Self::Schnorr {
+                signers: SignerBitmap::from_bytes(schnorr.signers),
+                timeouts: schnorr
+                    .timeouts
+                    .into_iter()
+                    .map(TryInto::try_into)
+                    .collect::<Result<_, _>>()
+                    .context("invalid encoding of timeouts")?,
+            }),
+        }
     }
 }
 
@@ -1353,6 +1387,30 @@ mod tests {
         );
 
         let decoded = ProposalCertificate::try_from(proto::consensus::QuorumCertificate::from(&certificate)).unwrap();
+
+        assert_eq!(decoded.signatures(), certificate.signatures());
+        assert_eq!(decoded.calculate_id(), certificate.calculate_id());
+    }
+
+    #[test]
+    fn a_timeout_certificate_round_trips() {
+        let timeout = |seed: u8| {
+            let mut scalar = [0u8; 32];
+            scalar[0] = seed;
+            SignedTimeout {
+                high_pc_height: NodeHeight(u64::from(seed)),
+                signature: tari_template_lib::types::crypto::SchnorrSignatureBytes::new(
+                    RistrettoPublicKeyBytes::from_bytes(&[seed; 32]).unwrap(),
+                    tari_template_lib::types::crypto::Scalar32Bytes::from_bytes(&scalar).unwrap(),
+                ),
+            }
+        };
+        let certificate = TimeoutCertificate::new(Epoch(4), NodeHeight(5), TcSignatures::Schnorr {
+            signers: SignerBitmap::from_indices(10, [1, 9]).unwrap(),
+            timeouts: vec![timeout(1), timeout(2)],
+        });
+
+        let decoded = TimeoutCertificate::try_from(proto::consensus::TimeoutCertificate::from(&certificate)).unwrap();
 
         assert_eq!(decoded.signatures(), certificate.signatures());
         assert_eq!(decoded.calculate_id(), certificate.calculate_id());

@@ -31,6 +31,7 @@ use tari_consensus_types::{
     ProposalCertificate,
     ShardGroupAccumulatedData,
     SignedTimeout,
+    TcSignatures,
     TimeoutCertificate,
     TimeoutVote,
     TimeoutVoteMessage,
@@ -49,7 +50,7 @@ use tari_ootle_common_types::{
 };
 use tari_ootle_storage::consensus_models::{Block, BlockCommands, BlockHeader};
 use tari_ootle_transaction::Network;
-use tari_sidechain::{FixedHash, QuorumDecision};
+use tari_sidechain::{FixedHash, QuorumDecision, SignerBitmap};
 use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
 
 use crate::support::{TestAddress, TestConsensusSpec, TestVoteSignatureService};
@@ -64,20 +65,16 @@ fn timeout_certificate(height: NodeHeight, high_pc_heights: &[u64]) -> TimeoutCe
 }
 
 fn timeout_certificate_in(epoch: Epoch, height: NodeHeight, high_pc_heights: &[u64]) -> TimeoutCertificate {
-    TimeoutCertificate::new(
-        epoch,
-        height,
-        high_pc_heights
+    TimeoutCertificate::new(epoch, height, TcSignatures::Schnorr {
+        signers: SignerBitmap::from_indices(high_pc_heights.len(), 0..high_pc_heights.len()).unwrap(),
+        timeouts: high_pc_heights
             .iter()
             .map(|h| SignedTimeout {
                 high_pc_height: NodeHeight(*h),
-                signature: ValidatorSignatureBytes::new(
-                    RistrettoPublicKeyBytes::default(),
-                    SchnorrSignatureBytes::zero(),
-                ),
+                signature: SchnorrSignatureBytes::zero(),
             })
             .collect(),
-    )
+    })
 }
 
 fn proposal_certificate(height: NodeHeight) -> ProposalCertificate {
@@ -316,20 +313,6 @@ fn signed_timeout_certificate(
         .iter()
         .map(|addr| TestVoteSignatureService::new(TestAddress::new(*addr)))
         .collect::<Vec<_>>();
-    let high_pc_height = NodeHeight(height.as_u64() - 1);
-    let timeouts = services
-        .iter()
-        .map(|service| {
-            let message = TimeoutVoteMessage::new(network, TEST_EPOCH, height, high_pc_height);
-            SignedTimeout {
-                high_pc_height,
-                signature: ValidatorSignatureBytes::new(
-                    service.public_key().to_byte_type(),
-                    service.sign(&message).to_byte_type(),
-                ),
-            }
-        })
-        .collect();
     let committee = Committee::new(
         signers
             .iter()
@@ -341,7 +324,26 @@ fn signed_timeout_certificate(
             })
             .collect(),
     );
-    (TimeoutCertificate::new(TEST_EPOCH, height, timeouts), committee)
+    let high_pc_height = NodeHeight(height.as_u64() - 1);
+    let timeouts = committee
+        .iter()
+        .map(|member| {
+            let service = services
+                .iter()
+                .find(|service| service.public_key().to_byte_type() == member.public_key)
+                .unwrap();
+            let message = TimeoutVoteMessage::new(network, TEST_EPOCH, height, high_pc_height);
+            SignedTimeout {
+                high_pc_height,
+                signature: service.sign(&message).to_byte_type(),
+            }
+        })
+        .collect();
+    let signatures = TcSignatures::Schnorr {
+        signers: SignerBitmap::from_indices(committee.len(), 0..committee.len()).unwrap(),
+        timeouts,
+    };
+    (TimeoutCertificate::new(TEST_EPOCH, height, signatures), committee)
 }
 
 #[test]
