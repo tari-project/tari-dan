@@ -31,7 +31,7 @@ use tari_ootle_wallet_sdk::{
     IndexerTrust,
     apis::{
         config::ConfigKey,
-        transaction::{Submission, TransactionApiError},
+        transaction::{Submission, TRANSACTION_EXPIRY_GRACE_EPOCHS, TransactionApiError},
         validator_set::ValidatorSetApiError,
     },
     models::{TransactionContext, TransactionContextKind, TransactionStatus, ValidatorSetAnchor, WalletEvent},
@@ -59,7 +59,11 @@ fn sets() -> Vec<ValidatorSetFixture> {
 }
 
 fn build_transaction() -> Transaction {
-    Transaction::builder_localnet(Epoch(100))
+    build_transaction_valid_until(Epoch(100))
+}
+
+fn build_transaction_valid_until(max_epoch: Epoch) -> Transaction {
+    Transaction::builder_localnet(max_epoch)
         .allocate_component_address("component")
         .put_last_instruction_output_on_workspace("bucket")
         .call_method("component", "new", args!["bucket"])
@@ -183,6 +187,47 @@ async fn a_commit_stays_pending_until_its_receipt_is_proven() {
         let stored = test.sdk().transaction_api().get(transaction_id).unwrap();
         assert_eq!(stored.status, TransactionStatus::New);
         assert!(stored.finalize.is_none());
+    }
+}
+
+#[tokio::test]
+async fn a_transaction_with_no_outcome_expires_by_the_epoch_of_the_trusted_validator_set() {
+    // The latest checkpoint names the set of epoch 6.
+    let sets = (1..=6).map(ValidatorSetFixture::new).collect::<Vec<_>>();
+    let trusted_epoch = 6;
+
+    for (max_epoch, expires) in [
+        (trusted_epoch - TRANSACTION_EXPIRY_GRACE_EPOCHS - 1, true),
+        (trusted_epoch - TRANSACTION_EXPIRY_GRACE_EPOCHS, false),
+    ] {
+        let network = ProvingNetwork::new(&sets, 4);
+        let transaction = build_transaction_valid_until(Epoch(max_epoch));
+        let transaction_id = transaction.calculate_id();
+        network.set_result(TransactionQueryResult {
+            transaction_id,
+            result: TransactionFinalizedResult::Pending,
+            receipt: None,
+        });
+        let test = wallet(network, &transaction);
+        let trusted = test.sdk().validator_set_api().sync().await.unwrap();
+        assert_eq!(trusted.epoch(), Epoch(trusted_epoch));
+
+        // The network panics if asked for the current epoch.
+        let resolved = test
+            .sdk()
+            .transaction_api()
+            .check_and_store_finalized_transaction(transaction_id)
+            .await
+            .unwrap();
+
+        let stored = test.sdk().transaction_api().get(transaction_id).unwrap();
+        if expires {
+            assert!(resolved.is_some(), "max_epoch {max_epoch} expires");
+            assert_eq!(stored.status, TransactionStatus::InvalidTransaction);
+        } else {
+            assert!(resolved.is_none(), "max_epoch {max_epoch} may still finalize");
+            assert_eq!(stored.status, TransactionStatus::New);
+        }
     }
 }
 
