@@ -18,6 +18,7 @@ use tari_engine_types::commit_result::{ExecutionFailureCode, FinalizeResult, Rej
 use tari_ootle_common_types::{Epoch, optional::Optional};
 use tari_ootle_transaction::TransactionId;
 use tari_ootle_wallet_sdk::{
+    apis::substate::SubstateApiError,
     models::{TransactionStatus, WalletEvent, WalletTransaction},
     network::WalletNetworkInterface,
 };
@@ -502,7 +503,7 @@ impl AutoClaimBurnService {
             Some(file_name.to_string()),
         )
         .await
-        .map_err(ClaimError::Permanent)?;
+        .map_err(ClaimError::from_claim_failure)?;
 
         let Some(result) = resp.dry_run_result else {
             return Err(ClaimError::Permanent(anyhow::anyhow!(
@@ -533,9 +534,9 @@ impl AutoClaimBurnService {
         // the indexer's figure, so the handler treats it as a ceiling and reveals no more than its own
         // price for the claim. The wallet's `max_fee_limit` bounds that ceiling in turn.
         let max_fee = required_fees.min(self.max_fee_limit);
-        // Any error here is treated as permanent: by this point the file is readable and the account
-        // is known, so failures indicate a bad proof (wrong key, ownership check failed, fee too high,
-        // corrupt encrypted data). Retrying would produce the same result.
+        // By this point the file is readable and the account is known, so a failure here indicates a
+        // bad proof (wrong key, ownership check failed, fee too high, corrupt encrypted data), which
+        // retrying would only repeat, unless it is a read the indexer could not yet prove.
         let resp = execute_claim_burn(
             &self.sdk,
             &self.transaction_service,
@@ -547,7 +548,7 @@ impl AutoClaimBurnService {
             Some(file_name.to_string()),
         )
         .await
-        .map_err(ClaimError::Permanent)?;
+        .map_err(ClaimError::from_claim_failure)?;
 
         Ok(resp.transaction_id)
     }
@@ -746,11 +747,47 @@ impl ClaimError {
     fn transient(error: anyhow::Error, max_retries: u32) -> Self {
         Self::Transient { error, max_retries }
     }
+
+    /// Classifies a failure to build or submit a claim. A substate the indexer served without a proof
+    /// is transient: the indexer proves it once consensus commits the epoch it is finishing. Every
+    /// other failure is permanent.
+    fn from_claim_failure(error: anyhow::Error) -> Self {
+        let unproven = error.chain().any(|cause| {
+            matches!(
+                cause.downcast_ref::<SubstateApiError>(),
+                Some(SubstateApiError::SubstateUnproven { .. })
+            )
+        });
+        if unproven {
+            Self::transient(error, MAX_RETRIES_NETWORK)
+        } else {
+            Self::Permanent(error)
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_unproven_read_is_a_transient_claim_failure() {
+        let unproven = || SubstateApiError::SubstateUnproven {
+            substate_id: tari_template_lib_types::constants::TARI_TOKEN.into(),
+        };
+        assert!(matches!(
+            ClaimError::from_claim_failure(unproven().into()),
+            ClaimError::Transient { .. }
+        ));
+        assert!(matches!(
+            ClaimError::from_claim_failure(anyhow::Error::from(unproven()).context("pricing the claim")),
+            ClaimError::Transient { .. }
+        ));
+        assert!(matches!(
+            ClaimError::from_claim_failure(anyhow::anyhow!("the claim proof is invalid")),
+            ClaimError::Permanent(_)
+        ));
+    }
 
     fn execution_failure(code: ExecutionFailureCode) -> RejectReason {
         RejectReason::ExecutionFailure {

@@ -46,7 +46,7 @@ use tari_ootle_wallet_sdk::{
         confidential_transfer::ConfidentialTransferParams,
         stealth_outputs::{StealthOutputsApiError, TransferStatementParams},
         stealth_transfer::{InputsToSpend, StealthTransferParams, TransferOutput},
-        substate::ValidatorScanResult,
+        substate::{SubstateApiError, ValidatorScanResult},
     },
     models::{
         AccountWithAddress,
@@ -1721,14 +1721,39 @@ struct DeclaredInputPricing {
 }
 
 impl DeclaredInputPricing {
+    const UNPROVEN_READ_MAX_INTERVAL: Duration = Duration::from_secs(4);
+    /// How long [`Self::fetch`] keeps asking for substates the indexer serves without a proof. The
+    /// indexer cannot prove a read while consensus is still finishing an epoch its epoch manager has
+    /// already left, and serves it unproven until that epoch's last block commits.
+    const UNPROVEN_READ_RETRY_WINDOW: Duration = Duration::from_secs(30);
+
     /// Reads the substates `ids` names from the network, and the layout the latest end-of-epoch
     /// checkpoints describe, one per shard group (see [`committees_of_checkpoint_layout`]).
     async fn fetch<I: IntoIterator<Item = SubstateId>>(sdk: &WalletSdk, ids: I) -> Result<Self, anyhow::Error> {
-        let ids = ids.into_iter().filter(|id| !id.is_global()).collect::<HashSet<_>>();
-        let value_bytes = sdk
-            .substate_api()
-            .get_substates_from_network(ids.into_iter().collect())
-            .await?
+        let ids = ids
+            .into_iter()
+            .filter(|id| !id.is_global())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let started = tokio::time::Instant::now();
+        let mut interval = Duration::from_millis(250);
+        let substates = loop {
+            match sdk.substate_api().get_substates_from_network(ids.clone()).await {
+                Err(SubstateApiError::SubstateUnproven { substate_id })
+                    if started.elapsed() < Self::UNPROVEN_READ_RETRY_WINDOW =>
+                {
+                    debug!(
+                        target: LOG_TARGET,
+                        "The indexer served {substate_id} without a proof; asking again in {interval:.1?}"
+                    );
+                    tokio::time::sleep(interval).await;
+                    interval = (interval * 2).min(Self::UNPROVEN_READ_MAX_INTERVAL);
+                },
+                result => break result?,
+            }
+        };
+        let value_bytes = substates
             .into_iter()
             .map(|(id, substate)| (id, declared_input_bytes(substate.substate_value())))
             .collect();
