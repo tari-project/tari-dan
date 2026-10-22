@@ -637,7 +637,7 @@ pub fn create_node_transaction_validator<TProvider: TemplateProvider>(
 /// also backs `TariBlockTransactionValidator`. A rejection rule in block validation is a consensus rule: an
 /// upgraded validator would refuse a block that a non-upgraded one accepts. Refusing at ingress costs the
 /// sender and nothing else, and a block carrying such a transaction is still sound to execute: a virtual input
-/// aborts at input resolution, and an output-only one is locked and pledged at the sender's expense.
+/// aborts at input resolution, and an output-only one is locked and pledged without changing.
 pub fn create_mempool_transaction_validator<TProvider: TemplateProvider>(
     network: Network,
     template_manager: TProvider,

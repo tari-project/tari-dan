@@ -647,6 +647,9 @@ pub struct ValidatorScanResult {
     pub substate: SubstateValue,
 }
 
+/// Adds `parent` and the substates the wallet store records it depending on to `substate_ids`, keeping only those a
+/// transaction may declare as inputs: the store also records the receipts of the wallet's own transactions, which a
+/// component may reference.
 fn get_dependent_substates<TTx: WalletStoreReader>(
     tx: &mut TTx,
     parent: SubstateModel,
@@ -676,6 +679,7 @@ fn get_dependent_substates<TTx: WalletStoreReader>(
             get_dependent_substates_inner(tx, &child, substate_ids)?;
         }
     }
+    substate_ids.retain(|requirement| requirement.substate_id().is_declarable_input());
     Ok(())
 }
 fn get_dependent_substates_inner<TTx: WalletStoreReader>(
