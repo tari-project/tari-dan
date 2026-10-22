@@ -279,15 +279,34 @@ impl<TNetwork: WalletNetworkInterface> TestWithNetwork<TNetwork> {
     }
 }
 
-/// Network interface that answers `query_transaction_result` with a canned result and panics on every other call.
+/// Network interface that answers `query_transaction_result` with a canned result, and `get_current_epoch` with a
+/// canned epoch, and panics on every other call.
 #[derive(Debug, Clone)]
 pub struct CannedTransactionResultInterface {
-    result: TransactionQueryResult,
+    /// `None` answers that the transaction is not found.
+    result: Option<TransactionQueryResult>,
+    current_epoch: Option<Epoch>,
 }
 
 impl CannedTransactionResultInterface {
     pub fn new(result: TransactionQueryResult) -> Self {
-        Self { result }
+        Self {
+            result: Some(result),
+            current_epoch: None,
+        }
+    }
+
+    /// An indexer that has no result for any transaction.
+    pub fn not_found() -> Self {
+        Self {
+            result: None,
+            current_epoch: None,
+        }
+    }
+
+    pub fn with_current_epoch(mut self, epoch: Epoch) -> Self {
+        self.current_epoch = Some(epoch);
+        self
     }
 }
 
@@ -334,7 +353,7 @@ impl WalletNetworkInterface for CannedTransactionResultInterface {
         _transaction_id: TransactionId,
         _include_proof: bool,
     ) -> Result<TransactionQueryResult, Self::Error> {
-        Ok(self.result.clone())
+        self.result.clone().ok_or(PanicError::NotFound)
     }
 
     async fn subscribe_transaction_finalized(&self) -> Result<TransactionFinalizedStream<Self::Error>, Self::Error> {
@@ -394,7 +413,9 @@ impl WalletNetworkInterface for CannedTransactionResultInterface {
     }
 
     async fn get_current_epoch(&self) -> Result<Epoch, Self::Error> {
-        panic!("CannedTransactionResultInterface called")
+        Ok(self
+            .current_epoch
+            .expect("CannedTransactionResultInterface has no current epoch"))
     }
 
     async fn get_consensus_epoch(&self) -> Result<Option<Epoch>, Self::Error> {
@@ -527,7 +548,10 @@ impl WalletNetworkInterface for PanicNetworkInterface {
 }
 
 #[derive(Debug)]
-pub enum PanicError {}
+pub enum PanicError {
+    /// The one error a test network answers with in place of panicking.
+    NotFound,
+}
 
 impl std::fmt::Display for PanicError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -549,6 +573,6 @@ impl TransactionStatusResponseError for PanicError {
 
 impl IsNotFoundError for PanicError {
     fn is_not_found_error(&self) -> bool {
-        false
+        matches!(self, Self::NotFound)
     }
 }
