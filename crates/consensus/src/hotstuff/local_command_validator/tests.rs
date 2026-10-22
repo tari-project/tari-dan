@@ -794,4 +794,71 @@ mod local_only {
             evaluation.no_vote
         );
     }
+
+    #[test]
+    fn an_honest_early_abort_is_voted_for() {
+        let replica = Replica::new();
+        let id = replica.pool_transaction(1, &[&component_id(0x20)], commits());
+
+        let evaluation = replica.evaluate_local_only(&[aborting(id, AbortReason::OneOrMoreInputsNotFound)]);
+
+        assert!(evaluation.no_vote.is_none(), "{:?}", evaluation.no_vote);
+        assert_eq!(evaluation.stages, [TransactionPoolStage::LocalOnly]);
+    }
+
+    #[test]
+    fn an_early_abort_proposed_for_a_different_reason_is_refused() {
+        let replica = Replica::new();
+        let id = replica.pool_transaction(1, &[&component_id(0x20)], commits());
+
+        let evaluation = replica.evaluate_local_only(&[aborting(id, AbortReason::ExecutionFailure)]);
+
+        assert!(
+            matches!(
+                evaluation.no_vote,
+                Some(NoVoteReason::DecisionDisagreement {
+                    local: Decision::Abort(AbortReason::OneOrMoreInputsNotFound),
+                    remote: Decision::Abort(AbortReason::ExecutionFailure),
+                })
+            ),
+            "{:?}",
+            evaluation.no_vote
+        );
+    }
+
+    #[test]
+    fn an_early_abort_with_a_transaction_fee_is_refused() {
+        let replica = Replica::new();
+        let id = replica.pool_transaction(1, &[&component_id(0x20)], commits());
+
+        let evaluation = replica.evaluate_local_only(&[LocalOnlyAtom {
+            transaction_fee: FEE,
+            ..aborting(id, AbortReason::OneOrMoreInputsNotFound)
+        }]);
+
+        assert!(
+            matches!(evaluation.no_vote, Some(NoVoteReason::FeeDisagreement)),
+            "{:?}",
+            evaluation.no_vote
+        );
+    }
+
+    #[test]
+    fn an_abort_with_a_leader_fee_is_refused() {
+        let replica = Replica::new();
+        let input = component_id(0x20);
+        replica.add_substate(&input);
+        let id = replica.pool_transaction(1, &[&input], Script::default());
+
+        let evaluation = replica.evaluate_local_only(&[LocalOnlyAtom {
+            leader_fee: Some(local_leader_fee()),
+            ..aborting(id, AbortReason::ExecutionFailure)
+        }]);
+
+        assert!(
+            matches!(evaluation.no_vote, Some(NoVoteReason::LeaderFeeDisagreement)),
+            "{:?}",
+            evaluation.no_vote
+        );
+    }
 }
