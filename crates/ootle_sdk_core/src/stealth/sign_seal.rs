@@ -665,13 +665,13 @@ mod tests {
         let eph_tx = decode(&eph);
         assert!(
             eph_tx.is_seal_signer_authorized(),
-            "ephemeral (0 auth sigs) ⇒ is_seal_signer_authorized must be true"
+            "ephemeral (0 auth sigs) ⇒ the seal signer must be the main signer"
         );
 
         let ak = seal_and_encode_stealth_transfer(NETWORK, account_key_partial(), &stealth_keys()).unwrap();
         assert!(
             decode(&ak).is_seal_signer_authorized(),
-            "account-key path ⇒ is_seal_signer_authorized must be true"
+            "account-key path ⇒ the seal signer must be the main signer"
         );
     }
 

@@ -713,20 +713,6 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         Ok(count > 0)
     }
 
-    fn epoch_checkpoint_with_header_metadata_exists_before(&mut self, epoch: Epoch) -> Result<bool, StorageError> {
-        const OPERATION: &str = "epoch_checkpoint_with_header_metadata_exists_before";
-        use crate::storage_sqlite::schema::epoch_checkpoints;
-        diesel::select(diesel::dsl::exists(
-            epoch_checkpoints::table
-                .filter(epoch_checkpoints::epoch.lt(epoch.as_u64() as i64))
-                .filter(epoch_checkpoints::has_header_metadata.eq(true)),
-        ))
-        .get_result(self.connection())
-        .map_err(|e| StorageError::QueryError {
-            reason: format!("{OPERATION}: {}", e),
-        })
-    }
-
     fn epoch_checkpoint_get_all(
         &mut self,
         from_epoch: Epoch,
@@ -739,7 +725,6 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         let mut query = epoch_checkpoints::table
             .select(epoch_checkpoints::json_data)
             .filter(epoch_checkpoints::epoch.ge(from_epoch.as_u64() as i64))
-            .filter(epoch_checkpoints::has_header_metadata.eq(true))
             .into_boxed();
         if let Some(shard) = shard {
             let shard = shard.as_u32() as i32;
@@ -771,7 +756,6 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
 
         let mut query = epoch_checkpoints::table
             .select(epoch_checkpoints::json_data)
-            .filter(epoch_checkpoints::has_header_metadata.eq(true))
             .into_boxed();
         if let Some(shard) = shard {
             let shard = shard.as_u32() as i32;

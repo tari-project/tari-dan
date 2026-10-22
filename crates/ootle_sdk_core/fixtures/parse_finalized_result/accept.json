@@ -2,8 +2,8 @@
   "name": "parse_finalized_result/accept",
   "schema_version": 1,
   "provenance": {
-    "core_version": "0.41.2",
-    "git_rev": "f1de8633ae83fa2801be7c31c8a53a46cc0cb921",
+    "core_version": "0.47.0",
+    "git_rev": "878a15236a6e908e3a9e0a8d2d74e1d0ef627e3b",
     "generated_by": "ootle_sdk_core golden-vector generator"
   },
   "operation": "parse_finalized_result",
@@ -28,7 +28,6 @@
                 "topic": "std.deposit"
               }
             ],
-            "execution_results": [],
             "fee_receipt": {
               "cost_breakdown": {
                 "breakdown": {
@@ -91,8 +90,10 @@
                 ]
               }
             },
+            "total_fees_required": 9007199254741999,
             "transaction_hash": "5151515151515151515151515151515151515151515151515151515151515151"
           },
+          "native_execution_points": 0,
           "wasm_execution_points": 0
         },
         "execution_time": {

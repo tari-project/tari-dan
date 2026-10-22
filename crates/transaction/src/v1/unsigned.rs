@@ -67,7 +67,6 @@ pub struct UnsignedTransactionV1 {
     #[n(5)]
     pub max_epoch: Epoch,
     #[n(6)]
-    #[cfg_attr(feature = "serde", serde(alias = "is_seal_signer_authorized"))]
     pub main_signer: MainSigner,
     #[n(7)]
     pub dry_run: bool,
@@ -77,8 +76,6 @@ pub struct UnsignedTransactionV1 {
     /// raw blob bytes are excluded so that storage layers can drop them without affecting
     /// signature verifiability or transaction id.
     #[n(8)]
-    #[cfg_attr(feature = "serde", serde(default))]
-    #[cbor(default)]
     pub blobs: Blobs,
 
     /// Distinguishes otherwise-identical transactions. The transaction id excludes the seal
@@ -86,12 +83,8 @@ pub struct UnsignedTransactionV1 {
     /// an intent builder (e.g. a wallet) that wants each submission to execute independently
     /// must stamp a distinct nonce per intent. Part of the signing and id domains.
     #[n(9)]
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, deserialize_with = "ootle_serde::str_number::deserialize")
-    )]
+    #[cfg_attr(feature = "serde", serde(deserialize_with = "ootle_serde::str_number::deserialize"))]
     #[cfg_attr(feature = "ts", ts(type = "number | bigint | string"))]
-    #[cbor(default)]
     pub nonce: u64,
 }
 

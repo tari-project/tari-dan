@@ -502,7 +502,6 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
                 epoch_checkpoints::shard_group.eq(shard_group.to_parsable_string()),
                 epoch_checkpoints::shard_start.eq(shard_group.start().as_u32() as i32),
                 epoch_checkpoints::shard_end.eq(shard_group.end().as_u32() as i32),
-                epoch_checkpoints::has_header_metadata.eq(epoch_checkpoint.header_metadata().is_some()),
                 epoch_checkpoints::json_data.eq(serialize_json(epoch_checkpoint)?),
             ))
             .on_conflict((epoch_checkpoints::epoch, epoch_checkpoints::shard_group))

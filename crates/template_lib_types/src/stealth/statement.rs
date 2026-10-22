@@ -90,10 +90,8 @@ pub struct StealthInput {
     /// The commitment of the unspent output being spent
     #[n(0)]
     pub commitment: PedersenCommitmentBytes,
-    /// Selects which authorisation path the spender is exercising for this input (TIP-0006). Defaults to the key path.
+    /// Selects which authorisation path the spender is exercising for this input (TIP-0006).
     #[n(1)]
-    #[cfg_attr(feature = "serde", serde(default))]
-    #[cbor(default)]
     pub witness: SpendWitness,
 }
 
@@ -209,8 +207,7 @@ pub struct StealthTransferStatement {
     /// Covenant sub-balance proofs (TIP-0006), one per input partition (keyed by `condition_root`) whose predicate
     /// requires value conservation. Empty when no spent input gates on a covenant.
     #[n(3)]
-    #[cfg_attr(feature = "serde", serde(default))]
-    #[cbor(default, decode_with = "decode_covenant_claims")]
+    #[cbor(decode_with = "decode_covenant_claims")]
     pub covenant_claims: Vec<CovenantBalanceClaim>,
 }
 

@@ -161,18 +161,15 @@ pub trait IndexerStoreReadTransaction {
 
     // -------------------------------- Epoch Checkpoints -------------------------------- //
     fn epoch_checkpoint_exists(&mut self, shard_group: ShardGroup, epoch: Epoch) -> Result<bool, StorageError>;
-    /// True if a checkpoint of an epoch before `epoch` carries its header metadata preimage.
-    fn epoch_checkpoint_with_header_metadata_exists_before(&mut self, epoch: Epoch) -> Result<bool, StorageError>;
     /// Checkpoints from `from_epoch` on, ascending by epoch, of every shard group or of the shard groups that contain
-    /// `shard`. Only checkpoints that carry their header metadata preimage are returned.
+    /// `shard`.
     fn epoch_checkpoint_get_all(
         &mut self,
         from_epoch: Epoch,
         shard: Option<Shard>,
         limit: u64,
     ) -> Result<Vec<EpochCheckpoint>, StorageError>;
-    /// The checkpoint of the latest epoch, of any shard group or of the shard group that contains `shard`, among those
-    /// that carry their header metadata preimage.
+    /// The checkpoint of the latest epoch, of any shard group or of the shard group that contains `shard`.
     fn epoch_checkpoint_get_latest(&mut self, shard: Option<Shard>) -> Result<EpochCheckpoint, StorageError>;
 
     // -------------------------------- UTXOs -------------------------------- //

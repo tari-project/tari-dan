@@ -11,9 +11,10 @@ use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 /// signer is.
 ///
 /// Encoding: `None` and `SealSigner` encode as the booleans `false` and `true` in both CBOR and borsh (whose variant
-/// tag is the same byte), and `Authorizer` as the key, so a transaction carrying the boolean
-/// `is_seal_signer_authorized` decodes, hashes and verifies as the matching variant.
+/// tag is the same byte), and `Authorizer` as the key. JSON uses the externally tagged form: `"None"`,
+/// `"SealSigner"` or `{"Authorizer": <key>}`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, borsh::BorshSerialize)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum MainSigner {
     /// The seal signer is not authorized and the transaction has no main signer. Anything that needs one aborts.
@@ -92,50 +93,6 @@ pub(crate) fn other_main_signers(main_signer: MainSigner) -> Vec<MainSigner> {
     .collect()
 }
 
-#[cfg(feature = "serde")]
-mod serde_impl {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
-
-    use super::MainSigner;
-
-    #[derive(Serialize, Deserialize)]
-    enum Tagged {
-        None,
-        SealSigner,
-        Authorizer(RistrettoPublicKeyBytes),
-    }
-
-    /// Also accepts the boolean `is_seal_signer_authorized`.
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Repr {
-        Flag(bool),
-        Tagged(Tagged),
-    }
-
-    impl Serialize for MainSigner {
-        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-            match *self {
-                Self::None => Tagged::None,
-                Self::SealSigner => Tagged::SealSigner,
-                Self::Authorizer(public_key) => Tagged::Authorizer(public_key),
-            }
-            .serialize(serializer)
-        }
-    }
-
-    impl<'de> Deserialize<'de> for MainSigner {
-        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-            Ok(match Repr::deserialize(deserializer)? {
-                Repr::Flag(true) | Repr::Tagged(Tagged::SealSigner) => Self::SealSigner,
-                Repr::Flag(false) | Repr::Tagged(Tagged::None) => Self::None,
-                Repr::Tagged(Tagged::Authorizer(public_key)) => Self::Authorizer(public_key),
-            })
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use borsh::BorshSerialize;
@@ -185,7 +142,7 @@ mod tests {
 
     #[cfg(feature = "serde")]
     #[test]
-    fn json_round_trips_and_accepts_the_boolean_flag() {
+    fn json_round_trips_in_the_tagged_form() {
         let public_key = RistrettoPublicKeyBytes::from_bytes(&[7u8; 32]).unwrap();
         for value in [
             MainSigner::None,
@@ -195,24 +152,6 @@ mod tests {
             let json = serde_json::to_string(&value).unwrap();
             assert_eq!(serde_json::from_str::<MainSigner>(&json).unwrap(), value);
         }
-        assert_eq!(
-            serde_json::from_str::<MainSigner>("true").unwrap(),
-            MainSigner::SealSigner
-        );
-        assert_eq!(serde_json::from_str::<MainSigner>("false").unwrap(), MainSigner::None);
-    }
-
-    #[cfg(feature = "serde")]
-    #[test]
-    fn unsigned_transaction_json_accepts_the_boolean_flag() {
-        let unsigned =
-            crate::UnsignedTransactionV1::new(1u8, vec![], vec![], Default::default(), None, crate::Epoch(1), false);
-        let mut json = serde_json::to_value(&unsigned).unwrap();
-        let fields = json.as_object_mut().unwrap();
-        assert_eq!(fields.remove("main_signer"), Some(serde_json::json!("SealSigner")));
-        fields.insert("is_seal_signer_authorized".to_string(), serde_json::json!(false));
-
-        let decoded: crate::UnsignedTransactionV1 = serde_json::from_value(json).unwrap();
-        assert_eq!(decoded.main_signer, MainSigner::None);
+        assert!(serde_json::from_str::<MainSigner>("true").is_err());
     }
 }

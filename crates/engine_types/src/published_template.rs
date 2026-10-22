@@ -181,8 +181,6 @@ pub type TemplateName = MaxString<{ limits::ENGINE_LIMITS.max_template_name_leng
 pub struct PublishedTemplate {
     /// Human-readable template name extracted from the WASM ABI.
     #[n(0)]
-    #[cbor(default)]
-    #[serde(default)]
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub template_name: TemplateName,
     /// Author's public key
@@ -198,8 +196,6 @@ pub struct PublishedTemplate {
     pub at_epoch: u64,
     /// Optional multihash of off-chain CBOR metadata
     #[n(4)]
-    #[cbor(default)]
-    #[serde(default)]
     #[cfg_attr(feature = "ts", ts(type = "string | null"))]
     pub metadata_hash: Option<MetadataHash>,
 }

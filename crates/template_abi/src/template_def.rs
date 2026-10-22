@@ -3,8 +3,6 @@
 
 use minicbor::{CborLen, Decode, Encode};
 
-#[cfg(feature = "serde")]
-use crate::rust::ops;
 use crate::{
     rust::{boxed::Box, string::String, vec::Vec},
     version::WasmAbiVersion,
@@ -96,8 +94,6 @@ pub struct FunctionDef {
     #[n(3)]
     pub is_mut: bool,
     #[n(4)]
-    #[cbor(default)]
-    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "ops::Not::not"))]
     pub is_migration: bool,
 }
 

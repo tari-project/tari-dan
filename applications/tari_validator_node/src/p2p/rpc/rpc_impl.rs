@@ -1059,6 +1059,7 @@ mod tests {
     use tari_ootle_storage::{
         StateStoreWriteTransaction,
         consensus_models::{
+            BlockHeaderMetadata,
             EndOfEpochCommand,
             EpochCheckpoint,
             SubstateCreated,
@@ -1471,7 +1472,13 @@ mod tests {
                 proof_ext(7),
             ),
             Default::default(),
-            None,
+            BlockHeaderMetadata {
+                total_leader_fee: 0,
+                timestamp: 0,
+                extra_data: Default::default(),
+                timeout_certificate_id: None,
+                is_dummy: false,
+            },
         );
         store.with_write_tx(|tx| tx.epoch_checkpoint_save(&checkpoint)).unwrap();
         (dir, store)

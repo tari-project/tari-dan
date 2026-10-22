@@ -37,11 +37,10 @@ pub struct EpochCheckpoint {
     #[cbor(with = "tari_bor::adapters::indexmap_codec")]
     shard_tree_summary: IndexMap<Shard, TreeRootSummary>,
     /// The preimage of the end-of-epoch header's metadata hash, from which a holder of this checkpoint reads the
-    /// header's [`ExtraData`](tari_ootle_common_types::ExtraData). Optional so that a checkpoint stored without it
-    /// still decodes.
-    #[serde(default)]
+    /// header's [`ExtraData`](tari_ootle_common_types::ExtraData). The quorum certificate does not cover it, so
+    /// [`Self::validate_well_formed`] checks it against the header's metadata hash.
     #[n(2)]
-    header_metadata: Option<BlockHeaderMetadata>,
+    header_metadata: BlockHeaderMetadata,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, CborLen)]
@@ -57,7 +56,7 @@ impl EpochCheckpoint {
     pub fn new(
         proof: CommandCommitProof<EndOfEpochCommand>,
         shard_tree_summary: IndexMap<Shard, TreeRootSummary>,
-        header_metadata: Option<BlockHeaderMetadata>,
+        header_metadata: BlockHeaderMetadata,
     ) -> Self {
         Self {
             proof,
@@ -68,18 +67,14 @@ impl EpochCheckpoint {
 
     /// The preimage of the end-of-epoch header's metadata hash. [`Self::validate_well_formed`] checks it against the
     /// header, so it is the committed preimage once the checkpoint validates.
-    pub fn header_metadata(&self) -> Option<&BlockHeaderMetadata> {
-        self.header_metadata.as_ref()
+    pub fn header_metadata(&self) -> &BlockHeaderMetadata {
+        &self.header_metadata
     }
 
     /// The [`ValidatorSetHash`] the end-of-epoch block ratifies for the next epoch, read from
     /// [`Self::header_metadata`]. It is the committed value only once the checkpoint validates.
-    ///
-    /// `None` proves nothing: the quorum certificate does not cover the preimage, so whoever serves the checkpoint can
-    /// strip it. A consumer that needs the set to trust anything, such as a wallet walking the validator set handover,
-    /// must treat `None` as a failure.
     pub fn next_epoch_validator_set_hash(&self) -> Option<ValidatorSetHash> {
-        self.header_metadata.as_ref()?.next_epoch_validator_set_hash()
+        self.header_metadata.next_epoch_validator_set_hash()
     }
 
     pub fn proof(&self) -> &CommandCommitProof<EndOfEpochCommand> {
@@ -210,14 +205,12 @@ impl EpochCheckpoint {
 
         // TODO: more basic checks?
 
-        if let Some(metadata) = &self.header_metadata {
-            let computed = metadata.calculate_hash();
-            if computed != self.header().metadata_hash {
-                return Err(EpochCheckpointValidationError::HeaderMetadataMismatch {
-                    computed,
-                    header_metadata_hash: self.header().metadata_hash,
-                });
-            }
+        let computed = self.header_metadata.calculate_hash();
+        if computed != self.header().metadata_hash {
+            return Err(EpochCheckpointValidationError::HeaderMetadataMismatch {
+                computed,
+                header_metadata_hash: self.header().metadata_hash,
+            });
         }
 
         // Validate state root matches provided header
@@ -364,7 +357,7 @@ mod tests {
     }
 
     /// A checkpoint whose header commits to `committed` and whose state root matches its shard summary.
-    fn checkpoint(committed: &BlockHeaderMetadata, carried: Option<BlockHeaderMetadata>) -> EpochCheckpoint {
+    fn checkpoint(committed: &BlockHeaderMetadata, carried: BlockHeaderMetadata) -> EpochCheckpoint {
         let key = TreeHash::new([1; 32]);
         let (_, inclusion_proof) = compute_proof_for_hashes([key].into_iter(), key).unwrap();
         let mut header = SidechainBlockHeader {
@@ -410,7 +403,7 @@ mod tests {
     fn a_checkpoint_carrying_the_committed_preimage_names_the_next_validator_set() {
         let set_hash = ValidatorSetHash::from_array([9; 32]);
         let committed = metadata(set_hash);
-        let checkpoint = checkpoint(&committed, Some(committed.clone()));
+        let checkpoint = checkpoint(&committed, committed.clone());
         checkpoint.validate_well_formed().unwrap();
         assert_eq!(checkpoint.next_epoch_validator_set_hash(), Some(set_hash));
     }
@@ -419,7 +412,7 @@ mod tests {
     fn a_checkpoint_carrying_another_preimage_is_rejected() {
         let committed = metadata(ValidatorSetHash::from_array([9; 32]));
         let forged = metadata(ValidatorSetHash::from_array([8; 32]));
-        let err = checkpoint(&committed, Some(forged)).validate_well_formed().unwrap_err();
+        let err = checkpoint(&committed, forged).validate_well_formed().unwrap_err();
         assert!(
             matches!(err, EpochCheckpointValidationError::HeaderMetadataMismatch { .. }),
             "{err}"
@@ -427,28 +420,10 @@ mod tests {
     }
 
     #[test]
-    fn a_checkpoint_without_the_preimage_encodes_as_before_the_field_existed() {
-        let committed = metadata(ValidatorSetHash::from_array([9; 32]));
-        let checkpoint = checkpoint(&committed, None);
-        checkpoint.validate_well_formed().unwrap();
-        assert_eq!(checkpoint.next_epoch_validator_set_hash(), None);
-
-        let bytes = tari_bor::encode(&checkpoint).unwrap();
-        assert_eq!(minicbor::Decoder::new(&bytes).array().unwrap(), Some(2));
-        let decoded: EpochCheckpoint = tari_bor::decode(&bytes).unwrap();
-        assert!(decoded.header_metadata().is_none());
-
-        let mut json = serde_json::to_value(&checkpoint).unwrap();
-        json.as_object_mut().unwrap().remove("header_metadata");
-        let decoded: EpochCheckpoint = serde_json::from_value(json).unwrap();
-        assert!(decoded.header_metadata().is_none());
-    }
-
-    #[test]
     fn a_checkpoint_round_trips_its_preimage() {
         let set_hash = ValidatorSetHash::from_array([9; 32]);
         let committed = metadata(set_hash);
-        let checkpoint = checkpoint(&committed, Some(committed.clone()));
+        let checkpoint = checkpoint(&committed, committed.clone());
 
         let decoded: EpochCheckpoint = tari_bor::decode(&tari_bor::encode(&checkpoint).unwrap()).unwrap();
         decoded.validate_well_formed().unwrap();

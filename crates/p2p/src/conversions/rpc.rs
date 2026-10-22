@@ -182,11 +182,7 @@ impl TryFrom<proto::rpc::EpochCheckpoint> for EpochCheckpoint {
             tari_bor::serde_codec::from_slice_with_max_depth(&value.proof, MAX_CBOR_NESTING_DEPTH)
                 .map_err(|e| anyhow!("Failed to decode CommandCommitProof: {e}"))?,
             shard_tree_summary,
-            if value.header_metadata.is_empty() {
-                None
-            } else {
-                Some(decode_from_slice(&value.header_metadata).context("BlockHeaderMetadata")?)
-            },
+            decode_from_slice(&value.header_metadata).context("BlockHeaderMetadata")?,
         ))
     }
 }
@@ -200,10 +196,7 @@ impl From<EpochCheckpoint> for proto::rpc::EpochCheckpoint {
                 .iter()
                 .map(|(k, v)| (k.as_u32(), v.into()))
                 .collect(),
-            header_metadata: value
-                .header_metadata()
-                .map(|metadata| encode_to_vec(metadata).expect("Failed to encode BlockHeaderMetadata"))
-                .unwrap_or_default(),
+            header_metadata: encode_to_vec(value.header_metadata()).expect("Failed to encode BlockHeaderMetadata"),
         }
     }
 }

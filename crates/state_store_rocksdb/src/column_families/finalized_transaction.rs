@@ -23,8 +23,6 @@ pub struct FinalizedTransactionLinkData {
     /// The epoch of the block that finalized the transaction. Keyed into [`EpochIndex`] so epoch GC
     /// can prune finalized transaction bookkeeping by age.
     #[n(1)]
-    #[cbor(default)]
-    #[serde(default)]
     pub epoch: Epoch,
 }
 

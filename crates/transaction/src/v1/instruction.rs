@@ -81,8 +81,6 @@ pub enum Instruction {
         #[n(0)]
         address: ValidatorFeePoolAddress,
         #[n(1)]
-        #[cfg_attr(feature = "serde", serde(default))]
-        #[cbor(default)]
         max_amount: Option<Amount>,
     },
     #[n(7)]
@@ -111,8 +109,6 @@ pub enum Instruction {
         binary: BlobIndex,
         /// Optional multihash of off-chain CBOR metadata
         #[n(1)]
-        #[cfg_attr(feature = "serde", serde(default))]
-        #[cbor(default)]
         #[cfg_attr(feature = "ts", ts(type = "string | null"))]
         metadata_hash: Option<MetadataHash>,
     },
