@@ -287,9 +287,10 @@ where
         substate_ids: &mut HashSet<SubstateRequirement>,
     ) -> Result<(), SubstateApiError> {
         for addr in value.referenced_substates() {
-            // Component state legitimately holds engine-issued addresses — an `Account` approval is keyed on a
-            // spender badge, which is commonly a public-key identity — and those have no substate to fetch or lock.
-            if addr.is_virtual() {
+            // Component state legitimately holds addresses no transaction can declare: an `Account` approval is
+            // keyed on a spender badge, which is commonly a public-key identity, and a template may record a
+            // transaction receipt.
+            if !addr.is_declarable_input() {
                 continue;
             }
             self.insert_substate_if_absent(&addr, unversioned, substate_ids).await?;

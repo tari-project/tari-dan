@@ -84,7 +84,7 @@ use tari_ootle_transaction_validation::{
     BlobReferenceValidator,
     EpochRangeValidator,
     InputLimitValidator,
-    InputsAreNotVirtualValidator,
+    InputsAreDeclarableValidator,
     InstructionLimitValidator,
     PublishTemplateLimitValidator,
     SignatureLimitValidator,
@@ -633,11 +633,11 @@ pub fn create_node_transaction_validator<TProvider: TemplateProvider>(
 /// Builds the validations applied when a transaction is admitted to this node's mempool: the node-local chain
 /// plus the two epoch-window rules and the ingress-only input check.
 ///
-/// [`InputsAreNotVirtualValidator`] is deliberately here rather than in [`create_node_transaction_validator`], which
+/// [`InputsAreDeclarableValidator`] is deliberately here rather than in [`create_node_transaction_validator`], which
 /// also backs `TariBlockTransactionValidator`. A rejection rule in block validation is a consensus rule: an
 /// upgraded validator would refuse a block that a non-upgraded one accepts. Refusing at ingress costs the
-/// sender and nothing else, and a transaction that slips past an un-upgraded node's mempool still aborts at
-/// input resolution as it does today.
+/// sender and nothing else, and a block carrying such a transaction is still sound to execute: a virtual input
+/// aborts at input resolution, and an output-only one is locked and pledged at the sender's expense.
 pub fn create_mempool_transaction_validator<TProvider: TemplateProvider>(
     network: Network,
     template_manager: TProvider,
@@ -647,7 +647,7 @@ pub fn create_mempool_transaction_validator<TProvider: TemplateProvider>(
         .map_context(
             |_| (),
             create_node_transaction_validator(network, template_manager, constants)
-                .and_then(InputsAreNotVirtualValidator::new()),
+                .and_then(InputsAreDeclarableValidator::new()),
         )
         .and_then(EpochRangeValidator::new())
         .and_then(TransactionValidityWindowValidator::new(

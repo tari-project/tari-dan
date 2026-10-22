@@ -459,7 +459,7 @@ fn push_arg_substate_wants(args: &[ArgValue], wants: &mut Vec<WantItem>) {
         let Ok(indexed) = tari_engine_types::indexed_value::IndexedValue::from_raw(bytes) else {
             continue;
         };
-        for id in indexed.referenced_substates() {
+        for id in indexed.referenced_substates().filter(|id| id.is_declarable_input()) {
             wants.push(WantItem::SpecificSubstate {
                 substate_id: id.to_string(),
                 required: true,

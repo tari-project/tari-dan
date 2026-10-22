@@ -244,3 +244,34 @@ fn a_signature_over_the_builder_message_verifies_once_fee_instructions_are_appli
     assert!(unsealed.verify_all_signatures(&seal_signer));
     assert!(unsealed.seal(&seal_secret).verify_all_signatures());
 }
+
+#[test]
+fn auto_filled_inputs_and_referenced_substates_skip_undeclarable_ids() {
+    use tari_engine_types::substate::SubstateId;
+    use tari_template_lib_types::{ObjectKey, TransactionReceiptAddress, crypto::RistrettoPublicKeyBytes};
+
+    let receipt = TransactionReceiptAddress::from_array([3; 32]);
+    let identity = tari_template_lib_types::NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::default());
+    let component = ComponentAddress::new(ObjectKey::from_array([2; 32]));
+    let transaction = Transaction::builder_localnet(Epoch(1))
+        .with_auto_fill_inputs()
+        .call_function(TemplateAddress::default(), "record", args![
+            receipt, identity, component
+        ])
+        .build_unsigned();
+
+    let inputs = transaction
+        .inputs()
+        .iter()
+        .map(|input| input.substate_id().clone())
+        .collect::<Vec<_>>();
+    assert_eq!(inputs, vec![SubstateId::from(component)]);
+    assert_eq!(
+        transaction
+            .to_referenced_substates()
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>(),
+        vec![SubstateId::from(component)]
+    );
+}
