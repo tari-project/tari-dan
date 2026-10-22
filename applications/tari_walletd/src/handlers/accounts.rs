@@ -23,7 +23,15 @@ use tari_engine_types::{
     substate::SubstateId,
 };
 use tari_ootle_app_utilities::fee_tables::fee_rates_by_network;
-use tari_ootle_common_types::{Epoch, InputDeclaration, NumPreshards, SubstateRequirement, optional::Optional};
+use tari_ootle_common_types::{
+    Epoch,
+    InputDeclaration,
+    NumPreshards,
+    ShardGroup,
+    SubstateRequirement,
+    optional::Optional,
+    shard::Shard,
+};
 use tari_ootle_transaction::{Transaction, args};
 use tari_ootle_wallet_crypto::{
     OutputWitness,
@@ -1703,14 +1711,6 @@ enum FeeEstimateStep {
     GiveUp,
 }
 
-/// Decides what an estimation round leads to, given what the round was `built_at`, what the shape it
-/// produced was `charged`, the `required` figure it reports, whether an earlier round named
-/// `built_at`, and how many rounds have run.
-///
-/// A round settles only against a `verified` fee: a figure is worth reporting once a build at it has
-/// been shown to cover itself. A dry-run round shows that for the figure the round before it named,
-/// and the static estimate shows it without a round trip. Unverified, the fee under test is the
-/// caller's guess.
 /// What a static fee estimate needs to price a transaction's declared inputs as the engine charges
 /// them: the encoded bytes of the substates it declares, read from the network, and the shard layout
 /// they are pledged across.
@@ -1722,10 +1722,7 @@ struct DeclaredInputPricing {
 
 impl DeclaredInputPricing {
     /// Reads the substates `ids` names from the network, and the layout the latest end-of-epoch
-    /// checkpoints describe, one per shard group.
-    ///
-    /// Before the network has ended an epoch there is no checkpoint to read the layout from, so each
-    /// shard is taken to be a group of its own, which no layout can exceed.
+    /// checkpoints describe, one per shard group (see [`committees_of_checkpoint_layout`]).
     async fn fetch<I: IntoIterator<Item = SubstateId>>(sdk: &WalletSdk, ids: I) -> Result<Self, anyhow::Error> {
         let ids = ids.into_iter().filter(|id| !id.is_global()).collect::<HashSet<_>>();
         let value_bytes = sdk
@@ -1737,15 +1734,13 @@ impl DeclaredInputPricing {
             .collect();
 
         let num_preshards = NumPreshards::current();
-        let num_shard_groups = sdk
-            .get_network_interface()
-            .get_latest_shard_group_checkpoints()
-            .await?
-            .len();
-        let num_committees = match u32::try_from(num_shard_groups) {
-            Ok(0) | Err(_) => num_preshards.as_u32(),
-            Ok(n) => n,
-        };
+        let checkpoints = sdk.get_network_interface().get_latest_shard_group_checkpoints().await?;
+        let num_committees = committees_of_checkpoint_layout(
+            num_preshards,
+            checkpoints
+                .iter()
+                .map(|checkpoint| (checkpoint.epoch, checkpoint.shard_group)),
+        );
         Ok(Self {
             value_bytes,
             num_preshards,
@@ -1771,6 +1766,44 @@ impl DeclaredInputPricing {
     }
 }
 
+/// The number of committees the shard groups of `checkpoints`, given in shard order, divide the
+/// network into, when they come from one epoch and together cover every shard.
+///
+/// Any other set, including none, gives one committee per shard. Each further group can only add to
+/// the groups a transaction's inputs span, so that count prices the input fanout of any layout from
+/// above.
+fn committees_of_checkpoint_layout<I: IntoIterator<Item = (Epoch, ShardGroup)>>(
+    num_preshards: NumPreshards,
+    checkpoints: I,
+) -> u32 {
+    let all_shards = ShardGroup::all_shards(num_preshards);
+    let mut checkpoints = checkpoints.into_iter().peekable();
+    let Some(&(epoch, _)) = checkpoints.peek() else {
+        return num_preshards.as_u32();
+    };
+    let mut next_shard = Some(all_shards.start());
+    let mut num_committees = 0u32;
+    for (checkpoint_epoch, shard_group) in checkpoints {
+        if checkpoint_epoch != epoch || Some(shard_group.start()) != next_shard {
+            return num_preshards.as_u32();
+        }
+        next_shard = shard_group.end().as_u32().checked_add(1).map(Shard::from);
+        num_committees += 1;
+    }
+    if next_shard != all_shards.end().as_u32().checked_add(1).map(Shard::from) {
+        return num_preshards.as_u32();
+    }
+    num_committees
+}
+
+/// Decides what an estimation round leads to, given what the round was `built_at`, what the shape it
+/// produced was `charged`, the `required` figure it reports, whether an earlier round named
+/// `built_at`, and how many rounds have run.
+///
+/// A round settles only against a `verified` fee: a figure is worth reporting once a build at it has
+/// been shown to cover itself. A dry-run round shows that for the figure the round before it named,
+/// and the static estimate shows it without a round trip. Unverified, the fee under test is the
+/// caller's guess.
 fn next_fee_estimate_step(
     built_at: u64,
     charged: u64,
@@ -3317,6 +3350,31 @@ mod claim_burn_fee_tests {
             .as_ref()
             .expect("a claim reveals its fee")
             .amount
+    }
+
+    #[test]
+    fn a_complete_one_epoch_checkpoint_layout_gives_its_committee_count() {
+        let epoch = Epoch(3);
+        let layout = [(epoch, ShardGroup::new(1, 128)), (epoch, ShardGroup::new(129, 256))];
+        assert_eq!(committees_of_checkpoint_layout(NumPreshards::P256, layout), 2);
+    }
+
+    #[test]
+    fn an_incomplete_or_mixed_checkpoint_layout_gives_one_committee_per_shard() {
+        let epoch = Epoch(3);
+        let cases = [
+            vec![],
+            vec![(epoch, ShardGroup::new(1, 128))],
+            vec![(epoch, ShardGroup::new(1, 128)), (Epoch(2), ShardGroup::new(129, 256))],
+            vec![(epoch, ShardGroup::new(1, 64)), (epoch, ShardGroup::new(129, 256))],
+        ];
+        for layout in cases {
+            assert_eq!(
+                committees_of_checkpoint_layout(NumPreshards::P256, layout.clone()),
+                256,
+                "{layout:?}"
+            );
+        }
     }
 
     /// Prices the TARI resource every claim declares at a nominal size, on a network of two shard

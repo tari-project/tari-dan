@@ -909,14 +909,6 @@ fn declared_lock_intent(decl: &InputDeclarationRef<'_>, version: SubstateVersion
     }
 }
 
-/// The abort a transaction declaring the burn rate governance component earns for executing in a
-/// later epoch than the one it was pinned to, or `None` if it may execute.
-///
-/// The template holds an activation to a lead time measured from `Consensus::current_epoch()`, which
-/// is the pinned epoch. Consensus resolves an epoch's rate from committed state on the premise that
-/// the lead time runs from the epoch the call actually executes in, so the two epochs must be the
-/// same. Every shard group holds the component and executes the call, and an abort from any one of
-/// them aborts it everywhere.
 /// [`Transaction::input_fanout`] under the shard layout of the block executing the transaction.
 fn input_fanout(transaction: &Transaction, local_committee_info: &CommitteeInfo) -> u32 {
     transaction.input_fanout(
@@ -925,6 +917,14 @@ fn input_fanout(transaction: &Transaction, local_committee_info: &CommitteeInfo)
     )
 }
 
+/// The abort a transaction declaring the burn rate governance component earns for executing in a
+/// later epoch than the one it was pinned to, or `None` if it may execute.
+///
+/// The template holds an activation to a lead time measured from `Consensus::current_epoch()`, which
+/// is the pinned epoch. Consensus resolves an epoch's rate from committed state on the premise that
+/// the lead time runs from the epoch the call actually executes in, so the two epochs must be the
+/// same. Every shard group holds the component and executes the call, and an abort from any one of
+/// them aborts it everywhere.
 fn burn_rate_governance_abort_reason(
     transaction: &Transaction,
     pinned_epoch: Epoch,
