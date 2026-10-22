@@ -52,7 +52,6 @@ docker run -d --name walletd \
   -e JRPC_LISTEN_ON=0.0.0.0:5100 \
   -e OOTLE_WALLETD_INDEXER_API_URL=https://ootle-indexer-a.tari.com/,https://ootle-indexer-b.tari.com/ \
   -e OOTLE_WALLETD_KEYRING_PASSWORD=<password> \
-  -e OOTLE_WALLETD_AUTHENTICATION=none \
   ghcr.io/tari-project/ootle-walletd:vX.Y.Z
 
 curl -fsS http://127.0.0.1:5100/health
@@ -62,7 +61,7 @@ curl -fsS http://127.0.0.1:5100/health
 |---|---|---|---|
 | `TARI_NETWORK` | `--network` | `esmeralda` | Network to join |
 | `TARI_BASE_DIR` | `--base-path` / `-b` | `/data` | Data directory; the wallet uses `<base>/<network>/` |
-| `JRPC_LISTEN_ON` | `--listen-on` | `0.0.0.0:5100` | JSON-RPC, web UI and `/health` listener |
+| `JRPC_LISTEN_ON` | `--listen-on` | `127.0.0.1:5100` | JSON-RPC, web UI and `/health` listener. Set `0.0.0.0:<port>` only to publish the port outside the container's network namespace (`docker run -p`); containers in one ECS `awsvpc` task share loopback |
 | `OOTLE_WALLETD_INDEXER_API_URL` | `--indexer-api-url` / `-i` | the network preset (Esmeralda: the two public Tari indexers) | Comma-separated indexer URLs; one is picked at random, the rest are failovers |
 | `OOTLE_WALLETD_KEYRING_PASSWORD` | `--override-keyring-password` | none | Password that encrypts the wallet seed. **Required in a container** |
 | `OOTLE_WALLETD_AUTHENTICATION` | `--authentication` | `webauthn` | `webauthn` or `none` |
@@ -74,7 +73,8 @@ name, or with an environment variable `TARI_<SECTION>__<KEY>` (double underscore
 levels), e.g. `TARI_ESMERALDA__OOTLE_WALLET_DAEMON__JWT_EXPIRY=15m`. Use the network-scoped
 key (`esmeralda.ootle_wallet_daemon.<key>`): a value in the network section of the config
 file wins over the unscoped `ootle_wallet_daemon.<key>`. The flags and `OOTLE_WALLETD_*`
-variables above always win over the config file.
+variables above win over the config file. One exception: indexer URLs saved over JSON-RPC with
+`settings.set` are stored in the wallet database and win over `OOTLE_WALLETD_INDEXER_API_URL`.
 
 ### First start
 
@@ -93,9 +93,18 @@ There is no OS keyring inside a container, so `OOTLE_WALLETD_KEYRING_PASSWORD` m
 without it the daemon cannot store the seed password and exits with a keyring access error. The seed is encrypted
 with this password, so the same password must be given on every later start.
 
-`OOTLE_WALLETD_AUTHENTICATION=none` lets anything that can reach the port spend the wallet's
-funds. Only use it when the port is reachable from trusted containers alone (e.g. inside one ECS
-task); `webauthn` needs a browser to register a passkey.
+### Running headless in ECS
+
+- Inject `OOTLE_WALLETD_KEYRING_PASSWORD` through the task definition's `secrets` (`valueFrom` a
+  Secrets Manager secret or SSM SecureString), not `environment`: plain environment values show
+  in the task definition and in `docker inspect`. Put `/data` on an encrypted EBS volume.
+- `webauthn` needs a browser to register a passkey. A headless wallet can use
+  `OOTLE_WALLETD_AUTHENTICATION=none`, but then anything that reaches the port can spend the
+  wallet's funds, including a web page through DNS rebinding when the port is published on a
+  desktop. Keep it on loopback inside the task (the image default).
+- For a cold and a hot wallet in one task, give each its own `JRPC_LISTEN_ON` port (e.g.
+  `127.0.0.1:5100` and `127.0.0.1:5101`) and its own health-check port. If the port is taken the
+  daemon silently binds a random port instead, so two wallets on 5100 conflict.
 
 Burn proofs are read from `/data/share/tari/<network>/burn_proofs` (the image sets
 `XDG_DATA_HOME=/data/share`), so pending proofs survive a container replacement.
@@ -104,7 +113,7 @@ Burn proofs are read from `/data/share/tari/<network>/burn_proofs` (the image se
 
 `GET /health` on the JSON-RPC port returns `200 OK` without authentication once the wallet has
 started. The image has a `HEALTHCHECK` that calls it with `curl` on the port in
-`JRPC_LISTEN_ON`. ECS ignores the image `HEALTHCHECK`; set it in the task definition instead:
+`JRPC_LISTEN_ON` (5100 when unset). ECS ignores the image `HEALTHCHECK`; set it in the task definition instead:
 
 ```json
 "healthCheck": {
@@ -129,10 +138,21 @@ Both images get the same tags. Released tags follow `vX.Y.Z` semver.
 
 ## Verifying signatures
 
-CI signs each pushed image by digest with cosign keyless signing (GitHub OIDC):
+CI signs each pushed image by digest with cosign keyless signing (GitHub OIDC). Verify a release
+image against the release tag ref:
 
 ```bash
 cosign verify ghcr.io/tari-project/ootle-walletd:vX.Y.Z \
-  --certificate-identity-regexp '^https://github.com/tari-project/tari-ootle/.github/workflows/build_dockers.yml@' \
+  --certificate-identity-regexp '^https://github\.com/tari-project/tari-ootle/\.github/workflows/build_dockers\.yml@refs/tags/v' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
+
+and a `development` image against the branch:
+
+```bash
+cosign verify ghcr.io/tari-project/ootle-walletd:development \
+  --certificate-identity https://github.com/tari-project/tari-ootle/.github/workflows/build_dockers.yml@refs/heads/development \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Tags can be moved; in ECS, pin the image by the verified digest (`ootle-walletd@sha256:...`).

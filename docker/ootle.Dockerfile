@@ -261,17 +261,16 @@ COPY --from=builder /out-walletd/ /usr/local/bin/
 
 # The wallet keeps its config, database and logs under /data/<network>/.
 # XDG_DATA_HOME puts the default burn proof directory on the volume too.
-# A container is only reachable through a non-loopback address.
+# JSON-RPC stays on the binary's 127.0.0.1:5100 default unless JRPC_LISTEN_ON is set.
 ENV TARI_BASE_DIR=/data \
-    XDG_DATA_HOME=/data/share \
-    JRPC_LISTEN_ON=0.0.0.0:5100
+    XDG_DATA_HOME=/data/share
 
 USER tari
 VOLUME ["/data"]
 EXPOSE 5100
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s \
-  CMD curl -fsS "http://127.0.0.1:${JRPC_LISTEN_ON##*:}/health" || exit 1
+  CMD listen="${JRPC_LISTEN_ON:-127.0.0.1:5100}"; curl -fsS "http://127.0.0.1:${listen##*:}/health" || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--", "tari_ootle_walletd"]
 
