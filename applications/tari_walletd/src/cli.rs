@@ -57,6 +57,11 @@ pub struct Cli {
     #[clap(long = "indexer-api-url", short = 'i', alias = "indexer-url", value_delimiter = ',')]
     /// Indexer API URL override. Repeat it, or separate URLs with commas, to configure several indexers.
     pub indexer_api_urls: Vec<Url>,
+    /// A host name, beyond localhost, IP addresses and the WebAuthn origin's host, that requests may address the
+    /// daemon by (e.g. the name a reverse proxy forwards). Repeat it, or separate names with commas. `*` accepts
+    /// every name.
+    #[clap(long = "allowed-host", value_delimiter = ',')]
+    pub allowed_hosts: Vec<String>,
     #[clap(flatten)]
     pub wallet_restore: WalletRestoreArgs,
     /// The OS keyring is used to store and retrieve a randomly generated password. This is used for wallet encryption.
@@ -120,6 +125,12 @@ impl ConfigOverrideProvider for Cli {
                 .collect::<Vec<_>>()
                 .join(",");
             overrides.push((format!("{}.ootle_wallet_daemon.indexer_api_url", network), urls));
+        }
+        if !self.allowed_hosts.is_empty() {
+            overrides.push((
+                format!("{}.ootle_wallet_daemon.allowed_hosts", network),
+                self.allowed_hosts.join(","),
+            ));
         }
         if let Some(ref file) = self.value_lookup_table_file {
             overrides.push((

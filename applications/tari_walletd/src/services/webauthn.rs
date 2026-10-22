@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use tari_ootle_wallet_sdk::storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter};
 use thiserror::Error;
-use webauthn_rs::prelude::{Passkey, PasskeyAuthentication, PasskeyRegistration};
+use webauthn_rs::prelude::{AuthenticationResult, Passkey, PasskeyAuthentication, PasskeyRegistration};
 
 use crate::services::{SessionData, SessionStore, SessionStoreError};
 
@@ -23,6 +23,8 @@ pub enum WebauthnServiceError {
     WalletStorage(#[from] WalletStorageError),
     #[error("This wallet is already enrolled. A new credential must be added from an authenticated session")]
     AlreadyEnrolled,
+    #[error("The credential that authenticated is not enrolled in this wallet")]
+    UnknownCredential,
 }
 
 /// Registration session data
@@ -155,6 +157,23 @@ where TStore: WalletStore
         Ok(self.auth_sessions.get(session_id).await?.passkey_auth.clone())
     }
 
+    /// Stores what a successful authentication reveals about its credential, chiefly the
+    /// authenticator's signature counter. A ceremony refuses a counter that is not above the stored
+    /// one, so this is what lets a cloned authenticator be detected.
+    pub fn record_authentication(&self, result: &AuthenticationResult) -> Result<(), WebauthnServiceError> {
+        self.wallet_store.with_write_tx(|tx| {
+            let mut passkey = tx
+                .webauthn_reg_fetch_all_passkeys()?
+                .into_iter()
+                .find(|passkey| passkey.cred_id() == result.cred_id())
+                .ok_or(WebauthnServiceError::UnknownCredential)?;
+            if passkey.update_credential(result) == Some(true) {
+                tx.webauthn_reg_update_passkey(&passkey)?;
+            }
+            Ok(())
+        })
+    }
+
     pub async fn finish_authentication(&self, session_id: &str) -> Result<(), WebauthnServiceError> {
         self.auth_sessions.remove(session_id).await?;
         Ok(())
@@ -244,6 +263,57 @@ mod tests {
         let err = enrol(&service, "attacker").await.unwrap_err();
         assert!(matches!(err, WebauthnServiceError::AlreadyEnrolled));
         assert!(service.passkeys("attacker".to_string()).unwrap().is_empty());
+    }
+
+    /// What `finish_passkey_authentication` reports for a ceremony by `cred_id` at `counter`.
+    fn authentication_result(cred_id: &str, counter: u32) -> AuthenticationResult {
+        serde_json::from_value(serde_json::json!({
+            "cred_id": cred_id,
+            "needs_update": true,
+            "user_verified": true,
+            "backup_state": false,
+            "backup_eligible": false,
+            "counter": counter,
+            "extensions": {},
+        }))
+        .unwrap()
+    }
+
+    fn stored_counter(service: &WebauthnService<SqliteWalletStore>) -> u64 {
+        let passkeys = service.passkeys("owner".to_string()).unwrap();
+        assert_eq!(passkeys.len(), 1);
+        serde_json::to_value(&passkeys[0]).unwrap()["cred"]["counter"]
+            .as_u64()
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn an_authentication_advances_the_stored_counter() {
+        let (service, _temp) = service();
+        enrol(&service, "owner").await.unwrap();
+        assert_eq!(stored_counter(&service), 0);
+
+        service
+            .record_authentication(&authentication_result("AAECAwQFBgcICQoLDA0ODw", 5))
+            .unwrap();
+        assert_eq!(stored_counter(&service), 5);
+
+        service
+            .record_authentication(&authentication_result("AAECAwQFBgcICQoLDA0ODw", 3))
+            .unwrap();
+        assert_eq!(stored_counter(&service), 5, "the stored counter never moves back");
+    }
+
+    #[tokio::test]
+    async fn an_authentication_by_an_unknown_credential_is_refused() {
+        let (service, _temp) = service();
+        enrol(&service, "owner").await.unwrap();
+
+        let err = service
+            .record_authentication(&authentication_result("AQIDBAUGBwgJCgsMDQ4PEA", 5))
+            .unwrap_err();
+        assert!(matches!(err, WebauthnServiceError::UnknownCredential));
+        assert_eq!(stored_counter(&service), 0);
     }
 
     /// Two enrolments that both passed any earlier check still end with one credential, because the

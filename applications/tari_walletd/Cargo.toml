@@ -103,6 +103,7 @@ tari_consensus = { workspace = true }
 tari_utilities = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
+tower = { workspace = true, features = ["util"] }
 
 [package.metadata.cargo-machete]
 ignored = [

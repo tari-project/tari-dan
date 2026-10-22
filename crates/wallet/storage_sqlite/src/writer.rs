@@ -17,6 +17,7 @@ use diesel::{
     OptionalExtension,
     QueryDsl,
     RunQueryDsl,
+    SelectableHelper,
     SqliteConnection,
     dsl,
 };
@@ -71,6 +72,7 @@ use tari_ootle_wallet_sdk::{
         WalletEvent,
         WalletLockId,
         WalletTransactionUpdate,
+        WebauthnRegistrationPasskeyModel,
     },
     storage::{CommittableStore, WalletEventStoreWriter, WalletStorageError, WalletStoreReader, WalletStoreWriter},
 };
@@ -94,7 +96,7 @@ use webauthn_rs::prelude::Passkey;
 use crate::{
     diesel::ExpressionMethods,
     models,
-    models::{AddressBookEntryChangeset, StealthOutputUpdate},
+    models::{AddressBookEntryChangeset, StealthOutputUpdate, WebauthnRegistrationPasskey},
     reader::ReadTransaction,
     serialization::{deserialize_hex_try_from, deserialize_json, serialize_hex, serialize_json},
 };
@@ -2653,6 +2655,46 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             ))
             .execute(self.connection())
             .map_err(|e| WalletStorageError::general("webauthn_reg_passkeys_insert", e))?;
+
+        Ok(())
+    }
+
+    fn webauthn_reg_update_passkey(&mut self, passkey: &Passkey) -> Result<(), WalletStorageError> {
+        use crate::schema::webauthn_registration_passkeys;
+
+        // The passkey is stored as opaque JSON, so the row is found by decoding each one.
+        let row_id = webauthn_registration_passkeys::table
+            .select(WebauthnRegistrationPasskey::as_select())
+            .load::<WebauthnRegistrationPasskey>(self.connection())
+            .map_err(|e| WalletStorageError::general("webauthn_reg_update_passkey", e))?
+            .iter()
+            .find(|row| {
+                WebauthnRegistrationPasskeyModel::try_from(*row)
+                    .is_ok_and(|model| model.passkey.cred_id() == passkey.cred_id())
+            })
+            .map(|row| row.id)
+            .ok_or_else(|| {
+                WalletStorageError::not_found(
+                    "webauthn_reg_update_passkey",
+                    "passkey".to_string(),
+                    format!("{:?}", passkey.cred_id()),
+                )
+            })?;
+
+        let passkey_json = serde_json::to_string(passkey).map_err(|e| WalletStorageError::EncodingError {
+            operation: "webauthn_reg_update_passkey",
+            item: "passkey",
+            details: e.to_string(),
+        })?;
+
+        diesel::update(webauthn_registration_passkeys::table)
+            .filter(webauthn_registration_passkeys::id.eq(row_id))
+            .set((
+                webauthn_registration_passkeys::passkey.eq(passkey_json.as_bytes()),
+                webauthn_registration_passkeys::updated_at.eq(diesel::dsl::now),
+            ))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("webauthn_reg_update_passkey", e))?;
 
         Ok(())
     }
