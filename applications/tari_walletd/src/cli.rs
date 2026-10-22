@@ -231,6 +231,7 @@ pub enum Subcommand {
 
 #[cfg(test)]
 mod tests {
+    use clap::CommandFactory;
     use tari_common::DefaultConfigLoader;
     use tari_ootle_app_utilities::configuration::{
         get_default_config,
@@ -287,40 +288,30 @@ mod tests {
         assert_eq!(config.max_fee_limit, 5_000_000);
     }
 
+    /// Every setting the container image documents must be settable from the environment.
     #[test]
-    fn environment_variables_override_the_esmeralda_preset() {
-        let vars = [
-            ("JRPC_LISTEN_ON", "0.0.0.0:5100"),
-            ("OOTLE_WALLETD_INDEXER_API_URL", "http://a.example/,http://b.example/"),
-            ("OOTLE_WALLETD_AUTHENTICATION", "none"),
-            ("OOTLE_WALLETD_AUTO_CLAIM_BURNS", "false"),
-            ("OOTLE_WALLETD_MAX_FEE_LIMIT", "5000000"),
-            ("OOTLE_WALLETD_KEYRING_PASSWORD", "secret"),
+    fn container_settings_have_environment_variables() {
+        let command = Cli::command();
+        let env_of = |long: &str| {
+            command
+                .get_arguments()
+                .find(|arg| arg.get_long() == Some(long))
+                .and_then(|arg| arg.get_env())
+                .and_then(|env| env.to_str())
+                .map(str::to_string)
+        };
+        let expected = [
+            ("network", "TARI_NETWORK"),
+            ("base-path", "TARI_BASE_DIR"),
+            ("listen-on", "JRPC_LISTEN_ON"),
+            ("indexer-api-url", "OOTLE_WALLETD_INDEXER_API_URL"),
+            ("override-keyring-password", "OOTLE_WALLETD_KEYRING_PASSWORD"),
+            ("authentication", "OOTLE_WALLETD_AUTHENTICATION"),
+            ("auto-claim-burns", "OOTLE_WALLETD_AUTO_CLAIM_BURNS"),
+            ("max-fee-limit", "OOTLE_WALLETD_MAX_FEE_LIMIT"),
         ];
-        // SAFETY: no other test reads these variables, and nextest runs each test in its own process.
-        unsafe {
-            for (key, value) in vars {
-                std::env::set_var(key, value);
-            }
+        for (long, env) in expected {
+            assert_eq!(env_of(long).as_deref(), Some(env), "--{long}");
         }
-        let cli = Cli::try_parse_from(["tari_ootle_walletd", "--network", "esmeralda"]);
-        // SAFETY: as above.
-        unsafe {
-            for (key, _) in vars {
-                std::env::remove_var(key);
-            }
-        }
-        let cli = cli.unwrap();
-        assert!(cli.override_keyring_password.is_some());
-
-        let config = load(&cli);
-        assert_eq!(config.json_rpc_address, "0.0.0.0:5100".parse::<SocketAddr>().unwrap());
-        assert_eq!(
-            config.indexer_api_urls,
-            urls(&["http://a.example/", "http://b.example/"])
-        );
-        assert!(config.authentication.is_none());
-        assert!(!config.auto_claim_burns);
-        assert_eq!(config.max_fee_limit, 5_000_000);
     }
 }

@@ -260,8 +260,10 @@ RUN apt-get update && \
 COPY --from=builder /out-walletd/ /usr/local/bin/
 
 # The wallet keeps its config, database and logs under /data/<network>/.
+# XDG_DATA_HOME puts the default burn proof directory on the volume too.
 # A container is only reachable through a non-loopback address.
 ENV TARI_BASE_DIR=/data \
+    XDG_DATA_HOME=/data/share \
     JRPC_LISTEN_ON=0.0.0.0:5100
 
 USER tari

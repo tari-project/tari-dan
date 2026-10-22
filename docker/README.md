@@ -83,6 +83,12 @@ the wallet database at `/data/<network>/data/wallet.sqlite` and generates a new 
 `/data/<network>/log/` and stdout. Keep `/data` on a persistent volume: losing it loses the
 wallet unless its seed words were backed up.
 
+The container runs as uid/gid 1000 and never as root, so `/data` must be writable by uid 1000.
+A Docker named volume inherits the image's ownership and works as is. A host bind mount or an
+attached EBS volume is usually owned by root: `chown 1000:1000` the directory on the host (or in
+an ECS init container) before the first start. Otherwise the daemon exits immediately with a
+`Permission denied` error while creating `/data/<network>/config/config.toml`.
+
 There is no OS keyring inside a container, so `OOTLE_WALLETD_KEYRING_PASSWORD` must be set;
 without it the daemon cannot store the seed password and exits with a keyring access error. The seed is encrypted
 with this password, so the same password must be given on every later start.
@@ -91,8 +97,8 @@ with this password, so the same password must be given on every later start.
 funds. Only use it when the port is reachable from trusted containers alone (e.g. inside one ECS
 task); `webauthn` needs a browser to register a passkey.
 
-Burn proofs are read from `/home/tari/.local/share/tari/<network>/burn_proofs`, which is not on
-the volume. Mount that directory if the wallet should claim burns.
+Burn proofs are read from `/data/share/tari/<network>/burn_proofs` (the image sets
+`XDG_DATA_HOME=/data/share`), so pending proofs survive a container replacement.
 
 ### Health check
 
