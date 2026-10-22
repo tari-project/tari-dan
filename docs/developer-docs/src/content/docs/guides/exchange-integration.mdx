@@ -172,7 +172,7 @@ Useful arguments:
 | `-c`, `--config` | Config file. Default: `config/config.toml` inside the base path |
 | `--network` | Network to connect to (env `TARI_NETWORK`) |
 | `-r`, `--api-listen-address` | REST API listen address |
-| `-g`, `--epoch-oracle-minotari-node-grpc-url` | Minotari base node gRPC URL (env `TARI_INDEXER_MINOTARI_NODE_GRPC_URL`) |
+| `-g`, `--epoch-oracle-minotari-node-grpc-url` | Minotari base node gRPC URL (env `TARI_INDEXER_MINOTARI_NODE_GRPC_URL`). This sets the root `[epoch_oracle.base_layer]` key, which a per-network section overrides. On Esmeralda, set `base_node_grpc_url` in `[esmeralda.epoch_oracle.base_layer]` instead (see below) |
 | `-s`, `--peer-seeds` | Override the peer seeds |
 | `--listener-port` | Fixed p2p listener port. Default `0`, which picks a random port |
 | `-p key=value` | Override any config value |
@@ -631,10 +631,11 @@ function stealthTransferRequest(destination, amountMicro, maxFee, dryRun) {
   };
 }
 
-// 1. Dry run. The wallet settles the fee over several rounds. Pass a generous upper bound as max_fee here.
-//    Dry runs are not subject to max_fee_limit.
-const ESTIMATE_BOUND = 1_000_000n; // µT (1 TARI)
-const dry = await walletRpc("accounts.stealth_transfer", stealthTransferRequest(dest, amount, ESTIMATE_BOUND, true));
+// 1. Dry run. The wallet re-prices the fee up or down over several rounds, so the starting figure only needs to be
+//    roughly right. Start from a small figure such as your last final_fee. Don't use a large bound: the first round
+//    selects inputs for amount + max_fee, so a large figure makes withdrawals close to the account balance fail.
+const startFee = lastFinalFee ?? 2_000n; // µT. lastFinalFee: the final_fee from your previous withdrawal, if any
+const dry = await walletRpc("accounts.stealth_transfer", stealthTransferRequest(dest, amount, startFee, true));
 
 // 2. Read the minimum fee to use for the real submission.
 const { final_fee } = await walletRpc("transactions.get", { transaction_id: dry.transaction_id });
@@ -655,11 +656,16 @@ const result = await walletRpc("transactions.wait_result", { transaction_id, tim
     deposit address that has a pay reference embedded, `null` makes sure the pay reference is forwarded. An empty
     string (`""`) removes it.
   - Fees are paid in TARI and are always public. Keep a TARI balance in the withdrawal account to cover them.
-  - Never retry a withdrawal blindly after a timeout. First look up the stored `transaction_id` with
-    `transactions.get`. Only resubmit if the result is definitely `Rejected` or `InvalidTransaction`, or the
-    transaction has expired. The wallet has no `Expired` status, so an expired transaction stays `Pending`. To detect
-    expiry, compare the indexer's current epoch (`current_epoch` from `GET /epoch-manager/stats`) with the
-    transaction's `max_epoch`. Once the current epoch is past `max_epoch`, the transaction can never be included.
+  - **Never resubmit a withdrawal unless its outcome is final and unsuccessful.** Resubmitting while the first
+    attempt can still commit pays the customer twice. After a timeout, look up the stored `transaction_id`. Resubmit
+    only if one of these is true:
+    - the wallet status is `Rejected` or `InvalidTransaction`
+    - the indexer's `GET /transactions/{id}/result` returns `Finalized` with an `Abort` decision
+    - the indexer returns `Rejected`
+
+    `Pending` is **not** a final outcome. Keep waiting, or escalate to manual review. Don't infer expiry from epoch
+    numbers. A transaction is judged against the epoch it was pinned to, so it can still commit in a later epoch,
+    after its `max_epoch` appears to have passed.
 </Aside>
 
 ### Moving funds between your wallets
@@ -677,9 +683,11 @@ each transaction through a three-chain rule. **Once a transaction has been commi
 and no probabilistic confirmations,** so you don't need to wait for a block count before crediting a deposit as you
 do on Minotari. A stealth output that the deposit wallet sees on-chain is already committed.
 
-Every transaction has a `max_epoch` set when it is built (by default about an hour ahead). If it has not been
-finalised by then, it can never be included. A transaction that is still pending will therefore always end up either
-final or expired.
+Every transaction has a `max_epoch` set when it is built (by default about an hour ahead). A transaction pinned to an
+epoch after its `max_epoch` is aborted. The pinned epoch is fixed when validators sequence the transaction, so it can
+differ from the latest epoch your indexer reports. A transaction pinned in time can still commit in a later block.
+**Treat a transaction as settled only when it has a final outcome. Never treat it as settled because time has
+passed.**
 
 ### Transaction status
 
@@ -759,7 +767,7 @@ own deposit and withdrawal path. See [Burn Minotari for TARI](/guides/burn-minot
 - [ ] Unknown or missing pay references routed to review; own change outputs recognised as internal
 - [ ] Withdrawal address validation (prefix, network, key validity)
 - [ ] Withdrawal flow: dry run, submit with the dry run's `final_fee`, store `transaction_id`, `wait_result`, treat only
-      `Accepted` as success, detect expiry through `max_epoch`
+      `Accepted` as success, resubmit only after a final unsuccessful outcome
 - [ ] Sweep and top-up procedures documented
 - [ ] `transaction_retention_epochs` set to cover your reconciliation window
 - [ ] End-to-end test on Esmeralda with small amounts
