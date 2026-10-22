@@ -272,14 +272,16 @@ fn the_transition_accumulator_follows_the_transition_records() {
                 .into_iter()
                 .map(|(_, versions)| (shard, versions))
                 .collect();
-            let acc_v1 = tx.substates_commit_batch(batch)?[&(shard, 1)];
+            tx.substates_commit_batch(batch)?;
+            let acc_v1 = tx.state_transitions_get_accumulator(shard, 1)?;
             let mut batch = create_substate_update_batch(Epoch(0), [&b_v0]);
             batch.updates = batch
                 .updates
                 .into_iter()
                 .map(|(_, versions)| (shard, versions))
                 .collect();
-            let acc_v2 = tx.substates_commit_batch(batch)?[&(shard, 2)];
+            tx.substates_commit_batch(batch)?;
+            let acc_v2 = tx.state_transitions_get_accumulator(shard, 2)?;
             tx.state_tree_shard_versions_set(shard, 2)?;
             Ok::<_, tari_ootle_storage::StorageError>((acc_v1, acc_v2))
         })

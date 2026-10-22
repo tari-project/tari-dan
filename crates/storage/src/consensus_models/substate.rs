@@ -3,7 +3,6 @@
 
 use std::{collections::HashSet, fmt, fmt::Display};
 
-use indexmap::IndexMap;
 use minicbor::{CborLen, Decode, Encode};
 use ootle_network::Network;
 use serde::{Deserialize, Serialize};
@@ -23,7 +22,7 @@ use tari_ootle_common_types::{
     shard::Shard,
 };
 use tari_ootle_transaction::TransactionId;
-use tari_state_tree::{SubstateTreeChange, TransitionAccumulator, Version};
+use tari_state_tree::{SubstateTreeChange, Version};
 use tari_template_lib_types::Hash32;
 
 use crate::{
@@ -182,11 +181,10 @@ impl SubstateRecord {
         tx.substate_locks_remove_many_for_transactions(transaction_ids)
     }
 
-    /// Commits `updates`. Returns the [`TransitionAccumulator`] of each `(shard, state version)` they wrote.
     pub fn commit_batch<TTx: StateStoreWriteTransaction>(
         tx: &mut TTx,
         updates: SubstateUpdateBatch,
-    ) -> Result<IndexMap<(Shard, Version), TransitionAccumulator>, StorageError> {
+    ) -> Result<(), StorageError> {
         tx.substates_commit_batch(updates)
     }
 

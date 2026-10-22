@@ -1322,10 +1322,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         self.remove_block_lock_set(block_id, OPERATION)
     }
 
-    fn substates_commit_batch(
-        &mut self,
-        update_batch: SubstateUpdateBatch,
-    ) -> Result<IndexMap<(Shard, Version), TransitionAccumulator>, StorageError> {
+    fn substates_commit_batch(&mut self, update_batch: SubstateUpdateBatch) -> Result<(), StorageError> {
         const OPERATION: &str = "substates_commit_batch";
 
         let db = self.db();
@@ -1333,7 +1330,6 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         let cf = db.cf(SubstateCf)?;
         let head_cf = db.cf(substate::HeadIndex)?;
         let unpruned_cf = db.cf(substate::UnprunedDownedValuesIndex)?;
-        let mut accumulators = IndexMap::new();
 
         for (shard, updates) in update_batch.updates {
             for (state_version, updates) in updates {
@@ -1429,11 +1425,10 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
 
                 db.cf(StateTransitionCf)?
                     .put(&(shard, state_version), &transition, OPERATION)?;
-                accumulators.insert((shard, state_version), transition_acc);
             }
         }
 
-        Ok(accumulators)
+        Ok(())
     }
 
     fn substates_prune_downed_values(&mut self, epoch: Epoch, limit: usize) -> Result<usize, StorageError> {
