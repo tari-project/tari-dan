@@ -76,8 +76,9 @@ pub fn migrate<TAddr: NodeAddressable + 'static>(
         },
         Some(version) if version > CURRENT_VERSION => {
             anyhow::bail!(
-                "Database schema version {version} is newer than this binary's {CURRENT_VERSION}; upgrade the binary \
-                 or delete the database"
+                "Database schema version {version} is newer than this binary's {CURRENT_VERSION}. Upgrade the binary, \
+                 or if a release incompatible with this network wrote the database, delete the validator's data \
+                 directory and resync."
             );
         },
         Some(version) => {

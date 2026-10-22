@@ -139,7 +139,8 @@ fn check_schema_version(store: &RocksDbStateStore<PeerAddress>) -> anyhow::Resul
         ),
         std::cmp::Ordering::Greater => bail!(
             "State db is at schema version {version}, which is newer than the {CURRENT_SCHEMA_VERSION} this tool \
-             understands. Use a rollback tool built from the same release as the validator."
+             understands. Use a rollback tool built from the release that wrote it, or if that release is \
+             incompatible with this network, delete the validator's data directory and resync."
         ),
     }
 }
