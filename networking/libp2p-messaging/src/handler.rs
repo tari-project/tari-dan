@@ -141,11 +141,13 @@ where TCodec: Codec + Send + Clone + 'static
             },
             StreamUpgradeError::Apply(_) => {},
             StreamUpgradeError::Io(e) => {
-                tracing::debug!(
-                    "outbound stream for request {} failed: {e}, retrying",
-                    stream.stream_id()
-                );
-                self.requested_stream = Some(stream);
+                tracing::debug!("outbound stream {} failed to negotiate: {e}", stream.stream_id());
+                // Dropping the stream closes its sink, so the behaviour opens a new stream for later messages.
+                self.pending_events.push_back(Event::OutboundFailure {
+                    peer_id: self.peer_id,
+                    stream_id: stream.stream_id(),
+                    error: Error::ProtocolNegotiationFailed(e),
+                });
             },
         }
     }
@@ -749,5 +751,42 @@ pub(crate) mod tests {
             timeouts(100, 100),
         ));
         assert!(matches!(event, Event::StreamClosed { stream_id: 1, .. }), "{event:?}");
+    }
+
+    #[test]
+    fn outbound_negotiation_io_error_is_reported_and_releases_the_stream() {
+        let peer_id = PeerId::random();
+        let mut handler = Handler::<TestCodec>::new(peer_id, StreamProtocol::new("/test/1"), &Config::default());
+        let (mut sink, msg_stream) = stream::channel(7, peer_id);
+        handler.on_behaviour_event(msg_stream);
+
+        let mut cx = Context::from_waker(std::task::Waker::noop());
+        assert!(matches!(
+            handler.poll(&mut cx),
+            Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { .. })
+        ));
+
+        handler.on_dial_upgrade_error(DialUpgradeError {
+            info: (),
+            error: StreamUpgradeError::Io(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid multistream message",
+            )),
+        });
+
+        match handler.poll(&mut cx) {
+            Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::OutboundFailure {
+                stream_id: 7,
+                error: Error::ProtocolNegotiationFailed(_),
+                ..
+            })) => {},
+            other => panic!("expected an outbound failure, got {:?}", other.map(|_| ())),
+        }
+        assert!(
+            sink.is_closed(),
+            "the handler must not keep the failed stream's receiver"
+        );
+        assert!(sink.send(b"later".to_vec()).is_err());
+        assert!(handler.poll(&mut cx).is_pending());
     }
 }

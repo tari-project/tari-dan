@@ -18,6 +18,7 @@ pub enum Error {
     SendTimeout(Duration),
     DialFailure,
     DialUpgradeError,
+    ProtocolNegotiationFailed(io::Error),
     ProtocolNotSupported,
     ChannelClosed,
 }
@@ -32,6 +33,7 @@ impl Display for Error {
             Self::SendTimeout(timeout) => write!(f, "Peer did not accept a message within {timeout:?}"),
             Self::DialFailure => write!(f, "Dial failure"),
             Self::DialUpgradeError => write!(f, "Dial upgrade error"),
+            Self::ProtocolNegotiationFailed(err) => write!(f, "Protocol negotiation with the peer failed: {err}"),
             Self::ProtocolNotSupported => write!(f, "Protocol not supported"),
             Self::ChannelClosed => write!(f, "Channel closed"),
         }

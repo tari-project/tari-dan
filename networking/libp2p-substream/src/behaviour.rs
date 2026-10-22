@@ -275,7 +275,7 @@ impl NetworkBehaviour for Behaviour {
         event: THandlerOutEvent<Self>,
     ) {
         match &event {
-            Event::SubstreamOpen { peer_id, stream_id, .. } => {
+            Event::SubstreamOpen { peer_id, stream_id, .. } | Event::OutboundFailure { peer_id, stream_id, .. } => {
                 if let Some(connections) = self.connected.get_mut(peer_id) {
                     for connection in connections {
                         connection.pending_streams.remove(stream_id);
@@ -284,7 +284,6 @@ impl NetworkBehaviour for Behaviour {
             },
             Event::InboundSubstreamOpen { .. } => {},
             Event::InboundFailure { .. } => {},
-            Event::OutboundFailure { .. } => {},
         }
 
         self.pending_events.push_back(ToSwarm::GenerateEvent(event));
