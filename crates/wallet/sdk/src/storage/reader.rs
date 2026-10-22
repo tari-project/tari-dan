@@ -303,10 +303,12 @@ pub trait WalletStoreReader {
         resource: &ResourceAddress,
     ) -> Result<HashMap<Shard, ClaimedStateVersion>, WalletStorageError>;
 
+    /// Up to `batch_size` queued UTXOs in queue order, after the entry `after` when given.
     fn utxo_process_queue_fetch_batch(
         &mut self,
+        after: Option<UtxoProcessQueueCursor>,
         batch_size: usize,
-    ) -> Result<HashMap<ResourceAddress, HashMap<TagAndPublicNoncePair, ComponentAddress>>, WalletStorageError>;
+    ) -> Result<UtxoProcessQueueBatch, WalletStorageError>;
 
     // Address book
     fn address_book_get(&mut self, name: &str) -> Result<AddressBookEntry, WalletStorageError>;
@@ -338,4 +340,26 @@ pub trait WalletStoreReader {
         &mut self,
         limit: u64,
     ) -> Result<Vec<ValidatorSetReanchor>, WalletStorageError>;
+}
+
+/// The position of an entry in the UTXO process queue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct UtxoProcessQueueCursor(pub i64);
+
+#[derive(Debug, Clone, Default)]
+pub struct UtxoProcessQueueBatch {
+    /// The queued UTXOs of each resource, by tag and nonce, with the account each belongs to.
+    pub entries: HashMap<ResourceAddress, HashMap<TagAndPublicNoncePair, ComponentAddress>>,
+    /// The last entry of the batch, or `None` for an empty batch.
+    pub last: Option<UtxoProcessQueueCursor>,
+}
+
+impl UtxoProcessQueueBatch {
+    pub fn is_empty(&self) -> bool {
+        self.last.is_none()
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.values().map(HashMap::len).sum()
+    }
 }

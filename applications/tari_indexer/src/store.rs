@@ -203,6 +203,13 @@ pub trait IndexerStoreReadTransaction {
         public_nonce_and_tag: &[(UtxoTag, RistrettoPublicKeyBytes)],
     ) -> Result<Vec<(UtxoId, Utxo)>, StorageError>;
 
+    /// The pairs of `public_nonce_and_tag` whose UTXO is spent or burnt.
+    fn utxos_get_spent_public_nonce_and_tag(
+        &mut self,
+        resource_address: &ResourceAddress,
+        public_nonce_and_tag: &[(UtxoTag, RistrettoPublicKeyBytes)],
+    ) -> Result<Vec<(UtxoTag, RistrettoPublicKeyBytes)>, StorageError>;
+
     // -------------------------------- Template Catalogue -------------------------------- //
 
     fn list_template_catalogue(

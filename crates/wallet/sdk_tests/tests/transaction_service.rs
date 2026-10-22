@@ -18,7 +18,6 @@ use tari_consensus_types::Decision;
 use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_engine_types::{
     Epoch,
-    Utxo,
     commit_result::{AbortReason, ExecuteResult, FinalizeResult, TransactionResult},
     fees::FeeReceipt,
     substate::{SubstateDiff, SubstateId},
@@ -37,6 +36,7 @@ use tari_ootle_wallet_sdk::{
     models::{TransactionStatus, WalletEvent},
     network::{
         FetchedSubstates,
+        FetchedUtxos,
         SubstateQueryResult,
         TransactionFinalizedNotification,
         TransactionFinalizedResult,
@@ -53,7 +53,7 @@ use tari_ootle_wallet_sdk_services::{
 };
 use tari_shutdown::Shutdown;
 use tari_template_abi::TemplateDef;
-use tari_template_lib::types::{ResourceAddress, TemplateAddress, UtxoId};
+use tari_template_lib::types::{ResourceAddress, TemplateAddress};
 use time::{OffsetDateTime, PrimitiveDateTime};
 use tokio::sync::{broadcast, mpsc};
 
@@ -217,12 +217,12 @@ impl WalletNetworkInterface for ScriptedNetwork {
         panic!("ScriptedNetwork::list_watched_substates called")
     }
 
-    async fn get_unspent_utxos(
+    async fn fetch_utxos(
         &self,
         _: ResourceAddress,
         _: Vec<TagAndPublicNoncePair>,
-    ) -> Result<Vec<(UtxoId, Utxo)>, Self::Error> {
-        panic!("ScriptedNetwork::get_unspent_utxos called")
+    ) -> Result<FetchedUtxos, Self::Error> {
+        panic!("ScriptedNetwork::fetch_utxos called")
     }
 
     async fn get_latest_epoch_checkpoint(&self, _shard: Shard) -> Result<EpochCheckpointEntry, Self::Error> {

@@ -1342,7 +1342,7 @@
         "tags": [
           "handlers::utxos"
         ],
-        "description": "Gets full UTXO data for a list of UTXO IDs",
+        "description": "Gets full UTXO data for a list of tag and nonce pairs, and which of the pairs are spent or burnt",
         "operationId": "fetch_utxos",
         "requestBody": {
           "content": {
@@ -2151,6 +2151,24 @@
           "utxos"
         ],
         "properties": {
+          "spent": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": false,
+              "prefixItems": [
+                {
+                  "type": "integer",
+                  "format": "int32",
+                  "minimum": 0
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "The requested tag and nonce pairs this indexer holds as spent or burnt. A requested pair in neither list is\nunknown to this indexer, which may not yet have indexed it."
+          },
           "utxos": {
             "type": "array",
             "items": {
@@ -2164,7 +2182,8 @@
                   "type": "object"
                 }
               ]
-            }
+            },
+            "description": "The unspent UTXOs matching a requested tag and nonce pair."
           }
         }
       },

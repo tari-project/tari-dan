@@ -687,7 +687,7 @@ pub(crate) mod tests {
         };
 
         use crate::storage_sqlite::{
-            reader::{unspent_utxos_by_tag_and_nonce_query, utxos_list_query},
+            reader::{spent_utxos_by_tag_and_nonce_query, unspent_utxos_by_tag_and_nonce_query, utxos_list_query},
             schema::utxos,
         };
 
@@ -720,6 +720,12 @@ pub(crate) mod tests {
             "fetch by tag and nonce",
             query_plan(&store, sql_of(&fetch)).await,
             "resource_address=? AND public_nonce=?",
+        );
+        let fetch_spent = spent_utxos_by_tag_and_nonce_query(&resource, &[(UtxoTag::from(0u32), nonce)]);
+        assert_seeks(
+            "fetch spent by tag and nonce",
+            query_plan(&store, sql_of(&fetch_spent)).await,
+            "utxos_resource_public_nonce_utxo_tag_spent_idx (resource_address=? AND public_nonce=?",
         );
 
         let mark_spent = diesel::update(utxos::table)
@@ -781,6 +787,24 @@ pub(crate) mod tests {
         };
         assert_eq!(fetch(3).await.len(), 1);
         assert!(fetch(2).await.is_empty(), "a spent UTXO is not fetched");
+
+        let pair = |seq: u8| {
+            (
+                UtxoTag::from(0u32),
+                RistrettoPublicKeyBytes::from_bytes(&[seq; 32]).unwrap(),
+            )
+        };
+        let spent = store
+            .with_read_tx(move |tx| {
+                tx.utxos_get_spent_public_nonce_and_tag(&utxo_resource(), &[pair(2), pair(3), pair(99)])
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            spent,
+            [pair(2)],
+            "only the spent pair is reported spent, not an unspent or unknown one"
+        );
     }
 
     pub(crate) async fn temp_store() -> (tempfile::TempDir, SqliteIndexerStore) {

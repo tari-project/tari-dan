@@ -241,17 +241,21 @@ impl SubstateManager {
         Ok(updates)
     }
 
-    pub async fn get_unspent_utxos(
+    /// The unspent UTXOs matching `public_nonce_and_tag`, and the pairs of `public_nonce_and_tag` whose UTXO is spent
+    /// or burnt, read in one transaction.
+    pub async fn fetch_utxos(
         &self,
         resource_address: &ResourceAddress,
         public_nonce_and_tag: &[(UtxoTag, RistrettoPublicKeyBytes)],
-    ) -> Result<Vec<(UtxoId, Utxo)>, SubstateManagerError> {
+    ) -> Result<(Vec<(UtxoId, Utxo)>, Vec<(UtxoTag, RistrettoPublicKeyBytes)>), SubstateManagerError> {
         let resource_address = *resource_address;
         let public_nonce_and_tag = public_nonce_and_tag.to_vec();
         let utxos = self
             .substate_store
             .with_read_tx(move |tx| {
-                tx.utxos_get_unspent_by_public_nonce_and_tag(&resource_address, &public_nonce_and_tag)
+                let unspent = tx.utxos_get_unspent_by_public_nonce_and_tag(&resource_address, &public_nonce_and_tag)?;
+                let spent = tx.utxos_get_spent_public_nonce_and_tag(&resource_address, &public_nonce_and_tag)?;
+                Ok::<_, StorageError>((unspent, spent))
             })
             .await?;
         Ok(utxos)

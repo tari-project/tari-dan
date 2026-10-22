@@ -890,8 +890,14 @@ pub struct GetUtxosRequest {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 pub struct GetUtxosResponse {
+    /// The unspent UTXOs matching a requested tag and nonce pair.
     #[cfg_attr(feature = "utoipa", schema(value_type = Vec<(String, Object)>))]
     pub utxos: Vec<(UtxoId, Utxo)>,
+    /// The requested tag and nonce pairs this indexer holds as spent or burnt. A requested pair in neither list is
+    /// unknown to this indexer, which may not yet have indexed it.
+    #[serde(default)]
+    #[cfg_attr(feature = "utoipa", schema(value_type = Vec<(u32, String)>))]
+    pub spent: Vec<(UtxoTag, RistrettoPublicKeyBytes)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

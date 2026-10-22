@@ -265,8 +265,9 @@ fn advanced_claim(first_state_version: u64, state_version: u64, verified_epoch: 
 
 fn queued_utxos(test: &TestWithNetwork<ProvingNetwork>) -> usize {
     test.store()
-        .with_read_tx(|tx| tx.utxo_process_queue_fetch_batch(100))
+        .with_read_tx(|tx| tx.utxo_process_queue_fetch_batch(None, 100))
         .unwrap()
+        .entries
         .get(&STEALTH_TARI_RESOURCE_ADDRESS)
         .map(HashMap::len)
         .unwrap_or(0)

@@ -119,7 +119,7 @@ pub async fn stream_utxo_updates(
 #[utoipa::path(
     post,
     path = "/utxos/fetch",
-    description = "Gets full UTXO data for a list of UTXO IDs",
+    description = "Gets full UTXO data for a list of tag and nonce pairs, and which of the pairs are spent or burnt",
     request_body = GetUtxosRequest,
     responses(
         (status = 200, description = "UTXO details", body = GetUtxosResponse),
@@ -134,13 +134,13 @@ pub async fn fetch_utxos(
     if req.tag_and_nonce_pairs.len() > 1000 {
         return Err(ErrorResponse::bad_request("cannot query more than 1000 UTXOs"));
     }
-    let utxos = context
+    let (utxos, spent) = context
         .substate_manager()
-        .get_unspent_utxos(&req.resource_address, &req.tag_and_nonce_pairs)
+        .fetch_utxos(&req.resource_address, &req.tag_and_nonce_pairs)
         .await
         .map_err(ErrorResponse::anyhow)?;
 
-    Ok(Json(GetUtxosResponse { utxos }))
+    Ok(Json(GetUtxosResponse { utxos, spent }))
 }
 
 #[utoipa::path(get, path = "/utxos", description = "List full UTXO data",

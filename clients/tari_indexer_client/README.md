@@ -74,7 +74,7 @@ client, Server-Sent Events (SSE) streaming, and a protobuf streaming interface f
 | Method | HTTP | Path | Description |
 |--------|------|------|-------------|
 | `list_utxos(req)` | GET | `/utxos` | List full UTXO data |
-| `get_utxos(req)` | POST | `/utxos/fetch` | Get full UTXO data for a list of UTXO IDs |
+| `get_utxos(req)` | POST | `/utxos/fetch` | Get full UTXO data for a list of tag and nonce pairs, and which of the pairs are spent or burnt |
 | `stream_utxo_updates_protobuf(req)` | POST | `/utxos/stream` | Stream UTXO updates via protobuf encoding |
 
 ### Transaction Receipts

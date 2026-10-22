@@ -41,6 +41,7 @@ use tari_ootle_wallet_sdk::{
     },
     network::{
         FetchedSubstates,
+        FetchedUtxos,
         SubstateQueryResult,
         TransactionFinalizedStream,
         TransactionQueryResult,
@@ -316,11 +317,11 @@ impl WalletNetworkInterface for CannedTransactionResultInterface {
         panic!("CannedTransactionResultInterface called")
     }
 
-    async fn get_unspent_utxos(
+    async fn fetch_utxos(
         &self,
         _resource_address: ResourceAddress,
         _tag_and_nonce_pairs: Vec<TagAndPublicNoncePair>,
-    ) -> Result<Vec<(UtxoId, Utxo)>, Self::Error> {
+    ) -> Result<FetchedUtxos, Self::Error> {
         panic!("CannedTransactionResultInterface called")
     }
 
@@ -436,12 +437,12 @@ impl WalletNetworkInterface for PanicNetworkInterface {
         panic!("PanicNetworkInterface called")
     }
 
-    async fn get_unspent_utxos(
+    async fn fetch_utxos(
         &self,
         _resource_address: ResourceAddress,
         _tag_and_nonce_pairs: Vec<TagAndPublicNoncePair>,
-    ) -> Result<Vec<(UtxoId, Utxo)>, Self::Error> {
-        panic!("PanicNetworkInterface get_unspent_utxos called")
+    ) -> Result<FetchedUtxos, Self::Error> {
+        panic!("PanicNetworkInterface fetch_utxos called")
     }
 
     async fn get_latest_epoch_checkpoint(&self, _shard: Shard) -> Result<EpochCheckpointEntry, Self::Error> {
