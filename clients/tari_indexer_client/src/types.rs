@@ -1284,6 +1284,17 @@ pub struct GetLatestEpochCheckpointResponse {
     pub checkpoint: EpochCheckpointEntry,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
+pub struct GetLatestShardGroupCheckpointsResponse {
+    /// The latest checkpoint of the shard group holding each shard, each listed once, in shard order and without
+    /// committees. Each group is at its own latest epoch, so where the shard group layout changed and this indexer
+    /// holds the new layout's checkpoints of only some groups, two listed groups can share shards. Empty while this
+    /// indexer holds no checkpoint.
+    pub checkpoints: Vec<EpochCheckpointEntry>,
+}
+
 /// A shard group's checkpoint of the end of an epoch: the commit proof of its end-of-epoch block, which the
 /// committee of `epoch` signed.
 ///

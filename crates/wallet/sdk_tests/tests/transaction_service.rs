@@ -229,6 +229,10 @@ impl WalletNetworkInterface for ScriptedNetwork {
         panic!("ScriptedNetwork called")
     }
 
+    async fn get_latest_shard_group_checkpoints(&self) -> Result<Vec<EpochCheckpointEntry>, Self::Error> {
+        panic!("ScriptedNetwork called")
+    }
+
     async fn list_epoch_checkpoints(
         &self,
         _from_epoch: Epoch,

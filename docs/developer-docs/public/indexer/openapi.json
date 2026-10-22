@@ -246,6 +246,37 @@
         }
       }
     },
+    "/epoch-checkpoints/latest/shard-groups": {
+      "get": {
+        "tags": [
+          "handlers::epoch_checkpoints"
+        ],
+        "description": "Get the latest epoch checkpoint of the shard group holding each shard, without committees",
+        "operationId": "get_latest_shard_group_checkpoints",
+        "responses": {
+          "200": {
+            "description": "The latest epoch checkpoint of each shard group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetLatestShardGroupCheckpointsResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/epoch-manager/stats": {
       "get": {
         "tags": [
@@ -1764,6 +1795,21 @@
         "properties": {
           "checkpoint": {
             "$ref": "#/components/schemas/EpochCheckpointEntry"
+          }
+        }
+      },
+      "GetLatestShardGroupCheckpointsResponse": {
+        "type": "object",
+        "required": [
+          "checkpoints"
+        ],
+        "properties": {
+          "checkpoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EpochCheckpointEntry"
+            },
+            "description": "The latest checkpoint of the shard group holding each shard, each listed once, in shard order and without\ncommittees. Each group is at its own latest epoch, so where the shard group layout changed and this indexer\nholds the new layout's checkpoints of only some groups, two listed groups can share shards. Empty while this\nindexer holds no checkpoint."
           }
         }
       },

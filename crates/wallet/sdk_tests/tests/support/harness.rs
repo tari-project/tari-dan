@@ -328,6 +328,10 @@ impl WalletNetworkInterface for CannedTransactionResultInterface {
         panic!("CannedTransactionResultInterface called")
     }
 
+    async fn get_latest_shard_group_checkpoints(&self) -> Result<Vec<EpochCheckpointEntry>, Self::Error> {
+        panic!("CannedTransactionResultInterface called")
+    }
+
     async fn list_epoch_checkpoints(
         &self,
         _from_epoch: Epoch,
@@ -441,6 +445,10 @@ impl WalletNetworkInterface for PanicNetworkInterface {
     }
 
     async fn get_latest_epoch_checkpoint(&self, _shard: Shard) -> Result<EpochCheckpointEntry, Self::Error> {
+        panic!("PanicNetworkInterface called")
+    }
+
+    async fn get_latest_shard_group_checkpoints(&self) -> Result<Vec<EpochCheckpointEntry>, Self::Error> {
         panic!("PanicNetworkInterface called")
     }
 

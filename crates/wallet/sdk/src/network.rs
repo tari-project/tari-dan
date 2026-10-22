@@ -138,6 +138,12 @@ pub trait WalletNetworkInterface {
         shard: Shard,
     ) -> impl Future<Output = Result<EpochCheckpointEntry, Self::Error>> + Send;
 
+    /// The latest end-of-epoch checkpoint of the shard group that holds each shard, each listed once, in shard order
+    /// and without committees. Empty before the network has ended an epoch.
+    fn get_latest_shard_group_checkpoints(
+        &self,
+    ) -> impl Future<Output = Result<Vec<EpochCheckpointEntry>, Self::Error>> + Send;
+
     /// Up to `limit` end-of-epoch checkpoints of the shard group that holds `shard`, from `from_epoch` in ascending
     /// epoch order, each with the next epoch's committee of that shard group and its proof.
     fn list_epoch_checkpoints(

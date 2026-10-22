@@ -74,6 +74,7 @@ const REQUEST_BODY_LIMIT: usize = 4 * 1024 * 1024; // 4 MB
     handlers::transaction_events::sse_transaction_events,
     handlers::epoch_checkpoints::list_epoch_checkpoints,
     handlers::epoch_checkpoints::get_latest_epoch_checkpoint,
+    handlers::epoch_checkpoints::get_latest_shard_group_checkpoints,
     handlers::validators::list_validators,
     handlers::committees::get_committee
 ))]
@@ -314,6 +315,7 @@ fn api_routes(rate_limits: &IndexerRateLimitsConfig, sse_metrics: &SseConnection
             .nest("/epoch-checkpoints", Router::new()
                 .route("/", get(handlers::epoch_checkpoints::list_epoch_checkpoints))
                 .route("/latest", get(handlers::epoch_checkpoints::get_latest_epoch_checkpoint))
+                .route("/latest/shard-groups", get(handlers::epoch_checkpoints::get_latest_shard_group_checkpoints))
                 .route_layer(middleware::from_fn_with_state(epoch_checkpoints_limiter, rate_limit_middleware))
             )
             // SSE /events – per-IP concurrent connection limit
@@ -368,6 +370,7 @@ mod tests {
         for path in [
             "/epoch-checkpoints?limit=100",
             "/epoch-checkpoints/latest",
+            "/epoch-checkpoints/latest/shard-groups",
             "/resources/tari",
             "/templates/catalogue",
             "/validators",

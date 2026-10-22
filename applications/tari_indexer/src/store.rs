@@ -664,6 +664,35 @@ impl<T: IndexerStoreReader> ReadOnlyStore<T> {
             .await
     }
 
+    /// The latest checkpoint of the shard group holding each shard, each once and in shard order: the latest of the
+    /// group holding the first shard, then of the group holding the shard after that group's last, until a shard that
+    /// no stored checkpoint covers. A checkpoint read for a shard holds it, so each one read moves the walk forward.
+    pub async fn epoch_checkpoint_get_latest_of_each_shard_group(&self) -> Result<Vec<EpochCheckpoint>, StorageError> {
+        self.inner
+            .with_read_tx(|tx| {
+                let mut checkpoints = Vec::new();
+                let mut next_shard = Some(Shard::first());
+                while let Some(shard) = next_shard {
+                    let Some(checkpoint) = tx.epoch_checkpoint_get_latest(Some(shard)).optional()? else {
+                        break;
+                    };
+                    let shard_group =
+                        checkpoint
+                            .checked_shard_group()
+                            .map_err(|e| StorageError::DataInconsistency {
+                                details: format!(
+                                    "stored checkpoint of {} has an invalid shard group: {e}",
+                                    checkpoint.epoch()
+                                ),
+                            })?;
+                    next_shard = shard_group.end().as_u32().checked_add(1).map(Shard::from);
+                    checkpoints.push(checkpoint);
+                }
+                Ok(checkpoints)
+            })
+            .await
+    }
+
     pub async fn list_watched_substates(
         &self,
         template_address: Option<&TemplateAddress>,

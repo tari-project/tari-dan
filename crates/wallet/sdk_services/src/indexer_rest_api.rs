@@ -666,6 +666,14 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
         Ok(resp.checkpoint)
     }
 
+    async fn get_latest_shard_group_checkpoints(&self) -> Result<Vec<EpochCheckpointEntry>, Self::Error> {
+        let client = self.tracked_client();
+        let resp = self
+            .observe(&client, client.get_latest_shard_group_checkpoints())
+            .await?;
+        Ok(resp.checkpoints)
+    }
+
     async fn list_epoch_checkpoints(
         &self,
         from_epoch: Epoch,

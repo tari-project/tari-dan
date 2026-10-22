@@ -8,6 +8,7 @@ export * from "./types/tari-indexer-client/GetCommitteeResponse";
 export * from "./types/tari-indexer-client/GetIndexerInfoResponse";
 export * from "./types/tari-indexer-client/GetLatestEpochCheckpointRequest";
 export * from "./types/tari-indexer-client/GetLatestEpochCheckpointResponse";
+export * from "./types/tari-indexer-client/GetLatestShardGroupCheckpointsResponse";
 export * from "./types/tari-indexer-client/GetNetworkEconomicsResponse";
 export * from "./types/tari-indexer-client/GetNetworkInfoResponse";
 export * from "./types/tari-indexer-client/GetNetworkSyncStateResponse";
