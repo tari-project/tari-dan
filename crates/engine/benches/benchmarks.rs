@@ -15,7 +15,7 @@ use tari_engine::{
     transaction::TransactionProcessor,
 };
 use tari_engine_types::{
-    fees::ExhaustBurnRate,
+    fees::{ExhaustBurnRate, FeeScale},
     virtual_substate::{VirtualSubstate, VirtualSubstateId, VirtualSubstates},
 };
 use tari_ootle_common_types::InputDeclaration;
@@ -100,6 +100,7 @@ fn setup(shared: &SharedState) -> BenchTxProcessor {
         WasmMeteringRate::unmetered(),
         ExhaustBurnRate::new(0),
         0,
+        FeeScale::ONE,
         Network::LocalNet,
         false,
     )

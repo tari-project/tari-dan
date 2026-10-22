@@ -36,7 +36,7 @@ use tari_engine::{
 };
 use tari_engine_types::{
     commit_result::{ExecuteResult, RejectReason},
-    fees::ExhaustBurnRate,
+    fees::{ExhaustBurnRate, FeeScale},
     indexed_value::IndexedValue,
     substate::{Substate, SubstateDiff, SubstateId},
     virtual_substate::{VirtualSubstate, VirtualSubstateId},
@@ -127,6 +127,7 @@ pub struct TemplateTest {
     fee_table: FeeTable,
     burn_rate: ExhaustBurnRate,
     input_fanout: u32,
+    fee_scale: FeeScale,
     virtual_substates: HashMap<VirtualSubstateId, VirtualSubstate>,
     key_seed: u8,
     auto_add_proofs_from_signers: bool,
@@ -300,6 +301,7 @@ impl TemplateTest {
             },
             burn_rate: ExhaustBurnRate::new(0),
             input_fanout: 0,
+            fee_scale: FeeScale::ONE,
             key_seed: 1,
             auto_add_proofs_from_signers: true,
         }
@@ -421,6 +423,12 @@ impl TemplateTest {
     /// Defaults to zero, as though every substate sat in one shard group.
     pub fn set_input_fanout(&mut self, input_fanout: u32) -> &mut Self {
         self.input_fanout = input_fanout;
+        self
+    }
+
+    /// Sets the fee scale every charge is taken at. Defaults to 10 000 bps, the fee table as written.
+    pub fn set_fee_scale_bps(&mut self, scale_bps: u16) -> &mut Self {
+        self.fee_scale = FeeScale::new(scale_bps);
         self
     }
 
@@ -895,6 +903,7 @@ impl TemplateTest {
             wasm_metering_rate,
             self.burn_rate,
             self.input_fanout,
+            self.fee_scale,
             Network::LocalNet,
             self.dry_run,
         );
@@ -961,6 +970,7 @@ impl TemplateTest {
             virtual_substates: self.virtual_substates.clone(),
             burn_rate: self.burn_rate,
             input_fanout: self.input_fanout,
+            fee_scale: self.fee_scale,
             dry_run: self.dry_run,
             claim_proof_verifier: self.claim_proof_verifier.clone(),
             auto_add_proofs_from_signers: self.auto_add_proofs_from_signers,
@@ -1161,6 +1171,7 @@ pub struct SnapshotExecutor {
     virtual_substates: HashMap<VirtualSubstateId, VirtualSubstate>,
     burn_rate: ExhaustBurnRate,
     input_fanout: u32,
+    fee_scale: FeeScale,
     dry_run: bool,
     claim_proof_verifier: Arc<dyn ClaimProofVerifier + Send + Sync>,
     auto_add_proofs_from_signers: bool,
@@ -1207,6 +1218,7 @@ impl SnapshotExecutor {
             wasm_metering_rate,
             self.burn_rate,
             self.input_fanout,
+            self.fee_scale,
             Network::LocalNet,
             self.dry_run,
         );

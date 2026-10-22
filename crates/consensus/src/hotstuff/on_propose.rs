@@ -760,7 +760,9 @@ where TConsensusSpec: ConsensusSpec
             ExtraFieldKey::ExhaustBurnRate,
             highest_seen_block.exhaust_burn_rate().as_bps(),
         );
-        if let Some(end_epoch) = end_epoch {
+        // Only the block carrying the `EndEpoch` command names the next epoch. The blocks that extend it before the
+        // epoch changes still hold the commitment, but carry no commands.
+        if let Some(end_epoch) = end_epoch.filter(|_| !is_end_of_epoch_in_chain) {
             let next_epoch = epoch + Epoch(1);
             let next_epoch_rate = resolve_epoch_exhaust_burn_rate(tx, self.config.network, next_epoch)?;
             extra_data

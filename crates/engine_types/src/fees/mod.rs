@@ -75,8 +75,10 @@ impl ExhaustBurnRate {
 ///
 /// The value is derived rather than chosen: [`FeeTable::fee_estimate_allowance`] computes it from
 /// `per_transaction_weight_cost`, `per_byte_storage_cost`, `storage_cost_divisor` and
-/// [`LITERAL_BYTE_DIVISOR`]. `fee_estimate_allowance_covers_every_shipped_network`, which sits with
-/// the shipped tables, asserts this value covers every one of them.
+/// [`LITERAL_BYTE_DIVISOR`], and [`FeeTable::fee_estimate_allowance_at`] at a fee scale.
+/// `fee_estimate_allowance_covers_every_shipped_network`, which sits with the shipped tables, asserts
+/// this value covers every one of them at every fee scale its network is scheduled at, so a release
+/// that schedules a higher scale raises this value with it.
 pub const FEE_ESTIMATE_ALLOWANCE: u64 = 12;
 
 /// The rates a transaction's fee charges are computed from, as a fee estimator needs them.

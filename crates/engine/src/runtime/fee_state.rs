@@ -34,9 +34,9 @@ pub struct FeeState {
     /// The exhaust burn rate resolved for the execution epoch. Set out-of-band by `FeeModule` during runtime
     /// initialization; used at settlement to split what was collected between leaders and the burn.
     burn_rate: ExhaustBurnRate,
-    /// The multiplier on every charge for the execution epoch, set from the network's schedule when
-    /// the working state is created. Applied to each source's accumulated charge when it is read, so
-    /// a source's many small charges round once.
+    /// The multiplier on every charge for the execution epoch. Set out-of-band during runtime
+    /// initialization. Applied to each source's accumulated charge when it is read, so a source's
+    /// many small charges round once.
     fee_scale: FeeScale,
 }
 

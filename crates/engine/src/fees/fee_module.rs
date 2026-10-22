@@ -2,7 +2,10 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_bor::encoded_len;
-use tari_engine_types::{fees::FeeSource, substate::SubstateValue};
+use tari_engine_types::{
+    fees::{FeeScale, FeeSource},
+    substate::SubstateValue,
+};
 use tari_template_lib::types::TemplateAddress;
 
 use super::FeeTable;
@@ -191,7 +194,8 @@ impl<TStore: StateReader> RuntimeModule<TStore> for FeeModule {
         // Charged before the fee intent runs, so a transaction pays for loading and pledging its
         // inputs even when its main intent is rejected: the pledges have been made either way.
         let input_load = track.declared_input_load();
-        let rates = self.fee_table.to_rates();
+        // Charges are recorded in fee-table terms and the fee state applies the scale when they are read.
+        let rates = self.fee_table.to_rates(FeeScale::ONE);
         track.add_fee_charge(FeeSource::InputLoad, rates.input_load_cost(input_load.bytes));
         track.add_fee_charge(
             FeeSource::InputFanout,

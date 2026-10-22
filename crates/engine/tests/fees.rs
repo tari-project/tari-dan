@@ -5,7 +5,7 @@ use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_engine::fees::FeeTable;
 use tari_engine_types::{
     commit_result::{ExecutionFailureCode, RejectReason, TransactionResult},
-    fees::{FeeReceipt, FeeSource},
+    fees::{FeeReceipt, FeeScale, FeeSource},
     limits::ENGINE_LIMITS,
 };
 use tari_ootle_common_types::InputDeclaration;
@@ -311,11 +311,16 @@ fn a_fee_intent_commit_is_not_charged_for_the_state_it_abandons() {
 #[test]
 fn compute_cannot_consume_what_the_fee_intent_commit_needs() {
     for burn_rate_bps in [0, 500, 10_000] {
-        spend_the_whole_allowance_and_still_pay(burn_rate_bps);
+        spend_the_whole_allowance_and_still_pay(burn_rate_bps, 10_000);
+    }
+    // The allowance converts the unspent payment back to fee-table terms, so it neither over- nor
+    // under-funds compute at a scale either side of 1x.
+    for fee_scale_bps in [5_000, 15_000, 33_333] {
+        spend_the_whole_allowance_and_still_pay(500, fee_scale_bps);
     }
 }
 
-fn spend_the_whole_allowance_and_still_pay(burn_rate_bps: u16) {
+fn spend_the_whole_allowance_and_still_pay(burn_rate_bps: u16, fee_scale_bps: u16) {
     const MAX_FEE: u64 = 100_000;
 
     let mut test = TemplateTest::new(CRATE_PATH, vec!["tests/templates/infinity_loop"]);
@@ -325,6 +330,7 @@ fn spend_the_whole_allowance_and_still_pay(burn_rate_bps: u16) {
     // Run at a burn too: the burn is a share of what is paid, so it must not narrow what the
     // payment can fund nor leave any of it uncollected.
     test.set_burn_rate_bps(burn_rate_bps);
+    test.set_fee_scale_bps(fee_scale_bps);
 
     // A loop that never returns: it runs until the compute allowance stops it, whatever that
     // allowance is, so the transaction always spends every point it is given.
@@ -1298,4 +1304,70 @@ fn an_unresolved_declared_input_is_an_invariant_violation() {
         err.to_string().contains("was not resolved before execution"),
         "unexpected error: {err}"
     );
+}
+
+/// Every source is charged at the fee scale, each rounded down on its own, and the receipt's total is
+/// what those scaled sources add up to.
+#[test]
+fn each_source_is_charged_at_the_fee_scale() {
+    const MAX_FEE: u64 = 2_000_000;
+
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let (account, owner_token, key) = test.create_funded_account();
+    test.enable_fees();
+    let build = state_transaction(&test, account, &key);
+    let unscaled = meter_across_max_fees(&mut test, &[MAX_FEE], std::slice::from_ref(&owner_token), &build).remove(0);
+
+    for bps in [5_000, 15_000, 33_333] {
+        test.set_fee_scale_bps(bps);
+        let scaled = meter_across_max_fees(&mut test, &[MAX_FEE], std::slice::from_ref(&owner_token), &build).remove(0);
+        let scale = FeeScale::new(bps);
+        for (source, amount) in unscaled.fee_breakdown().iter() {
+            assert_eq!(
+                scaled.fee_breakdown().get(*source),
+                scale.apply(*amount),
+                "{source:?} at {bps}bps"
+            );
+        }
+        assert_eq!(
+            scaled.total_fees_charged(),
+            scaled.fee_breakdown().get_total(),
+            "at {bps}bps"
+        );
+        assert_eq!(
+            scaled.total_refunded(),
+            MAX_FEE - scaled.total_fees_charged(),
+            "at {bps}bps"
+        );
+    }
+}
+
+/// A dry run's charges plus the allowance derived at the fee scale pay for the real submission, even
+/// when the submission's narrower `max_fee` moves what it meters.
+#[test]
+fn a_dry_run_estimate_pays_for_the_submission_at_the_fee_scale() {
+    for bps in [5_000, 15_000, 33_333] {
+        let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+        let (account, owner_token, key) = test.create_funded_account();
+        test.enable_fees();
+        test.set_fee_scale_bps(bps);
+        let build = state_transaction(&test, account, &key);
+
+        test.set_dry_run(true);
+        let dry_run = test.try_execute(build(999_000_000), vec![owner_token.clone()]).unwrap();
+        let estimate = dry_run.finalize.fee_receipt.total_fees_charged() +
+            test.fee_table().fee_estimate_allowance_at(FeeScale::new(bps));
+
+        test.set_dry_run(false);
+        let result = test.try_execute(build(estimate), vec![owner_token]).unwrap();
+        assert!(
+            matches!(result.finalize.result, TransactionResult::Accept(_)),
+            "at {bps}bps a submission at the estimate {estimate} did not commit: {:?}",
+            result.finalize.result
+        );
+        assert!(
+            result.finalize.fee_receipt.total_fees_charged() <= estimate,
+            "at {bps}bps"
+        );
+    }
 }

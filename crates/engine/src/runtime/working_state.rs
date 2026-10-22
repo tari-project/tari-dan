@@ -22,7 +22,7 @@ use tari_engine_types::{
     confidential_output::ConfidentialOutput,
     crypto,
     events::Event,
-    fees::{ExhaustBurnRate, FeeReceipt, FeeScaleSchedule},
+    fees::{ExhaustBurnRate, FeeReceipt, FeeScale},
     id_provider::{IdProvider, ObjectIds},
     indexed_value::{IndexedValue, IndexedWellKnownTypes},
     limits,
@@ -204,17 +204,14 @@ impl<TStore: StateReader> WorkingState<TStore> {
         transaction_hash: Hash32,
         intent_commitment: Hash32,
         burn_rate: ExhaustBurnRate,
+        fee_scale: FeeScale,
         network: Network,
         dry_run: bool,
     ) -> Self {
         let mut fee_state = FeeState::new();
         fee_state.set_burn_rate(burn_rate);
         fee_state.set_dry_run(dry_run);
-        // A transaction executed with no current epoch cannot finalize, since its receipt names the
-        // epoch, so the scale it would otherwise be charged at is never billed.
-        if let Some(epoch) = virtual_substates.current_epoch() {
-            fee_state.set_fee_scale(FeeScaleSchedule::at(network, Epoch(epoch)));
-        }
+        fee_state.set_fee_scale(fee_scale);
         Self {
             network,
             transaction_hash,

@@ -400,6 +400,8 @@ mod tests {
         let claim = ClaimBurnShape {
             persisted_output_bytes: TYPICAL_OUTPUT_BYTES,
             transaction_weight: 1_000,
+            input_bytes: 500,
+            input_fanout: 1,
         };
         let scale = FeeScale::new(15_000);
         assert_eq!(

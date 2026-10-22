@@ -28,7 +28,7 @@ use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult},
     component::derive_component_address_from_public_key,
     entity_id_provider::EntityIdProvider,
-    fees::ExhaustBurnRate,
+    fees::{ExhaustBurnRate, FeeScale},
     indexed_value::{IndexedValue, IndexedWellKnownTypes},
     limits,
     lock::LockFlag,
@@ -133,6 +133,8 @@ pub struct TransactionProcessor<TStore, TTemplateProvider> {
     /// The other shard groups the transaction's declared inputs are pledged to, which the caller
     /// derives from the shard layout the transaction executes under.
     input_fanout: u32,
+    /// The fee scale resolved for the execution epoch and seeded onto the fee state.
+    fee_scale: FeeScale,
     /// Selects the substate schema version for the execution epoch, which is scheduled per network.
     network: Network,
     dry_run: bool,
@@ -154,6 +156,7 @@ where
         wasm_metering_rate: WasmMeteringRate,
         burn_rate: ExhaustBurnRate,
         input_fanout: u32,
+        fee_scale: FeeScale,
         network: Network,
         dry_run: bool,
     ) -> Self {
@@ -167,6 +170,7 @@ where
             wasm_metering_rate,
             burn_rate,
             input_fanout,
+            fee_scale,
             network,
             dry_run,
         }
@@ -187,6 +191,7 @@ where
             wasm_metering_rate,
             burn_rate,
             input_fanout,
+            fee_scale,
             network,
             dry_run,
         } = self;
@@ -240,6 +245,7 @@ where
             declared_input_load,
             wasm_metering_rate,
             burn_rate,
+            fee_scale,
             network,
             dry_run,
         );
