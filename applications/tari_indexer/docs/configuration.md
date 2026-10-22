@@ -364,7 +364,7 @@ Use the `-p` flag to override individual configuration properties:
 # Override multiple properties  
 ./tari_indexer \
     -p indexer.api_listen_address=0.0.0.0:8080 \
-    -g http://localhost:18142
+    --epoch-oracle-minotari-node-grpc-url http://localhost:18142
 ```
 
 ## Common Configuration Patterns
