@@ -110,7 +110,7 @@ pub(crate) fn build_default_store_opts(options: &DatabaseOptions) -> (rocksdb::O
     // they belong inside the shared cache where they are accounted for and evictable.
     bb_opts.set_cache_index_and_filter_blocks(true);
     bb_opts.set_pin_l0_filter_and_index_blocks_in_cache(true);
-    bb_opts.set_format_version(6);
+    bb_opts.set_format_version(7);
     bb_opts.set_ribbon_filter(10.0);
     bb_opts.set_optimize_filters_for_memory(true);
     bb_opts.set_block_cache(budget.cache());
@@ -158,8 +158,8 @@ impl<TAddr> RocksDbStateStore<TAddr, TransactionDB> {
     /// This is not typically needed but can be useful for experimentation.
     pub fn compact_all<P: AsRef<Path>>(path: P) -> Result<(), StorageError> {
         let (options, _budget) = build_default_store_opts(&DatabaseOptions::default());
-        let cf_names = all_column_families_iter();
-        let db = DB::open_cf(&options, path, cf_names).map_err(|e| StorageError::ConnectionError {
+        let cf_names = all_column_families_iter().map(|name| ColumnFamilyDescriptor::new(name, options.clone()));
+        let db = DB::open_cf_descriptors(&options, path, cf_names).map_err(|e| StorageError::ConnectionError {
             reason: e.into_string(),
         })?;
         for name in all_column_families_iter() {

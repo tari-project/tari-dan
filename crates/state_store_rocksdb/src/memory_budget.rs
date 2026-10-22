@@ -35,7 +35,9 @@ impl RocksDbMemoryBudget {
     /// cache it is charged against would evict every cached block and still not be reached.
     pub fn new(capacity_bytes: usize, memtable_capacity_bytes: usize) -> Self {
         let memtable_capacity_bytes = memtable_capacity_bytes.min(capacity_bytes);
-        let cache = Cache::new_lru_cache(capacity_bytes);
+        // An estimated entry charge of 0 selects the auto-sized variant, which suits a cache that also holds
+        // write buffer manager reservations alongside data blocks.
+        let cache = Cache::new_hyper_clock_cache(capacity_bytes, 0);
         // `allow_stall = false`: over budget triggers earlier flushes rather than blocking writers.
         // Stalling would make the bound hard, but a writer blocked inside a block commit can miss a
         // proposal, and enough missed proposals suspend the node — a memory bound must not be able
