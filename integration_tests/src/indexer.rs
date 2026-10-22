@@ -162,7 +162,6 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         config.indexer.rate_limits.enabled = false;
         config.epoch_oracle.base_layer.base_node_grpc_url =
             Some(format!("http://127.0.0.1:{}", base_node_grpc_port).parse().unwrap());
-        config.indexer.block_scanning_interval = Duration::from_secs(5);
         config.indexer.state_scanning_interval = Duration::from_secs(5);
         config.indexer.p2p.listener_port = port;
 

@@ -29,8 +29,6 @@
 # HTTP UI listener address (default = "127.0.0.1:15000")
 #web_ui_address = "127.0.0.1:15000"
 
-# How often do we want to scan for changes. (default = 10)
-#block_scanning_interval=10
 # How long a shard group waits before reopening its state sync stream after it fails, or after a
 # validator that does not follow its tip closes it. (default = 60)
 #state_scanning_interval=60

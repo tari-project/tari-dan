@@ -132,9 +132,6 @@ pub struct IndexerConfig {
     /// The publicly-accessible URL that the UI uses to connect to the API.
     /// If this is None, then the api_listen_address will be used.
     pub web_ui_public_api_url: Option<String>,
-    /// How often do we want to scan the second layer for new versions
-    #[serde(with = "serializers::seconds")]
-    pub block_scanning_interval: Duration,
     /// How long a shard group waits before reopening its state sync stream after the stream fails,
     /// or after a validator that does not follow its tip closes it. Also how often sync statistics
     /// are reported.
@@ -471,7 +468,6 @@ impl Default for IndexerConfig {
             metrics_listen_address: Some("127.0.0.1:18302".parse().unwrap()),
             web_ui_address: Some("127.0.0.1:15000".parse().unwrap()),
             web_ui_public_api_url: None,
-            block_scanning_interval: Duration::from_secs(10),
             state_scanning_interval: Duration::from_secs(60),
             state_sync_stream_deadline: default_state_sync_stream_deadline(),
             state_sync_keepalive_interval: default_state_sync_keepalive_interval(),
