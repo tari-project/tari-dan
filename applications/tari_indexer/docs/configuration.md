@@ -53,9 +53,6 @@ Main indexer application settings.
 # Public API URL for web UI (optional, defaults to api_listen_address)
 #web_ui_public_api_url = "https://myindexer.example.com:18300"
 
-# Block scanning interval in seconds (default: 10)
-#block_scanning_interval = 10
-
 # How long, in seconds, a shard group waits before reopening its state sync stream after it fails,
 # or after a validator that does not follow its tip closes it (default: 60)
 #state_scanning_interval = 60
@@ -367,8 +364,7 @@ Use the `-p` flag to override individual configuration properties:
 # Override multiple properties  
 ./tari_indexer \
     -p indexer.api_listen_address=0.0.0.0:8080 \
-    -p indexer.block_scanning_interval=5 \
-    -p epoch_oracle.base_layer.base_node_grpc_url=http://localhost:18142
+    --epoch-oracle-minotari-node-grpc-url http://localhost:18142
 ```
 
 ## Common Configuration Patterns
@@ -381,7 +377,6 @@ network = "localnet"
 [indexer]
 api_listen_address = "127.0.0.1:18300"
 web_ui_address = "127.0.0.1:15000"
-block_scanning_interval = 5  # Faster scanning for development
 state_scanning_interval = 30
 
 [indexer.p2p]
@@ -407,7 +402,6 @@ network = "esmeralda"
 api_listen_address = "0.0.0.0:18300"
 web_ui_address = "0.0.0.0:15000"
 web_ui_public_api_url = "https://indexer.example.com:18300"
-block_scanning_interval = 10
 state_scanning_interval = 60
 
 [indexer.p2p]
@@ -442,8 +436,6 @@ topic = "ResourceTransferred"
 network = "esmeralda"
 
 [indexer]
-# Fast scanning for real-time applications
-block_scanning_interval = 2
 state_scanning_interval = 10
 
 # Large cache for better performance

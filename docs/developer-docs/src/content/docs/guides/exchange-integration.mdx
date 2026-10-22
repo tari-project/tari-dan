@@ -559,7 +559,6 @@ function isCreditable(utxo) {
     utxo.status !== "Invalid" && // decrypts under our view key, but its spend key is not ours
     "Key" in utxo.auth && // key-path output that this wallet can spend
     !utxo.is_frozen &&
-    utxo.is_on_chain &&
     !utxo.is_burnt
   );
 }
@@ -621,7 +620,7 @@ can create a change output back to the deposit account with no memo. Without spe
 an unreferenced "deposit" into manual review. Record the outputs your own transactions create:
 
 ```javascript
-// After each of your own transactions (sweeps, withdrawals) is Accepted:
+// After each of your own transactions (sweeps, withdrawals) is Accepted or OnlyFeeAccepted:
 const tx = await walletRpc("transactions.get", { transaction_id });
 // A fee-only result also commits the outputs built into the fee intent, including a stealth transfer's change.
 const diff = tx.result?.result?.Accept ?? tx.result?.result?.AcceptFeeRejectRest?.[0];
@@ -674,8 +673,8 @@ const balances = await walletRpc("accounts.get_balances", { account: "withdrawal
 <Aside type="caution">
   **For a stealth transfer, `max_fee` is the fee you pay, not a ceiling.** The fee is paid from a bucket and the
   surplus is not refunded. If `max_fee` is too high you overpay. If it is too low, the transaction is rejected, or it
-  ends as `OnlyFeeAccepted`: the fee is spent and the transfer is reverted. Always use the `final_fee` from a dry run
-  of the same transfer.
+  ends as `OnlyFeeAccepted`, which needs manual review (see [Transaction status](#transaction-status)). Always use the
+  `final_fee` from a dry run of the same transfer.
 </Aside>
 
 ```javascript
@@ -728,6 +727,8 @@ if (result.timed_out) {
   // Not an outcome. The status is the one from before the wait. Check again later; never resubmit on a timeout.
 } else if (result.status === "Accepted") {
   // Withdrawal paid
+} else if (result.status === "OnlyFeeAccepted") {
+  // Manual review: the customer may have been paid. Never refund or resend this automatically.
 } else {
   // Failed: see "Transaction status" below for which failures are safe to resubmit
 }
@@ -749,7 +750,8 @@ if (result.timed_out) {
     - the indexer's `GET /transactions/{id}/result` returns `Finalized` with an `Abort` decision
     - the indexer returns `Rejected`
 
-    `Pending` is **not** a final outcome. Keep waiting, or escalate to manual review. Don't infer expiry from epoch
+    `OnlyFeeAccepted` is final, but the customer may have been paid, so never resubmit it. `Pending` is **not** a
+    final outcome. Keep waiting, or escalate to manual review. Don't infer expiry from epoch
     numbers. A transaction is judged against the epoch it was pinned to, so it can still commit in a later epoch,
     after its `max_epoch` appears to have passed.
 </Aside>
@@ -792,12 +794,17 @@ passed.**
 | `DryRunFailed` | Dry run failed | ❌ No |
 | `Pending` | Submitted, waiting for consensus | ⚠️ Not yet |
 | `Accepted` | Committed. Funds have moved | ✅ Yes |
-| `OnlyFeeAccepted` | Committed, but only the fee was charged. The transfer itself was reverted | ❌ No. Funds did **not** move, and the fee was spent |
+| `OnlyFeeAccepted` | Committed, but only the fee intent's changes were kept and the rest was reverted. The fee was spent. The payment may or may not have been made, see below | ⚠️ Unknown. Review manually |
 | `Rejected` | Aborted by consensus. Nothing committed and no fee charged, although `final_fee` can show the fee execution would have cost | ❌ No |
 | `InvalidTransaction` | Rejected before consensus, at submission or by mempool validation. Nothing committed | ❌ No |
 
 <Aside type="caution">
-  Treat **only `Accepted`** as a successful withdrawal. `OnlyFeeAccepted` is a failure, even though a fee was taken.
+  - Treat **only `Accepted`** as a confirmed withdrawal.
+  - **Never refund or resend an `OnlyFeeAccepted` withdrawal automatically.** A fee-only result commits everything
+    in the transaction's fee intent. When a stealth transfer's own inputs can fund the fee, which is the usual case
+    for a small TARI withdrawal, the wallet puts the whole transfer in the fee intent. The customer has then been
+    paid. Otherwise the transfer was reverted. The outputs that were created are listed in
+    `result.result.AcceptFeeRejectRest[0].up_substates` from `transactions.get`. Send the withdrawal to manual review.
 </Aside>
 
 ### Checking the indexer directly
@@ -806,7 +813,8 @@ For reconciliation or independent verification, ask your indexer:
 
 - `GET /transactions/{transaction_id}/result` returns `Pending`, `Finalized` or `Rejected`:
   - `Finalized` carries a `final_decision` of `"Commit"` or `{"Abort": "<reason>"}`. `Commit` also covers a fee-only
-    result. Check that `execution_result.finalize.result` is `Accept` before treating a withdrawal as paid.
+    result, where `execution_result.finalize.result` is `AcceptFeeRejectRest`. Treat that like `OnlyFeeAccepted`:
+    only `Accept` confirms a withdrawal.
   - `Rejected` means mempool validation rejected the transaction when it was submitted through this indexer. It was
     never sequenced. The wallet reports this as `InvalidTransaction`. The indexer keeps the rejection only for
     `transaction_retention_epochs`.
@@ -867,8 +875,8 @@ own deposit and withdrawal path. See [Burn Minotari for TARI](/guides/burn-minot
 - [ ] Unknown or missing pay references routed to review; own change outputs recognised as internal
 - [ ] Withdrawal address validation (prefix, network, key validity)
 - [ ] Withdrawal flow: dry run, submit with the dry run's `final_fee`, store `transaction_id`, `wait_result` with a
-      timeout and a `timed_out` check, treat only `Accepted` as success, resubmit only after a final unsuccessful
-      outcome
+      timeout and a `timed_out` check, treat only `Accepted` as success and `OnlyFeeAccepted` as manual review,
+      resubmit only after a final unsuccessful outcome
 - [ ] Sweep and top-up procedures documented
 - [ ] `transaction_retention_epochs` set to cover your reconciliation window, and bounded while gossip indexing is on
 - [ ] End-to-end test on Esmeralda with small amounts

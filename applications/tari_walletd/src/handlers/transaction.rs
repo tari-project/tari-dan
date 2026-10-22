@@ -938,9 +938,13 @@ fn resolve_metadata_hash(
 
 #[cfg(test)]
 mod tests {
+    use tari_crypto::ristretto::RistrettoSecretKey;
     use tari_ootle_address::Network;
     use tari_ootle_common_types::{SubstateVersion, engine_types::substate::SubstateId};
-    use tari_ootle_wallet_sdk::models::KeyBranch;
+    use tari_ootle_wallet_sdk::{
+        models::{KeyBranch, WalletTransactionUpdate},
+        storage::{WalletStoreWriter, WriteableWalletStore},
+    };
     use tari_template_lib_types::{
         ComponentAddress,
         crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes},
@@ -948,6 +952,43 @@ mod tests {
 
     use super::*;
     use crate::handlers::test_support::TestDaemon;
+
+    #[tokio::test]
+    async fn waiting_on_a_transaction_rejected_before_consensus_returns_at_once() {
+        let daemon = TestDaemon::start().await;
+        let sdk = daemon.context.wallet_sdk();
+        for (seed, status) in [
+            (1u64, TransactionStatus::InvalidTransaction),
+            (2, TransactionStatus::DryRunFailed),
+        ] {
+            let transaction = Transaction::builder_localnet(Epoch(1))
+                .allocate_component_address("component")
+                .put_last_instruction_output_on_workspace("bucket")
+                .call_method("component", "new", args!["bucket"])
+                .build_and_seal(&RistrettoSecretKey::from(seed));
+            let transaction_id = sdk
+                .transaction_api()
+                .insert_new_transaction(transaction, None, &[], false)
+                .unwrap();
+            sdk.store()
+                .with_write_tx(|tx| {
+                    tx.transactions_update(WalletTransactionUpdate::new(transaction_id).with_new_status(status))
+                })
+                .unwrap();
+
+            let wait = handle_wait_result(&daemon.context, Some(&daemon.session), TransactionWaitResultRequest {
+                transaction_id,
+                timeout_secs: None,
+            });
+            let resp = time::timeout(Duration::from_secs(5), wait)
+                .await
+                .expect("wait_result kept waiting on a transaction that already has its outcome")
+                .unwrap();
+
+            assert!(!resp.timed_out);
+            assert_eq!(resp.status, status);
+        }
+    }
 
     fn component(byte: u8) -> SubstateId {
         SubstateId::Component(ComponentAddress::from_array([byte; 32]))

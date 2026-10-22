@@ -118,7 +118,7 @@ enum Commands {
         #[arg(
             short = 'x',
             long,
-            default_value = "http://localhost:9000/json_rpc",
+            default_value = "http://localhost:5100/json_rpc",
             help = "URL of the exchange wallet API"
         )]
         exchange_wallet_url: String,

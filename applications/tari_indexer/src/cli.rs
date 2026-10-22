@@ -51,9 +51,6 @@ pub struct Cli {
     #[clap(long, short = 'a', multiple_values = true)]
     pub address: Vec<SubstateId>,
 
-    #[clap(long, short = 'i')]
-    pub scanning_interval: Option<u64>,
-
     /// Bind address for API server
     #[clap(long, short = 'r', alias = "api-address")]
     pub api_listen_address: Option<SocketAddr>,
@@ -116,9 +113,6 @@ impl ConfigOverrideProvider for Cli {
         if let Some(listener_port) = self.listener_port {
             overrides.push(("indexer.p2p.listener_port".to_string(), listener_port.to_string()));
         }
-        if let Some(seconds) = self.scanning_interval {
-            overrides.push(("indexer.scanning_interval".to_string(), seconds.to_string()));
-        }
         if let Some(ref api_url) = self.web_ui_public_api_url {
             overrides.push(("indexer.web_ui_public_api_url".to_string(), api_url.to_string()));
         }
@@ -157,15 +151,19 @@ mod tests {
     use super::*;
     use crate::config::ApplicationConfig;
 
-    #[test]
-    fn grpc_url_flag_overrides_the_network_preset() {
+    fn load_with_presets(args: &[&str]) -> ApplicationConfig {
         let dir = tempfile::tempdir().unwrap();
         let config_path = dir.path().join("config.toml");
         write_config_to(&config_path, &get_default_config()).unwrap();
-        let cli = Cli::parse_from(["tari_indexer", "--network", "esmeralda", "-g", "http://my-node:18142"]);
+        let cli = Cli::parse_from(std::iter::once("tari_indexer").chain(args.iter().copied()));
 
         let cfg = load_configuration_with_overrides(&config_path, &cli, Some(cli.network())).unwrap();
-        let config = ApplicationConfig::load_from(&cfg).unwrap();
+        ApplicationConfig::load_from(&cfg).unwrap()
+    }
+
+    #[test]
+    fn grpc_url_flag_overrides_the_network_preset() {
+        let config = load_with_presets(&["--network", "esmeralda", "-g", "http://my-node:18142"]);
 
         assert_eq!(
             config.epoch_oracle.base_layer.base_node_grpc_url.unwrap().as_str(),

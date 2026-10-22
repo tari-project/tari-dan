@@ -48,7 +48,7 @@ The indexer uses configuration files and environment variables. Key configuratio
 - **API Endpoints**: Configure the REST server address
 - **P2P Networking**: Set peer seeds, ports, and reachability modes
 - **Database**: SQLite storage configuration
-- **Scanning**: Block scanning intervals and filters
+- **Scanning**: Scanning intervals and filters
 - **Web UI**: Public API URLs for the web interface
 
 ## Running
@@ -83,7 +83,6 @@ The following options are available (use `tari_indexer --help` for the most up-t
 
 #### Blockchain Scanning
 - `-a, --address <ADDRESS>...`: Substate addresses to track (can be specified multiple times)
-- `-i, --scanning-interval <SCANNING_INTERVAL>`: Block scanning interval in seconds
 
 #### P2P Networking
 - `-s, --peer-seeds <PEER_SEEDS>`: P2P peer seeds (can be specified multiple times)
@@ -102,8 +101,7 @@ The following options are available (use `tari_indexer --help` for the most up-t
 ./target/release/tari_indexer \
     --api-listen-address 0.0.0.0:8080 \
     --peer-seeds "peer1::address1" \
-    --peer-seeds "peer2::address2" \
-    --scanning-interval 10
+    --peer-seeds "peer2::address2"
 
 # Run with environment variables
 TARI_INDEXER_WEB_UI_PUBLIC_API_URL=http://localhost:8080 \
