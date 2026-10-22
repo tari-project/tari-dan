@@ -31,7 +31,6 @@ mod webrtc;
 use std::{fs, panic, pin, process};
 
 use log::*;
-use serde::Deserialize;
 use tari_common_types::seeds::seed_words::SeedWords;
 use tari_crypto::{keys::SecretKey, ristretto::RistrettoSecretKey};
 use tari_ootle_address::Network;
@@ -261,32 +260,14 @@ pub fn initialize_wallet_sdk(config: &ApplicationConfig, store: SqliteWalletStor
     let config_api = ConfigApi::new(&store);
     // Indexer URLs saved through `settings.set` take precedence over the config file.
     let indexer_endpoints = config_api
-        .get::<StoredIndexerUrls>(ConfigKey::IndexerUrls)
+        .get::<Vec<Url>>(ConfigKey::IndexerUrls)
         .optional()?
-        .map(StoredIndexerUrls::into_vec)
         .filter(|urls| !urls.is_empty())
         .unwrap_or_else(|| config.ootle_wallet_daemon.indexer_api_urls.clone());
     let indexer = IndexerRestApiNetworkInterface::init(indexer_endpoints)?;
     let birthday = get_epoch_birthday(sdk_config.network);
     let sdk = WalletSdk::initialize_with_local_key_store(store, indexer, sdk_config, birthday)?;
     Ok(sdk)
-}
-
-/// The value stored under [`ConfigKey::IndexerUrls`]: a list of URLs, or a single URL as stored by earlier versions.
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum StoredIndexerUrls {
-    Many(Vec<Url>),
-    One(Url),
-}
-
-impl StoredIndexerUrls {
-    fn into_vec(self) -> Vec<Url> {
-        match self {
-            Self::Many(urls) => urls,
-            Self::One(url) => vec![url],
-        }
-    }
 }
 
 const fn get_epoch_birthday(network: Network) -> EpochBirthday {

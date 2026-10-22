@@ -104,9 +104,6 @@ pub struct BatchedSubstate {
     /// Epoch the substate value hash was computed at; needed to re-derive the leaf value hash when
     /// verifying an inclusion proof.
     pub proof_epoch: u64,
-    /// CBOR-encoded SubstateDownProof, decoded for wire compatibility. Validators leave it empty: a batch answers
-    /// with heads, which a down proof cannot settle.
-    pub substate_down_proof: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -463,9 +460,8 @@ where
     }
 
     // Every requested id is either answered or named as missing. A responder that accounts for
-    // none of them is not answering this protocol - most likely it predates the batch response
-    // becoming a oneof, and its substates decoded as an unknown field. Failing here keeps that
-    // skew from reading as "none of these substates exist".
+    // none of them is not answering, and failing here keeps that from reading as "none of these
+    // substates exist".
     if batch.substates.is_empty() && batch.missing.is_empty() {
         return Err(ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
             "Node accounted for none of the {} requested substates",
@@ -517,7 +513,6 @@ fn decode_batched_substate(proven: proto::rpc::ProvenSubstate) -> Result<Batched
         result,
         value_proof: Some(proven.substate_value_proof).filter(|proof| !proof.is_empty()),
         proof_epoch: proven.proof_epoch,
-        substate_down_proof: Some(proven.substate_down_proof).filter(|proof| !proof.is_empty()),
     })
 }
 
@@ -661,7 +656,6 @@ mod tests {
             }),
             substate_value_proof: vec![],
             proof_epoch: 0,
-            substate_down_proof: vec![],
         }))
     }
 
@@ -802,7 +796,7 @@ mod tests {
     }
 
     #[test]
-    fn a_batched_down_substate_carries_its_down_proof() {
+    fn a_batched_destroyed_substate_decodes_as_down() {
         let destroyed = over_the_wire(&proto::rpc::ProvenSubstate {
             substate: Some(proto::consensus::Substate {
                 substate_id: substate_id().to_bytes(),
@@ -816,27 +810,8 @@ mod tests {
             }),
             substate_value_proof: vec![1],
             proof_epoch: 0,
-            substate_down_proof: vec![7, 8],
         });
         let batched = decode_batched_substate(destroyed).unwrap();
         assert!(matches!(batched.result, SubstateResult::Down { .. }));
-        assert_eq!(batched.substate_down_proof, Some(vec![7, 8]));
-
-        let without = over_the_wire(&proto::rpc::ProvenSubstate {
-            substate: Some(proto::consensus::Substate {
-                substate_id: substate_id().to_bytes(),
-                version: 2,
-                substate: vec![],
-                created: None,
-                destroyed: Some(proto::consensus::SubstateDestroyedMetadata {
-                    at_epoch: None,
-                    at_state_version: 5,
-                }),
-            }),
-            substate_value_proof: vec![1],
-            proof_epoch: 0,
-            substate_down_proof: vec![],
-        });
-        assert_eq!(decode_batched_substate(without).unwrap().substate_down_proof, None);
     }
 }

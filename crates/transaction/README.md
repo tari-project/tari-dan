@@ -23,15 +23,15 @@ the engine and validator nodes.
 
 ```rust
 use tari_ootle_transaction::{Transaction, args, Network};
-use tari_template_lib::types::constants::XTR;
+use tari_template_lib::types::constants::TARI_TOKEN;
 
 // All transactions start from Transaction::builder(network) or the
 // convenience alias Transaction::builder_localnet().
 let tx = Transaction::builder(Network::Esmeralda)
 // Pay fees from the sender account (max 1000 units)
 .pay_fee_from_component(sender_account, 1000)
-// Withdraw XTR from the sender's account
-.call_method(sender_account, "withdraw", args![XTR, 500u64])
+// Withdraw TARI from the sender's account
+.call_method(sender_account, "withdraw", args![TARI_TOKEN, 500u64])
 .put_last_instruction_output_on_workspace("bucket")
 // Deposit into the receiver's account
 .call_method(receiver_account, "deposit", args![Workspace("bucket")])

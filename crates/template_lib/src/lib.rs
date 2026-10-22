@@ -68,8 +68,8 @@
 //!      pub fn new() -> Self {
 //!          Self {
 //!             counter: 0,
-//!             // A empty vault that can only hold the native token (XTR). You can also create vaults that hold your own resources (see the `ResourceBuilder`).
-//!             vault: Vault::new_empty(XTR),
+//!             // A empty vault that can only hold the native token (TARI). You can also create vaults that hold your own resources (see the `ResourceBuilder`).
+//!             vault: Vault::new_empty(TARI_TOKEN),
 //!          }
 //!      }
 //!

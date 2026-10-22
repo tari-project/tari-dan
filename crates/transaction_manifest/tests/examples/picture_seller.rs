@@ -24,7 +24,7 @@ fn main() {
     );
 
     // buy a picture
-    let bucket = account.withdraw(XTR, 1_000);
+    let bucket = account.withdraw(TARI, 1_000);
     let picture = picture_seller.buy(bucket);
 
     // store our brand new picture in our account

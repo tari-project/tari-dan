@@ -208,8 +208,6 @@ message ShardCursor {
 }
 
 message SyncStateRequest {
-  reserved 1, 2;
-  reserved "start_state_version", "shard";
   // Optional - If not provided, state will be streamed until the current epoch
   tari.ootle.common.Epoch until_epoch = 3;
   // Bitflags representing which substates to return.
@@ -348,10 +346,6 @@ message ProvenSubstate {
   // The epoch the substate value hash was computed at, needed by the verifier to re-derive the leaf
   // value hash and bind it to the returned value. Only meaningful for an up substate.
   uint64 proof_epoch = 3;
-  // Always empty: a batch answers with each substate's head, which a down proof cannot settle, since it says
-  // nothing of later versions. Kept for wire compatibility. A down proof is served by GetSubstate for a read of the
-  // version it names.
-  bytes substate_down_proof = 4;
 }
 
 message MissingSubstates {

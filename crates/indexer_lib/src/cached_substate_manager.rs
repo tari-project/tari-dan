@@ -737,7 +737,7 @@ where
                         substate_value_proof,
                         commit_proof,
                         proof_epoch: substate.proof_epoch,
-                        // A batch's down proofs are not checked, so none rides along with its verified proof.
+                        // A batch answers with heads, which a down proof cannot settle, so it carries none.
                         substate_down_proof: None,
                         destroyed_at_state_version: None,
                     },
@@ -859,8 +859,6 @@ where
         let Some(trusted_root) = self.trusted_root_from_commit_proof(commit_proof).await? else {
             return Ok(BatchTrust::Stale);
         };
-        // A batch answers with heads, which a down proof cannot settle (it says nothing about later versions), so
-        // the down proofs a batch carries are not checked.
         for substate in &batch.substates {
             let Some(value_proof) = &substate.value_proof else {
                 return Err(IndexerError::SubstateProofVerificationFailed {
@@ -1362,7 +1360,6 @@ fn decode_commit_proof(commit_proof: &[u8]) -> Result<CommittedBlockProof, Index
 mod tests {
     use std::{
         collections::HashSet,
-        slice,
         str::FromStr,
         sync::{
             Mutex,
@@ -1524,7 +1521,6 @@ mod tests {
                         result: result.clone(),
                         value_proof: None,
                         proof_epoch: 0,
-                        substate_down_proof: None,
                     });
                     continue;
                 }
@@ -1537,7 +1533,6 @@ mod tests {
                             },
                             value_proof: None,
                             proof_epoch: 0,
-                            substate_down_proof: None,
                         })
                     },
                     Some(substate) if !self.0.omitted_from_batches.contains(id) => {
@@ -1548,7 +1543,6 @@ mod tests {
                             },
                             value_proof: None,
                             proof_epoch: 0,
-                            substate_down_proof: None,
                         })
                     },
                     _ => batch.missing.push(id.clone()),
@@ -2431,33 +2425,6 @@ mod tests {
         assert!(proof.is_none());
     }
 
-    /// A batch answers with heads, which a down proof cannot settle, so a batch's down proofs are not checked: one
-    /// that would not verify, against an anchor its committee does not sign, does not fail the batch.
-    #[tokio::test]
-    async fn a_batch_does_not_check_its_down_proofs() {
-        let (id, proof, _, r2_root) = global_down_proof(group(1, 2));
-        let decoded = decode_substate_down_proof(&proof).unwrap();
-        let batch = SubstateBatch {
-            commit_proof: Some(unsigned_commit_proof(group(1, 2), 4, r2_root)),
-            substates: vec![tari_validator_node_rpc::client::BatchedSubstate {
-                substate_id: id,
-                result: SubstateResult::Down {
-                    version: SubstateVersion::ZERO,
-                },
-                value_proof: Some(tari_bor::serde_codec::to_vec(&decoded.down).unwrap()),
-                proof_epoch: 0,
-                substate_down_proof: Some(vec![0xff]),
-            }],
-            missing: vec![],
-        };
-        let (manager, _) = manager(FakeNetwork::default());
-        let manager = manager
-            .with_substate_proof_verification(true)
-            .with_trusted_root_store(Arc::new(TrustEverything));
-        let result = manager.verify_substate_batch(&batch, &"vn".to_string()).await;
-        assert!(matches!(result, Ok(BatchTrust::Proven)), "{result:?}");
-    }
-
     #[tokio::test]
     async fn it_fetches_live_inputs_in_one_batch() {
         let ids = (0..10).map(component_id).collect::<Vec<_>>();
@@ -2535,76 +2502,6 @@ mod tests {
         };
         assert_eq!(found.len(), ids.len());
         assert_eq!(network.single_requests.load(Ordering::Relaxed), 1);
-    }
-
-    /// A batch's down proofs are not checked, so peer bytes in one never ride along with a substate's verified proof.
-    #[tokio::test]
-    async fn a_proven_batch_entry_carries_no_down_proof() {
-        use tari_engine_types::substate::hash_substate;
-        use tari_ootle_common_types::{ToSubstateAddress, VersionedSubstateId, shard::Shard};
-        use tari_state_tree::{
-            SPARSE_MERKLE_PLACEHOLDER_HASH,
-            ShardGroupRootTree,
-            SpreadPrefixStateTree,
-            StateTreePayload,
-            SubstateTreeChange,
-            SubstateValueProof,
-            memory_store::MemoryTreeStore,
-        };
-
-        let id = component_id(1);
-        let substate = live(std::slice::from_ref(&id)).remove(&id).unwrap();
-        let versioned = VersionedSubstateId::new(id.clone(), substate.version());
-        let shard = versioned.to_substate_address().to_shard(NumPreshards::P256);
-        let mut store = MemoryTreeStore::<StateTreePayload>::new();
-        let shard_root = SpreadPrefixStateTree::new(&mut store)
-            .put_substate_changes(None, 1, vec![SubstateTreeChange::Up {
-                id: versioned.clone(),
-                value_hash: hash_substate(
-                    Network::LocalNet,
-                    substate.substate_value(),
-                    substate.version(),
-                    PROOF_EPOCH,
-                ),
-            }])
-            .unwrap();
-        let tree = ShardGroupRootTree::build(
-            tari_engine_types::ProtocolVersion::at(Network::LocalNet, PROOF_EPOCH),
-            [
-                (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0),
-                (shard, shard_root, 1),
-            ],
-        )
-        .unwrap();
-        let (_, _, leaf_proof) = SpreadPrefixStateTree::new(&mut store).get_proof(1, &versioned).unwrap();
-        let value_proof = SubstateValueProof::new(shard_root, 1, tree.get_proof(shard).unwrap().1, leaf_proof);
-        let all_shards = group(1, NumPreshards::P256.as_u32());
-
-        let (manager, _) = manager(FakeNetwork {
-            proven_batch: Some(SubstateBatch {
-                commit_proof: Some(unsigned_commit_proof(all_shards, 4, tree.root())),
-                substates: vec![tari_validator_node_rpc::client::BatchedSubstate {
-                    substate_id: id.clone(),
-                    result: SubstateResult::Up {
-                        substate: Box::new(substate),
-                    },
-                    value_proof: Some(tari_bor::serde_codec::to_vec(&value_proof).unwrap()),
-                    proof_epoch: PROOF_EPOCH.as_u64(),
-                    substate_down_proof: Some(vec![7, 7]),
-                }],
-                missing: vec![],
-            }),
-            ..Default::default()
-        });
-        // The unsigned anchor is taken as trusted, standing in for a validated one.
-        let manager = manager
-            .with_substate_proof_verification(true)
-            .with_trusted_root_store(Arc::new(TrustEverything));
-
-        let found = manager.fetch_and_cache_substates(slice::from_ref(&id)).await.unwrap();
-
-        let proof = found[&id].proof.as_ref().expect("the batch proved the substate");
-        assert_eq!(proof.substate_down_proof, None);
     }
 
     /// A manager without cache writes, as the dry-run manager runs, leaves a cache it shares untouched however it
@@ -3217,7 +3114,6 @@ mod tests {
                         },
                         value_proof: Some(value_proof),
                         proof_epoch: PROOF_EPOCH.as_u64(),
-                        substate_down_proof: None,
                     }],
                     missing: vec![],
                 }),

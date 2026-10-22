@@ -240,60 +240,6 @@ const useManifestCodeStore = create<Store>()(
     }),
     {
       name: "manifest-code",
-      migrate: (persisted: unknown, version: number) => {
-        const state = persisted as Record<string, unknown>;
-        // Migrate from single-tab format (no tabs array) to multi-tab format
-        if (version < 1 && state && !state.tabs) {
-          const code = (state.code as string) || DEFAULT_CODE;
-          const variables = (state.variables as Record<string, string>) || {};
-          const tab: ManifestTab = {
-            id: generateId(),
-            name: "Manifest 1",
-            code,
-            variables,
-            signingKeys: [],
-            blobs: {},
-          };
-          return {
-            ...state,
-            tabs: [tab],
-            activeTabId: tab.id,
-            code: tab.code,
-            variables: tab.variables,
-            signingKeys: tab.signingKeys,
-            blobs: tab.blobs,
-          } as Store;
-        }
-        // Add signingKeys to existing tabs
-        if (version < 2 && state && state.tabs) {
-          const tabs = (state.tabs as ManifestTab[]).map((t) => ({
-            ...t,
-            signingKeys: t.signingKeys || [],
-          }));
-          const activeTabId = state.activeTabId as string;
-          const active = tabs.find((t) => t.id === activeTabId) || tabs[0];
-          return {
-            ...state,
-            tabs,
-            signingKeys: active?.signingKeys || [],
-          } as unknown as Store;
-        }
-        // Add blobs map to existing tabs
-        if (version < 3 && state && state.tabs) {
-          const tabs = (state.tabs as ManifestTab[]).map((t) => ({
-            ...t,
-            blobs: t.blobs || {},
-          }));
-          const activeTabId = state.activeTabId as string;
-          const active = tabs.find((t) => t.id === activeTabId) || tabs[0];
-          return {
-            ...state,
-            tabs,
-            blobs: active?.blobs || {},
-          } as unknown as Store;
-        }
-        return state as unknown as Store;
-      },
       version: 3,
     },
   ),

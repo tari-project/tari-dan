@@ -116,6 +116,9 @@ message LeaderFee {
 }
 
 message Command {
+  reserved 8;
+  reserved "evict_node";
+
   oneof command {
     LocalOnlyAtom local_only = 1;
     MultiShardAtom local_prepare = 2;
@@ -124,8 +127,6 @@ message Command {
     MultiShardAtom some_accept = 5;
 
     ForeignProposalAtom foreign_proposal = 6;
-    // Reserved: rejected on decode. Do not reuse field 8.
-    EvictNodeAtom evict_node = 8;
     EndEpochAtom end_epoch = 9;
   }
 }
@@ -183,7 +184,6 @@ message Evidence {
 
 
 message QuorumCertificate {
-  reserved 5;
   bytes header_hash = 1;
   bytes parent_id = 2;
   uint64 block_height = 3;
@@ -303,11 +303,6 @@ message SubstateDestroyedMetadata {
 message SyncRequest {
   uint64 epoch = 1;
   uint64 block_height = 2;
-}
-
-// Reserved: rejected on decode. Retained so field 8 of Command stays occupied.
-message EvictNodeAtom {
-  bytes public_key = 1;
 }
 
 message ShardGroupAccumulatedData {

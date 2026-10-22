@@ -140,11 +140,8 @@ pub enum NoVoteReason {
         total_bytes: usize,
         max_bytes: usize,
     },
-    #[error("Transaction {transaction_id} has substate lock conflicts and must be deferred to a later block")]
-    DeferrableLockConflict { transaction_id: TransactionId },
     /// Locking succeeded but the transaction's state diff does not apply over the pending store. An honest proposer
-    /// skips such a transaction, so it is distinct from [NoVoteReason::DeferrableLockConflict]: the lock rules
-    /// classify the underlying failure as one that no later block can clear.
+    /// skips such a transaction: the lock rules classify the underlying failure as one that no later block can clear.
     #[error("The proposer proposed a conflicting transaction {transaction_id}: {details}")]
     ConflictingTransactionProposed {
         transaction_id: TransactionId,
@@ -205,7 +202,6 @@ impl NoVoteReason {
             Self::BlockShardOutputBytesExceeded { .. } => "BlockShardOutputBytesExceeded",
             Self::BlockPledgeBytesExceeded { .. } => "BlockPledgeBytesExceeded",
             Self::BlockForeignProposalBytesExceeded { .. } => "BlockForeignProposalBytesExceeded",
-            Self::DeferrableLockConflict { .. } => "DeferrableLockConflict",
             Self::ConflictingTransactionProposed { .. } => "ConflictingTransactionProposed",
         }
     }

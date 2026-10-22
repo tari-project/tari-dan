@@ -644,7 +644,7 @@ pub async fn handle_get(
     })
 }
 
-pub async fn handle_get_all(
+pub async fn handle_list(
     context: &HandlerContext,
     token: Option<&Bearer>,
     req: TransactionGetAllRequest,

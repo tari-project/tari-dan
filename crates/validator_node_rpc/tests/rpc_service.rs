@@ -131,20 +131,20 @@ async fn connect() -> (RpcClient, task::JoinHandle<()>) {
     (client, server)
 }
 
-/// Method 4 is retired: a peer that calls it gets an unsupported-method status.
+/// A peer that calls a method past the end of the table gets an unsupported-method status.
 #[tokio::test]
-async fn method_4_is_not_served() {
+async fn a_method_past_the_table_is_not_served() {
     let (mut client, server) = connect().await;
 
     let result = client
-        .server_streaming::<_, _, proto::SyncStateResponse>(proto::SyncStateRequest::default(), 4u32)
+        .server_streaming::<_, _, proto::SyncStateResponse>(proto::SyncStateRequest::default(), 10u32)
         .await;
     let status = match result {
         Ok(mut stream) => stream
             .next()
             .await
             .expect("the server closed the stream without a status")
-            .expect_err("method 4 must not stream a response"),
+            .expect_err("an unserved method must not stream a response"),
         Err(RpcError::RequestFailed(status)) => status,
         Err(err) => panic!("expected the server to refuse the request, got {err}"),
     };

@@ -706,7 +706,7 @@ fn build_argument(arg: Expr, depth: usize) -> Result<ManifestLiteral, syn::Error
             if let Some(seg) = path.segments.first() {
                 if seg.ident == "None" {
                     Ok(ManifestLiteral::Special(SpecialLiteral::Null))
-                } else if seg.ident == "XTR" || seg.ident == "TARI" {
+                } else if seg.ident == "TARI" {
                     Ok(ManifestLiteral::Special(SpecialLiteral::Address(OrVar::Value(
                         TARI_TOKEN.into(),
                     ))))
