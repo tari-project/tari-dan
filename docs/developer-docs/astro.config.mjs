@@ -74,6 +74,7 @@ export default defineConfig({
             { label: "Stealth Transfers", link: "/guides/stealth-resources/" },
             { label: "Burn Minotari for TARI", link: "/guides/burn-minotari/" },
             { label: "How Burn Claims Work", link: "/guides/claim-burn/" },
+            { label: "Exchange Integration", link: "/guides/exchange-integration/" },
             { label: "Randomness in Templates", link: "/guides/randomness/" },
           ],
         },
