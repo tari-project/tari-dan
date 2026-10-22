@@ -279,13 +279,14 @@ impl<TNetwork: WalletNetworkInterface> TestWithNetwork<TNetwork> {
     }
 }
 
-/// Network interface that answers `query_transaction_result` with a canned result, and `get_current_epoch` with a
-/// canned epoch, and panics on every other call.
+/// Network interface that answers `query_transaction_result` with a canned result, `get_current_epoch` with a canned
+/// epoch and, if set to, `submit_transaction` with a rejection, and panics on every other call.
 #[derive(Debug, Clone)]
 pub struct CannedTransactionResultInterface {
     /// `None` answers that the transaction is not found.
     result: Option<TransactionQueryResult>,
     current_epoch: Option<Epoch>,
+    rejects_submissions: bool,
 }
 
 impl CannedTransactionResultInterface {
@@ -293,6 +294,7 @@ impl CannedTransactionResultInterface {
         Self {
             result: Some(result),
             current_epoch: None,
+            rejects_submissions: false,
         }
     }
 
@@ -301,11 +303,17 @@ impl CannedTransactionResultInterface {
         Self {
             result: None,
             current_epoch: None,
+            rejects_submissions: false,
         }
     }
 
     pub fn with_current_epoch(mut self, epoch: Epoch) -> Self {
         self.current_epoch = Some(epoch);
+        self
+    }
+
+    pub fn rejecting_submissions(mut self) -> Self {
+        self.rejects_submissions = true;
         self
     }
 }
@@ -328,9 +336,9 @@ impl WalletNetworkInterface for CannedTransactionResultInterface {
         panic!("CannedTransactionResultInterface called")
     }
 
-    #[allow(clippy::diverging_sub_expression)]
     async fn submit_transaction(&self, _transaction: Transaction) -> Result<TransactionId, Self::Error> {
-        panic!("CannedTransactionResultInterface called")
+        assert!(self.rejects_submissions, "CannedTransactionResultInterface called");
+        Err(PanicError::Rejected)
     }
 
     async fn submit_transaction_envelope(
@@ -549,8 +557,9 @@ impl WalletNetworkInterface for PanicNetworkInterface {
 
 #[derive(Debug)]
 pub enum PanicError {
-    /// The one error a test network answers with in place of panicking.
+    /// The errors a test network answers with in place of panicking.
     NotFound,
+    Rejected,
 }
 
 impl std::fmt::Display for PanicError {
@@ -563,11 +572,15 @@ impl std::error::Error for PanicError {}
 
 impl TransactionStatusResponseError for PanicError {
     fn get_status(&self) -> ResponseErrorStatus {
-        panic!("get_status called on PanicError")
+        let message = self.get_error_message();
+        match self {
+            Self::NotFound => ResponseErrorStatus::NotFound { message },
+            Self::Rejected => ResponseErrorStatus::TransactionRejected { message },
+        }
     }
 
     fn get_error_message(&self) -> String {
-        panic!("get_error_message called on PanicError")
+        format!("{self:?}")
     }
 }
 

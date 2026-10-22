@@ -33,8 +33,9 @@ const LOG_TARGET: &str = "tari::ootle::wallet_sdk::apis::transaction";
 
 /// Epochs past its `max_epoch` that the wallet keeps waiting for the outcome of a transaction the network reports no
 /// outcome for. No shard group starts a transaction after its `max_epoch`, but one that prepared it by then waits an
-/// epoch longer for the other shard groups, and accepts their proposals from the epoch before its own, so the network
-/// can finalize it up to two epochs past its `max_epoch`. The third leaves the indexer time to serve that result.
+/// epoch longer for the other shard groups, and accepts their proposals from the epoch before its own, so a shard group
+/// can finalize it as COMMIT up to two of its own epochs past its `max_epoch`. The third leaves the indexer time to
+/// serve that result. An ABORT can finalize an epoch later, and releases the inputs whenever it does.
 pub const TRANSACTION_EXPIRY_GRACE_EPOCHS: u64 = 3;
 
 pub struct TransactionApi<'a, TStore, TNetworkInterface> {
@@ -91,8 +92,8 @@ where
 
     /// Submits a transaction to the network. The transaction must be in the `New` status.
     /// If the submission is successful, the transaction status is updated to `Pending`.
-    /// If the transaction is rejected, the status is updated to `InvalidTransaction` and the
-    /// rejection reason is stored.
+    /// If the transaction is rejected, the status is updated to `InvalidTransaction`, the
+    /// rejection reason is stored and the inputs locked for it are released.
     /// A wallet that verifies its indexer but trusts no validator set yet, and cannot anchor on one now, returns
     /// [`Submission::Deferred`] and leaves the transaction `New`. The caller submits it again later.
     pub async fn submit_transaction(&self, transaction_id: TransactionId) -> Result<Submission, TransactionApiError> {
@@ -142,7 +143,8 @@ where
                                 WalletTransactionUpdate::new(transaction_id)
                                     .with_new_status(TransactionStatus::InvalidTransaction)
                                     .with_invalid_reason(&message),
-                            )
+                            )?;
+                            self.release_all_locks_for_transaction_internal(tx, transaction_id)
                         })?;
                         Ok(Submission::Rejected)
                     },
@@ -436,7 +438,8 @@ where
     /// The epoch the network has reached, or `None` while the wallet cannot tell.
     ///
     /// Under [`IndexerTrust::Verify`] this is the epoch of the latest validator set the wallet trusts, which the
-    /// network has reached whatever the indexer reports.
+    /// network has reached as far as the wallet's anchor is right: past the anchor, only a checkpoint signed by the
+    /// previous set advances it.
     async fn current_epoch(&self) -> Result<Option<Epoch>, TransactionApiError> {
         if self.indexer_trust.is_verify() {
             return Ok(self.validator_set_api.latest()?.map(|set| set.epoch()));

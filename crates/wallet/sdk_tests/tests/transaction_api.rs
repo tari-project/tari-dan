@@ -18,7 +18,7 @@ use tari_engine_types::{
 use tari_ootle_common_types::SubstateVersion;
 use tari_ootle_transaction::{Transaction, TransactionId, args};
 use tari_ootle_wallet_sdk::{
-    apis::transaction::TRANSACTION_EXPIRY_GRACE_EPOCHS,
+    apis::transaction::{Submission, TRANSACTION_EXPIRY_GRACE_EPOCHS},
     models::{TransactionStatus, WalletTransactionUpdate},
     network::{TransactionFinalizedResult, TransactionQueryResult},
     storage::{WalletStoreWriter, WriteableWalletStore},
@@ -222,17 +222,28 @@ fn wallet_with_inputs_locked_for(
     network: CannedTransactionResultInterface,
     transaction: &Transaction,
 ) -> TestWithNetwork<CannedTransactionResultInterface> {
+    let test = wallet_with_inputs_locked_for_new(network, transaction);
+    test.store()
+        .with_write_tx(|tx| {
+            tx.transactions_update(
+                WalletTransactionUpdate::new(transaction.calculate_id()).with_new_status(TransactionStatus::Pending),
+            )
+        })
+        .unwrap();
+    test
+}
+
+/// A wallet on `network` holding `transaction` not yet submitted, with outputs of 25 and 49 locked for it.
+fn wallet_with_inputs_locked_for_new(
+    network: CannedTransactionResultInterface,
+    transaction: &Transaction,
+) -> TestWithNetwork<CannedTransactionResultInterface> {
     let test = TestWithNetwork::with_network(network);
     let transaction_id = transaction.calculate_id();
     test.add_unspent_output(25u64);
     test.add_unspent_output(49u64);
     test.store()
-        .with_write_tx(|tx| {
-            tx.transactions_insert(transaction, None, &[Test::test_account_address()], false)?;
-            tx.transactions_update(
-                WalletTransactionUpdate::new(transaction_id).with_new_status(TransactionStatus::Pending),
-            )
-        })
+        .with_write_tx(|tx| tx.transactions_insert(transaction, None, &[Test::test_account_address()], false))
         .unwrap();
     let lock_id = test.new_lock().keep_locked();
     test.sdk()
@@ -299,4 +310,26 @@ async fn a_transaction_with_no_outcome_stays_pending_while_the_network_may_still
         assert_eq!(stored.status, TransactionStatus::Pending);
         assert_eq!(test.get_unspent_balance(), 0, "the outputs stay locked");
     }
+}
+
+#[tokio::test]
+async fn a_rejected_submission_releases_its_inputs() {
+    let transaction = build_transaction();
+    let transaction_id = transaction.calculate_id();
+    let test = wallet_with_inputs_locked_for_new(
+        CannedTransactionResultInterface::not_found().rejecting_submissions(),
+        &transaction,
+    );
+
+    let submission = test
+        .sdk()
+        .transaction_api()
+        .submit_transaction(transaction_id)
+        .await
+        .unwrap();
+
+    assert_eq!(submission, Submission::Rejected);
+    let stored = test.sdk().transaction_api().get(transaction_id).unwrap();
+    assert_eq!(stored.status, TransactionStatus::InvalidTransaction);
+    assert_eq!(test.get_unspent_balance(), 74, "both outputs are released");
 }
