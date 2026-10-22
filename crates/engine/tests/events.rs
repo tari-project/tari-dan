@@ -38,6 +38,8 @@ fn basic_emit_event() {
     assert_eq!(*result.finalize.events[0].template_address(), event_emitter_template);
     assert_eq!(result.finalize.events[0].substate_id(), None);
     assert_eq!(result.finalize.events[0].payload().get_str("my"), Some("event"));
+
+    template_test.assert_substate_lengths_match_encoding();
 }
 
 #[test]

@@ -1188,8 +1188,9 @@ fn a_fee_account_declared_as_a_read_still_pays_the_fee() {
 }
 
 /// The storage charge sizes each persisted substate by its `CborLen`, so that length must equal the
-/// bytes the substate actually encodes to. The substate variants a template call does not produce are
-/// checked in `tari_engine_types`.
+/// bytes the substate actually encodes to. Richer state is checked the same way at the end of the
+/// stealth, confidential, metadata, NFT-data and event tests, and the leaf substate variants in
+/// `tari_engine_types`.
 #[test]
 fn persisted_substate_lengths_match_their_encoding() {
     let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
@@ -1204,12 +1205,5 @@ fn persisted_substate_lengths_match_their_encoding() {
         vec![owner_token],
     );
 
-    for (id, substate) in test.get_state_store_mut().iter() {
-        let value = substate.substate_value();
-        assert_eq!(
-            tari_bor::encoded_len(value),
-            tari_bor::encode(value).unwrap().len(),
-            "CborLen disagrees with the encoding of {id}"
-        );
-    }
+    test.assert_substate_lengths_match_encoding();
 }

@@ -245,6 +245,8 @@ fn transfer_confidential_amounts_between_accounts() {
     // account1 vault, account2 component and the single spent input ConfidentialOutput.
     assert_eq!(diff.up_iter().count(), 7);
     assert_eq!(diff.down_iter().count(), 3);
+
+    template_test.assert_substate_lengths_match_encoding();
 }
 
 #[test]

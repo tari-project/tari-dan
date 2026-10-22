@@ -1090,6 +1090,20 @@ impl TemplateTest {
         self.execute_and_commit(instructions.instructions, proofs)
     }
 
+    /// Asserts that every substate in the state store has a `CborLen` equal to the bytes it encodes to. The storage
+    /// fee sizes persisted substates by `CborLen`, so a mismatch misprices them.
+    #[track_caller]
+    pub fn assert_substate_lengths_match_encoding(&self) {
+        for (id, substate) in self.state_store.iter() {
+            let value = substate.substate_value();
+            assert_eq!(
+                tari_bor::encoded_len(value),
+                tari_bor::encode(value).unwrap().len(),
+                "CborLen disagrees with the encoding of {id}"
+            );
+        }
+    }
+
     /// Prints all substates in the current state store to stderr for debugging.
     pub fn print_state(&self) {
         for (k, v) in self.state_store.iter() {

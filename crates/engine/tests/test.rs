@@ -918,6 +918,8 @@ mod basic_nft {
             .unwrap_err();
 
         assert!(err.to_string().contains("Not enough brightness remaining"));
+
+        template_test.assert_substate_lengths_match_encoding();
     }
 
     #[test]
