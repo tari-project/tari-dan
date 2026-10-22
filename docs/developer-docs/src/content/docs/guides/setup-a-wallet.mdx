@@ -122,14 +122,15 @@ To receive funds, simply share your wallet address with the sender. You can find
 
 ## 5. A Note on Authentication
 
-You may have noticed that the wallet didn't require any authentication. This is because the wallet daemon currently
-defaults to no auth. This will surely change in future.
+The wallet daemon uses WebAuthn authentication by default. The first time you open the web UI, you register a
+passkey (or security key), and you use it to log in from then on. Automated clients authenticate with
+[API keys](/guides/agent-api-keys/) instead.
 
-If you would like to enable authentication, pass `--auth webauthn` when starting the wallet daemon.
-This will require you to register a passkey for the wallet.
+On a local test network you can turn authentication off. Never do this on a wallet that holds real funds: anyone who
+can reach the port can then spend from it.
 
 ```bash
-./tari_ootle_walletd --network esme --auth webauthn
+./tari_ootle_walletd --network localnet --authentication none
 ```
 
 ## 6. Resetting your wallet (testnet only)

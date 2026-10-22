@@ -89,12 +89,15 @@ recommend this structure:
 
   You can use these to build a monitor that holds no spend key, and keep the deposit account's spend key cold. No
   packaged tool does this today, so you must build and maintain it yourself. Be aware of its limits:
-  - **It cannot reject forged outputs.** With `account_secret = None`, `scan_stealth_output` skips the spend-key
+  - **It cannot tell a forged output from a real one.** With `account_secret = None`, `scan_stealth_output` skips the
     ownership check and returns every output it can decrypt. Anyone can build an output encrypted to your public view
     key, with any value and any pay reference, and keep the spend key for themselves (see
-    [Section 5](#section-5-detecting-deposits)). Before crediting, the monitor must also check ownership. That needs
-    the account public key and the one-time stealth address derivation.
-  - **Memos are returned as raw bytes**, so the `extractPayRef` helper in Section 5 does not apply directly.
+    [Section 5](#section-5-detecting-deposits)). The ownership check needs the account **secret** key: the output's
+    one-time key is derived from a Diffie-Hellman exchange with the account key, not the view key. A monitor without
+    the account secret can only flag candidate deposits. Never credit from it alone; confirm each candidate with a
+    process that holds the account secret.
+  - **Pay-reference memos are returned as raw bytes**, so the `extractPayRef` helper in Section 5 does not apply
+    directly.
   - **Results are unproven.** `fetch_unspent_utxos` returns whatever the indexer serves, without proofs.
 </Aside>
 
@@ -132,7 +135,8 @@ it before you install.
   your indexer on Linux.
 </Aside>
 
-A Docker image with `tari_indexer` is also published at `ghcr.io/tari-project/ootle`.
+A Docker image with `tari_indexer` is also published at `ghcr.io/tari-project/ootle` (linux/amd64 only). It has no
+default command, so name the binary: `docker run ghcr.io/tari-project/ootle tari_indexer --network esmeralda`.
 
 ## Section 1: Set up your indexer
 
@@ -145,8 +149,9 @@ A Docker image with `tari_indexer` is also published at `ghcr.io/tari-project/oo
 ### Requirements
 
 - Linux, with at least 4 cores, 8–16 GB RAM and 200 GB or more of NVMe storage for production.
-- Access to a **Minotari base node gRPC** endpoint. The indexer reads the base layer to follow Ootle epochs and the
-  validator set. The shipped Esmeralda configuration uses Tari's public endpoint (`https://grpc.esmeralda.tari.com`).
+- Access to a **Minotari base node gRPC** endpoint. The indexer reads the base layer to follow Ootle epochs. (On
+  Esmeralda the validator set ships in the config, under `[esmeralda.epoch_oracle.configured]`.) The shipped Esmeralda
+  configuration uses Tari's public endpoint (`https://grpc.esmeralda.tari.com`).
   You can point it at your own `minotari_node` instead: see the Minotari exchange guide, Section 1.
 - Outbound connectivity to the validator peer seeds (libp2p over TCP and QUIC/UDP).
 
@@ -172,12 +177,12 @@ Useful arguments:
 | `-c`, `--config` | Config file. Default: `config/config.toml` inside the base path |
 | `--network` | Network to connect to (env `TARI_NETWORK`) |
 | `-r`, `--api-listen-address` | REST API listen address |
-| `-g`, `--epoch-oracle-minotari-node-grpc-url` | Minotari base node gRPC URL (env `TARI_INDEXER_MINOTARI_NODE_GRPC_URL`). This sets the root `[epoch_oracle.base_layer]` key, which a per-network section overrides. On Esmeralda, set `base_node_grpc_url` in `[esmeralda.epoch_oracle.base_layer]` instead (see below) |
+| `-g`, `--epoch-oracle-minotari-node-grpc-url` | Minotari base node gRPC URL (env `TARI_INDEXER_MINOTARI_NODE_GRPC_URL`) |
 | `-s`, `--peer-seeds` | Override the peer seeds |
 | `--listener-port` | Fixed p2p listener port. Default `0`, which picks a random port |
-| `-p key=value` | Override any config value |
+| `-p key=value` | Override any config value. For a key that a per-network section also sets, name the network section, e.g. `-p esmeralda.epoch_oracle.base_layer.base_node_grpc_url=http://127.0.0.1:18142` |
 
-3. Check that the indexer is healthy and synced:
+3. Check that the indexer is up:
 
 ```bash
 curl http://127.0.0.1:18300/health
@@ -185,7 +190,8 @@ curl http://127.0.0.1:18300/ready
 curl http://127.0.0.1:18300/info
 ```
 
-The interactive REST API documentation is at `http://127.0.0.1:18300/swagger-ui`.
+`/ready` reports that the indexer has finished its initial base-layer scan. It does not mean the indexer has caught
+up with the network. The interactive REST API documentation is at `http://127.0.0.1:18300/swagger-ui`.
 
 ### Configuring the indexer
 
@@ -193,7 +199,9 @@ Config lives under `[indexer]` in `config.toml`. Unknown keys are rejected at st
 key you add.
 
 The generated `config.toml` also contains per-network sections, such as `[esmeralda.epoch_oracle.base_layer]`. These
-override the matching root sections. Edit the section for your network, or the value you set at the root is ignored.
+override the matching root sections key by key. For a key that your network's section also sets, edit it there: the
+value you set at the root is ignored. The shipped per-network sections cover the epoch oracle and the peer seeds; there
+is no per-network `[indexer]` section.
 
 The settings that matter most for exchanges are:
 
@@ -203,10 +211,10 @@ api_listen_address = "127.0.0.1:18300"
 metrics_listen_address = "127.0.0.1:18302"   # Prometheus metrics at /_metrics
 web_ui_address = "127.0.0.1:15000"
 
-# How long the indexer keeps full transactions. The default is 50 epochs. After that, a transaction can no longer
-# be looked up by ID. Set this well above your longest reconciliation window, or to "forever".
-transaction_retention_epochs = "forever"
-# transaction_receipt_retention_epochs and event_retention_epochs default to "forever".
+# How long the indexer keeps full transaction bodies. The default is 50 epochs. Set this well above your longest
+# reconciliation window. Receipts (the outcome of a transaction) follow transaction_receipt_retention_epochs, and
+# events follow event_retention_epochs. Both default to "forever".
+transaction_retention_epochs = 500
 
 # Wallets verify the proofs served by the indexer by default, so leave this enabled (default = true).
 verify_substate_proofs = true
@@ -215,6 +223,12 @@ verify_substate_proofs = true
 # Point this at your own Minotari base node if you run one.
 base_node_grpc_url = "https://grpc.esmeralda.tari.com"
 ```
+
+<Aside type="caution">
+  `transaction_retention_epochs = "forever"` is unbounded while `index_gossiped_transactions` is on (the default). The
+  indexer then stores the whole network's transaction volume, including cheap spam. Use a finite window, or set
+  `index_gossiped_transactions = false` if your indexer only needs to know about the transactions it submits.
+</Aside>
 
 <Aside type="note">
   The indexer's REST API is designed to be publicly reachable. Whether you expose it is up to you. It is
@@ -243,21 +257,29 @@ Useful arguments:
 | Argument | Description |
 |---|---|
 | `-b`, `--base-path` | Data directory. Use a separate one for each wallet (deposit, withdrawal, cold) |
+| `--allowed-host` | Extra host name the daemon may be addressed by (repeatable). See below |
 | `--network` | Network (env `TARI_NETWORK`) |
 | `-i`, `--indexer-api-url` | Indexer URL(s). Repeat the flag or comma-separate for failover |
 | `-l`, `--listen-on` | JSON-RPC and web UI listen address (env `JRPC_LISTEN_ON`). Default `127.0.0.1:5100` |
 | `--authentication` | `webauthn` (default) or `none` |
-| `--override-keyring-password` | Use this password instead of the OS keyring. See below |
+| `--override-keyring-password` | Use this password instead of the OS keyring. Prefer the config setting, see below |
 | `--seed-words "..."` | Restore a wallet from seed words (first run only) |
 
 3. The JSON-RPC endpoint is `http://127.0.0.1:5100/json_rpc`. The web UI is at `http://127.0.0.1:5100`.
+
+<Aside type="caution">
+  Give each daemon on a host its own `--listen-on` port. If the port is taken, the daemon binds a random port instead
+  and only logs a warning, so your backend could end up talking to the wrong wallet. Check the `JSON-RPC listening on` log
+  line at startup.
+</Aside>
 
 ### Configuring the wallet daemon
 
 Config lives under `[ootle_wallet_daemon]` in `config.toml`. The generated config also contains per-network sections
 `[<network>.ootle_wallet_daemon]`, which override the root section. For example, the Esmeralda section sets
 `indexer_api_url` to Tari's public indexers. Set network-specific values, such as the indexer URL, in your network's
-section. The `-i` flag also writes to that section.
+section. The `-i` flag also writes to that section. Indexer URLs saved through the web UI settings are stored in the
+wallet database and take precedence over both.
 
 ```toml
 [esmeralda.ootle_wallet_daemon]
@@ -277,6 +299,9 @@ default_transaction_validity_epochs = 3
   - **Never run with `authentication = "none"` on anything but a local test network.** In that mode anyone who can
     reach the port can spend your funds, and the daemon logs a warning saying so.
   - Never expose the JSON-RPC port to the public internet.
+  - The daemon refuses requests addressed to a host name other than `localhost`, an IP address or the host of
+    `webauthn.rp_origin`. If your backend or a reverse proxy reaches it by another name, add that name to
+    `allowed_hosts` (or `--allowed-host`).
   - If you reach the web UI by a hostname other than `localhost`, set `webauthn.rp_id` and `webauthn.rp_origin` to
     match.
 </Aside>
@@ -285,18 +310,25 @@ default_transaction_validity_epochs = 3
 
 The daemon encrypts its seed with a random password stored in the OS keyring: macOS Keychain, Linux Secret Service
 (DBus) or the Windows Credential Manager. Headless Linux servers usually have no Secret Service. There, start the
-daemon with `--override-keyring-password <password>` (or set `override_keyring_password` in the config) and supply it
-from your secrets manager. Once a wallet has been created with an override password, you must always supply it.
+daemon with an override password and supply it from your secrets manager. Once a wallet has been created with an
+override password, you must always supply it.
+
+Prefer setting `override_keyring_password` in the `[ootle_wallet_daemon]` section of a config file that only the
+daemon's user can read. The `--override-keyring-password` flag has no environment variable, so passing it on the
+command line leaves the password in your shell history and in the process list. The same applies to `--seed-words`.
 
 ### API access for your backend
 
-Your backend should use **API keys**, not interactive logins:
+Your backend should use **API keys**, not interactive logins. [API Keys for AI Agents](/guides/agent-api-keys/)
+describes how they work; the steps for an exchange are:
 
 1. Open the web UI and register a WebAuthn credential (passkey or security key) for the admin login.
 2. From an admin session, create an API key scoped to exactly what the service needs. You can use the web UI, the
    `auth.create_api_key` method, or the wallet CLI's `auth api-key create`. For example:
    - **Deposit monitor:** `accounts:read`, `stealth_utxos:read`, `transactions:read`
    - **Withdrawal service:** `accounts:read`, `transactions:read`, `transfer:create:<withdrawal account component address>`
+   - **Sweep service:** `accounts:read`, `transactions:read`, `transfer:create:<deposit account component address>`.
+     Keep this key out of the deposit monitor.
 3. Send the key on every request as `Authorization: Bearer tw_...`.
 
 API keys can have an expiry, and only a hash of each key is stored. An API key cannot create other API keys.
@@ -343,7 +375,13 @@ This prints the new account as JSON, including:
 
 - `component_address`: the on-chain account component.
 - `address`: the account's **Ootle address**. This is where you send funds to cold storage.
-- The view-only key pair.
+- The view-only key pair, **including the view secret key in plain text**. Anyone with it can see every payment to the
+  account, so clear the terminal and don't log this output.
+
+<Aside type="caution">
+  Mainnet has not launched. Before you move real funds to an address generated now, confirm against the mainnet
+  release notes that mainnet addresses and key derivation are unchanged.
+</Aside>
 
 2. Print and record the seed words:
 
@@ -362,15 +400,18 @@ base path.
   (or your override password). Your backup is the seed words.
 </Aside>
 
-To spend from cold storage later, restore it on a secured machine with `--seed-words`. Let it finish account recovery
-(it scans derived accounts until 10 in a row are unused). Make the transfer, then wipe it again.
+To spend from cold storage later, restore it on a secured machine with `--seed-words`, and point it at an indexer
+with `-i`: recovery waits for an indexer, and the default is `127.0.0.1:18300`. Let it finish account recovery (it
+scans derived accounts until 10 in a row are unused). Make the transfer, then wipe it again.
 
 ### Creating the deposit and withdrawal wallets
 
-On your server, start a `tari_ootle_walletd` for each wallet, each with its own `--base-path`. Then create an account
-in each one:
+On your server, start a `tari_ootle_walletd` for each wallet, each with its own `--base-path` and `--listen-on` port.
+Then create an account in each one, from an admin session (the web UI, or a JSON-RPC session logged in with WebAuthn).
+Creating accounts needs the `accounts:create` permission, which the service keys above don't have:
 
 ```javascript
+// With an admin session token in place of the service API key
 const created = await walletRpc("accounts.create", { account_name: "deposits", is_default: true });
 // created.address -> the Ootle address to hand out to customers
 ```
@@ -412,7 +453,7 @@ equivalent of asking customers to fill in a Payment ID, but in most cases the cu
 It is **not guaranteed** that the reference arrives. Plan for deposits without one:
 
 - **The customer's wallet can override it.** The wallet daemon copies the destination's pay reference only when the
-  sender doesn't set one. An empty pay reference removes it, and any other value replaces it.
+  sender doesn't set one. Over JSON-RPC an empty pay reference removes it, and any other value replaces it.
 - **Other senders may not copy it at all.** Software built on `ootle-rs` or the SDK doesn't copy the address's pay
   reference automatically.
 
@@ -432,11 +473,11 @@ Make each reference random and unguessable, and store the mapping to the custome
 sequential IDs or customer identifiers: the pay reference is visible to anyone who sees the address.
 
 **Use printable ASCII, no more than 40 characters**, for example a UUID string or 16 random bytes written as hex.
-Raw binary references are not safe, for three reasons:
+Raw binary references are not safe, and long ones are not either:
 
 - The wallet daemon's `pay_ref` field is UTF-8 text.
-- The TypeScript bindings decode pay references as text.
-- The TypeScript bindings currently reject addresses whose pay reference is longer than about 40 bytes.
+- Older releases of the TypeScript bindings, which browser wallets use, decode pay references as text and reject
+  addresses whose pay reference is longer than about 40 bytes.
 
 ### Validating customer withdrawal addresses
 
@@ -466,7 +507,8 @@ fn validate_withdrawal_address(s: &str, expected: Network) -> Result<OotleAddres
 The deposit wallet's account monitor scans the indexer for stealth outputs addressed to its accounts. It does this
 every 60 seconds by default. To trigger a scan sooner, call `accounts.get_balances` with `refresh: true`. This only
 queues the scan, so new outputs may not appear in a `stealth_utxos.list` call made straight afterwards. Poll on an
-interval rather than expecting refresh-then-list to be immediate.
+interval rather than expecting refresh-then-list to be immediate. An output the indexer has not indexed yet is
+retried on later scans, so a deposit can appear more than one scan interval after it was committed.
 
 The main deposit feed is `stealth_utxos.list`. It returns every TARI output the wallet has detected for the account,
 with its value, status, spend authorization and decrypted memo.
@@ -483,6 +525,13 @@ with its value, status, spend authorization and decrypted memo.
   - it is on chain (`is_on_chain` is true) and not burnt (`is_burnt` is false)
 </Aside>
 
+<Aside type="caution">
+  **Incoming outputs are not proven.** The wallet takes the outputs it detects from the indexer as served, even with
+  `indexer_trust = "verify"`, which proves receipts, reads and spends. Point the deposit wallet only at an indexer
+  you run yourself. Before crediting a large deposit, you can also fetch the UTXO from your indexer with
+  `GET /substates/{utxo_id}?include_proof=true` and verify the proof.
+</Aside>
+
 ```javascript
 const TARI = "resource_0101010101010101010101010101010101010101010101010101010101010101";
 
@@ -495,6 +544,16 @@ const { utxos } = await walletRpc("stealth_utxos.list", {
   filter_by_status: null, // include Spent, so that UTXOs already swept to cold storage are still seen
 });
 
+// utxo.address is an object. This builds the same `utxo_…` string that transaction results use as a substate ID.
+function utxoId(address) {
+  return `utxo_${address.resource_address.replace(/^resource_/, "")}_${address.id}`;
+}
+
+// An output of one of your own transactions that has not finalised yet. It is not a deposit.
+function isInFlight(utxo) {
+  return utxo.status === "LockedUnconfirmed" || !utxo.is_on_chain;
+}
+
 function isCreditable(utxo) {
   return (
     utxo.status !== "Invalid" && // decrypts under our view key, but its spend key is not ours
@@ -506,35 +565,45 @@ function isCreditable(utxo) {
 }
 
 for (const utxo of utxos) {
-  const depositId = utxo.address; // unique per output: use as your idempotency key
+  const depositId = utxoId(utxo.address); // unique per output: use as your idempotency key
   if (alreadyProcessed(depositId)) continue;
   if (isInternalOutput(depositId)) continue; // change from your own sweeps, see below
+  if (isInFlight(utxo)) continue; // look again next round
   if (!isCreditable(utxo)) {
     flagForReview(utxo); // never credit these
     continue;
   }
   const amountMicro = BigInt(utxo.value); // in µT. 1 TARI = 1_000_000 µT
-  const payRef = extractPayRef(utxo.memo);
+  const payRef = extractPayRef(utxo.memo, issuedRefs);
   // Look up payRef in your table of issued deposit references. If it matches, credit the customer's account.
   // Otherwise queue it for manual review.
 }
 ```
 
-Pay references can arrive in two memo forms, depending on the sender's wallet settings. Both are hex-encoded:
+A pay reference copied from the address arrives in one of two memo forms, depending on the sender's wallet settings.
+Both are hex-encoded, and the reference inside is the raw bytes you embedded in the address. Wallets built on the
+Ootle SDK (mobile and other SDK-based wallets) can't copy the reference. Their users can only type it into a text
+memo, which arrives as `{"Message": "..."}`. Match that against your issued references as a fallback:
 
 ```javascript
-function extractPayRef(memo) {
+// Returns the pay reference as text, matching the printable-ASCII references recommended in Section 4.
+function extractPayRef(memo, issuedRefs) {
   if (!memo) return null;
   // [len: u8][pay_ref: len bytes][optional message bytes]
   if (memo.PayRefAndBytes) {
     const b = Buffer.from(memo.PayRefAndBytes, "hex");
-    return b.length >= 1 + b[0] && b[0] > 0 ? b.subarray(1, 1 + b[0]).toString("hex") : null;
+    return b[0] > 0 && b.length >= 1 + b[0] ? b.subarray(1, 1 + b[0]).toString("utf8") : null;
   }
   // The sender chose to attach their own address:
   // [account_key: 32][view_key: 32][len: u8][pay_ref: len bytes]
   if (memo.SenderAddress) {
     const b = Buffer.from(memo.SenderAddress, "hex");
-    return b.length > 65 && b[64] > 0 ? b.subarray(65, 65 + b[64]).toString("hex") : null;
+    return b.length > 65 && b[64] > 0 && b.length >= 65 + b[64] ? b.subarray(65, 65 + b[64]).toString("utf8") : null;
+  }
+  // A customer typed the reference into a text memo
+  if (typeof memo.Message === "string") {
+    const text = memo.Message.trim();
+    return issuedRefs.has(text) ? text : null;
   }
   return null;
 }
@@ -554,29 +623,32 @@ an unreferenced "deposit" into manual review. Record the outputs your own transa
 ```javascript
 // After each of your own transactions (sweeps, withdrawals) is Accepted:
 const tx = await walletRpc("transactions.get", { transaction_id });
-const diff = tx.result?.result?.Accept;
+// A fee-only result also commits the outputs built into the fee intent, including a stealth transfer's change.
+const diff = tx.result?.result?.Accept ?? tx.result?.result?.AcceptFeeRejectRest?.[0];
 for (const [substateId] of diff?.up_substates ?? []) {
   if (substateId.startsWith("utxo_")) markInternalOutput(substateId); // never treat as a customer deposit
 }
 ```
 
 Process your own transactions' results before you run the deposit scan, so their change outputs are already marked
-as internal. Alternatively, sweep in a way that leaves no change (send the full balance less the fee), so that no
-change output is created.
+as internal. Outputs of transactions still in flight are skipped by `isInFlight` until they finalise.
 
 ### Other things to keep in mind
 
 - **The memo is written by the sender's wallet.** A pay reference tells you *which of your issued addresses* was
   paid. It is not proof of *who* paid. The `sender_address` field, filled in when the memo is a `SenderAddress`, is
   informational only. Never use it to decide which account to credit.
-- `stealth_utxos.list` has no timestamp or transaction ID for each output. For an audit trail with timestamps, use
-  `accounts.get_balance_changes`. Each record has:
+- `stealth_utxos.list` has no timestamp or transaction ID for each output. For a timestamped audit trail of the
+  account balance, use `accounts.get_balance_changes`. Each record is a snapshot of one resource's balance change,
+  taken when the wallet refreshes the account. One record can cover several deposits, and records don't name UTXOs.
+  Each record has:
   - `created_at`
   - `revealed_delta` and `confidential_delta`
-  - a tagged `source`, which is `{"type": "Scan"}` for incoming stealth outputs and
-    `{"type": "Transaction", "transaction_id": ...}` for your own transactions
+  - a tagged `source`: `{"type": "Scan"}` for incoming stealth outputs,
+    `{"type": "Transaction", "transaction_id": ...}` for your own transactions, and `{"type": "Recovery"}` for
+    balances found while restoring from seed words
 
-  You can page through it with `offset` and `limit` (at most 200).
+  `offset` and `limit` are required. A `limit` above 200 is reduced to 200.
 - `transactions.list` only shows transactions that *your wallet* submitted. Incoming payments from customers are not
   listed there.
 
@@ -587,8 +659,8 @@ Send TARI with `accounts.stealth_transfer` from the withdrawal wallet. Amounts a
 
 <Aside type="note">
   The command-line `tari_ootle_wallet_cli` currently has no stealth transfer command. Its `transactions send` command
-  makes a public vault transfer, which is not what you want for TARI. Use the JSON-RPC method (or the web UI for
-  manual operations).
+  makes a public vault transfer, and `transactions confidential-transfer` moves funds between confidential vaults.
+  Neither is what you want for TARI. Use the JSON-RPC method (or the web UI for manual operations).
 </Aside>
 
 1. Check that the withdrawal account has enough funds:
@@ -601,8 +673,9 @@ const balances = await walletRpc("accounts.get_balances", { account: "withdrawal
 
 <Aside type="caution">
   **For a stealth transfer, `max_fee` is the fee you pay, not a ceiling.** The fee is paid from a bucket and the
-  surplus is not refunded. If `max_fee` is too high you overpay; if it is too low the transaction fails. Always use the
-  `final_fee` from a dry run of the same transfer.
+  surplus is not refunded. If `max_fee` is too high you overpay. If it is too low, the transaction is rejected, or it
+  ends as `OnlyFeeAccepted`: the fee is spent and the transfer is reverted. Always use the `final_fee` from a dry run
+  of the same transfer.
 </Aside>
 
 ```javascript
@@ -648,7 +721,16 @@ const { transaction_id } = await walletRpc(
 );
 
 // Store transaction_id against the withdrawal *before* waiting, so a crash can't cause a double send.
+// Always pass timeout_secs: without it the call can wait forever.
 const result = await walletRpc("transactions.wait_result", { transaction_id, timeout_secs: 120 });
+
+if (result.timed_out) {
+  // Not an outcome. The status is the one from before the wait. Check again later; never resubmit on a timeout.
+} else if (result.status === "Accepted") {
+  // Withdrawal paid
+} else {
+  // Failed: see "Transaction status" below for which failures are safe to resubmit
+}
 ```
 
 <Aside type="caution">
@@ -656,6 +738,10 @@ const result = await walletRpc("transactions.wait_result", { transaction_id, tim
     deposit address that has a pay reference embedded, `null` makes sure the pay reference is forwarded. An empty
     string (`""`) removes it.
   - Fees are paid in TARI and are always public. Keep a TARI balance in the withdrawal account to cover them.
+  - `stealth_transfer` submits the transaction before it returns the `transaction_id`. If the call fails or your
+    service crashes before you store the id, the withdrawal may still be on its way. Before you send it again, list
+    the withdrawal account's transactions (`transactions.list` with `account`) and look for it. If you can't rule it
+    out, send it to manual review.
   - **Never resubmit a withdrawal unless its outcome is final and unsuccessful.** Resubmitting while the first
     attempt can still commit pays the customer twice. After a timeout, look up the stored `transaction_id`. Resubmit
     only if one of these is true:
@@ -674,6 +760,11 @@ Sweeps from the deposit wallet to cold storage use exactly the same call, with t
 the destination. Top-ups from cold storage to the withdrawal wallet are made from the restored cold wallet in the
 same way.
 
+Sweep a fixed amount and let the wallet return change, rather than trying to empty the account. Input selection
+covers `amount + max_fee`, and the fee depends on the inputs selected, so an exact full-balance sweep needs several
+dry runs. A single transfer also spends at most a few hundred inputs, so a deposit account that has received many small
+deposits needs several sweeps.
+
 ## Confirming deposits and withdrawals
 
 ### Finality
@@ -681,7 +772,8 @@ same way.
 Ootle uses a BFT consensus protocol (chained HotStuff), so finality is deterministic: committees of validators commit
 each transaction through a three-chain rule. **Once a transaction has been committed it is final. Ootle has no reorgs
 and no probabilistic confirmations,** so you don't need to wait for a block count before crediting a deposit as you
-do on Minotari. A stealth output that the deposit wallet sees on-chain is already committed.
+do on Minotari. A stealth output that the deposit wallet reports on-chain has been committed, provided the indexer
+reported it honestly (see [Section 5](#section-5-detecting-deposits)).
 
 Every transaction has a `max_epoch` set when it is built (by default about an hour ahead). A transaction pinned to an
 epoch after its `max_epoch` is aborted. The pinned epoch is fixed when validators sequence the transaction, so it can
@@ -695,14 +787,14 @@ passed.**
 
 | Status | Meaning | Final / succeeded? |
 |---|---|---|
-| `New` | Created, not yet submitted | ❌ No |
+| `New` | Created, not yet submitted. It may be queued for automatic submission, so don't resubmit it | ❌ No |
 | `DryRun` | Dry run only, never submitted | ❌ No |
 | `DryRunFailed` | Dry run failed | ❌ No |
 | `Pending` | Submitted, waiting for consensus | ⚠️ Not yet |
 | `Accepted` | Committed. Funds have moved | ✅ Yes |
 | `OnlyFeeAccepted` | Committed, but only the fee was charged. The transfer itself was reverted | ❌ No. Funds did **not** move, and the fee was spent |
-| `Rejected` | Rejected by the network. No fee charged | ❌ No |
-| `InvalidTransaction` | Failed validation | ❌ No |
+| `Rejected` | Aborted by consensus. Nothing committed and no fee charged, although `final_fee` can show the fee execution would have cost | ❌ No |
+| `InvalidTransaction` | Rejected before consensus, at submission or by mempool validation. Nothing committed | ❌ No |
 
 <Aside type="caution">
   Treat **only `Accepted`** as a successful withdrawal. `OnlyFeeAccepted` is a failure, even though a fee was taken.
@@ -712,14 +804,18 @@ passed.**
 
 For reconciliation or independent verification, ask your indexer:
 
-- `GET /transactions/{transaction_id}/result` returns `Pending`, `Finalized` (with `final_decision` of `Commit` or
-  `Abort`) or `Rejected`. You get a 404 if the transaction is unknown or has been pruned (see
-  `transaction_retention_epochs`).
+- `GET /transactions/{transaction_id}/result` returns `Pending`, `Finalized` or `Rejected`:
+  - `Finalized` carries a `final_decision` of `"Commit"` or `{"Abort": "<reason>"}`. `Commit` also covers a fee-only
+    result. Check that `execution_result.finalize.result` is `Accept` before treating a withdrawal as paid.
+  - `Rejected` means mempool validation rejected the transaction when it was submitted through this indexer. It was
+    never sequenced. The wallet reports this as `InvalidTransaction`. The indexer keeps the rejection only for
+    `transaction_retention_epochs`.
+  - A 404 means neither the indexer nor the validators have a record of the transaction.
 - `GET /events` is a server-sent event (SSE) stream that includes `TransactionFinalized` notifications.
 - `GET /transactions/events/stream` is an SSE stream of engine events. You can filter it by `topic`, `substate_id`,
   `template_address` or `resource_address`, and resume it with `Last-Event-ID`.
 
-Make sure your indexer is healthy and synced (`GET /ready`, `GET /info`) before you rely on its answers. Indexer
+Make sure your indexer is up and following the network (`GET /health`, `GET /info`) before you rely on its answers. Indexer
 metrics are exposed on `/_metrics` for monitoring.
 
 ## Minotari to Ootle (burns)
@@ -744,7 +840,8 @@ own deposit and withdrawal path. See [Burn Minotari for TARI](/guides/burn-minot
 6. **Spendable deposits only:** never credit an output that is `Invalid`, frozen, or not a key-path (`Key`) output.
 7. **Idempotency:** credit deposits once per UTXO address, and record withdrawal transaction IDs before you wait for
    the result.
-8. **Verify the indexer:** keep `indexer_trust = "verify"` in every wallet daemon.
+8. **Verify the indexer:** keep `indexer_trust = "verify"` in every wallet daemon, and point the deposit wallet at an
+   indexer you run. Incoming deposits are not proven.
 9. **Audit logging:** log every credit with the UTXO address, the pay reference, the amount and the time.
 
 ### Customer experience
@@ -761,13 +858,17 @@ own deposit and withdrawal path. See [Burn Minotari for TARI](/guides/burn-minot
 - [ ] Cold wallet created offline; seed words secured; base path destroyed
 - [ ] Deposit and withdrawal wallets running with WebAuthn enabled, `indexer_trust = "verify"` and scoped API keys
 - [ ] Network-specific config set in the `[<network>.…]` sections
-- [ ] Keyring or override password handled on headless hosts
+- [ ] Keyring or override password handled on headless hosts, with secrets in config files rather than on the
+      command line
+- [ ] Each wallet daemon on its own port; `allowed_hosts` set if anything reaches it by host name
 - [ ] Deposit addresses with pay references generated and stored
-- [ ] Deposit scanner crediting once per UTXO, and only spendable outputs (not `Invalid`, not frozen, `Key` auth)
+- [ ] Deposit scanner crediting once per UTXO, and only spendable outputs (not `Invalid`, not frozen, `Key` auth);
+      in-flight outputs of your own transactions skipped
 - [ ] Unknown or missing pay references routed to review; own change outputs recognised as internal
 - [ ] Withdrawal address validation (prefix, network, key validity)
-- [ ] Withdrawal flow: dry run, submit with the dry run's `final_fee`, store `transaction_id`, `wait_result`, treat only
-      `Accepted` as success, resubmit only after a final unsuccessful outcome
+- [ ] Withdrawal flow: dry run, submit with the dry run's `final_fee`, store `transaction_id`, `wait_result` with a
+      timeout and a `timed_out` check, treat only `Accepted` as success, resubmit only after a final unsuccessful
+      outcome
 - [ ] Sweep and top-up procedures documented
-- [ ] `transaction_retention_epochs` set to cover your reconciliation window
+- [ ] `transaction_retention_epochs` set to cover your reconciliation window, and bounded while gossip indexing is on
 - [ ] End-to-end test on Esmeralda with small amounts
