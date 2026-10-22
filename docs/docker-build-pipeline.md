@@ -6,7 +6,10 @@ Reference document for engineers working on the Tari Ootle Docker build.
 
 - One Dockerfile: `docker/ootle.Dockerfile`
 - One workflow: `.github/workflows/build_dockers.yml`
-- One image: `ghcr.io/<owner>/ootle` containing the network node binaries, `tari_validator_node` and `tari_indexer`
+- Two images from the same build:
+  - `ghcr.io/<owner>/ootle` (target `runtime`) containing the network node binaries, `tari_validator_node` and `tari_indexer`
+  - `ghcr.io/<owner>/ootle-walletd` (target `walletd`) containing `tari_ootle_walletd`; see `docker/README.md`
+- Both images are signed by digest with cosign keyless signing
 - Platform: `linux/amd64` only
 - Registry: GitHub Container Registry (GHCR) only
 - Caching: BuildKit cache mounts + registry cache (`ghcr.io/<owner>/ootle-buildcache`, `mode=max`)
@@ -19,9 +22,9 @@ Reference document for engineers working on the Tari Ootle Docker build.
 |---|---|
 | `tari_indexer` | Substate indexer (JSON-RPC API + embedded web UI) |
 | `tari_validator_node` | Validator node daemon (consensus + embedded web UI) |
+| `tari_ootle_walletd` | Wallet daemon (JSON-RPC API + embedded web UI), `ootle-walletd` image only |
 
-Only what a deployed network node runs. The wallet, swarm and operations
-tools ship as release binaries, not in the image.
+The wallet CLI, swarm and operations tools ship as release binaries, not in an image.
 
 Both binaries embed a React web UI at compile time via the
 `include_dir!` macro pointing at `web_ui/dist/`.
@@ -369,7 +372,7 @@ DOCKER_BUILDKIT=1 docker build \
 docker run --rm -it ootle-builder:local bash
 ```
 
-Valid `--target` values: `chef`, `planner`, `builder`, `runtime`.
+Valid `--target` values: `chef`, `planner`, `builder`, `base`, `walletd`, `runtime`.
 
 ## Common changes
 

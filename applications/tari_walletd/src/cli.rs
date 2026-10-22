@@ -46,7 +46,7 @@ pub struct WalletRestoreArgs {
 pub struct Cli {
     #[clap(flatten)]
     pub common: CommonCliArgs,
-    #[clap(long, short = 'l', alias = "listen-on", env = "JRPC_LISTEN_ON")]
+    #[clap(long, alias = "listen-on", env = "JRPC_LISTEN_ON")]
     /// The address to listen on for Web and JSON-RPC requests. Defaults to localhost:5100.
     pub listen_on: Option<SocketAddr>,
     #[clap(long, env = "SIGNALING_SERVER_ADDRESS")]
@@ -54,7 +54,13 @@ pub struct Cli {
     /// Allow apps to connect to the wallet over WebRTC (`webrtc.start`).
     #[clap(long, env = "ENABLE_WEBRTC")]
     pub enable_webrtc: bool,
-    #[clap(long = "indexer-api-url", short = 'i', alias = "indexer-url", value_delimiter = ',')]
+    #[clap(
+        long = "indexer-api-url",
+        short = 'i',
+        alias = "indexer-url",
+        value_delimiter = ',',
+        env = "OOTLE_WALLETD_INDEXER_API_URL"
+    )]
     /// Indexer API URL override. Repeat it, or separate URLs with commas, to configure several indexers.
     pub indexer_api_urls: Vec<Url>,
     /// A host name, beyond localhost, IP addresses and the WebAuthn origin's host, that requests may address the
@@ -69,12 +75,18 @@ pub struct Cli {
     /// This is useful if a keyring is not available on your platform or if there is some other preference to use a
     /// specific password.
     /// NOTE: Once this is set, it must always be set to access the wallet.
-    #[clap(long)]
+    #[clap(long, env = "OOTLE_WALLETD_KEYRING_PASSWORD", hide_env_values = true)]
     pub override_keyring_password: Option<SafePassword>,
     /// The authentication method to use for the wallet daemon. This controls how clients must authenticate when making
     /// requests to the wallet daemon.
-    #[clap(long, alias = "auth")]
+    #[clap(long, alias = "auth", env = "OOTLE_WALLETD_AUTHENTICATION")]
     pub authentication: Option<WalletDaemonAuth>,
+    /// Whether to watch the burn proof directory and claim new burns automatically (`true` or `false`).
+    #[clap(long, env = "OOTLE_WALLETD_AUTO_CLAIM_BURNS")]
+    pub auto_claim_burns: Option<bool>,
+    /// The largest max_fee, in microtari, that this wallet submits a transaction with.
+    #[clap(long, env = "OOTLE_WALLETD_MAX_FEE_LIMIT")]
+    pub max_fee_limit: Option<u64>,
     /// The path to the value lookup table binary file used for brute force value lookups. This setting
     /// is only used when attempting to view confidential balances in confidential resources that use a view key
     /// controlled by this wallet. The binary file can be generated using the generate_ristretto_value_lookup
@@ -150,6 +162,18 @@ impl ConfigOverrideProvider for Cli {
                 "true".to_string(),
             ));
         }
+        if let Some(auto_claim_burns) = self.auto_claim_burns {
+            overrides.push((
+                format!("{}.ootle_wallet_daemon.auto_claim_burns", network),
+                auto_claim_burns.to_string(),
+            ));
+        }
+        if let Some(max_fee_limit) = self.max_fee_limit {
+            overrides.push((
+                format!("{}.ootle_wallet_daemon.max_fee_limit", network),
+                max_fee_limit.to_string(),
+            ));
+        }
         if let Some(port) = self.enable_vite_dev_port {
             overrides.extend([
                 (
@@ -203,4 +227,100 @@ pub enum Subcommand {
         #[clap(long)]
         confirm: bool,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use tari_common::DefaultConfigLoader;
+    use tari_ootle_app_utilities::configuration::{
+        get_default_config,
+        load_configuration_with_overrides,
+        write_config_to,
+    };
+
+    use super::*;
+    use crate::config::WalletDaemonConfig;
+
+    /// Loads the wallet section the way the daemon does, from the default config file it writes on first start.
+    fn load(cli: &Cli) -> WalletDaemonConfig {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        write_config_to(&path, &get_default_config()).unwrap();
+        let cfg = load_configuration_with_overrides(&path, cli, Some(cli.network())).unwrap();
+        WalletDaemonConfig::load_from(&cfg).unwrap()
+    }
+
+    fn urls(urls: &[&str]) -> Vec<Url> {
+        urls.iter().map(|url| Url::parse(url).unwrap()).collect()
+    }
+
+    #[test]
+    fn command_line_flags_override_the_esmeralda_preset() {
+        let cli = Cli::try_parse_from([
+            "tari_ootle_walletd",
+            "--network",
+            "esmeralda",
+            "--listen-on",
+            "0.0.0.0:5100",
+            "--indexer-api-url",
+            "http://a.example/,http://b.example/",
+            "--authentication",
+            "none",
+            "--auto-claim-burns",
+            "false",
+            "--max-fee-limit",
+            "5000000",
+            "--override-keyring-password",
+            "secret",
+        ])
+        .unwrap();
+        assert!(cli.override_keyring_password.is_some());
+
+        let config = load(&cli);
+        assert_eq!(config.json_rpc_address, "0.0.0.0:5100".parse::<SocketAddr>().unwrap());
+        assert_eq!(
+            config.indexer_api_urls,
+            urls(&["http://a.example/", "http://b.example/"])
+        );
+        assert!(config.authentication.is_none());
+        assert!(!config.auto_claim_burns);
+        assert_eq!(config.max_fee_limit, 5_000_000);
+    }
+
+    #[test]
+    fn environment_variables_override_the_esmeralda_preset() {
+        let vars = [
+            ("JRPC_LISTEN_ON", "0.0.0.0:5100"),
+            ("OOTLE_WALLETD_INDEXER_API_URL", "http://a.example/,http://b.example/"),
+            ("OOTLE_WALLETD_AUTHENTICATION", "none"),
+            ("OOTLE_WALLETD_AUTO_CLAIM_BURNS", "false"),
+            ("OOTLE_WALLETD_MAX_FEE_LIMIT", "5000000"),
+            ("OOTLE_WALLETD_KEYRING_PASSWORD", "secret"),
+        ];
+        // SAFETY: no other test reads these variables, and nextest runs each test in its own process.
+        unsafe {
+            for (key, value) in vars {
+                std::env::set_var(key, value);
+            }
+        }
+        let cli = Cli::try_parse_from(["tari_ootle_walletd", "--network", "esmeralda"]);
+        // SAFETY: as above.
+        unsafe {
+            for (key, _) in vars {
+                std::env::remove_var(key);
+            }
+        }
+        let cli = cli.unwrap();
+        assert!(cli.override_keyring_password.is_some());
+
+        let config = load(&cli);
+        assert_eq!(config.json_rpc_address, "0.0.0.0:5100".parse::<SocketAddr>().unwrap());
+        assert_eq!(
+            config.indexer_api_urls,
+            urls(&["http://a.example/", "http://b.example/"])
+        );
+        assert!(config.authentication.is_none());
+        assert!(!config.auto_claim_burns);
+        assert_eq!(config.max_fee_limit, 5_000_000);
+    }
 }

@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.7
 #
-# Tari Ootle network node image: tari_validator_node and tari_indexer.
+# Tari Ootle images:
+#   runtime (default target) - ghcr.io/tari-project/ootle: tari_validator_node and tari_indexer
+#   walletd                  - ghcr.io/tari-project/ootle-walletd: tari_ootle_walletd
 #
 # See docs/docker-build-pipeline.md for an architecture overview.
 #
@@ -10,13 +12,17 @@
 #   chef    - sysdeps + node + pnpm + cargo-chef
 #   planner - emits cargo-chef recipe (dependency graph snapshot)
 #   builder - cooks Rust deps, installs JS deps, builds binaries
-#   runtime - minimal Debian 13 with tini and the compiled binaries
+#   base    - minimal Debian 13 with tini and the non-root user
+#   walletd - base plus tari_ootle_walletd
+#   runtime - base plus the network node binaries
 #
 # Build:
 #   DOCKER_BUILDKIT=1 docker build -f docker/ootle.Dockerfile -t ootle:local .
+#   DOCKER_BUILDKIT=1 docker build -f docker/ootle.Dockerfile --target walletd -t ootle-walletd:local .
 #
 # Run:
 #   docker run --rm ootle:local tari_validator_node --help
+#   docker run --rm ootle-walletd:local --help
 
 ARG RUST_VERSION=1.97.1
 ARG DEBIAN_VERSION=trixie
@@ -152,7 +158,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
     cargo chef cook --release --recipe-path recipe.json \
       --bin tari_validator_node \
-      --bin tari_indexer
+      --bin tari_indexer \
+      --bin tari_ootle_walletd
 
 # Phase 3b: copy full source and warm JS dependencies.
 COPY . .
@@ -181,18 +188,20 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.npm,sharing=locked \
     cargo build --release --locked \
       --bin tari_validator_node \
-      --bin tari_indexer && \
-    mkdir -p /out && \
+      --bin tari_indexer \
+      --bin tari_ootle_walletd && \
+    mkdir -p /out /out-walletd && \
     cp \
       target/release/tari_validator_node \
       target/release/tari_indexer \
-      /out/
+      /out/ && \
+    cp target/release/tari_ootle_walletd /out-walletd/
 
 
 # ---------------------------------------------------------------------------
-# runtime: minimal Debian 13 with tini and the binaries
+# base: minimal Debian 13 with tini and the non-root user
 # ---------------------------------------------------------------------------
-FROM debian:${DEBIAN_VERSION}-slim AS runtime
+FROM debian:${DEBIAN_VERSION}-slim AS base
 
 ARG VERSION=unknown
 ARG RUST_VERSION
@@ -201,7 +210,7 @@ ARG DEBIAN_VERSION
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Runtime libraries only - no -dev packages, no toolchain.
-# - libsqlite3-0 linked by both daemons
+# - libsqlite3-0 linked by the node daemons
 # - openssl + ca-certificates for TLS
 # - tini as PID 1 init
 RUN apt-get update && \
@@ -220,8 +229,6 @@ RUN groupadd --gid 1000 tari && \
     mkdir -p /home/tari/data && \
     chown -R tari:tari /home/tari
 
-COPY --from=builder /out/ /usr/local/bin/
-
 # Metadata for runtime introspection (`docker inspect`, `env` inside container).
 ENV OOTLE_VERSION=$VERSION \
     OOTLE_RUST_VERSION=$RUST_VERSION \
@@ -230,6 +237,49 @@ ENV OOTLE_VERSION=$VERSION \
 
 USER tari
 WORKDIR /home/tari
+
+
+# ---------------------------------------------------------------------------
+# walletd: tari_ootle_walletd, configured through environment variables
+# ---------------------------------------------------------------------------
+FROM base AS walletd
+
+USER root
+
+# - libdbus-1-3, linked by the OS keyring store (unused in a container, where
+#   OOTLE_WALLETD_KEYRING_PASSWORD replaces the keyring, but still loaded)
+# - curl for the health check
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      libdbus-1-3 \
+      curl && \
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /data && \
+    chown tari:tari /data
+
+COPY --from=builder /out-walletd/ /usr/local/bin/
+
+# The wallet keeps its config, database and logs under /data/<network>/.
+# A container is only reachable through a non-loopback address.
+ENV TARI_BASE_DIR=/data \
+    JRPC_LISTEN_ON=0.0.0.0:5100
+
+USER tari
+VOLUME ["/data"]
+EXPOSE 5100
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s \
+  CMD curl -fsS "http://127.0.0.1:${JRPC_LISTEN_ON##*:}/health" || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--", "tari_ootle_walletd"]
+
+
+# ---------------------------------------------------------------------------
+# runtime: the network node binaries. Last stage, so it is the default target.
+# ---------------------------------------------------------------------------
+FROM base AS runtime
+
+COPY --from=builder /out/ /usr/local/bin/
 
 # tini as PID 1 for proper signal handling and zombie reaping.
 # No CMD: caller must specify which binary to run, e.g.
