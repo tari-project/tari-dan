@@ -11,7 +11,7 @@ use std::{
 
 use futures::StreamExt;
 use ootle_byte_type::ToByteType;
-use tari_engine_types::{Epoch, Utxo, substate::SubstateId};
+use tari_engine_types::{Epoch, substate::SubstateId};
 use tari_indexer_client::types::{EpochCheckpointEntry, ValidatorSetCommittee, WatchedSubstateItem};
 use tari_ootle_common_types::{StateVersion, SubstateVersion, shard::Shard};
 use tari_ootle_transaction::{Transaction, TransactionEnvelope, TransactionId};
@@ -19,6 +19,7 @@ use tari_ootle_wallet_sdk::{
     models::{EndOfShard, KeyBranch, KeyId, StartOfShard, UtxoUnspent, UtxoUpdatePayload, WalletUtxoUpdate},
     network::{
         FetchedSubstates,
+        FetchedUtxos,
         SubstateQueryResult,
         TransactionFinalizedStream,
         TransactionQueryResult,
@@ -29,7 +30,7 @@ use tari_ootle_wallet_sdk::{
 };
 use tari_ootle_wallet_sdk_services::{notify::Notify, utxo_scanner::UtxoScanner};
 use tari_template_abi::TemplateDef;
-use tari_template_lib::types::{ResourceAddress, TemplateAddress, UtxoId, constants::STEALTH_TARI_RESOURCE_ADDRESS};
+use tari_template_lib::types::{ResourceAddress, TemplateAddress, constants::STEALTH_TARI_RESOURCE_ADDRESS};
 
 use crate::support::{Test, TestWithNetwork, random_keypair};
 
@@ -106,16 +107,20 @@ impl WalletNetworkInterface for ScriptedUtxoNetwork {
         panic!("ScriptedUtxoNetwork::list_watched_substates called")
     }
 
-    async fn get_unspent_utxos(
+    async fn fetch_utxos(
         &self,
         _: ResourceAddress,
         _: Vec<TagAndPublicNoncePair>,
-    ) -> Result<Vec<(UtxoId, Utxo)>, Self::Error> {
-        panic!("ScriptedUtxoNetwork::get_unspent_utxos called")
+    ) -> Result<FetchedUtxos, Self::Error> {
+        panic!("ScriptedUtxoNetwork::fetch_utxos called")
     }
 
     async fn get_latest_epoch_checkpoint(&self, _: Shard) -> Result<EpochCheckpointEntry, Self::Error> {
         panic!("ScriptedUtxoNetwork::get_latest_epoch_checkpoint called")
+    }
+
+    async fn get_latest_shard_group_checkpoints(&self) -> Result<Vec<EpochCheckpointEntry>, Self::Error> {
+        panic!("ScriptedUtxoNetwork::get_latest_shard_group_checkpoints called")
     }
 
     async fn list_epoch_checkpoints(
@@ -213,8 +218,9 @@ fn saved_cursor(test: &TestWithNetwork<ScriptedUtxoNetwork>, shard: Shard) -> Op
 fn num_queued(test: &TestWithNetwork<ScriptedUtxoNetwork>) -> usize {
     test.sdk()
         .store()
-        .with_read_tx(|tx| tx.utxo_process_queue_fetch_batch(100))
+        .with_read_tx(|tx| tx.utxo_process_queue_fetch_batch(None, 100))
         .unwrap()
+        .entries
         .values()
         .map(HashMap::len)
         .sum()

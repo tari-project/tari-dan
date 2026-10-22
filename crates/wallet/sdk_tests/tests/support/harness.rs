@@ -5,10 +5,11 @@ use std::{collections::HashMap, convert::Infallible, future::Future, marker::Pha
 
 use futures::StreamExt;
 use ootle_byte_type::ToByteType;
-use tari_crypto::tari_utilities::SafePassword;
+use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey, tari_utilities::SafePassword};
 use tari_engine_types::{
     Utxo,
-    crypto::commit_amount,
+    UtxoOutput,
+    crypto::{OutputBody, commit_amount},
     resource::Resource,
     substate::{Substate, SubstateId},
 };
@@ -31,6 +32,7 @@ use tari_ootle_wallet_sdk::{
     cipher_seed::CipherSeedRestore,
     local_key_store::LocalKeyStore,
     models::{
+        AccountWithAddress,
         ConfidentialOutputModel,
         EpochBirthday,
         KeyBranch,
@@ -66,7 +68,10 @@ use tari_template_lib::types::{
     access_rules::ResourceAccessRules,
     constants::{STEALTH_TARI_RESOURCE_ADDRESS, TOKEN_SYMBOL},
     crypto::PedersenCommitmentBytes,
+    stealth::SpendAuthorization,
 };
+
+use super::{random_key, random_keypair};
 
 pub struct TestSdkSpec<TNetwork = PanicNetworkInterface>(PhantomData<TNetwork>);
 
@@ -208,6 +213,48 @@ impl<TNetwork: WalletNetworkInterface> TestWithNetwork<TNetwork> {
             })
             .unwrap();
         commitment
+    }
+
+    /// A stealth TARI UTXO of `amount` that `account` can read and spend.
+    pub fn owned_utxo(&self, account: &AccountWithAddress, amount: u64) -> (UtxoId, Utxo) {
+        let sdk = &self.sdk;
+        let view_key = sdk.key_manager_api().get_key(account.view_only_key_id()).unwrap();
+        let owner_key = sdk
+            .key_manager_api()
+            .get_key(account.owner_key_id().expect("account is locally owned"))
+            .unwrap();
+        let owner_public_key = RistrettoPublicKey::from_secret_key(&owner_key.secret);
+        let view_public_key = RistrettoPublicKey::from_secret_key(&view_key.secret);
+        let (nonce_secret, public_nonce) = random_keypair();
+
+        let tag = sdk.stealth_crypto_api().derive_stealth_output_tag(
+            sdk.network(),
+            &view_key.secret,
+            &public_nonce,
+            &STEALTH_TARI_RESOURCE_ADDRESS,
+        );
+        let mask = random_key();
+        let commitment = commit_amount(&mask, amount.into()).unwrap().to_byte_type();
+        let encrypted_data = sdk
+            .stealth_crypto_api()
+            .encrypt_value_and_mask(amount, &mask, &view_public_key, &nonce_secret, None)
+            .unwrap();
+        let stealth_owner_public_key = sdk
+            .stealth_crypto_api()
+            .derive_stealth_owner_public_key(sdk.network(), &owner_public_key, &nonce_secret)
+            .to_byte_type();
+
+        let utxo = Utxo::new(UtxoOutput {
+            output: OutputBody {
+                public_nonce: public_nonce.to_byte_type(),
+                encrypted_data,
+                minimum_value_promise: 0,
+                viewable_balance: None,
+            },
+            auth: SpendAuthorization::Key(stealth_owner_public_key),
+            tag,
+        });
+        (UtxoId::from(commitment), utxo)
     }
 
     pub fn new_lock(&self) -> WalletLockDropGuard<'_, SqliteWalletStore> {

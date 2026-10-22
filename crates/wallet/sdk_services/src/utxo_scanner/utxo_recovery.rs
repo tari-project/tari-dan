@@ -5,11 +5,15 @@ use std::{array, collections::HashSet, time::Duration};
 
 use log::*;
 use tari_engine_types::UtxoOutput;
-use tari_ootle_common_types::{optional::IsNotFoundError, response_status::TransactionStatusResponseError};
+use tari_ootle_common_types::{
+    optional::{IsNotFoundError, Optional},
+    response_status::TransactionStatusResponseError,
+};
 use tari_ootle_transaction::Network;
 use tari_ootle_wallet_sdk::{
     WalletSdk,
     WalletSdkSpec,
+    apis::substate::SubstateApiError,
     models::{
         AccountAndViewKeys,
         UtxoRecoveredEvent,
@@ -104,7 +108,7 @@ where
     }
 
     /// Processes each queued UTXO once and returns the number left queued, because the indexer that answered neither
-    /// returned them nor reported them spent.
+    /// returned them nor reported them spent, or because a report that one is frozen could not be settled yet.
     #[allow(clippy::too_many_lines)]
     pub async fn process_utxo_validation_queue(&mut self) -> Result<usize, StealthScannerApiError> {
         let mut start_event_published = false;
@@ -221,9 +225,96 @@ where
                         })
                     })
                     .collect();
+                let utxos = if self.sdk.sdk_config().indexer_trust.is_verify() {
+                    let (utxos, num_deferred) = self.settle_frozen_claims(*resource_addr, utxos).await?;
+                    num_unresolved += num_deferred;
+                    utxos
+                } else {
+                    utxos
+                };
                 num_recovered += self.process_recovered_utxos(*resource_addr, utxos)?;
             }
         }
+    }
+
+    /// Settles each report that a UTXO is frozen, which withholds the output from spending, against the UTXO's state
+    /// as the indexer proves it. A report is dropped when the answer refuses it for good: the indexer serves no proof,
+    /// a proof that does not verify or that the wallet can never trust, or proves the UTXO unfrozen. The output is then
+    /// held unfrozen. A UTXO whose report could not be settled for any other reason stays queued for a later round, and
+    /// is counted in the returned number.
+    ///
+    /// A report that a UTXO is unfrozen needs no proof, as it only lets the wallet try a spend that the network
+    /// decides. Nor does a report of a freeze the wallet already holds.
+    async fn settle_frozen_claims(
+        &self,
+        resource_address: ResourceAddress,
+        utxos: Vec<FoundUtxo>,
+    ) -> Result<(Vec<FoundUtxo>, usize), StealthScannerApiError> {
+        let substate_api = self.sdk.substate_api();
+        let mut settled = Vec::with_capacity(utxos.len());
+        let mut num_deferred = 0;
+        for mut found in utxos {
+            if !found.is_frozen {
+                settled.push(found);
+                continue;
+            }
+            let held = self
+                .sdk
+                .store()
+                .with_read_tx(|tx| {
+                    tx.stealth_outputs_get_by_commitment(&resource_address, &found.id.into_commitment_bytes())
+                })
+                .optional()?;
+            if held.is_some_and(|output| output.is_frozen) {
+                settled.push(found);
+                continue;
+            }
+
+            let address = UtxoAddress::new(resource_address, found.id);
+            match substate_api
+                .fetch_substate_from_network(&address.clone().into(), None)
+                .await
+            {
+                Ok(read) => {
+                    found.is_frozen = read.substate.as_utxo().is_some_and(|utxo| utxo.is_frozen());
+                    if !found.is_frozen {
+                        warn!(
+                            target: LOG_TARGET,
+                            "⚠️ The indexer reported stealth output {} frozen, but proved it unfrozen. Keeping the output spendable.",
+                            address
+                        );
+                    }
+                    settled.push(found);
+                },
+                Err(
+                    err @ (SubstateApiError::SubstateDoesNotExist { .. } |
+                    SubstateApiError::SubstateUnproven { .. } |
+                    SubstateApiError::SubstateUnverified { .. } |
+                    SubstateApiError::SubstateProvenBeforeAnchor { .. } |
+                    SubstateApiError::SubstateProofStale { .. }),
+                ) => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "⚠️ The indexer reported stealth output {} frozen without proving it ({}). Keeping the output spendable.",
+                        address,
+                        err
+                    );
+                    found.is_frozen = false;
+                    settled.push(found);
+                },
+                Err(SubstateApiError::StoreError(err)) => return Err(err.into()),
+                Err(err) => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "⚠️ Could not check the indexer's report that stealth output {} is frozen ({}). Retrying later.",
+                        address,
+                        err
+                    );
+                    num_deferred += 1;
+                },
+            }
+        }
+        Ok((settled, num_deferred))
     }
 
     fn process_recovered_utxos(

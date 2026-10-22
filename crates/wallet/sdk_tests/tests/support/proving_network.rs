@@ -94,6 +94,8 @@ struct ProvingNetworkState {
     utxo_stream_answer: Option<UtxoStreamAnswer>,
     /// The shard cursors of each stealth UTXO stream request.
     utxo_stream_requests: Vec<Vec<(Shard, StateVersion)>>,
+    /// The UTXOs the full-UTXO lookup returns.
+    indexed_utxos: HashMap<UtxoId, Utxo>,
 }
 
 struct ServedSubstate {
@@ -138,6 +140,7 @@ impl ProvingNetwork {
                 shard_group_checkpoint_requests: 0,
                 utxo_stream_answer: None,
                 utxo_stream_requests: Vec::new(),
+                indexed_utxos: HashMap::new(),
             })),
         }
     }
@@ -268,6 +271,11 @@ impl ProvingNetwork {
     /// The shard cursors of each stealth UTXO stream request so far.
     pub fn utxo_stream_requests(&self) -> Vec<Vec<(Shard, StateVersion)>> {
         self.state.lock().unwrap().utxo_stream_requests.clone()
+    }
+
+    /// Returns `utxo` to full-UTXO lookups of its tag and nonce, in place of what was returned for `id` before.
+    pub fn index_utxo(&self, id: UtxoId, utxo: Utxo) {
+        self.state.lock().unwrap().indexed_utxos.insert(id, utxo);
     }
 }
 
@@ -401,9 +409,19 @@ impl WalletNetworkInterface for ProvingNetwork {
     async fn fetch_utxos(
         &self,
         _resource_address: ResourceAddress,
-        _tag_and_nonce_pairs: Vec<TagAndPublicNoncePair>,
+        tag_and_nonce_pairs: Vec<TagAndPublicNoncePair>,
     ) -> Result<FetchedUtxos, Self::Error> {
-        panic!("ProvingNetwork called")
+        let state = self.state.lock().unwrap();
+        let unspent = state
+            .indexed_utxos
+            .iter()
+            .filter(|(_, utxo)| {
+                utxo.output()
+                    .is_some_and(|output| tag_and_nonce_pairs.contains(&(output.tag, output.output.public_nonce)))
+            })
+            .map(|(id, utxo)| (*id, utxo.clone()))
+            .collect();
+        Ok(FetchedUtxos { unspent, spent: vec![] })
     }
 
     async fn get_latest_epoch_checkpoint(&self, shard: Shard) -> Result<EpochCheckpointEntry, Self::Error> {

@@ -6,18 +6,7 @@ mod support;
 use std::sync::{Arc, Mutex};
 
 use futures::StreamExt;
-use ootle_byte_type::ToByteType;
-use tari_crypto::{
-    keys::{PublicKey, SecretKey},
-    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
-};
-use tari_engine_types::{
-    Epoch,
-    Utxo,
-    UtxoOutput,
-    crypto::{OutputBody, commit_amount},
-    substate::SubstateId,
-};
+use tari_engine_types::{Epoch, Utxo, substate::SubstateId};
 use tari_indexer_client::types::{EpochCheckpointEntry, ValidatorSetCommittee, WatchedSubstateItem};
 use tari_ootle_common_types::{
     StateVersion,
@@ -52,10 +41,9 @@ use tari_template_lib::types::{
     UtxoAddress,
     UtxoId,
     constants::STEALTH_TARI_RESOURCE_ADDRESS,
-    stealth::SpendAuthorization,
 };
 
-use crate::support::{TestWithNetwork, random_keypair};
+use crate::support::TestWithNetwork;
 
 #[derive(Debug, thiserror::Error)]
 #[error("not found")]
@@ -228,6 +216,10 @@ impl WalletNetworkInterface for UtxoNetwork {
         panic!("UtxoNetwork::get_latest_epoch_checkpoint called")
     }
 
+    async fn get_latest_shard_group_checkpoints(&self) -> Result<Vec<EpochCheckpointEntry>, Self::Error> {
+        panic!("UtxoNetwork::get_latest_shard_group_checkpoints called")
+    }
+
     async fn list_epoch_checkpoints(
         &self,
         _from_epoch: Epoch,
@@ -267,48 +259,6 @@ fn new_test(network: UtxoNetwork) -> (Test, AccountWithAddress) {
     (test, account)
 }
 
-/// A UTXO of `amount` that `account` can read and spend.
-fn owned_utxo(test: &Test, account: &AccountWithAddress, amount: u64) -> (UtxoId, Utxo) {
-    let sdk = test.sdk();
-    let view_key = sdk.key_manager_api().get_key(account.view_only_key_id()).unwrap();
-    let owner_key = sdk
-        .key_manager_api()
-        .get_key(account.owner_key_id().expect("account is locally owned"))
-        .unwrap();
-    let owner_public_key = RistrettoPublicKey::from_secret_key(&owner_key.secret);
-    let view_public_key = RistrettoPublicKey::from_secret_key(&view_key.secret);
-    let (nonce_secret, public_nonce) = random_keypair();
-
-    let tag = sdk.stealth_crypto_api().derive_stealth_output_tag(
-        sdk.network(),
-        &view_key.secret,
-        &public_nonce,
-        &STEALTH_TARI_RESOURCE_ADDRESS,
-    );
-    let mask = RistrettoSecretKey::random(&mut rand::rng());
-    let commitment = commit_amount(&mask, amount.into()).unwrap().to_byte_type();
-    let encrypted_data = sdk
-        .stealth_crypto_api()
-        .encrypt_value_and_mask(amount, &mask, &view_public_key, &nonce_secret, None)
-        .unwrap();
-    let stealth_owner_public_key = sdk
-        .stealth_crypto_api()
-        .derive_stealth_owner_public_key(sdk.network(), &owner_public_key, &nonce_secret)
-        .to_byte_type();
-
-    let utxo = Utxo::new(UtxoOutput {
-        output: OutputBody {
-            public_nonce: public_nonce.to_byte_type(),
-            encrypted_data,
-            minimum_value_promise: 0,
-            viewable_balance: None,
-        },
-        auth: SpendAuthorization::Key(stealth_owner_public_key),
-        tag,
-    });
-    (UtxoId::from(commitment), utxo)
-}
-
 fn queued(test: &Test) -> usize {
     test.store()
         .with_read_tx(|tx| tx.utxo_process_queue_fetch_batch(None, 1000))
@@ -343,7 +293,7 @@ async fn scan(test: &Test, account: &AccountWithAddress) {
 async fn a_utxo_the_lookup_does_not_know_stays_queued_until_it_is_recovered() {
     let network = UtxoNetwork::default();
     let (test, account) = new_test(network.clone());
-    let (id, utxo) = owned_utxo(&test, &account, 1_234);
+    let (id, utxo) = test.owned_utxo(&account, 1_234);
     network.stream((id, utxo.clone()));
 
     scan(&test, &account).await;
@@ -388,9 +338,9 @@ async fn a_utxo_the_lookup_does_not_know_stays_queued_until_it_is_recovered() {
 async fn a_partial_lookup_resolves_the_returned_and_spent_utxos_and_keeps_the_rest_queued() {
     let network = UtxoNetwork::default();
     let (test, account) = new_test(network.clone());
-    let (returned_id, returned) = owned_utxo(&test, &account, 100);
-    let (spent_id, spent) = owned_utxo(&test, &account, 200);
-    let (unknown_id, unknown) = owned_utxo(&test, &account, 300);
+    let (returned_id, returned) = test.owned_utxo(&account, 100);
+    let (spent_id, spent) = test.owned_utxo(&account, 200);
+    let (unknown_id, unknown) = test.owned_utxo(&account, 300);
     network.stream((returned_id, returned.clone()));
     network.stream((spent_id, spent.clone()));
     network.stream((unknown_id, unknown));
@@ -417,8 +367,8 @@ async fn a_round_reaches_entries_queued_behind_more_than_a_batch_of_unknown_utxo
     let network = UtxoNetwork::default();
     let (test, account) = new_test(network.clone());
     let account_address = *account.account.component_address();
-    let unknown = (0..150).map(|_| owned_utxo(&test, &account, 1)).collect::<Vec<_>>();
-    let (id, utxo) = owned_utxo(&test, &account, 777);
+    let unknown = (0..150).map(|_| test.owned_utxo(&account, 1)).collect::<Vec<_>>();
+    let (id, utxo) = test.owned_utxo(&account, 777);
     network.index((id, utxo.clone()));
 
     let queue_items = unknown
