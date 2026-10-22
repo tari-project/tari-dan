@@ -32,7 +32,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let endpoint = cli
         .daemon_jrpc_endpoint
-        .unwrap_or_else(|| "/ip4/127.0.0.1/tcp/9000".parse().unwrap());
+        .unwrap_or_else(|| "/ip4/127.0.0.1/tcp/5100".parse().unwrap());
     let endpoint = multiaddr_to_http_url(endpoint)?;
 
     log::info!("🌍️ Connecting to {}", endpoint);

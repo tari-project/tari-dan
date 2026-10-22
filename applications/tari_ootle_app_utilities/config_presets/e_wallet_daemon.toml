@@ -5,11 +5,11 @@
 ########################################################################################################################
 
 [ootle_wallet_daemon]
-# JSON-RPC listener address (default = "127.0.0.1:9000")
-# listen_addr = "127.0.0.1:9000"
+# JSON-RPC and web UI listener address (default = "127.0.0.1:5100")
+# json_rpc_address = "127.0.0.1:5100"
 
 # Signaling server address (default = "127.0.0.1:9100")
-# signaling_server_addr = "127.0.0.1:9100"
+# signaling_server_address = "127.0.0.1:9100"
 
 # Allow apps to connect over WebRTC (webrtc.start). A connected app receives a token carrying the caller's permissions,
 # so leave this off unless you use WebRTC apps. Also settable with --enable-webrtc. (default = false)

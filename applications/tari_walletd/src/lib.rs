@@ -213,7 +213,7 @@ pub async fn run_tari_ootle_walletd(
 /// Installs the OS-native credential store that the wallet SDK uses to hold the cipher seed password.
 /// Must be called before the SDK touches the keyring. Not needed when `override_keyring_password` is set.
 /// If no store can be installed (e.g. no DBus Secret Service on a headless host), a warning is logged and
-/// any later keyring access fails with a clear error advising `--password`.
+/// any later keyring access fails with a clear error advising `--override-keyring-password`.
 pub fn init_os_keyring_store() {
     let result: keyring_core::Result<std::sync::Arc<keyring_core::CredentialStore>> = {
         #[cfg(target_os = "macos")]
@@ -241,7 +241,7 @@ pub fn init_os_keyring_store() {
         Err(err) => warn!(
             target: LOG_TARGET,
             "⚠️ OS keyring store is unavailable: {err}. The wallet cannot store or retrieve the cipher seed \
-             password; use the `--password` option to provide one.",
+             password; use the `--override-keyring-password` option to provide one.",
         ),
     }
 }

@@ -7,7 +7,8 @@ import { OotleAddress } from "../types/OotleAddress";
 
 const PAY_REF_MAX_LENGTH = 64;
 
-const MAX_LENGTH_LIMIT = 118 + PAY_REF_MAX_LENGTH;
+// Longest HRP (8) + separator (1) + 64 key bytes and a full pay ref as 5-bit words + checksum (6).
+const MAX_LENGTH_LIMIT = 8 + 1 + Math.ceil(((64 + PAY_REF_MAX_LENGTH) * 8) / 5) + 6;
 
 export type DecodedOotleAddress = {
   network: Network;
@@ -46,11 +47,11 @@ export function decodeOotleAddress(address: OotleAddress): DecodedOotleAddress {
   const viewOnlyKey = buf2hex(data.slice(32, 64));
   const payRefBytes = new Uint8Array(data.slice(64));
 
-  // If the payRefSlice is utf-8 decodable, use it as payRef, otherwise null
+  // A pay ref that is valid UTF-8 is returned as a string, otherwise as raw bytes
   let payRef: string | Uint8Array | null = null;
   if (payRefBytes.length > 0) {
     try {
-      payRef = new TextDecoder().decode(payRefBytes);
+      payRef = new TextDecoder("utf-8", { fatal: true }).decode(payRefBytes);
     } catch (e) {
       payRef = payRefBytes;
     }

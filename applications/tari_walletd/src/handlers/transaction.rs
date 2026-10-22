@@ -19,7 +19,15 @@ use tari_ootle_common_types::{
 use tari_ootle_transaction::{Transaction, TransactionSignature, UnsignedTransaction, args};
 use tari_ootle_wallet_sdk::{
     apis::transaction::TransactionApiError,
-    models::{KeyId, OutputStatus, StealthUtxoSpendKeyId, TransactionContext, WalletEvent, WalletLockId},
+    models::{
+        KeyId,
+        OutputStatus,
+        StealthUtxoSpendKeyId,
+        TransactionContext,
+        TransactionStatus,
+        WalletEvent,
+        WalletLockId,
+    },
 };
 use tari_ootle_wallet_sdk_services::transaction_service::TransactionServiceError;
 use tari_ootle_walletd_client::{
@@ -683,10 +691,16 @@ pub async fn handle_wait_result(
         .optional()?
         .ok_or_else(|| not_found(format!("Transaction {}", req.transaction_id)))?;
 
-    if let Some(result) = transaction.finalize {
+    // A transaction rejected before consensus has no finalize result and emits no further events.
+    let has_outcome = transaction.finalize.is_some() ||
+        matches!(
+            transaction.status,
+            TransactionStatus::InvalidTransaction | TransactionStatus::DryRunFailed
+        );
+    if has_outcome {
         return Ok(TransactionWaitResultResponse {
             transaction_id: req.transaction_id,
-            result: Some(result),
+            result: transaction.finalize,
             status: transaction.status,
             final_fee: transaction.final_fee.unwrap_or_default(),
             timed_out: false,

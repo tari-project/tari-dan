@@ -40,6 +40,7 @@ pub enum EpochOracleType {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BaseLayerOracleConfig {
     /// The Tari base node's GRPC URL. If none is specified, http://localhost:{port} will be used where {port} is the network-specific default.
     pub base_node_grpc_url: Option<Url>,
@@ -76,6 +77,7 @@ impl Display for BaseLayerOracleConfig {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ConfiguredOracleConfig {
     /// Absolute or relative (to current working dir) path to the ConfiguredEpochOracle config file (toml, json or
     /// json5). Mutually exclusive with `config_json`.
