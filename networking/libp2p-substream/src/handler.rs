@@ -67,11 +67,18 @@ impl Handler {
         tracing::warn!("unexpected listen upgrade error: {:?}", error.error);
     }
 
+    /// Removes the request for `stream_id`. Outbound negotiations complete in any order, so the request is found by id
+    /// rather than by position.
+    fn take_requested_stream(&mut self, stream_id: StreamId) -> Option<OpenStreamRequest> {
+        let pos = self.requested_streams.iter().position(|s| s.stream_id() == stream_id)?;
+        self.requested_streams.remove(pos)
+    }
+
     fn on_dial_upgrade_error(&mut self, error: DialUpgradeError<StreamId, ChosenProtocol<StreamProtocol>>) {
-        let stream = self
-            .requested_streams
-            .pop_front()
-            .expect("negotiated a stream without a pending request");
+        let Some(stream) = self.take_requested_stream(error.info) else {
+            tracing::warn!("outbound stream {} failed without a pending request", error.info);
+            return;
+        };
 
         match error.error {
             StreamUpgradeError::Timeout => {
@@ -114,8 +121,7 @@ impl Handler {
     ) {
         let (stream, protocol) = outbound.protocol;
         let stream_id = outbound.info;
-        // Requested stream succeeded, remove it from the pending list.
-        let _request = self.requested_streams.pop_front();
+        let _request = self.take_requested_stream(stream_id);
 
         self.pending_events.push_back(Event::SubstreamOpen {
             peer_id: self.peer_id,
@@ -319,5 +325,41 @@ mod tests {
         }
         assert!(handler.requested_streams.is_empty());
         assert!(handler.poll(&mut cx).is_pending());
+    }
+
+    #[test]
+    fn outbound_failure_is_matched_to_the_failed_request() {
+        let peer_id = PeerId::random();
+        let protocol = StreamProtocol::new("/test/1");
+        let mut handler = Handler::new(peer_id, smallvec::smallvec![protocol.clone()]);
+        let mut cx = Context::from_waker(Waker::noop());
+        for stream_id in [1, 2] {
+            handler.on_behaviour_event(OpenStreamRequest::new(stream_id, peer_id, protocol.clone()).into());
+            assert!(matches!(
+                handler.poll(&mut cx),
+                Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { .. })
+            ));
+        }
+
+        handler.on_dial_upgrade_error(DialUpgradeError {
+            info: 2,
+            error: StreamUpgradeError::Io(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid multistream message",
+            )),
+        });
+
+        match handler.poll(&mut cx) {
+            Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::OutboundFailure { stream_id, .. })) => {
+                assert_eq!(stream_id, 2);
+            },
+            other => panic!("expected an outbound failure, got {:?}", other.map(|_| ())),
+        }
+        let remaining = handler
+            .requested_streams
+            .iter()
+            .map(OpenStreamRequest::stream_id)
+            .collect::<Vec<_>>();
+        assert_eq!(remaining, [1]);
     }
 }
