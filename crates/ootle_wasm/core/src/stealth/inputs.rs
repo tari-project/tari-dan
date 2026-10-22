@@ -276,13 +276,20 @@ mod tests {
     }
 
     #[test]
-    fn statement_from_inputs_defaults_missing_witness_to_key_path() {
+    fn statement_from_inputs_builds_a_key_path_input() {
         let commitment_hex = hex::encode([2u8; 32]);
-        let inputs_json = format!(r#"[{{"commitment":"{commitment_hex}"}}]"#);
+        let inputs_json = format!(r#"[{{"commitment":"{commitment_hex}","witness":"KeyPath"}}]"#);
         let statement_json = build_stealth_inputs_statement_from_inputs(&inputs_json, 500).unwrap();
         let statement: StealthInputsStatement = serde_json::from_str(&statement_json).unwrap();
         assert_eq!(statement.inputs.len(), 1);
         assert_eq!(serde_json::to_value(&statement.inputs[0].witness).unwrap(), "KeyPath");
         assert_eq!(statement.revealed_amount, Amount::from_u64(500));
+    }
+
+    #[test]
+    fn statement_from_inputs_requires_a_witness() {
+        let commitment_hex = hex::encode([2u8; 32]);
+        let inputs_json = format!(r#"[{{"commitment":"{commitment_hex}"}}]"#);
+        build_stealth_inputs_statement_from_inputs(&inputs_json, 500).unwrap_err();
     }
 }

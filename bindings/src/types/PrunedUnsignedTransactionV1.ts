@@ -27,8 +27,7 @@ export type PrunedUnsignedTransactionV1 = {
   /**
    * Byte size of each blob, parallel to `blob_hashes`. **Not part of the signing/id domain**
    * — populated at conversion time from `Blobs` so that API consumers and UIs can show
-   * blob sizes without downloading payloads. May be empty when deserialised from older
-   * archives that didn't record sizes.
+   * blob sizes without downloading payloads.
    */
   blob_sizes: Array<number>;
   /**
