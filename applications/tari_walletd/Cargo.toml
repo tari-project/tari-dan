@@ -75,7 +75,8 @@ tokio = { workspace = true, features = [
 tower-http = { workspace = true, features = ["cors", "trace"] }
 url = { workspace = true }
 webrtc = "0.14.0"
-webauthn-rs = { workspace = true }
+# `danger-credential-internals` exposes a stored passkey's signature counter, which login checks.
+webauthn-rs = { workspace = true, features = ["danger-credential-internals"] }
 uuid = { workspace = true }
 wasm-opt = "0.116.1"
 tempfile.workspace = true
@@ -103,6 +104,7 @@ tari_consensus = { workspace = true }
 tari_utilities = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
+tower = { workspace = true, features = ["util"] }
 
 [package.metadata.cargo-machete]
 ignored = [

@@ -338,6 +338,8 @@ pub trait WalletStoreWriter: CommittableStore {
 
     // Webauthn registrations
     fn webauthn_reg_insert(&mut self, username: String, passkey: Passkey) -> Result<(), WalletStorageError>;
+    /// Replaces the stored passkey with the same credential ID as `passkey`.
+    fn webauthn_reg_update_passkey(&mut self, passkey: &Passkey) -> Result<(), WalletStorageError>;
 
     // Authored templates
     fn authored_templates_insert(&mut self, model: AuthoredTemplateModel) -> Result<(), WalletStorageError>;

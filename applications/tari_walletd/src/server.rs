@@ -6,6 +6,7 @@ use std::{net::SocketAddr, sync::Arc};
 use axum::{
     Router,
     extract::{DefaultBodyLimit, Extension},
+    middleware,
     response::{IntoResponse, Response},
     routing::post,
 };
@@ -24,25 +25,28 @@ use tokio::task;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use super::handlers::{HandlerContext, HandlerWithCookie, auth, stealth_utxos, substates, templates, wallet, webauthn};
-use crate::handlers::{
-    Handler,
-    accounts,
-    address_book,
-    auth::jwt::AuthError,
-    burn_proofs,
-    confidential,
-    error::HandlerError,
-    keys,
-    nfts,
-    resources,
-    settings,
-    signing_requests,
-    swap_pools,
-    transaction,
-    transaction_requests,
-    validator,
-    validator_set,
-    webrtc,
+use crate::{
+    allowed_hosts::{AllowedHosts, check_host},
+    handlers::{
+        Handler,
+        accounts,
+        address_book,
+        auth::jwt::AuthError,
+        burn_proofs,
+        confidential,
+        error::HandlerError,
+        keys,
+        nfts,
+        resources,
+        settings,
+        signing_requests,
+        swap_pools,
+        transaction,
+        transaction_requests,
+        validator,
+        validator_set,
+        webrtc,
+    },
 };
 
 const LOG_TARGET: &str = "tari::ootle::wallet_daemon::json_rpc";
@@ -52,8 +56,28 @@ pub async fn spawn_listener(
     signaling_server_address: SocketAddr,
     context: HandlerContext,
 ) -> anyhow::Result<(SocketAddr, task::JoinHandle<anyhow::Result<()>>)> {
-    let enable_permissive_cors = context.config().enable_permissive_cors;
     let shutdown_signal = context.shutdown_signal().clone();
+    let router = router(preferred_address, signaling_server_address, context);
+
+    let listener = try_bind_with_fallback(preferred_address).await?;
+    let server = axum::serve(listener, router);
+    let listen_addr = server.local_addr()?;
+    info!(target: LOG_TARGET, "🌐 JSON-RPC listening on {listen_addr}");
+    #[cfg(feature = "web_ui")]
+    info!(target: LOG_TARGET, "🕸️ Web interface available at http://{listen_addr}");
+    let server = server.with_graceful_shutdown(shutdown_signal);
+    let task = tokio::spawn(async move {
+        server.await?;
+        info!(target: LOG_TARGET, "💤 Stopping RPC");
+        Ok(())
+    });
+
+    Ok((listen_addr, task))
+}
+
+fn router(preferred_address: SocketAddr, signaling_server_address: SocketAddr, context: HandlerContext) -> Router {
+    let enable_permissive_cors = context.config().enable_permissive_cors;
+    let allowed_hosts = AllowedHosts::from_config(context.config());
     let router = Router::new()
         .route("/json_rpc", post(handler))
         .route("/json-rpc", post(handler))
@@ -70,20 +94,8 @@ pub async fn spawn_listener(
     #[cfg(not(feature = "web_ui"))]
     let router = router.fallback(crate::handlers::web_ui::feature_disabled_handler);
 
-    let listener = try_bind_with_fallback(preferred_address).await?;
-    let server = axum::serve(listener, router);
-    let listen_addr = server.local_addr()?;
-    info!(target: LOG_TARGET, "🌐 JSON-RPC listening on {listen_addr}");
-    #[cfg(feature = "web_ui")]
-    info!(target: LOG_TARGET, "🕸️ Web interface available at http://{listen_addr}");
-    let server = server.with_graceful_shutdown(shutdown_signal);
-    let task = tokio::spawn(async move {
-        server.await?;
-        info!(target: LOG_TARGET, "💤 Stopping RPC");
-        Ok(())
-    });
-
-    Ok((listen_addr, task))
+    // Layered last so that it guards the fallback as well as the routes.
+    router.layer(middleware::from_fn_with_state(allowed_hosts, check_host))
 }
 
 /// Renders the part of a JSON-RPC request that may be written to a log: the request id, the method,
@@ -437,9 +449,19 @@ pub enum ApplicationErrorCode {
 
 #[cfg(test)]
 mod tests {
+    use axum::{
+        body::{Body, to_bytes},
+        http::{Request, StatusCode, header},
+    };
     use axum_jrpc::Id;
+    use tari_ootle_walletd_client::{
+        permissions::Permission,
+        types::{AuthCredentials, AuthLoginRequest},
+    };
+    use tower::ServiceExt;
 
     use super::*;
+    use crate::handlers::test_support::TestDaemon;
 
     fn keys_import(secret_key: &str) -> JsonRpcExtractor {
         JsonRpcExtractor {
@@ -467,5 +489,49 @@ mod tests {
         assert!(described.contains("keys.import"));
         assert!(described.contains('7'));
         assert!(described.contains("2 named"));
+    }
+
+    /// Sends an anonymous admin `auth.request` to a no-auth daemon's router, addressed to `host`.
+    async fn login_as(host: &str) -> Response {
+        let daemon = TestDaemon::start().await;
+        let address = SocketAddr::from(([127, 0, 0, 1], 5100));
+        let router = router(address, SocketAddr::from(([127, 0, 0, 1], 9100)), daemon.context);
+        let body = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "auth.request",
+            "params": AuthLoginRequest {
+                permissions: vec![Permission::Admin],
+                credentials: AuthCredentials::None,
+            },
+        });
+        let request = Request::post("/json_rpc")
+            .header(header::HOST, host)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        router.oneshot(request).await.unwrap()
+    }
+
+    async fn issues_token(response: Response) -> bool {
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
+        body["result"]["token"].is_string()
+    }
+
+    #[tokio::test]
+    async fn a_request_addressed_to_a_foreign_host_name_is_refused() {
+        let response = login_as("wallet.example.com:5100").await;
+        assert_eq!(response.status(), StatusCode::MISDIRECTED_REQUEST);
+        assert!(!issues_token(response).await);
+    }
+
+    #[tokio::test]
+    async fn a_request_addressed_to_a_local_name_is_served() {
+        for host in ["127.0.0.1:5100", "localhost:5100", "[::1]:5100", "localhost"] {
+            let response = login_as(host).await;
+            assert_eq!(response.status(), StatusCode::OK, "{host}");
+            assert!(issues_token(response).await, "{host}");
+        }
     }
 }

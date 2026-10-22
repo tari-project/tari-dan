@@ -15,6 +15,11 @@
 # so leave this off unless you use WebRTC apps. Also settable with --enable-webrtc. (default = false)
 # enable_webrtc = false
 
+# Host names a request may address the daemon by, beyond localhost, IP addresses and the host of webauthn.rp_origin.
+# Add the name a reverse proxy forwards or a LAN/container host name; requests naming any other host are refused.
+# "*" accepts every name. Also settable with --allowed-host. (default = [])
+# allowed_hosts = ["wallet.internal"]
+
 # The largest max_fee, in microtari, the wallet submits a transaction with. Larger requests are refused; dry runs are
 # exempt. (default = 100000000, i.e. 100 TARI)
 # max_fee_limit = 100000000

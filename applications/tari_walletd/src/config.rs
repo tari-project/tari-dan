@@ -103,6 +103,12 @@ pub struct WalletDaemonConfig {
     /// If true, the wallet daemon will allow CORS requests from any origin. This is useful for development and
     /// testing, but should be disabled in production.
     pub enable_permissive_cors: bool,
+    /// Host names, beyond `localhost`, IP addresses and the host of `webauthn.rp_origin`, that a request may address
+    /// the daemon by: the name a reverse proxy forwards, or a LAN or container host name. Any other name is refused,
+    /// so that a web page served under an unrelated name cannot reach the daemon. Accepts a list, or a string of
+    /// comma-separated names. `*` accepts every name.
+    #[serde(default, deserialize_with = "deserialize_string_list")]
+    pub allowed_hosts: Vec<String>,
     pub webauthn: WebAuthnConfig,
     /// The path to the value lookup table binary file used for brute force value lookups. This setting
     /// is only used when attempting to view confidential balances in confidential resources that use a view key
@@ -228,6 +234,14 @@ fn return_default_jwt_expiry() -> Duration {
 }
 
 fn deserialize_indexer_urls<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<Url>, D::Error> {
+    deserialize_string_list(deserializer)?
+        .iter()
+        .map(|url| Url::parse(url).map_err(|e| de::Error::custom(format!("invalid indexer URL: {e}"))))
+        .collect()
+}
+
+/// A list of non-empty, trimmed strings, given as a list or as one comma-separated string.
+fn deserialize_string_list<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D::Error> {
     #[derive(Deserialize)]
     #[serde(untagged)]
     enum Raw {
@@ -235,15 +249,16 @@ fn deserialize_indexer_urls<'de, D: Deserializer<'de>>(deserializer: D) -> Resul
         CommaSeparated(String),
     }
 
-    let urls = match Raw::deserialize(deserializer)? {
-        Raw::List(urls) => urls,
-        Raw::CommaSeparated(urls) => urls.split(',').map(str::to_string).collect(),
+    let items = match Raw::deserialize(deserializer)? {
+        Raw::List(items) => items,
+        Raw::CommaSeparated(items) => items.split(',').map(str::to_string).collect(),
     };
-    urls.iter()
-        .map(|url| url.trim())
-        .filter(|url| !url.is_empty())
-        .map(|url| Url::parse(url).map_err(|e| de::Error::custom(format!("invalid indexer URL: {e}"))))
-        .collect()
+    Ok(items
+        .iter()
+        .map(|item| item.trim())
+        .filter(|item| !item.is_empty())
+        .map(str::to_string)
+        .collect())
 }
 
 fn return_default_rpc_address() -> SocketAddr {
@@ -268,6 +283,7 @@ impl Default for WalletDaemonConfig {
             transaction_request_ttl: return_default_transaction_request_ttl(),
             signing_request_ttl: return_default_signing_request_ttl(),
             enable_permissive_cors: false,
+            allowed_hosts: Vec::new(),
             enable_webrtc: false,
             value_lookup_table_file: None,
             recovery_abandon_count: 10,

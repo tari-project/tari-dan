@@ -1735,6 +1735,18 @@ impl WalletStoreReader for ReadTransaction<'_> {
             .collect::<Vec<Passkey>>())
     }
 
+    fn webauthn_reg_fetch_all_passkeys(&mut self) -> Result<Vec<Passkey>, WalletStorageError> {
+        use crate::schema::webauthn_registration_passkeys;
+        Ok(webauthn_registration_passkeys::table
+            .select(WebauthnRegistrationPasskey::as_select())
+            .load::<WebauthnRegistrationPasskey>(self.connection())
+            .map_err(|e| WalletStorageError::general("webauthn_reg_fetch_all_passkeys", e))?
+            .iter()
+            .filter_map(|model| WebauthnRegistrationPasskeyModel::try_from(model).ok())
+            .map(|model| model.passkey)
+            .collect())
+    }
+
     fn authored_templates_exists_by_address(&mut self, address: &TemplateAddress) -> Result<bool, WalletStorageError> {
         use crate::schema::authored_templates;
         let address_hex = format!("{}", address);
