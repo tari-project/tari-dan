@@ -1178,3 +1178,6 @@ where
         Ok(execution.for_block(block, transaction_id))
     }
 }
+
+#[cfg(test)]
+mod tests;
