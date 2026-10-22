@@ -97,11 +97,13 @@ impl Handler {
             },
             StreamUpgradeError::Apply(_infallible) => {},
             StreamUpgradeError::Io(e) => {
-                tracing::debug!(
-                    "outbound stream for request {} failed: {e}, retrying",
-                    stream.stream_id()
-                );
-                self.requested_streams.push_back(stream);
+                tracing::debug!("outbound stream {} failed to negotiate: {e}", stream.stream_id());
+                self.pending_events.push_back(Event::OutboundFailure {
+                    peer_id: self.peer_id,
+                    protocol: stream.protocol().clone(),
+                    stream_id: stream.stream_id(),
+                    error: Error::ProtocolNegotiationFailed { details: e.to_string() },
+                });
             },
         }
     }
@@ -277,5 +279,45 @@ where P: AsRef<str> + Clone
 
     fn upgrade_outbound(self, io: Stream, protocol: Self::Info) -> Self::Future {
         ready(Ok((io, protocol)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{io, task::Waker};
+
+    use super::*;
+
+    #[test]
+    fn outbound_negotiation_io_error_is_reported() {
+        let peer_id = PeerId::random();
+        let protocol = StreamProtocol::new("/test/1");
+        let mut handler = Handler::new(peer_id, smallvec::smallvec![protocol.clone()]);
+        handler.on_behaviour_event(OpenStreamRequest::new(7, peer_id, protocol.clone()).into());
+
+        let mut cx = Context::from_waker(Waker::noop());
+        assert!(matches!(
+            handler.poll(&mut cx),
+            Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { .. })
+        ));
+
+        handler.on_dial_upgrade_error(DialUpgradeError {
+            info: 7,
+            error: StreamUpgradeError::Io(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid multistream message",
+            )),
+        });
+
+        match handler.poll(&mut cx) {
+            Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::OutboundFailure {
+                stream_id: 7,
+                error: Error::ProtocolNegotiationFailed { .. },
+                ..
+            })) => {},
+            other => panic!("expected an outbound failure, got {:?}", other.map(|_| ())),
+        }
+        assert!(handler.requested_streams.is_empty());
+        assert!(handler.poll(&mut cx).is_pending());
     }
 }

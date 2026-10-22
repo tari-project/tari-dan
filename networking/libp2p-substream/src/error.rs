@@ -11,6 +11,7 @@ pub enum Error {
     DialUpgradeError,
     ProtocolNotSupported,
     ProtocolNegotiationTimeout,
+    ProtocolNegotiationFailed { details: String },
     ChannelClosed,
 }
 
@@ -23,6 +24,9 @@ impl Display for Error {
             Self::DialUpgradeError => write!(f, "Dial upgrade error"),
             Self::ProtocolNotSupported => write!(f, "Protocol not supported"),
             Self::ProtocolNegotiationTimeout => write!(f, "Protocol negotiation timeout"),
+            Self::ProtocolNegotiationFailed { details } => {
+                write!(f, "Protocol negotiation with the peer failed: {details}")
+            },
             Self::ChannelClosed => write!(f, "Channel closed"),
         }
     }
