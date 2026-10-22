@@ -15,10 +15,24 @@ use rand::RngExt;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_engine_types::commit_result::FinalizeResult;
 use tari_ootle_transaction::args;
-use tari_ootle_wallet_sdk::apis::confidential_transfer::UtxoInputSelection;
+use tari_ootle_wallet_sdk::{
+    apis::{
+        confidential_transfer::UtxoInputSelection,
+        stealth_transfer::{BadgeUsage, TransferFeeParams},
+    },
+    crypto::pay_to::PayTo,
+    models::OutputStatus,
+};
 use tari_ootle_walletd_client::{
     ComponentAddressOrName,
-    types::{TransactionSubmitRequest, TransactionWaitResultRequest},
+    types::{
+        AccountsImportViewOnlyRequest,
+        StealthTransfer,
+        StealthTransferRequest,
+        StealthUtxosListRequest,
+        TransactionSubmitRequest,
+        TransactionWaitResultRequest,
+    },
 };
 use tari_template_lib_types::{Amount, bytes::Bytes, constants::TARI_TOKEN, crypto::PedersenCommitmentBytes};
 use tari_transaction_components::{
@@ -686,4 +700,152 @@ async fn when_i_drop_burn_proof_as_file(
         .unwrap_or_else(|e| panic!("Failed to write proof file {}: {}", file_path.display(), e));
 
     cucumber_log!("Dropped burn proof {} as file {}", proof_name, file_path.display());
+}
+
+#[when(
+    expr = "I import account {word} from wallet daemon {word} as view-only account {word} into wallet daemon {word}"
+)]
+async fn when_i_import_view_only_account(
+    world: &mut TariWorld,
+    step: &Step,
+    source_account_name: String,
+    source_wallet_daemon_name: String,
+    account_name: String,
+    wallet_daemon_name: String,
+) {
+    cucumber_log!("==== Step: {}", step.value);
+    let mut source = wallet_daemon_client::get_auth_wallet_daemon_client(world, &source_wallet_daemon_name).await;
+    let exported = source
+        .accounts_export_view_key(ComponentAddressOrName::Name(source_account_name))
+        .await
+        .unwrap();
+
+    let mut client = wallet_daemon_client::get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
+    client
+        .accounts_import_view_only(AccountsImportViewOnlyRequest {
+            account_name,
+            account_public_key: exported.account_public_key,
+            view_secret_key: exported.view_secret_key,
+            birthday_epoch: Some(exported.birthday_epoch),
+            is_default: None,
+        })
+        .await
+        .unwrap();
+}
+
+#[when(
+    expr = "I do a stealth transfer of {int} from account {word} on wallet daemon {word} to account {word} on wallet \
+            daemon {word} with pay ref {word}"
+)]
+#[allow(clippy::too_many_arguments)]
+async fn when_i_stealth_transfer_with_pay_ref(
+    world: &mut TariWorld,
+    step: &Step,
+    amount: u64,
+    source_account_name: String,
+    source_wallet_daemon_name: String,
+    dest_account_name: String,
+    dest_wallet_daemon_name: String,
+    pay_ref: String,
+) {
+    cucumber_log!("==== Step: {}", step.value);
+    let mut dest = wallet_daemon_client::get_auth_wallet_daemon_client(world, &dest_wallet_daemon_name).await;
+    let destination_address = dest
+        .accounts_get(ComponentAddressOrName::Name(dest_account_name))
+        .await
+        .unwrap()
+        .address;
+
+    let mut client = wallet_daemon_client::get_auth_wallet_daemon_client(world, &source_wallet_daemon_name).await;
+    let resp = client
+        .accounts_stealth_transfer(StealthTransferRequest {
+            owner_account: ComponentAddressOrName::Name(source_account_name),
+            fee_params: TransferFeeParams::new(UtxoInputSelection::PreferRevealed),
+            input_selection: UtxoInputSelection::PreferRevealed,
+            resource_address: TARI_TOKEN,
+            badge_usage: BadgeUsage::None,
+            transfers: vec![StealthTransfer {
+                destination_address,
+                blinded_output_amount: amount,
+                revealed_output_amount: Amount::zero(),
+                output_memo: None,
+                pay_to: PayTo::StealthPublicKey,
+                attach_sender_address: true,
+                pay_ref: Some(pay_ref),
+            }],
+            max_fee: 50_000,
+            dry_run: false,
+        })
+        .await
+        .unwrap();
+    let wait_resp = client
+        .wait_transaction_result(TransactionWaitResultRequest {
+            transaction_id: resp.transaction_id,
+            timeout_secs: Some(120),
+        })
+        .await
+        .unwrap();
+    if let Some(reason) = wait_resp.result.expect("Transaction has timed out").result.any_reject() {
+        panic!("Transaction failed: {}", reason);
+    }
+}
+
+#[then(
+    expr = "wallet daemon {word} lists a stealth output of {int} for account {word} with pay ref {word} sent by \
+            account {word} on wallet daemon {word}"
+)]
+#[allow(clippy::too_many_arguments)]
+async fn then_wallet_daemon_lists_stealth_output_with_pay_ref(
+    world: &mut TariWorld,
+    step: &Step,
+    wallet_daemon_name: String,
+    amount: u64,
+    account_name: String,
+    pay_ref: String,
+    sender_account_name: String,
+    sender_wallet_daemon_name: String,
+) {
+    cucumber_log!("==== Step: {}", step.value);
+    let mut sender = wallet_daemon_client::get_auth_wallet_daemon_client(world, &sender_wallet_daemon_name).await;
+    let sender_address = sender
+        .accounts_get(ComponentAddressOrName::Name(sender_account_name))
+        .await
+        .unwrap()
+        .address;
+
+    let mut client = wallet_daemon_client::get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
+    let account_address = *client
+        .accounts_get(ComponentAddressOrName::Name(account_name.clone()))
+        .await
+        .unwrap()
+        .account
+        .component_address();
+
+    for _ in 0..60 {
+        // Requests a UTXO scan for the account
+        wallet_daemon_client::get_balance(world, &account_name, &wallet_daemon_name, TARI_TOKEN).await;
+        let utxos = client
+            .stealth_utxos_list(StealthUtxosListRequest {
+                resource_address: TARI_TOKEN,
+                account_address: Some(account_address),
+                filter_by_status: None,
+            })
+            .await
+            .unwrap()
+            .utxos;
+        if let Some(utxo) = utxos.iter().find(|u| u.value == Amount::from(amount)) {
+            assert!(matches!(utxo.status, OutputStatus::Unspent), "{:?}", utxo.status);
+            let (_, _, memo_pay_ref) = utxo
+                .memo
+                .as_ref()
+                .and_then(|m| m.as_sender_address())
+                .expect("UTXO memo is not a sender address");
+            assert_eq!(memo_pay_ref, pay_ref.as_bytes());
+            let utxo_sender = utxo.sender_address.as_ref().expect("UTXO has no sender address");
+            assert_eq!(utxo_sender.account_public_key(), sender_address.account_public_key());
+            return;
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    panic!("Timed out waiting for a stealth output of {amount} on account {account_name}");
 }

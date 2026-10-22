@@ -1,0 +1,87 @@
+---
+title: Watch-only Accounts
+description: Track incoming stealth TARI payments on an online wallet daemon while the spend key stays on an offline machine.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+A watch-only (view-only) account lets a wallet daemon find and decrypt incoming stealth outputs for an account without
+holding the account's spend key. The daemon sees each output's value, memo, payment reference and (when the sender
+attached it) the sender's address, but it cannot spend anything.
+
+A typical setup has two wallet daemons:
+
+- a **cold** daemon on an offline machine that holds the seed and owns the account, and
+- an **online** daemon that imports the account as watch-only and reports deposits.
+
+### 1. Export the view key on the cold machine
+
+Call `accounts.export_view_key` on the cold daemon. This requires the `admin` permission.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "accounts.export_view_key",
+  "params": { "account": "deposits" }
+}
+```
+
+The response contains everything the online daemon needs:
+
+```json
+{
+  "account_public_key": "a2f1…",
+  "view_secret_key": "5c0e…",
+  "birthday_epoch": 1234
+}
+```
+
+<Aside type="caution">
+The view secret key reveals the value, memo and sender of every payment to this account. Move it to the online
+machine over a channel you trust and do not log it.
+</Aside>
+
+### 2. Import the account on the online daemon
+
+Call `accounts.import_view_only` on the online daemon with the exported values. This requires the unscoped
+`accounts:create` permission (or `admin`).
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "accounts.import_view_only",
+  "params": {
+    "account_name": "deposits",
+    "account_public_key": "a2f1…",
+    "view_secret_key": "5c0e…",
+    "birthday_epoch": 1234,
+    "is_default": false
+  }
+}
+```
+
+The response is the account's component address: `{ "account_address": "component_…" }`.
+
+- `birthday_epoch` is the epoch to start scanning from. Pass the exported value so earlier deposits are found. If it is
+  omitted, scanning starts at the current epoch.
+- The import is rejected if the wallet already has an account with this public key or name.
+
+The account's Ootle address (from `accounts.get`) is the same as on the cold daemon, so you can hand it out as a
+deposit address from either machine.
+
+### 3. Read deposits
+
+The online daemon scans for the account like any other account. These calls work as usual:
+
+- `accounts.get_balances` — the stealth TARI balance.
+- `stealth_utxos.list` — each output with its `value`, `memo` and `sender_address`. A payment reference is carried in
+  the memo, and in `sender_address` when the sender attached their address.
+- `accounts.get_balance_changes` — the balance history.
+
+### Payments cannot be sent
+
+The online daemon has no spend key for a watch-only account. `accounts.transfer`, `accounts.stealth_transfer` and
+`accounts.create_stealth_transfer_statement` from the account fail with
+`cannot transfer from a view-only account`. Spend the funds from the cold daemon.

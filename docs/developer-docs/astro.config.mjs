@@ -72,6 +72,7 @@ export default defineConfig({
             { label: "Authorization and Access", link: "/guides/authorization-and-access/" },
             { label: "API Keys for AI Agents", link: "/guides/agent-api-keys/" },
             { label: "Stealth Transfers", link: "/guides/stealth-resources/" },
+            { label: "Watch-only Accounts", link: "/guides/watch-only-accounts/" },
             { label: "Burn Minotari for TARI", link: "/guides/burn-minotari/" },
             { label: "How Burn Claims Work", link: "/guides/claim-burn/" },
             { label: "Exchange Integration", link: "/guides/exchange-integration/" },

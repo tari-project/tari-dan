@@ -723,7 +723,7 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
         &self,
         outputs: I,
     ) -> Result<HashSet<(ComponentAddress, ResourceAddress)>, StealthOutputsApiError> {
-        let all_used_view_only_keys = self
+        let mut all_used_view_only_keys = self
             .key_manager_api
             .get_all_derived_keys(KeyBranch::ViewOnlyKey)?
             .into_iter()
@@ -741,6 +741,25 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
+        // View-only accounts use an imported view key, which is not in the derived key branch above
+        let accounts = self.store.with_read_tx(|tx| {
+            let count = tx.accounts_count()?;
+            tx.accounts_get_many(0, count as usize)
+        })?;
+        for account in accounts {
+            if !matches!(account.view_only_key_id, KeyId::Imported { .. }) {
+                continue;
+            }
+            let account_key = account
+                .owner_key_id
+                .map(|key_id| self.key_manager_api.get_key(key_id))
+                .transpose()?;
+            all_used_view_only_keys.push(AccountAndViewKeys {
+                account_public_key: account.owner_public_key,
+                account_key,
+                view_only_key: self.key_manager_api.get_key(account.view_only_key_id)?,
+            });
+        }
         let network = self.config_api.get_network()?;
 
         let mut found_utxos_count = 0usize;

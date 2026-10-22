@@ -4,6 +4,11 @@
 use std::collections::HashSet;
 
 use ootle_byte_type::{FromByteType, ToByteType};
+use tari_crypto::{
+    keys::PublicKey as _,
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
+    tari_utilities::hex::Hex,
+};
 use tari_engine_types::{
     SubstateVersion,
     component::derive_component_address_from_public_key,
@@ -45,6 +50,7 @@ use crate::{
         EpochBirthday,
         KeyId,
         KeyIdOrPublicKey,
+        KeyType,
         VaultBalance,
         VaultModel,
         WalletOotleAddressWithKeyIds,
@@ -145,6 +151,43 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
             },
             address: account_address.address.to_byte_type(),
         })
+    }
+
+    /// Adds an account that can be scanned and viewed but not spent from. The view secret key is stored as an
+    /// imported key and the account has no owner key. Outputs are scanned from `birthday_epoch`, or the current epoch
+    /// if not given.
+    pub fn add_view_only_account(
+        &self,
+        account_name: Option<&str>,
+        account_public_key: &RistrettoPublicKeyBytes,
+        view_secret_key: &RistrettoSecretKey,
+        birthday_epoch: Option<Epoch>,
+        is_default: bool,
+    ) -> Result<AccountWithAddress, AccountsApiError> {
+        let account_address = self.derive_account_address_from_public_key(account_public_key);
+        if self.has_account(&account_address)? {
+            return Err(AccountsApiError::AccountAlreadyExists {
+                address: account_address,
+            });
+        }
+
+        let view_public_key = RistrettoPublicKey::from_secret_key(view_secret_key);
+        let view_only_key_id =
+            self.key_manager_api
+                .import_key(&view_public_key.to_hex(), view_secret_key, KeyType::ViewOnly)?;
+        let birthday_epoch = birthday_epoch.unwrap_or_else(|| self.epoch_birthday.calculate_current_epoch());
+
+        self.add_account(
+            account_name,
+            &account_address,
+            view_only_key_id,
+            *account_public_key,
+            birthday_epoch,
+            false,
+            is_default,
+        )?;
+
+        self.get_account_by_address(&account_address)
     }
 
     pub fn add_account<K: Into<KeyIdOrPublicKey>>(
@@ -660,6 +703,8 @@ pub enum AccountsApiError {
     KeyManagerApiError(#[from] KeyManagerApiError),
     #[error("Account name already exists: {name}")]
     AccountNameAlreadyExists { name: String },
+    #[error("Account already exists: {address}")]
+    AccountAlreadyExists { address: ComponentAddress },
     #[error("Config API error: {0}")]
     ConfigApiError(#[from] ConfigApiError),
 }
@@ -667,6 +712,10 @@ pub enum AccountsApiError {
 impl AccountsApiError {
     pub fn is_name_exists_error(&self) -> bool {
         matches!(self, Self::AccountNameAlreadyExists { .. })
+    }
+
+    pub fn is_account_exists_error(&self) -> bool {
+        matches!(self, Self::AccountAlreadyExists { .. })
     }
 }
 
