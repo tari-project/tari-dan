@@ -444,7 +444,7 @@ mod tests {
     }
 
     #[test]
-    fn a_proof_that_trims_a_needed_command_names_the_shard_group_it_withholds_it_from() {
+    fn a_proof_that_prunes_a_needed_command_names_the_shard_group_it_withholds_it_from() {
         let local_accept = &commands()[1];
         let pruned = CommandOrHash::Pruned(PrunedCommand {
             hash: local_accept.hash(ProtocolVersion::V0),
