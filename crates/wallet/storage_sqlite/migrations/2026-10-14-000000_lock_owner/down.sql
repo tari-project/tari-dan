@@ -1,1 +1,0 @@
-ALTER TABLE locks DROP COLUMN owner;

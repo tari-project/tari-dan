@@ -1,2 +1,0 @@
-DROP INDEX utxos_resource_unspent_idx;
-DROP INDEX utxos_resource_commitment_idx;

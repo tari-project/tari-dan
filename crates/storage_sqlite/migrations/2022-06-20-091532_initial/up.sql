@@ -50,13 +50,26 @@ CREATE TABLE committees
     FOREIGN KEY (validator_node_id) REFERENCES validator_nodes (id) ON DELETE CASCADE
 );
 
-CREATE INDEX committees_validator_node_id_epoch_index ON committees (validator_node_id, epoch);
+-- A validator holds one committee assignment per epoch.
+CREATE UNIQUE INDEX committees_validator_node_id_epoch_index ON committees (validator_node_id, epoch);
 
 
 create table epochs
 (
-    epoch      bigint primary key not null,
-    epoch_hash blob               not null
+    epoch              bigint primary key not null,
+    epoch_hash         blob               not null,
+    -- NULL until the epoch manager stores the hash, which it does each time it assigns the epoch's committees.
+    validator_set_hash blob               null
+);
+
+-- The committee leaf hash of each shard group in an epoch's validator set tree.
+CREATE TABLE validator_set_leaves
+(
+    epoch       bigint  not null references epochs (epoch),
+    shard_start integer not null,
+    shard_end   integer not null,
+    leaf_hash   blob    not null,
+    primary key (epoch, shard_start, shard_end)
 );
 
 create table bmt_cache

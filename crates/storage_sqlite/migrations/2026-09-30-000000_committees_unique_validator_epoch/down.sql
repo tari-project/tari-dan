@@ -1,2 +1,0 @@
-DROP INDEX committees_validator_node_id_epoch_index;
-CREATE INDEX committees_validator_node_id_epoch_index ON committees (validator_node_id, epoch);

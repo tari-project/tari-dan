@@ -1934,60 +1934,6 @@ pub(crate) mod tests {
         assert!(!plan.contains("SCAN events"), "{plan}");
     }
 
-    /// Indexers upgrading in place carry receipts and events stored before either recorded an epoch.
-    /// The migration must date them from the receipt, or enabling retention would prune the whole
-    /// backlog as epoch 0 on its first pass.
-    #[tokio::test]
-    async fn the_retention_migration_dates_existing_receipts_and_events() {
-        use diesel_migrations::MigrationHarness;
-
-        use crate::{
-            storage_sqlite::serialization::{serialize_hex, serialize_json},
-            store::ReadOnlyStore,
-        };
-
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("indexer.db");
-        {
-            let mut conn = SqliteConnection::establish(path.to_str().unwrap()).unwrap();
-            // Only the initial migration: the schema an indexer upgrading in place already has.
-            conn.run_next_migration(MIGRATIONS).unwrap();
-
-            let dated = serialize_hex(receipt_address(1).as_object_key());
-            let orphan = serialize_hex(receipt_address(2).as_object_key());
-            sql_query("insert into transaction_receipts (address, data) values (?, ?)")
-                .bind::<diesel::sql_types::Text, _>(&dated)
-                .bind::<diesel::sql_types::Text, _>(serialize_json(&receipt_at(Epoch(7))).unwrap())
-                .execute(&mut conn)
-                .unwrap();
-            for tx_hash in [&dated, &orphan] {
-                sql_query(
-                    "insert into events (template_address, tx_hash, topic, payload) values ('00', ?, 'test', '{}')",
-                )
-                .bind::<diesel::sql_types::Text, _>(tx_hash)
-                .execute(&mut conn)
-                .unwrap();
-            }
-        }
-
-        let store = SqliteIndexerStore::try_create(path).unwrap();
-
-        let receipt_epochs = store
-            .with_read_tx(|tx| {
-                sql_query("select epoch from transaction_receipts")
-                    .load::<EpochRow>(tx.connection())
-                    .map_err(|e| StorageError::general("receipt_epochs", e))
-            })
-            .await
-            .unwrap();
-        assert_eq!(receipt_epochs.iter().map(|r| r.epoch).collect::<Vec<_>>(), vec![7]);
-        // An event whose receipt this indexer never stored has nothing to date it by.
-        assert_eq!(event_epochs(&store).await, vec![7, 0]);
-
-        let econ = ReadOnlyStore::new(store.clone()).get_tari_economics().await.unwrap();
-        assert_eq!(econ.transaction_receipt_count, 1);
-    }
-
     #[cfg(feature = "metrics")]
     #[tokio::test]
     async fn file_stats_report_the_database_and_its_wal() {
@@ -3098,49 +3044,5 @@ pub(crate) mod tests {
             |epoch| store.with_read_tx(move |tx| tx.epoch_checkpoint_with_header_metadata_exists_before(Epoch(epoch)));
         assert!(!carried_before(100).await.unwrap());
         assert!(!carried_before(250).await.unwrap());
-    }
-
-    /// An indexer upgrading in place selects the checkpoints it stored before their shard range and preimage were
-    /// recorded.
-    #[tokio::test]
-    async fn the_shard_range_migration_covers_stored_checkpoints() {
-        use diesel_migrations::MigrationHarness;
-
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("indexer.db");
-        let high = ShardGroup::new(128u32, 255u32);
-        {
-            let mut conn = SqliteConnection::establish(path.to_str().unwrap()).unwrap();
-            for _ in 0..4 {
-                conn.run_next_migration(MIGRATIONS).unwrap();
-            }
-            for (epoch, carried) in [(4, true), (5, false)] {
-                sql_query("insert into epoch_checkpoints (epoch, shard_group, json_data) values (?, ?, ?)")
-                    .bind::<diesel::sql_types::BigInt, _>(epoch)
-                    .bind::<diesel::sql_types::Text, _>(high.to_parsable_string())
-                    .bind::<diesel::sql_types::Text, _>(
-                        crate::storage_sqlite::serialization::serialize_json(&epoch_checkpoint(
-                            epoch as u64,
-                            high,
-                            carried,
-                        ))
-                        .unwrap(),
-                    )
-                    .execute(&mut conn)
-                    .unwrap();
-            }
-        }
-
-        let store = SqliteIndexerStore::try_create(path).unwrap();
-
-        assert_eq!(
-            checkpoint_keys(&store, Epoch(0), Some(Shard::from(128u32))).await,
-            vec![(Epoch(4), high)]
-        );
-        assert!(
-            checkpoint_keys(&store, Epoch(0), Some(Shard::from(127u32)))
-                .await
-                .is_empty()
-        );
     }
 }

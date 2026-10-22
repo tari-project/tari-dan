@@ -1,8 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use diesel::{Connection, RunQueryDsl, SqliteConnection, sql_query, sql_types::Integer};
-use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
+use diesel::{Connection, SqliteConnection};
 use ootle_byte_type::ToByteType;
 use tari_crypto::{keys::PublicKey, ristretto::RistrettoPublicKey};
 use tari_ootle_common_types::{Epoch, NumPreshards, ShardGroup, SubstateAddress, ValidatorSetHash, VotePower};
@@ -281,58 +280,6 @@ fn reassigning_a_committee_replaces_the_previous_assignment() {
 
     assert_eq!(validator_nodes.count_in_shard_group(Epoch(1), all_shards).unwrap(), 0);
     assert_eq!(validator_nodes.count_in_shard_group(Epoch(1), first_half).unwrap(), 1);
-}
-
-#[derive(diesel::QueryableByName)]
-struct CommitteeRow {
-    #[diesel(sql_type = Integer)]
-    validator_node_id: i32,
-    #[diesel(sql_type = Integer)]
-    shard_start: i32,
-}
-
-/// A node that assigned an epoch's committees more than once holds duplicate rows, which must not stop the
-/// unique index being created. The most recent assignment is the one kept.
-#[test]
-fn migration_keeps_the_latest_of_duplicate_committee_assignments() {
-    const MIGRATIONS: EmbeddedMigrations = embed_migrations!("./migrations");
-    let mut conn = SqliteConnection::establish(":memory:").unwrap();
-    // Only the initial schema, as it was when the duplicates were written.
-    conn.run_next_migration(MIGRATIONS).unwrap();
-
-    sql_query("PRAGMA foreign_keys = ON").execute(&mut conn).unwrap();
-    sql_query(
-        "INSERT INTO validator_nodes (id, public_key, address, shard_key, start_epoch, fee_claim_public_key, power) \
-         VALUES (1, x'01', 'vn1', x'01', 0, x'01', 1), (2, x'02', 'vn2', x'02', 0, x'02', 1)",
-    )
-    .execute(&mut conn)
-    .unwrap();
-    sql_query(
-        "INSERT INTO committees (validator_node_id, epoch, shard_start, shard_end) VALUES (1, 5, 0, 255), (2, 5, 0, \
-         255), (1, 5, 128, 255), (1, 6, 0, 255)",
-    )
-    .execute(&mut conn)
-    .unwrap();
-
-    conn.run_pending_migrations(MIGRATIONS).unwrap();
-
-    let rows =
-        sql_query("SELECT validator_node_id, shard_start FROM committees WHERE epoch = 5 ORDER BY validator_node_id")
-            .load::<CommitteeRow>(&mut conn)
-            .unwrap();
-    let rows = rows
-        .into_iter()
-        .map(|r| (r.validator_node_id, r.shard_start))
-        .collect::<Vec<_>>();
-    assert_eq!(rows, vec![(1, 128), (2, 0)]);
-
-    let duplicate =
-        sql_query("INSERT INTO committees (validator_node_id, epoch, shard_start, shard_end) VALUES (1, 6, 0, 255)")
-            .execute(&mut conn);
-    assert!(
-        duplicate.is_err(),
-        "a second assignment for the same validator and epoch must be rejected"
-    );
 }
 
 /// Leader rotation and the validator set leaf both index a committee by position, so every node must read the members

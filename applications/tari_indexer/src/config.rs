@@ -219,8 +219,7 @@ pub struct IndexerConfig {
     /// longer, so a pruned transaction still resolves to its receipt-backed outcome. Set this well above the
     /// longest a client may take to poll for a result: once pruned, a transaction no longer appears in the
     /// recent-transactions listing or single transaction lookup, and a mempool rejection reason recorded for it is
-    /// lost. Transactions stored before this indexer recorded a terminal epoch carry epoch 0, so the first
-    /// pass on an indexer upgraded from a build that retained everything prunes that entire backlog.
+    /// lost.
     ///
     /// Pruning bounds database growth but does not return disk to the filesystem: SQLite reuses the
     /// freed pages rather than shrinking the file.
