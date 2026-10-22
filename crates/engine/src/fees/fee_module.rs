@@ -188,6 +188,16 @@ impl<TStore: StateReader> RuntimeModule<TStore> for FeeModule {
             .ok_or_else(|| RuntimeModuleError::Overflow("Overflow calculating transaction weight cost".to_string()))?;
         track.add_fee_charge(FeeSource::TransactionWeight, transaction_weight_cost);
 
+        // Charged before the fee intent runs, so a transaction pays for loading and pledging its
+        // inputs even when its main intent is rejected: the pledges have been made either way.
+        let input_load = track.declared_input_load();
+        let rates = self.fee_table.to_rates();
+        track.add_fee_charge(FeeSource::InputLoad, rates.input_load_cost(input_load.bytes));
+        track.add_fee_charge(
+            FeeSource::InputFanout,
+            rates.input_fanout_cost(input_load.bytes, input_load.fanout),
+        );
+
         Ok(())
     }
 

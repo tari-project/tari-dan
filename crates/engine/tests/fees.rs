@@ -8,11 +8,13 @@ use tari_engine_types::{
     fees::{FeeReceipt, FeeSource},
     limits::ENGINE_LIMITS,
 };
+use tari_ootle_common_types::InputDeclaration;
 use tari_ootle_transaction::{Epoch, INVOCATION_FLOOR, Transaction, args};
 use tari_template_lib::types::{
     Amount,
     ComponentAddress,
     NonFungibleAddress,
+    ObjectKey,
     constants::STEALTH_TARI_RESOURCE_ADDRESS,
 };
 use tari_template_test_tooling::{
@@ -1206,4 +1208,94 @@ fn persisted_substate_lengths_match_their_encoding() {
     );
 
     test.assert_substate_lengths_match_encoding();
+}
+
+/// Executes a fee-paying transaction from a funded account that declares the account as an input,
+/// taking its inputs to be pledged to `input_fanout` other shard groups. A main intent that calls a
+/// function the template lacks is rejected. Returns the fee receipt and the encoded bytes of the
+/// transaction's declared inputs.
+fn execute_declaring_the_account(input_fanout: u32, main_intent_fails: bool) -> (FeeReceipt, u64) {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let (account, owner_token, private_key) = test.create_funded_account();
+    test.enable_fees();
+    test.set_input_fanout(input_fanout);
+
+    let function = if main_intent_fails { "this_doesnt_exist" } else { "new" };
+    let transaction = Transaction::builder_localnet(Epoch(1))
+        .add_input(InputDeclaration::write(account))
+        .pay_fee_from_component(account, 100_000u64)
+        .call_function(test.get_template_address("State"), function, args![])
+        .build_and_seal(&private_key);
+    let input_bytes = test.declared_input_bytes(&transaction);
+
+    let result = test.execute_and_commit_on_success(transaction, vec![owner_token]);
+    (result.finalize.fee_receipt, input_bytes)
+}
+
+/// A declared input is charged by the encoded bytes of its value: once for loading it, and again for
+/// each other shard group it is pledged to.
+#[test]
+fn declared_inputs_are_charged_by_the_byte_and_by_each_further_group() {
+    let table = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS).fee_table().clone();
+
+    let (single_group, input_bytes) = execute_declaring_the_account(0, false);
+    assert!(input_bytes > 0);
+    assert_eq!(
+        single_group.fee_breakdown().get(FeeSource::InputLoad),
+        table.per_byte_storage_cost() * input_bytes / table.input_load_bytes_cost_divisor()
+    );
+    assert_eq!(single_group.fee_breakdown().get(FeeSource::InputFanout), 0);
+
+    let (three_groups, fanout_input_bytes) = execute_declaring_the_account(2, false);
+    assert_eq!(fanout_input_bytes, input_bytes);
+    assert_eq!(
+        three_groups.fee_breakdown().get(FeeSource::InputFanout),
+        table.per_byte_storage_cost() * input_bytes * 2 / table.input_fanout_bytes_cost_divisor()
+    );
+    assert_eq!(
+        three_groups.total_fees_charged() - single_group.total_fees_charged(),
+        three_groups.fee_breakdown().get(FeeSource::InputFanout),
+        "the fanout must move nothing but its own charge"
+    );
+}
+
+/// The inputs were loaded and pledged whatever the main intent went on to do, so a transaction whose
+/// main intent is rejected still pays for them.
+#[test]
+fn a_rejected_main_intent_still_pays_for_its_inputs() {
+    let (committed, _) = execute_declaring_the_account(1, false);
+    let (rejected, _) = execute_declaring_the_account(1, true);
+
+    for source in [FeeSource::InputLoad, FeeSource::InputFanout] {
+        assert!(committed.fee_breakdown().get(source) > 0);
+        assert_eq!(
+            rejected.fee_breakdown().get(source),
+            committed.fee_breakdown().get(source),
+            "{source:?}"
+        );
+    }
+}
+
+/// Consensus resolves every declared input before execution, so the engine refuses to price a
+/// transaction whose declared input it was not given.
+#[test]
+fn an_unresolved_declared_input_is_an_invariant_violation() {
+    let mut test = TemplateTest::new(CRATE_PATH, TEMPLATE_PATHS);
+    let (account, owner_token, private_key) = test.create_funded_account();
+    test.enable_fees();
+
+    let missing = ComponentAddress::from_array([0xab; ObjectKey::LENGTH]);
+    let err = test
+        .try_execute(
+            Transaction::builder_localnet(Epoch(1))
+                .add_input(InputDeclaration::read(missing))
+                .pay_fee_from_component(account, 100_000u64)
+                .build_and_seal(&private_key),
+            vec![owner_token],
+        )
+        .expect_err("a declared input missing from the state store must not execute");
+    assert!(
+        err.to_string().contains("was not resolved before execution"),
+        "unexpected error: {err}"
+    );
 }

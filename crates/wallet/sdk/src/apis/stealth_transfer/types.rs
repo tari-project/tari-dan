@@ -29,7 +29,8 @@ pub struct StealthTransferOutput {
 /// a template load and the WASM execution behind it — so the estimate must not be applied to them.
 ///
 /// The transaction's weight is missing because it is not known until the transaction is signed and
-/// sealed: [`Self::with_transaction_weight`] completes the shape once it is.
+/// sealed, and what its declared inputs weigh because measuring them takes the network:
+/// [`Self::with_transaction`] completes the shape once both are known.
 #[derive(Debug, Clone, Copy)]
 pub struct StaticallyPricedShape {
     num_inputs: usize,
@@ -54,14 +55,22 @@ impl StaticallyPricedShape {
     }
 
     /// The shape a fee estimate prices, given the weight of the sealed transaction this build
-    /// produced.
-    pub fn with_transaction_weight(&self, transaction_weight: u64) -> MergedStealthTransferShape {
+    /// produced, the encoded bytes of its declared inputs and the other shard groups they are pledged
+    /// to.
+    pub fn with_transaction(
+        &self,
+        transaction_weight: u64,
+        input_bytes: u64,
+        input_fanout: u32,
+    ) -> MergedStealthTransferShape {
         MergedStealthTransferShape {
             num_inputs: self.num_inputs,
             num_outputs: self.num_outputs,
             persisted_output_bytes: self.persisted_output_bytes,
             has_view_key: self.has_view_key,
             transaction_weight,
+            input_bytes,
+            input_fanout,
         }
     }
 }

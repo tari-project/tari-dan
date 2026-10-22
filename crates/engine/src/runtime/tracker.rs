@@ -123,6 +123,17 @@ pub enum ComputeFunding {
     Payment,
 }
 
+/// What a transaction's declared inputs weigh as every executing validator loads them and pledges
+/// them across shard groups. Measured before execution starts, from the declared inputs alone, so it
+/// is charged whatever the transaction goes on to do with them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DeclaredInputLoad {
+    /// Encoded bytes of the values of the declared inputs, global ones excepted.
+    pub bytes: u64,
+    /// The other shard groups the declared inputs are pledged to.
+    pub fanout: u32,
+}
+
 /// The transaction's execution state, shared by every frame that runs under it.
 ///
 /// A nested call re-enters the engine against the same tracker the outer frame is running on, so
@@ -133,6 +144,7 @@ pub struct StateTracker<TStore> {
     working_state: RefCell<Option<WorkingState<TStore>>>,
     fee_checkpoint: RefCell<Option<WorkingState<TStore>>>,
     transaction_weight: TransactionWeight,
+    declared_input_load: DeclaredInputLoad,
     wasm_metering_rate: WasmMeteringRate,
     /// Stealth transfers performed so far in the fee intent. Lives here rather than in `WorkingState` because the fee
     /// intent is delimited by `fee_checkpoint`, and because the checkpoint clones the working state — a count held
@@ -150,6 +162,7 @@ impl<TStore: StateReader> StateTracker<TStore> {
         transaction_hash: Hash32,
         intent_commitment: Hash32,
         transaction_weight: TransactionWeight,
+        declared_input_load: DeclaredInputLoad,
         wasm_metering_rate: WasmMeteringRate,
         burn_rate: ExhaustBurnRate,
         network: Network,
@@ -169,6 +182,7 @@ impl<TStore: StateReader> StateTracker<TStore> {
             ))),
             fee_checkpoint: RefCell::new(None),
             transaction_weight,
+            declared_input_load,
             wasm_metering_rate,
             fee_intent_stealth_transfers: Cell::new(0),
         }
@@ -176,6 +190,10 @@ impl<TStore: StateReader> StateTracker<TStore> {
 
     pub fn get_transaction_weight(&self) -> TransactionWeight {
         self.transaction_weight
+    }
+
+    pub fn declared_input_load(&self) -> DeclaredInputLoad {
+        self.declared_input_load
     }
 
     /// The compute this transaction may still consume, and what authorizes it. `None` when no bound

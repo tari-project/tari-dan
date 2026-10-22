@@ -1148,6 +1148,7 @@ where TConsensusSpec: ConsensusSpec
         let transaction = tx_rec.get_transaction(tx)?;
         let execution = self.execute_transaction(
             substate_store,
+            local_committee_info,
             state_anchor,
             transaction,
             change_set,
@@ -1286,6 +1287,7 @@ where TConsensusSpec: ConsensusSpec
     fn execute_transaction<TTx: StateStoreReadTransaction>(
         &self,
         substate_store: &PendingSubstateStore<TTx>,
+        local_committee_info: &CommitteeInfo,
         state_anchor: &LeafBlock,
         transaction: TransactionRecord,
         change_set: &ProposedBlockChangeSet,
@@ -1317,7 +1319,13 @@ where TConsensusSpec: ConsensusSpec
         );
 
         self.transaction_manager
-            .execute(substate_store, locked_epoch, state_anchor.epoch, pledged)
+            .execute(
+                substate_store,
+                local_committee_info,
+                locked_epoch,
+                state_anchor.epoch,
+                pledged,
+            )
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))
     }
 }

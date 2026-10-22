@@ -374,7 +374,11 @@ mod fee_estimate {
         }
     }
 
-    fn shape_of(build: &Build) -> ClaimBurnShape {
+    /// The groups beyond the first that a claim's declared inputs are taken to be pledged to: the TARI
+    /// resource and the claim's tombstone in two groups.
+    const INPUT_FANOUT: u32 = 1;
+
+    fn shape_of(test: &TemplateTest, build: &Build) -> ClaimBurnShape {
         ClaimBurnShape {
             persisted_output_bytes: build
                 .statement
@@ -384,18 +388,21 @@ mod fee_estimate {
                 .map(persisted_utxo_bytes)
                 .sum(),
             transaction_weight: build.transaction.calculate_transaction_weight().as_u64(),
+            input_bytes: test.declared_input_bytes(&build.transaction),
+            input_fanout: INPUT_FANOUT,
         }
     }
 
     #[test]
     fn the_estimate_bounds_what_the_engine_charges_a_claim() {
         let mut test = setup();
+        test.set_input_fanout(INPUT_FANOUT);
         let claimed = new_claim();
 
-        let shape = shape_of(&build(&test, &claimed, PLACEHOLDER_FEE));
+        let shape = shape_of(&test, &build(&test, &claimed, PLACEHOLDER_FEE));
         let settled = build(&test, &claimed, shape.estimate_fee(&rates(&test)));
         assert_eq!(
-            shape_of(&settled),
+            shape_of(&test, &settled),
             shape,
             "the fee a claim reveals must not move the shape it is priced at"
         );
@@ -440,7 +447,7 @@ mod fee_estimate {
     fn revealing_under_the_charge_rejects_the_claim() {
         let mut test = setup();
         let claimed = new_claim();
-        let shape = shape_of(&build(&test, &claimed, PLACEHOLDER_FEE));
+        let shape = shape_of(&test, &build(&test, &claimed, PLACEHOLDER_FEE));
         let too_little = shape.estimate_fee(&rates(&test)) / 2;
 
         let result = test

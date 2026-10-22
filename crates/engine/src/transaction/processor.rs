@@ -33,9 +33,10 @@ use tari_engine_types::{
     limits,
     lock::LockFlag,
     published_template::TemplateBlob,
+    substate::SubstateId,
     virtual_substate::VirtualSubstates,
 };
-use tari_ootle_common_types::{optional::Optional, services::template_provider::TemplateProvider};
+use tari_ootle_common_types::{InputDeclaration, optional::Optional, services::template_provider::TemplateProvider};
 use tari_ootle_template_metadata::MetadataHash;
 use tari_ootle_transaction::{
     AllocatableAddressType,
@@ -71,6 +72,7 @@ use crate::{
     runtime::{
         AuthParams,
         AuthorizationScope,
+        DeclaredInputLoad,
         LoadedComponent,
         NativeAction,
         PayFee,
@@ -95,6 +97,31 @@ const ACCOUNT_DEPOSIT_METHOD: &str = "deposit";
 
 pub type ModulesCollection<TStore> = Arc<[Box<dyn RuntimeModule<TStore>>]>;
 
+/// The encoded bytes of the values of `inputs`, measured the way the fee module tallies storage.
+///
+/// A global substate is held by every shard group and never pledged, so it is not counted. Every
+/// other declared input is resolved before execution — consensus aborts a transaction that names one
+/// it cannot find, and a dry run fails to fetch it — so one missing from `store` is an invariant
+/// violation.
+fn declared_input_bytes<'a, TStore: StateReader, I: IntoIterator<Item = &'a SubstateId>>(
+    store: &TStore,
+    inputs: I,
+) -> Result<u64, TransactionError> {
+    inputs
+        .into_iter()
+        .filter(|id| !id.is_global())
+        .try_fold(0u64, |total, id| {
+            let substate = store
+                .get_state(id)
+                .map_err(|err| TransactionErrorKind::InvariantError {
+                    details: format!("Declared input {id} was not resolved before execution: {err}"),
+                })?;
+            let len =
+                tari_bor::encoded_len_via_writer(substate.substate_value()).map_err(TransactionErrorKind::from)?;
+            Ok(total.saturating_add(len as u64))
+        })
+}
+
 pub struct TransactionProcessor<TStore, TTemplateProvider> {
     template_provider: Arc<TTemplateProvider>,
     state_db: TStore,
@@ -105,6 +132,9 @@ pub struct TransactionProcessor<TStore, TTemplateProvider> {
     wasm_metering_rate: WasmMeteringRate,
     /// The exhaust burn rate resolved for the execution epoch and seeded onto the fee state.
     burn_rate: ExhaustBurnRate,
+    /// The other shard groups the transaction's declared inputs are pledged to, which the caller
+    /// derives from the shard layout the transaction executes under.
+    input_fanout: u32,
     /// Selects the substate schema version for the execution epoch, which is scheduled per network.
     network: Network,
     dry_run: bool,
@@ -125,6 +155,7 @@ where
         claim_burn_proof_verifier: Arc<dyn ClaimProofVerifier + Send + Sync + 'static>,
         wasm_metering_rate: WasmMeteringRate,
         burn_rate: ExhaustBurnRate,
+        input_fanout: u32,
         network: Network,
         dry_run: bool,
     ) -> Self {
@@ -137,6 +168,7 @@ where
             claim_burn_proof_verifier,
             wasm_metering_rate,
             burn_rate,
+            input_fanout,
             network,
             dry_run,
         }
@@ -156,6 +188,7 @@ where
             claim_burn_proof_verifier,
             wasm_metering_rate,
             burn_rate,
+            input_fanout,
             network,
             dry_run,
         } = self;
@@ -188,6 +221,15 @@ where
         // building the declaration set, repeated here because an `Executable` may chain several.
         read_declared_inputs.retain(|id| !write_declared_inputs.contains(id));
 
+        let charged_inputs = executable
+            .charged_inputs_iter()
+            .map(InputDeclaration::into_substate_id)
+            .collect::<HashSet<_>>();
+        let declared_input_load = DeclaredInputLoad {
+            bytes: declared_input_bytes(&state_db, &charged_inputs)?,
+            fanout: input_fanout,
+        };
+
         let transaction_weight = executable.calculate_weight();
         let tracker = StateTracker::new(
             state_db,
@@ -197,6 +239,7 @@ where
             id.as_hash(),
             intent_commitment,
             transaction_weight,
+            declared_input_load,
             wasm_metering_rate,
             burn_rate,
             network,

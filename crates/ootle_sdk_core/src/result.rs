@@ -276,6 +276,8 @@ fn fee_source_name(source: FeeSource) -> &'static str {
         FeeSource::WasmExecution => "WasmExecution",
         FeeSource::TemplatePublish => "TemplatePublish",
         FeeSource::NativeExecution => "NativeExecution",
+        FeeSource::InputLoad => "InputLoad",
+        FeeSource::InputFanout => "InputFanout",
     }
 }
 

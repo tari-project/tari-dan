@@ -1,7 +1,12 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashSet, iter, path::Path, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    iter,
+    path::Path,
+    time::Duration,
+};
 
 use anyhow::anyhow;
 use axum_extra::headers::authorization::Bearer;
@@ -14,11 +19,11 @@ use tari_engine_types::{
     component::derive_component_address_from_public_key,
     confidential::ClaimBurnOutputData,
     fees::FEE_ESTIMATE_ALLOWANCE,
-    stealth::{ClaimBurnShape, persisted_utxo_bytes},
+    stealth::{ClaimBurnShape, declared_input_bytes, persisted_utxo_bytes},
     substate::SubstateId,
 };
 use tari_ootle_app_utilities::fee_tables::fee_rates_by_network;
-use tari_ootle_common_types::{Epoch, InputDeclaration, SubstateRequirement, optional::Optional};
+use tari_ootle_common_types::{Epoch, InputDeclaration, NumPreshards, SubstateRequirement, optional::Optional};
 use tari_ootle_transaction::{Transaction, args};
 use tari_ootle_wallet_crypto::{
     OutputWitness,
@@ -44,6 +49,7 @@ use tari_ootle_wallet_sdk::{
         TransactionContextKind,
         TransactionSubmittedEvent,
     },
+    network::WalletNetworkInterface,
 };
 use tari_ootle_wallet_sdk_services::transaction_service::TransactionServiceHandle;
 use tari_ootle_walletd_client::{
@@ -107,25 +113,28 @@ use tari_template_lib_types::{
 use tokio::task;
 
 use super::context::HandlerContext;
-use crate::handlers::{
-    auth::jwt::enforce_scopes,
-    helpers::{
-        complete_burn_proof_to_contents,
-        ensure_seed_recovery_finished,
-        faucet_already_claimed,
-        faucet_empty,
-        general_error,
-        get_account,
-        get_account_by_key_index,
-        get_account_or_default,
-        get_account_with_inputs,
-        invalid_params,
-        invalid_request,
-        not_found,
-        transaction_rejected,
-        validate_burn_proof_file_name,
-        wait_for_result,
-        wait_for_result_and_account,
+use crate::{
+    WalletSdk,
+    handlers::{
+        auth::jwt::enforce_scopes,
+        helpers::{
+            complete_burn_proof_to_contents,
+            ensure_seed_recovery_finished,
+            faucet_already_claimed,
+            faucet_empty,
+            general_error,
+            get_account,
+            get_account_by_key_index,
+            get_account_or_default,
+            get_account_with_inputs,
+            invalid_params,
+            invalid_request,
+            not_found,
+            transaction_rejected,
+            validate_burn_proof_file_name,
+            wait_for_result,
+            wait_for_result_and_account,
+        },
     },
 };
 
@@ -560,7 +569,17 @@ pub(crate) async fn execute_claim_burn(
     is_dry_run: bool,
     proof_file_name: Option<String>,
 ) -> Result<ClaimBurnResponse, anyhow::Error> {
-    let transaction = build_claim_burn_transaction(sdk, account, proof_contents, max_fee, max_epoch, is_dry_run)?;
+    // A claim declares no input of its own; the TARI resource is the one every transaction declares.
+    let input_pricing = DeclaredInputPricing::fetch(sdk, [SubstateId::from(TARI_TOKEN)]).await?;
+    let transaction = build_claim_burn_transaction(
+        sdk,
+        account,
+        proof_contents,
+        max_fee,
+        max_epoch,
+        is_dry_run,
+        &input_pricing,
+    )?;
 
     if is_dry_run {
         let transaction_id = transaction.calculate_id();
@@ -599,6 +618,7 @@ fn build_claim_burn_transaction(
     max_fee: u64,
     max_epoch: Epoch,
     is_dry_run: bool,
+    input_pricing: &DeclaredInputPricing,
 ) -> Result<Transaction, anyhow::Error> {
     let ClaimBurnProofContents {
         encrypted_data: claimed_encrypted_data,
@@ -755,10 +775,11 @@ fn build_claim_burn_transaction(
     // the claimant. `max_fee` is therefore a ceiling: it can come from a dry run that the
     // configured indexer answers, so the claim is priced here and reveals no more than that.
     //
-    // The transaction's weight and the stored output's size follow the claim's shape alone, so a probe
-    // built at the smallest fee a claim can reveal prices the claim at any fee.
+    // The transaction's weight, the stored output's size and the declared inputs follow the claim's
+    // shape alone, so a probe built at the smallest fee a claim can reveal prices the claim at any fee.
     const PROBE_FEE: u64 = 1;
     let (probe, statement) = build(PROBE_FEE)?;
+    let (input_bytes, input_fanout) = input_pricing.measure(&probe);
     let price = ClaimBurnShape {
         persisted_output_bytes: statement
             .outputs_statement
@@ -767,6 +788,8 @@ fn build_claim_burn_transaction(
             .map(persisted_utxo_bytes)
             .sum(),
         transaction_weight: probe.calculate_transaction_weight().as_u64(),
+        input_bytes,
+        input_fanout,
     }
     .estimate_fee(&fee_rates_by_network(network))
     .saturating_add(FEE_ESTIMATE_ALLOWANCE);
@@ -1514,8 +1537,18 @@ pub async fn handle_stealth_transfer(
                 // ceiling would have them reveal — unrefundably — far more than the transfer costs.
                 let mut settled_statically = false;
                 if let Some(shape) = transfer.statically_priced_shape.filter(|_| settle_statically) {
+                    let (input_bytes, input_fanout) = DeclaredInputPricing::fetch(
+                        &sdk,
+                        transaction.all_inputs_iter().map(|input| input.substate_id().clone()),
+                    )
+                    .await?
+                    .measure(&transaction);
                     let estimate = shape
-                        .with_transaction_weight(transaction.calculate_transaction_weight().as_u64())
+                        .with_transaction(
+                            transaction.calculate_transaction_weight().as_u64(),
+                            input_bytes,
+                            input_fanout,
+                        )
                         .estimate_fee(&fee_rates)
                         .saturating_add(FEE_ESTIMATE_ALLOWANCE);
                     if estimate != params.max_fee && static_rounds < MAX_STATIC_SETTLE_ROUNDS {
@@ -1678,6 +1711,66 @@ enum FeeEstimateStep {
 /// been shown to cover itself. A dry-run round shows that for the figure the round before it named,
 /// and the static estimate shows it without a round trip. Unverified, the fee under test is the
 /// caller's guess.
+/// What a static fee estimate needs to price a transaction's declared inputs as the engine charges
+/// them: the encoded bytes of the substates it declares, read from the network, and the shard layout
+/// they are pledged across.
+struct DeclaredInputPricing {
+    value_bytes: HashMap<SubstateId, u64>,
+    num_preshards: NumPreshards,
+    num_committees: u32,
+}
+
+impl DeclaredInputPricing {
+    /// Reads the substates `ids` names from the network, and the layout the latest end-of-epoch
+    /// checkpoints describe, one per shard group.
+    ///
+    /// Before the network has ended an epoch there is no checkpoint to read the layout from, so each
+    /// shard is taken to be a group of its own, which no layout can exceed.
+    async fn fetch<I: IntoIterator<Item = SubstateId>>(sdk: &WalletSdk, ids: I) -> Result<Self, anyhow::Error> {
+        let ids = ids.into_iter().filter(|id| !id.is_global()).collect::<HashSet<_>>();
+        let value_bytes = sdk
+            .substate_api()
+            .get_substates_from_network(ids.into_iter().collect())
+            .await?
+            .into_iter()
+            .map(|(id, substate)| (id, declared_input_bytes(substate.substate_value())))
+            .collect();
+
+        let num_preshards = NumPreshards::current();
+        let num_shard_groups = sdk
+            .get_network_interface()
+            .get_latest_shard_group_checkpoints()
+            .await?
+            .len();
+        let num_committees = match u32::try_from(num_shard_groups) {
+            Ok(0) | Err(_) => num_preshards.as_u32(),
+            Ok(n) => n,
+        };
+        Ok(Self {
+            value_bytes,
+            num_preshards,
+            num_committees,
+        })
+    }
+
+    /// The encoded bytes of `transaction`'s declared inputs and the other shard groups they are
+    /// pledged to. A declared input the network does not hold adds no bytes: consensus aborts the
+    /// transaction before the engine charges it anything.
+    fn measure(&self, transaction: &Transaction) -> (u64, u32) {
+        let input_bytes = transaction
+            .all_inputs_iter()
+            .map(|input| input.substate_id().clone())
+            .collect::<HashSet<_>>()
+            .iter()
+            .filter_map(|id| self.value_bytes.get(id))
+            .sum();
+        (
+            input_bytes,
+            transaction.input_fanout(self.num_preshards, self.num_committees),
+        )
+    }
+}
+
 fn next_fee_estimate_step(
     built_at: u64,
     charged: u64,
@@ -3226,8 +3319,19 @@ mod claim_burn_fee_tests {
             .amount
     }
 
+    /// Prices the TARI resource every claim declares at a nominal size, on a network of two shard
+    /// groups, so the input charges enter the price under test.
+    fn input_pricing() -> DeclaredInputPricing {
+        DeclaredInputPricing {
+            value_bytes: HashMap::from([(SubstateId::from(TARI_TOKEN), 400)]),
+            num_preshards: NumPreshards::current(),
+            num_committees: 2,
+        }
+    }
+
     /// What this wallet prices the claim at, from the transaction it built.
     fn local_price(transaction: &Transaction) -> u64 {
+        let (input_bytes, input_fanout) = input_pricing().measure(transaction);
         ClaimBurnShape {
             persisted_output_bytes: claim_statement(transaction)
                 .outputs_statement
@@ -3236,6 +3340,8 @@ mod claim_burn_fee_tests {
                 .map(persisted_utxo_bytes)
                 .sum(),
             transaction_weight: transaction.calculate_transaction_weight().as_u64(),
+            input_bytes,
+            input_fanout,
         }
         .estimate_fee(&fee_rates_by_network(Network::LocalNet))
         .saturating_add(FEE_ESTIMATE_ALLOWANCE)
@@ -3248,8 +3354,16 @@ mod claim_burn_fee_tests {
         let test = setup();
         let proof = burn_to_account(&test, CLAIMED_VALUE);
 
-        let transaction =
-            build_claim_burn_transaction(&test.sdk, &test.account, proof, CLAIMED_VALUE - 1, Epoch(10), false).unwrap();
+        let transaction = build_claim_burn_transaction(
+            &test.sdk,
+            &test.account,
+            proof,
+            CLAIMED_VALUE - 1,
+            Epoch(10),
+            false,
+            &input_pricing(),
+        )
+        .unwrap();
 
         let price = local_price(&transaction);
         assert_eq!(
@@ -3269,8 +3383,16 @@ mod claim_burn_fee_tests {
         let test = setup();
         for max_fee in [CLAIMED_VALUE, u64::MAX] {
             let proof = burn_to_account(&test, CLAIMED_VALUE);
-            let transaction =
-                build_claim_burn_transaction(&test.sdk, &test.account, proof, max_fee, Epoch(10), false).unwrap();
+            let transaction = build_claim_burn_transaction(
+                &test.sdk,
+                &test.account,
+                proof,
+                max_fee,
+                Epoch(10),
+                false,
+                &input_pricing(),
+            )
+            .unwrap();
             assert_eq!(revealed_fee(&transaction), Amount::from(local_price(&transaction)));
         }
     }
@@ -3280,7 +3402,9 @@ mod claim_burn_fee_tests {
         let test = setup();
         let proof = burn_to_account(&test, CLAIMED_VALUE);
 
-        let transaction = build_claim_burn_transaction(&test.sdk, &test.account, proof, 100, Epoch(10), false).unwrap();
+        let transaction =
+            build_claim_burn_transaction(&test.sdk, &test.account, proof, 100, Epoch(10), false, &input_pricing())
+                .unwrap();
 
         assert!(local_price(&transaction) > 100);
         assert_eq!(revealed_fee(&transaction), Amount::from(100u64));

@@ -35,6 +35,9 @@ pub trait TransactionExecutor<TStore> {
     type Error: std::error::Error + Send + Sync + 'static;
 
     /// Executes `transaction`, resolving every template it calls from `template_provider`.
+    ///
+    /// `input_fanout` is [`Transaction::input_fanout`] for the shard layout the transaction executes
+    /// under.
     fn execute<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>>(
         &self,
         transaction: &Transaction,
@@ -42,6 +45,7 @@ pub trait TransactionExecutor<TStore> {
         state_store: TStore,
         virtual_substates: VirtualSubstates,
         burn_rate: ExhaustBurnRate,
+        input_fanout: u32,
     ) -> Result<ExecutionOutput, Self::Error>;
 }
 
@@ -138,6 +142,7 @@ impl<TStore: StateReader + Clone + 'static> TransactionExecutor<TStore> for Tari
         state_store: TStore,
         virtual_substates: VirtualSubstates,
         burn_rate: ExhaustBurnRate,
+        input_fanout: u32,
     ) -> Result<ExecutionOutput, Self::Error> {
         // Include signature public key badges for all transaction signers in the initial auth scope
         // NOTE: we assume all signatures have already been validated.
@@ -158,6 +163,7 @@ impl<TStore: StateReader + Clone + 'static> TransactionExecutor<TStore> for Tari
             self.claim_burn_proof_verifier.clone(),
             self.wasm_metering_rate,
             burn_rate,
+            input_fanout,
             self.network,
             self.dry_run,
         );

@@ -135,6 +135,7 @@ impl DryRunTransactionProcessor {
 
         // Estimate the burn at the rate in effect for the epoch the transaction executes in.
         let burn_rate = resolve_exhaust_burn_rate_for_epoch(&self.substate_manager, self.network, epoch).await;
+        let input_fanout = self.input_fanout(&transaction, epoch).await?;
 
         let mut state_store = new_memory_store();
         state_store.set_many(found_substates)?;
@@ -162,6 +163,7 @@ impl DryRunTransactionProcessor {
                 state_store.into_read_only(),
                 virtual_substates,
                 burn_rate,
+                input_fanout,
             )
         })
         .await??;
@@ -186,6 +188,17 @@ impl DryRunTransactionProcessor {
             .into_iter()
             .map(|(id, fetched)| (id, fetched.substate))
             .collect())
+    }
+
+    /// [`Transaction::input_fanout`] under `epoch`'s shard layout.
+    async fn input_fanout(
+        &self,
+        transaction: &Transaction,
+        epoch: Epoch,
+    ) -> Result<u32, DryRunTransactionProcessorError> {
+        let num_preshards = self.epoch_manager.get_network_description().await?.num_preshards;
+        let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
+        Ok(transaction.input_fanout(num_preshards, num_committees))
     }
 
     /// The epoch the validators would execute the transaction in. Until the state sync has observed

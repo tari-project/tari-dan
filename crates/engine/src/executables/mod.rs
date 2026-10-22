@@ -30,6 +30,13 @@ pub trait Executable {
 
     fn all_inputs_iter(&self) -> impl Iterator<Item = InputDeclaration> + '_;
 
+    /// The declared inputs the transaction pays to load and pledge. An executable that declares
+    /// more than its transaction carries — a test harness standing in for consensus's input
+    /// resolution — prices only the transaction's own declarations.
+    fn charged_inputs_iter(&self) -> impl Iterator<Item = InputDeclaration> + '_ {
+        self.all_inputs_iter()
+    }
+
     /// Returns the key the executable acts as wherever the engine needs a single signer, if it has one.
     fn main_signer(&self) -> Option<RistrettoPublicKeyBytes> {
         self.signers_iter().next().copied()
