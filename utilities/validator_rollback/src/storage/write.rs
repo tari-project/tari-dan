@@ -22,7 +22,6 @@ use tari_state_store_rocksdb::{
     column_families::{
         block,
         block::BlockCf,
-        block_transaction_execution::BlockTransactionExecutionCf,
         bookkeeping::{
             HighPcCf,
             HighTcCf,
@@ -116,19 +115,6 @@ where
         tx.transaction_pool_state_updates_remove_any_by_block_id(block_id)?;
         tx.lock_conflicts_remove_by_block_id(block_id)?;
 
-        // A database written before the block index outlived transaction finalization has no
-        // index entry for a finalized transaction's execution, so the block-id cascade above
-        // reaches nothing for it. Deleting at this block's own key covers those rows: it is
-        // exact for a LocalOnly execution recorded here and a no-op otherwise, where the
-        // block that did record it deletes its own row on its turn through this loop. An
-        // execution that survives the rollback is worse than a leaked row — its block is no
-        // longer in the pending chain index, so `block_transaction_executions_get_pending_for_block`
-        // reads it as committed, hence an ancestor, hence reusable, and a re-sequenced
-        // transaction reuses an execution pinned to already-spent input versions.
-        let exec_cf = tx.db().cf(BlockTransactionExecutionCf)?;
-        for tx_id in block.all_transaction_ids() {
-            exec_cf.delete(&(*tx_id, *block_id, *epoch, *height), OPERATION)?;
-        }
         let finalized_link_cf = tx.db().cf(FinalizedTransactionLinkCf)?;
         // Finalising commands mark this block as where the transaction's finalize QC
         // committed, so `FinalizedTransactionLinkCf[tx_id]` was written here. Deleting it

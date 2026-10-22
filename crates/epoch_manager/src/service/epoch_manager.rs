@@ -179,36 +179,6 @@ where TSpec: EpochManagerSpec
         Ok(validator_set_hash)
     }
 
-    /// Commits the validator set of every epoch after the highest locked one, up to the current epoch, whose committees
-    /// are assigned but whose set is not stored. Consensus can trail the epoch manager by several epochs, and each
-    /// end-of-epoch block it has yet to commit names the next epoch's set, so a node needs all of them before it can
-    /// propose or ratify those blocks.
-    pub fn ensure_unlocked_validator_sets(&mut self) -> Result<(), EpochManagerError> {
-        for epoch in self.highest_locked_epoch.as_u64() + 1..=self.current_epoch().as_u64() {
-            self.ensure_validator_set(Epoch(epoch))?;
-        }
-        Ok(())
-    }
-
-    fn ensure_validator_set(&self, epoch: Epoch) -> Result<(), EpochManagerError> {
-        let mut tx = self.global_db.create_transaction()?;
-        let Some(data) = self.global_db.epochs(&mut tx).get_epoch_data(epoch)? else {
-            return Ok(());
-        };
-        if data.validator_set_hash.is_some() {
-            return Ok(());
-        }
-        let num_validators = self.global_db.validator_nodes(&mut tx).count(epoch)?;
-        let num_committees = calculate_num_committees(num_validators, self.config.committee_size);
-        let validator_set_hash = self.commit_validator_set(&mut tx, epoch, num_committees)?;
-        tx.commit()?;
-        info!(
-            target: LOG_TARGET,
-            "Committed validator set {validator_set_hash} for {epoch}, whose committees had none stored"
-        );
-        Ok(())
-    }
-
     pub fn add_validator_node_registration(
         &mut self,
         activation_epoch: Epoch,
@@ -804,77 +774,6 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![public_key(1)]
         );
-    }
-
-    /// Leaves `epoch`'s committees assigned but its validator set unstored.
-    fn forget_validator_set(manager: &EpochManager<TestSpec>, epoch: Epoch) {
-        use diesel::{RunQueryDsl, sql_types::BigInt};
-
-        let mut tx = manager.global_db.create_transaction().unwrap();
-        diesel::sql_query("DELETE FROM validator_set_leaves WHERE epoch = ?")
-            .bind::<BigInt, _>(epoch.as_u64() as i64)
-            .execute(tx.connection())
-            .unwrap();
-        diesel::sql_query("UPDATE epochs SET validator_set_hash = NULL WHERE epoch = ?")
-            .bind::<BigInt, _>(epoch.as_u64() as i64)
-            .execute(tx.connection())
-            .unwrap();
-        tx.commit().unwrap();
-    }
-
-    #[test]
-    fn every_unlocked_epoch_assigned_without_a_validator_set_gets_one() {
-        let mut manager = create_epoch_manager();
-        for byte in 1..=25 {
-            register(&manager, byte * 10, Epoch(1));
-        }
-        manager.advance_to_epoch(Epoch(2), FixedHash::zero()).unwrap();
-        manager.advance_to_epoch(Epoch(3), FixedHash::zero()).unwrap();
-        manager.lock_epoch(Epoch(1)).unwrap();
-        let assigned = [Epoch(2), Epoch(3)].map(|epoch| manager.get_validator_set_hash(epoch).unwrap());
-        for epoch in [Epoch(2), Epoch(3)] {
-            forget_validator_set(&manager, epoch);
-            assert!(matches!(
-                manager.get_validator_set_hash(epoch),
-                Err(EpochManagerError::NoValidatorSet { epoch: e }) if e == epoch
-            ));
-        }
-
-        manager.ensure_unlocked_validator_sets().unwrap();
-
-        for (epoch, assigned) in [Epoch(2), Epoch(3)].into_iter().zip(assigned) {
-            assert_eq!(manager.get_validator_set_hash(epoch).unwrap(), assigned);
-            for (shard_group, _) in committees(&manager, epoch, 2) {
-                let proof = manager.get_validator_set_committee_proof(epoch, shard_group).unwrap();
-                proof.verify(&assigned).unwrap();
-            }
-        }
-    }
-
-    #[test]
-    fn a_locked_epoch_is_left_without_a_validator_set() {
-        let mut manager = create_epoch_manager();
-        register(&manager, 1, Epoch(1));
-        manager.advance_to_epoch(Epoch(2), FixedHash::zero()).unwrap();
-        manager.advance_to_epoch(Epoch(3), FixedHash::zero()).unwrap();
-        manager.lock_epoch(Epoch(2)).unwrap();
-        forget_validator_set(&manager, Epoch(2));
-        forget_validator_set(&manager, Epoch(3));
-
-        manager.ensure_unlocked_validator_sets().unwrap();
-
-        assert!(matches!(
-            manager.get_validator_set_hash(Epoch(2)),
-            Err(EpochManagerError::NoValidatorSet { .. })
-        ));
-        manager.get_validator_set_hash(Epoch(3)).unwrap();
-    }
-
-    #[test]
-    fn a_node_with_no_current_epoch_has_no_validator_set_to_commit() {
-        let mut manager = create_epoch_manager();
-        manager.ensure_unlocked_validator_sets().unwrap();
-        assert!(manager.get_validator_set_hash(Epoch::zero()).is_err());
     }
 
     #[test]

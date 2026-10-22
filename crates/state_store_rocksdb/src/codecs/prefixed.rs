@@ -13,10 +13,7 @@ use crate::{
 pub enum KeyPrefix {
     Blocks = 0,
     BlockEpochHeightIndex = 1,
-    // 2, 3 and 31 hold the per-change and per-shard tables of schema version 1, read only by the migration to
-    // version 2.
-    BlockDiffs = 2,
-    BlockDiffsBySubstateId = 3,
+    // 2 and 3 are unused
     BlockTransactionExecutions = 4,
     BlockTransactionExecutionByBlockIdIndex = 5,
     ProposalCertificates = 6,
@@ -44,12 +41,8 @@ pub enum KeyPrefix {
     ForeignProposalMissingTransactions = 28,
     MissingTransactionBlockIdIndex = 29,
     ParkedBlocks = 30,
-    PendingStateTreeDiff = 31,
-    // 32, 34, 35 and 49 hold the per-lock tables of schema version 0, read only by the migration to version 1.
-    SubstateLocks = 32,
-    // 33 was SubstateLockHeadIndex
-    SubstateLocksBlockIdIndex = 34,
-    SubstateLockSubstateIdIndex = 35,
+    // 31 is unused
+    // 32 to 35 are unused
     Substates = 36,
     SubstatesHeadIndex = 37,
     SubstatesUnprunedDownedValuesIndex = 38,
@@ -63,7 +56,7 @@ pub enum KeyPrefix {
     DiagnosticEvents = 46,
     VoteEquivocations = 47,
     ValidatorLivenessLog = 48,
-    SubstateLockChainOrderIndex = 49,
+    // 49 is unused
     ForeignProposalMissingTransactionsBlockIdIndex = 50,
     StateSyncRewindPoint = 51,
     StateVersionProofs = 52,

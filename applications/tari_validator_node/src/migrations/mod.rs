@@ -7,21 +7,19 @@
 //! only take effect for freshly bootstrapped databases. Each database records the schema version it
 //! was last brought up to ([`DatabaseMigrationVersion`]); [`migrate`] runs the steps between that
 //! stored version and [`CURRENT_VERSION`]. A fresh database skips migrations entirely - it is stamped
-//! directly with `CURRENT_VERSION` once the genesis state is laid down.
+//! directly with `CURRENT_VERSION` once the genesis state is laid down. No migration is defined, so
+//! a node refuses a database at any version other than `CURRENT_VERSION`.
 //!
 //! # Adding a migration
 //!
-//! To take the schema from version `N` to `N + 1`:
-//!
-//! 1. Add `v{N+1}.rs` with `pub fn migrate(...) -> ...` performing the upgrade, and declare it here with `mod v{N+1};`.
-//! 2. Bump `CURRENT_SCHEMA_VERSION` (in the state store, beside `DatabaseMigrationVersion`) to `N + 1`.
-//! 3. Apply it from [`migrate`]'s step loop, in an arm keyed by the version it upgrades *from*. The loop steps the
-//!    stored version up one migration at a time, persisting each version it reaches:
+//! To take the schema from version `N` to `N + 1`, add `v{N+1}.rs` with `pub fn migrate(...)`, bump
+//! `CURRENT_SCHEMA_VERSION` (in the state store, beside `DatabaseMigrationVersion`), and step the stored version up
+//! one migration at a time in [`migrate`], persisting each version it reaches:
 //!
 //! ```ignore
 //! while version < CURRENT_VERSION {
 //!     match version {
-//!         2 => v3::migrate(tx)?,
+//!         4 => v5::migrate(tx)?,
 //!         other => anyhow::bail!("no migration defined for database version {other}"),
 //!     }
 //!     version += 1;
@@ -53,10 +51,6 @@ use tari_state_store_rocksdb::{
 
 use crate::genesis_state::create_genesis_state;
 
-mod v1;
-mod v2;
-mod v3;
-
 const LOG_TARGET: &str = "tari::validator_node::migrations";
 
 pub fn migrate<TAddr: NodeAddressable + 'static>(
@@ -87,27 +81,11 @@ pub fn migrate<TAddr: NodeAddressable + 'static>(
                  or delete the database"
             );
         },
-        Some(mut version) => {
-            while version < CURRENT_VERSION {
-                info!(
-                    target: LOG_TARGET,
-                    "Migrating database from version {version} to {}", version + 1
-                );
-                match version {
-                    0 => v1::migrate(tx)?,
-                    1 => v2::migrate(tx)?,
-                    2 => v3::migrate(tx)?,
-                    other => anyhow::bail!(
-                        "Database is at migration version {other}, and no migration upgrades it to version {}. Delete \
-                         the database and resync.",
-                        other + 1
-                    ),
-                }
-                version += 1;
-                tx.db()
-                    .cf(DatabaseMigrationVersion)?
-                    .put(&ByteColumn, &version, OPERATION)?;
-            }
+        Some(version) => {
+            anyhow::bail!(
+                "Database schema version {version} is older than this binary's {CURRENT_VERSION}, and no migration \
+                 upgrades it. Delete the database and resync."
+            );
         },
         // A fresh database: lay down the genesis state and stamp the current version.
         None => {
@@ -170,6 +148,14 @@ mod tests {
         let (db, _tmp) = store_stamped(CURRENT_VERSION);
         run_migrate(&db).unwrap();
         assert_eq!(stored_version(&db), CURRENT_VERSION);
+    }
+
+    #[test]
+    fn a_database_older_than_the_binary_is_refused() {
+        let (db, _tmp) = store_stamped(CURRENT_VERSION - 1);
+        let err = run_migrate(&db).unwrap_err();
+        assert!(err.to_string().contains("Delete the database and resync"), "{err}");
+        assert_eq!(stored_version(&db), CURRENT_VERSION - 1);
     }
 
     #[test]
