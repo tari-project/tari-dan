@@ -620,7 +620,7 @@ can create a change output back to the deposit account with no memo. Without spe
 an unreferenced "deposit" into manual review. Record the outputs your own transactions create:
 
 ```javascript
-// After each of your own transactions (sweeps, withdrawals) is Accepted:
+// After each of your own transactions (sweeps, withdrawals) is Accepted or OnlyFeeAccepted:
 const tx = await walletRpc("transactions.get", { transaction_id });
 // A fee-only result also commits the outputs built into the fee intent, including a stealth transfer's change.
 const diff = tx.result?.result?.Accept ?? tx.result?.result?.AcceptFeeRejectRest?.[0];
@@ -727,6 +727,8 @@ if (result.timed_out) {
   // Not an outcome. The status is the one from before the wait. Check again later; never resubmit on a timeout.
 } else if (result.status === "Accepted") {
   // Withdrawal paid
+} else if (result.status === "OnlyFeeAccepted") {
+  // Manual review: the customer may have been paid. Never refund or resend this automatically.
 } else {
   // Failed: see "Transaction status" below for which failures are safe to resubmit
 }
