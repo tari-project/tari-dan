@@ -130,8 +130,8 @@ pub enum PasswordManagerApiError {
     #[error("Failed to generate password for cipher seed: {0}")]
     PasswordGeneration(String),
     #[error(
-        "OS keyring not supported on this device. You may have to specify an encryption password by using the \
-         `--password` cli option."
+        "The OS keyring is not available on this device. Provide the seed encryption password with the \
+         `override_keyring_password` config setting (`--override-keyring-password` for tari_ootle_walletd)."
     )]
     FailedToAccessKeyRing,
     #[error(transparent)]

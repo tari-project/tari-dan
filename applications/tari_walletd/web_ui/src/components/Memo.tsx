@@ -28,7 +28,7 @@ export function Memo({ memo }: MemoProps) {
     try {
       const bytes = hexToU8(memo.PayRefAndBytes);
       const len = bytes[0];
-      const payRef = tryDecodeUtf8(bytes.slice(1, len)) || Buffer.from(bytes.slice(1, len)).toString("hex");
+      const payRef = tryDecodeUtf8(bytes.slice(1, 1 + len)) || Buffer.from(bytes.slice(1, 1 + len)).toString("hex");
       const message = bytes.length >= 1 + len ? tryDecodeUtf8(bytes.slice(1 + len)) : [];
       return (
         <span>

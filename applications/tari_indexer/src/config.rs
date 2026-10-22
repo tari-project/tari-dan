@@ -511,6 +511,7 @@ impl SubConfigPath for IndexerConfig {
 /// the per-minute throughput intact while letting clients recover from a burst
 /// in seconds rather than a full minute.
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct IndexerRateLimitsConfig {
     /// On by default, since the API is public. Local networks such as the swarm turn it off.
     pub enabled: bool,
