@@ -434,8 +434,8 @@ CREATE UNIQUE INDEX account_balance_changes_vault_version_uniq
 -- Invariants:
 --   * `unsigned_transaction` is the transaction frozen at creation, stored as
 --     JSON like `transactions.transaction_json`: inputs already detected and
---     `main_signer` already settled to the value `seal()` will produce. It is immutable once written, so the approver views exactly what
---     submit seals.
+--     `main_signer` already settled to the value `seal()` will produce. It is
+--     immutable once written, so the approver views exactly what submit seals.
 --   * `seal_signer` / `other_signers` are the caller's choice of who pays and
 --     co-signs. Stealth spend keys are deliberately absent: they are derived
 --     at submit from the `lock_ids` below, so a caller cannot ask the wallet
