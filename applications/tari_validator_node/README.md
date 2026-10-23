@@ -35,7 +35,8 @@ Source code for this is in the `tari_validator_node_web_ui`
 
 Server is running by default on `127.0.0.1:18200`, at `/json_rpc`. It exposes every operator function without
 authentication, so keep it off public interfaces. Cross-origin browser requests are refused unless the node is started
-with `--enable-permissive-cors`.
+with `--enable-permissive-cors`. Requests must address the node by `localhost`, an IP address or a name listed in
+`validator_node.json_rpc_allowed_hosts` (`--json-rpc-allowed-host`); any other host name gets `421 Misdirected Request`.
 
 - submit_transaction
 - register_template

@@ -53,6 +53,10 @@ pub struct Cli {
     /// Allow cross-origin browser requests to the JSON-RPC
     #[clap(long)]
     pub enable_permissive_cors: bool,
+    /// A host name, beyond localhost and IP addresses, that requests may address the JSON-RPC and web UI by (e.g. the
+    /// name a reverse proxy forwards). Repeat it, or separate names with commas. `*` accepts every name.
+    #[clap(long = "json-rpc-allowed-host", value_delimiter = ',')]
+    pub json_rpc_allowed_hosts: Vec<String>,
     #[clap(long, alias = "node-grpc", short = 'g', env = "TARI_VN_MINOTARI_NODE_GRPC_URL")]
     pub epoch_oracle_minotari_node_grpc_url: Option<Url>,
     #[clap(long, alias = "oracle-config")]
@@ -115,6 +119,12 @@ impl ConfigOverrideProvider for Cli {
 
         if self.enable_permissive_cors {
             overrides.push(("validator_node.enable_permissive_cors".to_string(), "true".to_string()));
+        }
+        if !self.json_rpc_allowed_hosts.is_empty() {
+            overrides.push((
+                "validator_node.json_rpc_allowed_hosts".to_string(),
+                self.json_rpc_allowed_hosts.join(","),
+            ));
         }
         if !self.peer_seeds.is_empty() {
             overrides.push((

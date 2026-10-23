@@ -1,12 +1,12 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-//! The host names a request may address the wallet daemon by.
+//! The host names a request may address a local HTTP service by.
 //!
 //! A browser enforces the same-origin policy by host *name*, not by the address the name resolves
-//! to. A page whose name resolves to the daemon's address is same-origin with itself, so its
-//! requests reach the daemon with no CORS check, carrying that foreign name in `Host`. Serving only
-//! names the operator recognises keeps such pages out, whatever the authentication mode.
+//! to. A page whose name resolves to the service's address is same-origin with itself, so its
+//! requests reach the service with no CORS check, carrying that foreign name in `Host`. Serving only
+//! names the operator recognises keeps such pages out, whatever the CORS or authentication setting.
 
 use std::net::IpAddr;
 
@@ -18,37 +18,37 @@ use axum::{
 };
 use log::*;
 
-use crate::config::WalletDaemonConfig;
-
-const LOG_TARGET: &str = "tari::ootle::wallet_daemon::allowed_hosts";
+const LOG_TARGET: &str = "tari::ootle::app_utilities::allowed_hosts";
 
 #[derive(Debug, Clone)]
 pub struct AllowedHosts {
     any: bool,
     names: Vec<String>,
+    setting: &'static str,
 }
 
 impl AllowedHosts {
-    /// Allows the names listed in `allowed_hosts` (`*` allows every name) and the host of the
-    /// WebAuthn relying-party origin, beside the names [`Self::permits`] always accepts.
-    pub fn from_config(config: &WalletDaemonConfig) -> Self {
-        let mut names = config
-            .allowed_hosts
-            .iter()
-            .map(|host| host.trim().to_ascii_lowercase())
+    /// Allows `names` (`*` allows every name) beside the names [`Self::permits`] always accepts.
+    /// `setting` is the configuration key that lists the names; a refusal logs it so the operator
+    /// knows where to add a name.
+    pub fn new<I, S>(setting: &'static str, names: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let names = names
+            .into_iter()
+            .map(|host| host.as_ref().trim().to_ascii_lowercase())
             .filter(|host| !host.is_empty())
             .collect::<Vec<_>>();
         let any = names.iter().any(|host| host == "*");
-        if let Some(host) = config.webauthn.rp_origin.as_ref().and_then(|origin| origin.host_str()) {
-            names.push(host.to_ascii_lowercase());
-        }
-        Self { any, names }
+        Self { any, names, setting }
     }
 
     /// True if a request naming `host` (without a port) may be served.
     ///
     /// An IP literal is always accepted: it names no domain whose resolution someone else controls,
-    /// so a page reaching the daemon by it is either served from that address or cross-origin and
+    /// so a page reaching the service by it is either served from that address or cross-origin and
     /// held to CORS. The same holds for `localhost` and its subdomains, which resolve to loopback by
     /// definition.
     pub fn permits(&self, host: &str) -> bool {
@@ -81,9 +81,10 @@ pub async fn check_host(State(allowed): State<AllowedHosts>, request: Request, n
         Some(Ok(authority)) => {
             warn!(
                 target: LOG_TARGET,
-                "🚫 Refused a request addressed to '{}'. Add the name to ootle_wallet_daemon.allowed_hosts if this \
-                 daemon is meant to be reached by it.",
-                authority.host()
+                "🚫 Refused a request addressed to '{}'. Add the name to {} if this service is meant to be reached \
+                 by it.",
+                authority.host(),
+                allowed.setting
             );
             misdirected()
         },
@@ -94,27 +95,22 @@ pub async fn check_host(State(allowed): State<AllowedHosts>, request: Request, n
 fn misdirected() -> Response {
     (
         StatusCode::MISDIRECTED_REQUEST,
-        "This wallet daemon does not serve the requested host name",
+        "This server does not serve the requested host name",
     )
         .into_response()
 }
 
 #[cfg(test)]
 mod tests {
-    use url::Url;
-
     use super::*;
 
-    fn allowed(hosts: &[&str], rp_origin: Option<&str>) -> AllowedHosts {
-        let mut config = WalletDaemonConfig::default();
-        config.allowed_hosts = hosts.iter().map(|h| h.to_string()).collect();
-        config.webauthn.rp_origin = rp_origin.map(|o| Url::parse(o).unwrap());
-        AllowedHosts::from_config(&config)
+    fn allowed(hosts: &[&str]) -> AllowedHosts {
+        AllowedHosts::new("test.allowed_hosts", hosts)
     }
 
     #[test]
     fn local_names_and_ip_literals_are_permitted() {
-        let allowed = allowed(&[], None);
+        let allowed = allowed(&[]);
         for host in [
             "localhost",
             "LocalHost",
@@ -130,7 +126,7 @@ mod tests {
 
     #[test]
     fn other_names_are_refused() {
-        let allowed = allowed(&[], None);
+        let allowed = allowed(&[]);
         for host in [
             "wallet.example.com",
             "localhost.example.com",
@@ -142,15 +138,14 @@ mod tests {
     }
 
     #[test]
-    fn configured_names_and_the_rp_origin_are_permitted() {
-        let allowed = allowed(&["Wallet.Internal "], Some("https://wallet.example.com"));
+    fn configured_names_are_permitted() {
+        let allowed = allowed(&["Wallet.Internal ", ""]);
         assert!(allowed.permits("wallet.internal"));
-        assert!(allowed.permits("wallet.example.com"));
         assert!(!allowed.permits("other.example.com"));
     }
 
     #[test]
     fn a_wildcard_permits_every_name() {
-        assert!(allowed(&["*"], None).permits("wallet.example.com"));
+        assert!(allowed(&["*"]).permits("wallet.example.com"));
     }
 }

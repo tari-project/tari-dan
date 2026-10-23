@@ -23,7 +23,7 @@ tari_transaction_components = { workspace = true }
 tari_crypto = { workspace = true }
 tari_epoch_oracles = { workspace = true, features = ["base_layer"] }
 tari_validator_node_rpc = { workspace = true }
-tari_ootle_app_utilities = { workspace = true, features = ["consensus_constants", "epoch_oracle", "execution", "p2p"] }
+tari_ootle_app_utilities = { workspace = true, features = ["allowed_hosts", "consensus_constants", "epoch_oracle", "execution", "p2p"] }
 tari_ootle_common_types = { workspace = true }
 tari_ootle_p2p = { workspace = true }
 tari_engine = { workspace = true, features = ["wasm-cache"] }
@@ -92,6 +92,7 @@ tari_common = { workspace = true, features = ["build"] }
 serde-saphyr = { workspace = true }
 tempfile = { workspace = true }
 tari_template_lib_types = { workspace = true }
+tower = { workspace = true, features = ["util"] }
 
 [package.metadata.cargo-machete]
 ignored = [

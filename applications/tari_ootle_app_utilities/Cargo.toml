@@ -31,6 +31,7 @@ ootle_serde = { workspace = true, features = ["std"] }
 ootle_byte_type = { workspace = true, features = ["crypto"] }
 
 anyhow = { workspace = true }
+axum = { workspace = true, optional = true }
 blake2 = { workspace = true }
 bounded-vec = { workspace = true }
 borsh = { workspace = true, features = ["std"] }
@@ -66,3 +67,5 @@ execution = ["dep:tari_engine"]
 p2p = ["tari_networking", "tari_ootle_p2p", "libp2p-identity", "multiaddr"]
 epoch_oracle = ["tari_epoch_oracles"]
 consensus_constants = ["tari_consensus"]
+# The host allow-list middleware, for the applications that serve operator HTTP endpoints.
+allowed_hosts = ["dep:axum"]

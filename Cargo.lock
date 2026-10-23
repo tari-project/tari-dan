@@ -12209,6 +12209,7 @@ name = "tari_ootle_app_utilities"
 version = "0.47.0"
 dependencies = [
  "anyhow",
+ "axum 0.8.8",
  "blake2 0.10.6",
  "borsh",
  "bounded-vec",
@@ -13350,6 +13351,7 @@ dependencies = [
  "thiserror 2.0.18",
  "time",
  "tokio",
+ "tower 0.5.2",
  "tower-http",
  "url",
 ]

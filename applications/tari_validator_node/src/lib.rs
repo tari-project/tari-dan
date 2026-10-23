@@ -47,6 +47,7 @@ use tari_engine_types::crypto::{MAX_LAZY_BP_AGG_FACTORS, get_commitment_factory,
 use tari_epoch_manager::traits::EpochManagerSpec;
 use tari_epoch_oracles::EpochOracle;
 use tari_ootle_app_utilities::{
+    allowed_hosts::AllowedHosts,
     consensus_constants_file::load_consensus_constants,
     keypair::RistrettoKeypair,
     protocol_activation::check_and_record_activation_schedule,
@@ -153,6 +154,10 @@ pub async fn run_validator_node(
         let (bound_addr, jrpc_handle) = spawn_json_rpc(
             *jrpc_address,
             config.validator_node.enable_permissive_cors,
+            AllowedHosts::new(
+                "validator_node.json_rpc_allowed_hosts",
+                config.validator_node.json_rpc_allowed_hosts.iter(),
+            ),
             handlers,
             shutdown.to_signal(),
         )

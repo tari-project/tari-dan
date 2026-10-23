@@ -32,7 +32,7 @@ use tari_common::{
     ConfigurationError,
     DefaultConfigLoader,
     SubConfigPath,
-    configuration::{CommonConfig, ConfigList},
+    configuration::{CommonConfig, ConfigList, StringList},
 };
 use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_ootle_app_utilities::{
@@ -113,6 +113,12 @@ pub struct ValidatorNodeConfig {
     /// transactions. Leave off unless the listener is only reachable by trusted pages.
     #[serde(default)]
     pub enable_permissive_cors: bool,
+    /// Host names, beyond `localhost`, its subdomains and IP addresses, that a request may address the JSON-RPC and
+    /// web UI by: the name a reverse proxy forwards, or a LAN or container host name. Any other name is refused, so
+    /// that a web page served under an unrelated name cannot reach the operator interface. Accepts a list, or a
+    /// string of comma-separated names. `*` accepts every name.
+    #[serde(default)]
+    pub json_rpc_allowed_hosts: StringList,
     /// Template config
     pub templates: TemplateConfig,
     /// Fee claim public key
@@ -322,6 +328,7 @@ impl Default for ValidatorNodeConfig {
             json_rpc_listener_address: Some("127.0.0.1:18200".parse().unwrap()),
             metrics_listener_address: Some("127.0.0.1:18201".parse().unwrap()),
             enable_permissive_cors: false,
+            json_rpc_allowed_hosts: StringList::default(),
             templates: TemplateConfig::default(),
             // Burn your fees
             fee_claim_public_key: RistrettoPublicKey::default(),

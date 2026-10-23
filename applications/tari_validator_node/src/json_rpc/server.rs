@@ -26,6 +26,7 @@ use axum::{
     Json,
     Router,
     extract::Extension,
+    middleware,
     response::IntoResponse,
     routing::{get, post},
 };
@@ -33,7 +34,10 @@ use axum_jrpc::{JrpcResult, JsonRpcAnswer, JsonRpcExtractor, error::JsonRpcError
 use log::*;
 use serde_json::json;
 use tari_consensus::hotstuff::ConsensusCurrentState;
-use tari_ootle_app_utilities::tcp::try_bind_with_fallback;
+use tari_ootle_app_utilities::{
+    allowed_hosts::{AllowedHosts, check_host},
+    tcp::try_bind_with_fallback,
+};
 use tari_shutdown::ShutdownSignal;
 use tokio::task::JoinHandle;
 use tower_http::cors::CorsLayer;
@@ -50,6 +54,7 @@ const LOG_TARGET: &str = "tari::validator_node::json_rpc";
 pub async fn spawn_json_rpc(
     preferred_address: SocketAddr,
     enable_permissive_cors: bool,
+    allowed_hosts: AllowedHosts,
     handlers: JsonRpcHandlers,
     mut shutdown_signal: ShutdownSignal,
 ) -> Result<(SocketAddr, JoinHandle<Result<(), anyhow::Error>>), anyhow::Error> {
@@ -58,12 +63,8 @@ pub async fn spawn_json_rpc(
         .route("/json_rpc", post(handler))
         .route("/health", get(health_check))
         .fallback(http_ui::handler)
-        .layer(Extension(Arc::new(handlers)))
-        .layer(if enable_permissive_cors {
-            CorsLayer::permissive()
-        } else {
-            CorsLayer::new()
-        });
+        .layer(Extension(Arc::new(handlers)));
+    let router = guard(router, enable_permissive_cors, allowed_hosts);
 
     let listener = try_bind_with_fallback(preferred_address).await?;
     let server = axum::serve(listener, router).with_graceful_shutdown(async move {
@@ -78,6 +79,18 @@ pub async fn spawn_json_rpc(
     });
 
     Ok((addr, handle))
+}
+
+/// Wraps every route and the fallback of `router` in the listener's access policy. The host check is
+/// the outermost layer, so a refused host name gets no CORS headers either.
+fn guard(router: Router, enable_permissive_cors: bool, allowed_hosts: AllowedHosts) -> Router {
+    router
+        .layer(if enable_permissive_cors {
+            CorsLayer::permissive()
+        } else {
+            CorsLayer::new()
+        })
+        .layer(middleware::from_fn_with_state(allowed_hosts, check_host))
 }
 
 async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: JsonRpcExtractor) -> JrpcResult {
@@ -163,5 +176,53 @@ async fn health_check(Extension(handlers): Extension<Arc<JsonRpcHandlers>>) -> i
         (axum::http::StatusCode::OK, Json(body)).into_response()
     } else {
         (axum::http::StatusCode::SERVICE_UNAVAILABLE, Json(body)).into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode, header},
+    };
+    use tower::ServiceExt;
+
+    use super::*;
+
+    async fn status_of(method: &str, path: &str, host: &str) -> StatusCode {
+        let router = Router::new()
+            .route("/json_rpc", post(|| async { "served" }))
+            .fallback(|| async { "ui" });
+        let allowed_hosts = AllowedHosts::new("validator_node.json_rpc_allowed_hosts", ["vn.internal"]);
+        let request = Request::builder()
+            .method(method)
+            .uri(path)
+            .header(header::HOST, host)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::empty())
+            .unwrap();
+        guard(router, false, allowed_hosts)
+            .oneshot(request)
+            .await
+            .unwrap()
+            .status()
+    }
+
+    #[tokio::test]
+    async fn a_request_addressed_to_a_foreign_host_name_is_refused() {
+        for (method, path) in [("POST", "/json_rpc"), ("GET", "/"), ("GET", "/index.html")] {
+            assert_eq!(
+                status_of(method, path, "vn.example.com:18200").await,
+                StatusCode::MISDIRECTED_REQUEST,
+                "{method} {path}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn a_request_addressed_to_a_local_or_configured_name_is_served() {
+        for host in ["127.0.0.1:18200", "localhost:18200", "[::1]:18200", "vn.internal:18200"] {
+            assert_eq!(status_of("POST", "/json_rpc", host).await, StatusCode::OK, "{host}");
+        }
     }
 }
