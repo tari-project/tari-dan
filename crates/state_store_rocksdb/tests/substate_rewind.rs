@@ -246,3 +246,70 @@ fn rewind_preserves_other_shards() {
     // Silence unused-version warning.
     let _ = Version::default();
 }
+
+/// The accumulator is read at or below a version, chains from a record written earlier in the same write
+/// transaction, and a rewind restores it with the transitions it inverts.
+#[test]
+fn the_transition_accumulator_follows_the_transition_records() {
+    use tari_state_tree::TransitionAccumulator;
+
+    let (db, _tmp) = create_rocksdb();
+    let a = substate_id(1);
+    let b = substate_id(2);
+    let shard = shard_for(&a, SubstateVersion::ZERO);
+    let a_v0 = build_substate_record(&a, SubstateVersion::ZERO, 1);
+    let b_v0 = {
+        let mut r = build_substate_record(&b, SubstateVersion::ZERO, 2);
+        r.created.in_shard = shard;
+        r
+    };
+
+    let (acc_v1, acc_v2) = db
+        .with_write_tx(|tx| {
+            let mut batch = create_substate_update_batch(Epoch(0), [&a_v0]);
+            batch.updates = batch
+                .updates
+                .into_iter()
+                .map(|(_, versions)| (shard, versions))
+                .collect();
+            tx.substates_commit_batch(batch)?;
+            let acc_v1 = tx.state_transitions_get_accumulator(shard, 1)?;
+            let mut batch = create_substate_update_batch(Epoch(0), [&b_v0]);
+            batch.updates = batch
+                .updates
+                .into_iter()
+                .map(|(_, versions)| (shard, versions))
+                .collect();
+            tx.substates_commit_batch(batch)?;
+            let acc_v2 = tx.state_transitions_get_accumulator(shard, 2)?;
+            tx.state_tree_shard_versions_set(shard, 2)?;
+            Ok::<_, tari_ootle_storage::StorageError>((acc_v1, acc_v2))
+        })
+        .unwrap();
+    assert_ne!(acc_v1, TransitionAccumulator::zero());
+    assert_ne!(acc_v2, acc_v1);
+
+    db.with_read_tx(|tx| {
+        assert_eq!(
+            tx.state_transitions_get_accumulator(shard, 0)?,
+            TransitionAccumulator::zero()
+        );
+        assert_eq!(tx.state_transitions_get_accumulator(shard, 1)?, acc_v1);
+        assert_eq!(tx.state_transitions_get_accumulator(shard, 2)?, acc_v2);
+        assert_eq!(tx.state_transitions_get_accumulator(shard, 7)?, acc_v2);
+        Ok::<_, tari_ootle_storage::StorageError>(())
+    })
+    .unwrap();
+
+    db.with_write_tx(|tx| {
+        tx.substates_rewind_to_state_version(shard, 1)?;
+        tx.state_tree_shard_versions_set(shard, 1)?;
+        Ok::<_, tari_ootle_storage::StorageError>(())
+    })
+    .unwrap();
+    db.with_read_tx(|tx| {
+        assert_eq!(tx.state_transitions_get_accumulator(shard, 2)?, acc_v1);
+        Ok::<_, tari_ootle_storage::StorageError>(())
+    })
+    .unwrap();
+}

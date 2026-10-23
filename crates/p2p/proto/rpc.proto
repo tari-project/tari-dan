@@ -197,6 +197,7 @@ message EpochCheckpoint {
 message TreeRootSummary {
   bytes root_hash = 1;
   uint64 state_version = 2;
+  bytes transition_acc = 3;
 }
 
 // A per-shard resume point. State versions are assigned per shard and only advance when that shard

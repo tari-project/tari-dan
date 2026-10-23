@@ -20,6 +20,7 @@ use tari_state_tree::{
     SubstateDownProof,
     SubstateValueProof,
     SubstateValueProofError,
+    TransitionAccumulator,
     TreeHash,
     Version,
     jmt_hash_scheme,
@@ -70,6 +71,7 @@ struct CommittedShardState {
     /// `None` if the shard has no committed state yet, in which case `root` is the empty-tree
     /// placeholder and no substate in the shard can be proved.
     version: Option<Version>,
+    transition_acc: TransitionAccumulator,
 }
 
 impl<'a, TTx: StateStoreReadTransaction> SubstateProofGenerator<'a, TTx> {
@@ -85,7 +87,12 @@ impl<'a, TTx: StateStoreReadTransaction> SubstateProofGenerator<'a, TTx> {
         let mut shards = HashMap::with_capacity(shard_group.len() + 1);
         for shard in shard_group.shard_iter_with_global() {
             let state = committed_shard_state(tx, shard)?;
-            shard_states.push((shard, state.root, state.version.unwrap_or_default()));
+            shard_states.push((
+                shard,
+                state.root,
+                state.version.unwrap_or_default(),
+                state.transition_acc,
+            ));
             shards.insert(shard, state);
         }
 
@@ -140,6 +147,7 @@ impl<'a, TTx: StateStoreReadTransaction> SubstateProofGenerator<'a, TTx> {
         Ok(Some(SubstateValueProof::new(
             state.root,
             version,
+            state.transition_acc,
             shard_root_proof,
             leaf_proof,
         )))
@@ -437,6 +445,7 @@ fn committed_shard_state<TTx: StateStoreReadTransaction>(
         return Ok(CommittedShardState {
             root: SPARSE_MERKLE_PLACEHOLDER_HASH,
             version: None,
+            transition_acc: TransitionAccumulator::zero(),
         });
     };
     let mut scoped = ShardScopedTreeStoreReader::new(tx, shard);
@@ -447,6 +456,7 @@ fn committed_shard_state<TTx: StateStoreReadTransaction>(
     Ok(CommittedShardState {
         root,
         version: Some(version),
+        transition_acc: tx.state_transitions_get_accumulator(shard, version)?,
     })
 }
 
@@ -458,6 +468,7 @@ mod tests {
     use super::*;
 
     const NUM_PRESHARDS: NumPreshards = NumPreshards::P4;
+    const ZERO_ACC: TransitionAccumulator = TransitionAccumulator::zero();
 
     /// A shard group's root commits to the shards in the group and nothing else, so a substate in a
     /// shard outside the group has no leaf there, the same as a substate in an empty shard. An
@@ -472,8 +483,8 @@ mod tests {
         let other_group = ShardGroup::new(other_shard, other_shard);
 
         let other_group_states = [
-            (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0),
-            (other_shard, TreeHash::new([7; 32]), 1),
+            (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0, ZERO_ACC),
+            (other_shard, TreeHash::new([7; 32]), 1, ZERO_ACC),
         ];
         let other_group_root = compute_shard_group_root(ProtocolVersion::V0, other_group_states).unwrap();
         // The substate's shard has no leaf in the other group's root, so the proof that its key is
@@ -482,7 +493,7 @@ mod tests {
             ProtocolVersion::V0,
             other_group_states
                 .into_iter()
-                .chain([(own_shard, SPARSE_MERKLE_PLACEHOLDER_HASH, 0)]),
+                .chain([(own_shard, SPARSE_MERKLE_PLACEHOLDER_HASH, 0, ZERO_ACC)]),
         )
         .unwrap();
         assert_eq!(with_own_shard_empty.root(), other_group_root);
@@ -494,7 +505,13 @@ mod tests {
         let (_, _, leaf_proof) = SpreadPrefixStateTree::new(&mut empty)
             .get_proof(1, &versioned_id)
             .unwrap();
-        let proof = SubstateValueProof::new(SPARSE_MERKLE_PLACEHOLDER_HASH, 0, shard_root_proof, leaf_proof);
+        let proof = SubstateValueProof::new(
+            SPARSE_MERKLE_PLACEHOLDER_HASH,
+            0,
+            ZERO_ACC,
+            shard_root_proof,
+            leaf_proof,
+        );
         proof
             .verify_exclusion(
                 JmtHashScheme::V1,
@@ -673,9 +690,9 @@ mod tests {
 
                 let group_tree = |shard_root, shard_version| {
                     ShardGroupRootTree::build(ProtocolVersion::at(NETWORK, EPOCH), [
-                        (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0),
-                        (shard, shard_root, shard_version),
-                        (sibling, sibling_root, 1),
+                        (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0, ZERO_ACC),
+                        (shard, shard_root, shard_version, ZERO_ACC),
+                        (sibling, sibling_root, 1, ZERO_ACC),
                     ])
                     .unwrap()
                 };
@@ -722,7 +739,7 @@ mod tests {
                 let (_, value, leaf_proof) = SpreadPrefixStateTree::new(&mut self.own).get_proof(1, id).unwrap();
                 let (_, shard_root_proof) = self.r1_tree.get_proof(self.shard).unwrap();
                 (
-                    SubstateValueProof::new(self.r1_shard_root, 1, shard_root_proof, leaf_proof),
+                    SubstateValueProof::new(self.r1_shard_root, 1, ZERO_ACC, shard_root_proof, leaf_proof),
                     value.map(|(hash, _, _)| hash),
                 )
             }
@@ -731,7 +748,7 @@ mod tests {
             fn down_proof(&mut self, id: &VersionedSubstateId) -> SubstateValueProof {
                 let (_, _, leaf_proof) = SpreadPrefixStateTree::new(&mut self.own).get_proof(2, id).unwrap();
                 let (_, shard_root_proof) = self.r2_tree.get_proof(self.shard).unwrap();
-                SubstateValueProof::new(self.r2_shard_root, 2, shard_root_proof, leaf_proof)
+                SubstateValueProof::new(self.r2_shard_root, 2, ZERO_ACC, shard_root_proof, leaf_proof)
             }
 
             fn honest(&mut self, id: &VersionedSubstateId) -> SubstateDownProof {
@@ -794,8 +811,13 @@ mod tests {
                 scenario.r2_tree.get_proof(scenario.sibling).unwrap().1,
                 scenario.r2_tree.get_proof(scenario.shard).unwrap().1,
             ] {
-                proof.down =
-                    SubstateValueProof::new(scenario.sibling_root, 1, shard_root_proof, sibling_leaf_proof.clone());
+                proof.down = SubstateValueProof::new(
+                    scenario.sibling_root,
+                    1,
+                    ZERO_ACC,
+                    shard_root_proof,
+                    sibling_leaf_proof.clone(),
+                );
                 let result = scenario.verify(&proof, &target, scenario.r1(2));
                 assert!(
                     matches!(result, Err(SubstateProofVerifyError::DownProofNotDown(_))),
@@ -903,6 +925,7 @@ mod tests {
                     Shard::global(),
                     shard_root,
                     version,
+                    ZERO_ACC,
                 )])
                 .unwrap()
             };
@@ -915,6 +938,7 @@ mod tests {
                     up: SubstateValueProof::new(
                         r1_global_root,
                         1,
+                        ZERO_ACC,
                         r1_tree.get_proof(Shard::global()).unwrap().1,
                         up_leaf.clone(),
                     ),
@@ -923,6 +947,7 @@ mod tests {
                     down: SubstateValueProof::new(
                         r2_global_root,
                         2,
+                        ZERO_ACC,
                         r2_tree.get_proof(Shard::global()).unwrap().1,
                         down_leaf.clone(),
                     ),

@@ -23,7 +23,7 @@
 use minicbor::{CborLen, Decode, Encode};
 use serde::{Deserialize, Serialize};
 use tari_ootle_common_types::{Epoch, SubstateAddress, shard::Shard};
-use tari_state_tree::Version;
+use tari_state_tree::{TransitionAccumulator, Version};
 
 use crate::{
     codecs::{DefaultVersionedCodec, KeyPrefix, NumberCodec, ShardCodec},
@@ -32,6 +32,9 @@ use crate::{
     traits::{Cf, QueryCf, Versioned},
 };
 
+/// The transitions one state version of a shard committed, with the shard's [`TransitionAccumulator`] once they are
+/// appended. The accumulator is stored with the transitions it covers, so the history this node serves and the
+/// history its leaves commit to are the same record.
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, CborLen)]
 pub struct StateTransitionModelDataV1 {
     #[n(0)]
@@ -40,6 +43,9 @@ pub struct StateTransitionModelDataV1 {
     pub transitions: Vec<StateTransitionRecordData>,
     #[n(2)]
     pub state_version: Version,
+    #[n(3)]
+    #[cbor(with = "tari_bor::adapters::serde_bridge")]
+    pub transition_acc: TransitionAccumulator,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, CborLen)]

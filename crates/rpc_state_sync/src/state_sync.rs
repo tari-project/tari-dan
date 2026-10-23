@@ -37,7 +37,7 @@ use tari_ootle_storage::{
     consensus_models::{BookkeepingEpochAgnosticRead, EpochCheckpoint, SubstateValueFilterFlags},
 };
 use tari_rpc_framework::RpcError;
-use tari_state_tree::Version;
+use tari_state_tree::{TransitionAccumulator, Version};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use tari_validator_node_rpc::{
     client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory},
@@ -218,13 +218,13 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
         num_preshards: NumPreshards,
         checkpoint: &EpochCheckpoint,
     ) -> Result<Option<Version>, RpcStateSyncError> {
-        let checkpoint_shard_root = checkpoint.get_shard_root(shard);
         let shard_sync = ShardSync::new(
             self.network,
             num_preshards,
             &self.state_store,
             shard,
-            checkpoint_shard_root,
+            checkpoint.get_shard_root(shard),
+            checkpoint.get_shard_transition_acc(shard),
             checkpoint.get_shard_state_version(shard),
             checkpoint.epoch(),
             self.state_history_length,
@@ -236,7 +236,7 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             .with_min_throughput(self.min_throughput_bytes_per_sec);
         let maybe_persisted_state_version = shard_sync.discard_unverified_state()?;
 
-        if shard_sync.local_state_root(maybe_persisted_state_version)? == checkpoint_shard_root {
+        if shard_sync.local_state_matches_checkpoint(maybe_persisted_state_version)? {
             info!(target: LOG_TARGET, "Checkpoint state root indicates no further state changes. Nothing to sync for {shard}");
             shard_sync.align_to_checkpoint_version(maybe_persisted_state_version)?;
             return Ok(None);
@@ -292,7 +292,12 @@ where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
             for shard in local_info.shard_group().shard_iter_with_global() {
                 let version = tx.state_tree_versions_get_latest(shard)?;
                 let local_root = calculate_state_root_for_shard(tx, shard, version)?;
+                let local_acc = match version {
+                    Some(version) => tx.state_transitions_get_accumulator(shard, version)?,
+                    None => TransitionAccumulator::zero(),
+                };
                 if local_root != checkpoint.get_shard_root(shard) ||
+                    local_acc != checkpoint.get_shard_transition_acc(shard) ||
                     tx.state_sync_missing_values_get_earliest(shard, 0)?.is_some()
                 {
                     return Ok(false);

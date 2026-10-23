@@ -12,7 +12,7 @@ use tari_ootle_storage::{
     consensus_models::{BookkeepingModel, PendingShardStateTreeDiff},
 };
 use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
-use tari_state_tree::{Node, NodeKey, StateHashTreeDiff};
+use tari_state_tree::{Node, NodeKey, StateHashTreeDiff, TransitionAccumulator};
 
 #[test]
 fn pending_state_tree_diff_rocksdb() {
@@ -45,7 +45,7 @@ fn pending_state_tree_diff_operations(db: impl StateStore) {
 
     // pending_state_tree_diffs_insert_all
     let shard = block_2.shard_group().shard_iter().next().unwrap();
-    let diff = PendingShardStateTreeDiff::new(0, StateHashTreeDiff::new());
+    let diff = PendingShardStateTreeDiff::new(0, TransitionAccumulator::zero(), StateHashTreeDiff::new());
     tx.pending_state_tree_diffs_insert_all(block_2.id(), [(&shard, &diff)])
         .unwrap();
 
@@ -69,7 +69,7 @@ fn pending_state_tree_diff_operations(db: impl StateStore) {
 }
 
 fn diff_with_root(version: u64) -> PendingShardStateTreeDiff {
-    PendingShardStateTreeDiff::new(version, StateHashTreeDiff {
+    PendingShardStateTreeDiff::new(version, TransitionAccumulator::zero(), StateHashTreeDiff {
         new_nodes: vec![(NodeKey::new_empty_path(version), Node::Null)],
         stale_tree_nodes: vec![],
     })

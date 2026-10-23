@@ -16,6 +16,7 @@ use tari_state_tree::{
     SparseMerkleProofExt,
     SpreadPrefixStateTree,
     StateTreeError,
+    TransitionAccumulator,
     TreeHash,
     Version,
     jmt_hash_scheme,
@@ -26,7 +27,7 @@ use crate::{
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
-    consensus_models::{Block, CommittedBlockProof},
+    consensus_models::{Block, CommittedBlockProof, CommittedShardVersion},
 };
 
 const LOG_TARGET: &str = "tari::ootle::storage::state_version_proof";
@@ -70,8 +71,9 @@ impl StateVersionProofSource {
     }
 }
 
-/// Checks that `shard_root_proof` proves the leaf of `shard` at `shard_root` and `state_version` in the state
-/// merkle root of `commit_proof`'s block, and that the block is one of `network` whose shard group holds `shard`.
+/// Checks that `shard_root_proof` proves the leaf of `shard` at `shard_root`, `state_version` and `transition_acc`
+/// in the state merkle root of `commit_proof`'s block, and that the block is one of `network` whose shard group holds
+/// `shard`.
 ///
 /// Validating the commit proof's quorum certificates against the committee of its epoch and shard group is the
 /// caller's part: this check only binds the shard state to the header those certificates sign.
@@ -81,6 +83,7 @@ pub fn verify_state_version_leaf(
     shard: Shard,
     state_version: Version,
     shard_root: &TreeHash,
+    transition_acc: &TransitionAccumulator,
     shard_root_proof: &SparseMerkleProofExt,
 ) -> Result<(), StateVersionProofError> {
     let header = &commit_proof.proof().header;
@@ -110,7 +113,7 @@ pub fn verify_state_version_leaf(
         )));
     }
 
-    let leaf = ShardGroupLeaf::new(protocol_version, shard, shard_root, state_version);
+    let leaf = ShardGroupLeaf::new(protocol_version, shard, shard_root, state_version, transition_acc);
     let state_merkle_root = TreeHash::new(commit_proof.state_merkle_root().into_array());
     let scheme = jmt_hash_scheme(protocol_version);
     let result = match leaf.value {
@@ -146,7 +149,9 @@ pub enum StateVersionProofError {
 /// block's state merkle root, so that this node can prove the version to a peer that syncs it.
 ///
 /// Must run once the block's tree diffs are committed, while the committed tree holds exactly the state the
-/// block's root commits: every shard of the group at its latest committed root and version.
+/// block's root commits: every shard of the group at its latest committed root and version. The block's transitions
+/// may not be committed yet, so the accumulator of a shard the block moved is taken from `version_updates`, and the
+/// accumulator of any other shard from its committed transitions.
 ///
 /// Returns true if it recorded any proof. Those proofs name `block` as their source, so the caller must then store
 /// the block's commit proof with [`StateStoreWriteTransaction::block_commit_proofs_insert`]: the block itself is
@@ -154,7 +159,7 @@ pub enum StateVersionProofError {
 pub fn index_committed_block_state_versions<TTx>(
     tx: &mut TTx,
     block: &Block,
-    version_updates: &HashMap<Shard, Version>,
+    version_updates: &HashMap<Shard, CommittedShardVersion>,
 ) -> Result<bool, StorageError>
 where
     TTx: StateStoreWriteTransaction + Deref,
@@ -167,6 +172,11 @@ where
     let mut shard_states = Vec::with_capacity(block.shard_group().len() + 1);
     for shard in block.shard_group().shard_iter_with_global() {
         let version = tx.state_tree_versions_get_latest(shard)?;
+        let transition_acc = match (version_updates.get(&shard), version) {
+            (Some(committed), _) => committed.transition_acc,
+            (None, Some(version)) => tx.state_transitions_get_accumulator(shard, version)?,
+            (None, None) => TransitionAccumulator::zero(),
+        };
         let root = match version {
             Some(version) => {
                 let mut store = ShardScopedTreeStoreReader::new(&**tx, shard);
@@ -178,7 +188,7 @@ where
             },
             None => SPARSE_MERKLE_PLACEHOLDER_HASH,
         };
-        shard_states.push((shard, root, version.unwrap_or(0)));
+        shard_states.push((shard, root, version.unwrap_or(0), transition_acc));
     }
 
     let to_storage_error = |e: StateTreeError| StorageError::QueryError {
@@ -198,7 +208,7 @@ where
         return Ok(false);
     }
 
-    for (shard, state_version) in version_updates {
+    for (shard, committed) in version_updates {
         if !block.shard_group().contains_or_global(shard) {
             return Err(StorageError::QueryError {
                 reason: format!(
@@ -211,7 +221,7 @@ where
         let (_, shard_root_proof) = root_tree.get_proof(*shard).map_err(to_storage_error)?;
         tx.state_version_proofs_insert(&StateVersionProof {
             shard: *shard,
-            state_version: *state_version,
+            state_version: committed.version,
             source: StateVersionProofSource::Committed { block_id: *block.id() },
             shard_root_proof,
         })?;
@@ -226,8 +236,10 @@ mod tests {
 
     use super::*;
 
+    const ACC: TransitionAccumulator = TransitionAccumulator::new([9; 32]);
+
     /// A commit proof for a block of `network` at epoch 1 under `protocol_version` whose state root holds the leaf of
-    /// `shard` at `shard_root` and `state_version`, with the proof of that leaf.
+    /// `shard` at `shard_root`, `state_version` and [`ACC`], with the proof of that leaf.
     fn proof_of_leaf(
         network: Network,
         protocol_version: ProtocolVersion,
@@ -236,8 +248,13 @@ mod tests {
         state_version: Version,
     ) -> (CommittedBlockProof, SparseMerkleProofExt) {
         let root_tree = ShardGroupRootTree::build(protocol_version, [
-            (Shard::global(), SPARSE_MERKLE_PLACEHOLDER_HASH, 0),
-            (shard, shard_root, state_version),
+            (
+                Shard::global(),
+                SPARSE_MERKLE_PLACEHOLDER_HASH,
+                0,
+                TransitionAccumulator::zero(),
+            ),
+            (shard, shard_root, state_version, ACC),
         ])
         .unwrap();
         let root = root_tree.root();
@@ -276,9 +293,24 @@ mod tests {
         let network = Network::LocalNet;
         let protocol_version = ProtocolVersion::genesis(network);
         let (commit_proof, leaf_proof) = proof_of_leaf(network, protocol_version, shard, root, 64);
-        verify_state_version_leaf(network, &commit_proof, shard, 64, &root, &leaf_proof).unwrap();
+        verify_state_version_leaf(network, &commit_proof, shard, 64, &root, &ACC, &leaf_proof).unwrap();
         assert!(matches!(
-            verify_state_version_leaf(network, &commit_proof, shard, 96, &root, &leaf_proof),
+            verify_state_version_leaf(network, &commit_proof, shard, 96, &root, &ACC, &leaf_proof),
+            Err(StateVersionProofError::LeafNotIncluded { .. })
+        ));
+    }
+
+    /// Two histories with the same root at the same version differ in their accumulators, and the leaf proves one.
+    #[test]
+    fn a_leaf_proves_its_transition_accumulator() {
+        let root = TreeHash::new([7; 32]);
+        let shard = Shard::from(3u32);
+        let network = Network::LocalNet;
+        let protocol_version = ProtocolVersion::genesis(network);
+        let (commit_proof, leaf_proof) = proof_of_leaf(network, protocol_version, shard, root, 64);
+        let other = TransitionAccumulator::new([8; 32]);
+        assert!(matches!(
+            verify_state_version_leaf(network, &commit_proof, shard, 64, &root, &other, &leaf_proof),
             Err(StateVersionProofError::LeafNotIncluded { .. })
         ));
     }
@@ -291,7 +323,7 @@ mod tests {
         let protocol_version = ProtocolVersion::genesis(network);
         let (commit_proof, leaf_proof) = proof_of_leaf(network, protocol_version, Shard::from(3u32), root, 64);
         assert!(matches!(
-            verify_state_version_leaf(network, &commit_proof, Shard::from(4u32), 64, &root, &leaf_proof),
+            verify_state_version_leaf(network, &commit_proof, Shard::from(4u32), 64, &root, &ACC, &leaf_proof),
             Err(StateVersionProofError::LeafNotIncluded { .. })
         ));
     }

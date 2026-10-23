@@ -6,7 +6,7 @@ use tari_indexer_client::types::EpochCheckpointEntry;
 use tari_ootle_common_types::{Epoch, StateVersion, shard::Shard};
 use tari_ootle_light_client::{LightClientError, TrustedValidatorSet, VerifiedCommittee, test_fixtures::*};
 use tari_ootle_storage::consensus_models::{EpochCheckpoint, TreeRootSummary};
-use tari_state_tree::SPARSE_MERKLE_PLACEHOLDER_HASH;
+use tari_state_tree::{SPARSE_MERKLE_PLACEHOLDER_HASH, TransitionAccumulator};
 
 /// Validator sets of epochs 1 to 3.
 fn sets() -> Vec<ValidatorSetFixture> {
@@ -70,6 +70,7 @@ fn a_checkpoint_with_a_state_version_its_root_does_not_commit_is_rejected() {
         IndexMap::from([(Shard::from_u32(3), TreeRootSummary {
             root_hash: SPARSE_MERKLE_PLACEHOLDER_HASH,
             state_version: u64::MAX,
+            transition_acc: TransitionAccumulator::zero(),
         })]),
         signed.header_metadata().clone(),
     );

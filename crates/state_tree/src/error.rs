@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_jellyfish::{JmtStorageError, TreeHash, Version};
-use tari_ootle_common_types::{optional::IsNotFoundError, shard::Shard};
+use tari_ootle_common_types::{SubstateAddress, optional::IsNotFoundError, shard::Shard};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StateTreeError {
@@ -27,6 +27,8 @@ pub enum StateTreeError {
          tree can hold"
     )]
     VersionExhausted { current_version: Version },
+    #[error("A state version holds at most one transition of each kind per substate address, but two are at {address}")]
+    DuplicateTransition { address: SubstateAddress },
 }
 
 impl IsNotFoundError for StateTreeError {

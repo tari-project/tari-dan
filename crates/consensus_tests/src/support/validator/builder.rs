@@ -286,7 +286,7 @@ where
 {
     let substate_id = substate_id.into();
     let shard = VersionedSubstateIdRef::new(&substate_id, SubstateVersion::ZERO).to_shard(TEST_NUM_PRESHARDS);
-    let mut batch = SubstateUpdateBatch::new(Network::LocalNet, Epoch::zero());
+    let mut batch = SubstateUpdateBatch::new_unrecorded(Network::LocalNet, Epoch::zero());
     batch.with_transition(shard, 0).push(SubstateTransition::Up {
         id: substate_id,
         version: SubstateVersion::ZERO,

@@ -7,7 +7,7 @@ use std::collections::HashSet;
 
 use helpers::{PROOF_TEST_TREE_VERSION, build_substate_record, commit_substates, create_rocksdb, num_preshards};
 use tari_engine_types::ProtocolVersion;
-use tari_ootle_common_types::{ShardGroup, SubstateVersion, VersionedSubstateId, shard::Shard};
+use tari_ootle_common_types::{ShardGroup, SubstateVersion, VersionedSubstateId};
 use tari_ootle_storage::{
     ShardScopedTreeStoreReader,
     StateStore,
@@ -19,8 +19,8 @@ use tari_state_tree::{
     JmtHashScheme,
     SPARSE_MERKLE_PLACEHOLDER_HASH,
     SpreadPrefixStateTree,
+    TransitionAccumulator,
     TreeHash,
-    Version,
     compute_shard_group_root,
 };
 
@@ -30,16 +30,17 @@ const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion::V0;
 
 /// Each shard's committed root and state version, global shard included, with a shard that has no
 /// state tree at the empty root and version 0.
-fn shard_states(tx: &impl StateStoreReadTransaction, shard_group: ShardGroup) -> Vec<(Shard, TreeHash, Version)> {
+fn shard_states(tx: &impl StateStoreReadTransaction, shard_group: ShardGroup) -> Vec<tari_state_tree::ShardState> {
     shard_group
         .shard_iter_with_global()
         .map(|shard| {
             let Some(version) = tx.state_tree_versions_get_latest(shard).unwrap() else {
-                return (shard, SPARSE_MERKLE_PLACEHOLDER_HASH, 0);
+                return (shard, SPARSE_MERKLE_PLACEHOLDER_HASH, 0, TransitionAccumulator::zero());
             };
             let mut store = ShardScopedTreeStoreReader::new(tx, shard);
             let root = SpreadPrefixStateTree::new(&mut store).get_root_hash(version).unwrap();
-            (shard, root, version)
+            let acc = tx.state_transitions_get_accumulator(shard, version).unwrap();
+            (shard, root, version, acc)
         })
         .collect()
 }

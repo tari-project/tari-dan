@@ -12329,6 +12329,7 @@ dependencies = [
  "tari_ootle_storage",
  "tari_ootle_transaction",
  "tari_sidechain 8.0.0",
+ "tari_state_tree",
  "tari_swarm",
  "tari_template_lib",
  "ts-rs",
@@ -12976,6 +12977,7 @@ dependencies = [
 name = "tari_state_tree"
 version = "0.47.0"
 dependencies = [
+ "borsh",
  "log",
  "minicbor",
  "ootle-network",

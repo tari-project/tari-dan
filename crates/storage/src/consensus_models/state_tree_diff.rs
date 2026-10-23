@@ -11,26 +11,50 @@ use minicbor::{CborLen, Decode, Encode};
 use serde::{Deserialize, Serialize};
 use tari_consensus_types::BlockId;
 use tari_ootle_common_types::shard::Shard;
-use tari_state_tree::{IndexedTreeDiff, StateHashTreeDiff, StateTreePayload, Version};
+use tari_state_tree::{IndexedTreeDiff, StateHashTreeDiff, StateTreePayload, TransitionAccumulator, Version};
 
 use crate::{StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
 
-/// The diff a pending block makes to one shard's state tree. Cloning shares the diff.
+/// The diff a pending block makes to one shard's state tree, with the version and transition accumulator the shard
+/// is at once it applies. Cloning shares the diff.
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, CborLen)]
 pub struct PendingShardStateTreeDiff {
     #[n(0)]
     pub version: Version,
     #[n(1)]
     pub diff: IndexedTreeDiff<StateTreePayload>,
+    #[n(2)]
+    #[cbor(with = "tari_bor::adapters::serde_bridge")]
+    pub transition_acc: TransitionAccumulator,
 }
 
 impl PendingShardStateTreeDiff {
-    pub fn new(version: Version, diff: StateHashTreeDiff<StateTreePayload>) -> Self {
+    pub fn new(
+        version: Version,
+        transition_acc: TransitionAccumulator,
+        diff: StateHashTreeDiff<StateTreePayload>,
+    ) -> Self {
         Self {
             version,
             diff: IndexedTreeDiff::new(diff),
+            transition_acc,
         }
     }
+
+    /// The version and accumulator the shard is at once this diff is committed.
+    pub fn committed_version(&self) -> CommittedShardVersion {
+        CommittedShardVersion {
+            version: self.version,
+            transition_acc: self.transition_acc,
+        }
+    }
+}
+
+/// The state version a block moved a shard to, with the transition accumulator at that version.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CommittedShardVersion {
+    pub version: Version,
+    pub transition_acc: TransitionAccumulator,
 }
 
 impl PendingShardStateTreeDiff {
@@ -68,8 +92,9 @@ impl Display for PendingShardStateTreeDiff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "PendingShardStateTreeDiff(v{}, {} new node(s), {} stale node(s))",
+            "PendingShardStateTreeDiff(v{}, acc {}, {} new node(s), {} stale node(s))",
             self.version,
+            self.transition_acc,
             self.diff.new_nodes.len(),
             self.diff.stale_tree_nodes.len()
         )

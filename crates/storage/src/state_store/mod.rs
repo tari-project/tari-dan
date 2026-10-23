@@ -51,7 +51,7 @@ use tari_ootle_common_types::{
     shard::Shard,
 };
 use tari_ootle_transaction::TransactionId;
-use tari_state_tree::{Node, NodeKey, StaleTreeNode, StateTreePayload, Version};
+use tari_state_tree::{Node, NodeKey, StaleTreeNode, StateTreePayload, TransitionAccumulator, Version};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 use time::PrimitiveDateTime;
 
@@ -450,6 +450,14 @@ pub trait StateStoreReadTransaction: Sized {
         shard: Shard,
         state_version: Version,
     ) -> Result<Option<Epoch>, StorageError>;
+    /// The shard's [`TransitionAccumulator`] at `state_version`: that of its last state transition at or below the
+    /// version, or [`TransitionAccumulator::zero`] if it has committed none by then. A version with no transition
+    /// leaves the accumulator as it was, so this is the accumulator the shard's leaf commits at any version.
+    fn state_transitions_get_accumulator(
+        &self,
+        shard: Shard,
+        state_version: Version,
+    ) -> Result<TransitionAccumulator, StorageError>;
 
     // -------------------------------- State Tree -------------------------------- //
 
@@ -732,6 +740,8 @@ pub trait StateStoreWriteTransaction {
 
     // -------------------------------- Substates -------------------------------- //
 
+    /// Commits the batch's transitions, recording each state version's transitions with the shard's
+    /// [`TransitionAccumulator`] extended by them.
     fn substates_commit_batch(&mut self, update_batch: SubstateUpdateBatch) -> Result<(), StorageError>;
     /// Clears the values of substates downed in or before `epoch`, stopping at the first index entry that takes the
     /// count to `limit` or more. Returns the number of values cleared; a result below `limit` means none remain.

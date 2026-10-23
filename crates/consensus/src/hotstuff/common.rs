@@ -45,7 +45,7 @@ use tari_ootle_storage::{
 };
 use tari_ootle_transaction::Network;
 use tari_sidechain::FixedHash;
-use tari_state_tree::{JellyfishMerkleTree, JmtHashScheme, SPARSE_MERKLE_PLACEHOLDER_HASH, StateTreeError};
+use tari_state_tree::{JellyfishMerkleTree, JmtHashScheme, StateTreeError};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{
@@ -367,7 +367,7 @@ pub fn calculate_state_merkle_root<'a, TTx: StateStoreReadTransaction, I: IntoIt
     });
     let mut sharded_tree = ShardedStateTree::new(tx).with_pending_diffs(pending_tree_diffs);
     let root_hash =
-        sharded_tree.put_substate_tree_changes(ProtocolVersion::at(network, epoch), shard_group, change_map)?;
+        sharded_tree.put_substate_tree_changes(ProtocolVersion::at(network, epoch), shard_group, epoch, change_map)?;
 
     Ok((
         FixedHash::new(root_hash.into_array()),
@@ -400,21 +400,16 @@ where
         shard_tree_summary.insert(Shard::global(), TreeRootSummary {
             root_hash,
             state_version: version,
+            transition_acc: tx.state_transitions_get_accumulator(Shard::global(), version)?,
         });
     } else {
-        shard_tree_summary.insert(Shard::global(), TreeRootSummary {
-            root_hash: SPARSE_MERKLE_PLACEHOLDER_HASH,
-            state_version: 0,
-        });
+        shard_tree_summary.insert(Shard::global(), TreeRootSummary::empty());
     }
 
     for shard in shard_group.shard_iter() {
         let Some(version) = tx.state_tree_versions_get_latest(shard)? else {
             // At v0 there have been no state changes
-            shard_tree_summary.insert(shard, TreeRootSummary {
-                root_hash: SPARSE_MERKLE_PLACEHOLDER_HASH,
-                state_version: 0,
-            });
+            shard_tree_summary.insert(shard, TreeRootSummary::empty());
             continue;
         };
 
@@ -427,6 +422,7 @@ where
         shard_tree_summary.insert(shard, TreeRootSummary {
             root_hash,
             state_version: version,
+            transition_acc: tx.state_transitions_get_accumulator(shard, version)?,
         });
     }
 

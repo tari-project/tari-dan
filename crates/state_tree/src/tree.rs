@@ -30,6 +30,7 @@ use tari_template_lib_types::Hash32;
 use crate::{
     SPARSE_MERKLE_PLACEHOLDER_HASH,
     StateTreePayload,
+    TransitionAccumulator,
     TreeStoreBatchWriter,
     error::StateTreeError,
     key_mapper::{DbKeyMapper, HashIdentityKeyMapper, ShardKeyMapper, SpreadPrefixKeyMapper},
@@ -307,6 +308,10 @@ impl RootProofTree {
     }
 }
 
+/// The state of one shard as its leaf in the shard group root tree commits it: the shard, its tree root, its state
+/// version and its transition accumulator.
+pub type ShardState = (Shard, TreeHash, Version, TransitionAccumulator);
+
 /// Where a shard's state sits in its shard group's root tree: the key of its leaf, and the leaf's
 /// value, or `None` when the tree holds no leaf for the shard.
 ///
@@ -321,8 +326,14 @@ pub struct ShardGroupLeaf {
 }
 
 impl ShardGroupLeaf {
-    pub fn new(protocol_version: ProtocolVersion, shard: Shard, shard_root: &TreeHash, state_version: Version) -> Self {
-        let value = shard_state_leaf(protocol_version, shard, shard_root, state_version);
+    pub fn new(
+        protocol_version: ProtocolVersion,
+        shard: Shard,
+        shard_root: &TreeHash,
+        state_version: Version,
+        transition_acc: &TransitionAccumulator,
+    ) -> Self {
+        let value = shard_state_leaf(protocol_version, shard, shard_root, state_version, transition_acc);
         match protocol_version {
             ProtocolVersion::V0 => {
                 let has_state = *shard_root != SPARSE_MERKLE_PLACEHOLDER_HASH || state_version != 0;
@@ -345,8 +356,8 @@ pub struct ShardGroupRootTree {
 }
 
 impl ShardGroupRootTree {
-    /// Builds the tree over `(shard, shard root, state version)` entries. Fails if a shard appears more than once.
-    pub fn build<I: IntoIterator<Item = (Shard, TreeHash, Version)>>(
+    /// Builds the tree over [`ShardState`] entries. Fails if a shard appears more than once.
+    pub fn build<I: IntoIterator<Item = ShardState>>(
         protocol_version: ProtocolVersion,
         shard_states: I,
     ) -> Result<Self, StateTreeError> {
@@ -354,8 +365,8 @@ impl ShardGroupRootTree {
         let shard_states = shard_states.into_iter();
         let mut leaves = HashMap::with_capacity(shard_states.size_hint().0);
         let mut changes = Vec::with_capacity(shard_states.size_hint().0);
-        for (shard, shard_root, state_version) in shard_states {
-            let leaf = ShardGroupLeaf::new(protocol_version, shard, &shard_root, state_version);
+        for (shard, shard_root, state_version, transition_acc) in shard_states {
+            let leaf = ShardGroupLeaf::new(protocol_version, shard, &shard_root, state_version, &transition_acc);
             if let Some(value) = leaf.value {
                 changes.push((leaf.key, Some((value, ()))));
             }
@@ -400,9 +411,8 @@ impl ShardGroupRootTree {
 
 const SHARD_GROUP_ROOT_VERSION: Version = 1;
 
-/// Computes the shard-group state root over `(shard, shard root, state version)` entries. See
-/// [`ShardGroupRootTree`].
-pub fn compute_shard_group_root<I: IntoIterator<Item = (Shard, TreeHash, Version)>>(
+/// Computes the shard-group state root over [`ShardState`] entries. See [`ShardGroupRootTree`].
+pub fn compute_shard_group_root<I: IntoIterator<Item = ShardState>>(
     protocol_version: ProtocolVersion,
     shard_states: I,
 ) -> Result<TreeHash, StateTreeError> {

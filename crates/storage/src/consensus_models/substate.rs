@@ -185,8 +185,7 @@ impl SubstateRecord {
         tx: &mut TTx,
         updates: SubstateUpdateBatch,
     ) -> Result<(), StorageError> {
-        tx.substates_commit_batch(updates)?;
-        Ok(())
+        tx.substates_commit_batch(updates)
     }
 
     pub fn exists<TTx: StateStoreReadTransaction>(

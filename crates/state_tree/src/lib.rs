@@ -27,6 +27,9 @@ pub use substate_proof::*;
 mod traits;
 pub use traits::*;
 
+mod transition_accumulator;
+pub use transition_accumulator::*;
+
 mod tree;
 
 pub use tree::*;

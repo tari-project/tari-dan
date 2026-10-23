@@ -1125,7 +1125,13 @@ mod tests {
     }
 
     fn exclusion() -> SubstateValueProof {
-        SubstateValueProof::new(TreeHash::new([5; 32]), 2, proof_ext(5), proof_ext(6))
+        SubstateValueProof::new(
+            TreeHash::new([5; 32]),
+            2,
+            tari_state_tree::TransitionAccumulator::zero(),
+            proof_ext(5),
+            proof_ext(6),
+        )
     }
 
     /// An anchor for `shard`'s group of one. The responder serves its own state under the anchor it is given, so the
@@ -1204,6 +1210,7 @@ mod tests {
             value_hash: TreeHash::new([1; 32]),
             leaf_proof: proof_ext(1),
             shard_root: TreeHash::new([2; 32]),
+            transition_acc: tari_state_tree::TransitionAccumulator::zero(),
             shard_root_proof: proof_ext(2),
         };
         store
@@ -1394,6 +1401,7 @@ mod tests {
             value_hash: TreeHash::new([1; 32]),
             leaf_proof: proof_ext(1),
             shard_root: TreeHash::new([2; 32]),
+            transition_acc: tari_state_tree::TransitionAccumulator::zero(),
             shard_root_proof: proof_ext(2),
         };
 

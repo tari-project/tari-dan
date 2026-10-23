@@ -20,6 +20,7 @@ use tari_ootle_storage::consensus_models::{
     SubstateValueOrHash,
     TreeRootSummary,
 };
+use tari_state_tree::TransitionAccumulator;
 use tari_template_lib::types::Hash32;
 
 use crate::{
@@ -240,6 +241,8 @@ impl TryFrom<proto::rpc::TreeRootSummary> for TreeRootSummary {
         Ok(Self {
             root_hash: TreeHash::try_from_bytes(&value.root_hash).context("TreeRootSummary::root_hash")?,
             state_version: value.state_version,
+            transition_acc: TransitionAccumulator::try_from_bytes(&value.transition_acc)
+                .context("TreeRootSummary::transition_acc")?,
         })
     }
 }
@@ -249,6 +252,7 @@ impl From<&TreeRootSummary> for proto::rpc::TreeRootSummary {
         Self {
             root_hash: value.root_hash.as_slice().to_vec(),
             state_version: value.state_version,
+            transition_acc: value.transition_acc.as_slice().to_vec(),
         }
     }
 }
