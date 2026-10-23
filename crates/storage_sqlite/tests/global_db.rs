@@ -368,3 +368,28 @@ fn a_validator_set_needs_its_epoch() {
         .set_validator_set(Epoch(1), &ValidatorSetHash::from_array([1; 32]), &[])
         .unwrap_err();
 }
+
+#[test]
+fn copy_into_writes_a_database_that_opens_with_the_same_contents() {
+    let db = create_db();
+    {
+        let mut tx = db.create_transaction().unwrap();
+        insert_vns(&mut db.validator_nodes(&mut tx), 3, Epoch(1));
+        db.commit(tx).unwrap();
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("global_storage.sqlite");
+    db.adapter().copy_into(&path).unwrap();
+
+    let copy = GlobalDb::new(SqliteGlobalDbAdapter::<PeerAddress>::new(
+        SqliteConnection::establish(path.to_str().unwrap()).unwrap(),
+    ));
+    let mut tx = copy.create_transaction().unwrap();
+    assert_eq!(copy.validator_nodes(&mut tx).count(Epoch(1)).unwrap(), 3);
+
+    assert!(
+        db.adapter().copy_into(&path).is_err(),
+        "copying over an existing file must fail rather than replace it"
+    );
+}

@@ -122,6 +122,8 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         // Diagnostics
         "get_diagnostic_events" => handlers.get_diagnostic_events(value).await,
         "clear_diagnostic_events" => handlers.clear_diagnostic_events(value).await,
+        // Operations
+        "create_backup_snapshot" => handlers.create_backup_snapshot(value).await,
         // "get_network_committees" => handlers.get_network_committees(value).await,
         // Comms
         "add_peer" => handlers.add_peer(value).await,
