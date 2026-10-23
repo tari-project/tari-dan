@@ -83,11 +83,15 @@ The online daemon scans for the account like any other account. These calls work
   the memo, and in `sender_address` when the sender attached their address.
 - `accounts.get_balance_changes` — the balance history.
 
+The daemon also checks that each output pays the account. A stealth output's one-time spend key is derived from the
+account public key and the view key, so the watch-only daemon recomputes it from the view secret key and the account
+public key. An output that decrypts with the view key but carries a different spend key is stored with status
+`Invalid` and is not counted in the balance.
+
 <Aside type="caution">
-Without the spend key the daemon cannot check that an output's one-time spend key belongs to the account. Anyone who
-knows the account's address can create an output that decrypts with the view key but is spendable by someone else, and
-the watch-only daemon reports it like any other deposit. Confirm deposits on the cold daemon, which does check the
-spend key, before treating them as final.
+An output locked by a condition tree (an access rule or script) instead of a spend key carries no key to check. The
+daemon, watch-only or not, cannot confirm who can spend such an output and reports it as `Unspent` if it decrypts. Check
+the output's `auth` in `stealth_utxos.list` before crediting a deposit that is not a plain key-path output.
 </Aside>
 
 ### Payments cannot be sent
