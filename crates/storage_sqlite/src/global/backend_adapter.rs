@@ -25,6 +25,7 @@ use std::{
     convert::{TryFrom, TryInto},
     fmt::{Debug, Formatter},
     marker::PhantomData,
+    path::Path,
     sync::{Arc, Mutex, MutexGuard},
 };
 
@@ -37,7 +38,7 @@ use diesel::{
     RunQueryDsl,
     SqliteConnection,
     sql_query,
-    sql_types::{BigInt, Bigint},
+    sql_types::{BigInt, Bigint, Text},
 };
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 use log::debug;
@@ -91,6 +92,22 @@ impl<TAddr> SqliteGlobalDbAdapter<TAddr> {
             connection: Arc::new(Mutex::new(connection)),
             _addr: PhantomData,
         }
+    }
+
+    /// Writes a transactionally consistent copy of the database to `path`, which must not exist. Other users of
+    /// this adapter wait until the copy is complete.
+    pub fn copy_into(&self, path: &Path) -> Result<(), SqliteStorageError> {
+        let path = path.to_str().ok_or_else(|| SqliteStorageError::ConversionError {
+            reason: format!("Database copy path {} is not valid UTF-8", path.display()),
+        })?;
+        sql_query("VACUUM INTO ?")
+            .bind::<Text, _>(path)
+            .execute(&mut *self.connection.lock().unwrap())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "copy_into",
+            })?;
+        Ok(())
     }
 
     fn exists(

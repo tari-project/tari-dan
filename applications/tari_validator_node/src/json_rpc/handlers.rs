@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::sync::Arc;
+
 use axum_jrpc::{
     JrpcResult,
     JsonRpcExtractor,
@@ -72,6 +74,7 @@ use tari_validator_node_client::types::{
     ClearDiagnosticEventsRequest,
     ClearDiagnosticEventsResponse,
     ConnectionDirection,
+    CreateBackupSnapshotResponse,
     FunctionDef,
     GetAllVnsRequest,
     GetAllVnsResponse,
@@ -112,9 +115,11 @@ use tari_validator_node_client::types::{
     TemplateAbi,
     TemplateMetadata,
 };
+use time::OffsetDateTime;
 
 use crate::{
     ApplicationConfig,
+    backup_snapshot,
     bootstrap::Services,
     consensus::{
         ConsensusHandle,
@@ -147,6 +152,7 @@ pub struct JsonRpcHandlers {
     networking: NetworkingHandle<TariMessagingSpec>,
     state_store: ValidatorNodeStateStore,
     diagnostics: DiagnosticsHandle,
+    backup_in_progress: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl JsonRpcHandlers {
@@ -164,6 +170,7 @@ impl JsonRpcHandlers {
             networking: services.networking.clone(),
             state_store: services.state_store.clone(),
             diagnostics: services.diagnostics.clone(),
+            backup_in_progress: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 
@@ -831,6 +838,39 @@ impl JsonRpcHandlers {
 
         Ok(JsonRpcResponse::success(answer_id, ClearDiagnosticEventsResponse {
             deleted: deleted as u64,
+        }))
+    }
+
+    pub async fn create_backup_snapshot(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        // The guard moves into the blocking task, so a client that disconnects mid-snapshot does not let a second
+        // request start while the first is still writing.
+        let guard = self.backup_in_progress.clone().try_lock_owned().map_err(|_| {
+            invalid_operation(
+                answer_id.clone(),
+                "A backup snapshot is already being taken. Wait for it to finish before requesting another.",
+            )
+        })?;
+        let state_store = self.state_store.clone();
+        let global_db = self.global_db.clone();
+        let backups_dir = self.config.validator_node.backups_dir();
+
+        let path = tokio::task::spawn_blocking(move || {
+            let _guard = guard;
+            backup_snapshot::create_backup_snapshot(&state_store, &global_db, &backups_dir, OffsetDateTime::now_utc())
+        })
+        .await
+        .map_err(internal_error(answer_id.clone()))?
+        .map_err(|e| match e {
+            e @ backup_snapshot::BackupSnapshotError::SnapshotAlreadyExists { .. } => {
+                invalid_operation(answer_id.clone(), e.to_string())
+            },
+            e => general_error(answer_id.clone(), e.to_string()),
+        })?;
+
+        info!(target: LOG_TARGET, "💾 Backup snapshot written to {}", path.display());
+        Ok(JsonRpcResponse::success(answer_id, CreateBackupSnapshotResponse {
+            path,
         }))
     }
 

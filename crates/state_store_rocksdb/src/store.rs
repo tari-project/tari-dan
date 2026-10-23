@@ -20,6 +20,7 @@ use rocksdb::{
     TransactionDBOptions,
     TransactionOptions,
     WriteOptions,
+    checkpoint::TransactionDBCheckpoint,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use tari_ootle_common_types::NodeAddressable;
@@ -169,6 +170,19 @@ impl<TAddr> RocksDbStateStore<TAddr, TransactionDB> {
             db.compact_range_cf(handle, None::<Vec<u8>>, None::<Vec<u8>>);
         }
         Ok(())
+    }
+
+    /// Writes a consistent point-in-time copy of the database to `dir`, which must not exist and must be on the
+    /// same filesystem as the store. Memtables are flushed first, then the immutable SST files are hard-linked
+    /// rather than copied, so a checkpoint is cheap to take but pins their disk space until it is deleted.
+    ///
+    /// The checkpoint opens with [`RocksDbStateStore::open`] like any other store directory.
+    pub fn create_checkpoint<P: AsRef<Path>>(&self, dir: P) -> Result<(), StorageError> {
+        let checkpoint = TransactionDBCheckpoint::new(&self.db)
+            .map_err(|e| StorageError::general("create_checkpoint", e.into_string()))?;
+        checkpoint
+            .create_checkpoint(dir)
+            .map_err(|e| StorageError::general("create_checkpoint", e.into_string()))
     }
 
     /// Open a consistent point-in-time read view (a RocksDB snapshot) over the database. This is the

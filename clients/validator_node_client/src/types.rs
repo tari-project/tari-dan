@@ -644,6 +644,15 @@ pub struct ClearDiagnosticEventsResponse {
     pub deleted: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "validator-node-client/"))]
+pub struct CreateBackupSnapshotResponse {
+    /// The new snapshot directory. The caller deletes it once it has been copied off the host; another snapshot
+    /// cannot be taken while it exists.
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub path: PathBuf,
+}
+
 impl GetDiagnosticEventsRequest {
     pub fn filter(&self) -> DiagnosticEventFilter {
         DiagnosticEventFilter {

@@ -85,6 +85,10 @@ impl ValidatorNodeClient {
         self.send_request("clear_diagnostic_events", request).await
     }
 
+    pub async fn create_backup_snapshot(&mut self) -> Result<CreateBackupSnapshotResponse, ValidatorNodeClientError> {
+        self.send_request("create_backup_snapshot", json!({})).await
+    }
+
     pub async fn get_state(&mut self, request: GetStateRequest) -> Result<GetStateResponse, ValidatorNodeClientError> {
         self.send_request("get_state", request).await
     }

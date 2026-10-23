@@ -3,6 +3,7 @@
 
 export * from "./types/validator-node-client/ClearDiagnosticEventsRequest";
 export * from "./types/validator-node-client/ClearDiagnosticEventsResponse";
+export * from "./types/validator-node-client/CreateBackupSnapshotResponse";
 export * from "./types/validator-node-client/DryRunTransactionFinalizeResult";
 export * from "./types/validator-node-client/GetBaseLayerEpochChangesRequest";
 export * from "./types/validator-node-client/GetBaseLayerEpochChangesResponse";

@@ -299,6 +299,12 @@ impl ValidatorNodeConfig {
     pub fn get_global_db_path(&self) -> PathBuf {
         self.data_dir.join("global_storage.sqlite")
     }
+
+    /// Where backup snapshots are written. It is inside the data directory because a RocksDB checkpoint hard-links
+    /// the store's files, which only works on the same filesystem.
+    pub fn backups_dir(&self) -> PathBuf {
+        self.data_dir.join("backups")
+    }
 }
 
 impl Default for ValidatorNodeConfig {
