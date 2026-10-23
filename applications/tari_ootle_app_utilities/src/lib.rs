@@ -20,6 +20,8 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#[cfg(feature = "allowed_hosts")]
+pub mod allowed_hosts;
 pub mod burn_claim_proof;
 #[cfg(feature = "execution")]
 pub mod claim_burn_proof_verifier;

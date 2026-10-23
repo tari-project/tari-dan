@@ -12,7 +12,7 @@ license.workspace = true
 tari_common = { workspace = true }
 tari_common_types = { workspace = true }
 tari_crypto = { workspace = true }
-tari_ootle_app_utilities = { workspace = true }
+tari_ootle_app_utilities = { workspace = true, features = ["allowed_hosts"] }
 tari_shutdown = { workspace = true }
 tari_ootle_wallet_crypto = { workspace = true, features = ["mmap-value-lookup"] }
 tari_ootle_address = { workspace = true }

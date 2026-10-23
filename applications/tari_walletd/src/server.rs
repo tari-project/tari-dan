@@ -21,13 +21,16 @@ use axum_jrpc::{
 use log::*;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::json;
-use tari_ootle_app_utilities::tcp::try_bind_with_fallback;
+use tari_ootle_app_utilities::{
+    allowed_hosts::{AllowedHosts, check_host},
+    tcp::try_bind_with_fallback,
+};
 use tokio::task;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use super::handlers::{HandlerContext, HandlerWithCookie, auth, stealth_utxos, substates, templates, wallet, webauthn};
 use crate::{
-    allowed_hosts::{AllowedHosts, check_host},
+    config::WalletDaemonConfig,
     handlers::{
         Handler,
         accounts,
@@ -78,7 +81,7 @@ pub async fn spawn_listener(
 
 fn router(preferred_address: SocketAddr, signaling_server_address: SocketAddr, context: HandlerContext) -> Router {
     let enable_permissive_cors = context.config().enable_permissive_cors;
-    let allowed_hosts = AllowedHosts::from_config(context.config());
+    let allowed_hosts = allowed_hosts(context.config());
     let router = Router::new()
         .route("/json_rpc", post(handler))
         .route("/json-rpc", post(handler))
@@ -104,6 +107,15 @@ fn router(preferred_address: SocketAddr, signaling_server_address: SocketAddr, c
 /// opened its database and loaded its cipher seed, so a response means the daemon is up.
 async fn health() -> StatusCode {
     StatusCode::OK
+}
+
+/// The names listed in `allowed_hosts` and the host of the WebAuthn relying-party origin.
+fn allowed_hosts(config: &WalletDaemonConfig) -> AllowedHosts {
+    let rp_host = config.webauthn.rp_origin.as_ref().and_then(|origin| origin.host_str());
+    AllowedHosts::new(
+        "ootle_wallet_daemon.allowed_hosts",
+        config.allowed_hosts.iter().map(String::as_str).chain(rp_host),
+    )
 }
 
 /// Renders the part of a JSON-RPC request that may be written to a log: the request id, the method,
@@ -540,6 +552,17 @@ mod tests {
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
         body["result"]["token"].is_string()
+    }
+
+    #[test]
+    fn configured_names_and_the_rp_origin_host_are_allowed() {
+        let mut config = WalletDaemonConfig::default();
+        config.allowed_hosts = vec!["wallet.internal".to_string()];
+        config.webauthn.rp_origin = Some("https://wallet.example.com".parse().unwrap());
+        let allowed = allowed_hosts(&config);
+        assert!(allowed.permits("wallet.internal"));
+        assert!(allowed.permits("wallet.example.com"));
+        assert!(!allowed.permits("other.example.com"));
     }
 
     #[tokio::test]

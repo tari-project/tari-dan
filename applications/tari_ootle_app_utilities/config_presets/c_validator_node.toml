@@ -29,6 +29,11 @@
 # Allow cross-origin browser requests to the JSON-RPC (default = false)
 #enable_permissive_cors = false
 
+# Host names a request may address the JSON-RPC and web UI by, beyond localhost and IP addresses. Add the name a
+# reverse proxy forwards or a LAN/container host name; requests naming any other host are refused.
+# "*" accepts every name. Also settable with --json-rpc-allowed-host. (default = [])
+#json_rpc_allowed_hosts = ["vn.internal"]
+
 # Set to true to enable auto registration for each epoch (default = true)
 #auto_register = true
 
