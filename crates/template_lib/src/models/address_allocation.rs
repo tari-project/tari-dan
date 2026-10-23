@@ -14,7 +14,7 @@ pub type AddressAllocationId = u32;
 const COMPONENT_ALLOC_TAG: u64 = BinaryTag::AllocatedComponentAddress.as_u64();
 
 /// Represents an allocation of an address for a component.
-#[derive(Debug, Clone, Encode, Decode, CborLen, PartialEq)]
+#[derive(Debug, Clone, Encode, Decode, CborLen, PartialEq, Eq, Hash)]
 #[cbor(transparent)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(transparent))]
 pub struct ComponentAddressAllocation(BorTag<AddressAllocationId, COMPONENT_ALLOC_TAG>);
@@ -50,7 +50,7 @@ impl ComponentAddressAllocation {
 const RESOURCE_TAG: u64 = BinaryTag::AllocatedResourceAddress.as_u64();
 
 /// Represents an allocation of an address for a resource.
-#[derive(Debug, Clone, Encode, Decode, CborLen, PartialEq)]
+#[derive(Debug, Clone, Encode, Decode, CborLen, PartialEq, Eq, Hash)]
 #[cbor(transparent)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(transparent))]
 pub struct ResourceAddressAllocation(BorTag<AddressAllocationId, RESOURCE_TAG>);
