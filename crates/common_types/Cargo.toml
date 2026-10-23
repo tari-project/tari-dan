@@ -12,6 +12,7 @@ tari_bor = { workspace = true, default-features = true, features = ["std", "inde
 minicbor = { workspace = true, default-features = false, features = ["alloc", "derive"] }
 tari_template_lib_types = { workspace = true, features = ["serde"] }
 tari_crypto = { workspace = true, features = ["borsh"] }
+tari_ootle_sr25519 = { workspace = true }
 tari_engine_types = { workspace = true }
 tari_hashing = { workspace = true }
 tari_sidechain = { workspace = true }

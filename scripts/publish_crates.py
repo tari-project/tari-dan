@@ -37,6 +37,7 @@ CRATES = [
     ("tari_template_abi", "crates/template_abi", 2),
     ("tari_template_lib_types", "crates/template_lib_types", 2),
     ("ootle_byte_type", "crates/ootle_byte_type", 1),
+    ("tari_ootle_sr25519", "crates/sr25519", 1),
     ("tari_template_macros", "crates/template_macros", 2),
     ("tari_template_lib", "crates/template_lib", 2),
     ("tari_ootle_template_metadata", "crates/template_metadata", 2),

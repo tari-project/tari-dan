@@ -168,6 +168,7 @@ export * from "./types/SignedTimeout";
 export * from "./types/SpendAuthorization";
 export * from "./types/SpendCondition";
 export * from "./types/SpendWitness";
+export * from "./types/Sr25519SignatureBytes";
 export * from "./types/StateVersion";
 export * from "./types/StealthInput";
 export * from "./types/StealthInputsStatement";

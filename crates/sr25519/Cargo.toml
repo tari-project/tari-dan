@@ -1,0 +1,21 @@
+[package]
+name = "tari_ootle_sr25519"
+version = "0.1.0"
+description = "sr25519 (schnorrkel-compatible) signing and verification over tari_crypto Ristretto keys"
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+tari_crypto = { workspace = true }
+tari_template_lib_types = { workspace = true }
+
+curve25519-dalek = { workspace = true }
+merlin = { workspace = true }
+rand = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+rand_core_06 = { workspace = true }
+schnorrkel = { workspace = true }
