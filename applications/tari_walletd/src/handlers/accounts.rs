@@ -344,7 +344,12 @@ pub async fn handle_set_default(
     context.authorize(token, &[Permission::Accounts(Crud::Update, None)])?;
     let sdk = context.wallet_sdk();
     let account = get_account(&req.account, &sdk.accounts_api())?;
-    sdk.accounts_api().set_default_account(account.component_address())?;
+    sdk.accounts_api()
+        .set_default_account(account.component_address())
+        .map_err(|e| match e {
+            AccountsApiError::ViewOnlyAccountCannotBeDefault => invalid_request(e),
+            e => e.into(),
+        })?;
     Ok(AccountSetDefaultResponse {})
 }
 
@@ -3395,6 +3400,14 @@ mod create_stealth_transfer_statement_handler_tests {
         );
 
         // The default account pays fees, so an import never becomes the default
+        let default_account = test.context.wallet_sdk().accounts_api().get_default().unwrap();
+        assert_eq!(*default_account.component_address(), test.account);
+        let err = handle_set_default(&test.context, Some(&admin), AccountSetDefaultRequest {
+            account: watch.clone(),
+        })
+        .await
+        .expect_err("a view-only account cannot be made the default");
+        assert_invalid_request(&err, "A view-only account cannot be the default account");
         let default_account = test.context.wallet_sdk().accounts_api().get_default().unwrap();
         assert_eq!(*default_account.component_address(), test.account);
 

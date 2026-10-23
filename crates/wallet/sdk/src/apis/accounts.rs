@@ -558,10 +558,15 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
                 return Ok(false);
             }
             tx.accounts_delete(address)?;
-            if account.is_default &&
-                let Some(next_default) = tx.accounts_get_many(0, 1)?.first()
-            {
-                tx.accounts_set_default(next_default.component_address())?;
+            if account.is_default {
+                let count = tx.accounts_count()?;
+                let next_default = tx
+                    .accounts_get_many(0, count as usize)?
+                    .into_iter()
+                    .find(|account| account.owner_key_id.is_some());
+                if let Some(next_default) = next_default {
+                    tx.accounts_set_default(next_default.component_address())?;
+                }
             }
             Ok(true)
         })
@@ -646,11 +651,15 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
         Ok(())
     }
 
+    /// Makes the account the default account, which pays fees and signs, so it must have an owner key.
     pub fn set_default_account(&self, account_addr: &ComponentAddress) -> Result<(), AccountsApiError> {
-        let mut tx = self.store.create_write_tx()?;
-        tx.accounts_set_default(account_addr)?;
-        tx.commit()?;
-        Ok(())
+        self.store.with_write_tx(|tx| {
+            if tx.accounts_get(account_addr)?.owner_key_id.is_none() {
+                return Err(AccountsApiError::ViewOnlyAccountCannotBeDefault);
+            }
+            tx.accounts_set_default(account_addr)?;
+            Ok(())
+        })
     }
 
     pub fn add_vault(
@@ -783,6 +792,8 @@ pub enum AccountsApiError {
     ViewKeyAlreadyUsed { address: ComponentAddress },
     #[error("The view key is already an imported key")]
     ViewKeyAlreadyImported,
+    #[error("A view-only account cannot be the default account")]
+    ViewOnlyAccountCannotBeDefault,
     #[error("Config API error: {0}")]
     ConfigApiError(#[from] ConfigApiError),
 }

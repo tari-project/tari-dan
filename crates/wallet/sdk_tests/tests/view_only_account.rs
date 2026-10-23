@@ -13,6 +13,7 @@ use tari_engine_types::{Utxo, UtxoOutput, crypto::OutputBody};
 use tari_ootle_address::RistrettoOotleAddress;
 use tari_ootle_common_types::{Epoch, optional::Optional};
 use tari_ootle_wallet_sdk::{
+    apis::accounts::AccountsApiError,
     crypto::{memo::Memo, pay_to::PayTo},
     models::{AccountAndViewKeys, AccountWithAddress, KeyBranch, KeyId, OutputStatus},
     storage::{ReadableWalletStore, WalletStoreReader},
@@ -359,4 +360,30 @@ fn failed_view_only_import_leaves_no_imported_key() {
         .add_view_only_account(Some("watch"), &account_key, &view_secret, None, false)
         .unwrap();
     assert_eq!(*account.owner_public_key(), account_key);
+}
+
+#[test]
+fn view_only_account_never_becomes_the_default() {
+    let test = setup();
+    let accounts = test.watch.sdk().accounts_api();
+    let err = accounts
+        .set_default_account(test.account.component_address())
+        .expect_err("a view-only account cannot be the default");
+    assert!(matches!(err, AccountsApiError::ViewOnlyAccountCannotBeDefault), "{err}");
+
+    // Deleting the default account does not promote the view-only account
+    let spending = Test::test_account_address();
+    accounts
+        .add_account(
+            Some("spending"),
+            &spending,
+            KeyId::derived(KeyBranch::ViewOnlyKey, 0),
+            KeyId::derived(KeyBranch::Account, 0),
+            Epoch::zero(),
+            false,
+            true,
+        )
+        .unwrap();
+    assert!(accounts.delete_if_unused(&spending).unwrap());
+    assert!(accounts.get_default().optional().unwrap().is_none());
 }
