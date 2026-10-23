@@ -38,7 +38,7 @@ fn build_transaction() -> Transaction {
         .allocate_component_address("component")
         .put_last_instruction_output_on_workspace("bucket")
         .call_method("component", "new", args!["bucket"])
-        .build_and_seal(&RistrettoSecretKey::from(1))
+        .build_and_seal(&RistrettoSecretKey::from(1u64))
 }
 
 /// A fee-only accept where the fee intent could not cover everything charged: 1000 was paid up front and all of it

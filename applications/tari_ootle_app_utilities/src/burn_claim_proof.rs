@@ -97,9 +97,9 @@ fn mmr_proof(proof: &MmrInclusionProof) -> ClaimMmrInclusionProof {
 
 /// Converts the burn output proof a Minotari wallet or base node returns over gRPC into the form a
 /// [`BurnClaimProof`] carries. The two have the same fields and the same JSON encoding.
-pub fn burn_output_proof_from_l1(proof: tari_common_types::burn_proof::BurnOutputProof) -> BurnOutputProof {
-    let hash = |hash: tari_common_types::types::FixedHash| FixedHash::from(hash.into_array());
-    let mmr = |proof: tari_common_types::burn_proof::MmrInclusionProof| MmrInclusionProof {
+pub fn burn_output_proof_from_l1(proof: tari_sidechain_l1::BurnOutputProof) -> BurnOutputProof {
+    let hash = |hash: tari_sidechain_l1::FixedHash| FixedHash::from(<[u8; 32]>::from(hash));
+    let mmr = |proof: tari_sidechain_l1::MmrInclusionProof| MmrInclusionProof {
         leaf_index: proof.leaf_index,
         mmr_size: proof.mmr_size,
         path: proof.path.into_iter().map(hash).collect(),

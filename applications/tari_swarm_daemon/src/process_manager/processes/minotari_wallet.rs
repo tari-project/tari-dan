@@ -8,13 +8,14 @@ use log::{error, info};
 use minotari_node_grpc_client::grpc::{self, RevalidateRequest};
 use minotari_wallet_grpc_client::WalletGrpcClient;
 use serde::Serialize;
-use tari_common_types::{burn_proof::BurnOutputProof as L1BurnOutputProof, types::CompressedPublicKey};
+use tari_common_types::types::CompressedPublicKey;
 use tari_crypto::{
     ristretto::{CompressedRistrettoSchnorr, RistrettoSecretKey},
     tari_utilities::ByteArray,
 };
 use tari_ootle_app_utilities::burn_claim_proof::burn_output_proof_from_l1;
 use tari_sidechain::{BurnClaimProof, CompleteClaimBurnProof};
+use tari_sidechain_l1::BurnOutputProof as L1BurnOutputProof;
 use tari_template_lib_types::crypto::{PedersenCommitmentBytes, RistrettoPublicKeyBytes};
 use tari_transaction_components::transaction_components::{MemoField, memo_field::TxType};
 

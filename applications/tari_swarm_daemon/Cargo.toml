@@ -17,6 +17,7 @@ tari_ootle_common_types = { workspace = true }
 tari_crypto = { workspace = true }
 tari_shutdown = { workspace = true }
 tari_sidechain = { workspace = true }
+tari_sidechain_l1 = { workspace = true }
 minotari_node_grpc_client = { workspace = true }
 minotari_wallet_grpc_client = { workspace = true }
 tari_validator_node_client = { workspace = true }

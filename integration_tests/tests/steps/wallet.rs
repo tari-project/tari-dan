@@ -10,7 +10,7 @@ use minotari_app_grpc::{
     tari_rpc,
     tari_rpc::{GetBalanceRequest, ValidateRequest},
 };
-use tari_common_types::{burn_proof::BurnOutputProof as L1BurnOutputProof, types::CompressedPublicKey};
+use tari_common_types::types::CompressedPublicKey;
 use tari_crypto::{
     ristretto::{CompressedRistrettoSchnorr, RistrettoSecretKey},
     tari_utilities::ByteArray,
@@ -18,6 +18,7 @@ use tari_crypto::{
 use tari_ootle_app_utilities::burn_claim_proof::{burn_output_proof_from_l1, claim_proof_from_l1};
 use tari_ootle_walletd_client::types::{ClaimBurnProof, ClaimBurnProofContents};
 use tari_sidechain::{BurnClaimProof, CompleteClaimBurnProof};
+use tari_sidechain_l1::BurnOutputProof as L1BurnOutputProof;
 use tari_template_lib_types::{EncryptedData, crypto::PedersenCommitmentBytes};
 use tari_transaction_components::{
     tari_amount::T,

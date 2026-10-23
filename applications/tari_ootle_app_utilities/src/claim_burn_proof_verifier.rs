@@ -664,7 +664,6 @@ mod tests {
 mod burn_output_proof_tests {
     use ootle_byte_type::ToByteType;
     use tari_common_types::{
-        burn_proof::{BurnOutputProof, MmrInclusionProof as L1MmrInclusionProof, OutputHashPreimage},
         epoch::VnEpoch,
         types::{ComAndPubSignature, CompressedCommitment, CompressedPublicKey, PrivateKey},
     };
@@ -695,6 +694,7 @@ mod burn_output_proof_tests {
     use tari_ootle_transaction::Network;
     use tari_script::script;
     use tari_sidechain::FixedHash;
+    use tari_sidechain_l1::{BurnOutputProof, MmrInclusionProof as L1MmrInclusionProof, OutputHashPreimage};
     use tari_template_lib::types::{
         Hash32,
         crypto::{PedersenCommitmentBytes, RistrettoPublicKeyBytes},
@@ -1070,7 +1070,7 @@ mod burn_output_proof_tests {
         chain.add_header(Epoch(4), inclusion.block_hash, block_output_mr);
         let expected = claim_of(&burn, inclusion.clone(), None);
 
-        let fixed = |hash: &Hash32| tari_common_types::types::FixedHash::from(hash.into_array());
+        let fixed = |hash: &Hash32| tari_sidechain_l1::FixedHash::from(hash.into_array());
         let l1_mmr_proof = |proof: &MmrInclusionProof| L1MmrInclusionProof {
             leaf_index: proof.leaf_index,
             mmr_size: proof.mmr_size,

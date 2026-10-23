@@ -311,7 +311,7 @@ mod tests {
 
             let subject = ElgamalVerifiableBalance {
                 encrypted: RistrettoPublicKey::from_secret_key(&rp) +
-                    RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::from(10)),
+                    RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::from(10u64)),
                 public_nonce: nonce_pk,
             };
 
@@ -325,7 +325,7 @@ mod tests {
         #[test]
         fn it_returns_none_if_the_value_out_of_range() {
             let subject = ElgamalVerifiableBalance {
-                encrypted: RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::from(101)),
+                encrypted: RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::from(101u64)),
                 public_nonce: Default::default(),
             };
 
@@ -345,7 +345,7 @@ mod tests {
             let mut rng = rand::rng();
             let view_sk = &RistrettoSecretKey::random(&mut rng);
 
-            let subject = (0..100)
+            let subject = (0u64..100)
                 .map(|v| {
                     let (nonce_sk, nonce_pk) = RistrettoPublicKey::random_keypair(&mut rng);
                     let rp = nonce_sk * view_sk;

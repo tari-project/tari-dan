@@ -1243,7 +1243,7 @@ mod tests {
     async fn a_dry_run_result_with_a_mistyped_substate_is_refused() {
         let transaction = Transaction::builder_localnet(Epoch(100))
             .with_dry_run(true)
-            .build_and_seal(&RistrettoSecretKey::from(1));
+            .build_and_seal(&RistrettoSecretKey::from(1u64));
         let transaction_id = transaction.calculate_id();
         let body = serde_json::to_string(&SubmitTransactionDryRunResponse {
             transaction_id,

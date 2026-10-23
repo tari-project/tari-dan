@@ -122,7 +122,7 @@ mod tests {
 
         assert_eq!(v1.as_bytes()[..Amount::BYTE_SIZE], amount.to_le_bytes());
 
-        let v2 = RistrettoSecretKey::from(1000);
+        let v2 = RistrettoSecretKey::from(1000u64);
         let sub = Amount::from_le_slice((v1 - v2).as_bytes()).unwrap();
         let expected = amount - Amount::from_u64(1000);
         assert_eq!(sub, expected);

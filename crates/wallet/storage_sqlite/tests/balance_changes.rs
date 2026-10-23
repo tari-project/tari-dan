@@ -93,7 +93,7 @@ fn setup_store_at(path: impl AsRef<Path>) -> (SqliteWalletStore, VaultId, VaultI
     let second_vault = vault_address(2);
     let first_resource = resource_address(1);
     let second_resource = resource_address(2);
-    let owner_public_key = RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::from(1000)).to_byte_type();
+    let owner_public_key = RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::from(1000u64)).to_byte_type();
     let mut tx = store.create_write_tx().unwrap();
     tx.accounts_insert(
         Some("test"),
