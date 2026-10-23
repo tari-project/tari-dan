@@ -25,7 +25,7 @@ use crate::{
         confidential_transfer::ConfidentialTransferApi,
         config::{ConfigApi, ConfigApiError, ConfigKey},
         events::EventsApi,
-        key_manager::{KeyManagerApi, KeyManagerApiError},
+        key_manager::{ImportedKeyCache, KeyManagerApi, KeyManagerApiError},
         locks::LocksApi,
         non_fungible_tokens::NonFungibleTokensApi,
         password_manager::{PasswordManagerApi, PasswordManagerApiError},
@@ -81,6 +81,7 @@ pub struct WalletSdk<TSpec: WalletSdkSpec> {
     config: WalletSdkConfig,
     epoch_birthday: EpochBirthday,
     validator_sets: Arc<ValidatorSetShared>,
+    imported_keys: Arc<ImportedKeyCache>,
 }
 
 impl<TSpec: WalletSdkSpec> WalletSdk<TSpec> {
@@ -100,6 +101,7 @@ impl<TSpec: WalletSdkSpec> WalletSdk<TSpec> {
             config,
             epoch_birthday,
             validator_sets: Arc::default(),
+            imported_keys: Arc::default(),
         })
     }
 
@@ -162,6 +164,7 @@ impl<TSpec: WalletSdkSpec> WalletSdk<TSpec> {
             &self.store,
             &self.key_store,
             self.password_manager_api(),
+            &self.imported_keys,
             self.epoch_birthday,
         )
     }
@@ -316,6 +319,7 @@ where TSpec: WalletSdkSpec<KeyStore = LocalKeyStore>
             config,
             epoch_birthday,
             validator_sets: Arc::default(),
+            imported_keys: Arc::default(),
         })
     }
 
@@ -337,6 +341,7 @@ where TSpec: WalletSdkSpec<KeyStore = LocalKeyStore>
 
     fn create_cipher_seed(&mut self) -> Result<(), WalletSdkError> {
         let password = self.password_manager_api().create_cipher_seed_password()?;
+        self.imported_keys.lock().unwrap().clear();
         let cipher_seed = CipherSeed::random();
         let encrypted_cipher_seed = cipher_seed.encipher(Some(password))?;
         self.config_api().set(ConfigKey::CipherSeed, &encrypted_cipher_seed)?;
@@ -348,6 +353,7 @@ where TSpec: WalletSdkSpec<KeyStore = LocalKeyStore>
     /// and replaces current cipher seed in the DB (to let every component use the new seed).
     fn restore_cipher_seed_from_seed_words(&mut self, seed_words: &SeedWords) -> Result<(), WalletSdkError> {
         let password = self.password_manager_api().create_cipher_seed_password()?;
+        self.imported_keys.lock().unwrap().clear();
         let cipher_seed = CipherSeed::from_mnemonic(seed_words, None)?;
         let encrypted_cipher_seed = cipher_seed.encipher(Some(password))?;
         self.config_api().set(ConfigKey::CipherSeed, &encrypted_cipher_seed)?;
@@ -415,6 +421,7 @@ where
             config: self.config.clone(),
             epoch_birthday: self.epoch_birthday,
             validator_sets: self.validator_sets.clone(),
+            imported_keys: self.imported_keys.clone(),
         }
     }
 }

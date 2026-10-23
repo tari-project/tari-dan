@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::{collections::HashMap, sync::Mutex};
+
 use ootle_byte_type::FromByteType;
 use ootle_network::Network;
 use tari_common_types::seeds::cipher_seed;
@@ -52,11 +54,15 @@ use crate::{
     },
 };
 
+/// Decrypted imported secret keys, shared by every `KeyManagerApi` of a wallet so each key is decrypted once.
+pub(crate) type ImportedKeyCache = Mutex<HashMap<ImportedKeyId, RistrettoSecretKey>>;
+
 pub struct KeyManagerApi<'a, TSpec: WalletSdkSpec> {
     network: Network,
     store: &'a TSpec::Store,
     key_store: &'a TSpec::KeyStore,
     password_manager: PasswordManagerApi<'a, TSpec::Store>,
+    imported_keys: &'a ImportedKeyCache,
     crypto_api: StealthCryptoApi,
     epoch_birthday: EpochBirthday,
 }
@@ -67,6 +73,7 @@ impl<'a, TSpec: WalletSdkSpec> KeyManagerApi<'a, TSpec> {
         store: &'a TSpec::Store,
         key_store: &'a TSpec::KeyStore,
         password_manager: PasswordManagerApi<'a, TSpec::Store>,
+        imported_keys: &'a ImportedKeyCache,
         epoch_birthday: EpochBirthday,
     ) -> Self {
         Self {
@@ -74,6 +81,7 @@ impl<'a, TSpec: WalletSdkSpec> KeyManagerApi<'a, TSpec> {
             store,
             key_store,
             password_manager,
+            imported_keys,
             crypto_api: StealthCryptoApi::new(),
             epoch_birthday,
         }
@@ -104,6 +112,12 @@ impl<'a, TSpec: WalletSdkSpec> KeyManagerApi<'a, TSpec> {
     }
 
     pub fn get_imported_key(&self, id: ImportedKeyId) -> Result<ImportedWalletKey, KeyManagerApiError> {
+        if let Some(key) = self.imported_keys.lock().unwrap().get(&id) {
+            return Ok(ImportedWalletKey {
+                key: key.clone(),
+                import_id: id,
+            });
+        }
         let password = self.password_manager.get_cipher_seed_password()?;
         let (_ty, encrypted) = self.store.with_read_tx(|tx| tx.key_manager_get_raw_imported_key(id))?;
         let decrypted = decrypt_with_password(&encrypted, password.reveal())?;
@@ -113,6 +127,7 @@ impl<'a, TSpec: WalletSdkSpec> KeyManagerApi<'a, TSpec> {
                 item: "imported secret key",
                 details: format!("Imported key at id {id} is non-canonical {e}"),
             })?;
+        self.imported_keys.lock().unwrap().insert(id, secret.clone());
         Ok(ImportedWalletKey {
             key: secret,
             import_id: id,
@@ -136,6 +151,7 @@ impl<'a, TSpec: WalletSdkSpec> KeyManagerApi<'a, TSpec> {
         let id = self
             .store
             .with_write_tx(|tx| tx.key_manager_insert_imported_key(label, &public_key, &encrypted_key, key_type))?;
+        self.imported_keys.lock().unwrap().insert(id, secret_key.clone());
         Ok(KeyId::imported(id))
     }
 
@@ -425,6 +441,7 @@ impl<TSpec: WalletSdkSpec> Clone for KeyManagerApi<'_, TSpec> {
             store: self.store,
             key_store: self.key_store,
             password_manager: self.password_manager.clone(),
+            imported_keys: self.imported_keys,
             crypto_api: self.crypto_api,
             epoch_birthday: self.epoch_birthday,
         }
