@@ -155,7 +155,7 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
 
     /// Adds an account that can be scanned and viewed but not spent from. The view secret key is stored as an
     /// imported key and the account has no owner key. Outputs are scanned from `birthday_epoch`, or the current epoch
-    /// if not given.
+    /// if not given. The view key must not be the view key of another account.
     pub fn add_view_only_account(
         &self,
         account_name: Option<&str>,
@@ -164,8 +164,26 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
         birthday_epoch: Option<Epoch>,
         is_default: bool,
     ) -> Result<AccountWithAddress, AccountsApiError> {
-        RistrettoPublicKey::convert_from_byte_type(account_public_key)
-            .map_err(|e| AccountsApiError::InvalidAccountPublicKey { details: e.to_string() })?;
+        let invalid = |reason: &str| AccountsApiError::InvalidViewOnlyAccount {
+            reason: reason.to_string(),
+        };
+        let account_key = RistrettoPublicKey::convert_from_byte_type(account_public_key)
+            .map_err(|_| invalid("account public key is not a valid public key"))?;
+        if account_public_key.is_zero() {
+            return Err(invalid("account public key is the identity point"));
+        }
+        if *view_secret_key == RistrettoSecretKey::default() {
+            return Err(invalid("view secret key is zero"));
+        }
+        let view_public_key = RistrettoPublicKey::from_secret_key(view_secret_key);
+        if view_public_key == account_key {
+            return Err(invalid("view key is the account key"));
+        }
+        let current_epoch = self.epoch_birthday.calculate_current_epoch();
+        if birthday_epoch.is_some_and(|epoch| epoch > current_epoch) {
+            return Err(invalid("birthday epoch is after the current epoch"));
+        }
+
         let account_address = self.derive_account_address_from_public_key(account_public_key);
         if self.has_account(&account_address)? {
             return Err(AccountsApiError::AccountAlreadyExists {
@@ -179,12 +197,27 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
         {
             return Err(AccountsApiError::AccountNameAlreadyExists { name: name.to_string() });
         }
+        let accounts = self.store.with_read_tx(|tx| {
+            let count = tx.accounts_count()?;
+            tx.accounts_get_many(0, count as usize)
+        })?;
+        for account in accounts {
+            if self
+                .key_manager_api
+                .get_public_key(account.view_only_key_id)?
+                .public_key ==
+                view_public_key
+            {
+                return Err(AccountsApiError::ViewKeyAlreadyUsed {
+                    address: account.component_address,
+                });
+            }
+        }
 
-        let view_public_key = RistrettoPublicKey::from_secret_key(view_secret_key);
         let view_only_key_id =
             self.key_manager_api
                 .import_key(&view_public_key.to_hex(), view_secret_key, KeyType::ViewOnly)?;
-        let birthday_epoch = birthday_epoch.unwrap_or_else(|| self.epoch_birthday.calculate_current_epoch());
+        let birthday_epoch = birthday_epoch.unwrap_or(current_epoch);
 
         self.add_account(
             account_name,
@@ -708,8 +741,10 @@ pub enum AccountsApiError {
     AccountNameAlreadyExists { name: String },
     #[error("Account already exists: {address}")]
     AccountAlreadyExists { address: ComponentAddress },
-    #[error("Invalid account public key: {details}")]
-    InvalidAccountPublicKey { details: String },
+    #[error("Invalid view-only account: {reason}")]
+    InvalidViewOnlyAccount { reason: String },
+    #[error("The view key is already used by account {address}")]
+    ViewKeyAlreadyUsed { address: ComponentAddress },
     #[error("Config API error: {0}")]
     ConfigApiError(#[from] ConfigApiError),
 }
@@ -723,8 +758,12 @@ impl AccountsApiError {
         matches!(self, Self::AccountAlreadyExists { .. })
     }
 
-    pub fn is_invalid_account_public_key_error(&self) -> bool {
-        matches!(self, Self::InvalidAccountPublicKey { .. })
+    pub fn is_invalid_view_only_account_error(&self) -> bool {
+        matches!(self, Self::InvalidViewOnlyAccount { .. })
+    }
+
+    pub fn is_view_key_used_error(&self) -> bool {
+        matches!(self, Self::ViewKeyAlreadyUsed { .. })
     }
 }
 

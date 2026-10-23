@@ -86,7 +86,7 @@ pub async fn handle_create(
     req.transaction
         .validate_blob_references()
         .map_err(|e| invalid_params("transaction.blobs", Some(e.to_string())))?;
-    ensure_transaction_signers(&req.seal_signer, &req.other_signers)?;
+    ensure_transaction_signers(sdk, &req.seal_signer, &req.other_signers)?;
     if let TransactionRequestMainSigner::External { public_key } =
         resolve_main_signer(context, &req.transaction, &req.other_signers)? &&
         !req.signatures.iter().any(|sig| *sig.public_key() == public_key)
@@ -503,7 +503,7 @@ mod tests {
     use tari_ootle_address::Network;
     use tari_ootle_common_types::{Epoch, crypto::create_key_pair, optional::IsNotFoundError};
     use tari_ootle_transaction::{TransactionSignature, UnsignedTransaction};
-    use tari_ootle_wallet_sdk::models::{KeyBranch, KeyId, LockOwner, WalletLock};
+    use tari_ootle_wallet_sdk::models::{KeyBranch, KeyId, KeyType, LockOwner, WalletLock};
 
     use super::*;
     use crate::handlers::test_support::TestDaemon;
@@ -834,6 +834,48 @@ mod tests {
 
         let mut req = create_request(vec![], 60 * 60);
         req.other_signers = vec![KeyId::derived(KeyBranch::Nonce, 0)];
+        handle_create(&daemon.context, Some(&tool), req).await.unwrap();
+    }
+    #[tokio::test]
+    async fn a_request_cannot_name_a_view_only_accounts_view_key_as_a_signer() {
+        let daemon = TestDaemon::start().await;
+        let tool = daemon.api_key("htlc-swap-tool", "transaction_requests:create");
+        let (_, account_public_key) = create_key_pair();
+        let (view_secret_key, _) = create_key_pair();
+        let account = daemon
+            .context
+            .wallet_sdk()
+            .accounts_api()
+            .add_view_only_account(
+                Some("watch"),
+                &account_public_key.to_byte_type(),
+                &view_secret_key,
+                None,
+                false,
+            )
+            .unwrap();
+        let view_key_id = account.view_only_key_id();
+        assert!(matches!(view_key_id, KeyId::Imported { .. }));
+
+        let mut req = create_request(vec![], 60 * 60);
+        req.other_signers = vec![view_key_id];
+        let err = handle_create(&daemon.context, Some(&tool), req).await.unwrap_err();
+        assert!(err.to_string().contains("other_signers"), "{err}");
+
+        let mut req = create_request(vec![], 60 * 60);
+        req.seal_signer = view_key_id;
+        let err = handle_create(&daemon.context, Some(&tool), req).await.unwrap_err();
+        assert!(err.to_string().contains("seal_signer"), "{err}");
+
+        let (secret, _) = create_key_pair();
+        let general_key_id = daemon
+            .context
+            .wallet_sdk()
+            .key_manager_api()
+            .import_key("general", &secret, KeyType::GeneralPurpose)
+            .unwrap();
+        let mut req = create_request(vec![], 60 * 60);
+        req.other_signers = vec![general_key_id];
         handle_create(&daemon.context, Some(&tool), req).await.unwrap();
     }
 }

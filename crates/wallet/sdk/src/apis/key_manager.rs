@@ -54,7 +54,7 @@ use crate::{
     },
 };
 
-/// Decrypted imported secret keys, shared by every `KeyManagerApi` of a wallet so each key is decrypted once.
+/// Decrypted imported view-only secret keys, shared by every `KeyManagerApi` of a wallet so each is decrypted once.
 pub(crate) type ImportedKeyCache = Mutex<HashMap<ImportedKeyId, RistrettoSecretKey>>;
 
 pub struct KeyManagerApi<'a, TSpec: WalletSdkSpec> {
@@ -119,7 +119,7 @@ impl<'a, TSpec: WalletSdkSpec> KeyManagerApi<'a, TSpec> {
             });
         }
         let password = self.password_manager.get_cipher_seed_password()?;
-        let (_ty, encrypted) = self.store.with_read_tx(|tx| tx.key_manager_get_raw_imported_key(id))?;
+        let (key_type, encrypted) = self.store.with_read_tx(|tx| tx.key_manager_get_raw_imported_key(id))?;
         let decrypted = decrypt_with_password(&encrypted, password.reveal())?;
         let secret =
             RistrettoSecretKey::from_canonical_bytes(&decrypted).map_err(|e| WalletStorageError::DecodingError {
@@ -127,11 +127,36 @@ impl<'a, TSpec: WalletSdkSpec> KeyManagerApi<'a, TSpec> {
                 item: "imported secret key",
                 details: format!("Imported key at id {id} is non-canonical {e}"),
             })?;
-        self.imported_keys.lock().unwrap().insert(id, secret.clone());
+        if RistrettoPublicKey::from_secret_key(&secret) != self.get_public_key(KeyId::imported(id))?.public_key {
+            return Err(WalletStorageError::DataInconsistent {
+                operation: "get_imported_key",
+                details: format!("Imported key at id {id} does not match its stored public key"),
+            }
+            .into());
+        }
+        if key_type == KeyType::ViewOnly {
+            self.imported_keys.lock().unwrap().insert(id, secret.clone());
+        }
         Ok(ImportedWalletKey {
             key: secret,
             import_id: id,
         })
+    }
+
+    /// Returns true if the key may sign. An imported view-only key never signs.
+    pub fn is_signing_key(&self, key_id: KeyId) -> Result<bool, KeyManagerApiError> {
+        if !key_id.is_signing_key() {
+            return Ok(false);
+        }
+        let KeyId::Imported { local_key_id } = key_id else {
+            return Ok(true);
+        };
+        let key_type = self
+            .store
+            .with_read_tx(|tx| tx.key_manager_get_raw_imported_key(local_key_id))
+            .optional()?
+            .map(|(key_type, _)| key_type);
+        Ok(key_type != Some(KeyType::ViewOnly))
     }
 
     pub fn import_key(
@@ -151,7 +176,12 @@ impl<'a, TSpec: WalletSdkSpec> KeyManagerApi<'a, TSpec> {
         let id = self
             .store
             .with_write_tx(|tx| tx.key_manager_insert_imported_key(label, &public_key, &encrypted_key, key_type))?;
-        self.imported_keys.lock().unwrap().insert(id, secret_key.clone());
+        let mut imported_keys = self.imported_keys.lock().unwrap();
+        if key_type == KeyType::ViewOnly {
+            imported_keys.insert(id, secret_key.clone());
+        } else {
+            imported_keys.remove(&id);
+        }
         Ok(KeyId::imported(id))
     }
 
@@ -398,7 +428,7 @@ impl<'a, TSpec: WalletSdkSpec> KeyManagerApi<'a, TSpec> {
         T: Signable<C>,
         T::Signature: From<SignatureOutput>,
     {
-        if !key_id.is_signing_key() {
+        if !self.is_signing_key(key_id)? {
             return Err(KeyManagerApiError::NotASigningKey { key_id });
         }
         match &key_id {

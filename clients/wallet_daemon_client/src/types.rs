@@ -781,8 +781,8 @@ pub struct AccountsImportViewOnlyRequest {
     pub view_secret_key: RistrettoSecretKey,
     /// The epoch to start scanning for outputs from. Defaults to the current epoch.
     pub birthday_epoch: Option<Epoch>,
-    /// Makes the account the wallet's default account. Defaults to false, because the default account pays fees and
-    /// signs transactions, which a view-only account cannot do.
+    /// Must be omitted or false: the default account pays fees and signs transactions, which a view-only account
+    /// cannot do.
     pub is_default: Option<bool>,
 }
 

@@ -4,7 +4,10 @@
 mod support;
 
 use ootle_byte_type::ToByteType;
-use tari_crypto::{keys::PublicKey as _, ristretto::RistrettoPublicKey};
+use tari_crypto::{
+    keys::PublicKey as _,
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
+};
 use tari_engine_types::{Utxo, UtxoOutput, crypto::OutputBody};
 use tari_ootle_address::RistrettoOotleAddress;
 use tari_ootle_common_types::Epoch;
@@ -13,10 +16,11 @@ use tari_ootle_wallet_sdk::{
     models::{AccountAndViewKeys, AccountWithAddress, KeyBranch, KeyId, OutputStatus},
 };
 use tari_template_lib::types::{
+    Hash32,
     UtxoAddress,
     access_rules::AccessRule,
     constants::STEALTH_TARI_RESOURCE_ADDRESS,
-    crypto::PedersenCommitmentBytes,
+    crypto::{PedersenCommitmentBytes, RistrettoPublicKeyBytes},
     stealth::SpendAuthorization,
 };
 
@@ -245,4 +249,86 @@ fn view_only_account_does_not_accept_condition_tree_output() {
         .get_unspent_balance(&STEALTH_TARI_RESOURCE_ADDRESS)
         .unwrap();
     assert_eq!(balance.utxo_count, 0);
+}
+
+#[test]
+fn view_only_account_does_not_accept_key_and_script_output() {
+    let test = setup();
+    let (address, mut utxo) = output_to_cold_account(
+        &test,
+        1234,
+        &Memo::new_message("reclaimable").unwrap(),
+        PayTo::StealthPublicKey,
+    );
+    // The account's spend key, plus a script path the sender could use to take the output back
+    let output = utxo.output.as_mut().unwrap();
+    let spend_key = *output.auth.spend_key().unwrap();
+    output.auth = SpendAuthorization::KeyAndScript {
+        spend_key,
+        condition_root: Hash32::from_array([7; 32]),
+    };
+
+    let watch = test.watch.sdk();
+    watch
+        .stealth_outputs_api()
+        .verify_and_update_outputs([(address, &utxo)])
+        .unwrap();
+    let outputs = watch
+        .stealth_outputs_api()
+        .utxos_get_many(
+            &STEALTH_TARI_RESOURCE_ADDRESS,
+            Some(test.account.component_address()),
+            None,
+        )
+        .unwrap();
+    assert_eq!(outputs.len(), 1);
+    assert!(
+        matches!(outputs[0].status, OutputStatus::Invalid),
+        "{:?}",
+        outputs[0].status
+    );
+    let balance = watch
+        .stealth_outputs_api()
+        .get_unspent_balance(&STEALTH_TARI_RESOURCE_ADDRESS)
+        .unwrap();
+    assert_eq!(balance.utxo_count, 0);
+}
+
+#[test]
+fn view_only_account_rejects_invalid_keys_and_future_birthday() {
+    let test = Test::without_accounts(PanicNetworkInterface);
+    let accounts = test.sdk().accounts_api();
+    let (account_secret, account_key) = RistrettoPublicKey::random_keypair(&mut rand::rng());
+    let (view_secret, _) = RistrettoPublicKey::random_keypair(&mut rand::rng());
+    let account_key = account_key.to_byte_type();
+
+    let cases = [
+        (
+            RistrettoPublicKeyBytes::default(),
+            view_secret.clone(),
+            None,
+            "identity point",
+        ),
+        (
+            account_key,
+            RistrettoSecretKey::default(),
+            None,
+            "view secret key is zero",
+        ),
+        (account_key, account_secret, None, "view key is the account key"),
+        (
+            account_key,
+            view_secret,
+            Some(Epoch(u64::MAX)),
+            "birthday epoch is after the current epoch",
+        ),
+    ];
+    for (account_key, view_secret, birthday, reason) in cases {
+        let err = accounts
+            .add_view_only_account(Some("watch"), &account_key, &view_secret, birthday, false)
+            .expect_err(reason);
+        assert!(err.is_invalid_view_only_account_error(), "{err}");
+        assert!(err.to_string().contains(reason), "{err}");
+    }
+    assert_eq!(accounts.count().unwrap(), 0);
 }

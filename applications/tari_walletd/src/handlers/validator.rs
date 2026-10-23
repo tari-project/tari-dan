@@ -64,7 +64,7 @@ pub async fn handle_get_validator_fees(
             sdk.key_manager_api().get_public_key(account_key_id)?
         },
         AccountOrKeyId::KeyId(key_id) => {
-            ensure_signing_key("account_or_key", &key_id)?;
+            ensure_signing_key(&sdk, "account_or_key", &key_id)?;
             sdk.key_manager_api().get_public_key(key_id)?
         },
     };

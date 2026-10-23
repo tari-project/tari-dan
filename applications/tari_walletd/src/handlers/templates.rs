@@ -85,9 +85,9 @@ pub async fn handle_sign_metadata(
 ) -> Result<SignTemplateMetadataResponse, anyhow::Error> {
     context.authorize(token, &[Permission::Templates(Crud::Create)])?;
 
-    ensure_signing_key("key_id", &req.key_id)?;
-
     let sdk = context.wallet_sdk();
+    ensure_signing_key(sdk, "key_id", &req.key_id)?;
+
     let key = sdk.key_manager_api().get_key(req.key_id)?;
     let author_public_key = RistrettoPublicKey::from_secret_key(&key.secret);
 

@@ -271,8 +271,14 @@ pub async fn handle_import_view_only(
     token: Option<&Bearer>,
     req: AccountsImportViewOnlyRequest,
 ) -> Result<AccountsImportViewOnlyResponse, anyhow::Error> {
-    context.authorize(token, &[Permission::Accounts(Crud::Create, None)])?;
+    context.authorize_user_only(token, &[Permission::Admin])?;
+    if req.is_default == Some(true) {
+        return Err(invalid_request(
+            "a view-only account cannot be the default account, which pays fees and signs transactions",
+        ));
+    }
     let sdk = context.wallet_sdk();
+    ensure_seed_recovery_finished(sdk)?;
     let accounts_api = sdk.accounts_api();
 
     let acc = accounts_api
@@ -281,10 +287,14 @@ pub async fn handle_import_view_only(
             &req.account_public_key,
             &req.view_secret_key,
             req.birthday_epoch,
-            req.is_default.unwrap_or(false),
+            false,
         )
         .map_err(|e| {
-            if e.is_name_exists_error() || e.is_account_exists_error() || e.is_invalid_account_public_key_error() {
+            if e.is_name_exists_error() ||
+                e.is_account_exists_error() ||
+                e.is_invalid_view_only_account_error() ||
+                e.is_view_key_used_error()
+            {
                 invalid_request(e)
             } else {
                 general_error(e)
@@ -306,7 +316,7 @@ pub async fn handle_export_view_key(
     token: Option<&Bearer>,
     req: AccountsExportViewKeyRequest,
 ) -> Result<AccountsExportViewKeyResponse, anyhow::Error> {
-    context.authorize(token, &[Permission::Admin])?;
+    context.authorize_user_only(token, &[Permission::Admin])?;
     let sdk = context.wallet_sdk();
     let account = get_account(&req.account, &sdk.accounts_api())?;
     let view_key = sdk.key_manager_api().get_key(account.view_only_key_id())?;
@@ -3212,23 +3222,7 @@ mod create_stealth_transfer_statement_handler_tests {
         assert_rejected_without_locking(&test, &input, request, "pay_to").await;
     }
 
-    #[tokio::test]
-    async fn view_only_import_rejects_invalid_key_and_taken_name() {
-        let test = setup().await;
-        let admin = test.bearer("admin");
-        let import_request = AccountsImportViewOnlyRequest {
-            account_name: "stealth".to_string(),
-            account_public_key: RistrettoPublicKeyBytes::from_bytes(&[0xff; 32]).unwrap(),
-            view_secret_key: RistrettoSecretKey::random(&mut rand::rng()),
-            birthday_epoch: None,
-            is_default: None,
-        };
-
-        let mut invalid_key = import_request.clone();
-        invalid_key.account_name = "invalid".to_string();
-        let err = handle_import_view_only(&test.context, Some(&admin), invalid_key)
-            .await
-            .expect_err("an account public key that is not a valid point must be rejected");
+    fn assert_invalid_request(err: &anyhow::Error, message: &str) {
         let rpc = err
             .downcast_ref::<JsonRpcError>()
             .unwrap_or_else(|| panic!("expected a JsonRpcError, got: {err}"));
@@ -3240,7 +3234,67 @@ mod create_stealth_transfer_statement_handler_tests {
             "{:?}",
             rpc.error_reason()
         );
-        assert!(rpc.to_string().contains("Invalid account public key"), "{rpc}");
+        assert!(rpc.to_string().contains(message), "{rpc}");
+    }
+
+    #[tokio::test]
+    async fn view_only_import_rejects_bad_requests() {
+        let test = setup().await;
+        let admin = test.bearer("admin");
+        let valid = AccountsImportViewOnlyRequest {
+            account_name: "watch".to_string(),
+            account_public_key: RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::random(&mut rand::rng()))
+                .to_byte_type(),
+            view_secret_key: RistrettoSecretKey::random(&mut rand::rng()),
+            birthday_epoch: None,
+            is_default: None,
+        };
+        let import = |req: AccountsImportViewOnlyRequest| handle_import_view_only(&test.context, Some(&admin), req);
+
+        let creator = test.bearer("accounts:create");
+        let err = handle_import_view_only(&test.context, Some(&creator), valid.clone())
+            .await
+            .expect_err("importing requires admin");
+        assert!(err.downcast_ref::<AuthError>().is_some(), "{err}");
+
+        let mut req = valid.clone();
+        req.is_default = Some(true);
+        let err = import(req)
+            .await
+            .expect_err("a view-only account cannot be the default");
+        assert_invalid_request(&err, "cannot be the default account");
+
+        let mut req = valid.clone();
+        req.account_public_key = RistrettoPublicKeyBytes::from_bytes(&[0xff; 32]).unwrap();
+        let err = import(req)
+            .await
+            .expect_err("an invalid account public key is rejected");
+        assert_invalid_request(&err, "Invalid view-only account");
+
+        let mut req = valid.clone();
+        req.birthday_epoch = Some(Epoch(7));
+        let err = import(req)
+            .await
+            .expect_err("a birthday after the current epoch is rejected");
+        assert_invalid_request(&err, "birthday epoch is after the current epoch");
+
+        let exported = handle_export_view_key(&test.context, Some(&admin), AccountsExportViewKeyRequest {
+            account: test.account.into(),
+        })
+        .await
+        .unwrap();
+        let mut req = valid.clone();
+        req.view_secret_key = exported.view_secret_key;
+        let err = import(req)
+            .await
+            .expect_err("a view key that another account uses is rejected");
+        assert_invalid_request(&err, "already used by account");
+
+        let mut req = valid;
+        req.account_name = "stealth".to_string();
+        let err = import(req).await.expect_err("a taken name is rejected");
+        assert_invalid_request(&err, "Account name already exists");
+
         let listed = handle_list(&test.context, Some(&admin), AccountsListRequest {
             offset: 0,
             limit: 10,
@@ -3248,14 +3302,6 @@ mod create_stealth_transfer_statement_handler_tests {
         .await
         .unwrap();
         assert_eq!(listed.accounts.len(), 1);
-
-        let mut name_taken = import_request;
-        name_taken.account_public_key =
-            RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::random(&mut rand::rng())).to_byte_type();
-        let err = handle_import_view_only(&test.context, Some(&admin), name_taken)
-            .await
-            .expect_err("importing with a taken name must be rejected");
-        assert!(err.to_string().contains("Account name already exists"), "{err}");
     }
 
     #[tokio::test]
@@ -3274,7 +3320,7 @@ mod create_stealth_transfer_statement_handler_tests {
             account_name: "watch".to_string(),
             account_public_key,
             view_secret_key: view_secret_key.clone(),
-            birthday_epoch: Some(Epoch(7)),
+            birthday_epoch: Some(Epoch::zero()),
             is_default: None,
         };
 
@@ -3290,13 +3336,13 @@ mod create_stealth_transfer_statement_handler_tests {
         let account = get_account(&watch, &test.context.wallet_sdk().accounts_api()).unwrap();
         assert_eq!(account.owner_key_id(), None);
         assert_eq!(*account.owner_public_key(), account_public_key);
-        assert_eq!(account.birthday_epoch(), Epoch(7));
+        assert_eq!(account.birthday_epoch(), Epoch::zero());
         assert_eq!(
             *account.address().view_only_key(),
             RistrettoPublicKey::from_secret_key(&view_secret_key).to_byte_type()
         );
 
-        // The default account pays fees, so an import only becomes the default when asked to
+        // The default account pays fees, so an import never becomes the default
         let default_account = test.context.wallet_sdk().accounts_api().get_default().unwrap();
         assert_eq!(*default_account.component_address(), test.account);
 
@@ -3322,7 +3368,7 @@ mod create_stealth_transfer_statement_handler_tests {
         .unwrap();
         assert_eq!(exported.account_public_key, account_public_key);
         assert_eq!(exported.view_secret_key, view_secret_key);
-        assert_eq!(exported.birthday_epoch, Epoch(7));
+        assert_eq!(exported.birthday_epoch, Epoch::zero());
 
         let err = handle_stealth_transfer(&test.context, Some(&admin), StealthTransferRequest {
             owner_account: watch.clone(),

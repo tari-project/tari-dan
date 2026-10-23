@@ -190,7 +190,7 @@ fn validate_create_request(
         ));
     }
 
-    if !is_signing_key(&req.key_id) {
+    if !is_signing_key(context, &req.key_id)? {
         return Err(invalid_params(
             "key_id",
             Some(format!(
@@ -345,8 +345,9 @@ fn requester_of(auth: AuthIdentity) -> SigningRequester {
 /// Keys a signing request may name. A nonce key signs only as the throw-away
 /// authorizer of a stealth statement's revealed funds, in a transaction walletd
 /// seals itself, so a co-signature for another party never needs one.
-fn is_signing_key(key_id: &KeyId) -> bool {
-    key_id.is_signing_key() && key_id.derived_branch() != Some(KeyBranch::Nonce)
+fn is_signing_key(context: &HandlerContext, key_id: &KeyId) -> Result<bool, anyhow::Error> {
+    let is_signing_key = context.wallet_sdk().key_manager_api().is_signing_key(*key_id)?;
+    Ok(is_signing_key && key_id.derived_branch() != Some(KeyBranch::Nonce))
 }
 
 /// The first 8 bytes of the authorization message, as shown to the approver.

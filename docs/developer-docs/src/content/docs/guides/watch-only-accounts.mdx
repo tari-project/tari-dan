@@ -16,7 +16,8 @@ A typical setup has two wallet daemons:
 
 ### 1. Export the view key on the cold machine
 
-Call `accounts.export_view_key` on the cold daemon. This requires the `admin` permission.
+Call `accounts.export_view_key` on the cold daemon. This requires the `admin` permission from an interactive session:
+API keys and delegated (WebRTC) tokens are refused, even with `admin`.
 
 ```json
 {
@@ -44,8 +45,8 @@ machine over a channel you trust and do not log it.
 
 ### 2. Import the account on the online daemon
 
-Call `accounts.import_view_only` on the online daemon with the exported values. This requires the unscoped
-`accounts:create` permission (or `admin`).
+Call `accounts.import_view_only` on the online daemon with the exported values. Like the export, this requires the
+`admin` permission from an interactive session.
 
 ```json
 {
@@ -56,8 +57,7 @@ Call `accounts.import_view_only` on the online daemon with the exported values. 
     "account_name": "deposits",
     "account_public_key": "a2f1…",
     "view_secret_key": "5c0e…",
-    "birthday_epoch": 1234,
-    "is_default": false
+    "birthday_epoch": 1234
   }
 }
 ```
@@ -65,14 +65,16 @@ Call `accounts.import_view_only` on the online daemon with the exported values. 
 The response is the account's component address: `{ "account_address": "component_…" }`.
 
 - `birthday_epoch` is the epoch to start scanning from. Pass the exported value so earlier deposits are found. If it is
-  omitted, scanning starts at the current epoch.
-- `is_default` defaults to `false`. The default account pays fees and signs transactions, which a watch-only account
-  cannot do, so only set it when you mean to.
-- The import is rejected if the wallet already has an account with this public key or name, or if
-  `account_public_key` is not a valid public key.
+  omitted, scanning starts at the current epoch. A birthday after the current epoch is rejected.
+- The import never makes the account the wallet's default account, which pays fees and signs transactions. Omit
+  `is_default` or set it to `false`; `true` is rejected.
+- The import is rejected if the wallet already has an account with this public key or name, if another account already
+  uses this view key, or if the keys are invalid (an invalid or identity account public key, a zero view secret key, or a
+  view key equal to the account key).
 
-The account's Ootle address (from `accounts.get`) is the same as on the cold daemon, so you can hand it out as a
-deposit address from either machine.
+The account's Ootle address (from `accounts.get`) should be the same as on the cold daemon. Compare the two before you
+hand the address out: a mismatch means the wrong keys were imported, and payments to the online daemon's address would
+not reach the cold account.
 
 ### 3. Read deposits
 
@@ -88,9 +90,20 @@ account public key and the view key, so the watch-only daemon recomputes it from
 public key. An output that decrypts with the view key but carries a different spend key is stored with status
 `Invalid` and is not counted in the balance.
 
-An output locked by a condition tree (an access rule or script) instead of a spend key carries no key to check, so
-nothing ties it to the account. A watch-only daemon stores such an output as `Invalid` too, and it never counts toward
-the balance.
+An output with a condition tree (an access rule or script, with or without a spend key) can be spent by whoever
+satisfies the condition, which the view key cannot rule out. A watch-only daemon stores such an output as `Invalid`
+too, so it never counts toward the balance.
+
+<Aside type="caution">
+The sender writes the memo, so its payment reference and sender address are whatever the sender chose. Nothing proves
+who sent a payment. Give each payer an unguessable, single-use payment reference and credit deposits by that reference,
+not by the sender address.
+</Aside>
+
+<Aside type="caution">
+The daemon gets UTXO data from its indexer without a proof that it is on chain. Run an indexer you trust, or confirm
+each deposit on chain, before you credit it.
+</Aside>
 
 ### Payments cannot be sent
 
