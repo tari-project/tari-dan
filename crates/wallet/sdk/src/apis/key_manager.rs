@@ -165,30 +165,52 @@ impl<'a, TSpec: WalletSdkSpec> KeyManagerApi<'a, TSpec> {
         secret_key: &RistrettoSecretKey,
         key_type: KeyType,
     ) -> Result<KeyId, KeyManagerApiError> {
+        let encrypted_key = self.encrypt_imported_key(secret_key)?;
+        let id = self
+            .store
+            .with_write_tx(|tx| self.insert_imported_key(tx, label, secret_key, &encrypted_key, key_type))?;
+        self.cache_imported_key(id, secret_key, key_type);
+        Ok(KeyId::imported(id))
+    }
+
+    /// Encrypts `secret_key` with the keyring password, for [`Self::insert_imported_key`].
+    pub(crate) fn encrypt_imported_key(&self, secret_key: &RistrettoSecretKey) -> Result<Vec<u8>, KeyManagerApiError> {
         let password = self.password_manager.get_cipher_seed_password()?;
-        let encrypted_key = encrypt_with_password(secret_key.as_bytes(), password.reveal()).map_err(|e| {
+        encrypt_with_password(secret_key.as_bytes(), password.reveal()).map_err(|e| {
             KeyManagerApiError::StoreError(WalletStorageError::EncryptionError {
                 operation: "KeyManagerApi::import_key",
                 details: format!("Failed to encrypt imported key: {}", e),
             })
-        })?;
+        })
+    }
+
+    /// Stores an imported key in `tx`. Re-importing a key keeps its type, so a key never changes between signing and
+    /// view-only.
+    pub(crate) fn insert_imported_key(
+        &self,
+        tx: &mut <TSpec::Store as WriteableWalletStore>::WriteTransaction<'_>,
+        label: &str,
+        secret_key: &RistrettoSecretKey,
+        encrypted_key: &[u8],
+        key_type: KeyType,
+    ) -> Result<ImportedKeyId, KeyManagerApiError> {
         let public_key = RistrettoPublicKey::from_secret_key(secret_key).to_hex();
-        // Re-importing a key keeps its type, so a key never changes between signing and view-only
-        let id = self.store.with_write_tx(|tx| {
-            if let Some((_, existing)) = tx.key_manager_get_imported_key_by_public_key(&public_key).optional()? &&
-                existing != key_type
-            {
-                return Err(KeyManagerApiError::KeyAlreadyImportedWithDifferentType {
-                    existing,
-                    requested: key_type,
-                });
-            }
-            Ok(tx.key_manager_insert_imported_key(label, &public_key, &encrypted_key, key_type)?)
-        })?;
+        if let Some((_, existing)) = tx.key_manager_get_imported_key_by_public_key(&public_key).optional()? &&
+            existing != key_type
+        {
+            return Err(KeyManagerApiError::KeyAlreadyImportedWithDifferentType {
+                existing,
+                requested: key_type,
+            });
+        }
+        Ok(tx.key_manager_insert_imported_key(label, &public_key, encrypted_key, key_type)?)
+    }
+
+    /// Caches a key once its import is committed.
+    pub(crate) fn cache_imported_key(&self, id: ImportedKeyId, secret_key: &RistrettoSecretKey, key_type: KeyType) {
         if key_type == KeyType::ViewOnly {
             self.imported_keys.lock().unwrap().insert(id, secret_key.clone());
         }
-        Ok(KeyId::imported(id))
     }
 
     pub fn get_key(&self, key_id: KeyId) -> Result<WalletSecretKey, KeyManagerApiError> {

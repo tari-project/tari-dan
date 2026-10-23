@@ -7,13 +7,15 @@ use ootle_byte_type::ToByteType;
 use tari_crypto::{
     keys::PublicKey as _,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
+    tari_utilities::hex::Hex,
 };
 use tari_engine_types::{Utxo, UtxoOutput, crypto::OutputBody};
 use tari_ootle_address::RistrettoOotleAddress;
-use tari_ootle_common_types::Epoch;
+use tari_ootle_common_types::{Epoch, optional::Optional};
 use tari_ootle_wallet_sdk::{
     crypto::{memo::Memo, pay_to::PayTo},
     models::{AccountAndViewKeys, AccountWithAddress, KeyBranch, KeyId, OutputStatus},
+    storage::{ReadableWalletStore, WalletStoreReader},
 };
 use tari_template_lib::types::{
     Hash32,
@@ -331,4 +333,30 @@ fn view_only_account_rejects_invalid_keys_and_future_birthday() {
         assert!(err.to_string().contains(reason), "{err}");
     }
     assert_eq!(accounts.count().unwrap(), 0);
+}
+
+#[test]
+fn failed_view_only_import_leaves_no_imported_key() {
+    // Test::new has an account named "test"
+    let test = Test::new();
+    let accounts = test.sdk().accounts_api();
+    let (_, account_key) = RistrettoPublicKey::random_keypair(&mut rand::rng());
+    let (view_secret, view_key) = RistrettoPublicKey::random_keypair(&mut rand::rng());
+    let account_key = account_key.to_byte_type();
+
+    let err = accounts
+        .add_view_only_account(Some("test"), &account_key, &view_secret, None, false)
+        .expect_err("a taken name is rejected");
+    assert!(err.is_name_exists_error(), "{err}");
+    let stored_key = test
+        .store()
+        .with_read_tx(|tx| tx.key_manager_get_imported_key_by_public_key(&view_key.to_hex()))
+        .optional()
+        .unwrap();
+    assert!(stored_key.is_none(), "the view key was stored without its account");
+
+    let account = accounts
+        .add_view_only_account(Some("watch"), &account_key, &view_secret, None, false)
+        .unwrap();
+    assert_eq!(*account.owner_public_key(), account_key);
 }
