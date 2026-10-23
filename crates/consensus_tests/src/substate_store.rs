@@ -829,7 +829,7 @@ fn write_diff(id: &VersionedSubstateId) -> SubstateDiff {
 fn add_substate(store: &TestStore, seed: u8, version: SubstateVersion) -> VersionedSubstateId {
     let id = new_substate_id(seed);
     let value = new_substate_value(seed);
-    let mut batch = SubstateUpdateBatch::new(Network::LocalNet, Epoch::zero());
+    let mut batch = SubstateUpdateBatch::new_unrecorded(Network::LocalNet, Epoch::zero());
     batch.with_transition(Shard::first(), 0).push(SubstateTransition::Up {
         id: id.clone(),
         version,
@@ -845,7 +845,7 @@ fn add_substate(store: &TestStore, seed: u8, version: SubstateVersion) -> Versio
 
 fn add_fee_pool(store: &TestStore, amount: u64) -> SubstateId {
     let id = SubstateId::from(ValidatorFeePoolAddress::from_array([9; ObjectKey::LENGTH]));
-    let mut batch = SubstateUpdateBatch::new(Network::LocalNet, Epoch::zero());
+    let mut batch = SubstateUpdateBatch::new_unrecorded(Network::LocalNet, Epoch::zero());
     batch.with_transition(Shard::first(), 0).push(SubstateTransition::Up {
         id: id.clone(),
         version: SubstateVersion::ZERO,

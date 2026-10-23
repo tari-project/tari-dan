@@ -224,7 +224,7 @@ impl Test {
             .collect::<Vec<_>>();
 
         self.validators.values().filter(|vn| dest.is_for_vn(vn)).for_each(|v| {
-            let mut batch = SubstateUpdateBatch::new(Network::LocalNet, Epoch::zero());
+            let mut batch = SubstateUpdateBatch::new_unrecorded(Network::LocalNet, Epoch::zero());
             for substate in &substates {
                 let shard = substate.to_versioned_substate_id().to_shard(TEST_NUM_PRESHARDS);
                 if v.shard_group.contains(&shard) {

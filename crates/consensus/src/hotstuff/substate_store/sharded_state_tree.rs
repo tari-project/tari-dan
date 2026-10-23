@@ -77,8 +77,15 @@ impl<TTx: StateStoreReadTransaction> ShardedStateTree<&TTx> {
         Ok(maybe_version)
     }
 
-    /// The transition accumulator of `shard` after the pending diffs, or its committed one if there are none.
-    fn get_current_transition_acc(&self, shard: Shard) -> Result<TransitionAccumulator, StateTreeError> {
+    /// The transition accumulator of `shard` after the pending diffs, or, if there are none, the one its committed
+    /// transitions at or below `committed_version` hold. The store extends the accumulator of the last transition
+    /// record below a version when it commits that version, so the base must be read the same way: a shard whose
+    /// tree holds no version is at `committed_version` 0, and any transitions recorded at version 0 count.
+    fn get_current_transition_acc(
+        &self,
+        shard: Shard,
+        committed_version: Version,
+    ) -> Result<TransitionAccumulator, StateTreeError> {
         if let Some(acc) = self
             .pending_diffs
             .get(&shard)
@@ -88,11 +95,8 @@ impl<TTx: StateStoreReadTransaction> ShardedStateTree<&TTx> {
             return Ok(acc);
         }
 
-        let Some(version) = self.get_current_version(shard)? else {
-            return Ok(TransitionAccumulator::zero());
-        };
         self.tx
-            .state_transitions_get_accumulator(shard, version)
+            .state_transitions_get_accumulator(shard, committed_version)
             .map_err(|e| StateTreeError::JmtStorageError(JmtStorageError::UnexpectedError(e.to_string())))
     }
 
@@ -119,7 +123,7 @@ impl<TTx: StateStoreReadTransaction> ShardedStateTree<&TTx> {
                 None => 1,
             };
             let transition_acc = self
-                .get_current_transition_acc(shard)?
+                .get_current_transition_acc(shard, current_version.unwrap_or(0))?
                 .extend(epoch, next_version, &changes)?;
 
             // Read only state store that is scoped to the shard
@@ -204,7 +208,7 @@ impl<TTx: StateStoreReadTransaction> ShardedStateTree<&TTx> {
         let state_tree = SpreadPrefixStateTree::new(&mut store);
 
         let root_hash = state_tree.get_root_hash(version)?;
-        Ok((root_hash, version, self.get_current_transition_acc(shard)?))
+        Ok((root_hash, version, self.get_current_transition_acc(shard, version)?))
     }
 }
 

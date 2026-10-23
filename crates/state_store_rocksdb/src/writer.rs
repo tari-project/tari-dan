@@ -1416,6 +1416,9 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
                     )?;
                 }
 
+                if !update_batch.record_transitions {
+                    continue;
+                }
                 let transition = StateTransitionModelDataV1 {
                     epoch: update_batch.epoch,
                     state_version,

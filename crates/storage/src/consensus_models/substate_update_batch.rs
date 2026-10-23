@@ -13,6 +13,10 @@ pub struct SubstateUpdateBatch {
     pub network: Network,
     pub epoch: Epoch,
     pub updates: IndexMap<Shard, IndexMap<Version, Vec<SubstateTransition>>>,
+    /// Whether the batch is recorded as state transitions of its versions, which the shard's transition accumulator
+    /// covers and state sync serves. Every batch a block commits is. A test fixture that seeds state no block
+    /// committed is not, so the seeded state leaves the accumulator a block's leaf commits as it is.
+    pub record_transitions: bool,
 }
 
 impl SubstateUpdateBatch {
@@ -21,6 +25,16 @@ impl SubstateUpdateBatch {
             network,
             epoch,
             updates: IndexMap::new(),
+            record_transitions: true,
+        }
+    }
+
+    /// A batch that seeds state outside any block: its substates are written, but no transition is recorded (see
+    /// [`Self::record_transitions`]).
+    pub fn new_unrecorded(network: Network, epoch: Epoch) -> Self {
+        Self {
+            record_transitions: false,
+            ..Self::new(network, epoch)
         }
     }
 
