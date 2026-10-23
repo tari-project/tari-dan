@@ -60,6 +60,7 @@ tari_bor = { workspace = true, default-features = true, features = ["std"] }
 tari_transaction_manifest = { workspace = true }
 tari_ootle_transaction = { workspace = true, features = ["serde"] }
 tari_template_builtin = { workspace = true, features = ["templates", "state"] }
+tari_ootle_sr25519 = { workspace = true }
 
 # Default features stay off: arkworks' `std` feature links tracing-subscriber 0.2 through
 # `ark-relations`, a line that no longer receives security fixes.

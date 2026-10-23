@@ -4,7 +4,7 @@
 use minicbor::{CborLen, Decode, Encode};
 use tari_template_abi::rust::{fmt, marker::PhantomData};
 
-use crate::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
+use crate::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes, Sr25519SignatureBytes};
 
 pub trait SignatureDomain {
     fn domain() -> &'static [u8];
@@ -74,12 +74,24 @@ impl<D: SignatureDomain, T: Into<SignaturePayload>> From<T> for Signature<D> {
 pub enum SignaturePayload {
     #[n(0)]
     RistrettoSchnorrBlake2b(#[n(0)] SchnorrSignatureBytes),
+    /// A standard sr25519 (schnorrkel) signature, signed under the signature domain as its signing
+    /// context. Any sr25519 signer that lets the caller set the context can produce one.
+    #[n(1)]
+    Sr25519(#[n(0)] Sr25519SignatureBytes),
 }
 
 impl SignaturePayload {
     pub fn ristretto_schnorr_blake2b(&self) -> Option<&SchnorrSignatureBytes> {
         match self {
             SignaturePayload::RistrettoSchnorrBlake2b(sig) => Some(sig),
+            SignaturePayload::Sr25519(_) => None,
+        }
+    }
+
+    pub fn sr25519(&self) -> Option<&Sr25519SignatureBytes> {
+        match self {
+            SignaturePayload::Sr25519(sig) => Some(sig),
+            SignaturePayload::RistrettoSchnorrBlake2b(_) => None,
         }
     }
 }
@@ -87,6 +99,12 @@ impl SignaturePayload {
 impl From<SchnorrSignatureBytes> for SignaturePayload {
     fn from(value: SchnorrSignatureBytes) -> Self {
         SignaturePayload::RistrettoSchnorrBlake2b(value)
+    }
+}
+
+impl From<Sr25519SignatureBytes> for SignaturePayload {
+    fn from(value: Sr25519SignatureBytes) -> Self {
+        SignaturePayload::Sr25519(value)
     }
 }
 

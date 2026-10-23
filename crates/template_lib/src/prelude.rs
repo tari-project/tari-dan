@@ -73,6 +73,7 @@ pub use tari_template_lib_types::{
         Signature,
         SignatureDomain,
         SignaturePayload,
+        Sr25519SignatureBytes,
     },
     custom_signature_domain,
     metadata,

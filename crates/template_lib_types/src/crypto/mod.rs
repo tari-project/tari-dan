@@ -10,6 +10,7 @@ mod range_proof;
 mod ristretto;
 mod scalar;
 mod schnorr;
+mod sr25519;
 mod utxo_tag;
 
 #[macro_use]
@@ -24,6 +25,7 @@ pub use ristretto::*;
 pub use scalar::*;
 pub use schnorr::*;
 pub use signature::*;
+pub use sr25519::*;
 pub use utxo_tag::*;
 pub use value_proof::*;
 

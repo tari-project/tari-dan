@@ -8,6 +8,7 @@ use blake2::{
 };
 use ootle_byte_type::{ConvertFromByteType, FromByteType, ToByteType};
 use tari_crypto::ristretto::RistrettoSchnorr;
+use tari_ootle_sr25519::SigningContext;
 use tari_template_lib_types::crypto::{PublicKey, RistrettoPublicKeyBytes, SignaturePayload};
 
 pub trait GetVerifier {
@@ -18,6 +19,7 @@ impl GetVerifier for SignaturePayload {
     fn get_verifier(&self) -> &dyn Verifier {
         match self {
             SignaturePayload::RistrettoSchnorrBlake2b(_) => &RistrettoSchnorrBlake2bVerifier,
+            SignaturePayload::Sr25519(_) => &Sr25519Verifier,
         }
     }
 }
@@ -83,6 +85,21 @@ impl Verifier for RistrettoSchnorrBlake2bVerifier {
     }
 }
 
+/// A verifier for standard sr25519 signatures, with the signature domain as the signing context.
+pub struct Sr25519Verifier;
+
+impl Verifier for Sr25519Verifier {
+    fn verify(&self, domain: &[u8], message: &[u8], public_key: &PublicKey, signature: &SignaturePayload) -> bool {
+        let Some(sig) = signature.sr25519() else {
+            return false;
+        };
+        let Some(public_key) = public_key.ristretto25519() else {
+            return false;
+        };
+        SigningContext::new(domain).verify(sig, public_key, message)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use tari_crypto::{
@@ -115,5 +132,28 @@ mod tests {
 
         let verifier = RistrettoSchnorrBlake2bVerifier;
         assert!(verifier.verify(domain, message, &public_key, &signature_payload));
+    }
+
+    #[test]
+    fn it_verifies_an_sr25519_signature_under_its_domain() {
+        let (secret_key, public_key) = RistrettoPublicKey::random_keypair(&mut rand::rng());
+        let message = b"Hello, world!";
+        let domain = b"Test domain";
+
+        let payload = SignaturePayload::Sr25519(SigningContext::new(domain).sign(&secret_key, message));
+        let public_key = PublicKey::Ristretto25519(public_key.to_byte_type());
+
+        assert!(payload.get_verifier().verify(domain, message, &public_key, &payload));
+        assert!(
+            !payload
+                .get_verifier()
+                .verify(b"Another domain", message, &public_key, &payload)
+        );
+        assert!(
+            !payload
+                .get_verifier()
+                .verify(domain, b"Another message", &public_key, &payload)
+        );
+        assert!(!RistrettoSchnorrBlake2bVerifier.verify(domain, message, &public_key, &payload));
     }
 }
