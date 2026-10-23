@@ -79,6 +79,7 @@ use tari_ootle_storage::{
         LockConflict,
         NoVoteReason,
         PendingShardStateTreeDiff,
+        ProposalOrigin,
         StateVersionProof,
         StateVersionProofSource,
         SubstateChange,
@@ -310,6 +311,7 @@ impl<'a, TAddr: NodeAddressable> RocksDbStateStoreWriteTransaction<'a, TAddr> {
         &mut self,
         block: &Block,
         foreign_proposals: &[ForeignProposal],
+        origin: ProposalOrigin,
     ) -> Result<(), StorageError> {
         const OPERATION: &str = "parked_blocks_insert";
         if self.blocks_exists(block.id())? {
@@ -333,6 +335,7 @@ impl<'a, TAddr: NodeAddressable> RocksDbStateStoreWriteTransaction<'a, TAddr> {
         let parked_block_data = ParkedBlockDataRef {
             block,
             foreign_proposals,
+            origin,
         };
         let data = codec.encode(&parked_block_data)?;
         cf.put_raw_value(block.id(), &data, OPERATION)?;
@@ -345,7 +348,10 @@ impl<'a, TAddr: NodeAddressable> RocksDbStateStoreWriteTransaction<'a, TAddr> {
         Ok(())
     }
 
-    fn parked_blocks_remove(&mut self, block_id: &BlockId) -> Result<(Block, Vec<ForeignProposal>), StorageError> {
+    fn parked_blocks_remove(
+        &mut self,
+        block_id: &BlockId,
+    ) -> Result<(Block, Vec<ForeignProposal>, ProposalOrigin), StorageError> {
         const OPERATION: &str = "parked_blocks_remove";
         let cf = self.db().cf(ParkedBlockCf)?;
         let data = cf.get(block_id, OPERATION)?;
@@ -354,7 +360,7 @@ impl<'a, TAddr: NodeAddressable> RocksDbStateStoreWriteTransaction<'a, TAddr> {
             .cf(parked_block::ParkedBlockEpochHeightIndex)?
             .delete(&parked_block::epoch_height_index_key(&data.block), OPERATION)?;
 
-        Ok((data.block, data.foreign_proposals))
+        Ok((data.block, data.foreign_proposals, data.origin))
     }
 }
 
@@ -1117,6 +1123,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         &mut self,
         block: &Block,
         foreign_proposals: &[ForeignProposal],
+        origin: ProposalOrigin,
         missing_transaction_ids: IMissing,
     ) -> Result<(), StorageError> {
         const OPERATION: &str = "missing_transactions_insert";
@@ -1128,7 +1135,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
             });
         }
 
-        self.parked_blocks_insert(block, foreign_proposals)?;
+        self.parked_blocks_insert(block, foreign_proposals, origin)?;
 
         let cf = self.db().cf(MissingTransactionCf)?;
         let index_cf = self.db().cf(missing_transactions::MissingTransactionBlockIdIndex)?;
@@ -1145,7 +1152,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
     fn parked_block_remove_missing_transaction(
         &mut self,
         transaction_id: &TransactionId,
-    ) -> Result<Option<(Block, Vec<ForeignProposal>)>, StorageError> {
+    ) -> Result<Option<(Block, Vec<ForeignProposal>, ProposalOrigin)>, StorageError> {
         const OPERATION: &str = "missing_transactions_insert";
 
         let query_cf = self.db().cf(missing_transactions::ByTransactionIdQuery)?;
@@ -1181,8 +1188,8 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         }
 
         // None left, remove and return the block
-        let block_and_fp = self.parked_blocks_remove(&block_id)?;
-        Ok(Some(block_and_fp))
+        let parked = self.parked_blocks_remove(&block_id)?;
+        Ok(Some(parked))
     }
 
     fn parked_blocks_remove_up_to(&mut self, epoch: Epoch, height: NodeHeight) -> Result<usize, StorageError> {

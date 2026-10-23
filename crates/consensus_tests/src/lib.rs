@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 #[cfg(test)]
+mod catch_up_no_vote;
+#[cfg(test)]
 mod catch_up_on_proposal_ahead;
 #[cfg(test)]
 mod catch_up_rewind;

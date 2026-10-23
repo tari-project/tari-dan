@@ -17,7 +17,14 @@ use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
-    consensus_models::{Block, BookkeepingModel, ForeignParkedProposal, ForeignProposal, TransactionRecord},
+    consensus_models::{
+        Block,
+        BookkeepingModel,
+        ForeignParkedProposal,
+        ForeignProposal,
+        ProposalOrigin,
+        TransactionRecord,
+    },
 };
 use tari_ootle_transaction::{Transaction, TransactionId};
 use tokio::sync::broadcast;
@@ -375,7 +382,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             epoch_state,
             proposal,
             new_transactions,
-            HotstuffMessage::new_proposal,
+            ProposalOrigin::Live,
         )
         .await
     }
@@ -411,7 +418,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             epoch_state,
             proposal,
             new_transactions,
-            HotstuffMessage::new_catch_up_sync_response,
+            ProposalOrigin::CatchUp,
         )
         .await
     }
@@ -419,7 +426,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
     pub fn update_parked_blocks<'a, I: IntoIterator<Item = &'a TransactionId> + ExactSizeIterator>(
         &self,
         transaction_ids: I,
-    ) -> Result<(Vec<ProposalMessage>, Vec<ForeignProposalMessage>), HotStuffError> {
+    ) -> Result<(UnparkedLocalBlocks, Vec<ForeignProposalMessage>), HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "update_local_parked_blocks").with_iterations(transaction_ids.len());
         self.store.with_write_tx(|tx| {
             // TODO(perf)
@@ -427,7 +434,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             let mut foreign_unparked_blocks = Vec::new();
             for transaction_id in transaction_ids {
                 debug!(target: LOG_TARGET, "🔍 Checking if transaction {} unparks any blocks", transaction_id);
-                if let Some((unparked_block, foreign_proposals)) =
+                if let Some((unparked_block, foreign_proposals, origin)) =
                     tx.parked_block_remove_missing_transaction(transaction_id)?
                 {
                     info!(target: LOG_TARGET, "♻️ all transactions for local block {unparked_block} are ready for consensus");
@@ -436,10 +443,13 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
                         block: unparked_block.as_leaf(),
                     });
 
-                    unparked_blocks.push(ProposalMessage {
-                        block: unparked_block,
-                        foreign_proposals,
-                    });
+                    unparked_blocks.push((
+                        ProposalMessage {
+                            block: unparked_block,
+                            foreign_proposals,
+                        },
+                        origin,
+                    ));
                 } else {
                     debug!(target: LOG_TARGET, "🔍 Transaction {} did not unpark any blocks", transaction_id);
                 }
@@ -489,7 +499,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         epoch_state: &EpochState<TConsensusSpec::Addr>,
         proposal: ProposalMessage,
         new_transactions: &OnReceiveNewTransaction<TConsensusSpec>,
-        to_message: fn(ProposalMessage) -> HotstuffMessage,
+        origin: ProposalOrigin,
     ) -> Result<MessageValidationResult<TConsensusSpec::Addr>, HotStuffError> {
         let has_missing_transactions = self.store.with_write_tx(|tx| {
             self.resequence_unpooled_transactions(tx, epoch_state, &proposal, new_transactions)?;
@@ -500,7 +510,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         if !has_missing_transactions {
             return Ok(MessageValidationResult::Ready {
                 from,
-                message: to_message(proposal),
+                message: proposal_message(origin, proposal),
             });
         }
 
@@ -516,13 +526,13 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         }
 
         let missing_tx_ids = self.store.with_write_tx(|tx| {
-            self.check_for_missing_transactions(tx, epoch_state.local_committee_info(), &proposal)
+            self.check_for_missing_transactions(tx, epoch_state.local_committee_info(), &proposal, origin)
         })?;
 
         if missing_tx_ids.is_empty() {
             return Ok(MessageValidationResult::Ready {
                 from,
-                message: to_message(proposal),
+                message: proposal_message(origin, proposal),
             });
         }
 
@@ -700,6 +710,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         local_committee_info: &CommitteeInfo,
         proposal: &ProposalMessage,
+        origin: ProposalOrigin,
     ) -> Result<HashSet<TransactionId>, HotStuffError> {
         let missing_tx_ids = self.get_missing_transactions(&**tx, local_committee_info, proposal)?;
 
@@ -716,7 +727,7 @@ impl<TConsensusSpec: ConsensusSpec> OnMessageValidate<TConsensusSpec> {
             "⏳ Block {} has {} missing transactions", proposal.block, missing_tx_ids.len(),
         );
 
-        tx.parked_block_insert(&proposal.block, &proposal.foreign_proposals, &missing_tx_ids)?;
+        tx.parked_block_insert(&proposal.block, &proposal.foreign_proposals, origin, &missing_tx_ids)?;
 
         Ok(missing_tx_ids)
     }
@@ -993,6 +1004,15 @@ impl<TAddr: PartialEq> MissingTransactionRequests<TAddr> {
             .iter()
             .position(|req| req.request_id == request_id && req.to == *from)?;
         self.requests.remove(pos)
+    }
+}
+
+type UnparkedLocalBlocks = Vec<(ProposalMessage, ProposalOrigin)>;
+
+fn proposal_message(origin: ProposalOrigin, proposal: ProposalMessage) -> HotstuffMessage {
+    match origin {
+        ProposalOrigin::Live => HotstuffMessage::new_proposal(proposal),
+        ProposalOrigin::CatchUp => HotstuffMessage::new_catch_up_sync_response(proposal),
     }
 }
 
