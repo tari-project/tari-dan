@@ -1330,6 +1330,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
         let cf = db.cf(SubstateCf)?;
         let head_cf = db.cf(substate::HeadIndex)?;
         let unpruned_cf = db.cf(substate::UnprunedDownedValuesIndex)?;
+        let records_transitions = update_batch.records_transitions();
 
         for (shard, updates) in update_batch.updates {
             for (state_version, updates) in updates {
@@ -1416,7 +1417,7 @@ impl<'tx, TAddr: NodeAddressable + 'tx> StateStoreWriteTransaction for RocksDbSt
                     )?;
                 }
 
-                if !update_batch.record_transitions {
+                if !records_transitions {
                     continue;
                 }
                 let transition = StateTransitionModelDataV1 {

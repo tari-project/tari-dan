@@ -14,9 +14,10 @@ pub struct SubstateUpdateBatch {
     pub epoch: Epoch,
     pub updates: IndexMap<Shard, IndexMap<Version, Vec<SubstateTransition>>>,
     /// Whether the batch is recorded as state transitions of its versions, which the shard's transition accumulator
-    /// covers and state sync serves. Every batch a block commits is. A test fixture that seeds state no block
-    /// committed is not, so the seeded state leaves the accumulator a block's leaf commits as it is.
-    pub record_transitions: bool,
+    /// covers and state sync serves. Every batch a block commits is: a substate the store holds without its
+    /// transition is served by no history, rewound by no rewind and committed by no leaf. Only a test fixture that
+    /// seeds state no block committed clears it (see [`Self::new_unrecorded`]).
+    record_transitions: bool,
 }
 
 impl SubstateUpdateBatch {
@@ -29,13 +30,19 @@ impl SubstateUpdateBatch {
         }
     }
 
-    /// A batch that seeds state outside any block: its substates are written, but no transition is recorded (see
-    /// [`Self::record_transitions`]).
+    /// A batch that seeds state outside any block: its substates are written, but no transition is recorded, so the
+    /// seeded state leaves the accumulator a block's leaf commits as it is. Fixtures seed state while blocks are
+    /// pending, which rules out writing it into the tree the way genesis does.
+    #[cfg(any(test, feature = "test-fixtures"))]
     pub fn new_unrecorded(network: Network, epoch: Epoch) -> Self {
         Self {
             record_transitions: false,
             ..Self::new(network, epoch)
         }
+    }
+
+    pub fn records_transitions(&self) -> bool {
+        self.record_transitions
     }
 
     pub fn with_transition(&mut self, shard: Shard, state_version: Version) -> &mut Vec<SubstateTransition> {
