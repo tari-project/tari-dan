@@ -12,7 +12,7 @@ use std::{
 };
 
 use tari_common_types::types::PrivateKey;
-use tari_consensus_types::{Decision, ProposalCertificate, ShardGroupAccumulatedData};
+use tari_consensus_types::{Decision, PcId, ProposalCertificate, ShardGroupAccumulatedData};
 use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::epoch_time::EpochTime};
 use tari_engine_types::{
     commit_result::{AbortReason, ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
@@ -1303,6 +1303,125 @@ mod local_accept_from_new {
             evidence: Evidence::empty(),
             ..multishard_atom(&replica.honest_new_multishard_command(&id))
         };
+
+        let evaluation = replica.evaluate(&[Command::LocalAccept(atom)]);
+
+        assert!(
+            matches!(
+                evaluation.no_vote,
+                Some(NoVoteReason::InvalidEvidence {
+                    reason: InvalidEvidenceReason::MismatchedEvidence
+                })
+            ),
+            "{:?}",
+            evaluation.no_vote
+        );
+    }
+}
+
+/// Rules a replica enforces by comparing a proposed command for a New cross-shard transaction with the one it derives.
+mod new_multishard_rules {
+    use super::*;
+
+    fn assert_command_disagreement(evaluation: &Evaluation, local: &str, remote: &str) {
+        assert!(
+            matches!(
+                &evaluation.no_vote,
+                Some(NoVoteReason::CommandDisagreement { local: l, remote: r, .. }) if *l == local && *r == remote
+            ),
+            "{:?}",
+            evaluation.no_vote
+        );
+    }
+
+    #[test]
+    fn a_prepare_for_an_abort_is_refused() {
+        let (replica, id) = aborting_cross_shard();
+        let atom = multishard_atom(&replica.honest_new_multishard_command(&id));
+
+        let evaluation = replica.evaluate(&[Command::LocalPrepare(atom)]);
+
+        assert_command_disagreement(&evaluation, "LocalAccept", "LocalPrepare");
+    }
+
+    #[test]
+    fn a_prepare_for_an_output_only_transaction_is_refused() {
+        let (replica, id) = output_only();
+        let atom = multishard_atom(&replica.honest_new_multishard_command(&id));
+
+        let evaluation = replica.evaluate(&[Command::LocalPrepare(atom)]);
+
+        assert_command_disagreement(&evaluation, "LocalAccept", "LocalPrepare");
+    }
+
+    #[test]
+    fn a_prepare_with_a_leader_fee_is_refused() {
+        let (replica, id) = executing_cross_shard();
+        let atom = MultiShardAtom {
+            leader_fee: Some(local_leader_fee()),
+            ..multishard_atom(&replica.honest_new_multishard_command(&id))
+        };
+
+        let evaluation = replica.evaluate(&[Command::LocalPrepare(atom)]);
+
+        assert!(
+            matches!(evaluation.no_vote, Some(NoVoteReason::LeaderFeeDisagreement)),
+            "{:?}",
+            evaluation.no_vote
+        );
+    }
+
+    #[test]
+    fn a_prepare_with_different_foreign_evidence_is_refused() {
+        let (replica, id) = pledging_cross_shard();
+        let mut atom = multishard_atom(&replica.honest_new_multishard_command(&id));
+        atom.evidence.add_shard_group(ShardGroup::all_shards(NUM_PRESHARDS));
+
+        let evaluation = replica.evaluate(&[Command::LocalPrepare(atom)]);
+
+        assert!(
+            matches!(
+                evaluation.no_vote,
+                Some(NoVoteReason::InvalidEvidence {
+                    reason: InvalidEvidenceReason::MismatchedEvidence
+                })
+            ),
+            "{:?}",
+            evaluation.no_vote
+        );
+    }
+
+    #[test]
+    fn an_abort_for_a_different_reason_is_refused() {
+        let (replica, id) = aborting_cross_shard();
+        let honest = multishard_atom(&replica.honest_new_multishard_command(&id));
+        assert_eq!(honest.decision, Decision::Abort(AbortReason::OneOrMoreInputsNotFound));
+        let atom = MultiShardAtom {
+            decision: Decision::Abort(AbortReason::ExecutionFailure),
+            ..honest
+        };
+
+        let evaluation = replica.evaluate(&[Command::LocalAccept(atom)]);
+
+        assert!(
+            matches!(
+                evaluation.no_vote,
+                Some(NoVoteReason::DecisionDisagreement {
+                    local: Decision::Abort(AbortReason::OneOrMoreInputsNotFound),
+                    remote: Decision::Abort(AbortReason::ExecutionFailure),
+                })
+            ),
+            "{:?}",
+            evaluation.no_vote
+        );
+    }
+
+    #[test]
+    fn an_accept_with_a_certificate_in_its_evidence_is_refused() {
+        let (replica, id) = output_only();
+        let mut atom = multishard_atom(&replica.honest_new_multishard_command(&id));
+        let (input_group, _) = local_and_foreign_halves();
+        atom.evidence.add_shard_group(input_group).set_prepare_qc(PcId::zero());
 
         let evaluation = replica.evaluate(&[Command::LocalAccept(atom)]);
 
