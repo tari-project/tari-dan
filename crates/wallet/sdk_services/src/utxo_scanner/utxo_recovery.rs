@@ -222,6 +222,7 @@ where
                             id,
                             output,
                             is_frozen,
+                            is_held: false,
                         })
                     })
                     .collect();
@@ -244,7 +245,8 @@ where
     /// output and frozen flag the proof shows. Until then it stays queued, so that an output the network does not hold
     /// is never counted as spendable.
     ///
-    /// For a UTXO the wallet holds, only a report that it is frozen, which withholds the output from spending, needs a
+    /// For a UTXO the wallet holds, only the frozen flag is taken from the report, and only a report that it is
+    /// frozen, which withholds the output from spending, needs a
     /// proof. That report is dropped when the answer refuses it for good: the indexer serves no proof, a proof that
     /// does not verify or that the wallet can never trust, or proves the UTXO unfrozen. The output is then held
     /// unfrozen. A report that could not be settled for any other reason stays queued. A report that a held UTXO is
@@ -313,17 +315,22 @@ where
             return Ok(None);
         };
         let is_frozen = utxo.is_frozen();
-        let Some(output) = utxo
-            .into_output()
-            .filter(|output| (output.tag, output.output.public_nonce) == reported_pair)
-        else {
+        let Some(output) = utxo.into_output() else {
+            warn!(
+                target: LOG_TARGET,
+                "⚠️ The indexer reported stealth output {} unspent, but proved it burnt. Retrying later.",
+                address
+            );
+            return Ok(None);
+        };
+        if (output.tag, output.output.public_nonce) != reported_pair {
             warn!(
                 target: LOG_TARGET,
                 "⚠️ The indexer proved stealth output {} with an output other than the one it reported. Retrying later.",
                 address
             );
             return Ok(None);
-        };
+        }
         Ok(Some(FoundUtxo {
             output,
             is_frozen,
@@ -339,6 +346,7 @@ where
         mut found: FoundUtxo,
         held_frozen: bool,
     ) -> Result<Option<FoundUtxo>, StealthScannerApiError> {
+        found.is_held = true;
         if !found.is_frozen || held_frozen {
             return Ok(Some(found));
         }
@@ -435,17 +443,21 @@ where
 
         let address = UtxoAddress::new(resource_address, found.id);
         let commitment = found.id.into_commitment_bytes();
-        let Some(output) = outputs_api.validate_utxo(
-            array::from_ref(&keys),
-            network,
-            resource_address,
-            commitment,
-            &found.output,
-            found.is_frozen,
-        )?
-        else {
-            // The output could be burnt, frozen, or otherwise invalid. If we already have it in the db, update its
-            // status, if not, do nothing.
+        let validated = if found.is_held {
+            None
+        } else {
+            outputs_api.validate_utxo(
+                array::from_ref(&keys),
+                network,
+                resource_address,
+                commitment,
+                &found.output,
+                found.is_frozen,
+            )?
+        };
+        let Some(output) = validated else {
+            // The output could be held already, burnt, frozen, or otherwise invalid. If we already have it in the db,
+            // update its frozen flag, if not, do nothing.
             let frozen_changed = outputs_api.set_utxo_frozen(&address, found.is_frozen)?.unwrap_or(false);
 
             if frozen_changed {
@@ -485,4 +497,7 @@ struct FoundUtxo {
     output: UtxoOutput,
     id: UtxoId,
     is_frozen: bool,
+    /// The wallet holds the output and its contents, so only the settled frozen flag is taken from the report. The
+    /// reported output carries no proof.
+    is_held: bool,
 }

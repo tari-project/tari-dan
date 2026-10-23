@@ -7,6 +7,7 @@
 
 mod support;
 
+use ootle_byte_type::ToByteType;
 use tari_engine_types::{
     Utxo,
     substate::{SubstateId, SubstateValue},
@@ -16,13 +17,19 @@ use tari_ootle_common_types::{Epoch, SubstateVersion};
 use tari_ootle_light_client::test_fixtures::{NETWORK, Signers, ValidatorSetFixture, substate_proof};
 use tari_ootle_wallet_sdk::{
     IndexerTrust,
-    models::{AccountWithAddress, StealthOutputModel, UtxoUnspent},
+    models::{AccountWithAddress, OutputStatus, StealthOutputModel, UtxoUnspent},
     storage::{ReadableWalletStore, WalletStoreReader, WalletStoreWriter, WriteableWalletStore},
 };
 use tari_ootle_wallet_sdk_services::utxo_scanner::UtxoRecovery;
-use tari_template_lib::types::{Amount, UtxoAddress, UtxoId, constants::STEALTH_TARI_RESOURCE_ADDRESS};
+use tari_template_lib::types::{
+    Amount,
+    UtxoAddress,
+    UtxoId,
+    constants::STEALTH_TARI_RESOURCE_ADDRESS,
+    stealth::SpendAuthorization,
+};
 
-use crate::support::{ProvingNetwork, TestWithNetwork};
+use crate::support::{ProvingNetwork, TestWithNetwork, random_keypair};
 
 const VALUE: u64 = 1_234;
 const VERSION: SubstateVersion = SubstateVersion::ZERO;
@@ -235,6 +242,20 @@ async fn a_held_output_needs_no_proof_that_it_exists() {
     assert_eq!(recover(&test, &network, &account, id, &utxo).await, 0);
     assert_eq!(network.substate_queries(), queries);
     assert_eq!(queued(&test), 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_held_output_keeps_its_status_when_the_lookup_reports_other_contents() {
+    let (sets, network, test, account) = wallet(IndexerTrust::Verify).await;
+    let (id, utxo) = test.owned_utxo(&account, VALUE);
+    hold(&sets, &network, &test, &account, id, &utxo).await;
+
+    let mut output = utxo.output().unwrap().clone();
+    output.auth = SpendAuthorization::Key(random_keypair().1.to_byte_type());
+    let reported = Utxo::new(output);
+    assert_eq!(recover(&test, &network, &account, id, &reported).await, 0);
+    assert_eq!(stored(&test, id).status, OutputStatus::Unspent);
+    assert_eq!(balance(&test, &account), Amount::from_u64(VALUE));
 }
 
 /// The wallet holds `utxo` as not frozen, then recovers it again with the indexer reporting it frozen, serving
