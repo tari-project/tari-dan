@@ -104,7 +104,7 @@ impl EpochCheckpoint {
     /// committed value only once the checkpoint validates, and `None` proves nothing, for the reason
     /// [`Self::next_epoch_validator_set_hash`] gives.
     pub fn next_epoch_fee_scale(&self) -> Option<FeeScale> {
-        self.header_metadata.as_ref()?.next_epoch_fee_scale()
+        self.header_metadata.next_epoch_fee_scale()
     }
 
     pub fn proof(&self) -> &CommandCommitProof<EndOfEpochCommand> {
