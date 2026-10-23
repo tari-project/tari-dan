@@ -1998,10 +1998,8 @@ where TConsensusSpec: ConsensusSpec
         TransactionLockConflicts::remove_for_block(tx, block.id())?;
 
         if !finalized_transactions.is_empty() {
-            let _timer = TraceTimer::debug(LOG_TARGET, "unlock and finalized transactions")
-                .with_iterations(finalized_transactions.len());
-            // Remove locks for finalized transactions
-            SubstateRecord::unlock_all(tx, finalized_transactions.iter().map(|t| t.id()))?;
+            let _timer =
+                TraceTimer::debug(LOG_TARGET, "finalize transactions").with_iterations(finalized_transactions.len());
             TransactionRecord::finalize_all(tx, block.epoch(), &finalized_transactions)?;
 
             debug!(

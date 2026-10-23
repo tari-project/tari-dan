@@ -1110,6 +1110,8 @@ impl TransactionPoolRecord {
 }
 
 impl TransactionPoolRecord {
+    /// Removes the pool records of `transaction_ids`, with their foreign pledges, lock conflicts and substate locks.
+    /// A substate lock is held only by a pooled transaction: once its record is gone, nothing else releases it.
     pub fn remove_all<'a, TTx, I>(
         tx: &mut TTx,
         transaction_ids: I,
@@ -1123,7 +1125,8 @@ impl TransactionPoolRecord {
         // Clear any related foreign pledges
         tx.foreign_substate_pledges_remove_many(iter.clone())?;
         // Clear any related lock_conflicts
-        tx.lock_conflicts_remove_by_transaction_ids(iter)?;
+        tx.lock_conflicts_remove_by_transaction_ids(iter.clone())?;
+        tx.substate_locks_remove_many_for_transactions(iter)?;
         Ok(recs)
     }
 

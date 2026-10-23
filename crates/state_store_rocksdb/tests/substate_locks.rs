@@ -6,15 +6,15 @@ pub mod helpers;
 use std::collections::HashMap;
 
 use indexmap::IndexMap;
-use tari_consensus_types::LeafBlock;
+use tari_consensus_types::{Decision, LeafBlock};
 use tari_engine_types::substate::SubstateId;
-use tari_ootle_common_types::{SubstateLockType, SubstateVersion, optional::Optional};
+use tari_ootle_common_types::{Epoch, SubstateLockType, SubstateVersion, optional::Optional};
 use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
-    consensus_models::SubstateLock,
+    consensus_models::{Evidence, SubstateLock, TransactionPoolRecord},
 };
 use tari_ootle_transaction::TransactionId;
 use tari_state_store_rocksdb::{DatabaseOptions, RocksDbStateStore};
@@ -307,6 +307,48 @@ fn removing_a_block_releases_every_lock_it_granted() {
     tx.substate_locks_insert_all(&b8, &two_locks(&substate_id, granted_first, granted_last))
         .unwrap();
     tx.substate_locks_remove_any_by_block_id(b8.block_id()).unwrap();
+
+    let lock = tx
+        .substate_locks_get_latest_for_substate(&b9, &substate_id)
+        .optional()
+        .unwrap();
+    assert!(lock.is_none());
+
+    tx.rollback().unwrap();
+}
+
+/// A substate lock belongs to a pooled transaction, so removing a transaction from the pool releases its locks and
+/// leaves the locks of transactions still in the pool.
+#[test]
+fn removing_a_transaction_from_the_pool_releases_its_locks() {
+    let (db, _tmp) = create_rocksdb();
+    let mut tx = db.create_write_tx().unwrap();
+
+    let chain = create_chain(10);
+    commit_chain(&mut tx, &chain);
+    let b8 = chain[8].as_leaf();
+    let b9 = chain[9].as_leaf();
+
+    let substate_id = create_random_substate_id();
+    let (granted_first, granted_last) = ordered_transaction_ids();
+    for id in [granted_first, granted_last] {
+        tx.transaction_pool_insert_new(id, Decision::Commit, &Evidence::empty(), true, false, Epoch(1), 0)
+            .unwrap();
+    }
+    tx.substate_locks_insert_all(&b8, &two_locks(&substate_id, granted_first, granted_last))
+        .unwrap();
+
+    let removed = TransactionPoolRecord::remove_all(&mut tx, [&granted_last]).unwrap();
+    assert_eq!(removed.len(), 1);
+
+    let lock = tx.substate_locks_get_latest_for_substate(&b9, &substate_id).unwrap();
+    assert_eq!(lock.transaction_id(), &granted_first);
+    let locked_by_removed = tx
+        .substate_locks_get_locked_substates_for_transaction(&b9, &granted_last)
+        .unwrap();
+    assert!(locked_by_removed.is_empty());
+
+    TransactionPoolRecord::remove_all(&mut tx, [&granted_first]).unwrap();
 
     let lock = tx
         .substate_locks_get_latest_for_substate(&b9, &substate_id)
