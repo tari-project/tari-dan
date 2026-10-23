@@ -154,16 +154,15 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
     }
 
     /// Adds an account that can be scanned and viewed but not spent from. The view secret key is stored as an
-    /// imported key and the account has no owner key. Outputs are scanned from `birthday_epoch`, or the current epoch
-    /// if not given. The view key must not be the view key of another account or an already imported key. The key and
-    /// the account are stored together, or not at all.
+    /// imported key and the account has no owner key, so it is never the default account. Outputs are scanned from
+    /// `birthday_epoch`, or the current epoch if not given. The view key must not be the view key of another
+    /// account or an already imported key. The key and the account are stored together, or not at all.
     pub fn add_view_only_account(
         &self,
         account_name: Option<&str>,
         account_public_key: &RistrettoPublicKeyBytes,
         view_secret_key: &RistrettoSecretKey,
         birthday_epoch: Option<Epoch>,
-        is_default: bool,
     ) -> Result<AccountWithAddress, AccountsApiError> {
         let invalid = |reason: &str| AccountsApiError::InvalidViewOnlyAccount {
             reason: reason.to_string(),
@@ -234,7 +233,7 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
                 account_public_key,
                 birthday_epoch,
                 false,
-                is_default,
+                false,
             )?;
             Ok(view_key_id)
         })?;
@@ -287,6 +286,9 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
         is_confirmed_on_chain: bool,
         is_default: bool,
     ) -> Result<(), AccountsApiError> {
+        if is_default && owner_key_id.is_none() {
+            return Err(AccountsApiError::ViewOnlyAccountCannotBeDefault);
+        }
         if let Some(name) = account_name &&
             tx.accounts_get_by_name(name).optional()?.is_some()
         {
@@ -329,6 +331,11 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
     pub fn count(&self) -> Result<u64, AccountsApiError> {
         let count = self.store.with_read_tx(|tx| tx.accounts_count())?;
         Ok(count)
+    }
+
+    pub fn has_default_account(&self) -> Result<bool, AccountsApiError> {
+        let default_account = self.store.with_read_tx(|tx| tx.accounts_get_default().optional())?;
+        Ok(default_account.is_some())
     }
 
     pub fn any_accounts_exist(&self) -> Result<bool, AccountsApiError> {

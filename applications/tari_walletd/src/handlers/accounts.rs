@@ -166,7 +166,7 @@ pub async fn handle_create(
     let set_as_default = req
         .is_default
         .map(Ok)
-        .unwrap_or_else(|| accounts_api.any_accounts_exist().map(|b| !b))?;
+        .unwrap_or_else(|| accounts_api.has_default_account().map(|b| !b))?;
 
     ensure_seed_recovery_finished(sdk)?;
     let owner_address = match req.key_index {
@@ -238,7 +238,7 @@ pub async fn handle_create_or_get(
     let set_as_default = req
         .is_default
         .map(Ok)
-        .unwrap_or_else(|| accounts_api.any_accounts_exist().map(|b| !b))?;
+        .unwrap_or_else(|| accounts_api.has_default_account().map(|b| !b))?;
 
     ensure_seed_recovery_finished(sdk)?;
     let wallet_keys = match req.key_index {
@@ -289,7 +289,6 @@ pub async fn handle_import_view_only(
             &req.account_public_key,
             &req.view_secret_key,
             req.birthday_epoch,
-            false,
         )
         .map_err(|e| {
             if e.is_name_exists_error() ||
@@ -3359,6 +3358,38 @@ mod create_stealth_transfer_statement_handler_tests {
         let key_manager = test.context.wallet_sdk().key_manager_api();
         assert!(key_manager.is_signing_key(imported.key_id).unwrap());
         assert_eq!(key_manager.get_key(imported.key_id).unwrap().secret, secret_key);
+    }
+
+    #[tokio::test]
+    async fn an_account_created_after_a_view_only_import_becomes_the_default() {
+        use crate::handlers::test_support::TestDaemon;
+
+        let daemon = TestDaemon::start().await;
+        handle_import_view_only(&daemon.context, Some(&daemon.session), AccountsImportViewOnlyRequest {
+            account_name: "watch".to_string(),
+            account_public_key: RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::random(&mut rand::rng()))
+                .to_byte_type(),
+            view_secret_key: RistrettoSecretKey::random(&mut rand::rng()),
+            birthday_epoch: None,
+            is_default: None,
+        })
+        .await
+        .unwrap();
+        let accounts = daemon.context.wallet_sdk().accounts_api();
+        assert!(!accounts.has_default_account().unwrap());
+
+        let created = handle_create(&daemon.context, Some(&daemon.session), AccountsCreateRequest {
+            account_name: Some("spending".to_string()),
+            is_default: None,
+            key_index: None,
+        })
+        .await
+        .unwrap();
+        assert!(created.account.is_default);
+        assert_eq!(
+            accounts.get_default().unwrap().component_address(),
+            created.account.component_address()
+        );
     }
 
     #[tokio::test]

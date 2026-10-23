@@ -58,7 +58,6 @@ fn setup() -> ViewOnlyTest {
             &cold_address.account_key.to_byte_type(),
             &view_secret_key,
             Some(Epoch::zero()),
-            true,
         )
         .unwrap();
     assert_eq!(account.owner_key_id(), None);
@@ -328,7 +327,7 @@ fn view_only_account_rejects_invalid_keys_and_future_birthday() {
     ];
     for (account_key, view_secret, birthday, reason) in cases {
         let err = accounts
-            .add_view_only_account(Some("watch"), &account_key, &view_secret, birthday, false)
+            .add_view_only_account(Some("watch"), &account_key, &view_secret, birthday)
             .expect_err(reason);
         assert!(err.is_invalid_view_only_account_error(), "{err}");
         assert!(err.to_string().contains(reason), "{err}");
@@ -346,7 +345,7 @@ fn failed_view_only_import_leaves_no_imported_key() {
     let account_key = account_key.to_byte_type();
 
     let err = accounts
-        .add_view_only_account(Some("test"), &account_key, &view_secret, None, false)
+        .add_view_only_account(Some("test"), &account_key, &view_secret, None)
         .expect_err("a taken name is rejected");
     assert!(err.is_name_exists_error(), "{err}");
     let stored_key = test
@@ -357,7 +356,7 @@ fn failed_view_only_import_leaves_no_imported_key() {
     assert!(stored_key.is_none(), "the view key was stored without its account");
 
     let account = accounts
-        .add_view_only_account(Some("watch"), &account_key, &view_secret, None, false)
+        .add_view_only_account(Some("watch"), &account_key, &view_secret, None)
         .unwrap();
     assert_eq!(*account.owner_public_key(), account_key);
 }
@@ -366,9 +365,26 @@ fn failed_view_only_import_leaves_no_imported_key() {
 fn view_only_account_never_becomes_the_default() {
     let test = setup();
     let accounts = test.watch.sdk().accounts_api();
+    assert!(!test.account.account().is_default());
+    assert!(!accounts.has_default_account().unwrap());
     let err = accounts
         .set_default_account(test.account.component_address())
         .expect_err("a view-only account cannot be the default");
+    assert!(matches!(err, AccountsApiError::ViewOnlyAccountCannotBeDefault), "{err}");
+
+    let (_, account_key) = RistrettoPublicKey::random_keypair(&mut rand::rng());
+    let account_key = account_key.to_byte_type();
+    let err = accounts
+        .add_account(
+            Some("bare"),
+            &accounts.derive_account_address_from_public_key(&account_key),
+            KeyId::derived(KeyBranch::ViewOnlyKey, 1),
+            account_key,
+            Epoch::zero(),
+            false,
+            true,
+        )
+        .expect_err("an account without an owner key cannot be added as the default");
     assert!(matches!(err, AccountsApiError::ViewOnlyAccountCannotBeDefault), "{err}");
 
     // Deleting the default account does not promote the view-only account

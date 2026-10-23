@@ -851,7 +851,6 @@ mod tests {
                 &account_public_key.to_byte_type(),
                 &view_secret_key,
                 None,
-                false,
             )
             .unwrap();
         let view_key_id = account.view_only_key_id();
