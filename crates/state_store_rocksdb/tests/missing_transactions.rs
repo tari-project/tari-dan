@@ -59,7 +59,13 @@ fn missing_transactions_operations(db: impl StateStore) {
 
     // missing_transactions_insert
     let missing_transaction_ids = vec![&atom1.id, &atom2.id];
-    tx.parked_block_insert(&block1, &[], ProposalOrigin::CatchUp, missing_transaction_ids)
+    tx.parked_block_insert(&block1, &[], ProposalOrigin::Live, missing_transaction_ids.clone())
+        .unwrap();
+    // The block arrives again through catch-up, which marks it as certified
+    tx.parked_block_insert(&block1, &[], ProposalOrigin::CatchUp, missing_transaction_ids.clone())
+        .unwrap();
+    // and a later live delivery leaves it so
+    tx.parked_block_insert(&block1, &[], ProposalOrigin::Live, missing_transaction_ids)
         .unwrap();
 
     // The block stays parked while it is still waiting on atom2

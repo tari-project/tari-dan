@@ -324,8 +324,16 @@ impl<'a, TAddr: NodeAddressable> RocksDbStateStoreWriteTransaction<'a, TAddr> {
         }
 
         let cf = self.db().cf(ParkedBlockCf)?;
-        // Idempotent
+        // Idempotent, except that a catch-up delivery marks the parked block as a catch-up block whatever origin it
+        // was parked with: it shows the committee has certified the block, so it must not be voted on when unparked.
         if cf.exists(block.id(), OPERATION)? {
+            if origin.is_catch_up() {
+                let mut data = cf.get(block.id(), OPERATION)?;
+                if !data.origin.is_catch_up() {
+                    data.origin = origin;
+                    cf.put(block.id(), &data, OPERATION)?;
+                }
+            }
             return Ok(());
         }
 

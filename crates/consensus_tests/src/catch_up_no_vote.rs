@@ -1,12 +1,15 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-//! A replica does not vote on the blocks it imports through catch-up.
+//! A replica does not vote on the blocks it imports through catch-up, but does receive its catch-up server's leaf as
+//! a proposal.
 //!
 //! Catch-up imports blocks the committee has already certified, so a vote on one can never help form a certificate.
 //! It can conflict with a vote the replica cast before it lost its voting records, e.g. one restored from a backup
-//! snapshot. The test withholds three consecutive proposals from one replica so that it imports them through
-//! catch-up, then requires that it votes on none of them and does vote on a later live proposal.
+//! snapshot. The server's leaf has no certificate yet, so it is sent as a proposal the replica may vote on. The test
+//! withholds three consecutive proposals from one replica so that it imports them through catch-up, then requires
+//! that it votes on none of them, that its server relays a leaf as a proposal, and that it votes on a later live
+//! proposal.
 
 use std::{
     collections::HashSet,
@@ -18,28 +21,42 @@ use std::{
     time::Duration,
 };
 
+use ootle_byte_type::ToByteType;
 use tari_consensus::messages::HotstuffMessage;
 use tari_consensus_types::{BlockId, Decision};
 use tari_ootle_common_types::{Epoch, NodeHeight};
 
-use crate::support::{MessageFilter, Test, TestAddress, logging::setup_logger};
+use crate::support::{MessageFilter, Test, TestAddress, helpers, logging::setup_logger};
 
 /// Consecutive proposals withheld from the target.
 const DROPPED_PROPOSALS: u64 = 3;
 
-/// Records the target's votes and the blocks it receives through catch-up, and withholds from it the proposals in
-/// the window starting at `drop_from` once that is armed.
-fn observe_target(
-    target: TestAddress,
-    drop_from: Arc<AtomicU64>,
-    withheld: Arc<Mutex<HashSet<BlockId>>>,
-    caught_up: Arc<Mutex<HashSet<BlockId>>>,
-    votes: Arc<Mutex<Vec<(BlockId, NodeHeight)>>>,
-) -> MessageFilter {
+#[derive(Default)]
+struct Observed {
+    /// Every proposal delivered to the target, by sender.
+    proposal_deliveries: HashSet<(TestAddress, BlockId)>,
+    /// Proposals their proposers broadcast to the target and the filter withheld.
+    withheld: HashSet<BlockId>,
+    /// Blocks the target received in catch-up responses.
+    caught_up: HashSet<BlockId>,
+    /// Proposals the target received other than as their proposer's broadcast, i.e. a catch-up server's leaf: from a
+    /// validator other than the proposer, or a second time from the proposer.
+    relayed: HashSet<BlockId>,
+    /// The target's votes.
+    votes: Vec<(BlockId, NodeHeight)>,
+}
+
+/// Records what the target sends and receives, and withholds from it the proposals broadcast in the window starting
+/// at `drop_from` once that is armed. A relayed proposal is never withheld.
+fn observe_target(target: TestAddress, drop_from: Arc<AtomicU64>, observed: Arc<Mutex<Observed>>) -> MessageFilter {
     Box::new(move |from, to, msg| {
         if *from == target {
             if let HotstuffMessage::Vote(vote) = msg {
-                votes.lock().unwrap().push((vote.vote.block_id, vote.vote.block_height));
+                observed
+                    .lock()
+                    .unwrap()
+                    .votes
+                    .push((vote.vote.block_id, vote.vote.block_height));
             }
             return true;
         }
@@ -48,14 +65,22 @@ fn observe_target(
         }
         match msg {
             HotstuffMessage::CatchUpSyncResponse(response) => {
-                caught_up.lock().unwrap().insert(*response.block.id());
+                observed.lock().unwrap().caught_up.insert(*response.block.id());
                 true
             },
             HotstuffMessage::Proposal(proposal) => {
+                let block_id = *proposal.block.id();
+                let mut observed = observed.lock().unwrap();
+                let is_first_delivery = observed.proposal_deliveries.insert((from.clone(), block_id));
+                let (_, sender_pk) = helpers::derive_keypair_from_address(from);
+                if !is_first_delivery || *proposal.block.proposed_by() != sender_pk.to_byte_type() {
+                    observed.relayed.insert(block_id);
+                    return true;
+                }
                 let start = drop_from.load(Ordering::SeqCst);
                 let height = proposal.block.height().as_u64();
                 if start != 0 && (start..start + DROPPED_PROPOSALS).contains(&height) {
-                    withheld.lock().unwrap().insert(*proposal.block.id());
+                    observed.withheld.insert(block_id);
                     return false;
                 }
                 true
@@ -72,9 +97,7 @@ async fn a_replica_does_not_vote_on_blocks_it_catches_up_on() {
     let target = TestAddress::new("4");
     // First height of the withheld window; 0 until armed.
     let drop_from = Arc::new(AtomicU64::new(0));
-    let withheld = Arc::new(Mutex::new(HashSet::<BlockId>::new()));
-    let caught_up = Arc::new(Mutex::new(HashSet::<BlockId>::new()));
-    let votes = Arc::new(Mutex::new(Vec::<(BlockId, NodeHeight)>::new()));
+    let observed = Arc::new(Mutex::new(Observed::default()));
 
     let mut test = Test::builder()
         .with_test_timeout(Duration::from_secs(120))
@@ -82,13 +105,7 @@ async fn a_replica_does_not_vote_on_blocks_it_catches_up_on() {
             c.pacemaker_block_time = Duration::from_secs(2);
             c.missed_proposal_suspend_threshold = 50;
         })
-        .with_message_filter(observe_target(
-            target.clone(),
-            drop_from.clone(),
-            withheld.clone(),
-            caught_up.clone(),
-            votes.clone(),
-        ))
+        .with_message_filter(observe_target(target.clone(), drop_from.clone(), observed.clone()))
         .add_committee(0, vec!["1", "2", "3", "4"])
         .start()
         .await;
@@ -113,7 +130,7 @@ async fn a_replica_does_not_vote_on_blocks_it_catches_up_on() {
             }
         } else {
             let after_window = NodeHeight(start + DROPPED_PROPOSALS);
-            let voted_after_window = votes.lock().unwrap().iter().any(|(_, h)| *h >= after_window);
+            let voted_after_window = observed.lock().unwrap().votes.iter().any(|(_, h)| *h >= after_window);
             if target_leaf >= after_window && voted_after_window {
                 break;
             }
@@ -125,27 +142,30 @@ async fn a_replica_does_not_vote_on_blocks_it_catches_up_on() {
         );
     }
 
-    let withheld = withheld.lock().unwrap().clone();
-    let caught_up = caught_up.lock().unwrap().clone();
-    assert!(
-        !withheld.is_empty(),
-        "test premise: proposals to the target must have been withheld"
-    );
-    assert!(
-        withheld.iter().any(|id| caught_up.contains(id)),
-        "test premise: the target must have imported a withheld block through catch-up"
-    );
-    let votes_on_withheld = votes
-        .lock()
-        .unwrap()
-        .iter()
-        .filter(|(id, _)| withheld.contains(id))
-        .copied()
-        .collect::<Vec<_>>();
-    assert!(
-        votes_on_withheld.is_empty(),
-        "{target} voted on blocks it imported through catch-up: {votes_on_withheld:?}"
-    );
+    {
+        let observed = observed.lock().unwrap();
+        assert!(
+            !observed.withheld.is_empty(),
+            "test premise: proposals to the target must have been withheld"
+        );
+        assert!(
+            observed.withheld.iter().any(|id| observed.caught_up.contains(id)),
+            "test premise: the target must have imported a withheld block through catch-up"
+        );
+        let votes_on_withheld = observed
+            .votes
+            .iter()
+            .filter(|(id, _)| observed.withheld.contains(id))
+            .collect::<Vec<_>>();
+        assert!(
+            votes_on_withheld.is_empty(),
+            "{target} voted on blocks it imported through catch-up: {votes_on_withheld:?}"
+        );
+        assert!(
+            !observed.relayed.is_empty(),
+            "{target} caught up without its catch-up server sending its leaf as a proposal"
+        );
+    }
 
     test.stop();
     test.assert_clean_shutdown().await;

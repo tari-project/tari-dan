@@ -202,15 +202,15 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                     from
                 );
 
-                let is_tip = block.height() == leaf_block.height();
+                let is_leaf = block.id() == leaf_block.block_id();
                 let proposal = ProposalMessage {
                     block,
                     foreign_proposals: foreign_proposals.into_iter().map(|p| p.into_proposal()).collect(),
                 };
-                // The requester does not vote on catch-up blocks, because a later block certifies each of them. Our
-                // tip has no certificate yet, so it goes as a proposal: the requester votes on it if it is still
-                // current when it gets there.
-                let message = if is_tip {
+                // The requester does not vote on catch-up blocks, because a later block certifies each ancestor of
+                // our leaf. The leaf has no certificate yet, so it goes as a proposal: the requester votes on it if it
+                // is still current when it gets there.
+                let message = if is_leaf {
                     HotstuffMessage::new_proposal(proposal)
                 } else {
                     HotstuffMessage::new_catch_up_sync_response(proposal)
