@@ -64,7 +64,6 @@ pub struct PrunedUnsignedTransactionV1 {
     #[n(5)]
     pub max_epoch: Epoch,
     #[n(6)]
-    #[cfg_attr(feature = "serde", serde(alias = "is_seal_signer_authorized"))]
     pub main_signer: MainSigner,
     #[n(7)]
     pub dry_run: bool,
@@ -73,17 +72,12 @@ pub struct PrunedUnsignedTransactionV1 {
     pub blob_hashes: BlobHashes,
     /// Byte size of each blob, parallel to `blob_hashes`. **Not part of the signing/id domain**
     /// — populated at conversion time from `Blobs` so that API consumers and UIs can show
-    /// blob sizes without downloading payloads. May be empty when deserialised from older
-    /// archives that didn't record sizes.
+    /// blob sizes without downloading payloads.
     #[n(9)]
-    #[cfg_attr(feature = "serde", serde(default))]
-    #[cbor(default)]
     #[borsh(skip)]
     pub blob_sizes: Vec<u32>,
     /// Mirrors `UnsignedTransactionV1::nonce` of the full form.
     #[n(10)]
-    #[cfg_attr(feature = "serde", serde(default))]
-    #[cbor(default)]
     pub nonce: u64,
 }
 

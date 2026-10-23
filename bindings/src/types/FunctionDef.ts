@@ -7,5 +7,5 @@ export type FunctionDef = {
   arguments: Array<ArgDef>;
   output: Type;
   is_mut: boolean;
-  is_migration?: boolean;
+  is_migration: boolean;
 };

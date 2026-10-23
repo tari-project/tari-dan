@@ -10,7 +10,7 @@ import type { RistrettoPublicKeyBytes } from "./RistrettoPublicKeyBytes";
  * signer is.
  *
  * Encoding: `None` and `SealSigner` encode as the booleans `false` and `true` in both CBOR and borsh (whose variant
- * tag is the same byte), and `Authorizer` as the key, so a transaction carrying the boolean
- * `is_seal_signer_authorized` decodes, hashes and verifies as the matching variant.
+ * tag is the same byte), and `Authorizer` as the key. JSON uses the externally tagged form: `"None"`,
+ * `"SealSigner"` or `{"Authorizer": <key>}`.
  */
 export type MainSigner = "None" | "SealSigner" | { Authorizer: RistrettoPublicKeyBytes };

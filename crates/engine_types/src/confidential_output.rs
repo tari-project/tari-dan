@@ -18,8 +18,6 @@ pub struct ConfidentialOutput {
     #[n(0)]
     pub output: OutputBody,
     #[n(1)]
-    #[cbor(default)]
-    #[serde(default)]
     pub is_frozen: bool,
 }
 

@@ -71,7 +71,7 @@ fn a_checkpoint_with_a_state_version_its_root_does_not_commit_is_rejected() {
             root_hash: SPARSE_MERKLE_PLACEHOLDER_HASH,
             state_version: u64::MAX,
         })]),
-        signed.header_metadata().cloned(),
+        signed.header_metadata().clone(),
     );
     let entry = EpochCheckpointEntry {
         checkpoint: tari_bor::encode(&raised).unwrap(),

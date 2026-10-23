@@ -100,10 +100,7 @@ CREATE TABLE epoch_checkpoints
     -- The shard range of the checkpoint's shard group, so that the checkpoints of the shard group containing a given
     -- shard can be selected. `shard_group` holds the range as "start-end".
     shard_start INTEGER                           NOT NULL DEFAULT 0,
-    shard_end   INTEGER                           NOT NULL DEFAULT 0,
-    -- Whether the checkpoint carries its end-of-epoch header's metadata preimage, which names the next epoch's
-    -- validator set. Only such checkpoints are served.
-    has_header_metadata BOOLEAN                   NOT NULL DEFAULT false
+    shard_end   INTEGER                           NOT NULL DEFAULT 0
 );
 
 CREATE UNIQUE INDEX epoch_checkpoints_uniq_epoch_shard_group ON epoch_checkpoints (epoch, shard_group);

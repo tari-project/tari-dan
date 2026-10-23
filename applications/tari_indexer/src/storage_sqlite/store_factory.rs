@@ -2825,11 +2825,10 @@ pub(crate) mod tests {
         );
     }
 
-    /// A checkpoint whose header commits to a metadata preimage, which it carries when `carried`.
+    /// A checkpoint whose header commits to the metadata preimage it carries.
     pub(crate) fn epoch_checkpoint(
         epoch: u64,
         shard_group: ShardGroup,
-        carried: bool,
     ) -> tari_ootle_storage::consensus_models::EpochCheckpoint {
         use tari_ootle_storage::consensus_models::{BlockHeaderMetadata, EndOfEpochCommand, EpochCheckpoint};
 
@@ -2871,7 +2870,7 @@ pub(crate) mod tests {
         EpochCheckpoint::new(
             CommandCommitProof::new(EndOfEpochCommand::new(FixedHash::zero()), commit_proof, inclusion_proof),
             Default::default(),
-            carried.then_some(header_metadata),
+            header_metadata,
         )
     }
 
@@ -2902,11 +2901,11 @@ pub(crate) mod tests {
         store
             .with_write_tx(move |tx| {
                 for checkpoint in [
-                    epoch_checkpoint(1, all, true),
-                    epoch_checkpoint(2, low, true),
-                    epoch_checkpoint(2, high, true),
-                    epoch_checkpoint(3, low, true),
-                    epoch_checkpoint(3, high, true),
+                    epoch_checkpoint(1, all),
+                    epoch_checkpoint(2, low),
+                    epoch_checkpoint(2, high),
+                    epoch_checkpoint(3, low),
+                    epoch_checkpoint(3, high),
                 ] {
                     tx.insert_or_ignore_epoch_checkpoint(&checkpoint)?;
                 }
@@ -2963,11 +2962,10 @@ pub(crate) mod tests {
         let high = ShardGroup::new(128u32, 255u32);
         let all = ShardGroup::new(1u32, 255u32);
         store_checkpoints(&store, vec![
-            epoch_checkpoint(1, all, true),
-            epoch_checkpoint(2, low, true),
-            epoch_checkpoint(2, high, true),
-            epoch_checkpoint(3, low, true),
-            epoch_checkpoint(4, low, false),
+            epoch_checkpoint(1, all),
+            epoch_checkpoint(2, low),
+            epoch_checkpoint(2, high),
+            epoch_checkpoint(3, low),
         ])
         .await;
         assert_eq!(latest_of_each_shard_group(&store).await, vec![
@@ -2975,7 +2973,7 @@ pub(crate) mod tests {
             (Epoch(2), high)
         ]);
 
-        store_checkpoints(&store, vec![epoch_checkpoint(5, all, true)]).await;
+        store_checkpoints(&store, vec![epoch_checkpoint(5, all)]).await;
         assert_eq!(latest_of_each_shard_group(&store).await, vec![(Epoch(5), all)]);
     }
 
@@ -2986,63 +2984,10 @@ pub(crate) mod tests {
         let (_dir, store) = temp_store().await;
         let low = ShardGroup::new(1u32, 127u32);
         let all = ShardGroup::new(1u32, 255u32);
-        store_checkpoints(&store, vec![
-            epoch_checkpoint(1, all, true),
-            epoch_checkpoint(2, low, true),
-        ])
-        .await;
+        store_checkpoints(&store, vec![epoch_checkpoint(1, all), epoch_checkpoint(2, low)]).await;
         assert_eq!(latest_of_each_shard_group(&store).await, vec![
             (Epoch(2), low),
             (Epoch(1), all)
         ]);
-    }
-
-    /// A checkpoint without its header metadata preimage cannot name the next validator set to a wallet, so it is
-    /// never served, and once one with the preimage is stored, a later one without it was stripped.
-    #[tokio::test]
-    async fn only_checkpoints_carrying_their_header_metadata_are_served() {
-        use crate::store::{IndexerStoreReadTransaction, IndexerStoreWriteTransaction, ReadOnlyStore};
-
-        let (_dir, store) = temp_store().await;
-        let all = ShardGroup::new(1u32, 255u32);
-        store
-            .with_write_tx(move |tx| {
-                tx.insert_or_ignore_epoch_checkpoint(&epoch_checkpoint(1, all, false))?;
-                tx.insert_or_ignore_epoch_checkpoint(&epoch_checkpoint(2, all, true))?;
-                tx.insert_or_ignore_epoch_checkpoint(&epoch_checkpoint(3, all, false))
-            })
-            .await
-            .unwrap();
-
-        assert_eq!(checkpoint_keys(&store, Epoch(0), None).await, vec![(Epoch(2), all)]);
-        let latest = ReadOnlyStore::new(store.clone())
-            .epoch_checkpoint_get_latest(None)
-            .await
-            .unwrap();
-        assert_eq!(latest.epoch(), Epoch(2));
-
-        let carried_before =
-            |epoch| store.with_read_tx(move |tx| tx.epoch_checkpoint_with_header_metadata_exists_before(Epoch(epoch)));
-        assert!(!carried_before(2).await.unwrap());
-        assert!(carried_before(3).await.unwrap());
-    }
-
-    /// The checkpoint of the previous epoch is stored ahead of the backfill, which then still accepts earlier
-    /// checkpoints that lack their preimage.
-    #[tokio::test]
-    async fn a_head_checkpoint_stored_ahead_of_the_backfill_requires_no_preimage_before_it() {
-        use crate::store::{IndexerStoreReadTransaction, IndexerStoreWriteTransaction};
-
-        let (_dir, store) = temp_store().await;
-        let all = ShardGroup::new(1u32, 255u32);
-        store
-            .with_write_tx(move |tx| tx.insert_or_ignore_epoch_checkpoint(&epoch_checkpoint(250, all, true)))
-            .await
-            .unwrap();
-
-        let carried_before =
-            |epoch| store.with_read_tx(move |tx| tx.epoch_checkpoint_with_header_metadata_exists_before(Epoch(epoch)));
-        assert!(!carried_before(100).await.unwrap());
-        assert!(!carried_before(250).await.unwrap());
     }
 }

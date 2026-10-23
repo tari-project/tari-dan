@@ -190,7 +190,7 @@ message GetCheckpointsResponse {
 message EpochCheckpoint {
   bytes proof = 1;
   map<uint32, TreeRootSummary> shard_tree_summary = 2;
-  // CBOR-encoded preimage of the end-of-epoch header's metadata hash. Empty when the checkpoint has none.
+  // CBOR-encoded preimage of the end-of-epoch header's metadata hash.
   bytes header_metadata = 3;
 }
 

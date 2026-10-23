@@ -39,8 +39,6 @@ pub enum SpendWitness {
         #[n(1)]
         proof: MerkleProof,
         #[n(2)]
-        #[cbor(default)]
-        #[cfg_attr(feature = "serde", serde(default))]
         data: Bytes,
     },
     // `#[n(2)]` is reserved for a future `ScriptPathTweaked` variant (the deferred taproot-style key tweak); do not

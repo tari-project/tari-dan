@@ -168,8 +168,6 @@ impl<'a> ValidatorStatsUpdate<'a> {
     }
 }
 
-/// The liveness fields carry `#[cbor(default)]` so that a record written before they existed decodes
-/// with those counters at zero rather than failing at commit time.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, CborLen)]
 pub struct ValidatorConsensusStats {
     #[n(0)]
@@ -177,13 +175,10 @@ pub struct ValidatorConsensusStats {
     #[n(1)]
     pub participation_shares: u64,
     #[n(2)]
-    #[cbor(default)]
     pub probation_failures: u32,
     #[n(3)]
-    #[cbor(default)]
     pub votes_since_suspended: u64,
     #[n(4)]
-    #[cbor(default)]
     pub suspended_at_height: NodeHeight,
 }
 
@@ -486,32 +481,6 @@ mod tests {
         assert_eq!(chain.state(), LivenessState::Probation);
         chain.vote();
         assert_eq!(chain.counters().votes_since_suspended, 5);
-    }
-
-    /// A record written before the liveness fields existed must still decode, with those counters at
-    /// zero. What the record then says about the validator is up to the thresholds, as for any other.
-    #[test]
-    fn stats_without_the_liveness_fields_decode_with_the_counters_at_zero() {
-        #[derive(Encode)]
-        struct StatsBeforeLiveness {
-            #[n(0)]
-            missed_proposals: u64,
-            #[n(1)]
-            participation_shares: u64,
-        }
-
-        let encoded = minicbor::to_vec(StatsBeforeLiveness {
-            missed_proposals: 9,
-            participation_shares: 3,
-        })
-        .unwrap();
-
-        let stats: ValidatorConsensusStats = minicbor::decode(&encoded).unwrap();
-        assert_eq!(stats.missed_proposals, 9);
-        assert_eq!(stats.participation_shares, 3);
-        assert_eq!(stats.counters().probation_failures, 0);
-        assert_eq!(stats.counters().votes_since_suspended, 0);
-        assert_eq!(stats.counters().suspended_at_height, NodeHeight::zero());
     }
 
     #[test]

@@ -64,8 +64,6 @@ pub struct TransactionPoolStateUpdateData {
     pub locked_epoch: Option<LockedEpoch>,
     #[n(10)]
     pub is_ready: bool,
-    #[cbor(default)]
-    #[serde(default)]
     #[n(11)]
     pub exhaust_burn: u64,
 }

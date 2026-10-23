@@ -51,8 +51,6 @@ pub struct Vault {
     #[n(0)]
     resource_container: ResourceContainer,
     #[n(1)]
-    #[cbor(default)]
-    #[serde(default)]
     freeze_flags: VaultFreezeFlags,
 }
 

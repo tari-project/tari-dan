@@ -342,10 +342,9 @@ pub fn build_stealth_inputs_statement(
 /// this accepts a caller-supplied `witness` per input -- the only way to spend an output committed with
 /// `PayTo::Conditions` (e.g. claiming or refunding an HTLC-style hashlock/timelock output). Build each
 /// script-path input's witness with `buildScriptPathWitness` first; a plain key-path input can still be
-/// included in the same call, either with `"witness":"KeyPath"` or by omitting `witness` entirely
-/// (defaults to key path).
+/// included in the same call with `"witness":"KeyPath"`.
 ///
-/// `inputs_json` shape: `[{ "commitment": <hex 32 bytes>, "witness"?: <SpendWitness> }, ...]`.
+/// `inputs_json` shape: `[{ "commitment": <hex 32 bytes>, "witness": <SpendWitness> }, ...]`.
 #[wasm_bindgen(js_name = "buildStealthInputsStatementFromInputs")]
 pub fn build_stealth_inputs_statement_from_inputs(
     inputs_json: &str,

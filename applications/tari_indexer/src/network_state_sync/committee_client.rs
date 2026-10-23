@@ -120,36 +120,7 @@ impl ValidatorCommitteeRpcPool {
         T: 'static,
         E: Display + 'static,
     {
-        self.try_with_random_members_excluding(HashSet::new(), callback).await
-    }
-
-    /// [`Self::try_with_random_members`] among the members other than `member`.
-    pub async fn try_with_another_member<F, T, E, TFut>(
-        &mut self,
-        member: PeerAddress,
-        callback: F,
-    ) -> Result<T, ValidatorCommitteeClientError>
-    where
-        F: Fn(ValidatorRpcSession) -> TFut,
-        TFut: Future<Output = Result<T, E>>,
-        T: 'static,
-        E: Display + 'static,
-    {
-        self.try_with_random_members_excluding(HashSet::from([member]), callback)
-            .await
-    }
-
-    async fn try_with_random_members_excluding<F, T, E, TFut>(
-        &mut self,
-        mut attempted: HashSet<PeerAddress>,
-        callback: F,
-    ) -> Result<T, ValidatorCommitteeClientError>
-    where
-        F: Fn(ValidatorRpcSession) -> TFut,
-        TFut: Future<Output = Result<T, E>>,
-        T: 'static,
-        E: Display + 'static,
-    {
+        let mut attempted = HashSet::new();
         let epoch = self.epoch_manager.get_current_epoch();
         let mut last_error = None;
         loop {

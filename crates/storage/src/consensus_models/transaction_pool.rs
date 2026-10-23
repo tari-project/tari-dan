@@ -628,14 +628,10 @@ pub struct TransactionPoolRecord {
     /// Static transaction weight (`Transaction::calculate_transaction_weight`), cached here so block
     /// proposal can budget by weight without loading the full transaction body. Computed once when the
     /// record is created.
-    #[serde(default)]
-    #[cbor(default)]
     #[n(15)]
     transaction_weight: u64,
     /// The exhaust burn collected by the executor (`FeeReceipt::exhaust_burn`), set from local
     /// execution alongside `transaction_fee`.
-    #[serde(default)]
-    #[cbor(default)]
     #[n(16)]
     exhaust_burn: u64,
 }
@@ -1368,7 +1364,7 @@ mod tests {
 
         #[test]
         fn proposal_weight_is_at_least_one() {
-            // A zero-weight (e.g. legacy/empty) record still consumes some budget so the count cap
+            // A zero-weight record still consumes some budget so the count cap
             // is the only thing bounding it, never an unbounded fill.
             let rec = record_with_weight_and_stage(0, TransactionPoolStage::New);
             assert_eq!(rec.proposal_weight(), 1);

@@ -280,10 +280,10 @@ mod tests {
         store
             .with_write_tx(move |tx| {
                 for checkpoint in [
-                    epoch_checkpoint(1, low, true),
-                    epoch_checkpoint(1, high, true),
-                    epoch_checkpoint(2, low, true),
-                    epoch_checkpoint(2, high, true),
+                    epoch_checkpoint(1, low),
+                    epoch_checkpoint(1, high),
+                    epoch_checkpoint(2, low),
+                    epoch_checkpoint(2, high),
                 ] {
                     tx.insert_or_ignore_epoch_checkpoint(&checkpoint)?;
                 }

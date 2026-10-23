@@ -122,19 +122,18 @@ fn a_checkpoint_the_trusted_committee_did_not_sign_is_rejected() {
 fn a_checkpoint_stripped_of_its_preimage_is_rejected() {
     let sets = sets();
     let trusted = anchored(&sets);
-    let entry = checkpoint_entry(CheckpointSpec {
-        carry_preimage: false,
-        ..CheckpointSpec::handover(&sets[1], &sets[2])
-    });
+    let mut entry = checkpoint_entry(CheckpointSpec::handover(&sets[1], &sets[2]));
+    let tari_bor::Value::Array(mut fields) = tari_bor::decode(&entry.checkpoint).unwrap() else {
+        panic!("EpochCheckpoint is not encoded as an array");
+    };
+    fields.truncate(2);
+    entry.checkpoint = tari_bor::encode(&tari_bor::Value::Array(fields)).unwrap();
 
     let err = trusted.advance(&entry).unwrap_err();
-    assert!(matches!(err, LightClientError::NoNextValidatorSet { .. }), "{err}");
+    assert!(matches!(err, LightClientError::Decode { .. }), "{err}");
 
     let first_use = TrustedValidatorSet::anchor_on_first_use(NETWORK, walk_shard(), &entry).unwrap_err();
-    assert!(
-        matches!(first_use, LightClientError::NoNextValidatorSet { .. }),
-        "{first_use}"
-    );
+    assert!(matches!(first_use, LightClientError::Decode { .. }), "{first_use}");
 }
 
 #[test]

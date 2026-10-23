@@ -42,10 +42,8 @@ pub enum LightClientError {
         epoch: Epoch,
         source: EpochCheckpointValidationError,
     },
-    /// The quorum certificate does not cover the header metadata preimage, so whoever serves a checkpoint can strip it.
     #[error(
-        "The checkpoint for {epoch} carries no header metadata preimage naming the next validator set, so it proves \
-         no handover"
+        "The end-of-epoch header of the checkpoint for {epoch} names no next validator set, so it proves no handover"
     )]
     NoNextValidatorSet { epoch: Epoch },
     #[error("The checkpoint ends {epoch}, which no epoch follows")]

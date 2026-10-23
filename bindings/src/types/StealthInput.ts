@@ -11,7 +11,7 @@ export type StealthInput = {
    */
   commitment: PedersenCommitmentBytes;
   /**
-   * Selects which authorisation path the spender is exercising for this input (TIP-0006). Defaults to the key path.
+   * Selects which authorisation path the spender is exercising for this input (TIP-0006).
    */
   witness: SpendWitness;
 };

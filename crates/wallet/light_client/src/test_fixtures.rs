@@ -211,8 +211,6 @@ pub struct CheckpointSpec<'a> {
     pub signers: &'a Signers,
     /// The validator set the end-of-epoch header names for the next epoch.
     pub next_set: ValidatorSetHash,
-    /// Whether the checkpoint carries the header metadata preimage.
-    pub carry_preimage: bool,
     pub next_epoch_committee: Option<ValidatorSetCommittee>,
     /// The state version each of these shards of `shard_group` reached at the end of the epoch. Every other shard is
     /// at version zero.
@@ -228,7 +226,6 @@ impl<'a> CheckpointSpec<'a> {
             shard_group: low(),
             signers: &current.low,
             next_set: next.hash(),
-            carry_preimage: true,
             next_epoch_committee: Some(next.committee(low())),
             shard_state_versions: vec![],
         }
@@ -267,7 +264,7 @@ pub fn checkpoint_entry(spec: CheckpointSpec<'_>) -> EpochCheckpointEntry {
         EpochCheckpoint::new(
             CommandCommitProof::new(command.clone(), commit_proof, inclusion_proof.clone()),
             shard_tree_summary.clone(),
-            spec.carry_preimage.then(|| metadata.clone()),
+            metadata.clone(),
         )
     };
     let unsigned = build(SidechainBlockCommitProof {
