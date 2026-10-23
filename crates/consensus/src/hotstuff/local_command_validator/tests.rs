@@ -84,7 +84,7 @@ use crate::{
     hotstuff::{
         block_change_set::ProposedBlockChangeSet,
         substate_store::PendingSubstateStore,
-        transaction_manager::{ConsensusTransactionManager, EvidenceOrExecution, PreparedTransaction},
+        transaction_manager::{ConsensusTransactionManager, EvidenceOrExecution, ExecutionMemo, PreparedTransaction},
     },
     traits::{BlockTransactionExecutor, BlockTransactionExecutorError, CertificateStore, UncommittedChainTemplates},
 };
@@ -112,11 +112,22 @@ struct Script {
 #[derive(Debug, Clone, Default)]
 struct ScriptedExecutor {
     scripts: Arc<Mutex<HashMap<TransactionId, Script>>>,
+    num_executions: Arc<Mutex<HashMap<TransactionId, usize>>>,
 }
 
 impl ScriptedExecutor {
     fn script(&self, transaction_id: TransactionId, script: Script) {
         self.scripts.lock().unwrap().insert(transaction_id, script);
+    }
+
+    /// How many times `transaction_id` has been executed.
+    fn num_executions(&self, transaction_id: &TransactionId) -> usize {
+        self.num_executions
+            .lock()
+            .unwrap()
+            .get(transaction_id)
+            .copied()
+            .unwrap_or_default()
     }
 }
 
@@ -130,6 +141,7 @@ impl BlockTransactionExecutor<TestStore> for ScriptedExecutor {
         _templates: &UncommittedChainTemplates,
     ) -> Result<TransactionExecution, BlockTransactionExecutorError> {
         let id = transaction.calculate_id();
+        *self.num_executions.lock().unwrap().entry(id).or_default() += 1;
         let script = self
             .scripts
             .lock()
@@ -297,6 +309,13 @@ impl Replica {
         Self::in_committee(ShardGroup::all_shards(NUM_PRESHARDS), 1)
     }
 
+    /// The replica speculates a block's executions on `execution_threads` threads before evaluating it.
+    fn with_execution_threads(mut self, execution_threads: usize) -> Self {
+        self.manager = ConsensusTransactionManager::new(self.executor.clone(), 2160, usize::MAX)
+            .with_speculation(execution_threads, self.store.clone());
+        self
+    }
+
     /// A replica whose committee covers `shard_group` of a network split into `num_committees`.
     fn in_committee(shard_group: ShardGroup, num_committees: u32) -> Self {
         let tmp = tempfile::tempdir().unwrap();
@@ -397,18 +416,35 @@ impl Replica {
 
     /// Evaluates `atoms` in order as the LocalOnly commands of one block, stopping at the first refusal.
     fn evaluate_local_only(&self, atoms: &[LocalOnlyAtom]) -> Evaluation {
+        self.evaluate_local_only_after(atoms, |_| Ok(()))
+    }
+
+    /// Evaluates `atoms` as [`Self::evaluate_local_only`] does, in a write transaction in which `before` has already
+    /// written.
+    fn evaluate_local_only_after<F>(&self, atoms: &[LocalOnlyAtom], before: F) -> Evaluation
+    where F: FnOnce(&mut <TestStore as StateStore>::WriteTransaction<'_>) -> Result<(), StorageError> {
         let commands = atoms.iter().cloned().map(Command::LocalOnly).collect::<Vec<_>>();
-        self.evaluate(&commands)
+        self.evaluate_after(&commands, before)
     }
 
     /// Evaluates `commands` in order as the transaction commands of one block, stopping at the first refusal.
     fn evaluate(&self, commands: &[Command]) -> Evaluation {
+        self.evaluate_after(commands, |_| Ok(()))
+    }
+
+    /// Evaluates `commands` as [`Self::evaluate`] does, in a write transaction in which `before` has already written.
+    /// The commands' executions are speculated first if the replica speculates.
+    fn evaluate_after<F>(&self, commands: &[Command], before: F) -> Evaluation
+    where F: FnOnce(&mut <TestStore as StateStore>::WriteTransaction<'_>) -> Result<(), StorageError> {
         let block = &self.candidate;
-        let validator = LocalCommandValidator::new(&self.manager, &self.public_key);
+        let mut validator = LocalCommandValidator::new(&self.manager, &self.public_key);
         self.store
-            .with_read_tx(|tx| {
+            .with_write_tx(|tx| {
+                before(tx)?;
+                let tx = &**tx;
                 let mut substate_store = PendingSubstateStore::init(tx, block.as_leaf(), NUM_PRESHARDS)?;
                 let mut change_set = ProposedBlockChangeSet::new(block.as_leaf());
+                validator.speculate(tx, block, commands, &self.committee, &substate_store, &change_set);
                 let mut evaluation = Evaluation::default();
                 for command in commands {
                     evaluation.no_vote = match command {
@@ -452,6 +488,15 @@ impl Replica {
                     evaluation.stages.push(rec.current_stage());
                     evaluation.executed.push(change_set.transaction_execution(id).is_some());
                 }
+                let mut changes = substate_store
+                    .changes()
+                    .iter()
+                    .map(|change| format!("{change:?}"))
+                    .collect::<Vec<_>>();
+                changes.sort();
+                evaluation.changes = changes;
+                evaluation.memo_hits = validator.memo().num_hits();
+                evaluation.memo_misses = validator.memo().num_misses();
                 Ok::<_, StorageError>(evaluation)
             })
             .unwrap()
@@ -486,7 +531,14 @@ impl Replica {
                 rec.update_locked_epoch(block.to_locked_epoch());
                 let prepared = self
                     .manager
-                    .prepare_for_proposal(&mut substate_store, &self.committee, &rec, block.as_leaf(), &change_set)
+                    .prepare_for_proposal(
+                        &mut substate_store,
+                        &self.committee,
+                        &rec,
+                        block.as_leaf(),
+                        &change_set,
+                        &mut ExecutionMemo::empty(),
+                    )
                     .unwrap();
                 let PreparedTransaction::MultiShard(multishard) = prepared else {
                     panic!("transaction {id} did not prepare as multi-shard: {prepared:?}");
@@ -559,6 +611,24 @@ struct Evaluation {
     stages: Vec<TransactionPoolStage>,
     /// Whether each transaction voted for has an execution in the block.
     executed: Vec<bool>,
+    /// The block's substate changes, in a fixed order.
+    changes: Vec<String>,
+    memo_hits: usize,
+    memo_misses: usize,
+}
+
+impl Evaluation {
+    /// What the evaluation decided and changed, however it executed the transactions.
+    fn outcome(&self) -> impl PartialEq + std::fmt::Debug + '_ {
+        (
+            format!("{:?}", self.no_vote),
+            self.total_leader_fee,
+            self.total_exhaust_burn,
+            &self.stages,
+            &self.executed,
+            &self.changes,
+        )
+    }
 }
 
 fn commits() -> Script {
@@ -1435,5 +1505,200 @@ mod new_multishard_rules {
             "{:?}",
             evaluation.no_vote
         );
+    }
+}
+
+mod speculation {
+    use super::*;
+
+    const THREADS: usize = 4;
+
+    /// Builds the same pool in a replica that evaluates without speculating and one that speculates on [THREADS]
+    /// threads, with `setup`, and evaluates the atoms it returns, sorted into block order, in each.
+    fn evaluate_both(setup: impl Fn(&Replica) -> Vec<LocalOnlyAtom>) -> (Evaluation, Evaluation, Replica) {
+        let serial = Replica::new();
+        let speculating = Replica::new().with_execution_threads(THREADS);
+        let mut atoms = setup(&serial);
+        assert_eq!(setup(&speculating), atoms, "both replicas pool the same transactions");
+        atoms.sort_by_key(|atom| atom.id);
+        let expected = serial.evaluate_local_only(&atoms);
+        let speculated = speculating.evaluate_local_only(&atoms);
+        (expected, speculated, speculating)
+    }
+
+    #[test]
+    fn disjoint_transactions_take_their_speculated_executions() {
+        let (expected, speculated, replica) = evaluate_both(|replica| {
+            (0..4u8)
+                .map(|n| {
+                    let input = component_id(0x20 + n);
+                    replica.add_substate(&input);
+                    committing(replica.pool_transaction(u64::from(n) + 1, &[&input], commits()))
+                })
+                .collect()
+        });
+
+        assert!(expected.no_vote.is_none(), "{:?}", expected.no_vote);
+        assert_eq!(speculated.outcome(), expected.outcome());
+        assert_eq!(speculated.memo_hits, 4);
+        assert_eq!(speculated.memo_misses, 0);
+        for id in replica.executor.num_executions.lock().unwrap().values() {
+            assert_eq!(*id, 1, "a speculated transaction is executed once");
+        }
+    }
+
+    #[test]
+    fn a_chain_through_one_substate_takes_every_speculated_execution() {
+        let (expected, speculated, _replica) = evaluate_both(|replica| {
+            let vault = component_id(0x20);
+            replica.add_substate(&vault);
+            (1..=4)
+                .map(|seed| committing(replica.pool_transaction(seed, &[&vault], commits())))
+                .collect()
+        });
+
+        assert!(expected.no_vote.is_none(), "{:?}", expected.no_vote);
+        assert_eq!(speculated.outcome(), expected.outcome());
+        assert_eq!(speculated.memo_hits, 4);
+    }
+
+    #[test]
+    fn a_transaction_using_a_substate_an_earlier_one_creates_is_executed_in_block_order() {
+        let created = component_id(0x40);
+        let (expected, speculated, replica) = evaluate_both(|replica| {
+            let input = component_id(0x20);
+            replica.add_substate(&input);
+            let creator = replica.pool_transaction(1, &[&input], Script {
+                commit: true,
+                new_outputs: vec![created.clone()],
+                ..Default::default()
+            });
+            // The user declares only the created substate, so it shares no unit with the creator
+            let user = (2..)
+                .map(|seed| replica.pool_transaction(seed, &[&created], commits()))
+                .find(|user| *user > creator)
+                .unwrap();
+            vec![committing(creator), committing(user)]
+        });
+
+        assert!(expected.no_vote.is_none(), "{:?}", expected.no_vote);
+        assert_eq!(speculated.outcome(), expected.outcome());
+        assert_eq!(speculated.memo_hits, 1, "only the creator is speculated");
+        let executions = replica.executor.num_executions.lock().unwrap().clone();
+        assert!(executions.values().all(|n| *n == 1), "{executions:?}");
+    }
+
+    #[test]
+    fn a_snapshot_behind_the_write_transaction_misses_and_the_block_is_unchanged() {
+        let input = component_id(0x20);
+        let setup = |replica: &Replica| {
+            replica.add_substate(&input);
+            vec![committing(replica.pool_transaction(1, &[&input], commits()))]
+        };
+        // The evaluation's write transaction moves the input to version 1 before the block is evaluated, as a
+        // replica's commit of the block's ancestors does. The snapshot speculation reads cannot see it.
+        let bump_input = |tx: &mut <TestStore as StateStore>::WriteTransaction<'_>| {
+            let shard = VersionedSubstateId::new(input.clone(), SubstateVersion::ZERO).to_shard(NUM_PRESHARDS);
+            let mut batch = SubstateUpdateBatch::new(NETWORK, Epoch::zero());
+            let transitions = batch.with_transition(shard, 1);
+            transitions.push(SubstateTransition::Down {
+                id: VersionedSubstateId::new(input.clone(), SubstateVersion::ZERO),
+            });
+            transitions.push(SubstateTransition::Up {
+                id: input.clone(),
+                version: SubstateVersion::new(1),
+                substate_or_hash: component_value().into(),
+            });
+            SubstateRecord::commit_batch(tx, batch)
+        };
+
+        let serial = Replica::new();
+        let atoms = setup(&serial);
+        let expected = serial.evaluate_local_only_after(&atoms, bump_input);
+        let speculating = Replica::new().with_execution_threads(THREADS);
+        assert_eq!(setup(&speculating), atoms);
+        let speculated = speculating.evaluate_local_only_after(&atoms, bump_input);
+
+        assert!(expected.no_vote.is_none(), "{:?}", expected.no_vote);
+        assert_eq!(speculated.outcome(), expected.outcome());
+        assert_eq!(speculated.memo_hits, 0);
+        assert_eq!(speculated.memo_misses, 1);
+        assert_eq!(speculating.executor.num_executions(atoms[0].id()), 2);
+    }
+
+    /// A deterministic source of small random numbers.
+    struct XorShift(u64);
+
+    impl XorShift {
+        fn below(&mut self, bound: u64) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0 % bound
+        }
+    }
+
+    /// Pools transactions that write random substates among a few, one of them written by many as a faucet's vault
+    /// is. Some use substates created by an earlier transaction in the block without that transaction declaring them.
+    fn random_block(replica: &Replica, seed: u64) -> Vec<LocalOnlyAtom> {
+        const NUM_SUBSTATES: u8 = 5;
+        const NUM_TRANSACTIONS: u64 = 10;
+        const NUM_CREATED: u8 = 3;
+        let mut rng = XorShift(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+        let existing = (0..NUM_SUBSTATES).map(|n| component_id(0x20 + n)).collect::<Vec<_>>();
+        for id in &existing {
+            replica.add_substate(id);
+        }
+        let created = (0..NUM_CREATED).map(|n| component_id(0x40 + n)).collect::<Vec<_>>();
+
+        let mut transactions = (0..NUM_TRANSACTIONS)
+            .map(|n| {
+                let mut inputs = Vec::new();
+                if rng.below(2) == 0 {
+                    // The faucet's vault
+                    inputs.push(&existing[0]);
+                }
+                let other = &existing[rng.below(u64::from(NUM_SUBSTATES)) as usize];
+                if !inputs.contains(&other) {
+                    inputs.push(other);
+                }
+                if rng.below(4) == 0 {
+                    inputs.push(&created[rng.below(u64::from(NUM_CREATED)) as usize]);
+                }
+                let id = replica.pool_transaction(seed * 100 + n + 1, &inputs, commits());
+                (id, inputs.into_iter().cloned().collect::<Vec<_>>())
+            })
+            .collect::<Vec<_>>();
+        transactions.sort_by_key(|(id, _)| *id);
+
+        // Each created substate is created by a transaction ordered before its first user, or exists already if its
+        // first user is the first transaction
+        for substate in &created {
+            let Some(first_user) = transactions.iter().position(|(_, inputs)| inputs.contains(substate)) else {
+                continue;
+            };
+            if first_user == 0 {
+                replica.add_substate(substate);
+                continue;
+            }
+            let (creator, _) = &transactions[rng.below(first_user as u64) as usize];
+            let mut scripts = replica.executor.scripts.lock().unwrap();
+            scripts.get_mut(creator).unwrap().new_outputs.push(substate.clone());
+        }
+
+        transactions.into_iter().map(|(id, _)| committing(id)).collect()
+    }
+
+    #[test]
+    fn random_conflict_graphs_evaluate_the_same_with_and_without_speculation() {
+        let (mut total_hits, mut total_misses) = (0, 0);
+        for seed in 1..=24 {
+            let (expected, speculated, _replica) = evaluate_both(|replica| random_block(replica, seed));
+            assert_eq!(speculated.outcome(), expected.outcome(), "seed {seed}");
+            total_hits += speculated.memo_hits;
+            total_misses += speculated.memo_misses;
+        }
+        assert!(total_hits > 0, "no speculated execution was taken");
+        assert!(total_misses > 0, "no speculation read state the block did not have");
     }
 }

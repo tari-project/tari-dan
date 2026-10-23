@@ -35,6 +35,7 @@ use tari_ootle_transaction::TransactionId;
 
 use super::{
     SubstateOverlay,
+    SubstateVersionReader,
     chain_view::ChainView,
     change_log::{ChangeLog, SubstateLayer},
     error::SubstateStoreError,
@@ -141,6 +142,16 @@ impl<'a, TTx: StateStoreReadTransaction> WriteableSubstateStore for PendingSubst
             let total = shard_output_bytes.entry(change.shard()).or_default();
             *total = total.saturating_add(bytes);
         })
+    }
+}
+
+impl<TTx: StateStoreReadTransaction> SubstateVersionReader for PendingSubstateStore<'_, TTx> {
+    fn get_latest_version(&self, id: &SubstateId) -> Result<LatestSubstateVersion, SubstateStoreError> {
+        PendingSubstateStore::get_latest_version(self, id)
+    }
+
+    fn lock_assert_is_up(&self, id: VersionedSubstateIdRef<'_>) -> Result<(), SubstateStoreError> {
+        PendingSubstateStore::lock_assert_is_up(self, id)
     }
 }
 

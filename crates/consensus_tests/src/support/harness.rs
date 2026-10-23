@@ -688,6 +688,7 @@ pub struct TestBuilder {
     config: HotstuffConfig,
     claim_keys: Option<(TestVnDestination, RistrettoPublicKey)>,
     allow_wasm_budget_deferrals: bool,
+    execution_threads: HashMap<TestAddress, usize>,
 }
 
 impl TestBuilder {
@@ -704,6 +705,7 @@ impl TestBuilder {
             failure_nodes: Vec::new(),
             claim_keys: None,
             allow_wasm_budget_deferrals: false,
+            execution_threads: HashMap::new(),
             config: HotstuffConfig {
                 network: Network::LocalNet,
                 sidechain_id: None,
@@ -750,6 +752,7 @@ impl TestBuilder {
                 epoch_end_grace_period: Duration::from_secs(1),
                 epoch_end_drain_period: Duration::from_secs(5),
                 catch_up_request_timeout: Duration::from_secs(15),
+                execution_threads: 1,
             },
         }
     }
@@ -808,6 +811,15 @@ impl TestBuilder {
         self
     }
 
+    /// Speculates on `num_threads` threads at the validators named `addresses`, overriding the config's
+    /// `execution_threads`.
+    pub fn with_execution_threads(mut self, addresses: &[&'static str], num_threads: usize) -> Self {
+        for address in addresses {
+            self.execution_threads.insert(TestAddress::new(*address), num_threads);
+        }
+        self
+    }
+
     pub fn modify_consensus_constants<F: FnOnce(&mut ConsensusConstants)>(mut self, f: F) -> Self {
         f(&mut self.config.consensus_constants);
         self
@@ -826,6 +838,7 @@ impl TestBuilder {
         epoch_manager: &TestEpochManager,
         rocks_path_override: Option<String>,
         config: HotstuffConfig,
+        execution_threads: &HashMap<TestAddress, usize>,
         failure_nodes: &[TestAddress],
         send_observer: Option<NetworkSendObserver>,
         shutdown_signal: ShutdownSignal,
@@ -856,10 +869,14 @@ impl TestBuilder {
                     fs::create_dir_all(rocks_path).unwrap();
                 }
                 let (sk, pk) = helpers::derive_keypair_from_address(&vn.address);
+                let mut config = config.clone();
+                if let Some(num_threads) = execution_threads.get(&vn.address) {
+                    config.execution_threads = *num_threads;
+                }
 
                 let (channels, validator) = Validator::builder()
                     .with_rocks_override_path(rocks_path_override)
-                    .with_config(config.clone())
+                    .with_config(config)
                     .with_address_and_secret_key(vn.address.clone(), sk)
                     .with_shard(vn.shard_key)
                     .with_shard_group(shard_group)
@@ -909,6 +926,7 @@ impl TestBuilder {
             &epoch_manager,
             self.rocks_path,
             self.config,
+            &self.execution_threads,
             &self.failure_nodes,
             self.send_observer,
             shutdown.to_signal(),

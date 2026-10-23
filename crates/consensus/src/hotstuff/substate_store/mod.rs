@@ -7,8 +7,10 @@ mod error;
 mod overlay;
 mod pending_store;
 mod sharded_state_tree;
+mod version_reader;
 
 pub use error::*;
 pub use overlay::*;
 pub use pending_store::*;
 pub use sharded_state_tree::*;
+pub use version_reader::*;

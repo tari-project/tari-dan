@@ -48,6 +48,10 @@
 ## The streaming rate, in bytes per second, at which a state version's bytes extend that time, 0 for no extension
 ## (default = 262144)
 #state_sync_min_throughput_bytes_per_sec = 262144
+## The threads a block's transactions are executed on in parallel before the block is evaluated. Blocks are identical
+## at any number of threads. 1 executes every transaction as the block is evaluated, one at a time.
+## (default = half the available cores)
+#execution_threads = 4
 
 #[validator_node.database]
 ## The type of database ("rocksdb" or "sqlite") to use (default = "sqlite")
