@@ -67,6 +67,7 @@ use crate::{
         apply_leader_fee_to_substate_store,
         block_change_set::ProposedBlockChangeSet,
         calculate_state_merkle_root,
+        command_derivation::{DerivedCommand, derive_local_only_command},
         epoch_state::EpochState,
         error::HotStuffError,
         exceeds_block_foreign_proposal_bytes,
@@ -79,7 +80,6 @@ use crate::{
         transaction_manager::{
             ConsensusTransactionManager,
             EvidenceOrExecution,
-            LocalPreparedTransaction,
             PledgedTransaction,
             PreparedTransaction,
             TransactionLockConflicts,
@@ -965,93 +965,50 @@ where TConsensusSpec: ConsensusSpec
                 "Transaction {} was prepared as having its inputs locked without a deferrable lock conflict",
                 pool_tx.id(),
             ))),
-            PreparedTransaction::LocalOnly(local) => match *local {
-                LocalPreparedTransaction::Accept { execution, .. } => {
-                    pool_tx
-                        .set_local_decision(execution.decision())
-                        .set_transaction_fee(execution.transaction_fee())
-                        .set_exhaust_burn(execution.exhaust_burn())
-                        .set_evidence(execution.to_evidence(
-                            local_committee_info.num_preshards(),
-                            local_committee_info.num_committees(),
-                        ));
+            PreparedTransaction::LocalOnly(local) => {
+                let pool_tx_id = *pool_tx.id();
+                let derived = derive_local_only_command(pool_tx, *local, local_committee_info).map_err(|refusal| {
+                    HotStuffError::InvariantError(format!(
+                        "PROPOSE: LocalOnly transaction {} cannot be sequenced: {refusal}",
+                        pool_tx_id,
+                    ))
+                })?;
+                info!(
+                    target: LOG_TARGET,
+                    "🏠️ Transaction {} is local only, proposing LocalOnly({})",
+                    pool_tx_id,
+                    derived.atom.decision,
+                );
 
-                    info!(
-                        target: LOG_TARGET,
-                        "🏠️ Transaction {} is local only, proposing LocalOnly",
-                        pool_tx.id(),
-                    );
-
-                    if pool_tx.current_decision().is_commit() {
-                        // STRICT INVARIANT: a LocalOnly transaction involves exactly the local shard group, so its
-                        // leader fee is calculated with one involved shard group and it accounts for the entire
-                        // exhaust burn.
-                        if pool_tx.evidence().num_shard_groups() != 1 {
-                            return Err(HotStuffError::InvariantError(format!(
-                                "PROPOSE: LocalOnly transaction {} has evidence for {} shard groups",
-                                pool_tx.id(),
-                                pool_tx.evidence().num_shard_groups(),
-                            )));
-                        }
-                        let involved = NonZeroU64::new(1).expect("1 > 0");
-                        let leader_fee = pool_tx.calculate_leader_fee(involved);
-                        pool_tx.set_leader_fee(leader_fee);
-                        let diff = execution.result().finalize.any_accept().ok_or_else(|| {
-                            HotStuffError::InvariantError(format!(
-                                "prepare_transaction: Transaction {} has COMMIT decision but execution failed when \
-                                 proposing",
-                                pool_tx.id(),
-                            ))
-                        })?;
-
-                        if substate_store.diff_exceeds_shard_output_bytes(
-                            diff,
-                            self.config.consensus_constants.max_block_shard_output_bytes,
-                        ) {
-                            info!(
-                                target: LOG_TARGET,
-                                "📦 PROPOSE: shard output budget reached, deferring LocalOnly transaction {} to a later block",
-                                pool_tx.id(),
-                            );
-                            return Ok(None);
-                        }
-                        if let Err(err) = substate_store.put_diff(diff) {
-                            // A lock failure or DOWN input is an expected conflict under contention - skip the
-                            // transaction this round. Any other store error is fatal and must be propagated.
-                            let lock_err = err.ok_lock_failed()?;
-                            warn!(
-                                target: LOG_TARGET,
-                                "🔒 Skipping LocalOnly transaction {} while proposing due to input conflict: {}",
-                                pool_tx.id(),
-                                lock_err,
-                            );
-                            return Ok(None);
-                        }
+                if let Some(diff) = derived.committed_diff() {
+                    if substate_store.diff_exceeds_shard_output_bytes(
+                        diff,
+                        self.config.consensus_constants.max_block_shard_output_bytes,
+                    ) {
+                        info!(
+                            target: LOG_TARGET,
+                            "📦 PROPOSE: shard output budget reached, deferring LocalOnly transaction {} to a later block",
+                            pool_tx_id,
+                        );
+                        return Ok(None);
                     }
+                    if let Err(err) = substate_store.put_diff(diff) {
+                        // A lock failure or DOWN input is an expected conflict under contention - skip the
+                        // transaction this round. Any other store error is fatal and must be propagated.
+                        let lock_err = err.ok_lock_failed()?;
+                        warn!(
+                            target: LOG_TARGET,
+                            "🔒 Skipping LocalOnly transaction {} while proposing due to input conflict: {}",
+                            pool_tx_id,
+                            lock_err,
+                        );
+                        return Ok(None);
+                    }
+                }
 
-                    executed_transactions.insert(*pool_tx.id(), execution);
-
-                    Ok(Some(Command::LocalOnly(pool_tx.get_local_only_atom())))
-                },
-                LocalPreparedTransaction::EarlyAbort { execution } => {
-                    info!(
-                        target: LOG_TARGET,
-                        "⚠️ Transaction is LOCAL-ONLY EARLY ABORT, proposing LocalOnly({}, ABORT)",
-                        pool_tx.id()
-                    );
-                    pool_tx
-                        .set_local_decision(execution.decision())
-                        .set_transaction_fee(execution.transaction_fee())
-                        .set_exhaust_burn(execution.exhaust_burn())
-                        .no_leader_fee()
-                        .merge_evidence(execution.to_evidence(
-                            local_committee_info.num_preshards(),
-                            local_committee_info.num_committees(),
-                        ));
-
-                    executed_transactions.insert(*pool_tx.id(), execution);
-                    Ok(Some(Command::LocalOnly(pool_tx.get_local_only_atom())))
-                },
+                let DerivedCommand { atom, execution, .. } = derived;
+                executed_transactions.insert(atom.id, execution);
+                Ok(Some(Command::LocalOnly(atom)))
             },
 
             PreparedTransaction::MultiShard(multishard) => {
