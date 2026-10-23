@@ -108,7 +108,7 @@ where
     }
 
     /// Processes each queued UTXO once and returns the number left queued, because the indexer that answered neither
-    /// returned them nor reported them spent, or because a report that one is frozen could not be settled yet.
+    /// returned them nor reported them spent, or because a report of one could not be settled against a proof yet.
     #[allow(clippy::too_many_lines)]
     pub async fn process_utxo_validation_queue(&mut self) -> Result<usize, StealthScannerApiError> {
         let mut start_event_published = false;
@@ -226,7 +226,7 @@ where
                     })
                     .collect();
                 let utxos = if self.sdk.sdk_config().indexer_trust.is_verify() {
-                    let (utxos, num_deferred) = self.settle_frozen_claims(*resource_addr, utxos).await?;
+                    let (utxos, num_deferred) = self.settle_reported_utxos(*resource_addr, utxos).await?;
                     num_unresolved += num_deferred;
                     utxos
                 } else {
@@ -237,27 +237,27 @@ where
         }
     }
 
-    /// Settles each report that a UTXO is frozen, which withholds the output from spending, against the UTXO's state
-    /// as the indexer proves it. A report is dropped when the answer refuses it for good: the indexer serves no proof,
-    /// a proof that does not verify or that the wallet can never trust, or proves the UTXO unfrozen. The output is then
-    /// held unfrozen. A UTXO whose report could not be settled for any other reason stays queued for a later round, and
-    /// is counted in the returned number.
+    /// Settles each reported UTXO against the UTXO's state as the indexer proves it, and returns those the wallet may
+    /// store, with the number left queued for a later round.
     ///
-    /// A report that a UTXO is unfrozen needs no proof, as it only lets the wallet try a spend that the network
-    /// decides. Nor does a report of a freeze the wallet already holds.
-    async fn settle_frozen_claims(
+    /// A UTXO the wallet does not hold is stored only once the indexer proves that the network holds it, with the
+    /// output and frozen flag the proof shows. Until then it stays queued, so that an output the network does not hold
+    /// is never counted as spendable.
+    ///
+    /// For a UTXO the wallet holds, only a report that it is frozen, which withholds the output from spending, needs a
+    /// proof. That report is dropped when the answer refuses it for good: the indexer serves no proof, a proof that
+    /// does not verify or that the wallet can never trust, or proves the UTXO unfrozen. The output is then held
+    /// unfrozen. A report that could not be settled for any other reason stays queued. A report that a held UTXO is
+    /// unfrozen needs no proof, as it only lets the wallet try a spend that the network decides. Nor does a report
+    /// of a freeze the wallet already holds.
+    async fn settle_reported_utxos(
         &self,
         resource_address: ResourceAddress,
         utxos: Vec<FoundUtxo>,
     ) -> Result<(Vec<FoundUtxo>, usize), StealthScannerApiError> {
-        let substate_api = self.sdk.substate_api();
         let mut settled = Vec::with_capacity(utxos.len());
         let mut num_deferred = 0;
-        for mut found in utxos {
-            if !found.is_frozen {
-                settled.push(found);
-                continue;
-            }
+        for found in utxos {
             let held = self
                 .sdk
                 .store()
@@ -265,56 +265,129 @@ where
                     tx.stealth_outputs_get_by_commitment(&resource_address, &found.id.into_commitment_bytes())
                 })
                 .optional()?;
-            if held.is_some_and(|output| output.is_frozen) {
-                settled.push(found);
-                continue;
-            }
-
-            let address = UtxoAddress::new(resource_address, found.id);
-            match substate_api
-                .fetch_substate_from_network(&address.clone().into(), None)
-                .await
-            {
-                Ok(read) => {
-                    found.is_frozen = read.substate.as_utxo().is_some_and(|utxo| utxo.is_frozen());
-                    if !found.is_frozen {
-                        warn!(
-                            target: LOG_TARGET,
-                            "⚠️ The indexer reported stealth output {} frozen, but proved it unfrozen. Keeping the output spendable.",
-                            address
-                        );
-                    }
-                    settled.push(found);
-                },
-                Err(
-                    err @ (SubstateApiError::SubstateDoesNotExist { .. } |
-                    SubstateApiError::SubstateUnproven { .. } |
-                    SubstateApiError::SubstateUnverified { .. } |
-                    SubstateApiError::SubstateProvenBeforeAnchor { .. } |
-                    SubstateApiError::SubstateProofStale { .. }),
-                ) => {
-                    warn!(
-                        target: LOG_TARGET,
-                        "⚠️ The indexer reported stealth output {} frozen without proving it ({}). Keeping the output spendable.",
-                        address,
-                        err
-                    );
-                    found.is_frozen = false;
-                    settled.push(found);
-                },
-                Err(SubstateApiError::StoreError(err)) => return Err(err.into()),
-                Err(err) => {
-                    warn!(
-                        target: LOG_TARGET,
-                        "⚠️ Could not check the indexer's report that stealth output {} is frozen ({}). Retrying later.",
-                        address,
-                        err
-                    );
-                    num_deferred += 1;
-                },
+            let settled_utxo = match held {
+                Some(held) => self.settle_held_utxo(resource_address, found, held.is_frozen).await?,
+                None => self.settle_new_utxo(resource_address, found).await?,
+            };
+            match settled_utxo {
+                Some(found) => settled.push(found),
+                None => num_deferred += 1,
             }
         }
         Ok((settled, num_deferred))
+    }
+
+    /// Settles a reported UTXO the wallet does not hold. Returns the UTXO as the indexer proves it, or `None` when it
+    /// is not proven.
+    async fn settle_new_utxo(
+        &self,
+        resource_address: ResourceAddress,
+        found: FoundUtxo,
+    ) -> Result<Option<FoundUtxo>, StealthScannerApiError> {
+        let address = UtxoAddress::new(resource_address, found.id);
+        let reported_pair = (found.output.tag, found.output.output.public_nonce);
+        let read = match self
+            .sdk
+            .substate_api()
+            .fetch_substate_from_network(&address.clone().into(), None)
+            .await
+        {
+            Ok(read) => read,
+            Err(SubstateApiError::StoreError(err)) => return Err(err.into()),
+            Err(err) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "⚠️ The indexer reported stealth output {} unspent without proving it ({}). Retrying later.",
+                    address,
+                    err
+                );
+                return Ok(None);
+            },
+        };
+        let Some(utxo) = read.substate.into_utxo() else {
+            warn!(
+                target: LOG_TARGET,
+                "⚠️ The indexer proved substate {} holds no UTXO. Retrying later.",
+                address
+            );
+            return Ok(None);
+        };
+        let is_frozen = utxo.is_frozen();
+        let Some(output) = utxo
+            .into_output()
+            .filter(|output| (output.tag, output.output.public_nonce) == reported_pair)
+        else {
+            warn!(
+                target: LOG_TARGET,
+                "⚠️ The indexer proved stealth output {} with an output other than the one it reported. Retrying later.",
+                address
+            );
+            return Ok(None);
+        };
+        Ok(Some(FoundUtxo {
+            output,
+            is_frozen,
+            ..found
+        }))
+    }
+
+    /// Settles a reported UTXO the wallet holds, whose held frozen flag is `held_frozen`. Returns `None` when a report
+    /// that it is frozen could not be settled yet.
+    async fn settle_held_utxo(
+        &self,
+        resource_address: ResourceAddress,
+        mut found: FoundUtxo,
+        held_frozen: bool,
+    ) -> Result<Option<FoundUtxo>, StealthScannerApiError> {
+        if !found.is_frozen || held_frozen {
+            return Ok(Some(found));
+        }
+
+        let address = UtxoAddress::new(resource_address, found.id);
+        match self
+            .sdk
+            .substate_api()
+            .fetch_substate_from_network(&address.clone().into(), None)
+            .await
+        {
+            Ok(read) => {
+                found.is_frozen = read.substate.as_utxo().is_some_and(|utxo| utxo.is_frozen());
+                if !found.is_frozen {
+                    warn!(
+                        target: LOG_TARGET,
+                        "⚠️ The indexer reported stealth output {} frozen, but proved it unfrozen. Keeping the output spendable.",
+                        address
+                    );
+                }
+                Ok(Some(found))
+            },
+            Err(
+                err @ (SubstateApiError::SubstateDoesNotExist { .. } |
+                SubstateApiError::SubstateUnproven { .. } |
+                SubstateApiError::SubstateUnverified { .. } |
+                SubstateApiError::SubstateProvenBeforeAnchor { .. } |
+                SubstateApiError::SubstateProofStale { .. }),
+            ) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "⚠️ The indexer reported stealth output {} frozen without proving it ({}). Keeping the output spendable.",
+                    address,
+                    err
+                );
+                found.is_frozen = false;
+                Ok(Some(found))
+            },
+            Err(SubstateApiError::StoreError(err)) => Err(err.into()),
+            Err(err) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "⚠️ Could not check the indexer's report that stealth output {} is frozen ({}). Retrying later.",
+                    address,
+                    err
+                );
+                Ok(None)
+            },
+        }
     }
 
     fn process_recovered_utxos(
