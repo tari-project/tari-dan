@@ -80,7 +80,8 @@ The directory is `<data_dir>/backups/<UTC timestamp>/` and holds:
 - `rocksdb/`, a RocksDB checkpoint of the state store
 - `global_storage.sqlite`, a copy of the global database
 
-The checkpoint hard-links the store's SST files, so it takes little time and space when it is taken. It keeps those
+The checkpoint hard-links the store's SST files, so it takes little time and space when it is taken, as long as
+`state_db_path` is on the same filesystem as the data directory (RocksDB copies the files otherwise). It keeps those
 files on disk while it exists, though, even after compaction has replaced them in the live store. Copy the snapshot
 off the host, then delete it: the node refuses another snapshot while one is still present under `backups/`. The same
 goes for a `*.partial` directory, which is left behind if the node exits while writing a snapshot.
@@ -91,8 +92,17 @@ those up separately.
 To restore:
 
 1. Stop the node.
-2. Replace `<data_dir>/rocksdb/` and `<data_dir>/global_storage.sqlite` with the snapshot's copies.
-3. Start the node. It syncs the blocks it missed from its peers.
+2. Replace the state store directory (`state_db_path`, `<data_dir>/rocksdb/` by default) and
+   `<data_dir>/global_storage.sqlite` with the snapshot's copies. Delete any `<data_dir>/global_storage.sqlite-journal`
+   left by the old database, or SQLite will apply it to the restored copy.
+3. Wait until the network is in a later epoch than the one in which the node stopped.
+4. Start the node. It syncs the blocks it missed from its peers.
+
+Step 3 matters because the snapshot also holds the node's record of the last height it voted on and proposed at in
+each epoch, which is what stops the node voting or proposing twice at one height. A restored node has the record as
+of the snapshot, so within the same epoch it could vote or propose again at a height it already
+used before it stopped, which other validators treat as equivocation. Votes and proposals belong to a single epoch,
+so in a later epoch the old record no longer matters.
 
 Only one node may run with a given identity. Restoring onto a new host while the original is still running makes the
 two vote under the same key, which other validators treat as equivocation.

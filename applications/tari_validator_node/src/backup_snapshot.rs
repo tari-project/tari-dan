@@ -4,9 +4,9 @@
 //! Point-in-time copies of the validator's state, taken while it runs, for an operator to ship off the host.
 //!
 //! A snapshot is a directory holding a RocksDB checkpoint of the state store (`rocksdb/`) and a copy of the global
-//! database (`global_storage.sqlite`). Restoring one means stopping the node, putting those two in place of the
-//! data directory's `rocksdb/` and `global_storage.sqlite`, and starting it again; the node syncs whatever it missed
-//! from its peers.
+//! database (`global_storage.sqlite`). The validator README describes restoring one. A snapshot carries the node's
+//! vote and proposal record as of when it was taken, so a restored node must not start until the network has moved
+//! past the epoch in which the original stopped.
 //!
 //! The checkpoint hard-links the store's SST files, so it pins their disk space for as long as it exists. Only one
 //! snapshot may exist at a time: deleting it once it has been copied off the host is the caller's job, and a
@@ -18,12 +18,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use log::*;
 use tari_ootle_p2p::PeerAddress;
 use tari_ootle_storage::{StorageError, global::GlobalDb};
 use tari_ootle_storage_sqlite::{error::SqliteStorageError, global::SqliteGlobalDbAdapter};
 use time::OffsetDateTime;
 
 use crate::consensus::spec::ValidatorNodeStateStore;
+
+const LOG_TARGET: &str = "tari::validator_node::backup_snapshot";
 
 pub const STATE_STORE_DIR: &str = "rocksdb";
 pub const GLOBAL_DB_FILE: &str = "global_storage.sqlite";
@@ -37,7 +40,7 @@ pub enum BackupSnapshotError {
          before taking another."
     )]
     SnapshotAlreadyExists { path: PathBuf },
-    #[error("Could not prepare backup directory {path}: {source}")]
+    #[error("Backup directory operation failed at {path}: {source}")]
     Io { path: PathBuf, source: io::Error },
     #[error("Could not checkpoint the state store: {0}")]
     StateStore(#[from] StorageError),
@@ -71,8 +74,14 @@ pub fn create_backup_snapshot(
         fs::rename(&partial, &path).map_err(io_error(&path))?;
         Ok(path)
     });
-    if result.is_err() {
-        let _ignore = fs::remove_dir_all(&partial);
+    if result.is_err() &&
+        let Err(e) = fs::remove_dir_all(&partial)
+    {
+        warn!(
+            target: LOG_TARGET,
+            "Could not remove incomplete backup snapshot {}: {e}. Delete it before taking another snapshot.",
+            partial.display()
+        );
     }
     result
 }

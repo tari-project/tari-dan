@@ -172,9 +172,10 @@ impl<TAddr> RocksDbStateStore<TAddr, TransactionDB> {
         Ok(())
     }
 
-    /// Writes a consistent point-in-time copy of the database to `dir`, which must not exist and must be on the
-    /// same filesystem as the store. Memtables are flushed first, then the immutable SST files are hard-linked
-    /// rather than copied, so a checkpoint is cheap to take but pins their disk space until it is deleted.
+    /// Writes a consistent point-in-time copy of the database to `dir`, which must not exist. Memtables are flushed
+    /// first, then the immutable SST files are hard-linked into `dir`. On the store's filesystem that makes a
+    /// checkpoint cheap to take, though it pins those files' disk space until it is deleted; on another filesystem
+    /// RocksDB copies the files instead.
     ///
     /// The checkpoint opens with [`RocksDbStateStore::open`] like any other store directory.
     pub fn create_checkpoint<P: AsRef<Path>>(&self, dir: P) -> Result<(), StorageError> {
