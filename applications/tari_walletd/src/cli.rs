@@ -66,7 +66,7 @@ pub struct Cli {
     /// A host name, beyond localhost, IP addresses and the WebAuthn origin's host, that requests may address the
     /// daemon by (e.g. the name a reverse proxy forwards). Repeat it, or separate names with commas. `*` accepts
     /// every name.
-    #[clap(long = "allowed-host", value_delimiter = ',')]
+    #[clap(long = "allowed-host", value_delimiter = ',', env = "OOTLE_WALLETD_ALLOWED_HOSTS")]
     pub allowed_hosts: Vec<String>,
     #[clap(flatten)]
     pub wallet_restore: WalletRestoreArgs,
@@ -309,6 +309,7 @@ mod tests {
             ("authentication", "OOTLE_WALLETD_AUTHENTICATION"),
             ("auto-claim-burns", "OOTLE_WALLETD_AUTO_CLAIM_BURNS"),
             ("max-fee-limit", "OOTLE_WALLETD_MAX_FEE_LIMIT"),
+            ("allowed-host", "OOTLE_WALLETD_ALLOWED_HOSTS"),
         ];
         for (long, env) in expected {
             assert_eq!(env_of(long).as_deref(), Some(env), "--{long}");

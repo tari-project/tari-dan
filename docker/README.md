@@ -67,6 +67,7 @@ curl -fsS http://127.0.0.1:5100/health
 | `OOTLE_WALLETD_AUTHENTICATION` | `--authentication` | `webauthn` | `webauthn` or `none` |
 | `OOTLE_WALLETD_AUTO_CLAIM_BURNS` | `--auto-claim-burns` | `true` | Claim burn proofs found in the burn proof directory |
 | `OOTLE_WALLETD_MAX_FEE_LIMIT` | `--max-fee-limit` | `100000000` (100 TARI) | Largest `max_fee`, in microtari, the wallet will submit |
+| `OOTLE_WALLETD_ALLOWED_HOSTS` | `--allowed-host` | none | Comma-separated host names requests may address the wallet by, beyond `localhost`, IP addresses and the WebAuthn origin's host. Any other `Host` gets `421 Misdirected Request`; `*` accepts every name |
 
 Any other `[ootle_wallet_daemon]` setting can be set with `-p <key>=<value>` after the image
 name, or with an environment variable `TARI_<SECTION>__<KEY>` (double underscore between
@@ -108,6 +109,9 @@ with this password, so the same password must be given on every later start.
   - `bridge`: each container has its own loopback. Reaching walletd from another container needs
     `0.0.0.0`, which exposes it to every container on the host's `docker0` bridge. Never combine
     `authentication=none` with a non-loopback bind, and never map a `hostPort` for the wallet port.
+    A client that addresses walletd by name (container link, Service Connect, Compose service, e.g.
+    `http://walletd:5100`) needs that name in `OOTLE_WALLETD_ALLOWED_HOSTS`; otherwise every call
+    gets `421` while the `127.0.0.1` health check stays green.
 - For a cold and a hot wallet in one task, give each its own `JRPC_LISTEN_ON` port (e.g.
   `127.0.0.1:5100` and `127.0.0.1:5101`) and its own health-check port. If the port is taken the
   daemon silently binds a random port instead, so two wallets on 5100 conflict.
