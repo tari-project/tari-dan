@@ -114,6 +114,50 @@ where
         Ok(substates)
     }
 
+    /// Fetches the latest version of each of `ids` in one fetch, and returns each one's result on its own: a
+    /// substate the indexer does not serve is [`SubstateApiError::SubstateDoesNotExist`], and under
+    /// [`IndexerTrust::Verify`] each served substate must be proven as [`Self::fetch_substate_from_network`] describes.
+    /// Only a failed fetch fails every result.
+    pub async fn get_each_substate_from_network(
+        &self,
+        ids: Vec<SubstateId>,
+    ) -> Result<Vec<(SubstateId, Result<Substate, SubstateApiError>)>, SubstateApiError> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let verify = self.indexer_trust.is_verify();
+        let FetchedSubstates {
+            mut substates,
+            mut proofs,
+        } = self
+            .network_interface
+            .get_substates(ids.clone(), verify)
+            .await
+            .map_err(|e| SubstateApiError::NetworkInterfaceError(e.into()))?;
+        let mut results = Vec::with_capacity(ids.len());
+        for id in ids {
+            let Some(substate) = substates.remove(&id) else {
+                results.push((id.clone(), Err(SubstateApiError::SubstateDoesNotExist { address: id })));
+                continue;
+            };
+            let result = if verify {
+                self.verify_read(
+                    &id,
+                    substate.version(),
+                    substate.substate_value(),
+                    proofs.remove(&id).as_ref(),
+                )
+                .await
+                .map(|()| substate)
+            } else {
+                Ok(substate)
+            };
+            results.push((id, result));
+        }
+        Ok(results)
+    }
+
     pub fn load_dependent_substates(
         &self,
         parents: &[&SubstateId],

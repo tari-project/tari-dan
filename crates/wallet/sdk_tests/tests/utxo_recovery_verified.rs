@@ -3,9 +3,12 @@
 
 //! A wallet that verifies its indexer recovers a stealth output it does not hold only once the indexer proves that the
 //! network holds the output, and stores it with the contents and frozen flag the proof shows. It holds a recovered
-//! output as frozen only once the indexer proves that the network holds the output frozen.
+//! output as frozen only once the indexer proves that the network holds the output frozen. The outputs of a lookup are
+//! proven in one fetch, and an output that is not proven waits longer after each attempt.
 
 mod support;
+
+use std::time::Duration;
 
 use ootle_byte_type::ToByteType;
 use tari_engine_types::{
@@ -71,14 +74,8 @@ fn serve_proven(sets: &[ValidatorSetFixture], network: &ProvingNetwork, id: Utxo
     network.serve_substate(substate_id(id), VERSION, value, Some(proof));
 }
 
-/// The indexer returns `utxo` to the full-UTXO lookup, and the wallet recovers it.
-async fn recover(
-    test: &Test,
-    network: &ProvingNetwork,
-    account: &AccountWithAddress,
-    id: UtxoId,
-    utxo: &Utxo,
-) -> usize {
+/// The indexer returns `utxo` to the full-UTXO lookup, and the wallet queues it for recovery.
+fn queue(test: &Test, network: &ProvingNetwork, account: &AccountWithAddress, id: UtxoId, utxo: &Utxo) {
     network.index_utxo(id, utxo.clone());
     let output = utxo.output().unwrap();
     let item = (*account.account.component_address(), UtxoUnspent {
@@ -88,6 +85,17 @@ async fn recover(
     test.store()
         .with_write_tx(|tx| tx.utxo_process_queue_extend(&STEALTH_TARI_RESOURCE_ADDRESS, [item]))
         .unwrap();
+}
+
+/// The indexer returns `utxo` to the full-UTXO lookup, and the wallet recovers it.
+async fn recover(
+    test: &Test,
+    network: &ProvingNetwork,
+    account: &AccountWithAddress,
+    id: UtxoId,
+    utxo: &Utxo,
+) -> usize {
+    queue(test, network, account, id, utxo);
     UtxoRecovery::new(test.sdk().clone())
         .process_utxo_validation_queue()
         .await
@@ -238,9 +246,9 @@ async fn a_held_output_needs_no_proof_that_it_exists() {
     let (id, utxo) = test.owned_utxo(&account, VALUE);
     hold(&sets, &network, &test, &account, id, &utxo).await;
 
-    let queries = network.substate_queries();
+    let fetches = network.substate_fetches();
     assert_eq!(recover(&test, &network, &account, id, &utxo).await, 0);
-    assert_eq!(network.substate_queries(), queries);
+    assert_eq!(network.substate_fetches(), fetches);
     assert_eq!(queued(&test), 0);
 }
 
@@ -326,7 +334,7 @@ async fn an_output_whose_proof_could_not_be_fetched_stays_queued_until_it_is_pro
     let (sets, network, test, account) = wallet(IndexerTrust::Verify).await;
     let (id, utxo) = test.owned_utxo(&account, VALUE);
     serve_proven(&sets, &network, id, &frozen(&utxo));
-    network.fail_substate_queries(1);
+    network.fail_substate_fetches(1);
 
     assert_eq!(recover(&test, &network, &account, id, &frozen(&utxo)).await, 1);
     assert!(!is_stored(&test, id));
@@ -345,10 +353,10 @@ async fn a_reported_unfreeze_needs_no_proof() {
     let (id, utxo) = test.owned_utxo(&account, VALUE);
     hold(&sets, &network, &test, &account, id, &frozen(&utxo)).await;
 
-    let queries = network.substate_queries();
+    let fetches = network.substate_fetches();
     assert_eq!(recover(&test, &network, &account, id, &utxo).await, 0);
     assert!(!stored(&test, id).is_frozen);
-    assert_eq!(network.substate_queries(), queries);
+    assert_eq!(network.substate_fetches(), fetches);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -357,19 +365,64 @@ async fn a_reported_freeze_of_an_output_held_frozen_needs_no_proof() {
     let (id, utxo) = test.owned_utxo(&account, VALUE);
     hold(&sets, &network, &test, &account, id, &frozen(&utxo)).await;
 
-    let queries = network.substate_queries();
+    let fetches = network.substate_fetches();
     assert_eq!(recover(&test, &network, &account, id, &frozen(&utxo)).await, 0);
     assert!(stored(&test, id).is_frozen);
-    assert_eq!(network.substate_queries(), queries);
+    assert_eq!(network.substate_fetches(), fetches);
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_trusting_wallet_recovers_and_freezes_an_output_without_a_proof() {
-    // The network serves no substate, so a proof request would panic.
     let (_, network, test, account) = wallet(IndexerTrust::Trust).await;
     let (id, utxo) = test.owned_utxo(&account, VALUE);
 
     assert_eq!(recover(&test, &network, &account, id, &utxo).await, 0);
     assert_eq!(recover(&test, &network, &account, id, &frozen(&utxo)).await, 0);
     assert!(stored(&test, id).is_frozen);
+    assert_eq!(network.substate_fetches(), 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_outputs_of_a_lookup_are_proven_in_one_fetch() {
+    let (sets, network, test, account) = wallet(IndexerTrust::Verify).await;
+    let outputs = (0..3).map(|_| test.owned_utxo(&account, VALUE)).collect::<Vec<_>>();
+    for (id, utxo) in &outputs {
+        serve_proven(&sets, &network, *id, utxo);
+        queue(&test, &network, &account, *id, utxo);
+    }
+
+    let fetches = network.substate_fetches();
+    let num_unresolved = UtxoRecovery::new(test.sdk().clone())
+        .process_utxo_validation_queue()
+        .await
+        .unwrap();
+    assert_eq!(num_unresolved, 0);
+    assert_eq!(network.substate_fetches(), fetches + 1);
+    assert_eq!(balance(&test, &account), Amount::from_u64(3 * VALUE));
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_unproven_output_is_asked_for_again_after_a_doubling_wait() {
+    let (sets, network, test, account) = wallet(IndexerTrust::Verify).await;
+    let (id, utxo) = test.owned_utxo(&account, VALUE);
+    network.serve_substate(substate_id(id), VERSION, SubstateValue::Utxo(utxo.clone()), None);
+    queue(&test, &network, &account, id, &utxo);
+    let mut recovery = UtxoRecovery::new(test.sdk().clone());
+    let fetches = network.substate_fetches();
+
+    let mut process = async |advance_secs: u64, expected_fetches: usize| {
+        tokio::time::advance(Duration::from_secs(advance_secs)).await;
+        let num_unresolved = recovery.process_utxo_validation_queue().await.unwrap();
+        assert_eq!(network.substate_fetches(), fetches + expected_fetches);
+        num_unresolved
+    };
+    assert_eq!(process(0, 1).await, 1);
+    assert_eq!(process(0, 1).await, 1, "the output waits before it is asked for again");
+    assert_eq!(process(60, 2).await, 1);
+    assert_eq!(process(60, 2).await, 1, "the wait doubles");
+    assert_eq!(process(60, 3).await, 1);
+
+    serve_proven(&sets, &network, id, &utxo);
+    assert_eq!(process(240, 4).await, 0);
+    assert_eq!(stored(&test, id).value, VALUE);
 }
