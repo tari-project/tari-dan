@@ -12,6 +12,7 @@ mod template {
         refs: Vec<ResourceAddress>,
         a: ResourceAddress,
         b: ResourceAddress,
+        vaults: Vec<Vault>,
     }
 
     impl StateRewrite {
@@ -22,9 +23,26 @@ mod template {
                 refs: vec![a; n as usize],
                 a,
                 b,
+                vaults: Vec::new(),
             })
             .with_access_rules(AccessRules::allow_all())
             .create()
+        }
+
+        pub fn add_vaults(&mut self, count: u32) {
+            for _ in 0..count {
+                self.vaults.push(Vault::new_empty(self.a));
+            }
+        }
+
+        /// Writes the state `times` times, reversing the order of `vaults` on each write. Every write
+        /// holds the same vaults as the previous state, in the reverse order.
+        pub fn reverse_vaults(&mut self, times: u32) {
+            let manager = ComponentManager::get(CallerContext::current_component_address());
+            for _ in 0..times {
+                self.vaults.reverse();
+                manager.set_state(&*self);
+            }
         }
 
         /// Writes the state `times` times, alternating between `a` and `b`. With `replace_all`, each
