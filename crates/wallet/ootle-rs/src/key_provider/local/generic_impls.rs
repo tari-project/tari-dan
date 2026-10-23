@@ -251,7 +251,12 @@ async fn create_output_witness<K: OutputMaskProvider>(
     let auth = pay_to_output_authorization(&pay_to, || {
         // Create stealth address that the destination can use at spend time
         crypto_api
-            .derive_stealth_owner_public_key(destination.network(), destination.account_key(), &nonce_secret)
+            .derive_stealth_owner_public_key(
+                destination.network(),
+                destination.account_key(),
+                destination.view_only_key(),
+                &nonce_secret,
+            )
             .to_byte_type()
     })
     .map_err(|e| StealthProviderError::UnexpectedError { details: e.to_string() })?;

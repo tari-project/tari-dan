@@ -82,20 +82,19 @@ recommend this structure:
   topped up from cold storage and used for customer withdrawals.
 
 <Aside type="note">
-  **Advanced alternative: a view-key-only monitor.** The Ootle SDK can detect and decrypt incoming payments with only
-  the view secret key:
-  - `ootle-rs`: `IndexerProvider::watch_stealth_utxos` and `fetch_unspent_utxos`
-  - `ootle_sdk_core`: `stealth::scan_stealth_output` with `account_secret = None`
+  **Advanced alternative: a view-key-only monitor.** The Ootle SDK can detect and decrypt incoming payments, and
+  confirm that they are spendable by your account, with only the view secret key and the account **public** key:
+  - `ootle-rs`: `IndexerProvider::watch_stealth_utxos` and `fetch_unspent_utxos` fetch candidate outputs
+  - `ootle_sdk_core`: `stealth::scan_stealth_output(network, view_secret, account_public_key, output, skip_memo)`
+    decrypts an output and checks that it is yours
 
   You can use these to build a monitor that holds no spend key, and keep the deposit account's spend key cold. No
   packaged tool does this today, so you must build and maintain it yourself. Be aware of its limits:
-  - **It cannot tell a forged output from a real one.** With `account_secret = None`, `scan_stealth_output` skips the
-    ownership check and returns every output it can decrypt. Anyone can build an output encrypted to your public view
-    key, with any value and any pay reference, and keep the spend key for themselves (see
-    [Section 5](#section-5-detecting-deposits)). The ownership check needs the account **secret** key: the output's
-    one-time key is derived from a Diffie-Hellman exchange with the account key, not the view key. A monitor without
-    the account secret can only flag candidate deposits. Never credit from it alone; confirm each candidate with a
-    process that holds the account secret.
+  - **Only key-path outputs are confirmed.** An output's one-time spend key is derived from your view key and account
+    key, so `scan_stealth_output` rejects a `StealthPublicKey` output that decrypts under your view key but pays a
+    spend key someone else holds (see [Section 5](#section-5-detecting-deposits)). An output locked by a condition
+    tree (`AccessRuleAllowAll` or a script) carries no spend key: the scan returns it as soon as it decrypts, without
+    checking who can spend it. Credit only outputs whose `pay_to` is `StealthPublicKey`.
   - **Pay-reference memos are returned as raw bytes**, so the `extractPayRef` helper in Section 5 does not apply
     directly.
   - **Results are unproven.** `fetch_unspent_utxos` returns whatever the indexer serves, without proofs.

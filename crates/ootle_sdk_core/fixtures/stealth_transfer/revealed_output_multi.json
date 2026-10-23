@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provenance": {
     "core_version": "0.47.0",
-    "git_rev": "a25b2ca804a1ae75cb3f1fc1c3860e7cb5073b90",
+    "git_rev": "4096f43913407b2ffe5ef8e44d821683bcf8b58b",
     "generated_by": "ootle_sdk_core golden-vector generator"
   },
   "operation": "build_and_encode_stealth_transfer",
@@ -50,6 +50,7 @@
     },
     "stealth_keys": {
       "account_secret": "0b00000000000000000000000000000000000000000000000000000000000000",
+      "view_secret": "a200000000000000000000000000000000000000000000000000000000000000",
       "seed": "8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c8c"
     }
   },
@@ -125,7 +126,7 @@
                       "outputs": [
                         {
                           "auth": {
-                            "Key": "9a8af7509e07834f4a389f2e9ecb7065323997bf9a3363772be1fd0c19cd3903"
+                            "Key": "b8c009bd4ba05ab076152b396d89a3d23653baad7b87d65bf531809b35c10d7d"
                           },
                           "output": {
                             "commitment": "d0fd63d267f702be56b7e963941c00efb41e996b73c6ec359585ff724fee1716",
@@ -138,7 +139,7 @@
                         },
                         {
                           "auth": {
-                            "Key": "d4c5f1ebbac289345b8415a2f79d425ae887a902b5c98b702af7b14b8b1a3c6c"
+                            "Key": "0a9b07a6a7eaa9622d3fba2d6fb0557e24943568de2d27e0c826b37c0d11534f"
                           },
                           "output": {
                             "commitment": "74f50163e8037eda676a6d704fc123b2d986679661b7df201dd570de22131637",

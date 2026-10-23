@@ -1217,8 +1217,9 @@ fn abi_version_is_the_stable_tag() {
     assert!(!p.is_null());
     let s = unsafe { CStr::from_ptr(p) }.to_str().unwrap();
     assert_eq!(
-        s, "ootle-sdk-ffi-c/18",
-        "the ABI tag every host binding asserts against (bumped when the co-sign exports gained the main signer)"
+        s, "ootle-sdk-ffi-c/19",
+        "the ABI tag every host binding asserts against (bumped when the stealth key bundles gained `view_secret` and \
+         the scan exports took `account_public_key`)"
     );
     // Static pointer — explicitly NOT freed (freeing it would be UB).
 }
@@ -1233,7 +1234,7 @@ struct StealthSendArgs {
     fetched: CArg,
     spend_secrets: CArg,
     keys: CArg,
-    /// The `{account_secret}`-only keys mirror for the random-nonce default symbols.
+    /// The `{account_secret, view_secret}` keys mirror (no seed) for the random-nonce default symbols.
     account_only_keys: CArg,
     /// The fixture's build seed (lowercase hex) for the `_with_seed` build symbols.
     seed_hex: CArg,
@@ -1246,7 +1247,10 @@ fn stealth_send_args(fx: &serde_json::Value) -> StealthSendArgs {
     let empty = serde_json::Value::Array(vec![]);
     let fetched = input.get("fetched").unwrap_or(&empty);
     let spend_secrets = input.get("spend_secrets").unwrap_or(&empty);
-    let account_only = serde_json::json!({ "account_secret": input["stealth_keys"]["account_secret"] });
+    let account_only = serde_json::json!({
+        "account_secret": input["stealth_keys"]["account_secret"],
+        "view_secret": input["stealth_keys"]["view_secret"],
+    });
     StealthSendArgs {
         network: network_byte(&input["network"]),
         intent: CArg::new(&serde_json::to_string(&input["stealth_intent"]).unwrap()),
@@ -1539,10 +1543,10 @@ fn stealth_scan_mine_round_trips() {
     let fx = load_fixture("stealth_scan/mine_basic.json");
     let scan_input = &fx["input"]["stealth_scan_input"];
     let network = network_byte(&scan_input["network"]);
-    // The scan-keys bundle the facade expects: {view_secret, account_secret?, skip_memo?}.
+    // The scan-keys bundle the facade expects: {view_secret, account_public_key, skip_memo?}.
     let scan_keys = serde_json::json!({
         "view_secret": scan_input["view_secret"],
-        "account_secret": scan_input["account_secret"],
+        "account_public_key": scan_input["account_public_key"],
         "skip_memo": scan_input["skip_memo"],
     });
     let keys = CArg::new(&serde_json::to_string(&scan_keys).unwrap());
@@ -1573,6 +1577,7 @@ fn stealth_scan_not_mine_is_success_false() {
     let network = network_byte(&scan_input["network"]);
     let scan_keys = serde_json::json!({
         "view_secret": scan_input["view_secret"],
+        "account_public_key": scan_input["account_public_key"],
         "skip_memo": scan_input["skip_memo"],
     });
     let keys = CArg::new(&serde_json::to_string(&scan_keys).unwrap());
@@ -1587,6 +1592,27 @@ fn stealth_scan_not_mine_is_success_false() {
     assert!(result.handle.is_null(), "scan is stateless — no handle");
     let out = data_json(&result);
     assert_eq!(out["is_mine"], false, "a not-mine output reports is_mine=false");
+    unsafe { ootle_result_free(result) };
+}
+
+/// (c) stealth receive: an output that decrypts under the scanner's view key but pays a spend key the
+/// scanner's account cannot spend yields `{"is_mine":false}`.
+#[test]
+fn stealth_scan_foreign_spend_key_is_not_mine() {
+    let fx = load_fixture("stealth_scan/foreign_spend_key.json");
+    let scan_input = &fx["input"]["stealth_scan_input"];
+    let network = network_byte(&scan_input["network"]);
+    let scan_keys = serde_json::json!({
+        "view_secret": scan_input["view_secret"],
+        "account_public_key": scan_input["account_public_key"],
+        "skip_memo": scan_input["skip_memo"],
+    });
+    let keys = CArg::new(&serde_json::to_string(&scan_keys).unwrap());
+    let output = CArg::new(&serde_json::to_string(&scan_input["output"]).unwrap());
+
+    let result = unsafe { ootle_scan_stealth_output(network, keys.ptr(), output.ptr()) };
+    assert!(ok(&result), "scan failed: {}", error_code(&result));
+    assert_eq!(data_json(&result)["is_mine"], false, "a foreign spend key is not mine");
     unsafe { ootle_result_free(result) };
 }
 
@@ -1615,7 +1641,7 @@ fn stealth_decode_utxo_round_trips() {
     let network = network_byte(&scan_input["network"]);
     let scan_keys = serde_json::json!({
         "view_secret": scan_input["view_secret"],
-        "account_secret": scan_input["account_secret"],
+        "account_public_key": scan_input["account_public_key"],
         "skip_memo": true,
     });
     let keys = CArg::new(&serde_json::to_string(&scan_keys).unwrap());
@@ -1643,6 +1669,7 @@ fn stealth_scan_substate_not_mine_and_bad_json() {
     let foreign_keys = CArg::new(
         &serde_json::to_string(&serde_json::json!({
             "view_secret": "ff".repeat(31) + "0f",
+            "account_public_key": load_fixture("stealth_scan/mine_basic.json")["input"]["stealth_scan_input"]["account_public_key"],
             "skip_memo": true,
         }))
         .unwrap(),
@@ -2159,7 +2186,7 @@ fn no_leaks_over_many_round_trips() {
     let scan_keys = CArg::new(
         &serde_json::to_string(&serde_json::json!({
             "view_secret": scan_input["view_secret"],
-            "account_secret": scan_input["account_secret"],
+            "account_public_key": scan_input["account_public_key"],
             "skip_memo": scan_input["skip_memo"],
         }))
         .unwrap(),

@@ -529,14 +529,19 @@ pub fn unblind_output(
     })
 }
 
-/// Derive the recipient's stealth spending scalar `c + k`, where `c = H(network || k.G * r)`. The
-/// receiver runs this with their account secret key (`private_key`) and the sender-provided public
-/// nonce to obtain the one-time secret that controls the stealth output.
+/// Derive the recipient's stealth spending scalar `c + k`, where `c = H(network || v·R)`. The
+/// receiver runs this with their account secret key `k`, view secret key `v` and the sender-provided
+/// public nonce `R` to obtain the one-time secret that controls the stealth output.
 ///
 /// `network` is the network byte (0x00 = MainNet, 0x10 = LocalNet, 0x26 = Esmeralda, ...).
 #[wasm_bindgen(js_name = "stealthDhSecret")]
-pub fn stealth_dh_secret(network: u8, private_key: &[u8], public_nonce: &[u8]) -> Result<Vec<u8>, JsError> {
-    ootle_wasm_core::stealth::kdfs::stealth_dh_secret(network, private_key, public_nonce)
+pub fn stealth_dh_secret(
+    network: u8,
+    account_secret: &[u8],
+    view_secret: &[u8],
+    public_nonce: &[u8],
+) -> Result<Vec<u8>, JsError> {
+    ootle_wasm_core::stealth::kdfs::stealth_dh_secret(network, account_secret, view_secret, public_nonce)
         .map_err(|e| JsError::new(&e.to_string()))
 }
 

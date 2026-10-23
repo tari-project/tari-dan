@@ -390,10 +390,8 @@ pub struct StealthScanInput {
     pub network: Network,
     /// The recipient's view-only secret (re-derives the AEAD key with the sender's public nonce).
     pub view_secret: SecretKeyBytes,
-    /// The recipient's account secret, for the ownership (tag + spend-key) checks. `None` selects
-    /// view-key-only mode (those checks are skipped).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub account_secret: Option<SecretKeyBytes>,
+    /// The recipient's account public key, for the spend-key ownership check.
+    pub account_public_key: PublicKeyBytes,
     /// The inbound stealth UTXO to scan.
     pub output: ootle_sdk_core::types::stealth::InboundStealthOutput,
     /// When `true`, the memo region is not decoded (the result's `memo` is `None`).
@@ -408,6 +406,8 @@ pub struct StealthScanInput {
 pub struct VectorStealthKeys {
     /// The account secret key.
     pub account_secret: SecretKeyBytes,
+    /// The account's view secret key.
+    pub view_secret: SecretKeyBytes,
     /// The build seed expanded into the per-output construction entropy (commitments/AEAD/proofs).
     pub seed: BuildSeed,
 }
@@ -415,7 +415,7 @@ pub struct VectorStealthKeys {
 impl VectorStealthKeys {
     /// Reconstitutes the core stealth seal-key bundle.
     pub fn to_core(&self) -> StealthKeys {
-        StealthKeys::new(self.account_secret.clone())
+        StealthKeys::new(self.account_secret.clone(), self.view_secret.clone())
     }
 }
 
@@ -758,7 +758,7 @@ pub fn run_operation(fixture: &Fixture) -> ExpectedOutput {
             let result = ootle_sdk_core::scan_stealth_output(
                 scan.network,
                 &scan.view_secret,
-                scan.account_secret.as_ref(),
+                &scan.account_public_key,
                 &scan.output,
                 scan.skip_memo,
             )

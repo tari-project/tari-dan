@@ -710,9 +710,12 @@ fn build_claim_burn_transaction(
     );
 
     // Create stealth address - used during spend time
-    let stealth_output_owner_public_key =
-        sdk.stealth_crypto_api()
-            .derive_stealth_owner_public_key(network, account_owner.public_key(), &nonce);
+    let stealth_output_owner_public_key = sdk.stealth_crypto_api().derive_stealth_owner_public_key(
+        network,
+        account_owner.public_key(),
+        view_only.public_key(),
+        &nonce,
+    );
 
     // We'll create an output with the same encrypted data that was used on L1 burn. Note that this is not strictly
     // necessary. The engine will create the output with whatever you give it, so we could reencrypt.
@@ -2002,6 +2005,7 @@ pub async fn handle_create_stealth_transfer_statement(
 
         utxo_signers.extend(inputs.iter().flat_map(|i| &i.inputs).map(|i| StealthUtxoSpendKeyId {
             account_key_id: sender_key_id,
+            view_key_id: sender_account.view_only_key_id(),
             public_nonce: i.public_nonce,
         }));
 

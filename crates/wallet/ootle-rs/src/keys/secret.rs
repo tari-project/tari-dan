@@ -105,7 +105,12 @@ impl StealthKeyPrehashSigner<(RistrettoSchnorr, RistrettoPublicKey)> for OotleSe
         public_nonce: &RistrettoPublicKey,
         prehash: &[u8],
     ) -> signer::Result<(RistrettoSchnorr, RistrettoPublicKey)> {
-        let secret = kdfs::owner_stealth_dh_secret(self.network(), self.account_secret(), public_nonce);
+        let secret = kdfs::owner_stealth_dh_secret(
+            self.network(),
+            self.account_secret(),
+            self.view_only_secret(),
+            public_nonce,
+        );
         let signature = RistrettoSchnorr::sign(&secret, prehash, &mut rand::rng())
             .expect("sign is infallible (challenge is the correct length)");
         let public_key = RistrettoPublicKey::from_secret_key(&secret);
@@ -113,7 +118,12 @@ impl StealthKeyPrehashSigner<(RistrettoSchnorr, RistrettoPublicKey)> for OotleSe
     }
 
     async fn stealth_public_key(&self, public_nonce: &RistrettoPublicKey) -> signer::Result<RistrettoPublicKey> {
-        let secret = kdfs::owner_stealth_dh_secret(self.network(), self.account_secret(), public_nonce);
+        let secret = kdfs::owner_stealth_dh_secret(
+            self.network(),
+            self.account_secret(),
+            self.view_only_secret(),
+            public_nonce,
+        );
         Ok(RistrettoPublicKey::from_secret_key(&secret))
     }
 }

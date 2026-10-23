@@ -43,7 +43,8 @@ impl KeyType {
 /// public nonce `R`, and the network the resulting key is bound to.
 ///
 /// Both travel together because neither is meaningful alone — the tweak is
-/// `c = H_stealth_owner(network, k·R)`, so the same nonce yields a different key on each network.
+/// `c = H_stealth_owner(network, v·R)` (`v` the view key at the same derivation path), so the same
+/// nonce yields a different key on each network.
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct StealthTweak {
     pub network: u8,
@@ -173,9 +174,10 @@ impl TryFrom<u8> for SigningField {
 /// procedure. The transaction fields themselves follow as `Segment` frames.
 ///
 /// `stealth_public_nonce` is set for confidential (stealth) transfers: when present, the device
-/// signs with the stealth-derived key `c + k` (`c = H_stealth_owner(network, k·R)`, `R` the spent
-/// UTXO's sender public nonce) instead of the raw account key. It is a key-derivation parameter
-/// only — not part of the signed message — so the message recipe is identical to the public path.
+/// signs with the stealth-derived key `c + k` (`c = H_stealth_owner(network, v·R)`, `v` the view key
+/// at the same derivation path, `R` the spent UTXO's sender public nonce) instead of the raw account
+/// key. It is a key-derivation parameter only — not part of the signed message — so the message
+/// recipe is identical to the public path.
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct SignTransactionHeader {
     pub account: u64,

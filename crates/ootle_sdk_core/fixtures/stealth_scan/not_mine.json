@@ -2,8 +2,8 @@
   "name": "stealth_scan/not_mine",
   "schema_version": 1,
   "provenance": {
-    "core_version": "0.41.2",
-    "git_rev": "f1de8633ae83fa2801be7c31c8a53a46cc0cb921",
+    "core_version": "0.47.0",
+    "git_rev": "4096f43913407b2ffe5ef8e44d821683bcf8b58b",
     "generated_by": "ootle_sdk_core golden-vector generator"
   },
   "operation": "scan_stealth_output",
@@ -11,12 +11,13 @@
     "stealth_scan_input": {
       "network": "esmeralda",
       "view_secret": "c800000000000000000000000000000000000000000000000000000000000000",
+      "account_public_key": "e2bf41576c1f0fcb1b7fdd5980f8f1f57f6d3f132fd44ec03c75e42360a42029",
       "output": {
         "commitment": "6438fe484f0cdbf98d56021c2506ad583370a68c0ecda45f28e7182f3180e76e",
-        "encrypted_data": "c8838249bb09ead131a80b4940d7bf91d995facd5005f1747ce70b23f962a72c58bf0fb80d0ad24b2c9101d3da29cce0f93a20c0288d5f665d92e4e8ac5016269aa6fec9790383bed04b185e5e0837b0",
+        "encrypted_data": "e28ad03a4b2958b413a1abd62b5fca2e7db95ca8f441bf27a44c5fa4eb55bbb1a9fa66329a884837e0a98f290b7b4a3cdb39af8f4400b1cde39723a3d058b371e645821995a74c0a79e5d37e9f491c5a",
         "sender_public_nonce": "a4a5adac6d68d700b188603360e5a705ee6e1022847799b1ed1923955dbcc911",
         "pay_to": "StealthPublicKey",
-        "spend_public_key": "6e4eaba42d4e84c0526aafab5683514df34cd3b3ee3f69b5f5aeb88cb39bb31f",
+        "spend_public_key": "42830d43ddefdc28878544ea3591c46745a09e3c15ba036768767ead0cb33770",
         "utxo_tag": "a132e1ef",
         "resource_address": "resource_0101010101010101010101010101010101010101010101010101010101010101"
       },

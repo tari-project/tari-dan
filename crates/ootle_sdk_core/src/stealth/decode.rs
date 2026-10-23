@@ -254,7 +254,8 @@ mod tests {
         let tag = crypto.derive_stealth_output_tag(internal_network, &nonce_secret, &view_pk, &resource_internal);
 
         let auth = if with_signed {
-            let owner_pk = crypto.derive_stealth_owner_public_key(internal_network, &account_pk, &nonce_secret);
+            let owner_pk =
+                crypto.derive_stealth_owner_public_key(internal_network, &account_pk, &view_pk, &nonce_secret);
             SpendAuthorization::Key(owner_pk.to_byte_type())
         } else {
             SpendAuthorization::Script(condition_root(&[SpendCondition::access_rule(AccessRule::AllowAll)]).unwrap())
@@ -299,8 +300,9 @@ mod tests {
         assert!(inbound.utxo_tag.is_some());
 
         let view = SecretKeyBytes::from_bytes(b.view_secret.as_bytes()).unwrap();
-        let account = SecretKeyBytes::from_bytes(b.account_secret.as_bytes()).unwrap();
-        let got = scan_stealth_output(net, &view, Some(&account), &inbound, true)
+        let account =
+            PublicKeyBytes::from_bytes(RistrettoPublicKey::from_secret_key(&b.account_secret).as_bytes()).unwrap();
+        let got = scan_stealth_output(net, &view, &account, &inbound, true)
             .unwrap()
             .expect("should be mine");
         assert!(got.is_mine);

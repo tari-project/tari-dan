@@ -307,6 +307,7 @@ fn derive_stealth_signers(
             })?;
             signers.insert(StealthUtxoSpendKeyId {
                 account_key_id,
+                view_key_id: output.view_only_key_id,
                 public_nonce: output.sender_public_nonce,
             });
         }

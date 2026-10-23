@@ -20,7 +20,6 @@ use tari_ootle_wallet_crypto::{
     StealthCryptoApi,
     encryption::{CipherError, decrypt_with_password, encrypt_with_password},
 };
-use tari_template_lib::types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{
     apis::password_manager::{PasswordManagerApi, PasswordManagerApiError},
@@ -198,18 +197,22 @@ impl<'a, TSpec: WalletSdkSpec> KeyManagerApi<'a, TSpec> {
 
     pub(crate) fn generate_stealth_owner_key(
         &self,
-        key_id: KeyId,
-        public_nonce: &RistrettoPublicKeyBytes,
+        key_id: &StealthUtxoSpendKeyId,
     ) -> Result<RistrettoSecretKey, KeyManagerApiError> {
-        let public_nonce = public_nonce
+        let public_nonce = key_id
+            .public_nonce
             .try_from_byte_type()
             .map_err(|e| KeyManagerApiError::InvalidKeyId {
                 details: format!("Failed to convert public nonce to RistrettoPublicKey: {}", e),
             })?;
-        let account_key = self.get_key(key_id)?;
-        Ok(self
-            .crypto_api
-            .derive_stealth_owner_secret(self.network, account_key.secret(), &public_nonce))
+        let account_key = self.get_key(key_id.account_key_id)?;
+        let view_key = self.get_key(key_id.view_key_id)?;
+        Ok(self.crypto_api.derive_stealth_owner_secret(
+            self.network,
+            account_key.secret(),
+            view_key.secret(),
+            &public_nonce,
+        ))
     }
 
     pub fn derive_keypair(
@@ -361,7 +364,7 @@ impl<'a, TSpec: WalletSdkSpec> KeyManagerApi<'a, TSpec> {
         T: Signable<C>,
         T::Signature: From<SignatureOutput>,
     {
-        let stealth_secret = self.generate_stealth_owner_key(key_id.account_key_id, &key_id.public_nonce)?;
+        let stealth_secret = self.generate_stealth_owner_key(key_id)?;
         self.sign_with_explicit_key(&stealth_secret, context, item)
     }
 

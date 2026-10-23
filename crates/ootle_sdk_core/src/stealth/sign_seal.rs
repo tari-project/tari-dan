@@ -8,7 +8,7 @@
 //! 1. **Account-key seal** (`must_sign_with_account_key == true`): seal with the caller-supplied account secret; emit
 //!    one stealth-key (`c+k`) authorization signature per `other_signers` entry.
 //! 2. **Stealth seal** (`!must_sign_with_account_key && seal_signer.is_some()`, or the first input promoted to seal
-//!    signer): seal with the one-time key `c+k` derived from the seal input's `public_nonce` via
+//!    signer): seal with the one-time key `c+k` (`c = H(v·R)`) derived from the seal input's `public_nonce` via
 //!    [`owner_stealth_dh_secret`](tari_ootle_wallet_crypto::kdfs::owner_stealth_dh_secret).
 //! 3. **Ephemeral seal** (`can_sign_with_ephemeral_key()`): seal with a fresh random one-time ephemeral key.
 //!
@@ -26,7 +26,7 @@
 //! signature are likewise byte-unstable. So the full send vectors compare semantically: the sealed
 //! transaction is re-decoded, its signatures re-verified, and its deterministic decoded fields
 //! compared, rather than asserting byte equality. The seal-signer **public key** is deterministic
-//! (`c+k` derives from the account secret + the input nonce; the account key seals case (i)), so the
+//! (`c+k` derives from the account and view secrets + the input nonce; the account key seals case (i)), so the
 //! key-selection contract is still locked.
 
 use ootle_network::Network as InternalNetwork;
@@ -67,17 +67,38 @@ use crate::{
 /// The caller-supplied secret bundle a stealth seal consumes.
 ///
 /// The account secret is required for **all three** seal cases: case (i) seals with it directly;
-/// cases (ii)/(iii) derive the `c+k` one-time keys / authorize stealth signers from it.
+/// cases (ii)/(iii) derive the `c+k` one-time keys / authorize stealth signers from it. The view
+/// secret keys the one-time tweak `c = H(v·R)`.
 #[derive(Debug, Clone)]
 pub struct StealthKeys {
     /// Account secret key (seals directly in case i; derives `c+k` in cases ii/iii).
     pub account_secret: SecretKeyBytes,
+    /// View secret key of the same account, deriving the tweak `c` of each one-time key.
+    pub view_secret: SecretKeyBytes,
 }
 
 impl StealthKeys {
-    /// Builds the bundle from the account secret.
-    pub fn new(account_secret: SecretKeyBytes) -> Self {
-        Self { account_secret }
+    /// Builds the bundle from the account and view secrets.
+    pub fn new(account_secret: SecretKeyBytes, view_secret: SecretKeyBytes) -> Self {
+        Self {
+            account_secret,
+            view_secret,
+        }
+    }
+}
+
+/// The parsed account and view secrets a stealth spend derives its one-time keys from.
+pub(crate) struct SpendSecrets {
+    account: RistrettoSecretKey,
+    view: RistrettoSecretKey,
+}
+
+impl SpendSecrets {
+    pub(crate) fn parse(keys: &StealthKeys) -> Result<Self, OotleSdkError> {
+        Ok(Self {
+            account: parse_secret(&keys.account_secret)?,
+            view: parse_secret(&keys.view_secret)?,
+        })
     }
 }
 
@@ -89,7 +110,7 @@ fn sign_random(secret: &RistrettoSecretKey, message: &[u8; 64]) -> Result<Schnor
     Ok(sig.to_byte_type())
 }
 
-/// Parses a boundary secret scalar (account secret) into the internal scalar.
+/// Parses a boundary secret scalar (account or view secret) into the internal scalar.
 fn parse_secret(bytes: &SecretKeyBytes) -> Result<RistrettoSecretKey, OotleSdkError> {
     RistrettoSecretKey::from_canonical_bytes(bytes.as_bytes())
         .map_err(|e| OotleSdkError::Key(format!("invalid secret key: {e}")))
@@ -101,16 +122,21 @@ fn parse_signer_public_nonce(signer: &StealthSignerEntry) -> Result<RistrettoPub
         .map_err(|e| OotleSdkError::Key(format!("invalid signer public nonce: {e}")))
 }
 
-/// Derives a signer's one-time spend secret `c+k` from the account secret and the signer's sender
-/// public nonce, via the reused KDF leaf. `network` is always the transfer's network — different
+/// Derives a signer's one-time spend secret `c+k` from the account and view secrets and the signer's
+/// sender public nonce, via the reused KDF leaf. `network` is always the transfer's network — different
 /// networks yield different stealth keys.
 fn derive_stealth_secret(
     network: InternalNetwork,
-    account_secret: &RistrettoSecretKey,
+    secrets: &SpendSecrets,
     signer: &StealthSignerEntry,
 ) -> Result<RistrettoSecretKey, OotleSdkError> {
     let public_nonce = parse_signer_public_nonce(signer)?;
-    Ok(owner_stealth_dh_secret(network, account_secret, &public_nonce))
+    Ok(owner_stealth_dh_secret(
+        network,
+        &secrets.account,
+        &secrets.view,
+        &public_nonce,
+    ))
 }
 
 /// Builds one stealth-key (`c+k`) authorization [`TransactionSignature`] for `signer`.
@@ -120,12 +146,12 @@ fn derive_stealth_secret(
 /// verifying key recorded is `(c+k)·G`.
 fn build_stealth_auth_signature(
     network: InternalNetwork,
-    account_secret: &RistrettoSecretKey,
+    secrets: &SpendSecrets,
     signer: &StealthSignerEntry,
     seal_signer_pk: &RistrettoPublicKeyBytes,
     unsigned_v1: &UnsignedTransactionV1,
 ) -> Result<TransactionSignature, OotleSdkError> {
-    let stealth_secret = derive_stealth_secret(network, account_secret, signer)?;
+    let stealth_secret = derive_stealth_secret(network, secrets, signer)?;
     let stealth_pk = public_key_bytes_from_secret(&stealth_secret);
     let message = TransactionSignature::create_message_v1(seal_signer_pk, unsigned_v1);
     let sig_bytes = sign_random(&stealth_secret, &message)?;
@@ -151,33 +177,34 @@ struct SealPlan {
 /// secret itself at seal time. Both go through here so the receiver named in the statement is the key that seals.
 fn seal_secret(
     network: InternalNetwork,
-    account_secret: &RistrettoSecretKey,
+    secrets: &SpendSecrets,
     sig_reqs: &StealthSignatureRequirementsState,
 ) -> Result<Option<RistrettoSecretKey>, OotleSdkError> {
     if sig_reqs.must_sign_with_account_key {
-        return Ok(Some(account_secret.clone()));
+        return Ok(Some(secrets.account.clone()));
     }
     effective_seal_signer(sig_reqs)
-        .map(|signer| derive_stealth_secret(network, account_secret, signer))
+        .map(|signer| derive_stealth_secret(network, secrets, signer))
         .transpose()
 }
 
 /// The public key that will seal a stealth transfer assembled from `sig_reqs`, or `None` when the seal key is the
 /// ephemeral one drawn at seal time. See [`seal_secret`].
-pub fn seal_public_key(
+pub(crate) fn seal_public_key(
     network: Network,
-    account_secret: &RistrettoSecretKey,
+    secrets: &SpendSecrets,
     sig_reqs: &StealthSignatureRequirementsState,
 ) -> Result<Option<RistrettoPublicKeyBytes>, OotleSdkError> {
-    Ok(seal_secret(network.into(), account_secret, sig_reqs)?.map(|secret| public_key_bytes_from_secret(&secret)))
+    Ok(seal_secret(network.into(), secrets, sig_reqs)?.map(|secret| public_key_bytes_from_secret(&secret)))
 }
 
 fn plan_seal(
     network: InternalNetwork,
-    account_secret: &RistrettoSecretKey,
+    secrets: &SpendSecrets,
     sig_reqs: &StealthSignatureRequirementsState,
     unsigned_v1: &UnsignedTransactionV1,
 ) -> Result<SealPlan, OotleSdkError> {
+    let account_secret = &secrets.account;
     if sig_reqs.must_sign_with_account_key {
         // Case (i): account key seals; account-key auth sig + stealth-key auth sigs for other signers.
         let seal_pk = public_key_bytes_from_secret(account_secret);
@@ -192,7 +219,7 @@ fn plan_seal(
         for signer in sig_reqs.other_signers_iter() {
             auth_signatures.push(build_stealth_auth_signature(
                 network,
-                account_secret,
+                secrets,
                 signer,
                 &seal_pk,
                 unsigned_v1,
@@ -203,7 +230,7 @@ fn plan_seal(
             seal_secret: account_secret.clone(),
             auth_signatures,
         })
-    } else if let Some(seal_secret) = seal_secret(network, account_secret, sig_reqs)? {
+    } else if let Some(seal_secret) = seal_secret(network, secrets, sig_reqs)? {
         // Case (ii): a stealth input seals with its one-time key c+k.
         let seal_pk = public_key_bytes_from_secret(&seal_secret);
 
@@ -213,7 +240,7 @@ fn plan_seal(
         for signer in sig_reqs.other_signers_iter() {
             auth_signatures.push(build_stealth_auth_signature(
                 network,
-                account_secret,
+                secrets,
                 signer,
                 &seal_pk,
                 unsigned_v1,
@@ -256,12 +283,12 @@ pub fn seal_and_encode_stealth_transfer(
     keys: &StealthKeys,
 ) -> Result<EncodedPublicTransfer, OotleSdkError> {
     let internal_network: InternalNetwork = network.into();
-    let account_secret = parse_secret(&keys.account_secret)?;
+    let secrets = SpendSecrets::parse(keys)?;
 
     let (unsigned, sig_reqs) = partial.into_parts();
     let UnsignedTransaction::V1(mut unsigned_v1) = unsigned;
 
-    let plan = plan_seal(internal_network, &account_secret, &sig_reqs, &unsigned_v1)?;
+    let plan = plan_seal(internal_network, &secrets, &sig_reqs, &unsigned_v1)?;
 
     let transaction = finalize_seal(&mut unsigned_v1, plan)?;
     let id = transaction.calculate_id();
@@ -412,8 +439,11 @@ mod tests {
         }
     }
 
+    /// The view secret the stealth-seal input is encrypted to (see [`stealth_seal_partial`]).
+    const VIEW_SECRET_SEED: u8 = 162;
+
     fn stealth_keys() -> StealthKeys {
-        StealthKeys::new(secret(11))
+        StealthKeys::new(secret(11), secret(VIEW_SECRET_SEED))
     }
 
     /// Builds an ephemeral-case (iii) partial.
@@ -480,7 +510,7 @@ mod tests {
         let input_mask = fixed_scalar(160);
         let nonce_secret = fixed_scalar(161);
         let public_nonce = RistrettoPublicKey::from_secret_key(&nonce_secret);
-        let view_secret = fixed_scalar(162);
+        let view_secret = fixed_scalar(VIEW_SECRET_SEED);
 
         let commitment = commit_u64_amount(&input_mask, value).to_byte_type();
         let commitment_hex = hex::encode(commitment.as_bytes());
@@ -500,7 +530,7 @@ mod tests {
             tag: UtxoTag::new(0),
         });
 
-        // The owner account secret: we use the test account secret (so c+k = H(net,acct,R)+acct).
+        // The owner account secret: we use the test account secret (so c+k = H(net, v·R) + acct).
         let owner_account_secret = fixed_scalar(11);
         let owner_pk = RistrettoPublicKey::from_secret_key(&owner_account_secret);
         let owner_pk_bytes = PublicKeyBytes::from_bytes(owner_pk.as_bytes()).unwrap();
@@ -609,7 +639,12 @@ mod tests {
 
         // The expected c+k seal key.
         let internal: InternalNetwork = NETWORK.into();
-        let expected_secret = owner_stealth_dh_secret(internal, &account_secret, &public_nonce);
+        let expected_secret = owner_stealth_dh_secret(
+            internal,
+            &account_secret,
+            &fixed_scalar(VIEW_SECRET_SEED),
+            &public_nonce,
+        );
         let expected_pk = public_key_bytes_from_secret(&expected_secret);
         assert_eq!(
             tx.seal_signature().public_key(),
@@ -696,7 +731,15 @@ mod tests {
     // (h) Malformed account secret ⇒ KEY error, never a panic.
     #[test]
     fn malformed_account_secret_is_key_error() {
-        let bad = StealthKeys::new(SecretKeyBytes::from_array([0xff; 32]));
+        let bad = StealthKeys::new(SecretKeyBytes::from_array([0xff; 32]), secret(VIEW_SECRET_SEED));
+        let err = seal_and_encode_stealth_transfer(NETWORK, ephemeral_partial(), &bad).unwrap_err();
+        assert_eq!(err.code(), "KEY");
+    }
+
+    // (i) Malformed view secret ⇒ KEY error, never a panic.
+    #[test]
+    fn malformed_view_secret_is_key_error() {
+        let bad = StealthKeys::new(secret(11), SecretKeyBytes::from_array([0xff; 32]));
         let err = seal_and_encode_stealth_transfer(NETWORK, ephemeral_partial(), &bad).unwrap_err();
         assert_eq!(err.code(), "KEY");
     }

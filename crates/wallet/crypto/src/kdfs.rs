@@ -56,16 +56,41 @@ where
     RistrettoSecretKey::from_uniform_bytes(hash.as_ref()).unwrap()
 }
 
-/// Generate a secret key for the owner key from a private key and nonce
+/// Derives the one-time spend secret `p = H(v·R) + a` of a stealth output, from the recipient's
+/// `account_secret` (`a`), `view_secret` (`v`) and the output's `public_nonce` (`R`).
+///
+/// The tweak is keyed on the view key so that a view-only wallet can confirm the output's spend key
+/// with [`owner_stealth_dh_public_key`]; the account secret is still required to spend.
 pub fn owner_stealth_dh_secret(
     network: Network,
-    private_key: &RistrettoSecretKey,
+    account_secret: &RistrettoSecretKey,
+    view_secret: &RistrettoSecretKey,
     public_nonce: &RistrettoPublicKey,
 ) -> RistrettoSecretKey {
-    // c = H(r.G * k)
-    let c = stealth_owner_dh(network, public_nonce, private_key);
-    // c + k
-    c + private_key
+    owner_stealth_dh_tweak(network, view_secret, public_nonce) + account_secret
+}
+
+/// Derives the recipient-side stealth owner tweak `c = H(v·R)` from the `view_secret` (`v`) and the
+/// output's `public_nonce` (`R`). The one-time spend key is `c·G + A` and its secret is `c + a`.
+pub fn owner_stealth_dh_tweak(
+    network: Network,
+    view_secret: &RistrettoSecretKey,
+    public_nonce: &RistrettoPublicKey,
+) -> RistrettoSecretKey {
+    stealth_owner_dh(network, public_nonce, view_secret)
+}
+
+/// Derives the one-time spend public key `P = H(v·R)·G + A` from the recipient's
+/// `account_public_key` (`A`), `view_secret` (`v`) and the output's `public_nonce` (`R`). A wallet
+/// holding only the view key uses this to confirm that an output is spendable by the account.
+pub fn owner_stealth_dh_public_key(
+    network: Network,
+    account_public_key: &RistrettoPublicKey,
+    view_secret: &RistrettoSecretKey,
+    public_nonce: &RistrettoPublicKey,
+) -> RistrettoPublicKey {
+    let c = owner_stealth_dh_tweak(network, view_secret, public_nonce);
+    RistrettoPublicKey::from_secret_key(&c) + account_public_key
 }
 
 /// L1-compatible derivation of the stealth claim secret `s = H(p·R) + p` for an L1 burn claim.
@@ -97,17 +122,17 @@ fn stealth_owner_dh(
     dh_kdf_aead(hasher, secret_nonce, public_key)
 }
 
+/// Derives the sender-side one-time spend public key `P = H(r·V)·G + A` that pays the recipient
+/// with `account_public_key` (`A`) and `view_public_key` (`V`), using the output's `secret_nonce`
+/// (`r`). The recipient recovers the same key with [`owner_stealth_dh_public_key`] (`r·V = v·R`).
 pub fn owner_stealth_dh_stealth_address(
     network: Network,
-    public_key: &RistrettoPublicKey,
+    account_public_key: &RistrettoPublicKey,
+    view_public_key: &RistrettoPublicKey,
     secret_nonce: &RistrettoSecretKey,
 ) -> RistrettoPublicKey {
-    // c = H(k.G * r)
-    let c = stealth_owner_dh(network, public_key, secret_nonce);
-    // C = c.G
-    let c_g = RistrettoPublicKey::from_secret_key(&c);
-    // c.G + k.G
-    c_g + public_key
+    let c = stealth_owner_dh(network, view_public_key, secret_nonce);
+    RistrettoPublicKey::from_secret_key(&c) + account_public_key
 }
 
 fn stealth_spend_auth_dh(
@@ -182,29 +207,48 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_generates_the_correct_private_stealth_address() {
+    fn sender_and_recipient_derive_the_same_spend_key() {
         let network = Network::LocalNet;
-        let (secret_key, public_key) = create_key_pair();
+        let (account_secret, account_public) = create_key_pair();
+        let (view_secret, view_public) = create_key_pair();
         let (secret_nonce, public_nonce) = create_key_pair();
 
-        let stealth_address = owner_stealth_dh_stealth_address(network, &public_key, &secret_nonce);
-        let stealth_secret = owner_stealth_dh_secret(network, &secret_key, &public_nonce);
-        let expected_stealth_address = RistrettoPublicKey::from_secret_key(&stealth_secret);
-        assert_eq!(stealth_address, expected_stealth_address);
+        let sender_side = owner_stealth_dh_stealth_address(network, &account_public, &view_public, &secret_nonce);
+        let spend_secret = owner_stealth_dh_secret(network, &account_secret, &view_secret, &public_nonce);
+        assert_eq!(sender_side, RistrettoPublicKey::from_secret_key(&spend_secret));
+
+        let view_only = owner_stealth_dh_public_key(network, &account_public, &view_secret, &public_nonce);
+        assert_eq!(view_only, sender_side);
     }
 
     #[test]
-    fn it_does_not_produce_the_same_secret_when_switching_params() {
+    fn view_key_rejects_a_spend_key_for_another_account() {
         let network = Network::LocalNet;
-        let (secret_key, public_key) = create_key_pair();
+        let (_, account_public) = create_key_pair();
+        let (view_secret, view_public) = create_key_pair();
+        let (_, attacker_public) = create_key_pair();
         let (secret_nonce, public_nonce) = create_key_pair();
 
-        let stealth_address1 = owner_stealth_dh_stealth_address(network, &public_key, &secret_nonce);
-        let stealth_address2 = owner_stealth_dh_stealth_address(network, &public_nonce, &secret_key);
+        // Same view key and nonce, so the output decrypts for the victim, but the spend key is bound
+        // to a different account key.
+        let attacker_spend_key =
+            owner_stealth_dh_stealth_address(network, &attacker_public, &view_public, &secret_nonce);
+        let expected = owner_stealth_dh_public_key(network, &account_public, &view_secret, &public_nonce);
+        assert_ne!(attacker_spend_key, expected);
+    }
 
-        // c + k.G != c + r.G
-        // Just makes this fact clear if it isn't obvious
-        assert_ne!(stealth_address1, stealth_address2);
+    #[test]
+    fn spend_key_depends_on_the_view_key() {
+        let network = Network::LocalNet;
+        let (_, account_public) = create_key_pair();
+        let (_, view_public) = create_key_pair();
+        let (_, other_view_public) = create_key_pair();
+        let (secret_nonce, _) = create_key_pair();
+
+        assert_ne!(
+            owner_stealth_dh_stealth_address(network, &account_public, &view_public, &secret_nonce),
+            owner_stealth_dh_stealth_address(network, &account_public, &other_view_public, &secret_nonce)
+        );
     }
 
     #[test]
@@ -237,7 +281,8 @@ mod tests {
         let (account_secret, _) = create_key_pair();
         let (_, public_nonce) = create_key_pair();
 
-        let owner = owner_stealth_dh_secret(network, &account_secret, &public_nonce);
+        // The account secret doubles as the view secret so both derivations hash the same DH point.
+        let owner = owner_stealth_dh_secret(network, &account_secret, &account_secret, &public_nonce);
         let spend_auth = spend_auth_dh_secret(network, &account_secret, &public_nonce, 0);
         assert_ne!(owner, spend_auth);
     }

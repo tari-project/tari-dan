@@ -40,23 +40,34 @@ mod stealth_address {
     #[test]
     fn it_generates_the_correct_private_stealth_address() {
         let api = StealthCryptoApi;
-        let (k1, p1) = random_keypair();
-        let (k2, p2) = random_keypair();
+        let (account_secret, account_public) = random_keypair();
+        let (view_secret, view_public) = random_keypair();
+        let (nonce_secret, nonce_public) = random_keypair();
 
-        let stealth_address = api.derive_stealth_owner_public_key(Network::Esmeralda, &p1, &k2);
-        let stealth_secret = api.derive_stealth_owner_secret(Network::Esmeralda, &k1, &p2);
-        let expected_stealth_address = RistrettoPublicKey::from_secret_key(&stealth_secret);
-        assert_eq!(stealth_address, expected_stealth_address);
+        let stealth_address =
+            api.derive_stealth_owner_public_key(Network::Esmeralda, &account_public, &view_public, &nonce_secret);
+        let stealth_secret =
+            api.derive_stealth_owner_secret(Network::Esmeralda, &account_secret, &view_secret, &nonce_public);
+        assert_eq!(stealth_address, RistrettoPublicKey::from_secret_key(&stealth_secret));
+
+        let view_only = api.derive_stealth_owner_public_key_from_view_key(
+            Network::Esmeralda,
+            &account_public,
+            &view_secret,
+            &nonce_public,
+        );
+        assert_eq!(view_only, stealth_address);
     }
 
     #[test]
     fn it_does_not_produce_the_same_secret_when_switching_params() {
         let api = StealthCryptoApi;
-        let (k1, p1) = random_keypair();
-        let (k2, p2) = random_keypair();
+        let (_, p1) = random_keypair();
+        let (_, p2) = random_keypair();
+        let (nonce_secret, _) = random_keypair();
 
-        let stealth_address1 = api.derive_stealth_owner_public_key(Network::Esmeralda, &p1, &k2);
-        let stealth_address2 = api.derive_stealth_owner_public_key(Network::Esmeralda, &p2, &k1);
+        let stealth_address1 = api.derive_stealth_owner_public_key(Network::Esmeralda, &p1, &p2, &nonce_secret);
+        let stealth_address2 = api.derive_stealth_owner_public_key(Network::Esmeralda, &p2, &p1, &nonce_secret);
         assert_ne!(stealth_address1, stealth_address2);
     }
 }
