@@ -24,15 +24,11 @@ pub enum NoVoteReason {
         is_output_only: bool,
         decision: Decision,
     },
-    #[error(
-        "Output only disagreement for local {shard_group}. Transaction ID: {transaction_id}, Stage: {stage}, Command: \
-         {command}"
-    )]
-    OutputOnlyDisagreement {
+    #[error("The leader proposed {remote} for transaction {transaction_id}, but this node derives {local}")]
+    CommandDisagreement {
         transaction_id: TransactionId,
-        shard_group: ShardGroup,
-        stage: TransactionPoolStage,
-        command: &'static str,
+        local: &'static str,
+        remote: &'static str,
     },
     #[error("The transaction is not in the pool")]
     TransactionNotInPool,
@@ -165,7 +161,7 @@ impl NoVoteReason {
             Self::AlreadyVotedAtHeight => "ShouldNotVote",
             Self::StageDisagreement { .. } => "StageDisagreement",
             Self::StageTransitionNotApplicable { .. } => "StageTransitionNotApplicable",
-            Self::OutputOnlyDisagreement { .. } => "OutputOnlyDisagreement",
+            Self::CommandDisagreement { .. } => "CommandDisagreement",
             Self::TransactionNotInPool => "TransactionNotInPool",
             Self::DecisionDisagreement { .. } => "DecisionDisagreement",
             Self::SomeAcceptAtomMustBeAbort { .. } => "SomeAcceptAtomMustBeAbort",

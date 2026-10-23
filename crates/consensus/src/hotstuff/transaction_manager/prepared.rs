@@ -1,7 +1,6 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_consensus_types::Decision;
 use tari_ootle_storage::consensus_models::{Evidence, TransactionExecution};
 
 use crate::hotstuff::substate_store::LockStatus;
@@ -97,15 +96,6 @@ pub enum EvidenceOrExecution {
     Execution { execution: Box<TransactionExecution> },
 }
 
-impl EvidenceOrExecution {
-    pub fn execution(&self) -> Option<&TransactionExecution> {
-        match self {
-            Self::Evidence { .. } => None,
-            Self::Execution { execution, .. } => Some(execution),
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct MultiShardPreparedTransaction {
     execution_or_evidence: EvidenceOrExecution,
@@ -113,13 +103,6 @@ pub struct MultiShardPreparedTransaction {
 }
 
 impl MultiShardPreparedTransaction {
-    pub fn current_decision(&self) -> Decision {
-        self.execution_or_evidence
-            .execution()
-            .map(|e| e.decision())
-            .unwrap_or(Decision::Commit)
-    }
-
     pub fn into_evidence_or_execution(self) -> EvidenceOrExecution {
         self.execution_or_evidence
     }

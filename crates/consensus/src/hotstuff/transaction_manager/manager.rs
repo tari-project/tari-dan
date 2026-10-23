@@ -972,7 +972,10 @@ mod tests {
     };
 
     use super::*;
-    use crate::traits::{UncommittedChainTemplates, WriteableSubstateStore};
+    use crate::{
+        hotstuff::transaction_manager::EvidenceOrExecution,
+        traits::{UncommittedChainTemplates, WriteableSubstateStore},
+    };
 
     /// Stands in for the engine: any transaction that reaches it fails, so a test can tell an
     /// execution from an abort consensus decided before executing.
@@ -1247,10 +1250,11 @@ mod tests {
             else {
                 panic!("expected a multishard preparation");
             };
-            Ok::<_, BlockTransactionExecutorError>((
-                prepared.current_decision(),
-                store.new_locks().contains_key(&local),
-            ))
+            let decision = match prepared.into_evidence_or_execution() {
+                EvidenceOrExecution::Execution { execution } => execution.decision(),
+                EvidenceOrExecution::Evidence { .. } => Decision::Commit,
+            };
+            Ok::<_, BlockTransactionExecutorError>((decision, store.new_locks().contains_key(&local)))
         })
         .unwrap()
     }
