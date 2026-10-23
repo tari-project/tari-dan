@@ -123,7 +123,9 @@ Burn proofs are read from `/data/share/tari/<network>/burn_proofs` (the image se
 
 `GET /health` on the JSON-RPC port returns `200 OK` without authentication once the wallet has
 started. The image has a `HEALTHCHECK` that calls it with `curl` on the port in
-`JRPC_LISTEN_ON` (5100 when unset). ECS ignores the image `HEALTHCHECK`; set it in the task definition instead:
+`JRPC_LISTEN_ON` (5100 when unset) on `127.0.0.1`. It follows only that variable: if the
+address is set with `--listen-on` or a `-p` config override, or bound to a specific non-loopback
+address, override it with `docker run --health-cmd`. ECS ignores the image `HEALTHCHECK`; set it in the task definition instead:
 
 ```json
 "healthCheck": {
@@ -144,7 +146,8 @@ docker pull ghcr.io/tari-project/ootle:nightly
 docker pull ghcr.io/tari-project/ootle-walletd:development
 ```
 
-Both images get the same tags. Released tags follow `vX.Y.Z` semver.
+Both images get the same tags. Released tags follow `vX.Y.Z` semver. Pre-release tags
+(`vX.Y.Z-pre.N`) are pushed under their own name and never move `latest`.
 
 ## Verifying signatures
 
@@ -153,7 +156,7 @@ image against the release tag ref:
 
 ```bash
 cosign verify ghcr.io/tari-project/ootle-walletd:vX.Y.Z \
-  --certificate-identity-regexp '^https://github\.com/tari-project/tari-ootle/\.github/workflows/build_dockers\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
+  --certificate-identity-regexp '^https://github\.com/tari-project/tari-ootle/\.github/workflows/build_dockers\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' \
   --certificate-github-workflow-trigger push \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```

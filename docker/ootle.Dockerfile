@@ -164,7 +164,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
 # Phase 3b: copy full source and warm JS dependencies.
 COPY . .
 
-# pnpm workspace (covers the indexer and validator_node web UIs plus
+# pnpm workspace (covers the indexer, validator_node and walletd web UIs plus
 # shared packages: bindings, clients/javascript/*, applications/theming).
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
     pnpm install --frozen-lockfile

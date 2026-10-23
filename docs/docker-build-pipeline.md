@@ -26,7 +26,7 @@ Reference document for engineers working on the Tari Ootle Docker build.
 
 The wallet CLI, swarm and operations tools ship as release binaries, not in an image.
 
-Both binaries embed a React web UI at compile time via the
+Each daemon embeds a React web UI at compile time via the
 `include_dir!` macro pointing at `web_ui/dist/`.
 This means the Dockerfile must build the web UIs before `cargo build`,
 otherwise the embedded asset directory is empty.
@@ -167,8 +167,13 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release --locked \
       --bin tari_validator_node \
       --bin tari_indexer \
-    && mkdir -p /out \
-    && cp target/release/{tari_validator_node,tari_indexer} /out/
+      --bin tari_ootle_walletd && \
+    mkdir -p /out /out-walletd && \
+    cp \
+      target/release/tari_validator_node \
+      target/release/tari_indexer \
+      /out/ && \
+    cp target/release/tari_ootle_walletd /out-walletd/
 ```
 
 Each daemon's `build.rs` invokes `pnpm` to compile its web UI into
@@ -176,12 +181,21 @@ Each daemon's `build.rs` invokes `pnpm` to compile its web UI into
 cache is mounted here, web UI builds are fast.
 
 **Why copy to `/out/` inside the same RUN:** the binaries get extracted
-to `/out/` so the runtime stage can grab them via a single
-`COPY --from=builder /out/` rather than mirroring the cargo target
+to `/out/` (node binaries) and `/out-walletd/` (wallet daemon) so each
+final stage can grab its set via a single `COPY --from=builder` rather than mirroring the cargo target
 directory structure. This also keeps the path explicit and stable across
 cargo version changes.
 
-### Stage 4: `runtime`
+### Stage 4: `walletd`
+
+Built from the shared `base` stage. Copies `tari_ootle_walletd` from
+`/out-walletd/`, sets `TARI_BASE_DIR=/data` and `XDG_DATA_HOME=/data/share`
+so config, database, logs and burn proofs all live on the `/data` volume,
+adds a `HEALTHCHECK` against `GET /health`, and uses
+`ENTRYPOINT ["/usr/bin/tini", "--", "tari_ootle_walletd"]`. Pushed as
+`ootle-walletd`; see `docker/README.md` for configuration.
+
+### Stage 5: `runtime`
 
 Minimal Debian 13. Installs only runtime libraries:
 
@@ -301,9 +315,10 @@ Driven by `docker/metadata-action`:
 | Any run | `sha-<short>` |
 | Manual/scheduled run on a branch | `<branch-name>` |
 | Tag `vX.Y.Z` | `vX.Y.Z`, `X.Y.Z`, `X.Y`, `latest` |
+| Tag `vX.Y.Z-pre.N` | `vX.Y.Z-pre.N`, `X.Y.Z-pre.N` |
 | Schedule (nightly) | `nightly` |
 
-All push to `ghcr.io/<owner>/ootle`.
+Both images (`ghcr.io/<owner>/ootle` and `ghcr.io/<owner>/ootle-walletd`) get the same tags.
 
 ### Authentication
 

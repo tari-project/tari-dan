@@ -66,6 +66,9 @@ Shared reference — what a tag sets off, the command index, recovery: [README.m
       assembled from the legs that succeeded, so read the matrix rather than the run's colour
       alone. **(human)**
 - [ ] All six **FFI platforms** present. ootle-go cannot ship a gap.
+- [ ] Both docker images (`ootle`, `ootle-walletd`) pushed and **public** on GHCR. GHCR creates
+      a new package private, so the first push of a new image needs an org admin to change its
+      visibility before anyone outside the org can pull or verify it. **(human)**
 - [ ] **Re-run a failed leg** rather than publishing without it:
       - binaries: re-run the failed job from the Actions UI, or push a `build-bins-*` / `build-all-*`
         branch at the tag's commit;
