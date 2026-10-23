@@ -472,8 +472,18 @@ mod tests {
     use crate::handlers::test_support::TestDaemon;
 
     #[tokio::test]
-    async fn health_answers_ok() {
-        assert_eq!(health().await, StatusCode::OK);
+    async fn health_answers_without_authentication() {
+        let daemon = TestDaemon::start().await;
+        let address = SocketAddr::from(([127, 0, 0, 1], 5100));
+        let router = router(address, SocketAddr::from(([127, 0, 0, 1], 9100)), daemon.context);
+        let request = Request::get("/health")
+            .header(header::HOST, "127.0.0.1:5100")
+            .body(Body::empty())
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        // The web UI fallback also answers 200, with a page; only the health route answers with an empty body.
+        assert!(to_bytes(response.into_body(), usize::MAX).await.unwrap().is_empty());
     }
 
     fn keys_import(secret_key: &str) -> JsonRpcExtractor {
