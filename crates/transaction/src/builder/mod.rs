@@ -978,7 +978,10 @@ impl<D> TransactionBuilder<D> {
                     {
                         declare_inputs(
                             self.unsigned_transaction.inputs_mut(),
-                            indexed.referenced_substates().map(InputDeclaration::write),
+                            indexed
+                                .referenced_substates()
+                                .filter(SubstateId::is_declarable_input)
+                                .map(InputDeclaration::write),
                         );
                     }
                 }
@@ -991,7 +994,10 @@ impl<D> TransactionBuilder<D> {
                     {
                         declare_inputs(
                             self.unsigned_transaction.inputs_mut(),
-                            indexed.referenced_substates().map(InputDeclaration::write),
+                            indexed
+                                .referenced_substates()
+                                .filter(SubstateId::is_declarable_input)
+                                .map(InputDeclaration::write),
                         );
                     }
                 }

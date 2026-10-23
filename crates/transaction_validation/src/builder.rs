@@ -9,7 +9,7 @@ use crate::{
     BlobReferenceValidator,
     EpochRangeValidator,
     InputLimitValidator,
-    InputsAreNotVirtualValidator,
+    InputsAreDeclarableValidator,
     InstructionLimitValidator,
     PublishTemplateLimitValidator,
     SignatureLimitValidator,
@@ -67,7 +67,7 @@ pub fn create_unsigned_structural_transaction_validator(
         .and_then(BlobReferenceValidator::new())
         .and_then(InputLimitValidator::new())
         .and_then(InstructionLimitValidator::new())
-        .and_then(InputsAreNotVirtualValidator::new())
+        .and_then(InputsAreDeclarableValidator::new())
         .and_then(TransactionWeightValidator::new(max_transaction_weight))
         .and_then(StealthTransactionLimitsValidator::new())
         .and_then(PublishTemplateLimitValidator::new())

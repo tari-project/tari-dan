@@ -229,7 +229,8 @@ impl UnsignedTransactionV1 {
             })
     }
 
-    /// Returns all substates addresses referenced by this transaction
+    /// Returns the substates this transaction references that it may declare as inputs (see
+    /// [`SubstateId::is_declarable_input`]).
     pub fn to_referenced_substates(&self) -> Result<HashSet<SubstateId>, IndexedValueError> {
         let all_instructions = self.instructions().iter().chain(self.fee_instructions());
 
@@ -239,7 +240,7 @@ impl UnsignedTransactionV1 {
                 Instruction::CallFunction { args, .. } => {
                     for arg in args.iter().filter_map(|a| a.as_literal_bytes()) {
                         let value = IndexedValue::from_raw(arg)?;
-                        substates.extend(value.referenced_substates().filter(|id| !id.is_virtual()));
+                        substates.extend(value.referenced_substates().filter(|id| id.is_declarable_input()));
                     }
                 },
                 Instruction::CallMethod { call, args, .. } => {
@@ -248,7 +249,7 @@ impl UnsignedTransactionV1 {
                     }
                     for arg in args.iter().filter_map(|a| a.as_literal_bytes()) {
                         let value = IndexedValue::from_raw(arg)?;
-                        substates.extend(value.referenced_substates().filter(|id| !id.is_virtual()));
+                        substates.extend(value.referenced_substates().filter(|id| id.is_declarable_input()));
                     }
                 },
                 Instruction::ClaimValidatorFees { address, .. } => {
@@ -280,7 +281,7 @@ impl UnsignedTransactionV1 {
                         .filter_map(|a| a.as_literal_bytes())
                     {
                         let value = IndexedValue::from_raw(arg)?;
-                        substates.extend(value.referenced_substates().filter(|id| !id.is_virtual()));
+                        substates.extend(value.referenced_substates().filter(|id| id.is_declarable_input()));
                     }
                 },
                 _ => {},

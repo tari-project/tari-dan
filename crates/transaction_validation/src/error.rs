@@ -71,6 +71,15 @@ pub enum TransactionValidationError {
         transaction_id: TransactionId,
         substate_id: SubstateId,
     },
+    #[error(
+        "Transaction {transaction_id} declares output-only substate {substate_id} as an input. Transaction receipts \
+         and burn claim tombstones exist only as the output of the transaction that created them, and no instruction \
+         reads or writes one."
+    )]
+    OutputOnlySubstateInput {
+        transaction_id: TransactionId,
+        substate_id: SubstateId,
+    },
     #[error("Dry run transactions are not allowed")]
     DryRunNotAllowed,
     #[error("Transaction {transaction_id} weight {weight} exceeds the maximum allowed weight {max_weight}")]
@@ -197,6 +206,7 @@ impl TransactionValidationError {
             Self::NetworkMismatch { .. } |
             Self::ContainsPayFeeInstruction { .. } |
             Self::ReservedSubstateInput { .. } |
+            Self::OutputOnlySubstateInput { .. } |
             Self::DryRunNotAllowed |
             Self::TransactionExceedsMaxWeight { .. } |
             Self::TransactionExceedsMaxSize { .. } |

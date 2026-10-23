@@ -337,6 +337,20 @@ impl SubstateId {
         }
     }
 
+    /// Returns `true` for substate ids that only exist as the output of the transaction that creates them: a
+    /// transaction's receipt and the tombstone a burn claim leaves. The engine creates each once and no instruction
+    /// reads or writes one afterwards, so declaring one as an input would lock and pledge it for nothing, and a
+    /// transaction naming one as an input is rejected at validation.
+    pub const fn is_output_only(&self) -> bool {
+        matches!(self, Self::TransactionReceipt(_) | Self::ClaimedOutputTombstone(_))
+    }
+
+    /// Returns `true` for substate ids a transaction may declare as an input: anything neither
+    /// [virtual](Self::is_virtual) nor [output-only](Self::is_output_only).
+    pub fn is_declarable_input(&self) -> bool {
+        !self.is_virtual() && !self.is_output_only()
+    }
+
     pub const fn is_vault(&self) -> bool {
         matches!(self, Self::Vault(_))
     }

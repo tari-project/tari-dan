@@ -6,45 +6,58 @@ use tari_ootle_transaction::Transaction;
 
 use crate::{TransactionValidationError, Validator};
 
-const LOG_TARGET: &str = "tari::ootle::mempool::validators::inputs_are_not_virtual";
+const LOG_TARGET: &str = "tari::ootle::mempool::validators::inputs_are_declarable";
 
-/// Rejects a transaction that declares a substate the engine reserves and never stores — a public-key identity, a
-/// caller badge, or one of the two resources those badges are namespaced by — as an input.
+/// Rejects a transaction that declares as an input a substate no transaction can use as one:
 ///
-/// Such an input can never resolve: consensus would abort the transaction at input resolution having already
-/// sequenced it. The address alone decides this, with no reference to any node's view of state, so refusing it at
-/// ingress cannot false-reject and the cost falls on the sender rather than on a committee.
+/// - one the engine reserves and never stores — a public-key identity, a caller badge, or one of the two resources
+///   those badges are namespaced by. Such an input can never resolve: consensus would abort the transaction at input
+///   resolution having already sequenced it.
+/// - one that only exists as the output of the transaction that created it — a transaction receipt or a burn claim's
+///   tombstone. No instruction reads or writes one, so declaring it only locks it and pledges its bytes across shard
+///   groups.
+///
+/// The address alone decides this, with no reference to any node's view of state, so refusing it at ingress cannot
+/// false-reject and the cost falls on the sender rather than on a committee.
 ///
 /// Authority over the badges themselves does not rest here — an input reaches `CallScope`, never the
 /// `AuthorizationScope` that badges are checked against, and both badge resources are empty by invariant. This
 /// rejects the request as nonsense, earlier and with a reason that names the mistake.
 #[derive(Debug, Clone, Default)]
-pub struct InputsAreNotVirtualValidator;
+pub struct InputsAreDeclarableValidator;
 
-impl InputsAreNotVirtualValidator {
+impl InputsAreDeclarableValidator {
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Validator<Transaction> for InputsAreNotVirtualValidator {
+impl Validator<Transaction> for InputsAreDeclarableValidator {
     type Context = ();
     type Error = TransactionValidationError;
 
     fn validate(&self, _context: &(), transaction: &Transaction) -> Result<(), Self::Error> {
         if let Some(input) = transaction
             .all_inputs_iter()
-            .find(|input| input.substate_id().is_virtual())
+            .find(|input| !input.substate_id().is_declarable_input())
         {
             let substate_id = input.substate_id().clone();
-            warn!(target: LOG_TARGET, "InputsAreNotVirtualValidator - FAIL: reserved substate {substate_id} declared as an input");
-            return Err(TransactionValidationError::ReservedSubstateInput {
-                transaction_id: transaction.calculate_id(),
+            let transaction_id = transaction.calculate_id();
+            if substate_id.is_virtual() {
+                warn!(target: LOG_TARGET, "InputsAreDeclarableValidator - FAIL: reserved substate {substate_id} declared as an input");
+                return Err(TransactionValidationError::ReservedSubstateInput {
+                    transaction_id,
+                    substate_id,
+                });
+            }
+            warn!(target: LOG_TARGET, "InputsAreDeclarableValidator - FAIL: output-only substate {substate_id} declared as an input");
+            return Err(TransactionValidationError::OutputOnlySubstateInput {
+                transaction_id,
                 substate_id,
             });
         }
 
-        debug!(target: LOG_TARGET, "InputsAreNotVirtualValidator - OK");
+        debug!(target: LOG_TARGET, "InputsAreDeclarableValidator - OK");
         Ok(())
     }
 }
@@ -56,9 +69,11 @@ mod tests {
     use tari_ootle_common_types::Epoch;
     use tari_template_lib::types::{
         Amount,
+        ClaimedOutputTombstoneAddress,
         ComponentAddress,
         NonFungibleAddress,
         ObjectKey,
+        TransactionReceiptAddress,
         constants::{
             CALLER_COMPONENT_RESOURCE_ADDRESS,
             DIRECT_CALLER_TEMPLATE_RESOURCE_ADDRESS,
@@ -77,7 +92,7 @@ mod tests {
     }
 
     fn validate(input: SubstateId) -> Result<(), TransactionValidationError> {
-        InputsAreNotVirtualValidator::new().validate(&(), &transaction_with_input(input))
+        InputsAreDeclarableValidator::new().validate(&(), &transaction_with_input(input))
     }
 
     #[test]
@@ -129,6 +144,24 @@ mod tests {
     #[test]
     fn it_accepts_the_identity_resource() {
         validate(PUBLIC_IDENTITY_RESOURCE_ADDRESS.into()).unwrap();
+    }
+
+    #[test]
+    fn it_refuses_a_transaction_receipt() {
+        let receipt = TransactionReceiptAddress::from_array([3u8; 32]);
+        assert!(matches!(
+            validate(receipt.into()),
+            Err(TransactionValidationError::OutputOnlySubstateInput { .. })
+        ));
+    }
+
+    #[test]
+    fn it_refuses_a_claimed_output_tombstone() {
+        let tombstone = ClaimedOutputTombstoneAddress::new(ObjectKey::from_array([4u8; 32]));
+        assert!(matches!(
+            validate(tombstone.into()),
+            Err(TransactionValidationError::OutputOnlySubstateInput { .. })
+        ));
     }
 
     #[test]

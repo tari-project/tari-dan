@@ -287,9 +287,10 @@ where
         substate_ids: &mut HashSet<SubstateRequirement>,
     ) -> Result<(), SubstateApiError> {
         for addr in value.referenced_substates() {
-            // Component state legitimately holds engine-issued addresses — an `Account` approval is keyed on a
-            // spender badge, which is commonly a public-key identity — and those have no substate to fetch or lock.
-            if addr.is_virtual() {
+            // Component state legitimately holds addresses no transaction can declare: an `Account` approval is
+            // keyed on a spender badge, which is commonly a public-key identity, and a template may record a
+            // transaction receipt.
+            if !addr.is_declarable_input() {
                 continue;
             }
             self.insert_substate_if_absent(&addr, unversioned, substate_ids).await?;
@@ -646,6 +647,9 @@ pub struct ValidatorScanResult {
     pub substate: SubstateValue,
 }
 
+/// Adds `parent` and the substates the wallet store records it depending on to `substate_ids`, keeping only those a
+/// transaction may declare as inputs: the store also records the receipts of the wallet's own transactions, which a
+/// component may reference.
 fn get_dependent_substates<TTx: WalletStoreReader>(
     tx: &mut TTx,
     parent: SubstateModel,
@@ -675,6 +679,7 @@ fn get_dependent_substates<TTx: WalletStoreReader>(
             get_dependent_substates_inner(tx, &child, substate_ids)?;
         }
     }
+    substate_ids.retain(|requirement| requirement.substate_id().is_declarable_input());
     Ok(())
 }
 fn get_dependent_substates_inner<TTx: WalletStoreReader>(
