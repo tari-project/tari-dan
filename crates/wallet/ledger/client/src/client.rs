@@ -402,7 +402,7 @@ mod tests {
             "unexpected stealth address"
         );
 
-        // And the stealth signature verifies under tari_crypto.
+        // And the stealth signature verifies as a transaction signature.
         let signature = TransactionSignature::new(
             RistrettoPublicKeyBytes::from(response.public_key),
             Sr25519SignatureBytes::from_array(response.signature),

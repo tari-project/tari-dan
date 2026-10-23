@@ -3,10 +3,10 @@
 
 //! Host reference for the on-device signing recipe (`ootle-ledger-app/src/hashing.rs`).
 //!
-//! This independently reimplements, using the `blake2` crate + `curve25519-dalek`, the exact byte
-//! recipe the Ledger device follows to (1) recompute a transaction's 64-byte signing message from
-//! the streamed preimage segments and (2) produce an sr25519 signature. It then proves
-//! the result against `tari_ootle_transaction` / `tari_crypto`:
+//! This independently reimplements, using the `blake2`, `merlin` and `curve25519-dalek` crates, the
+//! exact byte recipe the Ledger device follows to (1) recompute a transaction's 64-byte signing
+//! message from the streamed preimage segments and (2) produce an sr25519 signature. It then proves
+//! the result against `tari_ootle_transaction`:
 //!   - the reference message equals `create_message_v1` (domain separation + borsh feeding), and
 //!   - the reference signature verifies via `verify_v1` (sr25519 challenge + `s = e*k + r`).
 //!
