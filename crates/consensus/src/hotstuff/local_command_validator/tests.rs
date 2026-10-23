@@ -1191,7 +1191,14 @@ mod local_accept_from_new {
         let evaluation = replica.evaluate(&[Command::LocalAccept(atom)]);
 
         assert!(
-            matches!(evaluation.no_vote, Some(NoVoteReason::OutputOnlyDisagreement { .. })),
+            matches!(
+                evaluation.no_vote,
+                Some(NoVoteReason::CommandDisagreement {
+                    local: "LocalPrepare",
+                    remote: "LocalAccept",
+                    ..
+                })
+            ),
             "{:?}",
             evaluation.no_vote
         );

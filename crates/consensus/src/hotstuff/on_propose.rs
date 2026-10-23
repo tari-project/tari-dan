@@ -5,15 +5,7 @@ use std::{collections::HashMap, fmt::Display, num::NonZeroU64, time::Instant};
 
 use log::*;
 use ootle_byte_type::ToByteType;
-use tari_consensus_types::{
-    BlockId,
-    Decision,
-    HighPc,
-    HighestSeenBlock,
-    LeafBlock,
-    ProposalCertificate,
-    TimeoutCertificate,
-};
+use tari_consensus_types::{BlockId, HighPc, HighestSeenBlock, LeafBlock, ProposalCertificate, TimeoutCertificate};
 use tari_crypto::tari_utilities::epoch_time::EpochTime;
 use tari_engine_types::{commit_result::RejectReason, fees::FeeScaleSchedule};
 use tari_epoch_manager::EpochManagerReader;
@@ -67,7 +59,7 @@ use crate::{
         apply_leader_fee_to_substate_store,
         block_change_set::ProposedBlockChangeSet,
         calculate_state_merkle_root,
-        command_derivation::{DerivedCommand, derive_local_only_command},
+        command_derivation::{DerivedCommand, derive_local_only_command, derive_new_multishard_command},
         epoch_state::EpochState,
         error::HotStuffError,
         exceeds_block_foreign_proposal_bytes,
@@ -79,7 +71,6 @@ use crate::{
         substate_store::{InputPledge, PendingSubstateStore},
         transaction_manager::{
             ConsensusTransactionManager,
-            EvidenceOrExecution,
             PledgedTransaction,
             PreparedTransaction,
             TransactionLockConflicts,
@@ -975,9 +966,9 @@ where TConsensusSpec: ConsensusSpec
                 })?;
                 info!(
                     target: LOG_TARGET,
-                    "🏠️ Transaction {} is local only, proposing LocalOnly({})",
+                    "🏠️ Transaction {} is local only, proposing {}",
                     pool_tx_id,
-                    derived.atom.decision,
+                    derived.command,
                 );
 
                 if let Some(diff) = derived.committed_diff() {
@@ -1006,83 +997,24 @@ where TConsensusSpec: ConsensusSpec
                     }
                 }
 
-                let DerivedCommand { atom, execution, .. } = derived;
-                executed_transactions.insert(atom.id, execution);
-                Ok(Some(Command::LocalOnly(atom)))
+                let DerivedCommand { command, execution, .. } = derived;
+                if let Some(execution) = execution {
+                    executed_transactions.insert(pool_tx_id, execution);
+                }
+                Ok(Some(command))
             },
 
             PreparedTransaction::MultiShard(multishard) => {
-                match multishard.into_evidence_or_execution() {
-                    EvidenceOrExecution::Execution { execution } => {
-                        // CASE: All inputs are local and outputs are foreign (i.e. the transaction is
-                        // executed), or all inputs are foreign and this shard
-                        // group is output only and, we've already received all pledges.
-                        pool_tx.update_from_execution(
-                            local_committee_info.num_preshards(),
-                            local_committee_info.num_committees(),
-                            &execution,
-                        );
-
-                        // TODO: this is kinda hacky - we may not be involved in the transaction after ABORT execution,
-                        // but this would be invalid so we ensure that we are added to evidence. Ideally, we wouldn't
-                        // sequence this transaction at all - investigate.
-                        pool_tx
-                            .evidence_mut()
-                            .add_shard_group(local_committee_info.shard_group());
-
-                        if execution.decision().is_commit() {
-                            let involves_inputs = pool_tx.evidence().has_inputs(local_committee_info.shard_group());
-                            if !involves_inputs {
-                                let num_involved_shard_groups = pool_tx.evidence().num_shard_groups();
-                                let involved = NonZeroU64::new(num_involved_shard_groups as u64).ok_or_else(|| {
-                                    HotStuffError::InvariantError("Number of involved shard groups is 0".to_string())
-                                })?;
-                                let leader_fee = pool_tx.calculate_leader_fee(involved);
-                                pool_tx.set_leader_fee(leader_fee);
-                            }
-                        }
-
-                        executed_transactions.insert(*pool_tx.id(), *execution);
-                    },
-                    EvidenceOrExecution::Evidence { evidence, .. } => {
-                        // CASE: All local inputs were resolved. We need to continue with consensus to get the
-                        // foreign inputs/outputs.
-                        pool_tx.set_local_decision(Decision::Commit)
-                            // Set partial evidence using local inputs and known outputs.
-                            // NOTE: we could have evidence for initial sequence from foreign proposals, so we must not overwrite it
-                            .merge_evidence(evidence);
-                    },
-                }
-
+                let DerivedCommand { command, execution, .. } =
+                    derive_new_multishard_command(pool_tx, multishard, local_committee_info)?;
                 info!(
                     target: LOG_TARGET,
-                    "🌍 Transaction involves foreign shard groups, proposing Prepare({}, {})",
-                    pool_tx.id(),
-                    pool_tx.current_decision(),
+                    "🌍 Transaction involves foreign shard groups, proposing {command}",
                 );
-
-                if pool_tx.current_decision().is_abort() {
-                    let atom = pool_tx.get_current_multi_shard_atom();
-                    return Ok(Some(Command::LocalAccept(atom)));
+                if let Some(execution) = execution {
+                    executed_transactions.insert(*command.transaction().expect("transaction command").id(), execution);
                 }
-                if pool_tx
-                    .evidence()
-                    .is_committee_output_only(local_committee_info.shard_group())
-                {
-                    // No prepare phase needed for output-only transactions. All foreign shards have prepared inputs
-                    // and the output shard groups need to execute and accept outputs.
-                    debug!(
-                        target: LOG_TARGET,
-                        "ℹ️ Transaction {} is output-only for {}, proposing LocalAccept",
-                        pool_tx.id(),
-                        local_committee_info.shard_group()
-                    );
-                    let atom = pool_tx.get_current_multi_shard_atom();
-                    Ok(Some(Command::LocalAccept(atom)))
-                } else {
-                    let atom = pool_tx.get_current_multi_shard_atom();
-                    Ok(Some(Command::LocalPrepare(atom)))
-                }
+                Ok(Some(command))
             },
         }
     }
