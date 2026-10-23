@@ -14,7 +14,6 @@ use tari_ootle_storage::{
     consensus_models::{
         Block,
         BlockTransactionExecution,
-        Command,
         InvalidEvidenceReason,
         LocalOnlyAtom,
         LockedEpoch,
@@ -34,6 +33,7 @@ use crate::{
         block_change_set::ProposedBlockChangeSet,
         command_derivation::{
             DerivedCommand,
+            MultiShardCommandKind,
             derive_local_only_command,
             derive_new_multishard_command,
             local_only_disagreement,
@@ -225,22 +225,22 @@ where
         Ok(None)
     }
 
-    /// Evaluates a LocalPrepare or LocalAccept, named `proposed_kind`, proposed for a transaction at the New stage.
+    /// Evaluates a `proposed_kind` command proposed for a transaction at the New stage.
     fn evaluate_new_multishard_command<TTx: StateStoreReadTransaction>(
         &self,
         mut tx_rec: TransactionPoolRecord,
         block: &Block,
-        proposed_kind: &'static str,
+        proposed_kind: MultiShardCommandKind,
         atom: &MultiShardAtom,
         local_committee_info: &CommitteeInfo,
         substate_store: &mut PendingSubstateStore<TTx>,
         proposed_block_change_set: &mut ProposedBlockChangeSet,
     ) -> Result<Option<NoVoteReason>, HotStuffError> {
-        let _timer = TraceTimer::info(LOG_TARGET, "Evaluate Prepare command");
+        let _timer = TraceTimer::info(LOG_TARGET, proposed_kind.as_str());
 
         info!(
             target: LOG_TARGET,
-            "👨‍🔧 PREPARE: Transaction {} in block {}",
+            "👨‍🔧 {proposed_kind}: Transaction {} in block {}",
             tx_rec.id(),
             block,
         );
@@ -254,7 +254,7 @@ where
             let execution = maybe_execution.expect("is_some_and");
             info!(
                 target: LOG_TARGET,
-                "👨‍🔧 PREPARE: Transaction {} in block {} is already ABORTED by foreign block",
+                "👨‍🔧 {proposed_kind}: Transaction {} in block {} is already ABORTED by foreign block",
                 tx_rec.id(),
                 execution.block_id()
             );
@@ -319,12 +319,7 @@ where
         if let Some(execution) = execution {
             proposed_block_change_set.add_transaction_execution(*pool_record.id(), execution)?;
         }
-        let next_stage = if matches!(command, Command::LocalAccept(_)) {
-            TransactionPoolStage::LocalAccepted
-        } else {
-            TransactionPoolStage::LocalPrepared
-        };
-        pool_record.set_next_stage_and_readiness(next_stage, block.shard_group())?;
+        pool_record.set_next_stage_and_readiness(command.kind.next_stage(), block.shard_group())?;
         proposed_block_change_set.set_next_transaction_update(pool_record)?;
         Ok(None)
     }
@@ -369,7 +364,7 @@ where
         self.evaluate_new_multishard_command(
             tx_rec,
             block,
-            "LocalPrepare",
+            MultiShardCommandKind::LocalPrepare,
             atom,
             local_committee_info,
             substate_store,
@@ -416,7 +411,7 @@ where
             return self.evaluate_new_multishard_command(
                 tx_rec,
                 block,
-                "LocalAccept",
+                MultiShardCommandKind::LocalAccept,
                 atom,
                 local_committee_info,
                 substate_store,

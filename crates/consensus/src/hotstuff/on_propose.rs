@@ -1005,6 +1005,7 @@ where TConsensusSpec: ConsensusSpec
             },
 
             PreparedTransaction::MultiShard(multishard) => {
+                let pool_tx_id = *pool_tx.id();
                 let DerivedCommand { command, execution, .. } =
                     derive_new_multishard_command(pool_tx, multishard, local_committee_info)?;
                 info!(
@@ -1012,9 +1013,9 @@ where TConsensusSpec: ConsensusSpec
                     "🌍 Transaction involves foreign shard groups, proposing {command}",
                 );
                 if let Some(execution) = execution {
-                    executed_transactions.insert(*command.transaction().expect("transaction command").id(), execution);
+                    executed_transactions.insert(pool_tx_id, execution);
                 }
-                Ok(Some(command))
+                Ok(Some(command.into_command()))
             },
         }
     }

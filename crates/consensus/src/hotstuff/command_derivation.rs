@@ -5,7 +5,7 @@
 //! emits what it derives. A replica derives the same from its own record and execution and votes only if the result
 //! equals what was proposed, so the two disagree only where their inputs do.
 
-use std::num::NonZeroU64;
+use std::{fmt, fmt::Display, num::NonZeroU64};
 
 use tari_consensus_types::Decision;
 use tari_engine_types::substate::SubstateDiff;
@@ -19,6 +19,7 @@ use tari_ootle_storage::consensus_models::{
     NoVoteReason,
     TransactionExecution,
     TransactionPoolRecord,
+    TransactionPoolStage,
 };
 
 use crate::hotstuff::{
@@ -28,8 +29,8 @@ use crate::hotstuff::{
 
 /// A transaction command derived for a block, with what including it changes.
 #[derive(Debug)]
-pub(super) struct DerivedCommand {
-    pub command: Command,
+pub(super) struct DerivedCommand<TCommand = Command> {
+    pub command: TCommand,
     /// The pool record as the command leaves it, before it moves to its next stage.
     pub pool_record: TransactionPoolRecord,
     /// The execution the command is derived from. A transaction that pledges its local inputs to foreign shard
@@ -41,7 +42,7 @@ pub(super) struct DerivedCommand {
     pub exhaust_burn: u64,
 }
 
-impl DerivedCommand {
+impl DerivedCommand<Command> {
     /// The diff the block applies for this command: a committing LocalOnly command's execution diff. Every other
     /// command's diff is applied when the transaction finalizes.
     pub fn committed_diff(&self) -> Option<&SubstateDiff> {
@@ -50,6 +51,58 @@ impl DerivedCommand {
             .filter(|atom| atom.decision.is_commit())
             .and(self.execution.as_ref())
             .and_then(|execution| execution.result().finalize.any_accept())
+    }
+}
+
+/// The two commands a transaction at the New stage that involves foreign shard groups can be sequenced with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum MultiShardCommandKind {
+    LocalPrepare,
+    LocalAccept,
+}
+
+impl MultiShardCommandKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::LocalPrepare => "LocalPrepare",
+            Self::LocalAccept => "LocalAccept",
+        }
+    }
+
+    /// The stage the command moves the transaction to.
+    pub const fn next_stage(self) -> TransactionPoolStage {
+        match self {
+            Self::LocalPrepare => TransactionPoolStage::LocalPrepared,
+            Self::LocalAccept => TransactionPoolStage::LocalAccepted,
+        }
+    }
+}
+
+impl Display for MultiShardCommandKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// A LocalPrepare or LocalAccept command for a transaction at the New stage.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct NewMultiShardCommand {
+    pub kind: MultiShardCommandKind,
+    pub atom: MultiShardAtom,
+}
+
+impl NewMultiShardCommand {
+    pub fn into_command(self) -> Command {
+        match self.kind {
+            MultiShardCommandKind::LocalPrepare => Command::LocalPrepare(self.atom),
+            MultiShardCommandKind::LocalAccept => Command::LocalAccept(self.atom),
+        }
+    }
+}
+
+impl Display for NewMultiShardCommand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}({})", self.kind, self.atom)
     }
 }
 
@@ -128,7 +181,7 @@ pub(super) fn derive_new_multishard_command(
     mut pool_record: TransactionPoolRecord,
     prepared: MultiShardPreparedTransaction,
     local_committee_info: &CommitteeInfo,
-) -> Result<DerivedCommand, HotStuffError> {
+) -> Result<DerivedCommand<NewMultiShardCommand>, HotStuffError> {
     let local_shard_group = local_committee_info.shard_group();
     let execution = match prepared.into_evidence_or_execution() {
         EvidenceOrExecution::Execution { execution } => {
@@ -164,19 +217,21 @@ pub(super) fn derive_new_multishard_command(
         },
     };
 
-    let atom = pool_record.get_current_multi_shard_atom();
-    let command = if pool_record.current_decision().is_abort() ||
+    let kind = if pool_record.current_decision().is_abort() ||
         pool_record.evidence().is_committee_output_only(local_shard_group)
     {
         // Neither an aborting transaction nor one whose foreign shard groups have prepared every input needs a
         // prepare phase here
-        Command::LocalAccept(atom)
+        MultiShardCommandKind::LocalAccept
     } else {
-        Command::LocalPrepare(atom)
+        MultiShardCommandKind::LocalPrepare
     };
 
     Ok(DerivedCommand {
-        command,
+        command: NewMultiShardCommand {
+            kind,
+            atom: pool_record.get_current_multi_shard_atom(),
+        },
         pool_record,
         execution,
         leader_fee: 0,
@@ -199,30 +254,28 @@ pub(super) fn local_only_disagreement(derived: &LocalOnlyAtom, proposed: &LocalO
     leader_fee_disagreement(derived.leader_fee.as_ref(), proposed.leader_fee.as_ref())
 }
 
-/// The reason a replica refuses a LocalPrepare or LocalAccept named `proposed_kind` for a transaction at the New
-/// stage when it derived `derived`. Fields are compared in a fixed order, so a proposal that differs in several is
-/// refused for the first.
+/// The reason a replica refuses a `proposed_kind` command for a transaction at the New stage when it derived
+/// `derived`. Fields are compared in a fixed order, so a proposal that differs in several is refused for the first.
 pub(super) fn new_multishard_disagreement(
-    derived: &Command,
-    proposed_kind: &'static str,
+    derived: &NewMultiShardCommand,
+    proposed_kind: MultiShardCommandKind,
     proposed: &MultiShardAtom,
 ) -> Option<NoVoteReason> {
-    let (derived_kind, derived) = match derived {
-        Command::LocalPrepare(atom) => ("LocalPrepare", atom),
-        Command::LocalAccept(atom) => ("LocalAccept", atom),
-        command => unreachable!("{command} is not derived for a new multi-shard transaction"),
-    };
+    let NewMultiShardCommand {
+        kind: derived_kind,
+        atom: derived,
+    } = derived;
     if derived.decision != proposed.decision {
         return Some(NoVoteReason::DecisionDisagreement {
             local: derived.decision,
             remote: proposed.decision,
         });
     }
-    if derived_kind != proposed_kind {
+    if *derived_kind != proposed_kind {
         return Some(NoVoteReason::CommandDisagreement {
             transaction_id: proposed.id,
-            local: derived_kind,
-            remote: proposed_kind,
+            local: derived_kind.as_str(),
+            remote: proposed_kind.as_str(),
         });
     }
     if derived.transaction_fee != proposed.transaction_fee {
