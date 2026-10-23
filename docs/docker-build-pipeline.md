@@ -53,15 +53,16 @@ across deployment environments.
 
 ## Dockerfile architecture
 
-Four stages. See `docker/ootle.Dockerfile` for the source of truth.
+Six stages. See `docker/ootle.Dockerfile` for the source of truth.
 
 ```
 chef    ─┐                       (toolchain + system deps + node + pnpm + cargo-chef)
          ├── planner             (cargo chef prepare → recipe.json)
          └── builder             (cargo chef cook → pnpm install → npm ci → cargo build)
                                           │
-                                          ▼
-                                       runtime (debian-slim, non-root, tini)
+base (debian-slim, non-root, tini)        │
+  ├── walletd  ◄── /out-walletd/ ─────────┤
+  └── runtime  ◄── /out/ ─────────────────┘
 ```
 
 ### Stage 1: `chef`
@@ -186,26 +187,32 @@ final stage can grab its set via a single `COPY --from=builder` rather than mirr
 directory structure. This also keeps the path explicit and stable across
 cargo version changes.
 
-### Stage 4: `walletd`
+### Stage 4: `base`
 
-Built from the shared `base` stage. Copies `tari_ootle_walletd` from
+Minimal Debian 13 shared by both final stages. Installs only runtime libraries:
+
+- `tini` (PID 1 init)
+- `ca-certificates`, `openssl` (TLS)
+- `libsqlite3-0` (linked at runtime by the node daemons)
+
+Creates the `tari` user (uid/gid 1000), drops to `USER tari` and sets
+`WORKDIR /home/tari`.
+
+### Stage 5: `walletd`
+
+Built from `base`. Adds `libdbus-1-3` (linked by the OS keyring store) and
+`curl` (health check), creates `/data` owned by `tari`, copies `tari_ootle_walletd` from
 `/out-walletd/`, sets `TARI_BASE_DIR=/data` and `XDG_DATA_HOME=/data/share`
 so config, database, logs and burn proofs all live on the `/data` volume,
 adds a `HEALTHCHECK` against `GET /health`, and uses
 `ENTRYPOINT ["/usr/bin/tini", "--", "tari_ootle_walletd"]`. Pushed as
 `ootle-walletd`; see `docker/README.md` for configuration.
 
-### Stage 5: `runtime`
+### Stage 6: `runtime`
 
-Minimal Debian 13. Installs only runtime libraries:
-
-- `tini` (PID 1 init)
-- `ca-certificates`, `openssl` (TLS)
-- `libsqlite3-0` (linked at runtime by both daemons)
-
-Creates `tari` user (uid/gid 1000), copies the 2 binaries from `/out/`,
-drops to `USER tari`, sets `WORKDIR /home/tari`, and sets
-`ENTRYPOINT ["/usr/bin/tini", "--"]`.
+Built from `base`. Copies the 2 node binaries from `/out/` and sets
+`ENTRYPOINT ["/usr/bin/tini", "--"]`. It is the last stage, so it is the
+default build target.
 
 No `CMD` is set. Callers must specify which binary to run:
 
