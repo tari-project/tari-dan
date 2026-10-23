@@ -14,6 +14,7 @@ use tari_ootle_wallet_sdk::{
 };
 use tari_template_lib::types::{
     UtxoAddress,
+    access_rules::AccessRule,
     constants::STEALTH_TARI_RESOURCE_ADDRESS,
     crypto::PedersenCommitmentBytes,
     stealth::SpendAuthorization,
@@ -65,7 +66,7 @@ fn setup() -> ViewOnlyTest {
 }
 
 /// An output the sender pays to the cold account, encrypted and tagged for its view key.
-fn output_to_cold_account(test: &ViewOnlyTest, value: u64, memo: &Memo) -> (UtxoAddress, Utxo) {
+fn output_to_cold_account(test: &ViewOnlyTest, value: u64, memo: &Memo, pay_to: PayTo) -> (UtxoAddress, Utxo) {
     let output = test
         .sender
         .sdk()
@@ -76,7 +77,7 @@ fn output_to_cold_account(test: &ViewOnlyTest, value: u64, memo: &Memo) -> (Utxo
             &STEALTH_TARI_RESOURCE_ADDRESS,
             None,
             Some(memo),
-            PayTo::StealthPublicKey,
+            pay_to,
         )
         .unwrap();
     let commitment: PedersenCommitmentBytes = output.witness.to_commitment().to_byte_type();
@@ -109,7 +110,7 @@ fn view_only_account_decrypts_incoming_stealth_output() {
         b"bridge-uuid",
     )
     .unwrap();
-    let (address, utxo) = output_to_cold_account(&test, 1234, &memo);
+    let (address, utxo) = output_to_cold_account(&test, 1234, &memo, PayTo::StealthPublicKey);
 
     test.watch
         .sdk()
@@ -145,7 +146,12 @@ fn view_only_account_decrypts_incoming_stealth_output() {
 #[test]
 fn view_only_account_does_not_accept_output_with_a_foreign_spend_key() {
     let test = setup();
-    let (address, mut utxo) = output_to_cold_account(&test, 1234, &Memo::new_message("spoof").unwrap());
+    let (address, mut utxo) = output_to_cold_account(
+        &test,
+        1234,
+        &Memo::new_message("spoof").unwrap(),
+        PayTo::StealthPublicKey,
+    );
     // Encrypted and tagged for the view key, but spendable by a key the sender chose
     let (_, attacker_key) = RistrettoPublicKey::random_keypair(&mut rand::rng());
     utxo.output.as_mut().unwrap().auth = SpendAuthorization::Key(attacker_key.to_byte_type());
@@ -191,6 +197,44 @@ fn view_only_account_does_not_accept_output_with_a_foreign_spend_key() {
         )
         .unwrap();
     assert_eq!(outputs.len(), 1);
+    assert!(
+        matches!(outputs[0].status, OutputStatus::Invalid),
+        "{:?}",
+        outputs[0].status
+    );
+    let balance = watch
+        .stealth_outputs_api()
+        .get_unspent_balance(&STEALTH_TARI_RESOURCE_ADDRESS)
+        .unwrap();
+    assert_eq!(balance.utxo_count, 0);
+}
+
+#[test]
+fn view_only_account_does_not_accept_condition_tree_output() {
+    let test = setup();
+    let (address, utxo) = output_to_cold_account(
+        &test,
+        1234,
+        &Memo::new_message("anyone can spend").unwrap(),
+        PayTo::AccessRule(AccessRule::AllowAll),
+    );
+    assert!(utxo.output().unwrap().auth.spend_key().is_none());
+
+    let watch = test.watch.sdk();
+    watch
+        .stealth_outputs_api()
+        .verify_and_update_outputs([(address, &utxo)])
+        .unwrap();
+    let outputs = watch
+        .stealth_outputs_api()
+        .utxos_get_many(
+            &STEALTH_TARI_RESOURCE_ADDRESS,
+            Some(test.account.component_address()),
+            None,
+        )
+        .unwrap();
+    assert_eq!(outputs.len(), 1);
+    assert_eq!(outputs[0].value, 1234);
     assert!(
         matches!(outputs[0].status, OutputStatus::Invalid),
         "{:?}",

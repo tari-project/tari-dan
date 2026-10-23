@@ -446,16 +446,10 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
     }
 
     pub fn get_address_for_account(&self, account: &Account) -> Result<RistrettoOotleAddress, AccountsApiError> {
-        let view_only_key = match account.view_only_key_id {
-            KeyId::Derived { key_branch, index } => {
-                let view_only_key = self.key_manager_api.derive_key(key_branch, index)?;
-                view_only_key.to_public_key()
-            },
-            KeyId::Imported { local_key_id } => {
-                let imported = self.key_manager_api.get_imported_key(local_key_id)?;
-                imported.to_public_key()
-            },
-        };
+        let view_only_key = self
+            .key_manager_api
+            .get_public_key(account.view_only_key_id)?
+            .public_key;
         let address = RistrettoOotleAddress::new(
             self.network,
             view_only_key,

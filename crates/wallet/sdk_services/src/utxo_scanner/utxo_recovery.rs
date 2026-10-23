@@ -473,8 +473,15 @@ where
     ) -> Result<usize, StealthScannerApiError> {
         let num_attempted = utxos_to_recover.len();
         let mut num_recovered = 0;
+        // Loading an account's keys decrypts imported keys, so it is done once per account in the batch
+        let mut keys_by_account = HashMap::new();
         for utxo in utxos_to_recover {
-            if self.check_unspent_utxo_and_store(self.sdk.network(), resource_address, utxo)? {
+            if !keys_by_account.contains_key(&utxo.account_addr) {
+                let keys = self.load_account_keys(&utxo.account_addr)?;
+                keys_by_account.insert(utxo.account_addr, keys);
+            }
+            let keys = &keys_by_account[&utxo.account_addr];
+            if self.check_unspent_utxo_and_store(self.sdk.network(), resource_address, keys, utxo)? {
                 num_recovered += 1;
             }
         }
@@ -490,23 +497,30 @@ where
         Ok(num_recovered)
     }
 
-    fn check_unspent_utxo_and_store(
+    fn load_account_keys(
         &self,
-        network: Network,
-        resource_address: ResourceAddress,
-        found: FoundUtxo,
-    ) -> Result<bool, StealthScannerApiError> {
-        let account = self.sdk.accounts_api().get_account_by_address(&found.account_addr)?;
+        account_address: &ComponentAddress,
+    ) -> Result<AccountAndViewKeys, StealthScannerApiError> {
+        let account = self.sdk.accounts_api().get_account_by_address(account_address)?;
         let view_only_key = self.sdk.key_manager_api().get_key(account.view_only_key_id())?;
         let account_key = account
             .owner_key_id()
             .map(|key_id| self.sdk.key_manager_api().get_key(key_id))
             .transpose()?;
-        let keys = AccountAndViewKeys {
+        Ok(AccountAndViewKeys {
             account_public_key: *account.owner_public_key(),
             account_key,
             view_only_key,
-        };
+        })
+    }
+
+    fn check_unspent_utxo_and_store(
+        &self,
+        network: Network,
+        resource_address: ResourceAddress,
+        keys: &AccountAndViewKeys,
+        found: FoundUtxo,
+    ) -> Result<bool, StealthScannerApiError> {
         let outputs_api = self.sdk.stealth_outputs_api();
 
         let address = UtxoAddress::new(resource_address, found.id);
@@ -515,7 +529,7 @@ where
             None
         } else {
             outputs_api.validate_utxo(
-                array::from_ref(&keys),
+                array::from_ref(keys),
                 network,
                 resource_address,
                 commitment,

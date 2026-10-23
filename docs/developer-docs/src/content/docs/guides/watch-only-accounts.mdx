@@ -88,11 +88,9 @@ account public key and the view key, so the watch-only daemon recomputes it from
 public key. An output that decrypts with the view key but carries a different spend key is stored with status
 `Invalid` and is not counted in the balance.
 
-<Aside type="caution">
-An output locked by a condition tree (an access rule or script) instead of a spend key carries no key to check. The
-daemon, watch-only or not, cannot confirm who can spend such an output and reports it as `Unspent` if it decrypts. Check
-the output's `auth` in `stealth_utxos.list` before crediting a deposit that is not a plain key-path output.
-</Aside>
+An output locked by a condition tree (an access rule or script) instead of a spend key carries no key to check, so
+nothing ties it to the account. A watch-only daemon stores such an output as `Invalid` too, and it never counts toward
+the balance.
 
 ### Payments cannot be sent
 

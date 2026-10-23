@@ -943,7 +943,15 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
                         .to_byte_type();
                     // A key-path output is owned only if its spend_key is our derived stealth address. A
                     // condition-tree output (no spend_key) is recognised as viewable but not key-spendable here.
-                    if output.auth.spend_key().is_none_or(|pk| *pk == stealth_address) {
+                    if keys.account_key.is_none() && output.auth.spend_key().is_none() {
+                        // Nothing ties a condition-tree output to a view-only account, so it never counts as balance
+                        warn!(
+                            target: LOG_TARGET,
+                            "⚠️ Condition-tree output for view-only key {} has no spend key to verify and will be stored as invalid.",
+                            keys.view_only_key.key_id,
+                        );
+                        (decrypted.value(), decrypted.memo, OutputStatus::Invalid)
+                    } else if output.auth.spend_key().is_none_or(|pk| *pk == stealth_address) {
                         if keys.account_key.is_none() {
                             info!(
                                 target: LOG_TARGET,

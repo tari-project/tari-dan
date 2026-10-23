@@ -58,6 +58,8 @@ pub trait WalletStoreReader {
     fn key_manager_get_active_index(&mut self, branch: &str) -> Result<u64, WalletStorageError>;
     fn key_manager_get_last_index(&mut self, branch: &str) -> Result<u64, WalletStorageError>;
     fn key_manager_get_raw_imported_key(&mut self, id: u64) -> Result<(KeyType, Box<[u8]>), WalletStorageError>;
+    /// Returns the hex-encoded public key of an imported key, without decrypting the secret.
+    fn key_manager_get_imported_public_key(&mut self, id: u64) -> Result<String, WalletStorageError>;
     // Config
     fn config_get<T: serde::de::DeserializeOwned>(&mut self, key: &str) -> Result<Config<T>, WalletStorageError>;
     fn config_get_string(&mut self, key: &str) -> Result<Config<String>, WalletStorageError>;

@@ -156,12 +156,16 @@ impl<'a, TSpec: WalletSdkSpec> KeyManagerApi<'a, TSpec> {
         let key_id = key_id.into();
         match key_id {
             KeyId::Imported { local_key_id } => {
-                // TODO: could be implemented without fetching the secret key, if we stored the public key in the DB
-                let imported_key = self.get_imported_key(local_key_id)?;
-                Ok(WalletPublicKey {
-                    public_key: imported_key.to_public_key(),
-                    key_id,
-                })
+                let public_key = self
+                    .store
+                    .with_read_tx(|tx| tx.key_manager_get_imported_public_key(local_key_id))?;
+                let public_key =
+                    RistrettoPublicKey::from_hex(&public_key).map_err(|e| WalletStorageError::DecodingError {
+                        operation: "get_public_key",
+                        item: "imported public key",
+                        details: format!("Imported key at id {local_key_id} has an invalid public key: {e}"),
+                    })?;
+                Ok(WalletPublicKey { public_key, key_id })
             },
             KeyId::Derived { key_branch, index } => {
                 let derived_key = self.derive_key(key_branch, index)?;

@@ -211,6 +211,23 @@ impl WalletStoreReader for ReadTransaction<'_> {
         ))
     }
 
+    fn key_manager_get_imported_public_key(&mut self, id: u64) -> Result<String, WalletStorageError> {
+        const OPERATION: &str = "key_manager_get_imported_public_key";
+        use crate::schema::key_manager_imported_keys;
+
+        key_manager_imported_keys::table
+            .select(key_manager_imported_keys::public_key)
+            .filter(key_manager_imported_keys::id.eq(id as i32))
+            .first::<String>(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general(OPERATION, e))?
+            .ok_or_else(|| WalletStorageError::NotFound {
+                operation: OPERATION,
+                entity: "imported_key".to_string(),
+                key: id.to_string(),
+            })
+    }
+
     // -------------------------------- Config -------------------------------- //
     fn config_get<T: DeserializeOwned>(&mut self, key: &str) -> Result<Config<T>, WalletStorageError> {
         let config = self.config_get_string(key)?;
