@@ -109,12 +109,13 @@ mod tests {
     use tari_ootle_common_types::Epoch;
     use tari_ootle_transaction::{
         Network,
+        Sr25519SignatureBytes,
         Transaction,
         TransactionSealSignature,
         UnsealedTransactionV1,
         UnsignedTransactionV1,
     };
-    use tari_template_lib::types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
+    use tari_template_lib::types::crypto::RistrettoPublicKeyBytes;
 
     use super::*;
 
@@ -135,7 +136,7 @@ mod tests {
                 vec![],
             )
             .into(),
-            TransactionSealSignature::new(RistrettoPublicKeyBytes::zero(), SchnorrSignatureBytes::zero()),
+            TransactionSealSignature::new(RistrettoPublicKeyBytes::zero(), Sr25519SignatureBytes::zero()),
         )
     }
 

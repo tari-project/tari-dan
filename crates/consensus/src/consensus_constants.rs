@@ -495,6 +495,7 @@ mod tests {
         INVOCATION_FLOOR,
         MAX_SIGNATURES_PER_TRANSACTION,
         MIN_INVOCATION_ENCODED_BYTES,
+        Sr25519SignatureBytes,
         Transaction,
         TransactionSignature,
         args,
@@ -504,7 +505,7 @@ mod tests {
         ComponentAddress,
         ObjectKey,
         constants::TARI_TOKEN,
-        crypto::{PedersenCommitmentBytes, RistrettoPublicKeyBytes, SchnorrSignatureBytes},
+        crypto::{PedersenCommitmentBytes, RistrettoPublicKeyBytes},
         stealth::{StealthInput, StealthInputsStatement, StealthOutputsStatement, StealthTransferStatement},
     };
 
@@ -662,7 +663,7 @@ mod tests {
             .stealth_transfer(TARI_TOKEN, statement)
             .with_signatures(
                 (0..count)
-                    .map(|_| TransactionSignature::new(RistrettoPublicKeyBytes::zero(), SchnorrSignatureBytes::zero()))
+                    .map(|_| TransactionSignature::new(RistrettoPublicKeyBytes::zero(), Sr25519SignatureBytes::zero()))
                     .collect(),
             )
             .seal(&PrivateKey::from(1u64))

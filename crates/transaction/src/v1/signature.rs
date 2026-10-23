@@ -2,15 +2,19 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use indexmap::IndexSet;
-use ootle_byte_type::{ConvertFromByteType, FromByteType, ToByteType};
+use ootle_byte_type::ToByteType;
 use tari_crypto::{
     keys::PublicKey as PublicKeyT,
-    ristretto::{RistrettoPublicKey, RistrettoSchnorr, RistrettoSecretKey},
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
     tari_utilities,
     tari_utilities::ByteArray,
 };
-use tari_ootle_common_types::{Epoch, InputDeclaration, signature::SignatureOutput};
-use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
+use tari_ootle_common_types::{
+    Epoch,
+    InputDeclaration,
+    signature::{SignatureOutput, Sr25519SignatureBytes, TRANSACTION_SIGNING_CONTEXT},
+};
+use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{
     BlobHashes,
@@ -73,11 +77,11 @@ pub struct TransactionSealSignature {
     #[n(0)]
     public_key: RistrettoPublicKeyBytes,
     #[n(1)]
-    signature: SchnorrSignatureBytes,
+    signature: Sr25519SignatureBytes,
 }
 
 impl TransactionSealSignature {
-    pub fn new(public_key: RistrettoPublicKeyBytes, signature: SchnorrSignatureBytes) -> Self {
+    pub fn new(public_key: RistrettoPublicKeyBytes, signature: Sr25519SignatureBytes) -> Self {
         Self { public_key, signature }
     }
 
@@ -86,9 +90,7 @@ impl TransactionSealSignature {
 
         let message = Self::create_message_v1(transaction);
         Self {
-            signature: RistrettoSchnorr::sign(secret_key, message, &mut rand::rng())
-                .expect("sign is infallible with Ristretto keys")
-                .to_byte_type(),
+            signature: TRANSACTION_SIGNING_CONTEXT.sign(secret_key, &message),
             public_key: public_key.to_byte_type(),
         }
     }
@@ -113,16 +115,10 @@ impl TransactionSealSignature {
 
     /// Verifies this seal against an already-derived signing message.
     pub fn verify_message(&self, message: [u8; 64]) -> bool {
-        let Ok(public_key) = self.public_key.try_from_byte_type() else {
-            return false;
-        };
-        let Ok(signature) = RistrettoSchnorr::convert_from_byte_type(&self.signature) else {
-            return false;
-        };
-        signature.verify(&public_key, message)
+        TRANSACTION_SIGNING_CONTEXT.verify(&self.signature, &self.public_key, &message)
     }
 
-    pub fn signature(&self) -> &SchnorrSignatureBytes {
+    pub fn signature(&self) -> &Sr25519SignatureBytes {
         &self.signature
     }
 
@@ -219,7 +215,7 @@ impl From<SignatureOutput> for TransactionSealSignature {
     fn from(output: SignatureOutput) -> Self {
         Self {
             public_key: output.public_key.to_byte_type(),
-            signature: output.signature.to_byte_type(),
+            signature: output.signature,
         }
     }
 }
@@ -231,11 +227,11 @@ pub struct TransactionSignature {
     #[n(0)]
     public_key: RistrettoPublicKeyBytes,
     #[n(1)]
-    signature: SchnorrSignatureBytes,
+    signature: Sr25519SignatureBytes,
 }
 
 impl TransactionSignature {
-    pub fn new(public_key: RistrettoPublicKeyBytes, signature: SchnorrSignatureBytes) -> Self {
+    pub fn new(public_key: RistrettoPublicKeyBytes, signature: Sr25519SignatureBytes) -> Self {
         Self { public_key, signature }
     }
 
@@ -258,9 +254,7 @@ impl TransactionSignature {
         let message = Self::create_message_v1(seal_signer, transaction);
 
         Self {
-            signature: RistrettoSchnorr::sign(secret_key, message, &mut rand::rng())
-                .expect("sign is infallible with Ristretto keys")
-                .to_byte_type(),
+            signature: TRANSACTION_SIGNING_CONTEXT.sign(secret_key, &message),
             public_key: public_key.to_byte_type(),
         }
     }
@@ -277,16 +271,10 @@ impl TransactionSignature {
     /// makes verification cost `O(signatures × body bytes)`, which an attacker controls on both
     /// factors within a single transaction.
     pub fn verify_message(&self, message: [u8; 64]) -> bool {
-        let Ok(public_key) = self.public_key.try_from_byte_type() else {
-            return false;
-        };
-        let Ok(signature) = RistrettoSchnorr::convert_from_byte_type(&self.signature) else {
-            return false;
-        };
-        signature.verify(&public_key, message)
+        TRANSACTION_SIGNING_CONTEXT.verify(&self.signature, &self.public_key, &message)
     }
 
-    pub fn signature(&self) -> &SchnorrSignatureBytes {
+    pub fn signature(&self) -> &Sr25519SignatureBytes {
         &self.signature
     }
 
@@ -431,46 +419,38 @@ pub fn verify_sealed_batch(
 
 /// True when every `(public key, signature, message)` term verifies.
 ///
-/// Decodes each term and hands the set to [`RistrettoSchnorr::verify_batch`], which folds the n
-/// verification equations into one variable-time multiscalar multiplication under weights derived
-/// from the whole set. The weights are a hash rather than local randomness, so every node reaches
-/// the same verdict on the same bytes — a validity predicate a committee votes on must not depend on
-/// a local RNG. Variable time is safe because every input is public: keys, nonces and scalars travel
-/// on the wire and the messages are digests of a gossiped transaction body.
+/// Hands the set to [`SigningContext::verify_batch`] under [`TRANSACTION_SIGNING_CONTEXT`], which folds the n
+/// verification equations into one variable-time multiscalar multiplication under weights derived from the whole set.
+/// The weights are a transcript of the set rather than local randomness, so every node reaches the same verdict on the
+/// same bytes — a validity predicate a committee votes on must not depend on a local RNG. Variable time is safe because
+/// every input is public: keys, nonces and scalars travel on the wire and the messages are digests of a gossiped
+/// transaction body.
 ///
 /// The messages are per term, so a transaction's seal batches together with the authorizations that
 /// sign a different digest. A term that fails to decode, or whose key is the identity, rejects the
 /// set. A rejection is a verdict on the set and does not say which signature is at fault. An empty
-/// batch verifies vacuously.
+/// batch is rejected, so [`TransactionSignature::verify_all_against_message`] accepts a transaction
+/// with no authorizations before calling this, and [`verify_sealed_batch`] always has the seal.
 ///
-/// Decoding is the floor under this and the individual checks alike: every term costs two Ristretto
-/// decompressions, which no batch equation can amortise. `benches/signature_verification.rs`
+/// Decoding is the floor under this and the individual checks alike: every term costs a key
+/// decompression and a nonce decompression, which no batch equation can amortise. `benches/signature_verification.rs`
 /// measures both paths.
+///
+/// [`SigningContext::verify_batch`]: tari_ootle_common_types::signature::SigningContext::verify_batch
 fn verify_batch<'a, I>(terms: I) -> bool
-where I: IntoIterator<Item = (&'a RistrettoPublicKeyBytes, &'a SchnorrSignatureBytes, &'a [u8; 64])> {
-    let decoded = terms
+where I: IntoIterator<Item = (&'a RistrettoPublicKeyBytes, &'a Sr25519SignatureBytes, &'a [u8; 64])> {
+    let items: Vec<_> = terms
         .into_iter()
-        .map(|(public_key, signature, message)| {
-            let public_key: RistrettoPublicKey = public_key.try_from_byte_type().ok()?;
-            let signature = RistrettoSchnorr::convert_from_byte_type(signature).ok()?;
-            Some((signature, public_key, message))
-        })
-        .collect::<Option<Vec<_>>>();
-    let Some(decoded) = decoded else {
-        return false;
-    };
-    let items: Vec<_> = decoded
-        .iter()
-        .map(|(signature, public_key, message)| (signature, public_key, *message))
+        .map(|(public_key, signature, message)| (signature, public_key, message))
         .collect();
-    RistrettoSchnorr::verify_batch(&items)
+    TRANSACTION_SIGNING_CONTEXT.verify_batch(&items)
 }
 
 impl From<SignatureOutput> for TransactionSignature {
     fn from(output: SignatureOutput) -> Self {
         Self {
             public_key: output.public_key.to_byte_type(),
-            signature: output.signature.to_byte_type(),
+            signature: output.signature,
         }
     }
 }
@@ -531,6 +511,7 @@ mod tests {
     use borsh::BorshSerialize;
     use tari_crypto::keys::SecretKey;
     use tari_engine_types::{SubstateVersion, substate::SubstateId};
+    use tari_ootle_common_types::signature::{components, from_components};
     use tari_template_lib_types::ComponentAddress;
 
     use super::*;
@@ -577,6 +558,32 @@ mod tests {
 
     fn seal_msg(t: &UnsealedTransactionV1) -> [u8; 64] {
         TransactionSealSignature::create_message_v1(t)
+    }
+
+    /// An authorization produced by an off-the-shelf sr25519 signer under the transaction signing
+    /// context verifies, so a signer holding its key in an HSM needs no Ootle-specific code.
+    #[test]
+    fn an_sr25519_signer_authorizes_a_transaction() {
+        use schnorrkel::{ExpansionMode, MiniSecretKey, signing_context};
+
+        let seal_signer = sample_seal_signer();
+        let unsigned = sample_unsigned();
+        let keypair = MiniSecretKey::from_bytes(&[7; 32])
+            .unwrap()
+            .expand_to_keypair(ExpansionMode::Ed25519);
+
+        let message = TransactionSignature::create_message_v1(&seal_signer, &unsigned);
+        let signature = keypair.sign(signing_context(TRANSACTION_SIGNING_CONTEXT.as_bytes()).bytes(&message));
+        let signature = TransactionSignature::new(
+            RistrettoPublicKeyBytes::from(keypair.public.to_bytes()),
+            Sr25519SignatureBytes::from_array(signature.to_bytes()),
+        );
+
+        assert!(signature.verify_v1(&seal_signer, &unsigned));
+        assert!(TransactionSignature::verify_all_against_message(
+            std::slice::from_ref(&signature),
+            message
+        ));
     }
 
     #[test]
@@ -953,19 +960,11 @@ mod tests {
     /// difference of the two scalars — equal and opposite error terms, which is what a cancelling
     /// pair needs.
     fn swap_scalars(a: &TransactionSignature, b: &TransactionSignature) -> Vec<TransactionSignature> {
-        let a_inner = RistrettoSchnorr::convert_from_byte_type(a.signature()).unwrap();
-        let b_inner = RistrettoSchnorr::convert_from_byte_type(b.signature()).unwrap();
+        let (a_nonce, a_scalar) = components(a.signature()).unwrap();
+        let (b_nonce, b_scalar) = components(b.signature()).unwrap();
         vec![
-            TransactionSignature::new(
-                *a.public_key(),
-                RistrettoSchnorr::new(a_inner.get_public_nonce().clone(), b_inner.get_signature().clone())
-                    .to_byte_type(),
-            ),
-            TransactionSignature::new(
-                *b.public_key(),
-                RistrettoSchnorr::new(b_inner.get_public_nonce().clone(), a_inner.get_signature().clone())
-                    .to_byte_type(),
-            ),
+            TransactionSignature::new(*a.public_key(), from_components(&a_nonce, &b_scalar)),
+            TransactionSignature::new(*b.public_key(), from_components(&b_nonce, &a_scalar)),
         ]
     }
 
@@ -1036,11 +1035,11 @@ mod tests {
         let mut lhs = RistrettoSecretKey::default();
         let mut rhs = RistrettoPublicKey::default();
         for sig in &pair {
-            let public_key: RistrettoPublicKey = sig.public_key().try_from_byte_type().unwrap();
-            let inner = RistrettoSchnorr::convert_from_byte_type(sig.signature()).unwrap();
-            let e = inner.challenge_scalar(&public_key, message).unwrap();
-            lhs = &lhs + inner.get_signature();
-            rhs = &(&rhs + inner.get_public_nonce()) + &(&e * &public_key);
+            let public_key = RistrettoPublicKey::from_canonical_bytes(sig.public_key().as_bytes()).unwrap();
+            let (nonce, scalar) = components(sig.signature()).unwrap();
+            let e = TRANSACTION_SIGNING_CONTEXT.challenge(&nonce, &public_key, &message);
+            lhs = &lhs + &scalar;
+            rhs = &(&rhs + &nonce) + &(&e * &public_key);
         }
         assert_eq!(
             RistrettoPublicKey::from_secret_key(&lhs),
@@ -1088,10 +1087,8 @@ mod tests {
             RistrettoPublicKeyBytes::from_bytes(&[0xff; 32]).unwrap(),
             *valid.signature(),
         );
-        let bad_signature = TransactionSignature::new(
-            *valid.public_key(),
-            SchnorrSignatureBytes::from_bytes(&[0xff; 64]).unwrap(),
-        );
+        let bad_signature =
+            TransactionSignature::new(*valid.public_key(), Sr25519SignatureBytes::from_array([0xff; 64]));
 
         for (label, planted) in [
             ("key", vec![bad_key, valid.clone()]),
@@ -1104,8 +1101,7 @@ mod tests {
         }
     }
 
-    /// The identity public key must be rejected, as the stock verifier rejects it
-    /// (`verify_challenge_scalar` refuses `public_key == P::default()`).
+    /// The identity public key must be rejected.
     ///
     /// Its encoding is 32 zero bytes, which decompresses perfectly well, and with `P = 0` the
     /// verification equation degenerates to `s·G == R` — satisfied by anyone who picks `s` and sets
@@ -1122,12 +1118,12 @@ mod tests {
         let nonce = RistrettoSecretKey::random(&mut rand::rng());
         let forged = TransactionSignature::new(
             RistrettoPublicKeyBytes::zero(),
-            RistrettoSchnorr::new(RistrettoPublicKey::from_secret_key(&nonce), nonce.clone()).to_byte_type(),
+            from_components(&RistrettoPublicKey::from_secret_key(&nonce), &nonce),
         );
 
         assert!(
             !forged.verify_message(message),
-            "the stock verifier must refuse the identity key, or this test proves nothing",
+            "the individual check must refuse the identity key, or this test proves nothing",
         );
         assert!(
             !TransactionSignature::verify_all_against_message(std::slice::from_ref(&forged), message),

@@ -68,20 +68,7 @@ function Signers({ seal_signature, transaction_body }: SignersProps) {
                 <CopyAddress address={signer.public_key} />
               </DataTableCell>
               <DataTableCell>
-                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-                  <Chip
-                    label={`Nonce: ${signer.signature.public_nonce}`}
-                    size="small"
-                    color="default"
-                    variant="outlined"
-                  />
-                  <Chip
-                    label={`Signature: ${signer.signature.signature}`}
-                    size="small"
-                    color="default"
-                    variant="outlined"
-                  />
-                </Box>
+                <Chip label={`Signature: ${signer.signature}`} size="small" color="default" variant="outlined" />
               </DataTableCell>
             </TableRow>
           ))}

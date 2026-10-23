@@ -189,7 +189,8 @@ pub struct SignTransactionHeader {
 
 /// Response returned on the `Finalize` frame once the user approves.
 ///
-/// `signature` is the tari `SchnorrSignatureBytes` layout: `R.compress()(32) || s(32)`.
+/// `signature` is the standard 64-byte sr25519 encoding: `R.compress()(32) || s(32)` with the
+/// marker bit `0x80` set in the last byte.
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct SignTransactionResponse {
     pub public_key: [u8; 32],

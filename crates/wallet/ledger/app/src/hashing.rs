@@ -1,27 +1,25 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-//! On-device reproduction of the Ootle transaction signing message and `tari_crypto` Schnorr
-//! signature.
+//! On-device reproduction of the Ootle transaction signing message and its sr25519 signature.
 //!
 //! The host streams the canonical preimage bytes (see `tari_ootle_transaction`'s
 //! `signing_preimage_v1`); the device feeds them, in order, into a domain-separated Blake2b-512
-//! hasher seeded here, recomputes the 64-byte message itself, and produces a Schnorr signature
-//! that verifies under `tari_crypto`. The byte recipe is pinned by the host reference test in the
+//! hasher seeded here, recomputes the 64-byte message itself, and signs it as sr25519 under the
+//! transaction signing context. The byte recipe is pinned by the host reference test in the
 //! ledger client crate and the constants in `ootle_ledger_common::signing`.
 
 use alloc::format;
 
 use curve25519_dalek::{Scalar, ristretto::CompressedRistretto, traits::IsIdentity};
 use ledger_device_sdk::hash::{HashError, HashInit, blake2::Blake2b_512};
+use merlin::Transcript;
 use ootle_ledger_common::{
     OotleStatusWord,
     arg_types::SignMode,
     signing::{
         NONCE_DOMAIN,
-        SCHNORR_DOMAIN,
-        SCHNORR_DOMAIN_VERSION,
-        SCHNORR_LABEL,
+        SIGNING_CONTEXT,
         STEALTH_OWNER_LABEL,
         TX_DOMAIN,
         TX_DOMAIN_VERSION,
@@ -70,7 +68,7 @@ impl MessageHasher {
 }
 
 /// Sign a 64-byte transaction message with `secret`, producing the compressed public key and the
-/// `SchnorrSignatureBytes` layout `R(32) || s(32)`.
+/// standard sr25519 signature encoding `R(32) || s(32)` with the marker bit set in the last byte.
 pub fn sign_message(secret: &Scalar, message: &[u8; 64]) -> Result<([u8; 32], [u8; 64]), AppStatus> {
     let public_key = public_key_from_scalar(secret).compress().0;
 
@@ -78,13 +76,15 @@ pub fn sign_message(secret: &Scalar, message: &[u8; 64]) -> Result<([u8; 32], [u
     let nonce = Zeroizing::new(deterministic_nonce(secret, message).map_err(hash_err)?);
     let public_nonce = public_key_from_scalar(&nonce).compress().0;
 
-    // e = H_challenge(R, P, m); s = e*k + r  (matches tari_crypto RistrettoSchnorr::sign_raw_uniform)
-    let e = schnorr_challenge(&public_nonce, &public_key, message).map_err(hash_err)?;
+    // e = sr25519 challenge(R, P, m); s = e*k + r
+    let e = schnorr_challenge(&public_nonce, &public_key, message);
     let s = e * secret + *nonce;
 
     let mut signature = [0u8; 64];
     signature[..32].copy_from_slice(&public_nonce);
     signature[32..].copy_from_slice(s.as_bytes());
+    // sr25519 marks its signatures by setting the top bit of `s`, which a canonical scalar leaves clear.
+    signature[63] |= 0x80;
 
     Ok((public_key, signature))
 }
@@ -122,18 +122,18 @@ pub fn derive_stealth_secret(
     Ok(c + account_secret)
 }
 
-/// `e = Scalar::from_uniform_bytes(DomainSep("challenge") || len(R)||R || len(P)||P || len(m)||m)`,
-/// reproducing `tari_crypto`'s `construct_domain_separated_challenge::<Blake2b<U64>>`. Note the
-/// challenge hasher length-prefixes each chunk (unlike the borsh-fed message hasher).
-fn schnorr_challenge(public_nonce: &[u8; 32], public_key: &[u8; 32], message: &[u8; 64]) -> Result<Scalar, HashError> {
-    let mut hasher = Blake2b_512::new();
-    add_domain_separation_tag(&mut hasher, SCHNORR_DOMAIN, SCHNORR_DOMAIN_VERSION, SCHNORR_LABEL)?;
-    update_length_prefixed(&mut hasher, public_nonce)?;
-    update_length_prefixed(&mut hasher, public_key)?;
-    update_length_prefixed(&mut hasher, message)?;
-    let mut out = Zeroizing::new([0u8; 64]);
-    hasher.finalize(out.as_mut())?;
-    Ok(Scalar::from_bytes_mod_order_wide(&out))
+/// The sr25519 (schnorrkel) challenge for `message` under [`SIGNING_CONTEXT`], reproducing
+/// `tari_ootle_sr25519::SigningContext::challenge`.
+fn schnorr_challenge(public_nonce: &[u8; 32], public_key: &[u8; 32], message: &[u8; 64]) -> Scalar {
+    let mut transcript = Transcript::new(b"SigningContext");
+    transcript.append_message(b"", SIGNING_CONTEXT);
+    transcript.append_message(b"sign-bytes", message);
+    transcript.append_message(b"proto-name", b"Schnorr-sig");
+    transcript.append_message(b"sign:pk", public_key);
+    transcript.append_message(b"sign:R", public_nonce);
+    let mut out = [0u8; 64];
+    transcript.challenge_bytes(b"sign:c", &mut out);
+    Scalar::from_bytes_mod_order_wide(&out)
 }
 
 fn deterministic_nonce(secret: &Scalar, message: &[u8; 64]) -> Result<Scalar, HashError> {
@@ -144,12 +144,6 @@ fn deterministic_nonce(secret: &Scalar, message: &[u8; 64]) -> Result<Scalar, Ha
     let mut out = Zeroizing::new([0u8; 64]);
     hasher.finalize(out.as_mut())?;
     Ok(Scalar::from_bytes_mod_order_wide(&out))
-}
-
-/// `DomainSeparatedHasher::update`-style length-prefixed chunk: `u64_le(len) || data`.
-fn update_length_prefixed(hasher: &mut Blake2b_512, data: &[u8]) -> Result<(), HashError> {
-    hasher.update(&(data.len() as u64).to_le_bytes())?;
-    hasher.update(data)
 }
 
 /// Writes a `tari_crypto` domain-separation tag: `u64_le(len) || domain || ".v" || version_ascii

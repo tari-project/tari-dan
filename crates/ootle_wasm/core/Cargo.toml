@@ -10,6 +10,7 @@ license.workspace = true
 [dependencies]
 tari_ootle_transaction = { workspace = true, features = ["serde"] }
 tari_ootle_address = { workspace = true }
+tari_ootle_common_types = { workspace = true }
 tari_ootle_wallet_crypto = { workspace = true, features = ["serde"] }
 tari_engine_types = { workspace = true }
 tari_crypto = { workspace = true, features = ["borsh"] }

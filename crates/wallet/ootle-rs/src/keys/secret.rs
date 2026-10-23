@@ -6,10 +6,14 @@ use ootle_byte_type::{FromByteType, ToByteType};
 use signature::{Keypair, hazmat::PrehashSigner};
 use tari_crypto::{
     keys::{PublicKey, SecretKey},
-    ristretto::{RistrettoPublicKey, RistrettoSchnorr, RistrettoSecretKey},
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
 use tari_ootle_address::{Network, OotleAddress};
-use tari_ootle_common_types::{base_layer_hashing::encrypted_data_hasher, engine_types::crypto::OutputBody};
+use tari_ootle_common_types::{
+    base_layer_hashing::encrypted_data_hasher,
+    engine_types::crypto::OutputBody,
+    signature::{Sr25519SignatureBytes, TRANSACTION_SIGNING_CONTEXT},
+};
 use tari_ootle_wallet_crypto::{
     DecryptedData,
     StealthCryptoApi,
@@ -90,29 +94,27 @@ impl OotleSecretKey {
     }
 }
 
-impl PrehashSigner<(RistrettoSchnorr, RistrettoPublicKey)> for OotleSecretKey {
-    fn sign_prehash(&self, prehash: &[u8]) -> signature::Result<(RistrettoSchnorr, RistrettoPublicKey)> {
-        let signature = RistrettoSchnorr::sign(&self.account_secret, prehash, &mut rand::rng())
-            .expect("sign is infallible (challenge is the correct length)");
+impl PrehashSigner<(Sr25519SignatureBytes, RistrettoPublicKey)> for OotleSecretKey {
+    fn sign_prehash(&self, prehash: &[u8]) -> signature::Result<(Sr25519SignatureBytes, RistrettoPublicKey)> {
+        let signature = TRANSACTION_SIGNING_CONTEXT.sign(&self.account_secret, prehash);
         let public_key = self.verifying_key();
         Ok((signature, public_key))
     }
 }
 
-impl StealthKeyPrehashSigner<(RistrettoSchnorr, RistrettoPublicKey)> for OotleSecretKey {
+impl StealthKeyPrehashSigner<(Sr25519SignatureBytes, RistrettoPublicKey)> for OotleSecretKey {
     async fn sign_prehash_with_stealth_key(
         &self,
         public_nonce: &RistrettoPublicKey,
         prehash: &[u8],
-    ) -> signer::Result<(RistrettoSchnorr, RistrettoPublicKey)> {
+    ) -> signer::Result<(Sr25519SignatureBytes, RistrettoPublicKey)> {
         let secret = kdfs::owner_stealth_dh_secret(
             self.network(),
             self.account_secret(),
             self.view_only_secret(),
             public_nonce,
         );
-        let signature = RistrettoSchnorr::sign(&secret, prehash, &mut rand::rng())
-            .expect("sign is infallible (challenge is the correct length)");
+        let signature = TRANSACTION_SIGNING_CONTEXT.sign(&secret, prehash);
         let public_key = RistrettoPublicKey::from_secret_key(&secret);
         Ok((signature, public_key))
     }

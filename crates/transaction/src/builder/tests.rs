@@ -4,9 +4,9 @@
 use ootle_byte_type::ToByteType;
 use tari_crypto::{
     keys::{PublicKey as _, SecretKey as _},
-    ristretto::{RistrettoPublicKey, RistrettoSchnorr, RistrettoSecretKey},
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
-use tari_ootle_common_types::Epoch;
+use tari_ootle_common_types::{Epoch, signature::TRANSACTION_SIGNING_CONTEXT};
 use tari_template_lib_types::{ComponentAddress, TemplateAddress};
 
 use crate::{
@@ -235,9 +235,7 @@ fn a_signature_over_the_builder_message_verifies_once_fee_instructions_are_appli
     let message = builder.to_signing_message(&seal_signer);
     let signature = TransactionSignature::new(
         RistrettoPublicKey::from_secret_key(&signer_secret).to_byte_type(),
-        RistrettoSchnorr::sign(&signer_secret, message, &mut rand::rng())
-            .unwrap()
-            .to_byte_type(),
+        TRANSACTION_SIGNING_CONTEXT.sign(&signer_secret, &message),
     );
     let unsealed = builder.into_signed(signature);
 

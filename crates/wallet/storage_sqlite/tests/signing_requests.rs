@@ -8,7 +8,7 @@
 use std::{thread, time::Duration};
 
 use tari_ootle_common_types::{Epoch, optional::IsNotFoundError};
-use tari_ootle_transaction::{TransactionSignature, UnsignedTransaction};
+use tari_ootle_transaction::{Sr25519SignatureBytes, TransactionSignature, UnsignedTransaction};
 use tari_ootle_wallet_sdk::{
     models::{
         KeyBranch,
@@ -22,7 +22,7 @@ use tari_ootle_wallet_sdk::{
     storage::{CommittableStore, ReadableWalletStore, WalletStoreReader, WalletStoreWriter, WriteableWalletStore},
 };
 use tari_ootle_wallet_storage_sqlite::SqliteWalletStore;
-use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
+use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 fn open_store() -> SqliteWalletStore {
     let db = SqliteWalletStore::try_open(":memory:").unwrap();
@@ -38,7 +38,7 @@ fn key_id() -> KeyId {
 }
 
 fn signature() -> TransactionSignature {
-    TransactionSignature::new(RistrettoPublicKeyBytes::default(), SchnorrSignatureBytes::zero())
+    TransactionSignature::new(RistrettoPublicKeyBytes::default(), Sr25519SignatureBytes::zero())
 }
 
 fn insert_request(db: &SqliteWalletStore, ttl: Duration) -> SigningRequestId {

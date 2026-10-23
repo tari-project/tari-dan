@@ -3,8 +3,8 @@
 
 //! Sign → seal → BOR-encode an [`UnsignedTransaction`] into submit-ready bytes + transaction id.
 //!
-//! Signing always uses a fresh random Schnorr nonce (`RistrettoSchnorr::sign(secret, msg,
-//! &mut rand::rng())` inside `TransactionSignature::sign_v1` / `TransactionSealSignature::sign_v1`),
+//! Signing always uses a fresh random nonce (`TRANSACTION_SIGNING_CONTEXT.sign` inside
+//! `TransactionSignature::sign_v1` / `TransactionSealSignature::sign_v1`),
 //! so the sealed bytes and id are unique per call — the safe default for real submission. Nothing here
 //! pins a signature nonce from a seed.
 //!

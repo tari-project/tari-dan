@@ -18,11 +18,11 @@ Produces the 64-byte signing message for an `UnsignedTransactionV1`. Delegates t
 - `hash_unsigned_transaction(&UnsignedTransactionV1, seal_signer_hex: &str) → Result<Vec<u8>>`
 - `hash_unsigned_transaction_json(json: &str, seal_signer_hex: &str) → Result<Vec<u8>>`
 
-### `sign` — Schnorr signing and key management
+### `sign` — signing and key management
 
-Ristretto255 Schnorr signatures and keypair operations.
+sr25519 transaction signatures and Ristretto255 keypair operations.
 
-- `schnorr_sign(secret_key_hex: &str, message: &[u8]) → Result<SchnorrSignatureResult>`
+- `sr25519_sign(secret_key: &[u8], message: &[u8]) → Result<Vec<u8>>`
 - `public_key_from_secret_key(secret_key_hex: &str) → Result<String>`
 - `generate_keypair() → KeypairResult`
 

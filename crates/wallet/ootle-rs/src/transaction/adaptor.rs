@@ -19,8 +19,9 @@
 use ootle_byte_type::ToByteType;
 use tari_crypto::{
     keys::PublicKey,
-    ristretto::{RistrettoPublicKey, RistrettoSchnorr, RistrettoSecretKey},
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
+use tari_ootle_common_types::signature::{Sr25519SignatureBytes, TRANSACTION_SIGNING_CONTEXT};
 use tari_ootle_transaction::TransactionSignature;
 pub use tari_ootle_wallet_crypto::adaptor::{RistrettoAdaptorSignature, extract, verify};
 use tari_ootle_wallet_crypto::adaptor::{complete, sign};
@@ -31,8 +32,7 @@ use crate::wallet::TransactionAuthorization;
 /// key-path or `AccessRule` co-signer whose secret this party holds outright (e.g. our own side of a 2-of-2).
 pub fn sign_authorization(secret: &RistrettoSecretKey, message: &[u8]) -> TransactionAuthorization {
     let public_key = RistrettoPublicKey::from_secret_key(secret);
-    let signature =
-        RistrettoSchnorr::sign(secret, message, &mut rand::rng()).expect("sign is infallible with Ristretto keys");
+    let signature = TRANSACTION_SIGNING_CONTEXT.sign(secret, message);
     authorization_from_parts(&public_key, signature)
 }
 
@@ -49,7 +49,7 @@ pub fn pre_sign_authorization(
 
 /// Completes an adaptor pre-signature with the adaptor secret `t`, yielding an authorization ready to attach for
 /// `public_key` (the pre-signer's public key — the badge the completed signature proves). The completed signature is
-/// an ordinary Schnorr signature, so the engine verifies it with no adaptor awareness.
+/// an ordinary transaction signature, so the engine verifies it with no adaptor awareness.
 pub fn complete_authorization(
     pre: &RistrettoAdaptorSignature,
     t: &RistrettoSecretKey,
@@ -59,9 +59,9 @@ pub fn complete_authorization(
     authorization_from_parts(public_key, signature)
 }
 
-fn authorization_from_parts(public_key: &RistrettoPublicKey, signature: RistrettoSchnorr) -> TransactionAuthorization {
-    TransactionAuthorization::new(TransactionSignature::new(
-        public_key.to_byte_type(),
-        signature.to_byte_type(),
-    ))
+fn authorization_from_parts(
+    public_key: &RistrettoPublicKey,
+    signature: Sr25519SignatureBytes,
+) -> TransactionAuthorization {
+    TransactionAuthorization::new(TransactionSignature::new(public_key.to_byte_type(), signature))
 }

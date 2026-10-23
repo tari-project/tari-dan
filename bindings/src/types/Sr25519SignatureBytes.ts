@@ -4,7 +4,7 @@
  * A 64-byte sr25519 signature in its standard encoding: the public nonce `R`, then the scalar `s`
  * with the marker bit set in its last byte.
  *
- * The bytes are not validated on construction or decoding; verification rejects any encoding that
- * is not a well-formed signature.
+ * Construction and decoding accept any 64 bytes; verification rejects an encoding that is not a
+ * well-formed signature.
  */
 export type Sr25519SignatureBytes = string;

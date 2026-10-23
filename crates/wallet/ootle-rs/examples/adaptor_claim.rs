@@ -209,7 +209,7 @@ async fn main() {
 
     // The swap is atomic because the completed, on-chain signature reveals `t` to anyone holding the pre-signature.
     let signature_on_other_chain = adaptor::complete(&pre, &t);
-    let revealed = adaptor::extract(&pre, &signature_on_other_chain);
+    let revealed = adaptor::extract(&pre, &signature_on_other_chain).expect("a completed signature is well formed");
     assert_eq!(revealed, t, "completing the signature reveals the swap secret");
     println!("\nAdaptor signature completed; the swap secret t is now recoverable from the on-chain signature.");
 
