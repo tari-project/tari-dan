@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_engine_types::{
-    fees::{ExhaustBurnRate, FeeBreakdown, FeeSource},
+    fees::{ExhaustBurnRate, FeeBreakdown, FeeScale, FeeSource},
     resource_container::ResourceContainer,
 };
 use tari_template_lib::types::{VaultId, constants::TARI_TOKEN};
@@ -15,6 +15,7 @@ pub struct FeeState {
     /// The fee payments made by the user, used to pay for the transaction fees with the return vault.
     fee_payments: Vec<(ResourceContainer, VaultId)>,
     running_payments_total: u64,
+    /// Charges as the fee table prices them. Every reader sees them at `fee_scale`.
     fee_charges: FeeBreakdown,
     /// Raw Wasmer metering points consumed across every WASM invocation in this transaction.
     /// Summed across invocations so the divisor in `FeeModule::on_before_finalize` rounds once
@@ -33,6 +34,10 @@ pub struct FeeState {
     /// The exhaust burn rate resolved for the execution epoch. Set out-of-band by `FeeModule` during runtime
     /// initialization; used at settlement to split what was collected between leaders and the burn.
     burn_rate: ExhaustBurnRate,
+    /// The multiplier on every charge for the execution epoch. Set out-of-band during runtime
+    /// initialization. Applied to each source's accumulated charge when it is read, so a source's
+    /// many small charges round once.
+    fee_scale: FeeScale,
 }
 
 impl FeeState {
@@ -114,12 +119,13 @@ impl FeeState {
         self.accumulated_native_points
     }
 
-    pub fn fee_charges(&self) -> &FeeBreakdown {
-        &self.fee_charges
+    /// The charges so far, at the execution epoch's fee scale.
+    pub fn fee_charges(&self) -> FeeBreakdown {
+        self.fee_charges.scaled(self.fee_scale)
     }
 
     pub fn take_fee_charges(&mut self) -> FeeBreakdown {
-        std::mem::take(&mut self.fee_charges)
+        std::mem::take(&mut self.fee_charges).scaled(self.fee_scale)
     }
 
     pub fn is_paid_in_full(&self) -> bool {
@@ -127,7 +133,10 @@ impl FeeState {
     }
 
     pub fn total_charges(&self) -> u64 {
-        self.fee_charges.get_total()
+        if self.fee_scale.is_one() {
+            return self.fee_charges.get_total();
+        }
+        self.fee_charges().get_total()
     }
 
     pub fn total_payments(&self) -> u64 {
@@ -148,6 +157,14 @@ impl FeeState {
 
     pub fn burn_rate(&self) -> ExhaustBurnRate {
         self.burn_rate
+    }
+
+    pub fn set_fee_scale(&mut self, scale: FeeScale) {
+        self.fee_scale = scale;
+    }
+
+    pub fn fee_scale(&self) -> FeeScale {
+        self.fee_scale
     }
 }
 
@@ -204,6 +221,30 @@ mod tests {
         let (drained_resource, drained_vault_id) = drained.pop().unwrap();
         assert_eq!(drained_resource.unlocked_amount(), resource.unlocked_amount());
         assert_eq!(*drained_vault_id, vault_id);
+    }
+
+    #[test]
+    fn charges_are_read_at_the_fee_scale() {
+        let mut fee_state = FeeState::new();
+        fee_state.set_fee_scale(FeeScale::new(15_000));
+        // Many small charges to one source round once, not each to nothing or each up.
+        for _ in 0..3 {
+            fee_state.add_charge(FeeSource::RuntimeCall, 1);
+        }
+        fee_state.add_charge(FeeSource::Storage, 100);
+        assert_eq!(fee_state.fee_charges().get(FeeSource::RuntimeCall), 4);
+        assert_eq!(fee_state.fee_charges().get(FeeSource::Storage), 150);
+        assert_eq!(fee_state.total_charges(), 154);
+        assert_eq!(fee_state.take_fee_charges().get_total(), 154);
+    }
+
+    #[test]
+    fn a_source_that_scales_to_zero_is_absent() {
+        let mut fee_state = FeeState::new();
+        fee_state.set_fee_scale(FeeScale::new(5_000));
+        fee_state.add_charge(FeeSource::RuntimeCall, 1);
+        assert_eq!(fee_state.fee_charges().iter().count(), 0);
+        assert_eq!(fee_state.total_charges(), 0);
     }
 
     #[test]

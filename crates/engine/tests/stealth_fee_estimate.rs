@@ -13,7 +13,7 @@
 use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_engine::fees::FeeTable;
 use tari_engine_types::{
-    fees::{FeeRates, FeeReceipt},
+    fees::{FeeRates, FeeReceipt, FeeScale},
     stealth::{MergedStealthTransferShape, persisted_utxo_bytes},
 };
 use tari_ootle_transaction::{Epoch, Transaction};
@@ -73,7 +73,7 @@ fn setup() -> Harness {
 /// The rates the harness is executing at, as the estimator takes them. Both sides pricing from one
 /// table is the point: what is under test is the formula, not the numbers it is fed.
 fn rates(harness: &Harness) -> FeeRates {
-    harness.test.fee_table().to_rates()
+    harness.test.fee_table().to_rates(FeeScale::ONE)
 }
 
 /// Moves `count × UTXO_VALUE` of the account's TARI into stealth UTXOs, so a later transfer has

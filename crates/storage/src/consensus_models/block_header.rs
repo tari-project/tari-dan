@@ -20,7 +20,7 @@ use tari_consensus_types::{
     ToSignatureMessage,
 };
 use tari_crypto::tari_utilities::epoch_time::EpochTime;
-use tari_engine_types::fees::ExhaustBurnRate;
+use tari_engine_types::fees::{ExhaustBurnRate, FeeScale};
 use tari_ootle_common_types::{
     Epoch,
     ExtraData,
@@ -604,6 +604,13 @@ impl BlockHeader {
             .and_then(ExhaustBurnRate::try_new)
     }
 
+    /// The fee scale the next epoch charges at, which only an end-of-epoch block names.
+    pub fn next_epoch_fee_scale(&self) -> Option<FeeScale> {
+        self.extra_data
+            .get_bps(&ExtraFieldKey::NextEpochFeeScale)
+            .and_then(FeeScale::try_new)
+    }
+
     /// The [`ValidatorSetHash`] of the next epoch's committees, which only an end-of-epoch block names.
     pub fn next_epoch_validator_set_hash(&self) -> Option<ValidatorSetHash> {
         self.extra_data
@@ -727,6 +734,13 @@ impl BlockHeaderMetadata {
             .get_bps(&ExtraFieldKey::ExhaustBurnRate)
             .and_then(ExhaustBurnRate::try_new)
     }
+
+    /// The fee scale the next epoch charges at, which only an end-of-epoch block names.
+    pub fn next_epoch_fee_scale(&self) -> Option<FeeScale> {
+        self.extra_data
+            .get_bps(&ExtraFieldKey::NextEpochFeeScale)
+            .and_then(FeeScale::try_new)
+    }
 }
 
 #[derive(Debug, BorshSerialize)]
@@ -807,6 +821,7 @@ mod tests {
         extra_data
             .insert_bps(ExtraFieldKey::ExhaustBurnRate, 500)
             .insert_bps(ExtraFieldKey::NextEpochExhaustBurnRate, 600)
+            .insert_bps(ExtraFieldKey::NextEpochFeeScale, 12_000)
             .insert_validator_set_hash(
                 ExtraFieldKey::NextEpochValidatorSetHash,
                 &ValidatorSetHash::from_array([9; 32]),
@@ -840,6 +855,15 @@ mod tests {
             header(ProtocolVersion::V0).metadata().next_epoch_validator_set_hash(),
             None
         );
+    }
+
+    #[test]
+    fn the_metadata_preimage_names_the_next_epoch_fee_scale() {
+        let eoe = header_with_extra_data(eoe_extra_data(), None);
+        let expected = Some(FeeScale::new(12_000));
+        assert_eq!(eoe.next_epoch_fee_scale(), expected);
+        assert_eq!(eoe.metadata().next_epoch_fee_scale(), expected);
+        assert_eq!(header(ProtocolVersion::V0).metadata().next_epoch_fee_scale(), None);
     }
 
     #[test]

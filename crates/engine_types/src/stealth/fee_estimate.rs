@@ -120,12 +120,14 @@ impl MergedStealthTransferShape {
             .input_load_cost(self.input_bytes)
             .saturating_add(rates.input_fanout_cost(self.input_bytes, self.input_fanout));
 
-        weight_cost
-            .saturating_add(runtime_call_cost)
-            .saturating_add(native_cost)
-            .saturating_add(input_cost)
-            .saturating_add(storage_cost)
-            .saturating_add(create_cost)
+        rates.scale_total(
+            weight_cost
+                .saturating_add(runtime_call_cost)
+                .saturating_add(native_cost)
+                .saturating_add(input_cost)
+                .saturating_add(storage_cost)
+                .saturating_add(create_cost),
+        )
     }
 
     /// An upper bound on the bytes of permanent state this shape persists: the UTXOs it creates and
@@ -203,12 +205,14 @@ impl ClaimBurnShape {
             .input_load_cost(self.input_bytes)
             .saturating_add(rates.input_fanout_cost(self.input_bytes, self.input_fanout));
 
-        weight_cost
-            .saturating_add(runtime_call_cost)
-            .saturating_add(native_cost)
-            .saturating_add(input_cost)
-            .saturating_add(storage_cost)
-            .saturating_add(create_cost)
+        rates.scale_total(
+            weight_cost
+                .saturating_add(runtime_call_cost)
+                .saturating_add(native_cost)
+                .saturating_add(input_cost)
+                .saturating_add(storage_cost)
+                .saturating_add(create_cost),
+        )
     }
 
     /// An upper bound on the bytes of permanent state this shape persists: the stealth output, the
@@ -276,7 +280,7 @@ fn widest_utxo_address() -> UtxoAddress {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::limits::NativeExecutionPoints as P;
+    use crate::{fees::FeeScale, limits::NativeExecutionPoints as P};
 
     /// Priced like the shipped tables, so the terms are legible in microtari.
     fn rates() -> FeeRates {
@@ -290,6 +294,7 @@ mod tests {
             wasm_points_cost_divisor: 1000,
             input_load_bytes_cost_divisor: 64,
             input_fanout_bytes_cost_divisor: 4,
+            fee_scale: FeeScale::ONE,
         }
     }
 
@@ -380,6 +385,34 @@ mod tests {
 
     /// The estimate has to move with the shape monotonically, or a settling loop that raises its fee
     /// could select a wider shape that prices lower and oscillate.
+    #[test]
+    fn an_estimate_is_taken_at_the_fee_scale_rounded_up() {
+        let unscaled = shape(2, 2).estimate_fee(&rates());
+        for bps in [1, 5_000, 15_000, u16::MAX] {
+            let scale = FeeScale::new(bps);
+            let scaled = shape(2, 2).estimate_fee(&FeeRates {
+                fee_scale: scale,
+                ..rates()
+            });
+            assert_eq!(scaled, scale.apply_ceil(unscaled), "{bps}bps");
+        }
+
+        let claim = ClaimBurnShape {
+            persisted_output_bytes: TYPICAL_OUTPUT_BYTES,
+            transaction_weight: 1_000,
+            input_bytes: 500,
+            input_fanout: 1,
+        };
+        let scale = FeeScale::new(15_000);
+        assert_eq!(
+            claim.estimate_fee(&FeeRates {
+                fee_scale: scale,
+                ..rates()
+            }),
+            scale.apply_ceil(claim.estimate_fee(&rates()))
+        );
+    }
+
     #[test]
     fn a_larger_shape_never_prices_lower() {
         let mut previous = 0;

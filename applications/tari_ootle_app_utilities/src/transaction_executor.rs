@@ -15,11 +15,12 @@ use tari_engine::{
 };
 use tari_engine_types::{
     commit_result::ExecuteResult,
-    fees::ExhaustBurnRate,
+    fees::{ExhaustBurnRate, FeeScale, FeeScaleSchedule},
     substate::Substate,
     virtual_substate::VirtualSubstates,
 };
 use tari_ootle_common_types::{
+    Epoch,
     SubstateLockType,
     SubstateRequirement,
     VersionedSubstateId,
@@ -153,6 +154,11 @@ impl<TStore: StateReader + Clone + 'static> TransactionExecutor<TStore> for Tari
         let auth_params = AuthParams {
             initial_ownership_proofs,
         };
+        // A transaction executed with no current epoch cannot finalize, since its receipt names the
+        // epoch, so the scale it would otherwise be charged at is never billed.
+        let fee_scale = virtual_substates
+            .current_epoch()
+            .map_or(FeeScale::ONE, |epoch| FeeScaleSchedule::at(self.network, Epoch(epoch)));
 
         let processor = TransactionProcessor::new(
             Arc::new(template_provider),
@@ -164,6 +170,7 @@ impl<TStore: StateReader + Clone + 'static> TransactionExecutor<TStore> for Tari
             self.wasm_metering_rate,
             burn_rate,
             input_fanout,
+            fee_scale,
             self.network,
             self.dry_run,
         );

@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use super::{FeeRates, LITERAL_BYTE_DIVISOR};
+use super::{FeeRates, FeeScale, LITERAL_BYTE_DIVISOR};
 
 /// The narrowest `max_fee` a run can meter at is `1`, which a dry run clamps to. `Amount` encodes as
 /// a native CBOR integer, so that is a single byte.
@@ -125,17 +125,27 @@ impl FeeTable {
     /// `tari_engine_types::fees::FEE_ESTIMATE_ALLOWANCE` is the value this yields, restated where
     /// `FeeReceipt::required_fees` can reach it.
     pub const fn fee_estimate_allowance(&self) -> u64 {
+        self.fee_estimate_allowance_at(FeeScale::ONE)
+    }
+
+    /// [`Self::fee_estimate_allowance`] for charges taken at `scale`.
+    ///
+    /// The engine scales each charge on its own and rounds it down, so a drift of `d` in one charge
+    /// moves what it bills by at most `ceil(d × scale)`. Each term is scaled separately for that reason.
+    pub const fn fee_estimate_allowance_at(&self, scale: FeeScale) -> u64 {
         let weight_drift = MAX_FEE_LITERAL_WEIGHT_DRIFT.saturating_mul(self.per_transaction_weight_cost);
         let storage_drift = MAX_FEE_RESIDUAL_BYTE_DRIFT.saturating_mul(self.per_byte_storage_cost) /
             non_zero(self.storage_cost_divisor) +
             1;
-        weight_drift.saturating_add(storage_drift)
+        scale
+            .apply_ceil(weight_drift)
+            .saturating_add(scale.apply_ceil(storage_drift))
     }
 
-    /// The rates a fee estimator needs, projected onto [`FeeRates`]. An estimator — a wallet, say —
-    /// prices a transaction from those alone; the remaining entries here only mean something to an
-    /// engine that executes one.
-    pub fn to_rates(&self) -> FeeRates {
+    /// The rates a fee estimator needs at `fee_scale`, projected onto [`FeeRates`]. An estimator — a
+    /// wallet, say — prices a transaction from those alone; the remaining entries here only mean
+    /// something to an engine that executes one.
+    pub fn to_rates(&self, fee_scale: FeeScale) -> FeeRates {
         FeeRates {
             per_transaction_weight_cost: self.per_transaction_weight_cost(),
             per_module_call_cost: self.per_module_call_cost(),
@@ -146,6 +156,7 @@ impl FeeTable {
             wasm_points_cost_divisor: self.wasm_points_cost_divisor(),
             input_load_bytes_cost_divisor: self.input_load_bytes_cost_divisor(),
             input_fanout_bytes_cost_divisor: self.input_fanout_bytes_cost_divisor(),
+            fee_scale,
         }
     }
 
@@ -310,6 +321,16 @@ mod tests {
         assert_eq!(table.fee_estimate_allowance(), 6 + 8 + 1);
         table.per_byte_storage_cost = 2;
         assert_eq!(table.fee_estimate_allowance(), 6 + 16 + 1);
+    }
+
+    #[test]
+    fn the_allowance_scales_each_term_up() {
+        let table = shipped_like();
+        assert_eq!(table.fee_estimate_allowance_at(FeeScale::ONE), 3 + 9);
+        // 1.5x: ceil(4.5) + ceil(13.5).
+        assert_eq!(table.fee_estimate_allowance_at(FeeScale::new(15_000)), 5 + 14);
+        // 0.5x: ceil(1.5) + ceil(4.5).
+        assert_eq!(table.fee_estimate_allowance_at(FeeScale::new(5_000)), 2 + 5);
     }
 
     /// `FEE_ESTIMATE_ALLOWANCE` is stated in `tari_engine_types`, which cannot see a `FeeTable`. It

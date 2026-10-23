@@ -294,7 +294,7 @@ mod fee_estimate {
     use tari_crypto::keys::SecretKey as _;
     use tari_engine::fees::FeeTable;
     use tari_engine_types::{
-        fees::{FeeRates, FeeSource},
+        fees::{FeeRates, FeeScale, FeeSource},
         stealth::{ClaimBurnShape, persisted_utxo_bytes},
     };
     use tari_template_lib::types::{Amount, constants::TARI_TOKEN, stealth::StealthTransferStatement};
@@ -333,7 +333,7 @@ mod fee_estimate {
     }
 
     fn rates(test: &TemplateTest) -> FeeRates {
-        test.fee_table().to_rates()
+        test.fee_table().to_rates(FeeScale::ONE)
     }
 
     fn new_claim() -> MaskAndValue {

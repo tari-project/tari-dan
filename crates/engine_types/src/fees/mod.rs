@@ -5,8 +5,10 @@ use indexmap::{IndexMap, map::Entry};
 use serde::{Deserialize, Serialize};
 
 mod burn_rate_schedule;
+mod fee_scale;
 mod fee_table;
 pub use burn_rate_schedule::{ExhaustBurnRateSchedule, ExhaustBurnRateSource, resolve_exhaust_burn_rate};
+pub use fee_scale::{FeeScale, FeeScaleSchedule};
 pub use fee_table::{FeeTable, WasmMeteringRate};
 
 /// Inline literal args carry their bytes directly in the instruction, so they are priced by size,
@@ -73,8 +75,10 @@ impl ExhaustBurnRate {
 ///
 /// The value is derived rather than chosen: [`FeeTable::fee_estimate_allowance`] computes it from
 /// `per_transaction_weight_cost`, `per_byte_storage_cost`, `storage_cost_divisor` and
-/// [`LITERAL_BYTE_DIVISOR`]. `fee_estimate_allowance_covers_every_shipped_network`, which sits with
-/// the shipped tables, asserts this value covers every one of them.
+/// [`LITERAL_BYTE_DIVISOR`], and [`FeeTable::fee_estimate_allowance_at`] at a fee scale.
+/// `fee_estimate_allowance_covers_every_shipped_network`, which sits with the shipped tables, asserts
+/// this value covers every one of them at every fee scale its network is scheduled at, so a release
+/// that schedules a higher scale raises this value with it.
 pub const FEE_ESTIMATE_ALLOWANCE: u64 = 12;
 
 /// The rates a transaction's fee charges are computed from, as a fee estimator needs them.
@@ -97,6 +101,8 @@ pub struct FeeRates {
     pub input_load_bytes_cost_divisor: u64,
     /// Must be non-zero; a zero divisor reads as `1`, matching `FeeTable`.
     pub input_fanout_bytes_cost_divisor: u64,
+    /// The multiplier the engine applies to every charge priced from the rates above.
+    pub fee_scale: FeeScale,
 }
 
 impl FeeRates {
@@ -139,6 +145,12 @@ impl FeeRates {
             .saturating_mul(input_bytes)
             .saturating_mul(u64::from(input_fanout)) /
             non_zero(self.input_fanout_bytes_cost_divisor)
+    }
+
+    /// `unscaled`, a sum of charges priced from these rates, at [`Self::fee_scale`]. Rounds up, so it
+    /// is never below what the engine charges for the same terms.
+    pub fn scale_total(&self, unscaled: u64) -> u64 {
+        self.fee_scale.apply_ceil(unscaled)
     }
 }
 
@@ -510,6 +522,19 @@ impl FeeBreakdown {
 
     pub fn get(&self, source: FeeSource) -> u64 {
         self.breakdown.get(&source).copied().unwrap_or_default()
+    }
+
+    /// This breakdown with each source's charge at `scale`, rounded down. A source that scales to
+    /// zero is left absent, as [`Self::set`] leaves it.
+    pub fn scaled(&self, scale: FeeScale) -> Self {
+        if scale.is_one() {
+            return self.clone();
+        }
+        let mut scaled = Self::default();
+        for (source, amount) in self.iter() {
+            scaled.set(*source, scale.apply(*amount));
+        }
+        scaled
     }
 }
 

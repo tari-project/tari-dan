@@ -25,7 +25,7 @@ use tari_consensus_types::{
     ShardGroupAccumulatedData,
     TimeoutCertificate,
 };
-use tari_engine_types::fees::ExhaustBurnRate;
+use tari_engine_types::fees::{ExhaustBurnRate, FeeScale};
 use tari_ootle_common_types::{
     Epoch,
     ExtraData,
@@ -492,6 +492,11 @@ impl Block {
     /// The exhaust burn rate the next epoch opens at, which only an end-of-epoch block names.
     pub fn next_epoch_exhaust_burn_rate(&self) -> Option<ExhaustBurnRate> {
         self.header.next_epoch_exhaust_burn_rate()
+    }
+
+    /// The fee scale the next epoch charges at, which only an end-of-epoch block names.
+    pub fn next_epoch_fee_scale(&self) -> Option<FeeScale> {
+        self.header.next_epoch_fee_scale()
     }
 
     /// The [`ValidatorSetHash`] of the next epoch's committees, which only an end-of-epoch block names.

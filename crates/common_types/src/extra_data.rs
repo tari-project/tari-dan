@@ -54,6 +54,11 @@ pub enum ExtraFieldKey {
     /// a signed handover from one epoch's committees to the next.
     #[n(3)]
     NextEpochValidatorSetHash = 0x03,
+    /// The fee scale the next epoch charges at, big-endian basis points. Present on an end-of-epoch
+    /// block only, so a client that follows the signed end-of-epoch blocks learns what each epoch
+    /// charges without carrying the schedule that sets it.
+    #[n(4)]
+    NextEpochFeeScale = 0x04,
     #[n(255)]
     Custom = 0xff,
 }

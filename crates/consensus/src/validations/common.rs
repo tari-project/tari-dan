@@ -11,7 +11,7 @@ use tari_consensus_types::{
     TimeoutVoteMessage,
     ValidatorSignatureBytes,
 };
-use tari_engine_types::fees::ExhaustBurnRate;
+use tari_engine_types::fees::{ExhaustBurnRate, FeeScaleSchedule};
 use tari_ootle_common_types::{
     DerivableFromPublicKey,
     Epoch,
@@ -123,6 +123,43 @@ pub(super) fn check_exhaust_burn_rate(
     }
 
     Ok(())
+}
+
+/// An end-of-epoch block must name the fee scale the next epoch charges at, and no other block may
+/// name one.
+///
+/// The scale is a release schedule every replica holds, so this is a local check rather than a
+/// vote. It is in the header for clients that follow the signed end-of-epoch blocks rather than
+/// carry the schedule; the engine charges from the schedule itself.
+pub(super) fn check_next_epoch_fee_scale(block: &Block, network: Network) -> Result<(), ProposalValidationError> {
+    let proposed = block.next_epoch_fee_scale();
+    let has_key = block
+        .header()
+        .extra_data()
+        .contains_key(&ExtraFieldKey::NextEpochFeeScale);
+    if !block.is_epoch_end() {
+        if has_key {
+            return Err(ProposalValidationError::FeeScaleOutsideEndOfEpoch { block_id: *block.id() });
+        }
+        return Ok(());
+    }
+
+    let next_epoch = block.epoch() + Epoch(1);
+    let local = FeeScaleSchedule::at(network, next_epoch);
+    match proposed {
+        Some(scale) if scale == local => Ok(()),
+        Some(scale) => Err(ProposalValidationError::InvalidNextEpochFeeScale {
+            block_id: *block.id(),
+            next_epoch,
+            local_scale_bps: local.as_bps(),
+            proposed_scale_bps: scale.as_bps(),
+        }),
+        None => Err(ProposalValidationError::EndOfEpochBlockNamesNoFeeScale {
+            block_id: *block.id(),
+            next_epoch,
+            local_scale_bps: local.as_bps(),
+        }),
+    }
 }
 
 pub(super) fn check_shard_group_matches(
@@ -592,7 +629,7 @@ pub(super) fn check_sidechain_id(header: &BlockHeader, config: &HotstuffConfig) 
 mod tests {
     use tari_consensus_types::{BlockId, ProposalCertificate, ShardGroupAccumulatedData};
     use tari_ootle_common_types::ExtraData;
-    use tari_ootle_storage::consensus_models::BlockCommands;
+    use tari_ootle_storage::consensus_models::{BlockCommands, Command, EndEpochAtom};
 
     use super::*;
 
@@ -624,6 +661,79 @@ mod tests {
             check_protocol_version(&header(network, protocol_version, epoch), network),
             Err(ProposalValidationError::InvalidProtocolVersion { .. })
         )
+    }
+
+    fn block(network: Network, epoch: Epoch, is_epoch_end: bool, fee_scale_bps: Option<u16>) -> Block {
+        let shard_group = ShardGroup::all_shards(NumPreshards::P64);
+        let commands = if is_epoch_end {
+            BlockCommands::init([Command::EndEpoch(EndEpochAtom::new(FixedHash::zero()))]).unwrap()
+        } else {
+            BlockCommands::empty()
+        };
+        let mut extra_data = ExtraData::new();
+        if let Some(bps) = fee_scale_bps {
+            extra_data.insert_bps(ExtraFieldKey::NextEpochFeeScale, bps);
+        }
+        let justify = ProposalCertificate::genesis(epoch, shard_group);
+        let header = BlockHeader::create_unsigned(
+            network,
+            ProtocolVersion::V0,
+            BlockId::zero(),
+            justify.calculate_id(),
+            None,
+            NodeHeight(2),
+            epoch,
+            shard_group,
+            RistrettoPublicKeyBytes::default(),
+            FixedHash::zero(),
+            &commands,
+            1,
+            1234,
+            FixedHash::zero(),
+            ShardGroupAccumulatedData::default(),
+            extra_data,
+        )
+        .unwrap();
+        Block::new(header, justify, commands, None)
+    }
+
+    #[test]
+    fn an_end_of_epoch_block_names_the_scheduled_fee_scale_for_the_next_epoch() {
+        let network = Network::LocalNet;
+        let scheduled = FeeScaleSchedule::at(network, Epoch(6)).as_bps();
+        check_next_epoch_fee_scale(&block(network, Epoch(5), true, Some(scheduled)), network).unwrap();
+
+        assert!(matches!(
+            check_next_epoch_fee_scale(&block(network, Epoch(5), true, None), network),
+            Err(ProposalValidationError::EndOfEpochBlockNamesNoFeeScale {
+                next_epoch: Epoch(6),
+                ..
+            })
+        ));
+        assert!(matches!(
+            check_next_epoch_fee_scale(&block(network, Epoch(5), true, Some(scheduled + 1)), network),
+            Err(ProposalValidationError::InvalidNextEpochFeeScale {
+                next_epoch: Epoch(6),
+                ..
+            })
+        ));
+        // Zero is not a scale, so a block naming it names none.
+        assert!(matches!(
+            check_next_epoch_fee_scale(&block(network, Epoch(5), true, Some(0)), network),
+            Err(ProposalValidationError::EndOfEpochBlockNamesNoFeeScale { .. })
+        ));
+    }
+
+    #[test]
+    fn only_an_end_of_epoch_block_names_a_fee_scale() {
+        let network = Network::LocalNet;
+        check_next_epoch_fee_scale(&block(network, Epoch(5), false, None), network).unwrap();
+        for bps in [0, 10_000] {
+            assert!(matches!(
+                check_next_epoch_fee_scale(&block(network, Epoch(5), false, Some(bps)), network),
+                Err(ProposalValidationError::FeeScaleOutsideEndOfEpoch { .. })
+            ));
+        }
     }
 
     #[test]
