@@ -29,6 +29,7 @@ use crate::{
         ClaimedStateVersion,
         ConfidentialOutputModel,
         Config,
+        ImportedKeyId,
         KeyType,
         NonFungibleToken,
         OutputStatus,
@@ -60,6 +61,11 @@ pub trait WalletStoreReader {
     fn key_manager_get_raw_imported_key(&mut self, id: u64) -> Result<(KeyType, Box<[u8]>), WalletStorageError>;
     /// Returns the hex-encoded public key of an imported key, without decrypting the secret.
     fn key_manager_get_imported_public_key(&mut self, id: u64) -> Result<String, WalletStorageError>;
+    /// Returns the id and type of the imported key with the hex-encoded `public_key`.
+    fn key_manager_get_imported_key_by_public_key(
+        &mut self,
+        public_key: &str,
+    ) -> Result<(ImportedKeyId, KeyType), WalletStorageError>;
     // Config
     fn config_get<T: serde::de::DeserializeOwned>(&mut self, key: &str) -> Result<Config<T>, WalletStorageError>;
     fn config_get_string(&mut self, key: &str) -> Result<Config<String>, WalletStorageError>;

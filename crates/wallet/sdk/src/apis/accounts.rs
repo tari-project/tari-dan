@@ -155,7 +155,7 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
 
     /// Adds an account that can be scanned and viewed but not spent from. The view secret key is stored as an
     /// imported key and the account has no owner key. Outputs are scanned from `birthday_epoch`, or the current epoch
-    /// if not given. The view key must not be the view key of another account.
+    /// if not given. The view key must not be the view key of another account or an already imported key.
     pub fn add_view_only_account(
         &self,
         account_name: Option<&str>,
@@ -196,6 +196,14 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
                 .is_some()
         {
             return Err(AccountsApiError::AccountNameAlreadyExists { name: name.to_string() });
+        }
+        if self
+            .store
+            .with_read_tx(|tx| tx.key_manager_get_imported_key_by_public_key(&view_public_key.to_hex()))
+            .optional()?
+            .is_some()
+        {
+            return Err(AccountsApiError::ViewKeyAlreadyImported);
         }
         let accounts = self.store.with_read_tx(|tx| {
             let count = tx.accounts_count()?;
@@ -745,6 +753,8 @@ pub enum AccountsApiError {
     InvalidViewOnlyAccount { reason: String },
     #[error("The view key is already used by account {address}")]
     ViewKeyAlreadyUsed { address: ComponentAddress },
+    #[error("The view key is already an imported key")]
+    ViewKeyAlreadyImported,
     #[error("Config API error: {0}")]
     ConfigApiError(#[from] ConfigApiError),
 }
@@ -763,7 +773,7 @@ impl AccountsApiError {
     }
 
     pub fn is_view_key_used_error(&self) -> bool {
-        matches!(self, Self::ViewKeyAlreadyUsed { .. })
+        matches!(self, Self::ViewKeyAlreadyUsed { .. } | Self::ViewKeyAlreadyImported)
     }
 }
 

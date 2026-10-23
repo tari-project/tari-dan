@@ -38,6 +38,7 @@ use tari_ootle_wallet_sdk::{
         ClaimedStateVersion,
         ConfidentialOutputModel,
         Config,
+        ImportedKeyId,
         KeyType,
         NonFungibleToken,
         OutputStatus,
@@ -226,6 +227,34 @@ impl WalletStoreReader for ReadTransaction<'_> {
                 entity: "imported_key".to_string(),
                 key: id.to_string(),
             })
+    }
+
+    fn key_manager_get_imported_key_by_public_key(
+        &mut self,
+        public_key: &str,
+    ) -> Result<(ImportedKeyId, KeyType), WalletStorageError> {
+        const OPERATION: &str = "key_manager_get_imported_key_by_public_key";
+        use crate::schema::key_manager_imported_keys;
+
+        let (id, key_type) = key_manager_imported_keys::table
+            .select((key_manager_imported_keys::id, key_manager_imported_keys::key_type))
+            .filter(key_manager_imported_keys::public_key.eq(public_key))
+            .first::<(i32, String)>(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general(OPERATION, e))?
+            .ok_or_else(|| WalletStorageError::NotFound {
+                operation: OPERATION,
+                entity: "imported_key".to_string(),
+                key: public_key.to_string(),
+            })?;
+        let key_type = key_type
+            .parse::<KeyType>()
+            .map_err(|_| WalletStorageError::DecodingError {
+                operation: OPERATION,
+                item: "imported_key",
+                details: format!("Failed to parse key type: {}", key_type),
+            })?;
+        Ok((id as ImportedKeyId, key_type))
     }
 
     // -------------------------------- Config -------------------------------- //

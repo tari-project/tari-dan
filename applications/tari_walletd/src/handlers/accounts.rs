@@ -43,7 +43,9 @@ use tari_ootle_wallet_crypto::{
 };
 use tari_ootle_wallet_sdk::{
     apis::{
+        accounts::AccountsApiError,
         confidential_transfer::ConfidentialTransferParams,
+        key_manager::KeyManagerApiError,
         stealth_outputs::{StealthOutputsApiError, TransferStatementParams},
         stealth_transfer::{InputsToSpend, StealthTransferParams, TransferOutput},
         substate::{SubstateApiError, ValidatorScanResult},
@@ -293,7 +295,13 @@ pub async fn handle_import_view_only(
             if e.is_name_exists_error() ||
                 e.is_account_exists_error() ||
                 e.is_invalid_view_only_account_error() ||
-                e.is_view_key_used_error()
+                e.is_view_key_used_error() ||
+                matches!(
+                    e,
+                    AccountsApiError::KeyManagerApiError(
+                        KeyManagerApiError::KeyAlreadyImportedWithDifferentType { .. }
+                    )
+                )
             {
                 invalid_request(e)
             } else {
@@ -3302,6 +3310,50 @@ mod create_stealth_transfer_statement_handler_tests {
         .await
         .unwrap();
         assert_eq!(listed.accounts.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn imported_keys_keep_their_type() {
+        use tari_ootle_wallet_sdk::models::KeyType;
+        use tari_ootle_walletd_client::types::KeysImportRequest;
+
+        use crate::handlers::keys::handle_import;
+
+        let test = setup().await;
+        let admin = test.bearer("admin");
+        let secret_key = RistrettoSecretKey::random(&mut rand::rng());
+        let import_key = |key_type| {
+            handle_import(&test.context, Some(&admin), KeysImportRequest {
+                secret_key: secret_key.clone(),
+                key_type,
+            })
+        };
+        let imported = import_key(KeyType::GeneralPurpose).await.unwrap();
+        assert_eq!(
+            import_key(KeyType::GeneralPurpose).await.unwrap().key_id,
+            imported.key_id
+        );
+
+        let err = import_key(KeyType::ViewOnly)
+            .await
+            .expect_err("re-importing a key as another type is rejected");
+        assert_invalid_request(&err, "already imported as GeneralPurpose");
+
+        let err = handle_import_view_only(&test.context, Some(&admin), AccountsImportViewOnlyRequest {
+            account_name: "watch".to_string(),
+            account_public_key: RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::random(&mut rand::rng()))
+                .to_byte_type(),
+            view_secret_key: secret_key.clone(),
+            birthday_epoch: None,
+            is_default: None,
+        })
+        .await
+        .expect_err("a view-only import of an imported key is rejected");
+        assert_invalid_request(&err, "already an imported key");
+
+        let key_manager = test.context.wallet_sdk().key_manager_api();
+        assert!(key_manager.is_signing_key(imported.key_id).unwrap());
+        assert_eq!(key_manager.get_key(imported.key_id).unwrap().secret, secret_key);
     }
 
     #[tokio::test]

@@ -173,14 +173,20 @@ impl<'a, TSpec: WalletSdkSpec> KeyManagerApi<'a, TSpec> {
             })
         })?;
         let public_key = RistrettoPublicKey::from_secret_key(secret_key).to_hex();
-        let id = self
-            .store
-            .with_write_tx(|tx| tx.key_manager_insert_imported_key(label, &public_key, &encrypted_key, key_type))?;
-        let mut imported_keys = self.imported_keys.lock().unwrap();
+        // Re-importing a key keeps its type, so a key never changes between signing and view-only
+        let id = self.store.with_write_tx(|tx| {
+            if let Some((_, existing)) = tx.key_manager_get_imported_key_by_public_key(&public_key).optional()? &&
+                existing != key_type
+            {
+                return Err(KeyManagerApiError::KeyAlreadyImportedWithDifferentType {
+                    existing,
+                    requested: key_type,
+                });
+            }
+            Ok(tx.key_manager_insert_imported_key(label, &public_key, &encrypted_key, key_type)?)
+        })?;
         if key_type == KeyType::ViewOnly {
-            imported_keys.insert(id, secret_key.clone());
-        } else {
-            imported_keys.remove(&id);
+            self.imported_keys.lock().unwrap().insert(id, secret_key.clone());
         }
         Ok(KeyId::imported(id))
     }
@@ -498,6 +504,8 @@ pub enum KeyManagerApiError {
     InvalidKeyId { details: String },
     #[error("Key {key_id} is not a signing key: only account, transaction, nonce and imported keys sign")]
     NotASigningKey { key_id: KeyId },
+    #[error("The key is already imported as {existing}, not {requested}")]
+    KeyAlreadyImportedWithDifferentType { existing: KeyType, requested: KeyType },
     #[error("Cipher error: {0}")]
     CipherError(#[from] CipherError),
 }
