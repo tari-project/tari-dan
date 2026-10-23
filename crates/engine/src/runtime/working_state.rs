@@ -1393,9 +1393,10 @@ impl<TStore: StateReader> WorkingState<TStore> {
     ) -> Result<(), RuntimeError> {
         // Check that no vaults were dropped
         if let Some(prev_state) = previous_state {
+            let next_vaults = next_state.vault_ids().iter().collect::<HashSet<_>>();
             for existing_vault in prev_state.vault_ids() {
                 // Vaults can never be removed from components
-                if !next_state.vault_ids().contains(existing_vault) {
+                if !next_vaults.contains(existing_vault) {
                     return Err(RuntimeError::OrphanedSubstate {
                         id: (*existing_vault).into(),
                     });
@@ -1709,10 +1710,11 @@ impl<TStore: StateReader> WorkingState<TStore> {
         // A bucket or proof this frame created is either consumed here or named in the return value. One that is
         // still live and unreturned has no owner, so it fails the call. An emptied bucket carries nothing and is
         // tolerated, matching `validate_finalized`, so that the transaction has one rule for it rather than two.
+        let returned_buckets = returned.bucket_ids().iter().collect::<HashSet<_>>();
         let dangling_buckets = scope
             .buckets_owed()
             .filter(|id| self.buckets.get(id).is_some_and(|bucket| !bucket.is_empty()))
-            .filter(|id| !returned.bucket_ids().contains(id))
+            .filter(|id| !returned_buckets.contains(id))
             .copied()
             .collect::<Vec<_>>();
         if !dangling_buckets.is_empty() {
@@ -1721,10 +1723,11 @@ impl<TStore: StateReader> WorkingState<TStore> {
             });
         }
 
+        let returned_proofs = returned.proof_ids().iter().collect::<HashSet<_>>();
         let dangling_proofs = scope
             .proofs_owed()
             .filter(|id| self.proofs.contains_key(id))
-            .filter(|id| !returned.proof_ids().contains(id))
+            .filter(|id| !returned_proofs.contains(id))
             .copied()
             .collect::<Vec<_>>();
         if !dangling_proofs.is_empty() {

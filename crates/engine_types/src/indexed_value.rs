@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{any::type_name, ops::ControlFlow};
+use std::{any::type_name, collections::HashSet, hash::Hash, ops::ControlFlow};
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{BorError, FromTagAndValue, ValueVisitor, decode};
@@ -371,7 +371,8 @@ impl IndexedWellKnownTypes {
     }
 }
 
-fn diff_vec<T: PartialEq + Clone>(a: &[T], b: &[T]) -> Vec<T> {
+fn diff_vec<T: Eq + Hash + Clone>(a: &[T], b: &[T]) -> Vec<T> {
+    let b = b.iter().collect::<HashSet<_>>();
     a.iter().filter(|x| !b.contains(x)).cloned().collect()
 }
 
@@ -832,6 +833,18 @@ mod tests {
 
         assert_eq!(diff.bucket_ids, [BucketId::from(2)]);
         assert_eq!(diff.proof_ids, [ProofId::from(3), ProofId::from(4)]);
+    }
+
+    #[test]
+    fn diff_keeps_order_and_duplicates_of_new_values() {
+        let [a, b, c] = [(); 3].map(|_| ResourceAddress::new(new_object_key()));
+        let prev = IndexedWellKnownTypes::from_value(&tari_bor::to_value(&vec![a, a, b]).unwrap()).unwrap();
+        let next = IndexedWellKnownTypes::from_value(&tari_bor::to_value(&vec![c, b, a, c, c]).unwrap()).unwrap();
+
+        let diff = next.diff(&prev);
+
+        assert_eq!(diff.resource_addresses, [c, c, c]);
+        assert!(prev.diff(&next).resource_addresses.is_empty());
     }
 
     #[test]
