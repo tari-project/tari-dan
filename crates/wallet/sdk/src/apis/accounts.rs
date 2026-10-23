@@ -206,24 +206,35 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
                     address: account_address,
                 });
             }
-            if tx
-                .key_manager_get_imported_key_by_public_key(&view_public_key.to_hex())
-                .optional()?
-                .is_some()
-            {
-                return Err(AccountsApiError::ViewKeyAlreadyImported);
-            }
             if let Some((address, _)) = derived_view_keys.iter().find(|(_, key)| *key == view_public_key) {
                 return Err(AccountsApiError::ViewKeyAlreadyUsed { address: *address });
             }
 
-            let view_key_id = self.key_manager_api.insert_imported_key(
-                tx,
-                &view_public_key.to_hex(),
-                view_secret_key,
-                &encrypted_view_key,
-                KeyType::ViewOnly,
-            )?;
+            // A view key that was imported on its own (keys.import) and is not linked to an account is reused
+            let existing = tx
+                .key_manager_get_imported_key_by_public_key(&view_public_key.to_hex())
+                .optional()?;
+            let view_key_id = match existing {
+                Some((id, KeyType::ViewOnly)) => {
+                    let count = tx.accounts_count()?;
+                    let is_linked = tx.accounts_get_many(0, count as usize)?.iter().any(|account| {
+                        account.view_only_key_id == KeyId::imported(id) ||
+                            account.owner_key_id == Some(KeyId::imported(id))
+                    });
+                    if is_linked {
+                        return Err(AccountsApiError::ViewKeyAlreadyImported);
+                    }
+                    id
+                },
+                Some(_) => return Err(AccountsApiError::ViewKeyAlreadyImported),
+                None => self.key_manager_api.insert_imported_key(
+                    tx,
+                    &view_public_key.to_hex(),
+                    view_secret_key,
+                    &encrypted_view_key,
+                    KeyType::ViewOnly,
+                )?,
+            };
             Self::insert_account(
                 tx,
                 account_name,
@@ -797,7 +808,7 @@ pub enum AccountsApiError {
     InvalidViewOnlyAccount { reason: String },
     #[error("The view key is already used by account {address}")]
     ViewKeyAlreadyUsed { address: ComponentAddress },
-    #[error("The view key is already an imported key")]
+    #[error("The view key is already an imported key of another type or account")]
     ViewKeyAlreadyImported,
     #[error("A view-only account cannot be the default account")]
     ViewOnlyAccountCannotBeDefault,

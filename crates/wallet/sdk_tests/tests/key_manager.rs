@@ -92,3 +92,22 @@ fn imported_keys_are_decrypted_once_and_updated_on_import() {
     assert_ne!(second_id, KeyId::imported(first_id));
     assert_eq!(test.sdk().key_manager_api().get_key(second_id).unwrap().secret, second);
 }
+
+#[test]
+fn imported_key_ids_above_the_stored_range_are_not_found() {
+    let test = Test::new();
+    let key_manager = test.sdk().key_manager_api();
+    let secret = RistrettoSecretKey::random(&mut rand::rng());
+    let KeyId::Imported { local_key_id } = key_manager.import_key("view", &secret, KeyType::ViewOnly).unwrap() else {
+        panic!("import_key returns an imported key id");
+    };
+
+    let alias = KeyId::imported(local_key_id + (1 << 32));
+    assert!(key_manager.get_key(alias).is_err());
+    // A key cached under the alias would be returned here
+    assert!(test.sdk().key_manager_api().get_key(alias).is_err());
+    assert_eq!(
+        key_manager.get_key(KeyId::imported(local_key_id)).unwrap().secret,
+        secret
+    );
+}

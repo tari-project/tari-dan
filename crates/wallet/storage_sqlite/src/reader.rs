@@ -185,20 +185,23 @@ impl WalletStoreReader for ReadTransaction<'_> {
         const OPERATION: &str = "key_manager_get_raw_imported_key";
         use crate::schema::key_manager_imported_keys;
 
+        let not_found = || WalletStorageError::NotFound {
+            operation: OPERATION,
+            entity: "imported_key".to_string(),
+            key: id.to_string(),
+        };
+        let row_id = i32::try_from(id).map_err(|_| not_found())?;
+
         let (key_type, data) = key_manager_imported_keys::table
             .select((
                 key_manager_imported_keys::key_type,
                 key_manager_imported_keys::encrypted_secret,
             ))
-            .filter(key_manager_imported_keys::id.eq(id as i32))
+            .filter(key_manager_imported_keys::id.eq(row_id))
             .first::<(String, Vec<u8>)>(self.connection())
             .optional()
             .map_err(|e| WalletStorageError::general(OPERATION, e))?
-            .ok_or_else(|| WalletStorageError::NotFound {
-                operation: OPERATION,
-                entity: "imported_key".to_string(),
-                key: id.to_string(),
-            })?;
+            .ok_or_else(not_found)?;
 
         Ok((
             key_type
@@ -216,17 +219,20 @@ impl WalletStoreReader for ReadTransaction<'_> {
         const OPERATION: &str = "key_manager_get_imported_public_key";
         use crate::schema::key_manager_imported_keys;
 
+        let not_found = || WalletStorageError::NotFound {
+            operation: OPERATION,
+            entity: "imported_key".to_string(),
+            key: id.to_string(),
+        };
+        let row_id = i32::try_from(id).map_err(|_| not_found())?;
+
         key_manager_imported_keys::table
             .select(key_manager_imported_keys::public_key)
-            .filter(key_manager_imported_keys::id.eq(id as i32))
+            .filter(key_manager_imported_keys::id.eq(row_id))
             .first::<String>(self.connection())
             .optional()
             .map_err(|e| WalletStorageError::general(OPERATION, e))?
-            .ok_or_else(|| WalletStorageError::NotFound {
-                operation: OPERATION,
-                entity: "imported_key".to_string(),
-                key: id.to_string(),
-            })
+            .ok_or_else(not_found)
     }
 
     fn key_manager_get_imported_key_by_public_key(

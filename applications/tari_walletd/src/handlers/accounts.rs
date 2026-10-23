@@ -327,6 +327,11 @@ pub async fn handle_export_view_key(
     let sdk = context.wallet_sdk();
     let account = get_account(&req.account, &sdk.accounts_api())?;
     let view_key = sdk.key_manager_api().get_key(account.view_only_key_id())?;
+    warn!(
+        target: LOG_TARGET,
+        "Exported the view key of account {}.",
+        account.component_address()
+    );
 
     Ok(AccountsExportViewKeyResponse {
         account_public_key: *account.owner_public_key(),
@@ -3390,6 +3395,44 @@ mod create_stealth_transfer_statement_handler_tests {
             accounts.get_default().unwrap().component_address(),
             created.account.component_address()
         );
+    }
+
+    #[tokio::test]
+    async fn view_only_import_reuses_an_unlinked_imported_view_key() {
+        use tari_ootle_wallet_sdk::models::KeyType;
+        use tari_ootle_walletd_client::types::KeysImportRequest;
+
+        use crate::handlers::keys::handle_import;
+
+        let test = setup().await;
+        let admin = test.bearer("admin");
+        let view_secret_key = RistrettoSecretKey::random(&mut rand::rng());
+        let imported = handle_import(&test.context, Some(&admin), KeysImportRequest {
+            secret_key: view_secret_key.clone(),
+            key_type: KeyType::ViewOnly,
+        })
+        .await
+        .unwrap();
+        let request = |name: &str| AccountsImportViewOnlyRequest {
+            account_name: name.to_string(),
+            account_public_key: RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::random(&mut rand::rng()))
+                .to_byte_type(),
+            view_secret_key: view_secret_key.clone(),
+            birthday_epoch: None,
+            is_default: None,
+        };
+
+        handle_import_view_only(&test.context, Some(&admin), request("watch"))
+            .await
+            .unwrap();
+        let watch = ComponentAddressOrName::Name("watch".to_string());
+        let account = get_account(&watch, &test.context.wallet_sdk().accounts_api()).unwrap();
+        assert_eq!(account.view_only_key_id(), imported.key_id);
+
+        let err = handle_import_view_only(&test.context, Some(&admin), request("watch2"))
+            .await
+            .expect_err("a view key linked to an account is not reused");
+        assert_invalid_request(&err, "already an imported key");
     }
 
     #[tokio::test]

@@ -746,14 +746,28 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
             if !matches!(account.view_only_key_id, KeyId::Imported { .. }) {
                 continue;
             }
-            let account_key = account
+            let loaded = account
                 .owner_key_id
                 .map(|key_id| self.key_manager_api.get_key(key_id))
-                .transpose()?;
+                .transpose()
+                .and_then(|account_key| Ok((account_key, self.key_manager_api.get_key(account.view_only_key_id)?)));
+            // One unreadable key must not stop outputs being checked for every other account
+            let (account_key, view_only_key) = match loaded {
+                Ok(keys) => keys,
+                Err(e) => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "⚠️ Skipping account {} when checking outputs: its keys could not be loaded: {}",
+                        account.component_address,
+                        e
+                    );
+                    continue;
+                },
+            };
             keys.push(AccountAndViewKeys {
                 account_public_key: account.owner_public_key,
                 account_key,
-                view_only_key: self.key_manager_api.get_key(account.view_only_key_id)?,
+                view_only_key,
             });
         }
         Ok(keys)
