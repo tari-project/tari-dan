@@ -77,6 +77,8 @@ struct ProvingNetworkState {
     substates: HashMap<SubstateId, ServedSubstate>,
     /// How many of the next substate queries fail as if the indexer could not be reached.
     failing_substate_queries: usize,
+    /// How many of the next substate fetches fail as if the indexer could not be reached.
+    failing_substate_fetches: usize,
     /// Requests for a committee.
     committee_requests: usize,
     /// Transactions submitted to the network.
@@ -131,6 +133,7 @@ impl ProvingNetwork {
                 walk_requests: 0,
                 substates: HashMap::new(),
                 failing_substate_queries: 0,
+                failing_substate_fetches: 0,
                 committee_requests: 0,
                 submissions: 0,
                 substate_queries: 0,
@@ -244,6 +247,11 @@ impl ProvingNetwork {
         self.state.lock().unwrap().failing_substate_queries = count;
     }
 
+    /// Fails the next `count` substate fetches as if the indexer could not be reached.
+    pub fn fail_substate_fetches(&self, count: usize) {
+        self.state.lock().unwrap().failing_substate_fetches = count;
+    }
+
     pub fn set_result(&self, result: TransactionQueryResult) {
         self.state.lock().unwrap().result = Some(result);
     }
@@ -320,6 +328,10 @@ impl WalletNetworkInterface for ProvingNetwork {
     ) -> Result<FetchedSubstates, Self::Error> {
         let mut state = self.state.lock().unwrap();
         state.substate_fetches += 1;
+        if state.failing_substate_fetches > 0 {
+            state.failing_substate_fetches -= 1;
+            return Err(ProvingNetworkError::Unreachable);
+        }
         let mut fetched = FetchedSubstates::default();
         for id in substate_ids {
             let Some(served) = state.substates.get(&id) else {

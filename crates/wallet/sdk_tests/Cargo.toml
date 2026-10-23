@@ -38,4 +38,4 @@ time = { workspace = true }
 futures = { workspace = true }
 tokio-stream = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "time"] }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "test-util", "time"] }
