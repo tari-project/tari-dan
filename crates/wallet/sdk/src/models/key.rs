@@ -7,9 +7,10 @@ use anyhow::anyhow;
 use tari_bor::{Deserialize, Serialize};
 use tari_crypto::{
     keys::PublicKey as _,
-    ristretto::{RistrettoPublicKey, RistrettoSchnorr, RistrettoSecretKey},
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
 use tari_ootle_address::RistrettoOotleAddress;
+use tari_ootle_common_types::signature::{Sr25519SignatureBytes, TRANSACTION_SIGNING_CONTEXT};
 use tari_ootle_transaction::Signable;
 use tari_template_lib::types::crypto::RistrettoPublicKeyBytes;
 
@@ -187,10 +188,9 @@ impl WalletSecretKey {
         RistrettoPublicKey::from_secret_key(&self.secret)
     }
 
-    pub fn sign<T: Signable<C>, C>(&self, context: C, item: &T) -> RistrettoSchnorr {
+    pub fn sign<T: Signable<C>, C>(&self, context: C, item: &T) -> Sr25519SignatureBytes {
         let message = item.to_signing_message(context);
-        RistrettoSchnorr::sign(&self.secret, message.as_ref(), &mut rand::rng())
-            .expect("message is hashed internally into canonical form, so signing is infallible")
+        TRANSACTION_SIGNING_CONTEXT.sign(&self.secret, message.as_ref())
     }
 }
 

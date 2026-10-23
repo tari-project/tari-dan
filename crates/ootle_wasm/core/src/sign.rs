@@ -3,9 +3,10 @@
 
 use tari_crypto::{
     keys::{PublicKey, SecretKey},
-    ristretto::{RistrettoPublicKey, RistrettoSchnorr, RistrettoSecretKey},
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
     tari_utilities::ByteArray,
 };
+use tari_ootle_common_types::signature::TRANSACTION_SIGNING_CONTEXT;
 
 use crate::error::OotleWasmError;
 
@@ -35,21 +36,15 @@ pub fn generate_keypair() -> KeypairResult {
     }
 }
 
-/// Sign a message with a Ristretto secret key using Schnorr signatures.
-///
-/// The secret key should be provided as raw bytes.
-/// The message is an arbitrary byte slice (typically a transaction hash).
-pub fn schnorr_sign(secret_key: &[u8], message: &[u8]) -> Result<SchnorrSignatureResult, OotleWasmError> {
+/// Sign a transaction signing message (the 64-byte transaction hash) with a Ristretto secret key,
+/// both as raw bytes. Returns the 64-byte sr25519 signature.
+pub fn sr25519_sign(secret_key: &[u8], message: &[u8]) -> Result<Vec<u8>, OotleWasmError> {
     let secret_key = RistrettoSecretKey::from_canonical_bytes(secret_key)
         .map_err(|e| OotleWasmError::InvalidSecretKey(e.to_string()))?;
-
-    let sig = RistrettoSchnorr::sign(&secret_key, message, &mut rand::rng())
-        .map_err(|e| OotleWasmError::SigningFailed(e.to_string()))?;
-
-    Ok(SchnorrSignatureResult {
-        public_nonce: sig.get_public_nonce().as_bytes().to_vec(),
-        signature: sig.get_signature().as_bytes().to_vec(),
-    })
+    Ok(TRANSACTION_SIGNING_CONTEXT
+        .sign(&secret_key, message)
+        .as_bytes()
+        .to_vec())
 }
 
 /// Derive the public key from a secret key (both as raw bytes).
@@ -66,12 +61,19 @@ mod tests {
 
     #[test]
     fn sign_and_verify_round_trip() {
-        let secret = RistrettoSecretKey::random(&mut rand::rng());
-        let message = b"hello world";
+        use ootle_byte_type::ToByteType;
+        use tari_ootle_common_types::signature::Sr25519SignatureBytes;
 
-        let result = schnorr_sign(secret.as_bytes(), message).unwrap();
-        assert_eq!(result.public_nonce.len(), 32);
-        assert_eq!(result.signature.len(), 32);
+        let secret = RistrettoSecretKey::random(&mut rand::rng());
+        let public_key = RistrettoPublicKey::from_secret_key(&secret);
+        let message = [1u8; 64];
+
+        let signature: [u8; 64] = sr25519_sign(secret.as_bytes(), &message).unwrap().try_into().unwrap();
+        assert!(TRANSACTION_SIGNING_CONTEXT.verify(
+            &Sr25519SignatureBytes::from_array(signature),
+            &public_key.to_byte_type(),
+            &message
+        ));
     }
 
     #[test]

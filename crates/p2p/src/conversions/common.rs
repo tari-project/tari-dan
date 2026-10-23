@@ -27,7 +27,6 @@ use tari_consensus_types::ValidatorSignatureBytes;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_engine_types::substate::SubstateId;
 use tari_ootle_common_types::{Epoch, SubstateAddress, SubstateRequirement, SubstateRequirementRef, SubstateVersion};
-use tari_ootle_transaction::TransactionSignature;
 use tari_template_lib::types::{
     Amount,
     crypto::{
@@ -91,35 +90,6 @@ impl From<&ValidatorSignatureBytes> for proto::common::SignatureAndPublicKey {
             public_nonce: value.signature.public_nonce().to_vec(),
             signature: value.signature.signature().to_vec(),
             public_key: value.public_key.as_bytes().to_vec(),
-        }
-    }
-}
-
-//---------------------------------- TransactionSignature --------------------------------------------//
-
-impl TryFrom<proto::common::SignatureAndPublicKey> for TransactionSignature {
-    type Error = anyhow::Error;
-
-    fn try_from(sig: proto::common::SignatureAndPublicKey) -> Result<Self, Self::Error> {
-        let public_key =
-            RistrettoPublicKeyBytes::from_bytes(&sig.public_key).context("Public key was not valid bytes")?;
-        let public_nonce =
-            RistrettoPublicKeyBytes::from_bytes(&sig.public_nonce).context("public nonce bytes length != 32")?;
-        let signature = Scalar32Bytes::from_bytes(&sig.signature).context("signature bytes length != 32")?;
-
-        Ok(Self::new(
-            public_key,
-            SchnorrSignatureBytes::new(public_nonce, signature),
-        ))
-    }
-}
-
-impl From<&TransactionSignature> for proto::common::SignatureAndPublicKey {
-    fn from(value: &TransactionSignature) -> Self {
-        Self {
-            public_nonce: value.signature().public_nonce().to_vec(),
-            signature: value.signature().signature().to_vec(),
-            public_key: value.public_key().to_vec(),
         }
     }
 }

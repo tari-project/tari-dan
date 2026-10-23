@@ -21,6 +21,7 @@ use ootle_ledger_client::{Exchange, LedgerClient, LedgerClientError};
 use ootle_ledger_common::arg_types::{KeyType, SignMode, SigningField, StealthTweak};
 use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::ByteArray};
 use tari_ootle_address::OotleAddress;
+use tari_ootle_common_types::signature::Sr25519SignatureBytes;
 use tari_ootle_transaction::{
     IntoSigned,
     PreimageField,
@@ -31,7 +32,7 @@ use tari_ootle_transaction::{
     UnsealedTransaction,
     UnsignedTransaction,
 };
-use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
+use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{
     Address,
@@ -103,7 +104,7 @@ where
         mode: SignMode,
         stealth_public_nonce: Option<[u8; 32]>,
         segments: Vec<PreimageSegment>,
-    ) -> signer::Result<(RistrettoPublicKeyBytes, SchnorrSignatureBytes)> {
+    ) -> signer::Result<(RistrettoPublicKeyBytes, Sr25519SignatureBytes)> {
         let refs: Vec<(SigningField, &[u8])> = segments
             .iter()
             .map(|seg| (to_wire(seg.field), seg.bytes.as_slice()))
@@ -123,8 +124,7 @@ where
             .map_err(map_client_err)?;
 
         let public_key = RistrettoPublicKeyBytes::from(response.public_key);
-        let signature = SchnorrSignatureBytes::try_from(&response.signature[..])
-            .map_err(|_| SignerError::other("device returned malformed signature bytes"))?;
+        let signature = Sr25519SignatureBytes::from_array(response.signature);
         Ok((public_key, signature))
     }
 

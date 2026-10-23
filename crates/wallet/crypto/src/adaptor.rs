@@ -9,17 +9,21 @@
 //! pre-signature scalar from the completed one), which is what makes a cross-chain atomic swap
 //! atomic — completing one chain's signature publishes the secret that unlocks the other.
 //!
-//! The completed signature is an ordinary [`RistrettoSchnorr`] whose public nonce is `R + T`, so it
-//! verifies with the stock verifier and needs no consensus change. The challenge is built with
-//! tari_crypto's own [`RistrettoSchnorr::construct_domain_separated_challenge`] over the **offset**
-//! nonce `R + T`, so a completed adaptor signature is byte-for-byte one the standard signer could
-//! have produced over that nonce.
+//! The completed signature is an ordinary sr25519 signature ([`Sr25519SignatureBytes`]) whose public
+//! nonce is `R + T`, so it verifies as a transaction signature and needs no consensus change. The
+//! challenge is the transaction signing challenge under [`TRANSACTION_SIGNING_CONTEXT`], over the
+//! **offset** nonce `R + T`, so a completed adaptor signature is byte-for-byte one the standard signer
+//! could have produced over that nonce.
 
-use blake2::Blake2b;
-use digest::consts::U64;
 use tari_crypto::{
     keys::{PublicKey, SecretKey},
-    ristretto::{RistrettoPublicKey, RistrettoSchnorr, RistrettoSecretKey},
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
+};
+use tari_ootle_common_types::signature::{
+    Sr25519SignatureBytes,
+    TRANSACTION_SIGNING_CONTEXT,
+    components,
+    from_components,
 };
 use tari_utilities::ByteArray;
 
@@ -27,7 +31,7 @@ use tari_utilities::ByteArray;
 ///
 /// `public_nonce` is the offset nonce `R + T` that the completed signature will carry; `signature`
 /// is the pre-signature scalar `ŝ = r + e·x`, which does **not** include `t`. Completing with `t`
-/// yields `RistrettoSchnorr::new(R + T, ŝ + t)`.
+/// yields the signature `(R + T, ŝ + t)`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RistrettoAdaptorSignature {
     public_nonce: RistrettoPublicKey,
@@ -46,24 +50,15 @@ impl RistrettoAdaptorSignature {
     }
 }
 
-/// The challenge scalar the stock signer/verifier uses: `from_uniform_bytes(H(public_nonce ‖ public_key ‖ message))`,
-/// where `H` is tari_crypto's domain-separated `Blake2b<U64>` challenge. Reusing the library's own construction is
-/// what guarantees a completed adaptor signature verifies against the unchanged verifier.
-fn challenge(public_nonce: &RistrettoPublicKey, public_key: &RistrettoPublicKey, message: &[u8]) -> RistrettoSecretKey {
-    let hash =
-        RistrettoSchnorr::construct_domain_separated_challenge::<_, Blake2b<U64>>(public_nonce, public_key, message);
-    RistrettoSecretKey::from_uniform_bytes(hash.as_ref()).expect("Blake2b<U64> yields 64 uniform bytes")
-}
-
 /// True if `point` is the Ristretto identity, whose canonical encoding is 32 zero bytes. Uses a plain
 /// byte comparison rather than the constant-time point `==`, since these are public values.
 fn is_identity(point: &RistrettoPublicKey) -> bool {
     point.as_bytes().iter().all(|&b| b == 0)
 }
 
-/// Produces an adaptor pre-signature `ŝ = r + e·x` with `e = H((R + T) ‖ P ‖ message)`, where
+/// Produces an adaptor pre-signature `ŝ = r + e·x` with `e = H(R + T, P, message)`, where
 /// `R = r·G` for a freshly sampled nonce `r`, `P = secret·G`, and `T = adaptor_point`. The challenge
-/// binds the **offset** nonce `R + T` so [`complete`] yields a signature the stock verifier accepts.
+/// binds the **offset** nonce `R + T` so [`complete`] yields a valid transaction signature.
 ///
 /// The nonce is drawn internally from the OS CSPRNG on each call, so it cannot be reused across
 /// signatures (nonce reuse across two messages would leak `secret`).
@@ -76,7 +71,8 @@ pub fn sign(
     let public_key = RistrettoPublicKey::from_secret_key(secret);
     let r = RistrettoPublicKey::from_secret_key(&nonce);
     let public_nonce = &r + adaptor_point; // R + T
-    let e = challenge(&public_nonce, &public_key, message);
+    // The verifier's own challenge is what makes a completed adaptor signature a transaction signature.
+    let e = TRANSACTION_SIGNING_CONTEXT.challenge(&public_nonce, &public_key, message);
     let ek = &e * secret;
     let s_hat = &nonce + &ek; // ŝ = r + e·x
     RistrettoAdaptorSignature {
@@ -87,7 +83,7 @@ pub fn sign(
 
 /// Verifies an adaptor pre-signature against `public_key`, `adaptor_point` (`T`) and `message`,
 /// checking `ŝ·G + T == (R + T) + e·P`. A `true` result guarantees that [`complete`] with
-/// the discrete log of `T` produces a signature valid under the stock verifier.
+/// the discrete log of `T` produces a valid transaction signature.
 pub fn verify(
     pre: &RistrettoAdaptorSignature,
     public_key: &RistrettoPublicKey,
@@ -100,7 +96,7 @@ pub fn verify(
     if is_identity(public_key) || is_identity(&pre.public_nonce) || is_identity(adaptor_point) {
         return false;
     }
-    let e = challenge(&pre.public_nonce, public_key, message);
+    let e = TRANSACTION_SIGNING_CONTEXT.challenge(&pre.public_nonce, public_key, message);
     let s_hat_g = RistrettoPublicKey::from_secret_key(&pre.signature);
     let lhs = &s_hat_g + adaptor_point;
     let rhs = &pre.public_nonce + &e * public_key;
@@ -108,25 +104,28 @@ pub fn verify(
 }
 
 /// Completes the pre-signature with the adaptor secret `t` (`T = t·G`), yielding an ordinary
-/// signature `(R + T, ŝ + t)` that verifies with the stock [`RistrettoSchnorr`] verifier.
+/// signature `(R + T, ŝ + t)` that verifies as a transaction signature.
 ///
 /// The caller is responsible for ensuring `t` is the discrete log of the adaptor point the
 /// pre-signature was produced under; verify with [`verify`] first if in doubt.
-pub fn complete(pre: &RistrettoAdaptorSignature, t: &RistrettoSecretKey) -> RistrettoSchnorr {
+pub fn complete(pre: &RistrettoAdaptorSignature, t: &RistrettoSecretKey) -> Sr25519SignatureBytes {
     let s = &pre.signature + t;
-    RistrettoSchnorr::new(pre.public_nonce.clone(), s)
+    from_components(&pre.public_nonce, &s)
 }
 
 /// Recovers the adaptor secret `t` from a pre-signature and its completed signature: `t = s − ŝ`.
 ///
 /// This is the swap-reveal primitive: a watcher who holds the pre-signature and observes the
-/// completed signature on-chain recovers the secret that unlocks the other leg.
-pub fn extract(pre: &RistrettoAdaptorSignature, completed: &RistrettoSchnorr) -> RistrettoSecretKey {
-    completed.get_signature() - &pre.signature
+/// completed signature on-chain recovers the secret that unlocks the other leg. Returns `None` when
+/// `completed` is not a well-formed signature.
+pub fn extract(pre: &RistrettoAdaptorSignature, completed: &Sr25519SignatureBytes) -> Option<RistrettoSecretKey> {
+    let (_, s) = components(completed)?;
+    Some(&s - &pre.signature)
 }
 
 #[cfg(test)]
 mod tests {
+    use ootle_byte_type::ToByteType;
     use tari_crypto::ristretto::{RistrettoPublicKey, RistrettoSecretKey};
 
     use super::*;
@@ -140,15 +139,15 @@ mod tests {
     const MESSAGE: &[u8] = b"adaptor signature test message";
 
     #[test]
-    fn complete_yields_a_signature_the_stock_verifier_accepts() {
+    fn complete_yields_a_valid_transaction_signature() {
         let (x, p) = keypair();
         let (t, big_t) = keypair();
         let pre = sign(&x, &big_t, MESSAGE);
         assert!(verify(&pre, &p, &big_t, MESSAGE));
 
         let sig = complete(&pre, &t);
-        // The completed signature is an ordinary RistrettoSchnorr with no adaptor awareness needed.
-        assert!(sig.verify(&p, MESSAGE));
+        // The completed signature is an ordinary transaction signature with no adaptor awareness needed.
+        assert!(TRANSACTION_SIGNING_CONTEXT.verify(&sig, &p.to_byte_type(), MESSAGE));
     }
 
     #[test]
@@ -158,7 +157,7 @@ mod tests {
         let pre = sign(&x, &big_t, MESSAGE);
         let sig = complete(&pre, &t);
 
-        assert_eq!(extract(&pre, &sig), t);
+        assert_eq!(extract(&pre, &sig), Some(t));
     }
 
     #[test]
@@ -168,7 +167,7 @@ mod tests {
         let (wrong_t, _) = keypair();
         let pre = sign(&x, &big_t, MESSAGE);
         let sig = complete(&pre, &wrong_t);
-        assert!(!sig.verify(&p, MESSAGE));
+        assert!(!TRANSACTION_SIGNING_CONTEXT.verify(&sig, &p.to_byte_type(), MESSAGE));
     }
 
     #[test]

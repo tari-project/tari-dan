@@ -38,7 +38,8 @@
 //! only the signer's public key and the signature — no secret material.
 
 use serde::{Deserialize, Serialize};
-use tari_crypto::ristretto::{RistrettoSchnorr, RistrettoSecretKey};
+use tari_crypto::ristretto::RistrettoSecretKey;
+use tari_ootle_common_types::signature::{Sr25519SignatureBytes, TRANSACTION_SIGNING_CONTEXT, components};
 use tari_ootle_transaction::{MainSigner, TransactionSignature, UnsignedTransaction};
 
 use crate::{
@@ -76,7 +77,7 @@ impl UnsignedTransactionRecord {
     }
 }
 
-/// One co-signer's authorization: the signer's public key and the Schnorr signature over the auth
+/// One co-signer's authorization: the signer's public key and the sr25519 signature over the auth
 /// message (which commits to A's seal public key + the unsigned tx).
 ///
 /// Carries no secret material. Serializes as `{ "public_key": "<hex>", "signature": "<hex>" }`
@@ -85,7 +86,7 @@ impl UnsignedTransactionRecord {
 pub struct Authorization {
     /// The co-signer's public key (the key that authorizes; not the seal signer).
     pub public_key: PublicKeyBytes,
-    /// The Schnorr signature over the authorization message.
+    /// The 64-byte sr25519 signature over the authorization message.
     pub signature: SignatureBytes,
 }
 
@@ -93,17 +94,22 @@ impl Authorization {
     /// Reconstructs the internal [`TransactionSignature`] this authorization carries (for attaching to
     /// the unsealed transaction at seal time).
     fn to_internal(&self) -> Result<TransactionSignature, OotleSdkError> {
-        use ootle_byte_type::ConvertFromByteType;
-        use tari_template_lib_types::crypto::SchnorrSignatureBytes;
-
         let pk = self.public_key.to_internal();
-        let sig_bytes = SchnorrSignatureBytes::from_bytes(self.signature.as_bytes())
-            .map_err(|e| OotleSdkError::Key(format!("invalid authorization signature: {e}")))?;
-        // Validate the signature bytes decode into a real Schnorr signature up front (a wrong width /
-        // non-canonical scalar surfaces as KEY here rather than a verify failure at seal time).
-        RistrettoSchnorr::convert_from_byte_type(&sig_bytes)
-            .map_err(|e| OotleSdkError::Key(format!("invalid authorization signature: {e}")))?;
-        Ok(TransactionSignature::new(pk, sig_bytes))
+        let bytes: [u8; Sr25519SignatureBytes::LENGTH] = self.signature.as_bytes().try_into().map_err(|_| {
+            OotleSdkError::Key(format!(
+                "invalid authorization signature: expected {} bytes, got {}",
+                Sr25519SignatureBytes::LENGTH,
+                self.signature.as_bytes().len()
+            ))
+        })?;
+        let signature = Sr25519SignatureBytes::from_array(bytes);
+        // A malformed encoding surfaces as KEY here rather than a verify failure at seal time.
+        if components(&signature).is_none() {
+            return Err(OotleSdkError::Key(
+                "invalid authorization signature: not an sr25519 signature".to_string(),
+            ));
+        }
+        Ok(TransactionSignature::new(pk, signature))
     }
 }
 
@@ -141,7 +147,7 @@ pub fn unsigned_record_for_cosign(
     Ok(UnsignedTransactionRecord::new(unsigned))
 }
 
-/// **Party B.** Authorizes A's unsigned transaction with a fresh random Schnorr nonce, committing to
+/// **Party B.** Authorizes A's unsigned transaction with a fresh random nonce, committing to
 /// A's `seal_public_key`. Returns B's [`Authorization`].
 ///
 /// This is the only RNG site on the co-sign path. Bad key hex ⇒ [`OotleSdkError::Key`].
@@ -152,21 +158,17 @@ pub fn add_signature(
 ) -> Result<Authorization, OotleSdkError> {
     let secret = parse_secret_key(signer_secret)?;
     let message = cosign_auth_message(&seal_public_key.to_internal(), &unsigned.unsigned);
-    let sig = RistrettoSchnorr::sign(&secret, message, &mut rand::rng())
-        .map_err(|e| OotleSdkError::Key(format!("co-sign signing failed: {e}")))?;
+    let sig = TRANSACTION_SIGNING_CONTEXT.sign(&secret, &message);
     Ok(authorization_from_parts(&secret, sig))
 }
 
-/// Packs a signer secret + raw Schnorr signature into the boundary [`Authorization`].
-fn authorization_from_parts(secret: &RistrettoSecretKey, sig: RistrettoSchnorr) -> Authorization {
-    use ootle_byte_type::ToByteType;
-
+/// Packs a signer secret + signature into the boundary [`Authorization`].
+fn authorization_from_parts(secret: &RistrettoSecretKey, sig: Sr25519SignatureBytes) -> Authorization {
     let public_key = public_key_bytes_from_secret(secret);
-    let sig_bytes = sig.to_byte_type();
     Authorization {
         // RistrettoPublicKeyBytes is always 32 bytes; PublicKeyBytes::from_internal cannot mismatch.
         public_key: PublicKeyBytes::from_internal(&public_key),
-        signature: SignatureBytes::from_bytes(&sig_bytes.to_bytes()),
+        signature: SignatureBytes::from_bytes(sig.as_bytes()),
     }
 }
 
@@ -367,19 +369,15 @@ mod tests {
     /// B's authorization verifies against B's public key over the shared message.
     #[test]
     fn authorization_verifies_against_signer_public_key() {
-        use ootle_byte_type::{ConvertFromByteType, FromByteType};
-        use tari_template_lib_types::crypto::SchnorrSignatureBytes;
-
         let record = unsigned_record_for_cosign(&resolved_partial(), None).unwrap();
         let auth = add_signature(&record, &a_seal_pk(), &b_secret_bytes()).unwrap();
 
         let message = cosign_auth_message(&a_seal_pk().to_internal(), record.unsigned());
-        let pk = auth.public_key.to_internal().try_from_byte_type().unwrap();
-        let sig = RistrettoSchnorr::convert_from_byte_type(
-            &SchnorrSignatureBytes::from_bytes(auth.signature.as_bytes()).unwrap(),
-        )
-        .unwrap();
-        assert!(sig.verify(&pk, message), "B's authorization must verify");
+        let sig = Sr25519SignatureBytes::from_array(auth.signature.as_bytes().try_into().unwrap());
+        assert!(
+            TRANSACTION_SIGNING_CONTEXT.verify(&sig, &auth.public_key.to_internal(), &message),
+            "B's authorization must verify"
+        );
         // And it is B's key, not A's.
         let b_pk = RistrettoPublicKey::from_secret_key(&fixed_scalar(99));
         assert_eq!(auth.public_key.as_bytes(), b_pk.as_bytes());

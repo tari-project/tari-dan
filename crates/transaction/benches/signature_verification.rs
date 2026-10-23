@@ -17,11 +17,13 @@
 use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use ootle_byte_type::{ConvertFromByteType, FromByteType, ToByteType};
+use ootle_byte_type::ToByteType;
 use tari_crypto::{
     keys::{PublicKey, SecretKey},
-    ristretto::{RistrettoPublicKey, RistrettoSchnorr, RistrettoSecretKey},
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
+    tari_utilities::ByteArray,
 };
+use tari_ootle_common_types::signature::{TRANSACTION_SIGNING_CONTEXT, components};
 use tari_ootle_transaction::{TransactionSealSignature, TransactionSignature, verify_sealed_batch};
 
 /// `n` valid signatures over `message`, each from a distinct key — the shape a multi-input stealth
@@ -32,8 +34,10 @@ fn signatures(n: usize, message: &[u8; 64]) -> Vec<TransactionSignature> {
         .map(|_| {
             let secret = RistrettoSecretKey::random(&mut rng);
             let public_key = RistrettoPublicKey::from_secret_key(&secret);
-            let signature = RistrettoSchnorr::sign(&secret, message, &mut rng).expect("sign is infallible");
-            TransactionSignature::new(public_key.to_byte_type(), signature.to_byte_type())
+            TransactionSignature::new(
+                public_key.to_byte_type(),
+                TRANSACTION_SIGNING_CONTEXT.sign(&secret, message),
+            )
         })
         .collect()
 }
@@ -44,16 +48,16 @@ fn verify_individually(signatures: &[TransactionSignature], message: [u8; 64]) -
     signatures.iter().all(|sig| sig.verify_message(message))
 }
 
-/// Decoding alone: the two point decompressions every term needs before any equation can be
-/// evaluated, and the floor under both verification paths.
+/// Decoding alone: the key decompression and signature parsing every term needs before any equation
+/// can be evaluated, and the floor under both verification paths.
 ///
 /// A signature reaches a node as bytes, so this cost is unavoidable and cannot be amortised across a
 /// batch — which is what separates the speed-up achievable here from one measured over keys and
 /// nonces that are already decompressed (as `tari_crypto`'s own batch benchmark is).
 fn decode_only(signatures: &[TransactionSignature]) {
     for sig in signatures {
-        let public_key: RistrettoPublicKey = sig.public_key().try_from_byte_type().unwrap();
-        let signature = RistrettoSchnorr::convert_from_byte_type(sig.signature()).unwrap();
+        let public_key = RistrettoPublicKey::from_canonical_bytes(sig.public_key().as_bytes()).unwrap();
+        let signature = components(sig.signature()).unwrap();
         black_box((public_key, signature));
     }
 }
@@ -63,8 +67,10 @@ fn seal(seal_message: &[u8; 64]) -> TransactionSealSignature {
     let mut rng = rand::rng();
     let secret = RistrettoSecretKey::random(&mut rng);
     let public_key = RistrettoPublicKey::from_secret_key(&secret);
-    let signature = RistrettoSchnorr::sign(&secret, seal_message, &mut rng).expect("sign is infallible");
-    TransactionSealSignature::new(public_key.to_byte_type(), signature.to_byte_type())
+    TransactionSealSignature::new(
+        public_key.to_byte_type(),
+        TRANSACTION_SIGNING_CONTEXT.sign(&secret, seal_message),
+    )
 }
 
 fn bench(c: &mut Criterion) {

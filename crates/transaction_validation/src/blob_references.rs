@@ -51,17 +51,14 @@ mod tests {
         Blobs,
         Instruction,
         Network,
+        Sr25519SignatureBytes,
         TransactionSealSignature,
         TransactionSignature,
         UnsealedTransactionV1,
         UnsignedTransactionV1,
         args::InstructionArg,
     };
-    use tari_template_lib::types::{
-        FunctionName,
-        TemplateAddress,
-        crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes},
-    };
+    use tari_template_lib::types::{FunctionName, TemplateAddress, crypto::RistrettoPublicKeyBytes};
 
     use super::*;
 
@@ -94,10 +91,10 @@ mod tests {
         Transaction::new(
             UnsealedTransactionV1::new(unsigned, vec![TransactionSignature::new(
                 RistrettoPublicKeyBytes::zero(),
-                SchnorrSignatureBytes::zero(),
+                Sr25519SignatureBytes::zero(),
             )])
             .into(),
-            TransactionSealSignature::new(RistrettoPublicKeyBytes::zero(), SchnorrSignatureBytes::zero()),
+            TransactionSealSignature::new(RistrettoPublicKeyBytes::zero(), Sr25519SignatureBytes::zero()),
         )
     }
 

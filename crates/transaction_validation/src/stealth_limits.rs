@@ -132,6 +132,7 @@ mod tests {
     use tari_ootle_transaction::{
         Network,
         ResourceAddressRef,
+        Sr25519SignatureBytes,
         TransactionSealSignature,
         TransactionSignature,
         UnsealedTransactionV1,
@@ -142,7 +143,7 @@ mod tests {
         types::{
             Amount,
             EncryptedData,
-            crypto::{PedersenCommitmentBytes, RistrettoPublicKeyBytes, SchnorrSignatureBytes, UtxoTag},
+            crypto::{PedersenCommitmentBytes, RistrettoPublicKeyBytes, UtxoTag},
             stealth::{StealthInput, StealthTransferStatement, StealthUnspentOutput, UnspentOutput},
         },
     };
@@ -210,11 +211,11 @@ mod tests {
                 ),
                 vec![TransactionSignature::new(
                     RistrettoPublicKeyBytes::zero(),
-                    SchnorrSignatureBytes::zero(),
+                    Sr25519SignatureBytes::zero(),
                 )],
             )
             .into(),
-            TransactionSealSignature::new(RistrettoPublicKeyBytes::zero(), SchnorrSignatureBytes::zero()),
+            TransactionSealSignature::new(RistrettoPublicKeyBytes::zero(), Sr25519SignatureBytes::zero()),
         )
     }
 

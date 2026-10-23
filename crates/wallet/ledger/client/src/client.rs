@@ -232,6 +232,7 @@ mod tests {
     }
 
     use indexmap::IndexSet;
+    use tari_ootle_common_types::signature::Sr25519SignatureBytes;
     use tari_ootle_transaction::{
         Blob,
         Blobs,
@@ -244,7 +245,6 @@ mod tests {
         UnsealedTransactionV1,
         UnsignedTransactionV1,
     };
-    use tari_template_lib_types::crypto::SchnorrSignatureBytes;
 
     fn sample_unsigned() -> UnsignedTransactionV1 {
         let mut blobs = Blobs::empty();
@@ -303,7 +303,7 @@ mod tests {
 
         let signature = TransactionSignature::new(
             RistrettoPublicKeyBytes::from(response.public_key),
-            SchnorrSignatureBytes::try_from(&response.signature[..]).unwrap(),
+            Sr25519SignatureBytes::from_array(response.signature),
         );
         assert!(
             signature.verify_v1(&seal_signer, &tx),
@@ -333,7 +333,7 @@ mod tests {
 
         let seal = TransactionSealSignature::new(
             RistrettoPublicKeyBytes::from(response.public_key),
-            SchnorrSignatureBytes::try_from(&response.signature[..]).unwrap(),
+            Sr25519SignatureBytes::from_array(response.signature),
         );
         assert!(seal.verify_v1(&unsealed), "device seal signature did not verify");
     }
@@ -405,7 +405,7 @@ mod tests {
         // And the stealth signature verifies under tari_crypto.
         let signature = TransactionSignature::new(
             RistrettoPublicKeyBytes::from(response.public_key),
-            SchnorrSignatureBytes::try_from(&response.signature[..]).unwrap(),
+            Sr25519SignatureBytes::from_array(response.signature),
         );
         assert!(
             signature.verify_v1(&seal_signer, &tx),

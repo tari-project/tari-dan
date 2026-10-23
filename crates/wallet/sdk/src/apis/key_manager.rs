@@ -6,14 +6,14 @@ use ootle_network::Network;
 use tari_common_types::seeds::cipher_seed;
 use tari_crypto::{
     keys::{PublicKey as _, SecretKey},
-    ristretto::{RistrettoPublicKey, RistrettoSchnorr, RistrettoSecretKey},
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
     tari_utilities::{ByteArray, hex::Hex},
 };
 use tari_ootle_address::RistrettoOotleAddress;
 use tari_ootle_common_types::{
     Epoch,
     optional::{IsNotFoundError, Optional},
-    signature::SignatureOutput,
+    signature::{SignatureOutput, TRANSACTION_SIGNING_CONTEXT},
 };
 use tari_ootle_transaction::Signable;
 use tari_ootle_wallet_crypto::{
@@ -407,8 +407,7 @@ impl<'a, TSpec: WalletSdkSpec> KeyManagerApi<'a, TSpec> {
         T: Signable<C>,
         T::Signature: From<SignatureOutput>,
     {
-        let signature = RistrettoSchnorr::sign(secret_key, item.to_signing_message(context), &mut rand::rng())
-            .expect("RistrettoSchnorr::sign is infallible as it internally hashes the message into canonical form");
+        let signature = TRANSACTION_SIGNING_CONTEXT.sign(secret_key, item.to_signing_message(context).as_ref());
         let public_key = RistrettoPublicKey::from_secret_key(secret_key);
         Ok(SignatureOutput { public_key, signature }.into())
     }

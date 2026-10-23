@@ -57,6 +57,7 @@ mod tests {
     use tari_ootle_transaction::{
         Instruction,
         Network,
+        Sr25519SignatureBytes,
         Transaction,
         TransactionSealSignature,
         TransactionSignature,
@@ -64,11 +65,7 @@ mod tests {
         UnsignedTransactionV1,
         args::InstructionArg,
     };
-    use tari_template_lib::types::{
-        FunctionName,
-        TemplateAddress,
-        crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes},
-    };
+    use tari_template_lib::types::{FunctionName, TemplateAddress, crypto::RistrettoPublicKeyBytes};
 
     use super::*;
 
@@ -91,11 +88,11 @@ mod tests {
                 ),
                 vec![TransactionSignature::new(
                     RistrettoPublicKeyBytes::zero(),
-                    SchnorrSignatureBytes::zero(),
+                    Sr25519SignatureBytes::zero(),
                 )],
             )
             .into(),
-            TransactionSealSignature::new(RistrettoPublicKeyBytes::zero(), SchnorrSignatureBytes::zero()),
+            TransactionSealSignature::new(RistrettoPublicKeyBytes::zero(), Sr25519SignatureBytes::zero()),
         )
     }
 

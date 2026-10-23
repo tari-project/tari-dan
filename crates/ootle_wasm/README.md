@@ -65,7 +65,7 @@ wasm-pack build crates/ootle_wasm/wasm --target bundler --dev --out-dir ../../..
 |---------------------------|-----------------------------------------------------------------------------|-----------------------------------------------------|
 | `borEncodeTransaction`    | `(transactionJson: string) → string`                                        | BOR-encode a Transaction JSON → base64 envelope     |
 | `hashUnsignedTransaction` | `(unsignedTxJson: string, sealSignerPubKeyHex: string) → Uint8Array`        | Hash an unsigned transaction for signing (64 bytes) |
-| `schnorrSign`             | `(secretKeyHex: string, message: Uint8Array) → { public_nonce, signature }` | Schnorr-sign a message                              |
+| `sr25519Sign`             | `(secretKeyHex: string, message: Uint8Array) → Uint8Array`                  | sr25519-sign a message (64-byte signature)          |
 | `generateKeypair`         | `() → { secret_key, public_key }`                                           | Generate a random Ristretto keypair                 |
 | `publicKeyFromSecretKey`  | `(secretKeyHex: string) → string`                                           | Derive public key from secret key                   |
 
@@ -76,7 +76,7 @@ All keys and signatures are lowercase hex-encoded strings.
 ```typescript
 import init, {
   generateKeypair,
-  schnorrSign,
+  sr25519Sign,
   hashUnsignedTransaction,
   borEncodeTransaction,
   publicKeyFromSecretKey,
@@ -93,5 +93,5 @@ const unsignedTxJson = JSON.stringify(unsignedTransaction);
 const hash = hashUnsignedTransaction(unsignedTxJson, sealSignerPublicKeyHex);
 
 // Sign the hash
-const { public_nonce, signature } = schnorrSign(secret_key, hash);
+const signature = sr25519Sign(secret_key, hash);
 ```

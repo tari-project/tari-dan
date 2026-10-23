@@ -30,6 +30,8 @@ ootle-network = { workspace = true }
 tari_crypto = { workspace = true }
 curve25519-dalek = { version = "4", features = ["rand_core"] }
 blake2 = { workspace = true }
+merlin = { workspace = true }
+tari_ootle_common_types = { workspace = true }
 rand = { workspace = true }
 indexmap = { workspace = true }
 

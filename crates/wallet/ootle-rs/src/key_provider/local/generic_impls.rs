@@ -8,9 +8,10 @@ use ootle_byte_type::{FromByteType, ToByteType};
 use signature::hazmat::PrehashSigner;
 use tari_crypto::{
     keys::PublicKey,
-    ristretto::{RistrettoPublicKey, RistrettoSchnorr, RistrettoSecretKey},
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
 use tari_ootle_address::RistrettoOotleAddress;
+use tari_ootle_common_types::signature::Sr25519SignatureBytes;
 use tari_ootle_transaction::{
     Signable,
     TransactionSealSignature,
@@ -61,7 +62,7 @@ use crate::{
 
 #[async_trait]
 impl<C> TransactionSigner for LocalKeyProvider<C>
-where C: PrehashSigner<(RistrettoSchnorr, RistrettoPublicKey)> + Send + Sync
+where C: PrehashSigner<(Sr25519SignatureBytes, RistrettoPublicKey)> + Send + Sync
 {
     fn address(&self) -> &Address {
         &self.address
@@ -70,7 +71,7 @@ where C: PrehashSigner<(RistrettoSchnorr, RistrettoPublicKey)> + Send + Sync
     async fn sign_transaction(&self, message: &UnsealedTransaction) -> signer::Result<TransactionSealSignature> {
         let message = message.to_signing_message(());
         let (signature, public_key) = self.credentials.sign_prehash(&message)?;
-        let sig = TransactionSealSignature::new(public_key.to_byte_type(), signature.to_byte_type());
+        let sig = TransactionSealSignature::new(public_key.to_byte_type(), signature);
         Ok(sig)
     }
 
@@ -81,7 +82,7 @@ where C: PrehashSigner<(RistrettoSchnorr, RistrettoPublicKey)> + Send + Sync
     ) -> signer::Result<TransactionAuthorization> {
         let message = tx.to_signing_message(seal_signer);
         let (signature, public_key) = self.credentials.sign_prehash(&message)?;
-        let sig = TransactionSignature::new(public_key.to_byte_type(), signature.to_byte_type());
+        let sig = TransactionSignature::new(public_key.to_byte_type(), signature);
         Ok(sig.into())
     }
 }
@@ -287,7 +288,7 @@ async fn create_output_witness<K: OutputMaskProvider>(
 }
 
 #[async_trait]
-impl<C: StealthKeyPrehashSigner<(RistrettoSchnorr, RistrettoPublicKey)> + Send + Sync> TransactionStealthKeySigner
+impl<C: StealthKeyPrehashSigner<(Sr25519SignatureBytes, RistrettoPublicKey)> + Send + Sync> TransactionStealthKeySigner
     for LocalKeyProvider<C>
 {
     async fn sign_authorization_with_stealth(
@@ -300,7 +301,7 @@ impl<C: StealthKeyPrehashSigner<(RistrettoSchnorr, RistrettoPublicKey)> + Send +
             .credentials
             .sign_prehash_with_stealth_key(public_nonce, &tx.to_signing_message(seal_signer))
             .await?;
-        let sig = TransactionSignature::new(pk.to_byte_type(), sig.to_byte_type());
+        let sig = TransactionSignature::new(pk.to_byte_type(), sig);
         Ok(sig.into())
     }
 
@@ -314,7 +315,7 @@ impl<C: StealthKeyPrehashSigner<(RistrettoSchnorr, RistrettoPublicKey)> + Send +
             .credentials
             .sign_prehash_with_stealth_key(public_nonce, &message)
             .await?;
-        let sig = TransactionSealSignature::new(public_key.to_byte_type(), signature.to_byte_type());
+        let sig = TransactionSealSignature::new(public_key.to_byte_type(), signature);
         Ok(sig)
     }
 

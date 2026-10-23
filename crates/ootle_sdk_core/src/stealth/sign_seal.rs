@@ -12,7 +12,7 @@
 //!    [`owner_stealth_dh_secret`](tari_ootle_wallet_crypto::kdfs::owner_stealth_dh_secret).
 //! 3. **Ephemeral seal** (`can_sign_with_ephemeral_key()`): seal with a fresh random one-time ephemeral key.
 //!
-//! Every signature (auth + seal) is signed with a **fresh random Schnorr nonce** ([`sign_random`]) over
+//! Every signature (auth + seal) is signed with a **fresh random nonce** ([`sign_random`]) over
 //! the `create_message_v1` digests, and [`crate::tx::bor_encode`] encodes the result. The
 //! `main_signer` is set to `SealSigner` before building the unsealed tx in every seal case: all three
 //! seal with a key the spender controls, so the seal signer is always an authority here. (The public
@@ -32,9 +32,10 @@
 use ootle_network::Network as InternalNetwork;
 use tari_crypto::{
     keys::SecretKey,
-    ristretto::{RistrettoPublicKey, RistrettoSchnorr, RistrettoSecretKey},
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
     tari_utilities::ByteArray,
 };
+use tari_ootle_common_types::signature::{Sr25519SignatureBytes, TRANSACTION_SIGNING_CONTEXT};
 use tari_ootle_transaction::{
     Transaction,
     TransactionId,
@@ -45,7 +46,7 @@ use tari_ootle_transaction::{
     UnsignedTransactionV1,
 };
 use tari_ootle_wallet_crypto::kdfs::owner_stealth_dh_secret;
-use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
+use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{
     inputs::{FetchedSubstate, StealthSignerEntry},
@@ -102,12 +103,9 @@ impl SpendSecrets {
     }
 }
 
-/// Signs a 64-byte message with a fresh random Schnorr nonce and converts to the byte-typed signature.
-fn sign_random(secret: &RistrettoSecretKey, message: &[u8; 64]) -> Result<SchnorrSignatureBytes, OotleSdkError> {
-    use ootle_byte_type::ToByteType;
-    let sig = RistrettoSchnorr::sign(secret, *message, &mut rand::rng())
-        .map_err(|e| OotleSdkError::Key(format!("stealth signing failed: {e}")))?;
-    Ok(sig.to_byte_type())
+/// Signs a 64-byte message with a fresh random nonce.
+fn sign_random(secret: &RistrettoSecretKey, message: &[u8; 64]) -> Sr25519SignatureBytes {
+    TRANSACTION_SIGNING_CONTEXT.sign(secret, message)
 }
 
 /// Parses a boundary secret scalar (account or view secret) into the internal scalar.
@@ -154,7 +152,7 @@ fn build_stealth_auth_signature(
     let stealth_secret = derive_stealth_secret(network, secrets, signer)?;
     let stealth_pk = public_key_bytes_from_secret(&stealth_secret);
     let message = TransactionSignature::create_message_v1(seal_signer_pk, unsigned_v1);
-    let sig_bytes = sign_random(&stealth_secret, &message)?;
+    let sig_bytes = sign_random(&stealth_secret, &message);
     Ok(TransactionSignature::new(stealth_pk, sig_bytes))
 }
 
@@ -212,7 +210,7 @@ fn plan_seal(
 
         // The account-key authorization signature.
         let account_auth_msg = TransactionSignature::create_message_v1(&seal_pk, unsigned_v1);
-        let account_auth_sig = sign_random(account_secret, &account_auth_msg)?;
+        let account_auth_sig = sign_random(account_secret, &account_auth_msg);
         auth_signatures.push(TransactionSignature::new(seal_pk, account_auth_sig));
 
         // One stealth-key authorization signature per other signer.
@@ -311,7 +309,7 @@ fn finalize_seal(unsigned_v1: &mut UnsignedTransactionV1, plan: SealPlan) -> Res
     let unsealed = UnsealedTransactionV1::new(unsigned_v1.clone(), plan.auth_signatures);
 
     let seal_message = TransactionSealSignature::create_message_v1(&unsealed);
-    let seal_sig_bytes = sign_random(&plan.seal_secret, &seal_message)?;
+    let seal_sig_bytes = sign_random(&plan.seal_secret, &seal_message);
     let seal_sig = TransactionSealSignature::new(seal_pk, seal_sig_bytes);
 
     Ok(unsealed.seal_with_signature(seal_sig))

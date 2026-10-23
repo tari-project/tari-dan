@@ -941,15 +941,16 @@ fn resolve_metadata_hash(
 mod tests {
     use tari_crypto::ristretto::RistrettoSecretKey;
     use tari_ootle_address::Network;
-    use tari_ootle_common_types::{SubstateVersion, engine_types::substate::SubstateId};
+    use tari_ootle_common_types::{
+        SubstateVersion,
+        engine_types::substate::SubstateId,
+        signature::Sr25519SignatureBytes,
+    };
     use tari_ootle_wallet_sdk::{
         models::{KeyBranch, WalletTransactionUpdate},
         storage::{WalletStoreWriter, WriteableWalletStore},
     };
-    use tari_template_lib_types::{
-        ComponentAddress,
-        crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes},
-    };
+    use tari_template_lib_types::{ComponentAddress, crypto::RistrettoPublicKeyBytes};
 
     use super::*;
     use crate::handlers::test_support::TestDaemon;
@@ -1035,7 +1036,7 @@ mod tests {
 
     #[test]
     fn detecting_inputs_is_refused_when_signatures_are_provided() {
-        let signature = TransactionSignature::new(RistrettoPublicKeyBytes::zero(), SchnorrSignatureBytes::zero());
+        let signature = TransactionSignature::new(RistrettoPublicKeyBytes::zero(), Sr25519SignatureBytes::zero());
 
         let signatures = vec![signature];
 

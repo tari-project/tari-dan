@@ -5,10 +5,10 @@
 //!
 //! This independently reimplements, using the `blake2` crate + `curve25519-dalek`, the exact byte
 //! recipe the Ledger device follows to (1) recompute a transaction's 64-byte signing message from
-//! the streamed preimage segments and (2) produce a Ristretto Schnorr signature. It then proves
+//! the streamed preimage segments and (2) produce an sr25519 signature. It then proves
 //! the result against `tari_ootle_transaction` / `tari_crypto`:
 //!   - the reference message equals `create_message_v1` (domain separation + borsh feeding), and
-//!   - the reference signature verifies via `verify_v1` (Schnorr challenge + `s = e*k + r`).
+//!   - the reference signature verifies via `verify_v1` (sr25519 challenge + `s = e*k + r`).
 //!
 //! If this passes, the device recipe is correct by construction; only the SDK's Blake2b and the
 //! APDU transport remain to be exercised on Speculos.
@@ -18,9 +18,7 @@ use curve25519_dalek::{Scalar, constants::RISTRETTO_BASEPOINT_TABLE, ristretto::
 use indexmap::IndexSet;
 use ootle_ledger_common::signing::{
     NONCE_DOMAIN,
-    SCHNORR_DOMAIN,
-    SCHNORR_DOMAIN_VERSION,
-    SCHNORR_LABEL,
+    SIGNING_CONTEXT,
     STEALTH_OWNER_LABEL,
     TX_DOMAIN,
     TX_DOMAIN_VERSION,
@@ -30,6 +28,7 @@ use ootle_ledger_common::signing::{
     WALLET_DOMAIN_VERSION,
 };
 use rand::Rng;
+use tari_ootle_common_types::signature::Sr25519SignatureBytes;
 use tari_ootle_transaction::{
     Blob,
     Blobs,
@@ -42,7 +41,7 @@ use tari_ootle_transaction::{
     UnsealedTransactionV1,
     UnsignedTransactionV1,
 };
-use tari_template_lib_types::crypto::{RistrettoPublicKeyBytes, SchnorrSignatureBytes};
+use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 // ---- reference reimplementation of the device recipe (mirrors src/hashing.rs) -------------------
 
@@ -93,14 +92,14 @@ fn message(label: &str, segments: &[PreimageSegment]) -> [u8; 64] {
 }
 
 fn schnorr_challenge(r: &[u8; 32], p: &[u8; 32], m: &[u8; 64]) -> Scalar {
-    let mut h = Blake2b512::new();
-    add_domain_separation_tag(&mut h, SCHNORR_DOMAIN, SCHNORR_DOMAIN_VERSION, SCHNORR_LABEL);
-    for chunk in [&r[..], &p[..], &m[..]] {
-        h.update((chunk.len() as u64).to_le_bytes());
-        h.update(chunk);
-    }
+    let mut transcript = merlin::Transcript::new(b"SigningContext");
+    transcript.append_message(b"", SIGNING_CONTEXT);
+    transcript.append_message(b"sign-bytes", m);
+    transcript.append_message(b"proto-name", b"Schnorr-sig");
+    transcript.append_message(b"sign:pk", p);
+    transcript.append_message(b"sign:R", r);
     let mut out = [0u8; 64];
-    out.copy_from_slice(&h.finalize());
+    transcript.challenge_bytes(b"sign:c", &mut out);
     Scalar::from_bytes_mod_order_wide(&out)
 }
 
@@ -127,6 +126,7 @@ fn sign(secret: &Scalar, m: &[u8; 64]) -> ([u8; 32], [u8; 64]) {
     let mut sig = [0u8; 64];
     sig[..32].copy_from_slice(&r);
     sig[32..].copy_from_slice(s.as_bytes());
+    sig[63] |= 0x80;
     (pk, sig)
 }
 
@@ -170,8 +170,8 @@ fn pk_bytes(s: &Scalar) -> RistrettoPublicKeyBytes {
     RistrettoPublicKeyBytes::from_bytes(&public_key(s)).unwrap()
 }
 
-fn sig_bytes(sig: &[u8; 64]) -> SchnorrSignatureBytes {
-    SchnorrSignatureBytes::try_from(&sig[..]).unwrap()
+fn sig_bytes(sig: &[u8; 64]) -> Sr25519SignatureBytes {
+    Sr25519SignatureBytes::from_array(*sig)
 }
 
 fn sample_unsigned() -> UnsignedTransactionV1 {
@@ -195,6 +195,14 @@ fn sample_unsigned() -> UnsignedTransactionV1 {
 }
 
 // ---- tests --------------------------------------------------------------------------------------
+
+#[test]
+fn signing_context_matches_protocol() {
+    assert_eq!(
+        SIGNING_CONTEXT,
+        tari_ootle_common_types::signature::TRANSACTION_SIGNING_CONTEXT.as_bytes()
+    );
+}
 
 #[test]
 fn preimage_field_tags_match_protocol() {

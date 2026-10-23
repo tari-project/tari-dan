@@ -18,6 +18,7 @@ ledger_device_sdk = { version = "1.35.1" }
 curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "rand_core", "precomputed-tables", "zeroize"] }
 borsh = { version = "1.6.0", default-features = false, features = ["derive"] }
 zeroize = { version = "1.8.2", default-features = false, features = ["alloc"] }
+merlin = { version = "3.0.0", default-features = false }
 
 [features]
 bagl = []

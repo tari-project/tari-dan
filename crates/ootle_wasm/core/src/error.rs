@@ -11,8 +11,6 @@ pub enum OotleWasmError {
     InvalidSecretKey(String),
     #[error("Invalid public key: {0}")]
     InvalidPublicKey(String),
-    #[error("Signing failed: {0}")]
-    SigningFailed(String),
     #[error("Invalid network: {0}")]
     InvalidNetwork(String),
     #[error("Invalid pay reference: length {0} (must be 1-64 bytes)")]
