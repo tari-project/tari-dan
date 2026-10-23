@@ -25,7 +25,7 @@ the npm jobs silently skip a package whose version is already published.
 |---|---|---|---|
 | tag push | `build_binaries.yml` | node + wallet binaries → **draft** release | yes, until published |
 | tag push | `ffi_libs.yml` | `ootle_sdk_ffi_c` libs per platform → same draft | yes |
-| tag push | `build_dockers.yml` | `ootle` image, tagged `v…`, `<maj>.<min>`, `latest` | **no** |
+| tag push | `build_dockers.yml` | `ootle` and `ootle-walletd` images, tagged `v…`, `<maj>.<min>`, `latest` (pre-release tags skip `<maj>.<min>` and `latest`) | **no** |
 | tag push | `npm_publish.yml` | 3 npm packages | **no** |
 | tag push | `npm_publish_ootle_wasm.yml` | `@tari-project/ootle-wasm` | **no** |
 | **release published** | `docs-deploy.yml`, `indexer-web-ui-deploy.yml` | developer docs + indexer UI to Cloudflare | redeployable |

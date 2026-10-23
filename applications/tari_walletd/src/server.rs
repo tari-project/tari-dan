@@ -6,9 +6,10 @@ use std::{net::SocketAddr, sync::Arc};
 use axum::{
     Router,
     extract::{DefaultBodyLimit, Extension},
+    http::StatusCode,
     middleware,
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
 };
 use axum_extra::{TypedHeader, extract::CookieJar, headers, headers::authorization::Bearer};
 use axum_jrpc::{
@@ -81,6 +82,7 @@ fn router(preferred_address: SocketAddr, signaling_server_address: SocketAddr, c
     let router = Router::new()
         .route("/json_rpc", post(handler))
         .route("/json-rpc", post(handler))
+        .route("/health", get(health))
         // TODO: Get these traces to work
         .layer(TraceLayer::new_for_http())
         .layer(Extension(Arc::new(context)))
@@ -96,6 +98,12 @@ fn router(preferred_address: SocketAddr, signaling_server_address: SocketAddr, c
 
     // Layered last so that it guards the fallback as well as the routes.
     router.layer(middleware::from_fn_with_state(allowed_hosts, check_host))
+}
+
+/// Liveness probe for container health checks. Needs no authentication. The listener only starts once the wallet has
+/// opened its database and loaded its cipher seed, so a response means the daemon is up.
+async fn health() -> StatusCode {
+    StatusCode::OK
 }
 
 /// Renders the part of a JSON-RPC request that may be written to a log: the request id, the method,
@@ -462,6 +470,21 @@ mod tests {
 
     use super::*;
     use crate::handlers::test_support::TestDaemon;
+
+    #[tokio::test]
+    async fn health_answers_without_authentication() {
+        let daemon = TestDaemon::start().await;
+        let address = SocketAddr::from(([127, 0, 0, 1], 5100));
+        let router = router(address, SocketAddr::from(([127, 0, 0, 1], 9100)), daemon.context);
+        let request = Request::get("/health")
+            .header(header::HOST, "127.0.0.1:5100")
+            .body(Body::empty())
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        // The web UI fallback also answers 200, with a page; only the health route answers with an empty body.
+        assert!(to_bytes(response.into_body(), usize::MAX).await.unwrap().is_empty());
+    }
 
     fn keys_import(secret_key: &str) -> JsonRpcExtractor {
         JsonRpcExtractor {

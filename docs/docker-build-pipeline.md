@@ -6,7 +6,10 @@ Reference document for engineers working on the Tari Ootle Docker build.
 
 - One Dockerfile: `docker/ootle.Dockerfile`
 - One workflow: `.github/workflows/build_dockers.yml`
-- One image: `ghcr.io/<owner>/ootle` containing the network node binaries, `tari_validator_node` and `tari_indexer`
+- Two images from the same build:
+  - `ghcr.io/<owner>/ootle` (target `runtime`) containing the network node binaries, `tari_validator_node` and `tari_indexer`
+  - `ghcr.io/<owner>/ootle-walletd` (target `walletd`) containing `tari_ootle_walletd`; see `docker/README.md`
+- Both images are signed by digest with cosign keyless signing
 - Platform: `linux/amd64` only
 - Registry: GitHub Container Registry (GHCR) only
 - Caching: BuildKit cache mounts + registry cache (`ghcr.io/<owner>/ootle-buildcache`, `mode=max`)
@@ -19,11 +22,11 @@ Reference document for engineers working on the Tari Ootle Docker build.
 |---|---|
 | `tari_indexer` | Substate indexer (JSON-RPC API + embedded web UI) |
 | `tari_validator_node` | Validator node daemon (consensus + embedded web UI) |
+| `tari_ootle_walletd` | Wallet daemon (JSON-RPC API + embedded web UI), `ootle-walletd` image only |
 
-Only what a deployed network node runs. The wallet, swarm and operations
-tools ship as release binaries, not in the image.
+The wallet CLI, swarm and operations tools ship as release binaries, not in an image.
 
-Both binaries embed a React web UI at compile time via the
+Each daemon embeds a React web UI at compile time via the
 `include_dir!` macro pointing at `web_ui/dist/`.
 This means the Dockerfile must build the web UIs before `cargo build`,
 otherwise the embedded asset directory is empty.
@@ -50,15 +53,16 @@ across deployment environments.
 
 ## Dockerfile architecture
 
-Four stages. See `docker/ootle.Dockerfile` for the source of truth.
+Six stages. See `docker/ootle.Dockerfile` for the source of truth.
 
 ```
 chef    ─┐                       (toolchain + system deps + node + pnpm + cargo-chef)
          ├── planner             (cargo chef prepare → recipe.json)
          └── builder             (cargo chef cook → pnpm install → npm ci → cargo build)
                                           │
-                                          ▼
-                                       runtime (debian-slim, non-root, tini)
+base (debian-slim, non-root, tini)        │
+  ├── walletd  ◄── /out-walletd/ ─────────┤
+  └── runtime  ◄── /out/ ─────────────────┘
 ```
 
 ### Stage 1: `chef`
@@ -164,8 +168,13 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release --locked \
       --bin tari_validator_node \
       --bin tari_indexer \
-    && mkdir -p /out \
-    && cp target/release/{tari_validator_node,tari_indexer} /out/
+      --bin tari_ootle_walletd && \
+    mkdir -p /out /out-walletd && \
+    cp \
+      target/release/tari_validator_node \
+      target/release/tari_indexer \
+      /out/ && \
+    cp target/release/tari_ootle_walletd /out-walletd/
 ```
 
 Each daemon's `build.rs` invokes `pnpm` to compile its web UI into
@@ -173,22 +182,37 @@ Each daemon's `build.rs` invokes `pnpm` to compile its web UI into
 cache is mounted here, web UI builds are fast.
 
 **Why copy to `/out/` inside the same RUN:** the binaries get extracted
-to `/out/` so the runtime stage can grab them via a single
-`COPY --from=builder /out/` rather than mirroring the cargo target
+to `/out/` (node binaries) and `/out-walletd/` (wallet daemon) so each
+final stage can grab its set via a single `COPY --from=builder` rather than mirroring the cargo target
 directory structure. This also keeps the path explicit and stable across
 cargo version changes.
 
-### Stage 4: `runtime`
+### Stage 4: `base`
 
-Minimal Debian 13. Installs only runtime libraries:
+Minimal Debian 13 shared by both final stages. Installs only runtime libraries:
 
 - `tini` (PID 1 init)
 - `ca-certificates`, `openssl` (TLS)
-- `libsqlite3-0` (linked at runtime by both daemons)
+- `libsqlite3-0` (linked at runtime by the node daemons)
 
-Creates `tari` user (uid/gid 1000), copies the 2 binaries from `/out/`,
-drops to `USER tari`, sets `WORKDIR /home/tari`, and sets
-`ENTRYPOINT ["/usr/bin/tini", "--"]`.
+Creates the `tari` user (uid/gid 1000), drops to `USER tari` and sets
+`WORKDIR /home/tari`.
+
+### Stage 5: `walletd`
+
+Built from `base`. Adds `libdbus-1-3` (linked by the OS keyring store) and
+`curl` (health check), creates `/data` owned by `tari`, copies `tari_ootle_walletd` from
+`/out-walletd/`, sets `TARI_BASE_DIR=/data` and `XDG_DATA_HOME=/data/share`
+so config, database, logs and burn proofs all live on the `/data` volume,
+adds a `HEALTHCHECK` against `GET /health`, and uses
+`ENTRYPOINT ["/usr/bin/tini", "--", "tari_ootle_walletd"]`. Pushed as
+`ootle-walletd`; see `docker/README.md` for configuration.
+
+### Stage 6: `runtime`
+
+Built from `base`. Copies the 2 node binaries from `/out/` and sets
+`ENTRYPOINT ["/usr/bin/tini", "--"]`. It is the last stage, so it is the
+default build target.
 
 No `CMD` is set. Callers must specify which binary to run:
 
@@ -298,9 +322,10 @@ Driven by `docker/metadata-action`:
 | Any run | `sha-<short>` |
 | Manual/scheduled run on a branch | `<branch-name>` |
 | Tag `vX.Y.Z` | `vX.Y.Z`, `X.Y.Z`, `X.Y`, `latest` |
+| Tag `vX.Y.Z-pre.N` | `vX.Y.Z-pre.N`, `X.Y.Z-pre.N` |
 | Schedule (nightly) | `nightly` |
 
-All push to `ghcr.io/<owner>/ootle`.
+Both images (`ghcr.io/<owner>/ootle` and `ghcr.io/<owner>/ootle-walletd`) get the same tags.
 
 ### Authentication
 
@@ -369,7 +394,7 @@ DOCKER_BUILDKIT=1 docker build \
 docker run --rm -it ootle-builder:local bash
 ```
 
-Valid `--target` values: `chef`, `planner`, `builder`, `runtime`.
+Valid `--target` values: `chef`, `planner`, `builder`, `base`, `walletd`, `runtime`.
 
 ## Common changes
 
