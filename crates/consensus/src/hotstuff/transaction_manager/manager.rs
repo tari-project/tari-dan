@@ -1,10 +1,7 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::{HashMap, hash_map::Entry},
-    marker::PhantomData,
-};
+use std::collections::{HashMap, hash_map::Entry};
 
 use indexmap::{IndexMap, IndexSet};
 use log::*;
@@ -39,11 +36,11 @@ use tari_ootle_storage::{
 };
 use tari_ootle_transaction::{Transaction, TransactionId};
 
-use super::{PledgedTransaction, PreparedTransaction, UncommittedTemplateStore};
+use super::{ExecutionMemo, PledgedTransaction, PreparedTransaction, Speculation, UncommittedTemplateStore};
 use crate::{
     hotstuff::{
         block_change_set::ProposedBlockChangeSet,
-        substate_store::{InputPledge, LockStatus, PendingSubstateStore, SubstateStoreError},
+        substate_store::{InputPledge, LockStatus, PendingSubstateStore, SubstateStoreError, SubstateVersionReader},
     },
     tracing::TraceTimer,
     traits::{BlockTransactionExecutor, BlockTransactionExecutorError, ReadableSubstateStore},
@@ -57,7 +54,7 @@ pub struct ConsensusTransactionManager<TExecutor, TStateStore> {
     uncommitted_templates: UncommittedTemplateStore,
     max_transaction_validity_epochs: u64,
     max_transaction_pledge_bytes: usize,
-    _store: PhantomData<TStateStore>,
+    speculation: Option<Speculation<TStateStore>>,
 }
 
 impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
@@ -69,8 +66,23 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
             uncommitted_templates: UncommittedTemplateStore::default(),
             max_transaction_validity_epochs,
             max_transaction_pledge_bytes,
-            _store: PhantomData,
+            speculation: None,
         }
+    }
+
+    /// Speculates a block's executions on `execution_threads` threads, reading `state_store` (see [`Self::speculate`]).
+    /// With one thread nothing is speculated, and every execution happens as the block is evaluated.
+    pub fn with_speculation(mut self, execution_threads: usize, state_store: TStateStore) -> Self {
+        self.speculation = Speculation::new(execution_threads, state_store);
+        self
+    }
+
+    pub(super) fn speculation(&self) -> Option<&Speculation<TStateStore>> {
+        self.speculation.as_ref()
+    }
+
+    pub(super) fn executor(&self) -> &TExecutor {
+        &self.executor
     }
 
     pub fn uncommitted_templates(&self) -> &UncommittedTemplateStore {
@@ -142,7 +154,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
 
     /// The abort `transaction` earns for executing in a block of `block_epoch` while pinned to
     /// `pinned_epoch`, or `None` if it may execute.
-    fn execution_abort_reason(
+    pub(super) fn execution_abort_reason(
         &self,
         transaction: &Transaction,
         pinned_epoch: Epoch,
@@ -152,6 +164,8 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
             .or_else(|| burn_rate_governance_abort_reason(transaction, pinned_epoch, block_epoch))
     }
 
+    /// Prepares the transaction for a block this node evaluates. An execution is taken from `memo` if one was
+    /// speculated with the inputs the transaction resolves to here.
     pub fn prepare<TTx: StateStoreReadTransaction>(
         &self,
         store: &mut PendingSubstateStore<TTx>,
@@ -159,8 +173,9 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         pool_tx: &TransactionPoolRecord,
         block: LeafBlock,
         change_set: &ProposedBlockChangeSet,
+        memo: &mut ExecutionMemo,
     ) -> Result<PreparedTransaction, BlockTransactionExecutorError> {
-        self.prepare_inner(store, local_committee_info, pool_tx, block, change_set, false)
+        self.prepare_inner(store, local_committee_info, pool_tx, block, change_set, memo, false)
     }
 
     /// Prepares the transaction for a block this node proposes. A proposer defers a transaction with a deferrable lock
@@ -173,10 +188,12 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         pool_tx: &TransactionPoolRecord,
         block: LeafBlock,
         change_set: &ProposedBlockChangeSet,
+        memo: &mut ExecutionMemo,
     ) -> Result<PreparedTransaction, BlockTransactionExecutorError> {
-        self.prepare_inner(store, local_committee_info, pool_tx, block, change_set, true)
+        self.prepare_inner(store, local_committee_info, pool_tx, block, change_set, memo, true)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn prepare_inner<TTx: StateStoreReadTransaction>(
         &self,
         store: &mut PendingSubstateStore<TTx>,
@@ -184,6 +201,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         pool_tx: &TransactionPoolRecord,
         block: LeafBlock,
         change_set: &ProposedBlockChangeSet,
+        memo: &mut ExecutionMemo,
         is_proposing: bool,
     ) -> Result<PreparedTransaction, BlockTransactionExecutorError> {
         let _timer = TraceTimer::info(LOG_TARGET, "prepare");
@@ -221,6 +239,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                     local_versions,
                     block,
                     execution_epoch.clone(),
+                    memo,
                     is_proposing,
                 )
             },
@@ -245,6 +264,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                     block,
                     change_set,
                     execution_epoch.clone(),
+                    memo,
                 ),
             ResolvedTransactionInputs::OnlyTombstones => {
                 // Because we have only local inputs, this shard group unilaterally decides the locked epoch (though
@@ -257,6 +277,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                     IndexMap::new(),
                     block,
                     execution_epoch.clone(),
+                    memo,
                     is_proposing,
                 )
             },
@@ -279,9 +300,9 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         }
     }
 
-    fn resolve_local_versions<'a, TTx: StateStoreReadTransaction>(
+    pub(super) fn resolve_local_versions<'a, S: SubstateVersionReader>(
         &self,
-        store: &PendingSubstateStore<TTx>,
+        store: &S,
         local_committee_info: &CommitteeInfo,
         transaction: &'a Transaction,
     ) -> Result<ResolvedInputs<'a>, BlockTransactionExecutorError> {
@@ -384,6 +405,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn execute_or_fetch<TTx: StateStoreReadTransaction>(
         &self,
         store: &mut PendingSubstateStore<TTx>,
@@ -392,6 +414,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         resolved_inputs: &HashMap<SubstateRequirement, Substate>,
         block: &LeafBlock,
         execution_locked_epoch: LockedEpoch,
+        memo: &mut ExecutionMemo,
     ) -> Result<TransactionExecution, BlockTransactionExecutorError> {
         if let Some(reason) =
             self.execution_abort_reason(transaction.transaction(), execution_locked_epoch.epoch(), block.epoch)
@@ -418,6 +441,20 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
                 execution
             );
             // Artifacts are stored alongside the execution
+            return Ok(execution);
+        }
+        if let Some(execution) = memo.take(
+            store.parent_block().block_id(),
+            transaction.id(),
+            resolved_inputs,
+            &execution_locked_epoch,
+        ) {
+            debug!(
+                target: LOG_TARGET,
+                "👨‍🔧 PREPARE: Using speculated execution for transaction {}: {}",
+                transaction.id(),
+                execution
+            );
             return Ok(execution);
         }
         info!(
@@ -505,6 +542,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn prepare_local_input_transaction<TTx: StateStoreReadTransaction>(
         &self,
         store: &mut PendingSubstateStore<TTx>,
@@ -513,6 +551,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         local_versions: IndexMap<InputDeclarationRef<'_>, SubstateVersion>,
         block: LeafBlock,
         execution_locked_epoch: LockedEpoch,
+        memo: &mut ExecutionMemo,
         is_proposing: bool,
     ) -> Result<PreparedTransaction, BlockTransactionExecutorError> {
         let transaction_id = *transaction.id();
@@ -561,6 +600,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
             &local_inputs,
             &block,
             execution_locked_epoch,
+            memo,
         )?;
 
         let is_outputs_local_only = local_committee_info.is_all_local(execution.resulting_outputs());
@@ -778,6 +818,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         Ok(PreparedTransaction::new_multishard_evidence(evidence, lock_status))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn prepare_multishard_output_only_transaction<TTx: StateStoreReadTransaction>(
         &self,
         store: &mut PendingSubstateStore<TTx>,
@@ -787,6 +828,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
         block: LeafBlock,
         change_set: &ProposedBlockChangeSet,
         execution_locked_epoch: LockedEpoch,
+        memo: &mut ExecutionMemo,
     ) -> Result<PreparedTransaction, BlockTransactionExecutorError> {
         let transaction_id = *transaction.id();
         // We're output-only, so only need to gather foreign pledges
@@ -826,6 +868,7 @@ impl<TStateStore: StateStore, TExecutor: BlockTransactionExecutor<TStateStore>>
             &resolved_inputs,
             &block,
             execution_locked_epoch,
+            memo,
         )?;
         info!(
             target: LOG_TARGET,
@@ -858,7 +901,7 @@ enum ResolvedTransactionInputs<'a> {
     },
 }
 
-struct ResolvedInputs<'a> {
+pub(super) struct ResolvedInputs<'a> {
     pub local_inputs: IndexMap<InputDeclarationRef<'a>, SubstateVersion>,
     pub foreign_inputs: IndexSet<InputDeclarationRef<'a>>,
     pub num_local_tombstones: usize,
@@ -900,7 +943,10 @@ fn resolve_foreign_input_pledges(
 /// declaration alone. Writing to a read-declared input aborts in the engine, so a read lock cannot be escaped by
 /// the transaction that asked for it. A substate that no transaction can write takes a read lock whatever was
 /// declared, so that the default write declaration does not serialise every transaction that uses it.
-fn declared_lock_intent(decl: &InputDeclarationRef<'_>, version: SubstateVersion) -> SubstateRequirementLockIntent {
+pub(super) fn declared_lock_intent(
+    decl: &InputDeclarationRef<'_>,
+    version: SubstateVersion,
+) -> SubstateRequirementLockIntent {
     let requirement = decl.to_substate_requirement_ref().to_owned();
     if decl.is_write() && !decl.substate_id().is_read_only() {
         SubstateRequirementLockIntent::write(requirement, version)
@@ -910,7 +956,7 @@ fn declared_lock_intent(decl: &InputDeclarationRef<'_>, version: SubstateVersion
 }
 
 /// [`Transaction::input_fanout`] under the shard layout of the block executing the transaction.
-fn input_fanout(transaction: &Transaction, local_committee_info: &CommitteeInfo) -> u32 {
+pub(super) fn input_fanout(transaction: &Transaction, local_committee_info: &CommitteeInfo) -> u32 {
     transaction.input_fanout(
         local_committee_info.num_preshards(),
         local_committee_info.num_committees(),
@@ -1085,6 +1131,7 @@ mod tests {
                     &HashMap::new(),
                     &block,
                     pinned_to(5),
+                    &mut ExecutionMemo::new(block.block_id),
                 )
             })
             .expect("aborts before reaching the engine");

@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
+use ootle_byte_type::ToByteType;
 use tari_consensus_types::{BlockId, LastVoted, PcId, ProposalCertificate};
 use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_ootle_common_types::{
@@ -56,7 +57,12 @@ use crate::{
         local_command_validator::LocalCommandValidator,
         process_newly_justified_block,
         substate_store::{PendingSubstateStore, ShardedStateTree},
-        transaction_manager::{ConsensusTransactionManager, TransactionLockConflicts, UncommittedTemplateStore},
+        transaction_manager::{
+            ConsensusTransactionManager,
+            SpeculationBudget,
+            TransactionLockConflicts,
+            UncommittedTemplateStore,
+        },
     },
     tracing::TraceTimer,
     traits::{BlockStore, CertificateStore, ConsensusSpec},
@@ -316,8 +322,27 @@ where TConsensusSpec: ConsensusSpec
         let num_foreign_proposals = block.all_foreign_proposals().count();
         let mut foreign_proposal_bytes = 0usize;
 
-        let command_validator = LocalCommandValidator::new(&self.transaction_manager, &self.local_validator_pk);
+        let mut command_validator = LocalCommandValidator::new(&self.transaction_manager, &self.local_validator_pk);
+        // This node already holds the executions of a block it proposed
+        let is_own_block = *block.proposed_by() == self.local_validator_pk.to_byte_type();
+        let mut has_speculated = false;
         for cmd in block.commands() {
+            // Foreign proposals sort before the transaction commands, so every one is applied by now
+            if !is_own_block && !has_speculated && cmd.transaction().is_some() {
+                command_validator.speculate(
+                    tx,
+                    block,
+                    block.commands(),
+                    local_committee_info,
+                    &substate_store,
+                    proposed_block_change_set,
+                    SpeculationBudget {
+                        deadline: None,
+                        max_execution_points: max_validation_execution_points,
+                    },
+                );
+                has_speculated = true;
+            }
             match cmd {
                 Command::LocalOnly(atom) => {
                     if let Some(reason) = command_validator.evaluate_local_only_command(
@@ -538,6 +563,15 @@ where TConsensusSpec: ConsensusSpec
                     return Ok(());
                 }
             }
+        }
+
+        if command_validator.memo().is_speculated() {
+            info!(
+                target: LOG_TARGET,
+                "⚡ Speculated executions for block {}: {}",
+                block,
+                command_validator.memo(),
+            );
         }
 
         // CONSENSUS RULE: a block's writes to a shard form that shard's next state version, which state sync

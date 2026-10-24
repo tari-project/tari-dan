@@ -407,6 +407,10 @@ pub struct ConsensusConfig {
     /// no extension beyond `state_sync_progress_timeout_secs`.
     #[serde(default = "default_state_sync_min_throughput_bytes_per_sec")]
     pub state_sync_min_throughput_bytes_per_sec: u64,
+    /// The threads a block's transactions are executed on in parallel before the block is evaluated. Blocks are
+    /// identical at any number of threads. 1 executes every transaction as the block is evaluated, one at a time.
+    #[serde(default = "default_execution_threads")]
+    pub execution_threads: usize,
 }
 
 impl Default for ConsensusConfig {
@@ -416,8 +420,13 @@ impl Default for ConsensusConfig {
             state_sync_peer_skip_runs: default_state_sync_peer_skip_runs(),
             state_sync_progress_timeout_secs: default_state_sync_progress_timeout_secs(),
             state_sync_min_throughput_bytes_per_sec: default_state_sync_min_throughput_bytes_per_sec(),
+            execution_threads: default_execution_threads(),
         }
     }
+}
+
+fn default_execution_threads() -> usize {
+    std::thread::available_parallelism().map_or(1, |n| (n.get() / 2).max(1))
 }
 
 fn default_state_sync_peer_skip_runs() -> u32 {

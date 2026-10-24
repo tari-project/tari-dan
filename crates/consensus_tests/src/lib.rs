@@ -35,6 +35,8 @@ mod leader_failure;
 #[cfg(test)]
 mod leader_fast_skip;
 #[cfg(test)]
+mod parallel_execution;
+#[cfg(test)]
 mod peer_message_admission;
 #[cfg(test)]
 mod proposal_certificate_signatures;

@@ -4,7 +4,12 @@
 use std::{
     collections::HashMap,
     iter,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
+    thread,
 };
 
 use tari_consensus::traits::{
@@ -51,6 +56,8 @@ pub struct TestBlockTransactionProcessor {
     state_store: TestStore,
     history: Arc<Mutex<HashMap<TransactionId, TestHistoricalExecution>>>,
     execute_counts: Arc<Mutex<HashMap<TransactionId, usize>>>,
+    /// Executions on a thread consensus speculates on, which are named `ootle-exec-<n>`.
+    speculation_thread_executions: Arc<AtomicUsize>,
     template_misses: Arc<Mutex<HashMap<TransactionId, usize>>>,
 }
 
@@ -62,6 +69,7 @@ impl TestBlockTransactionProcessor {
             state_store,
             history: Default::default(),
             execute_counts: Default::default(),
+            speculation_thread_executions: Default::default(),
             template_misses: Default::default(),
         }
     }
@@ -82,6 +90,11 @@ impl TestBlockTransactionProcessor {
             .get(transaction_id)
             .copied()
             .unwrap_or(0)
+    }
+
+    /// The number of executions this validator ran on a thread it speculates on.
+    pub fn get_speculation_thread_execution_count(&self) -> usize {
+        self.speculation_thread_executions.load(Ordering::Relaxed)
     }
 
     /// The number of times this validator executed `transaction_id` without finding the template it calls.
@@ -257,6 +270,12 @@ impl<TStateStore: StateStore> BlockTransactionExecutor<TStateStore> for TestBloc
             executed.result().finalize.result
         );
         *self.execute_counts.lock().unwrap().entry(id).or_default() += 1;
+        if thread::current()
+            .name()
+            .is_some_and(|name| name.starts_with("ootle-exec-"))
+        {
+            self.speculation_thread_executions.fetch_add(1, Ordering::Relaxed);
+        }
         self.history.lock().unwrap().insert(id, TestHistoricalExecution {
             execution: executed.clone(),
             execution_epoch,

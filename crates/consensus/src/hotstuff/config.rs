@@ -24,4 +24,7 @@ pub struct HotstuffConfig {
     /// foreign shard group, so that only transactions whose foreign shard group fails to deliver are aborted.
     pub epoch_end_drain_period: Duration,
     pub catch_up_request_timeout: Duration,
+    /// The threads this node speculates a block's executions on before it evaluates the block in order. A local
+    /// setting: blocks are identical at any number of threads, and one thread speculates nothing in parallel.
+    pub execution_threads: usize,
 }

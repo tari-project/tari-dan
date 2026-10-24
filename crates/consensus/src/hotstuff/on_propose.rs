@@ -71,8 +71,11 @@ use crate::{
         substate_store::{InputPledge, PendingSubstateStore},
         transaction_manager::{
             ConsensusTransactionManager,
+            ExecutionMemo,
             PledgedTransaction,
             PreparedTransaction,
+            SpeculationBudget,
+            SpeculationCandidate,
             TransactionLockConflicts,
         },
     },
@@ -313,6 +316,7 @@ where TConsensusSpec: ConsensusSpec
     }
 
     /// Returns Ok(None) if the command cannot be sequenced yet due to lock conflicts.
+    #[allow(clippy::too_many_arguments)]
     fn transaction_pool_record_to_command<TTx: StateStoreReadTransaction>(
         &self,
         state_anchor: &LeafBlock,
@@ -321,6 +325,7 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
         change_set: &ProposedBlockChangeSet,
         substate_store: &mut PendingSubstateStore<TTx>,
+        memo: &mut ExecutionMemo,
         executed_transactions: &mut HashMap<TransactionId, TransactionExecution>,
         lock_conflicts: &mut TransactionLockConflicts,
     ) -> Result<Option<Command>, HotStuffError> {
@@ -332,6 +337,7 @@ where TConsensusSpec: ConsensusSpec
                 local_committee_info,
                 change_set,
                 substate_store,
+                memo,
                 executed_transactions,
                 lock_conflicts,
             ),
@@ -555,6 +561,20 @@ where TConsensusSpec: ConsensusSpec
         // transactions remain in the pool and are proposed in a later block.
         let propose_exec_deadline = self.config.consensus_constants.pacemaker_block_time / 2;
         let propose_started_at = Instant::now();
+        // Speculation takes at most half the time the commands may take, so that the commands still have time to take
+        // what it speculated
+        let mut memo = self.speculate_batch(
+            &substate_store,
+            local_committee_info,
+            &state_anchor_leaf,
+            &locked_epoch,
+            &batch.transactions,
+            &change_set,
+            SpeculationBudget {
+                deadline: Some(propose_started_at + propose_exec_deadline / 2),
+                max_execution_points: self.config.consensus_constants.max_block_execution_points,
+            },
+        );
         // Accumulated to log observed execution throughput (weight/s) for calibrating `max_block_weight`
         // against the block time. See the calibration log emitted after the loop.
         let mut executed_weight = 0u64;
@@ -641,6 +661,7 @@ where TConsensusSpec: ConsensusSpec
                 local_committee_info,
                 &change_set,
                 &mut substate_store,
+                &mut memo,
                 &mut executed_transactions,
                 &mut lock_conflicts,
             )?;
@@ -677,6 +698,9 @@ where TConsensusSpec: ConsensusSpec
             }
         }
         timer.done();
+        if memo.is_speculated() {
+            info!(target: LOG_TARGET, "⚡ Speculated executions for the proposal at height {next_height}: {memo}");
+        }
 
         let commands = BlockCommands::init(commands).map_err(|e| {
             HotStuffError::InvariantError(format!(
@@ -805,6 +829,42 @@ where TConsensusSpec: ConsensusSpec
         })
     }
 
+    /// Speculates the batch's transactions that are New, as the commands generated for them will see them once the
+    /// block's foreign proposals are applied.
+    fn speculate_batch<TTx: StateStoreReadTransaction>(
+        &self,
+        substate_store: &PendingSubstateStore<TTx>,
+        local_committee_info: &CommitteeInfo,
+        state_anchor: &LeafBlock,
+        locked_epoch: &LockedEpoch,
+        transactions: &[TransactionPoolRecord],
+        change_set: &ProposedBlockChangeSet,
+        budget: SpeculationBudget,
+    ) -> ExecutionMemo {
+        let candidates = transactions
+            .iter()
+            .filter_map(|pool_tx| {
+                let mut pool_tx = pool_tx.clone();
+                change_set.apply_transaction_update(&mut pool_tx);
+                if !pool_tx.current_stage().is_new() || pool_tx.current_decision().is_abort() {
+                    return None;
+                }
+                pool_tx.update_locked_epoch(locked_epoch.clone());
+                Some(SpeculationCandidate {
+                    transaction_id: *pool_tx.id(),
+                    locked_epoch: pool_tx.locked_epoch()?.clone(),
+                })
+            })
+            .collect::<Vec<_>>();
+        self.transaction_manager.speculate(
+            substate_store,
+            local_committee_info,
+            state_anchor.epoch,
+            &candidates,
+            budget,
+        )
+    }
+
     #[allow(clippy::too_many_lines)]
     fn fetch_next_proposal_batch<TTx: StateStoreReadTransaction>(
         &self,
@@ -899,7 +959,7 @@ where TConsensusSpec: ConsensusSpec
         })
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, clippy::too_many_arguments)]
     fn prepare_transaction<TTx: StateStoreReadTransaction>(
         &self,
         state_anchor: &LeafBlock,
@@ -908,6 +968,7 @@ where TConsensusSpec: ConsensusSpec
         local_committee_info: &CommitteeInfo,
         change_set: &ProposedBlockChangeSet,
         substate_store: &mut PendingSubstateStore<TTx>,
+        memo: &mut ExecutionMemo,
         executed_transactions: &mut HashMap<TransactionId, TransactionExecution>,
         lock_conflicts: &mut TransactionLockConflicts,
     ) -> Result<Option<Command>, HotStuffError> {
@@ -928,6 +989,7 @@ where TConsensusSpec: ConsensusSpec
                 &pool_tx,
                 *state_anchor,
                 change_set,
+                memo,
             )
             .map_err(|e| HotStuffError::TransactionExecutorError(e.to_string()))?;
 

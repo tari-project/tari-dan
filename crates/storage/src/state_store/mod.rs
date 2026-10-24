@@ -97,7 +97,9 @@ use crate::{
 const LOG_TARGET: &str = "tari::ootle::storage";
 pub trait StateStore {
     type Addr: NodeAddressable;
-    type ReadTransaction<'a>: StateStoreReadTransaction<Addr = Self::Addr>
+    /// A read view is `Sync` so that one consistent snapshot can be read from several threads at once, as consensus
+    /// does when it speculates a block's executions in parallel.
+    type ReadTransaction<'a>: StateStoreReadTransaction<Addr = Self::Addr> + Sync
     where Self: 'a;
     type WriteTransaction<'a>: StateStoreWriteTransaction<Addr = Self::Addr>
         + Deref<Target: StateStoreReadTransaction<Addr = Self::Addr>>
