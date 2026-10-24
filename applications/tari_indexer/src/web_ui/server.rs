@@ -24,6 +24,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
     Router,
+    body::Body,
     http::{Response, StatusCode, Uri, header::CONTENT_TYPE},
     response::IntoResponse,
     routing::get,
@@ -55,27 +56,60 @@ pub async fn serve(address: SocketAddr, api_address: Url) -> Result<(), anyhow::
 static PROJECT_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/web_ui/dist");
 
 async fn handler(uri: Uri) -> impl IntoResponse {
-    let path = uri.path();
+    serve_file(&PROJECT_DIR, uri.path())
+}
 
-    // If path starts with /, strip it.
+/// The file at `path` in `dir`, or `dir`'s index.html for any other path so the SPA router can resolve it.
+fn serve_file(dir: &'static Dir<'static>, path: &str) -> Response<Body> {
     let path = path.strip_prefix('/').unwrap_or(path);
-
-    // If the path is a file, return it. Otherwise use index.html (SPA)
-    let (file, path) = match PROJECT_DIR.get_file(path) {
+    let (file, path) = match dir.get_file(path) {
         Some(file) => (file, path),
-        None => (PROJECT_DIR.get_file("index.html").unwrap(), "index.html"),
+        None => (dir.get_file("index.html").unwrap(), "index.html"),
     };
-    if let Some(body) = file.contents_utf8() {
-        let content_type = mime_guess::from_path(path).first_raw().unwrap_or("text/html");
-        return Response::builder()
-            .status(StatusCode::OK)
-            .header(CONTENT_TYPE, content_type)
-            .body(body.to_owned())
-            .unwrap();
-    }
-    log::warn!(target: LOG_TARGET, "Path not found: {}", path);
+    let content_type = mime_guess::from_path(path).first_raw().unwrap_or("text/html");
     Response::builder()
-        .status(StatusCode::NOT_FOUND)
-        .body("".to_string())
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, content_type)
+        .body(Body::from(file.contents()))
         .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::body::to_bytes;
+    use include_dir::{DirEntry, File};
+
+    use super::*;
+
+    const WASM: &[u8] = b"\0asm\x01\0\0\0\xff\xfe";
+
+    static DIR: Dir<'static> = Dir::new("", &[
+        DirEntry::File(File::new("index.html", b"<html></html>")),
+        DirEntry::Dir(Dir::new("assets", &[DirEntry::File(File::new(
+            "assets/decoder.wasm",
+            WASM,
+        ))])),
+    ]);
+
+    async fn body(response: Response<Body>) -> Vec<u8> {
+        to_bytes(response.into_body(), usize::MAX).await.unwrap().to_vec()
+    }
+
+    #[tokio::test]
+    async fn a_binary_asset_is_served_as_is() {
+        let response = serve_file(&DIR, "/assets/decoder.wasm");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[CONTENT_TYPE], "application/wasm");
+        assert_eq!(body(response).await, WASM);
+    }
+
+    #[tokio::test]
+    async fn an_unknown_path_is_served_the_index() {
+        let response = serve_file(&DIR, "/substates/component_00");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[CONTENT_TYPE], "text/html");
+        assert_eq!(body(response).await, b"<html></html>");
+    }
 }
