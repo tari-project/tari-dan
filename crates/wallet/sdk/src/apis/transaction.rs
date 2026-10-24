@@ -308,11 +308,6 @@ where
                 finalized_time,
                 ..
             } => {
-                if let Some(diff) = execution_result.as_ref().and_then(|e| e.finalize.result.any_accept()) {
-                    check_diff_substate_types(diff)
-                        .map_err(|e| TransactionApiError::InvalidTransactionQueryResponse { details: e.to_string() })?;
-                }
-
                 let mut execution_result = execution_result;
                 if self.indexer_trust.is_verify() && !transaction.is_dry_run && final_decision.is_commit() {
                     let Some(verified) = self
@@ -324,6 +319,11 @@ where
                     if let Some(execution_result) = execution_result.as_mut() {
                         execution_result.finalize = verified;
                     }
+                }
+
+                if let Some(diff) = execution_result.as_ref().and_then(|e| e.finalize.result.any_accept()) {
+                    check_diff_substate_types(diff)
+                        .map_err(|e| TransactionApiError::InvalidTransactionQueryResponse { details: e.to_string() })?;
                 }
 
                 let new_status = if final_decision.is_commit() {
