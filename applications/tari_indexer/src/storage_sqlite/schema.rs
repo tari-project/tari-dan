@@ -112,7 +112,6 @@ diesel::table! {
         epoch -> BigInt,
         is_spent -> Bool,
         is_burnt -> Bool,
-        is_frozen -> Bool,
         created_at -> Timestamp,
     }
 }

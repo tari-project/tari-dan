@@ -1090,6 +1090,7 @@ impl NetworkWideStateSync {
                     id: inserted.id,
                     transaction_id: inserted.transaction_id,
                     event: inserted.event,
+                    encoded: inserted.encoded,
                 });
             }
         }

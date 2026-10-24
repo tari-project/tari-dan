@@ -488,6 +488,8 @@ pub struct InsertedEvent {
     pub id: i64,
     pub transaction_id: TransactionId,
     pub event: Arc<Event>,
+    /// `event` as stored.
+    pub encoded: Encoded<Event>,
 }
 
 pub struct ReadOnlyStore<T: IndexerStoreReader> {

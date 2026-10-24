@@ -130,6 +130,7 @@ impl TransactionEventStream {
                                     id,
                                     transaction_id: streamed.transaction_id,
                                     event: Arc::new(event),
+                                    encoded: streamed.event,
                                 });
                             },
                             Err(err) => {

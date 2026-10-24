@@ -123,7 +123,6 @@ create table utxos
     epoch            bigint    not NULL,
     is_spent         boolean   not NULL,
     is_burnt         boolean   not NULL,
-    is_frozen        boolean   not NULL,
     created_at       timestamp not null default current_timestamp
 );
 

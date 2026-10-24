@@ -57,6 +57,8 @@ pub struct TransactionEvent {
     pub id: i64,
     pub transaction_id: TransactionId,
     pub event: Arc<Event>,
+    /// The CBOR encoding of `event`, as the indexer stores and serves it.
+    pub encoded: Encoded<Event>,
 }
 
 /// The JSON data of a /transactions/events/stream SSE event. The event's id is the SSE `id:` field and its topic the

@@ -25,7 +25,6 @@ pub(crate) struct UtxoRecordUpdate {
     pub state_version: Option<i64>,
     pub is_spent: Option<bool>,
     pub is_burnt: Option<bool>,
-    pub is_frozen: Option<bool>,
 }
 
 #[derive(Insertable)]
@@ -42,7 +41,6 @@ pub(crate) struct UtxoRecordInsert {
     pub epoch: i64,
     pub is_spent: bool,
     pub is_burnt: bool,
-    pub is_frozen: bool,
 }
 #[derive(Queryable)]
 #[diesel(table_name = utxos)]
@@ -59,7 +57,6 @@ pub(crate) struct UtxoRecord {
     pub epoch: i64,
     pub is_spent: bool,
     pub is_burnt: bool,
-    pub _is_frozen: bool,
     pub _created_at: PrimitiveDateTime,
 }
 

@@ -259,8 +259,12 @@ fn replay_query(filter: &EventFilter, wildcard_scan_limit: u32) -> EventQuery {
 
 /// Encode a live TransactionEvent (which already carries its DB id) as an SSE event.
 fn encode_transaction_event(event: &TransactionEvent) -> Result<sse::Event, axum::Error> {
-    let encoded = Encoded::encode(&*event.event).map_err(axum::Error::new)?;
-    to_sse_event(event.id, event.event.topic(), event.transaction_id, encoded)
+    to_sse_event(
+        event.id,
+        event.event.topic(),
+        event.transaction_id,
+        event.encoded.clone(),
+    )
 }
 
 /// Encode a replayed event from the DB as an SSE event.
@@ -292,16 +296,46 @@ mod tests {
     use crate::storage_sqlite::insert_test_events;
 
     fn live_event(id: i64, topic: &str) -> TransactionEvent {
+        let event = Event::new(None, TemplateAddress::default(), topic.to_string(), Metadata::new());
         TransactionEvent {
             id,
             transaction_id: TransactionId::default(),
-            event: Arc::new(Event::new(
-                None,
-                TemplateAddress::default(),
-                topic.to_string(),
-                Metadata::new(),
-            )),
+            encoded: Encoded::encode(&event).unwrap(),
+            event: Arc::new(event),
         }
+    }
+
+    /// The JSON `data` of `event` as a client receives it.
+    async fn sent_data(event: sse::Event) -> StreamedTransactionEvent {
+        let stream = futures::stream::iter([Ok::<_, std::convert::Infallible>(event)]);
+        let body = Sse::new(stream).into_response().into_body();
+        let text = String::from_utf8(axum::body::to_bytes(body, usize::MAX).await.unwrap().to_vec()).unwrap();
+        let data = text
+            .lines()
+            .find_map(|line| line.strip_prefix("data: "))
+            .unwrap_or_else(|| panic!("no data line in {text:?}"));
+        serde_json::from_str(data).unwrap()
+    }
+
+    #[tokio::test]
+    async fn live_and_replayed_events_are_sent_as_the_same_streamed_event() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("indexer.db");
+        let store = ReadOnlyStore::new(SqliteIndexerStore::try_create(db_path.clone()).unwrap());
+        insert_test_events(&db_path, &["std.vault.deposit"]);
+        let live = live_event(1, "std.vault.deposit");
+
+        let page = store
+            .get_events_after_id(replay_query(&EventFilter::default(), 10), 0, 10)
+            .await
+            .unwrap();
+        let replayed = sent_data(encode_replay_event(&page.events[0]).unwrap()).await;
+        let sent_live = sent_data(encode_transaction_event(&live).unwrap()).await;
+
+        assert_eq!(sent_live.transaction_id, live.transaction_id);
+        assert_eq!(sent_live.event.decode().unwrap(), *live.event);
+        assert_eq!(replayed.transaction_id, live.transaction_id);
+        assert_eq!(replayed.event, sent_live.event);
     }
 
     async fn next_event_id(rx: &mut mpsc::Receiver<Result<sse::Event, axum::Error>>) -> Option<String> {

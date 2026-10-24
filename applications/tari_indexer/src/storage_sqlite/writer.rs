@@ -12,6 +12,7 @@ use log::{debug, info, warn};
 use serde::Serialize;
 use tari_engine_types::{
     Utxo,
+    encoded::Encoded,
     published_template::PublishedTemplateMetadata,
     substate::SubstateId,
     transaction_receipt::TransactionReceipt,
@@ -143,7 +144,6 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
                         epoch: epoch.as_u64() as i64,
                         is_spent: false,
                         is_burnt: false,
-                        is_frozen: unspent.is_frozen,
                     };
                     // batch insert results in "cannot start a transaction within a transaction" error
                     let num_inserted = diesel::insert_into(utxos::table)
@@ -291,11 +291,12 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
                 .collect();
 
             for event in filtered_events {
+                let encoded = encode_committed(&event)?;
                 let new_event = NewEvent {
                     template_address: event.template_address().to_string(),
                     tx_hash: &receipt_addr_hex,
                     topic: event.topic(),
-                    event: encode_committed(&event)?,
+                    event: encoded.clone(),
                     substate_id: event.substate_id().map(|s| s.to_string()),
                     resource_address: EventFilter::event_resource_address(&event).map(|r| r.to_string()),
                     epoch: encode_retention_epoch(receipt.epoch),
@@ -313,6 +314,7 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
                     id,
                     transaction_id,
                     event: Arc::new(event),
+                    encoded: Encoded::from_bytes(encoded),
                 });
             }
 

@@ -371,7 +371,7 @@ pub struct SubmitTransactionResponse {
     ts(
         export,
         export_to = "tari-indexer-client/",
-        rename = "IndexerSubmitTransactionResponse"
+        rename = "IndexerSubmitTransactionDryRunResponse"
     )
 )]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
