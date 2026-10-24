@@ -30,6 +30,8 @@ tari_crypto = { workspace = true, optional = true }
 [dev-dependencies]
 tari_ootle_light_client = { path = ".", features = ["test-fixtures"] }
 
+serde_json = { workspace = true }
+
 [features]
 # Signed fixtures for tests of crates that verify with the light client.
 test-fixtures = ["dep:indexmap", "dep:tari_common_types", "dep:tari_crypto"]

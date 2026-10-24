@@ -38,4 +38,11 @@ export type SubstateProof = {
    * that it is no longer in the state tree. `value_proof` is that exclusion proof.
    */
   down_proof?: string;
+  /**
+   * CBOR-encoded `SubstateValue` the proof is for, as its shard group committed it. Present when the substate
+   * version is up. A verifier hashes and uses the value decoded from these bytes: the substate's JSON form does not
+   * decode back to the committed value for every value, e.g. a non-finite float or metadata whose CBOR is not
+   * canonical.
+   */
+  value?: string;
 };

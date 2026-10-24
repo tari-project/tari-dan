@@ -1520,6 +1520,14 @@
             "format": "byte",
             "description": "CBOR-encoded `SubstateDownProof`, as in [`SubstateProof::down_proof`]."
           },
+          "value": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "byte",
+            "description": "CBOR-encoded `SubstateValue`, as in [`SubstateProof::value`]."
+          },
           "value_hash_epoch": {
             "type": "integer",
             "format": "int64",
@@ -2437,6 +2445,14 @@
             ],
             "format": "byte",
             "description": "CBOR-encoded `SubstateDownProof`, present when the substate version is down: an inclusion proof that the\nversion was committed, anchored at a block of its own, and an exclusion proof under `anchor.state_merkle_root`\nthat it is no longer in the state tree. `value_proof` is that exclusion proof."
+          },
+          "value": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "byte",
+            "description": "CBOR-encoded `SubstateValue` the proof is for, as its shard group committed it. Present when the substate\nversion is up. A verifier hashes and uses the value decoded from these bytes: the substate's JSON form does not\ndecode back to the committed value for every value, e.g. a non-finite float or metadata whose CBOR is not\ncanonical."
           },
           "value_hash_epoch": {
             "type": "integer",

@@ -223,7 +223,17 @@ where
                 break;
             }
             for account in &accounts {
-                let is_updated = self.scanner.refresh_account(*account.component_address()).await?;
+                // Accounts refresh independently: one that fails must not hold back the rest.
+                let is_updated = match self.scanner.refresh_account(*account.component_address()).await {
+                    Ok(is_updated) => is_updated,
+                    Err(err) => {
+                        error!(
+                            target: LOG_TARGET,
+                            "🏦 Failed to refresh account {}: {}", account, err
+                        );
+                        continue;
+                    },
+                };
 
                 if is_updated {
                     info!(

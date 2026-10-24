@@ -12332,6 +12332,7 @@ dependencies = [
  "indexmap 2.14.2",
  "ootle-network",
  "serde",
+ "serde_json",
  "tari_bor",
  "tari_common_types",
  "tari_crypto",

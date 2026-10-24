@@ -21,4 +21,8 @@ export type BatchedSubstateProof = {
    * CBOR-encoded `SubstateDownProof`, as in [`SubstateProof::down_proof`].
    */
   down_proof?: string;
+  /**
+   * CBOR-encoded `SubstateValue`, as in [`SubstateProof::value`].
+   */
+  value?: string;
 };

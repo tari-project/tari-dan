@@ -21,7 +21,7 @@ use tari_ootle_transaction::TransactionId;
 use tari_ootle_wallet_sdk::{
     WalletSdk,
     WalletSdkSpec,
-    apis::substate::ValidatorScanResult,
+    apis::substate::{SubstateApiError, ValidatorScanResult},
     models::{
         AccountChangedEvent,
         AccountCreatedEvent,
@@ -571,10 +571,17 @@ where TSpec: WalletSdkSpec
             let nft = match updated_nft_data_cache.remove(&id) {
                 Some(nft) => nft,
                 None => {
-                    let substate = self
+                    let substate = match self
                         .fetch_substate(&NonFungibleAddress::new(*latest_vault.resource_address(), id.clone()).into())
                         .await
-                        .optional()?;
+                    {
+                        // A token the indexer cannot prove costs only its own entry; the next scan fetches it again.
+                        Err(AccountMonitorError::Substate(err @ SubstateApiError::SubstateUnverified { .. })) => {
+                            warn!(target: LOG_TARGET, "Non-fungible {} for vault {} is not stored: {}", id, vault_id, err);
+                            continue;
+                        },
+                        result => result.optional()?,
+                    };
                     let Some(substate) = substate else {
                         warn!(target: LOG_TARGET, "Non-fungible {} for vault {} does not exist according to indexer. Unable to update it", id, vault_id);
                         continue;

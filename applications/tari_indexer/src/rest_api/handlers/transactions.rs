@@ -347,6 +347,10 @@ async fn get_proven_receipt(
         None => return Ok(None),
     };
     let version = fetched.substate.version();
+    let proof = fetched
+        .proof
+        .map(|proof| to_substate_proof(proof, Some(fetched.substate.substate_value())))
+        .transpose()?;
     let receipt = fetched
         .substate
         .into_substate_value()
@@ -355,7 +359,7 @@ async fn get_proven_receipt(
     Ok(Some(ProvenTransactionReceipt {
         version,
         receipt,
-        proof: fetched.proof.map(to_substate_proof).transpose()?,
+        proof,
     }))
 }
 

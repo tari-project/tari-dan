@@ -7,6 +7,7 @@ use ootle_network::Network;
 use tari_engine_types::{
     SubstateVersion,
     commit_result::{FinalizeResult, TransactionResult},
+    limits::MAX_CBOR_NESTING_DEPTH,
     substate::{SubstateDiff, SubstateId, SubstateValue, hash_substate},
     transaction_receipt::{FinalizeOutcome, TransactionReceipt},
 };
@@ -25,39 +26,55 @@ use tari_ootle_transaction::TransactionId;
 use crate::{LightClientError, VerifiedCommittee};
 
 impl VerifiedCommittee {
-    /// Verifies that `substate_id` at `version` held `value` (or, for `None`, was absent) when the block `proof` is
-    /// anchored at committed. This committee must be the anchor block's: of its epoch and shard group.
+    /// Verifies that `substate_id` at `version` held the value `proof` carries when the block `proof` is anchored at
+    /// committed, and returns that value. This committee must be the anchor block's: of its epoch and shard group.
     ///
-    /// Returns the anchor block's quorum-signed header fields. The proof says nothing about later blocks, so the caller
-    /// judges freshness by the returned epoch and height.
+    /// The value is decoded from the proof's committed encoding, so a caller uses it in place of the substate served
+    /// beside the proof.
+    ///
+    /// Also returns the anchor block's quorum-signed header fields. The proof says nothing about later blocks, so the
+    /// caller judges freshness by the returned epoch and height.
     pub fn verify_substate(
         &self,
         substate_id: &SubstateId,
         version: SubstateVersion,
-        value: Option<&SubstateValue>,
         proof: &SubstateProof,
-    ) -> Result<VerifiedBlockTip, LightClientError> {
+    ) -> Result<(VerifiedBlockTip, SubstateValue), LightClientError> {
+        let encoded = proof
+            .value
+            .as_deref()
+            .ok_or_else(|| LightClientError::MissingSubstateValue {
+                substate_id: substate_id.to_string(),
+            })?;
+        let value =
+            tari_bor::decode_exact_with_max_depth::<SubstateValue>(encoded, MAX_CBOR_NESTING_DEPTH).map_err(|e| {
+                LightClientError::Decode {
+                    what: "proven substate value",
+                    details: e.to_string(),
+                }
+            })?;
         let tip = self.verify_commit_proof(&proof.commit_proof)?;
         verify_substate_value_proof_against_root(
             &proof.value_proof,
             substate_id,
             version,
-            value,
+            Some(&value),
             self.network(),
             self.num_preshards(),
             proof.value_hash_epoch,
             &TrustedStateRoot::from(tip),
         )?;
-        Ok(tip)
+        Ok((tip, value))
     }
 
-    /// Verifies that `transaction_id` committed with the receipt `proven` carries. A transaction commits only once, so
-    /// a proven receipt stays proven however old its anchor block is, given a committee of that block's epoch.
+    /// Verifies that `transaction_id` committed with a receipt, and returns that receipt as `proven`'s proof carries
+    /// it. A transaction commits only once, so a proven receipt stays proven however old its anchor block is, given a
+    /// committee of that block's epoch.
     pub fn verify_receipt(
         &self,
         transaction_id: TransactionId,
         proven: &ProvenTransactionReceipt,
-    ) -> Result<VerifiedBlockTip, LightClientError> {
+    ) -> Result<(VerifiedBlockTip, TransactionReceipt), LightClientError> {
         let proof = proven
             .proof
             .as_ref()
@@ -65,8 +82,13 @@ impl VerifiedCommittee {
                 transaction_id: transaction_id.to_string(),
             })?;
         let substate_id = SubstateId::TransactionReceipt(transaction_id.into_receipt_address());
-        let value = SubstateValue::from(proven.receipt.clone());
-        self.verify_substate(&substate_id, proven.version, Some(&value), proof)
+        let (tip, value) = self.verify_substate(&substate_id, proven.version, proof)?;
+        let receipt = value
+            .into_transaction_receipt()
+            .ok_or_else(|| LightClientError::ProvenReceiptNotAReceipt {
+                transaction_id: transaction_id.to_string(),
+            })?;
+        Ok((tip, receipt))
     }
 }
 

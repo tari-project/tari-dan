@@ -478,7 +478,7 @@ where
             return Ok(false);
         };
         let unverified = |source| TransactionApiError::FinalizationUnverified { transaction_id, source };
-        committee.verify_receipt(transaction_id, proven).map_err(unverified)?;
+        let (_, receipt) = committee.verify_receipt(transaction_id, proven).map_err(unverified)?;
         let execution_result =
             execution_result.ok_or_else(|| TransactionApiError::InvalidTransactionQueryResponse {
                 details: format!("Transaction {transaction_id} committed, but the indexer served no result"),
@@ -486,7 +486,7 @@ where
         check_result_matches_receipt(
             committee.network(),
             transaction_id,
-            &proven.receipt,
+            &receipt,
             &execution_result.finalize,
         )
         .map_err(unverified)?;
