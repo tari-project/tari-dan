@@ -31,6 +31,21 @@ pub enum OotleWasmError {
         expected: usize,
         got: usize,
     },
+    #[error(
+        "Seal signature does not verify for the given public key; sign the hash from hashUnsealedTransaction, taken \
+         after every authorization signature is attached, with that public key's secret key"
+    )]
+    SealSignatureInvalid,
+    #[error(
+        "Authorization signature does not verify for the given public key; sign the hash from hashUnsignedTransaction \
+         for this seal signer with that public key's secret key"
+    )]
+    TransactionSignatureInvalid,
+    #[error(
+        "An authorization signature on the transaction was made for a different seal signer; each authorizer must \
+         sign the hash from hashUnsignedTransaction for this seal signer's public key"
+    )]
+    AuthorizationForOtherSealSigner,
     #[error("Stealth crypto error: {0}")]
     Stealth(String),
     #[error("Stealth transfer validation failed: {0}")]
