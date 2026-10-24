@@ -50,6 +50,7 @@ use crate::{
             ExecutionMemo,
             PledgedTransaction,
             PreparedTransaction,
+            SpeculationBudget,
             SpeculationCandidate,
         },
     },
@@ -95,6 +96,7 @@ where
         local_committee_info: &CommitteeInfo,
         substate_store: &PendingSubstateStore<TTx>,
         proposed_block_change_set: &ProposedBlockChangeSet,
+        budget: SpeculationBudget,
     ) where
         TStateStore: Sync,
         TExecutor: Sync,
@@ -121,9 +123,13 @@ where
                 })
             })
             .collect::<Vec<_>>();
-        self.memo =
-            self.transaction_manager
-                .speculate(substate_store, local_committee_info, block.epoch(), &candidates);
+        self.memo = self.transaction_manager.speculate(
+            substate_store,
+            local_committee_info,
+            block.epoch(),
+            &candidates,
+            budget,
+        );
     }
 
     pub fn memo(&self) -> &ExecutionMemo {

@@ -74,6 +74,7 @@ use crate::{
             ExecutionMemo,
             PledgedTransaction,
             PreparedTransaction,
+            SpeculationBudget,
             SpeculationCandidate,
             TransactionLockConflicts,
         },
@@ -560,6 +561,8 @@ where TConsensusSpec: ConsensusSpec
         // transactions remain in the pool and are proposed in a later block.
         let propose_exec_deadline = self.config.consensus_constants.pacemaker_block_time / 2;
         let propose_started_at = Instant::now();
+        // Speculation takes at most half the time the commands may take, so that the commands still have time to take
+        // what it speculated
         let mut memo = self.speculate_batch(
             &substate_store,
             local_committee_info,
@@ -567,6 +570,10 @@ where TConsensusSpec: ConsensusSpec
             &locked_epoch,
             &batch.transactions,
             &change_set,
+            SpeculationBudget {
+                deadline: Some(propose_started_at + propose_exec_deadline / 2),
+                max_execution_points: self.config.consensus_constants.max_block_execution_points,
+            },
         );
         // Accumulated to log observed execution throughput (weight/s) for calibrating `max_block_weight`
         // against the block time. See the calibration log emitted after the loop.
@@ -691,7 +698,7 @@ where TConsensusSpec: ConsensusSpec
             }
         }
         timer.done();
-        if batch_size > 0 {
+        if memo.is_speculated() {
             info!(target: LOG_TARGET, "⚡ Speculated executions for the proposal at height {next_height}: {memo}");
         }
 
@@ -832,6 +839,7 @@ where TConsensusSpec: ConsensusSpec
         locked_epoch: &LockedEpoch,
         transactions: &[TransactionPoolRecord],
         change_set: &ProposedBlockChangeSet,
+        budget: SpeculationBudget,
     ) -> ExecutionMemo {
         let candidates = transactions
             .iter()
@@ -848,8 +856,13 @@ where TConsensusSpec: ConsensusSpec
                 })
             })
             .collect::<Vec<_>>();
-        self.transaction_manager
-            .speculate(substate_store, local_committee_info, state_anchor.epoch, &candidates)
+        self.transaction_manager.speculate(
+            substate_store,
+            local_committee_info,
+            state_anchor.epoch,
+            &candidates,
+            budget,
+        )
     }
 
     #[allow(clippy::too_many_lines)]

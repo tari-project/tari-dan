@@ -84,7 +84,13 @@ use crate::{
     hotstuff::{
         block_change_set::ProposedBlockChangeSet,
         substate_store::PendingSubstateStore,
-        transaction_manager::{ConsensusTransactionManager, EvidenceOrExecution, ExecutionMemo, PreparedTransaction},
+        transaction_manager::{
+            ConsensusTransactionManager,
+            EvidenceOrExecution,
+            ExecutionMemo,
+            PreparedTransaction,
+            SpeculationBudget,
+        },
     },
     traits::{BlockTransactionExecutor, BlockTransactionExecutorError, CertificateStore, UncommittedChainTemplates},
 };
@@ -105,10 +111,15 @@ struct Script {
     extra_downs: Vec<VersionedSubstateId>,
     /// Substates the execution reports reading at version zero besides the inputs it is given.
     extra_reads: Vec<SubstateId>,
+    /// Inputs the transaction is given and leaves unchanged.
+    untouched: Vec<SubstateId>,
+    /// The state of each substate in `new_outputs`.
+    output_state: i128,
 }
 
 /// Stands in for the engine: a transaction executes as its script says, writing every input it is given that is not
-/// read-only.
+/// read-only or untouched. A written component's next state is its current state plus one, so what a transaction
+/// writes depends on the values it reads.
 #[derive(Debug, Clone, Default)]
 struct ScriptedExecutor {
     scripts: Arc<Mutex<HashMap<TransactionId, Script>>>,
@@ -153,7 +164,9 @@ impl BlockTransactionExecutor<TestStore> for ScriptedExecutor {
         let inputs = resolved_inputs
             .iter()
             .map(|(requirement, substate)| {
-                let lock_type = if requirement.substate_id().is_read_only() {
+                let lock_type = if requirement.substate_id().is_read_only() ||
+                    script.untouched.contains(requirement.substate_id())
+                {
                     SubstateLockType::Read
                 } else {
                     SubstateLockType::Write
@@ -189,14 +202,21 @@ impl BlockTransactionExecutor<TestStore> for ScriptedExecutor {
             let id = input.versioned_substate_id();
             diff.down(id.substate_id().clone(), id.version());
             let next = id.to_next_version();
-            diff.up(next.substate_id().clone(), component(next.version()));
+            let state = resolved_inputs
+                .get(id.substate_id())
+                .map_or(0, component_state)
+                .saturating_add(1);
+            diff.up(next.substate_id().clone(), component_with_state(next.version(), state));
             outputs.push(next);
         }
         for id in script.extra_downs {
             diff.down(id.substate_id().clone(), id.version());
         }
         for id in script.new_outputs {
-            diff.up(id.clone(), component(SubstateVersion::ZERO));
+            diff.up(
+                id.clone(),
+                component_with_state(SubstateVersion::ZERO, script.output_state),
+            );
             outputs.push(VersionedSubstateId::new(id, SubstateVersion::ZERO));
         }
         diff.up(
@@ -250,8 +270,25 @@ fn execute_result(transaction: &Transaction, result: TransactionResult) -> Execu
     }
 }
 
-fn component(version: SubstateVersion) -> Substate {
-    Substate::new(version, component_value())
+/// A component at `version` whose state is the integer `state`.
+fn component_with_state(version: SubstateVersion, state: i128) -> Substate {
+    let mut value = component_value();
+    if let SubstateValue::Component(component) = &mut value {
+        component.body.state = tari_bor::Value::Integer(state);
+    }
+    Substate::new(version, value)
+}
+
+/// The integer state of a component written by [ScriptedExecutor], or 0.
+fn component_state(substate: &Substate) -> i128 {
+    match substate
+        .substate_value()
+        .component()
+        .map(|component| &component.body.state)
+    {
+        Some(tari_bor::Value::Integer(state)) => *state,
+        _ => 0,
+    }
 }
 
 fn component_value() -> SubstateValue {
@@ -299,6 +336,8 @@ struct Replica {
     parent: Block,
     /// The stored block a replica evaluates commands in.
     candidate: Block,
+    /// What speculating the candidate's commands may spend, if the replica speculates.
+    speculation_budget: SpeculationBudget,
     public_key: RistrettoPublicKey,
     _tmp: TempDir,
 }
@@ -347,6 +386,10 @@ impl Replica {
             ),
             parent,
             candidate,
+            speculation_budget: SpeculationBudget {
+                deadline: None,
+                max_execution_points: u64::MAX,
+            },
             public_key: RistrettoPublicKey::default(),
             _tmp: tmp,
         };
@@ -444,7 +487,15 @@ impl Replica {
                 let tx = &**tx;
                 let mut substate_store = PendingSubstateStore::init(tx, block.as_leaf(), NUM_PRESHARDS)?;
                 let mut change_set = ProposedBlockChangeSet::new(block.as_leaf());
-                validator.speculate(tx, block, commands, &self.committee, &substate_store, &change_set);
+                validator.speculate(
+                    tx,
+                    block,
+                    commands,
+                    &self.committee,
+                    &substate_store,
+                    &change_set,
+                    self.speculation_budget,
+                );
                 let mut evaluation = Evaluation::default();
                 for command in commands {
                     evaluation.no_vote = match command {
@@ -1624,6 +1675,98 @@ mod speculation {
         assert_eq!(speculated.memo_hits, 0);
         assert_eq!(speculated.memo_misses, 1);
         assert_eq!(speculating.executor.num_executions(atoms[0].id()), 2);
+    }
+
+    #[test]
+    fn two_creators_of_one_substate_in_different_units_do_not_share_a_speculation() {
+        let created = component_id(0x40);
+        let (expected, speculated, _replica) = evaluate_both(|replica| {
+            let (input, shared) = (component_id(0x20), component_id(0x21));
+            replica.add_substate(&input);
+            replica.add_substate(&shared);
+            let first = replica.pool_transaction(1, &[&input], Script {
+                commit: true,
+                new_outputs: vec![created.clone()],
+                ..Default::default()
+            });
+            // Shares a unit with the user through `shared`, and creates the substate with another value. The block
+            // aborts it, because the first creator already created the substate.
+            let second = (2..)
+                .map(|seed| {
+                    replica.pool_transaction(seed, &[&shared], Script {
+                        commit: true,
+                        new_outputs: vec![created.clone()],
+                        untouched: vec![shared.clone()],
+                        output_state: 7,
+                        ..Default::default()
+                    })
+                })
+                .find(|second| *second > first)
+                .unwrap();
+            let user = (100..)
+                .map(|seed| replica.pool_transaction(seed, &[&created, &shared], commits()))
+                .find(|user| *user > second)
+                .unwrap();
+            vec![
+                committing(first),
+                aborting(second, AbortReason::LockInputsFailed),
+                committing(user),
+            ]
+        });
+
+        assert!(expected.no_vote.is_none(), "{:?}", expected.no_vote);
+        assert_eq!(speculated.outcome(), expected.outcome());
+        assert!(
+            speculated.memo_misses > 0,
+            "the user's speculation read the second creator's value"
+        );
+    }
+
+    #[test]
+    fn speculation_stops_once_its_execution_points_are_spent() {
+        let vault = component_id(0x20);
+        let setup = |replica: &Replica| {
+            replica.add_substate(&vault);
+            let mut atoms = (1..=4)
+                .map(|seed| committing(replica.pool_transaction(seed, &[&vault], commits())))
+                .collect::<Vec<_>>();
+            atoms.sort_by_key(|atom| atom.id);
+            atoms
+        };
+        let serial = Replica::new();
+        let atoms = setup(&serial);
+        let expected = serial.evaluate_local_only(&atoms);
+        let mut speculating = Replica::new().with_execution_threads(THREADS);
+        // Less than one transaction's points, so only the first transaction of the one unit starts
+        speculating.speculation_budget.max_execution_points = 1;
+        assert_eq!(setup(&speculating), atoms);
+        let speculated = speculating.evaluate_local_only(&atoms);
+
+        assert!(expected.no_vote.is_none(), "{:?}", expected.no_vote);
+        assert_eq!(speculated.outcome(), expected.outcome());
+        assert_eq!(speculated.memo_hits, 1);
+        assert_eq!(speculated.memo_misses, 0);
+    }
+
+    #[test]
+    fn speculation_past_its_deadline_starts_nothing() {
+        let (atoms, serial) = {
+            let replica = Replica::new();
+            let input = component_id(0x20);
+            replica.add_substate(&input);
+            let atoms = vec![committing(replica.pool_transaction(1, &[&input], commits()))];
+            (atoms, replica)
+        };
+        let expected = serial.evaluate_local_only(&atoms);
+        let mut speculating = Replica::new().with_execution_threads(THREADS);
+        speculating.speculation_budget.deadline = Some(std::time::Instant::now());
+        speculating.add_substate(&component_id(0x20));
+        speculating.pool_transaction(1, &[&component_id(0x20)], commits());
+        let speculated = speculating.evaluate_local_only(&atoms);
+
+        assert_eq!(speculated.outcome(), expected.outcome());
+        assert_eq!(speculated.memo_hits + speculated.memo_misses, 0);
+        assert_eq!(speculating.executor.num_executions(atoms[0].id()), 1);
     }
 
     /// A deterministic source of small random numbers.

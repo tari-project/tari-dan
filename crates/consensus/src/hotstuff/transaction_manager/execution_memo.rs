@@ -1,11 +1,11 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, time::Duration};
 
 use tari_consensus_types::BlockId;
 use tari_engine_types::substate::Substate;
-use tari_ootle_common_types::{SubstateRequirement, SubstateVersion};
+use tari_ootle_common_types::SubstateRequirement;
 use tari_ootle_storage::consensus_models::{LockedEpoch, TransactionExecution};
 use tari_ootle_transaction::TransactionId;
 
@@ -14,25 +14,66 @@ use tari_ootle_transaction::TransactionId;
 ///
 /// The engine is a pure function of the transaction, its input substates, the locked epoch, the input fanout and the
 /// templates of the chain the block builds on. The fanout and templates are the same for every transaction of the
-/// block the memo was speculated for, so a lookup names that block, and compares the input versions and the locked
-/// epoch.
+/// block the memo was speculated for, so a lookup names that block, and compares the input substates, value and
+/// version, and the locked epoch.
 ///
-/// An input version names one value along a chain, except a validator fee pool, which a block rewrites in place
-/// without a new version when fees are withdrawn from it. An execution with a validator fee pool input is therefore
-/// never recorded, so that equal versions always mean equal inputs.
+/// A version alone does not name a value here. Speculation applies changes the block may never make, so two
+/// speculated transactions can create the same substate at the same version with different values, and a block
+/// rewrites a validator fee pool in place when fees are withdrawn from it.
 #[derive(Debug)]
 pub struct ExecutionMemo {
     parent_block: BlockId,
     entries: HashMap<TransactionId, SpeculatedExecution>,
+    summary: Option<SpeculationSummary>,
     num_hits: usize,
     num_misses: usize,
 }
 
 #[derive(Debug)]
 struct SpeculatedExecution {
-    input_versions: HashMap<SubstateRequirement, SubstateVersion>,
+    inputs: SpeculatedInputs,
     locked_epoch: LockedEpoch,
     execution: TransactionExecution,
+}
+
+/// The substates an execution read, each encoded with its version and value, by the requirement it resolved.
+#[derive(Debug)]
+pub struct SpeculatedInputs(HashMap<SubstateRequirement, Vec<u8>>);
+
+impl SpeculatedInputs {
+    /// The encoding of `inputs`, or `None` if one cannot be encoded.
+    pub fn encode(inputs: &HashMap<SubstateRequirement, Substate>) -> Option<Self> {
+        inputs
+            .iter()
+            .map(|(req, substate)| Some((req.clone(), tari_bor::encode(substate).ok()?)))
+            .collect::<Option<_>>()
+            .map(Self)
+    }
+
+    /// Whether `inputs` are exactly these. Equal substates encode alike, so a substate whose encoding differs is a
+    /// different substate.
+    fn matches(&self, inputs: &HashMap<SubstateRequirement, Substate>) -> bool {
+        self.0.len() == inputs.len() &&
+            inputs.iter().all(|(req, substate)| {
+                self.0
+                    .get(req)
+                    .is_some_and(|encoded| tari_bor::encode(substate).is_ok_and(|bytes| bytes == *encoded))
+            })
+    }
+}
+
+/// How a block's transactions were speculated.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SpeculationSummary {
+    pub num_candidates: usize,
+    pub num_speculated: usize,
+    pub num_units: usize,
+    /// The number of transactions in the unit with the most, and their summed weight.
+    pub longest_unit: (usize, u64),
+    pub num_threads: usize,
+    pub elapsed: Duration,
+    /// Whether speculation stopped at its time or execution budget before every unit was done.
+    pub is_budget_spent: bool,
 }
 
 impl ExecutionMemo {
@@ -41,6 +82,7 @@ impl ExecutionMemo {
         Self {
             parent_block,
             entries: HashMap::new(),
+            summary: None,
             num_hits: 0,
             num_misses: 0,
         }
@@ -51,27 +93,28 @@ impl ExecutionMemo {
         Self::new(BlockId::zero())
     }
 
-    /// Records the execution of `transaction_id` against `inputs` at `locked_epoch`. Returns false, recording nothing,
-    /// if an input's version does not name its value.
+    /// Records the execution of `transaction_id` against `inputs` at `locked_epoch`.
     pub fn insert(
         &mut self,
         transaction_id: TransactionId,
-        inputs: &HashMap<SubstateRequirement, Substate>,
+        inputs: SpeculatedInputs,
         locked_epoch: LockedEpoch,
         execution: TransactionExecution,
-    ) -> bool {
-        if inputs.keys().any(|req| req.substate_id().is_validator_fee_pool()) {
-            return false;
-        }
+    ) {
         self.entries.insert(transaction_id, SpeculatedExecution {
-            input_versions: inputs
-                .iter()
-                .map(|(req, substate)| (req.clone(), substate.version()))
-                .collect(),
+            inputs,
             locked_epoch,
             execution,
         });
-        true
+    }
+
+    pub fn set_summary(&mut self, summary: SpeculationSummary) {
+        self.summary = Some(summary);
+    }
+
+    /// Whether the block's transactions were speculated.
+    pub fn is_speculated(&self) -> bool {
+        self.summary.is_some()
     }
 
     /// The execution speculated for `transaction_id` in the block that builds on `parent_block`, if it was speculated
@@ -87,11 +130,7 @@ impl ExecutionMemo {
             return None;
         }
         let entry = self.entries.remove(transaction_id)?;
-        let is_same_inputs = entry.input_versions.len() == inputs.len() &&
-            inputs
-                .iter()
-                .all(|(req, substate)| entry.input_versions.get(req) == Some(&substate.version()));
-        if is_same_inputs && entry.locked_epoch == *locked_epoch {
+        if entry.locked_epoch == *locked_epoch && entry.inputs.matches(inputs) {
             self.num_hits += 1;
             Some(entry.execution)
         } else {
@@ -116,9 +155,23 @@ impl ExecutionMemo {
     }
 }
 
-/// Hits, misses, and speculated executions no evaluation asked for.
 impl fmt::Display for ExecutionMemo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(summary) = &self.summary {
+            write!(
+                f,
+                "speculated {} of {} transaction(s) in {} unit(s) on {} thread(s) in {:.2?}{}, longest unit {} \
+                 transaction(s) of weight {}; ",
+                summary.num_speculated,
+                summary.num_candidates,
+                summary.num_units,
+                summary.num_threads,
+                summary.elapsed,
+                if summary.is_budget_spent { " (budget spent)" } else { "" },
+                summary.longest_unit.0,
+                summary.longest_unit.1,
+            )?;
+        }
         write!(
             f,
             "{} hit(s), {} miss(es), {} unused",
@@ -132,8 +185,8 @@ impl fmt::Display for ExecutionMemo {
 #[cfg(test)]
 mod tests {
     use tari_engine_types::{commit_result::RejectReason, non_fungible::NonFungibleContainer, substate::SubstateId};
-    use tari_ootle_common_types::Epoch;
-    use tari_template_lib_types::{ComponentAddress, ObjectKey, ValidatorFeePoolAddress};
+    use tari_ootle_common_types::{Epoch, SubstateVersion};
+    use tari_template_lib_types::{ComponentAddress, ObjectKey};
 
     use super::*;
 
@@ -160,20 +213,27 @@ mod tests {
             &TransactionId::default(),
             RejectReason::execution_failure_unclassified("test"),
         );
-        assert!(memo.insert(TransactionId::default(), inputs, locked_epoch, execution));
+        memo.insert(
+            TransactionId::default(),
+            SpeculatedInputs::encode(inputs).unwrap(),
+            locked_epoch,
+            execution,
+        );
         memo
+    }
+
+    fn take(
+        memo: &mut ExecutionMemo,
+        inputs: &HashMap<SubstateRequirement, Substate>,
+        locked_epoch: LockedEpoch,
+    ) -> Option<TransactionExecution> {
+        memo.take(&BlockId::zero(), &TransactionId::default(), inputs, &locked_epoch)
     }
 
     #[test]
     fn the_same_inputs_and_locked_epoch_hit() {
         let mut memo = memo_with(&inputs_at(3), pinned_to(5));
-        let hit = memo.take(
-            &BlockId::zero(),
-            &TransactionId::default(),
-            &inputs_at(3),
-            &pinned_to(5),
-        );
-        assert!(hit.is_some());
+        assert!(take(&mut memo, &inputs_at(3), pinned_to(5)).is_some());
         assert_eq!(memo.num_hits(), 1);
         assert_eq!(memo.num_untaken(), 0);
     }
@@ -181,13 +241,17 @@ mod tests {
     #[test]
     fn a_different_input_version_misses() {
         let mut memo = memo_with(&inputs_at(3), pinned_to(5));
-        let hit = memo.take(
-            &BlockId::zero(),
-            &TransactionId::default(),
-            &inputs_at(4),
-            &pinned_to(5),
-        );
-        assert!(hit.is_none());
+        assert!(take(&mut memo, &inputs_at(4), pinned_to(5)).is_none());
+        assert_eq!(memo.num_misses(), 1);
+    }
+
+    #[test]
+    fn a_different_input_value_at_the_same_version_misses() {
+        let mut memo = memo_with(&inputs_at(3), pinned_to(5));
+        let mut burnt = NonFungibleContainer::no_data();
+        burnt.burn();
+        let other_value = HashMap::from([(requirement(1), Substate::new(SubstateVersion::new(3), burnt))]);
+        assert!(take(&mut memo, &other_value, pinned_to(5)).is_none());
         assert_eq!(memo.num_misses(), 1);
     }
 
@@ -199,20 +263,13 @@ mod tests {
             requirement(2),
             Substate::new(SubstateVersion::ZERO, NonFungibleContainer::no_data()),
         );
-        let hit = memo.take(&BlockId::zero(), &TransactionId::default(), &more, &pinned_to(5));
-        assert!(hit.is_none());
+        assert!(take(&mut memo, &more, pinned_to(5)).is_none());
     }
 
     #[test]
     fn a_different_locked_epoch_misses() {
         let mut memo = memo_with(&inputs_at(3), pinned_to(5));
-        let hit = memo.take(
-            &BlockId::zero(),
-            &TransactionId::default(),
-            &inputs_at(3),
-            &pinned_to(4),
-        );
-        assert!(hit.is_none());
+        assert!(take(&mut memo, &inputs_at(3), pinned_to(4)).is_none());
         assert_eq!(memo.num_misses(), 1);
     }
 
@@ -222,23 +279,5 @@ mod tests {
         let other = BlockId::from([1u8; 32]);
         let hit = memo.take(&other, &TransactionId::default(), &inputs_at(3), &pinned_to(5));
         assert!(hit.is_none());
-    }
-
-    #[test]
-    fn an_execution_with_a_validator_fee_pool_input_is_not_recorded() {
-        let mut memo = ExecutionMemo::new(BlockId::zero());
-        let fee_pool = SubstateRequirement::unversioned(SubstateId::from(ValidatorFeePoolAddress::from_array(
-            [7; ObjectKey::LENGTH],
-        )));
-        let inputs = HashMap::from([(
-            fee_pool,
-            Substate::new(SubstateVersion::ZERO, NonFungibleContainer::no_data()),
-        )]);
-        let execution = TransactionExecution::abort(
-            &TransactionId::default(),
-            RejectReason::execution_failure_unclassified("test"),
-        );
-        assert!(!memo.insert(TransactionId::default(), &inputs, pinned_to(5), execution));
-        assert_eq!(memo.num_untaken(), 0);
     }
 }

@@ -11,17 +11,14 @@
 //! inputs it was speculated with, and executes it otherwise. Every consensus rule is decided in phase 2, so a
 //! speculation that read state the block does not have costs the time it took and changes no result.
 
-use std::collections::HashMap;
+use std::{
+    sync::atomic::{AtomicBool, AtomicU64, Ordering},
+    time::Instant,
+};
 
 use log::*;
-use tari_engine_types::substate::{Substate, SubstateId};
-use tari_ootle_common_types::{
-    Epoch,
-    SubstateRequirement,
-    SubstateVersion,
-    committee::CommitteeInfo,
-    optional::IsNotFoundError,
-};
+use tari_engine_types::substate::SubstateId;
+use tari_ootle_common_types::{Epoch, SubstateVersion, committee::CommitteeInfo, optional::IsNotFoundError};
 use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
@@ -35,11 +32,12 @@ use super::{
     ExecutionMemo,
     ExecutionPlan,
     ExecutionRunner,
+    SpeculatedInputs,
+    SpeculationSummary,
     manager::{declared_lock_intent, input_fanout},
 };
 use crate::{
     hotstuff::substate_store::{PendingSubstateStore, SubstateStoreError},
-    tracing::TraceTimer,
     traits::{BlockTransactionExecutor, UncommittedChainTemplates, WriteableSubstateStore},
 };
 
@@ -71,9 +69,51 @@ impl<TStateStore> Speculation<TStateStore> {
     }
 }
 
+/// What speculating one block may spend. A transaction already started finishes, so each thread may overrun by one
+/// transaction.
+#[derive(Debug, Clone, Copy)]
+pub struct SpeculationBudget {
+    /// No transaction starts at or after this instant.
+    pub deadline: Option<Instant>,
+    /// No transaction starts once the transactions speculated so far have consumed this many execution points.
+    pub max_execution_points: u64,
+}
+
+/// What the units of one block have spent of its [`SpeculationBudget`].
+struct Spending {
+    budget: SpeculationBudget,
+    execution_points: AtomicU64,
+    is_spent: AtomicBool,
+}
+
+impl Spending {
+    fn new(budget: SpeculationBudget) -> Self {
+        Self {
+            budget,
+            execution_points: AtomicU64::new(0),
+            is_spent: AtomicBool::new(false),
+        }
+    }
+
+    /// Whether another transaction may start.
+    fn may_start(&self) -> bool {
+        let is_spent = self.budget.deadline.is_some_and(|deadline| Instant::now() >= deadline) ||
+            self.execution_points.load(Ordering::Relaxed) >= self.budget.max_execution_points;
+        if is_spent {
+            self.is_spent.store(true, Ordering::Relaxed);
+        }
+        !is_spent
+    }
+
+    fn add(&self, execution: &TransactionExecution) {
+        self.execution_points
+            .fetch_add(execution.result().total_execution_points(), Ordering::Relaxed);
+    }
+}
+
 struct Speculated {
     transaction_id: TransactionId,
-    inputs: HashMap<SubstateRequirement, Substate>,
+    inputs: SpeculatedInputs,
     locked_epoch: LockedEpoch,
     execution: TransactionExecution,
 }
@@ -90,13 +130,15 @@ where
     /// The state is read from a snapshot of the store's chain, with the changes `store` already holds applied on top.
     /// A snapshot that lags the transaction `store` reads in only makes speculations miss.
     ///
-    /// Speculation never fails: a transaction it cannot execute is left for the evaluation to execute.
+    /// Speculation stops starting transactions once `budget` is spent, and never fails: a transaction it does not
+    /// execute is left for the evaluation to execute.
     pub fn speculate<TTx: StateStoreReadTransaction>(
         &self,
         store: &PendingSubstateStore<TTx>,
         local_committee_info: &CommitteeInfo,
         block_epoch: Epoch,
         candidates: &[SpeculationCandidate],
+        budget: SpeculationBudget,
     ) -> ExecutionMemo {
         let mut memo = ExecutionMemo::new(*store.parent_block().block_id());
         let Some(speculation) = self.speculation() else {
@@ -105,7 +147,7 @@ where
         if candidates.is_empty() {
             return memo;
         }
-        let timer = TraceTimer::info(LOG_TARGET, "Speculate executions").with_iterations(candidates.len());
+        let started_at = Instant::now();
 
         // The templates are those the evaluation executes with, read from the chain `store` builds on
         let templates = match self.uncommitted_templates().templates_for(store) {
@@ -130,9 +172,9 @@ where
             },
         };
 
-        let transactions = speculation
-            .runner
-            .map(candidates, |candidate| {
+        let transactions = candidates
+            .iter()
+            .filter_map(|candidate| {
                 TransactionRecord::get(&snapshot, &candidate.transaction_id)
                     .inspect_err(|err| {
                         debug!(
@@ -144,8 +186,6 @@ where
                     .ok()
                     .map(|record| (record, candidate.locked_epoch.clone()))
             })
-            .into_iter()
-            .flatten()
             .collect::<Vec<_>>();
         let plan = ExecutionPlan::new(
             &transactions
@@ -154,12 +194,14 @@ where
                 .collect::<Vec<_>>(),
         );
 
+        let spending = Spending::new(budget);
         let speculated = speculation.runner.map(plan.units(), |unit| {
             self.speculate_unit(
                 &base,
                 local_committee_info,
                 block_epoch,
                 &templates,
+                &spending,
                 unit.members().iter().map(|idx| &transactions[*idx]),
             )
         });
@@ -170,39 +212,41 @@ where
             execution,
         } in speculated.into_iter().flatten()
         {
-            memo.insert(transaction_id, &inputs, locked_epoch, execution);
+            memo.insert(transaction_id, inputs, locked_epoch, execution);
         }
 
         let longest = plan.units().iter().max_by_key(|unit| unit.members().len());
-        info!(
-            target: LOG_TARGET,
-            "⚡ Speculated {} of {} transaction(s) in {} unit(s) on {} thread(s). Longest unit: {} transaction(s), \
-             weight {}",
-            memo.num_untaken(),
-            candidates.len(),
-            plan.units().len(),
-            speculation.runner.num_threads(),
-            longest.map_or(0, |unit| unit.members().len()),
-            longest.map_or(0, |unit| unit.weight()),
-        );
-        timer.done();
+        memo.set_summary(SpeculationSummary {
+            num_candidates: candidates.len(),
+            num_speculated: memo.num_untaken(),
+            num_units: plan.units().len(),
+            longest_unit: longest.map_or((0, 0), |unit| (unit.members().len(), unit.weight())),
+            num_threads: speculation.runner.num_threads(),
+            elapsed: started_at.elapsed(),
+            is_budget_spent: spending.is_spent.load(Ordering::Relaxed),
+        });
+        debug!(target: LOG_TARGET, "⚡ {memo}");
         memo
     }
 
-    /// Speculates `transactions` one after another, each against the changes of those before it. A transaction whose
-    /// changes do not apply means the unit read state the block will not have, so the transactions after it are not
-    /// speculated.
+    /// Speculates `transactions` one after another, each against the changes of those before it, until `spending`
+    /// is spent. A transaction whose changes do not apply means the unit read state the block will not have, so the
+    /// transactions after it are not speculated.
     fn speculate_unit<'a, TTx: StateStoreReadTransaction>(
         &self,
         store: &PendingSubstateStore<TTx>,
         local_committee_info: &CommitteeInfo,
         block_epoch: Epoch,
         templates: &UncommittedChainTemplates,
+        spending: &Spending,
         transactions: impl Iterator<Item = &'a (TransactionRecord, LockedEpoch)>,
     ) -> Vec<Speculated> {
         let mut overlay = store.overlay();
         let mut speculated = Vec::new();
         for (record, locked_epoch) in transactions {
+            if !spending.may_start() {
+                break;
+            }
             let transaction = record.transaction();
             if self
                 .execution_abort_reason(transaction, locked_epoch.epoch(), block_epoch)
@@ -250,6 +294,7 @@ where
                     break;
                 },
             };
+            spending.add(&execution);
 
             // A commit changes the block's state when all its outputs are local. A cross-shard one takes locks.
             if execution.decision().is_commit() &&
@@ -265,6 +310,9 @@ where
                 break;
             }
 
+            let Some(inputs) = SpeculatedInputs::encode(&inputs) else {
+                continue;
+            };
             speculated.push(Speculated {
                 transaction_id: *record.id(),
                 inputs,

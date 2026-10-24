@@ -57,7 +57,12 @@ use crate::{
         local_command_validator::LocalCommandValidator,
         process_newly_justified_block,
         substate_store::{PendingSubstateStore, ShardedStateTree},
-        transaction_manager::{ConsensusTransactionManager, TransactionLockConflicts, UncommittedTemplateStore},
+        transaction_manager::{
+            ConsensusTransactionManager,
+            SpeculationBudget,
+            TransactionLockConflicts,
+            UncommittedTemplateStore,
+        },
     },
     tracing::TraceTimer,
     traits::{BlockStore, CertificateStore, ConsensusSpec},
@@ -331,6 +336,10 @@ where TConsensusSpec: ConsensusSpec
                     local_committee_info,
                     &substate_store,
                     proposed_block_change_set,
+                    SpeculationBudget {
+                        deadline: None,
+                        max_execution_points: max_validation_execution_points,
+                    },
                 );
                 has_speculated = true;
             }
@@ -556,7 +565,7 @@ where TConsensusSpec: ConsensusSpec
             }
         }
 
-        if has_speculated {
+        if command_validator.memo().is_speculated() {
             info!(
                 target: LOG_TARGET,
                 "⚡ Speculated executions for block {}: {}",
