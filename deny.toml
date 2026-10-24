@@ -51,21 +51,14 @@ It reaches the graph because `integration_tests` runs those binaries to stand up
 `tari_p2p` does with it is verify detached signatures on release hash files against maintainer
 public keys, which performs no private-key operation and so offers no timing oracle. Revisit if
 `rsa` publishes a fix or the L1 drops `pgp`.""" },
-    # zip 3.0.0 is a build dependency of `utoipa-swagger-ui` 9, which unpacks the Swagger UI assets for
-    # the L1's `minotari_node`, reached only through `integration_tests`. It is absent from every
-    # binary this project ships. Remove these three once `minotari_node` moves to
-    # `utoipa-swagger-ui` 10 (zip `^9`).
-    { id = "RUSTSEC-2026-0367", reason = """
-zip keeps SUID/SGID bits on files it extracts. Unreachable: `utoipa-swagger-ui`'s build script never
-calls zip's extract APIs, and the archive it unpacks is a pinned Swagger UI release fetched over HTTPS
-by an unprivileged build.""" },
-    { id = "RUSTSEC-2026-0368", reason = """
-`ZipArchive::extract` creates symlinks pointing outside the destination. Unreachable:
-`utoipa-swagger-ui`'s build script walks entries with `by_index` and `enclosed_name`, writes regular
-files itself and never creates symlinks or calls `extract`.""" },
-    { id = "RUSTSEC-2026-0369", reason = """
-`ZipStreamReader::extract` and `ZipArchive::extract` apply permissions through symlinks. Unreachable:
-`utoipa-swagger-ui`'s build script calls neither and creates no symlinks.""" },
+    { id = "RUSTSEC-2026-0387", reason = """
+crypto-bigint has secret-dependent branches in operations meant to be constant-time, patched only in
+0.7.6. The tree carries 0.5.5, pinned by RustCrypto's `elliptic-curve` 0.13 line, and nothing on that
+line can take 0.7. Of the binaries this project ships, only `tari_ootle_walletd` links it, through
+`webrtc` -> `dtls` -> `p256`/`p384`, which runs only under the opt-in `--enable-webrtc`. `dtls` uses those
+curves for ephemeral ECDH alone: each secret scalar serves one handshake, so an observer gets one
+trace per secret, and DTLS signing goes through `ring`. `pgp` and `cx448` also pull it in, reached
+only through the L1 binaries `integration_tests` runs. Remove once `dtls` moves to `p256` 0.14.""" },
 ]
 
 [licenses]
