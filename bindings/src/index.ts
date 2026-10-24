@@ -71,6 +71,7 @@ export * from "./types/DiagnosticLevel";
 export * from "./types/DiffSummary";
 export * from "./types/DownSubstate";
 export * from "./types/ElgamalVerifiableBalanceBytes";
+export * from "./types/EncodedSubstate";
 export * from "./types/EncryptedData";
 export * from "./types/EndEpochAtom";
 export * from "./types/EntityId";

@@ -4,8 +4,9 @@
 use ootle_network::Network;
 use tari_engine_types::{
     SubstateVersion,
-    commit_result::{ExecutionFailureCode, FinalizeResult, RejectReason, TransactionResult},
+    commit_result::{ExecuteResult, ExecutionFailureCode, FinalizeResult, RejectReason, TransactionResult},
     confidential::ClaimedOutputTombstone,
+    encoded::Encoded,
     events::Event,
     fees::FeeReceipt,
     non_fungible::NonFungibleContainer,
@@ -13,7 +14,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateDiff, SubstateId, SubstateValue, hash_substate},
     transaction_receipt::{DiffSummary, FinalizeOutcome, TransactionReceipt},
 };
-use tari_indexer_client::types::{ProvenTransactionReceipt, SubstateProof};
+use tari_indexer_client::types::{GetSubstateResponse, ProvenTransactionReceipt, SubstateProof, SubstateState};
 use tari_ootle_common_types::Epoch;
 use tari_ootle_light_client::{
     LightClientError,
@@ -66,6 +67,10 @@ fn receipt(diff_summary: DiffSummary) -> TransactionReceipt {
     }
 }
 
+fn encoded(value: &SubstateValue) -> Encoded<SubstateValue> {
+    Encoded::encode(value).unwrap()
+}
+
 fn committee_for(trusted: &TrustedValidatorSet, set: &ValidatorSetFixture, proof: &SubstateProof) -> VerifiedCommittee {
     trusted
         .verify_committee(&set.committee(proof.anchor.shard_group))
@@ -79,7 +84,9 @@ fn it_verifies_a_substate_against_its_shard_groups_committee() {
     let proof = substate_proof(&set, &id, SubstateVersion::ZERO, &value);
     let committee = committee_for(&trusted, &set, &proof);
 
-    let (tip, verified) = committee.verify_substate(&id, SubstateVersion::ZERO, &proof).unwrap();
+    let (tip, verified) = committee
+        .verify_substate(&id, SubstateVersion::ZERO, &encoded(&value), &proof)
+        .unwrap();
     assert_eq!(tip.epoch, EPOCH);
     assert_eq!(tip.height.as_u64(), 5);
     assert_eq!(tari_bor::encode(&verified).unwrap(), tari_bor::encode(&value).unwrap());
@@ -89,35 +96,31 @@ fn it_verifies_a_substate_against_its_shard_groups_committee() {
 fn a_substate_with_another_value_is_rejected() {
     let (set, trusted) = trusted_set();
     let (id, value) = tombstone(1);
-    let mut proof = substate_proof(&set, &id, SubstateVersion::ZERO, &value);
+    let proof = substate_proof(&set, &id, SubstateVersion::ZERO, &value);
     let committee = committee_for(&trusted, &set, &proof);
 
     let (_, other_value) = tombstone(2);
-    proof.value = Some(tari_bor::encode(&other_value).unwrap());
     let err = committee
-        .verify_substate(&id, SubstateVersion::ZERO, &proof)
+        .verify_substate(&id, SubstateVersion::ZERO, &encoded(&other_value), &proof)
         .unwrap_err();
     assert!(matches!(err, LightClientError::InvalidSubstateProof(_)), "{err}");
 }
 
 #[test]
-fn a_substate_proof_without_its_value_is_rejected() {
+fn a_value_that_does_not_decode_is_rejected() {
     let (set, trusted) = trusted_set();
     let (id, value) = tombstone(1);
-    let mut proof = substate_proof(&set, &id, SubstateVersion::ZERO, &value);
+    let proof = substate_proof(&set, &id, SubstateVersion::ZERO, &value);
     let committee = committee_for(&trusted, &set, &proof);
 
-    proof.value = None;
-    let err = committee
-        .verify_substate(&id, SubstateVersion::ZERO, &proof)
-        .unwrap_err();
-    assert!(matches!(err, LightClientError::MissingSubstateValue { .. }), "{err}");
-
-    proof.value = Some(vec![0xff]);
-    let err = committee
-        .verify_substate(&id, SubstateVersion::ZERO, &proof)
-        .unwrap_err();
-    assert!(matches!(err, LightClientError::Decode { .. }), "{err}");
+    let mut trailing = encoded(&value).into_bytes();
+    trailing.push(0);
+    for bytes in [vec![0xff], trailing] {
+        let err = committee
+            .verify_substate(&id, SubstateVersion::ZERO, &Encoded::from_bytes(bytes), &proof)
+            .unwrap_err();
+        assert!(matches!(err, LightClientError::Decode { .. }), "{err}");
+    }
 }
 
 #[test]
@@ -133,7 +136,7 @@ fn a_substate_proof_checked_against_another_shard_groups_committee_is_rejected()
     let committee = trusted.verify_committee(&set.committee(other_group)).unwrap();
 
     let err = committee
-        .verify_substate(&id, SubstateVersion::ZERO, &proof)
+        .verify_substate(&id, SubstateVersion::ZERO, &encoded(&value), &proof)
         .unwrap_err();
     assert!(
         matches!(err, LightClientError::CommitProofShardGroupMismatch { .. }),
@@ -196,11 +199,14 @@ fn it_verifies_a_committed_receipt() {
 
     let mut proven = ProvenTransactionReceipt {
         version: SubstateVersion::ZERO,
-        receipt,
+        value: encoded(&SubstateValue::from(receipt.clone())),
         proof: Some(proof),
-        result: None,
     };
-    committee.verify_receipt(transaction_id, &proven).unwrap();
+    let (_, verified) = committee.verify_receipt(transaction_id, &proven).unwrap();
+    assert_eq!(
+        tari_bor::encode(&verified).unwrap(),
+        tari_bor::encode(&receipt).unwrap()
+    );
 
     let err = committee
         .verify_receipt(TransactionId::new([8; 32]), &proven)
@@ -209,6 +215,11 @@ fn it_verifies_a_committed_receipt() {
         matches!(err, LightClientError::InvalidSubstateProof(_)),
         "the receipt is another transaction's: {err}"
     );
+
+    let mut not_a_receipt = proven.clone();
+    not_a_receipt.value = encoded(&tombstone(1).1);
+    let err = committee.verify_receipt(transaction_id, &not_a_receipt).unwrap_err();
+    assert!(matches!(err, LightClientError::InvalidSubstateProof(_)), "{err}");
 
     proven.proof = None;
     let err = committee.verify_receipt(transaction_id, &proven).unwrap_err();
@@ -485,15 +496,25 @@ fn values_json_does_not_carry_exactly() -> Vec<(SubstateId, SubstateValue)> {
 }
 
 #[test]
-fn a_proof_served_as_json_verifies_and_yields_the_committed_value() {
+fn a_substate_served_as_json_verifies_and_yields_the_committed_value() {
     let (set, trusted) = trusted_set();
     for (id, value) in values_json_does_not_carry_exactly() {
         let proof = substate_proof(&set, &id, SubstateVersion::ZERO, &value);
         let committee = committee_for(&trusted, &set, &proof);
-        let served: SubstateProof = serde_json::from_str(&serde_json::to_string(&proof).unwrap()).unwrap();
+        let response = GetSubstateResponse {
+            version: SubstateVersion::ZERO,
+            state: SubstateState::Up {
+                substate: encoded(&value),
+            },
+            verified: true,
+            proof: Some(proof),
+        };
+        let served: GetSubstateResponse = serde_json::from_str(&serde_json::to_string(&response).unwrap()).unwrap();
+        let proof = served.proof.clone().unwrap();
+        let served_value = served.into_substate_value().unwrap();
 
         let (_, verified) = committee
-            .verify_substate(&id, SubstateVersion::ZERO, &served)
+            .verify_substate(&id, SubstateVersion::ZERO, &served_value, &proof)
             .unwrap_or_else(|e| panic!("{id}: {e}"));
         assert_eq!(
             hash_substate(NETWORK, &verified, SubstateVersion::ZERO, EPOCH),
@@ -554,19 +575,32 @@ fn a_result_served_as_json_verifies_and_yields_the_committed_result() {
         &SubstateValue::from(receipt.clone()),
     );
     let committee = committee_for(&trusted, &set, &proof);
+    let execute_result = ExecuteResult {
+        finalize: result,
+        execution_time: Default::default(),
+        execute_epoch: Some(EPOCH),
+        wasm_execution_points: 0,
+        native_execution_points: 0,
+    };
     let proven = ProvenTransactionReceipt {
         version: SubstateVersion::ZERO,
-        receipt,
+        value: encoded(&SubstateValue::from(receipt)),
         proof: Some(proof),
-        result: Some(tari_bor::encode(&result).unwrap()),
     };
-    let mut served: ProvenTransactionReceipt = serde_json::from_str(&serde_json::to_string(&proven).unwrap()).unwrap();
+    let served: (ProvenTransactionReceipt, Encoded<ExecuteResult>) =
+        serde_json::from_str(&serde_json::to_string(&(proven, Encoded::encode(&execute_result).unwrap())).unwrap())
+            .unwrap();
+    let (proven, execution_result) = (&served.0, Some(&served.1));
 
-    let (_, verified) = committee.verify_result(transaction_id, &served).unwrap();
-    assert_eq!(tari_bor::encode(&verified).unwrap(), tari_bor::encode(&result).unwrap());
+    let (_, verified) = committee
+        .verify_result(transaction_id, proven, execution_result)
+        .unwrap();
+    assert_eq!(
+        tari_bor::encode(&verified).unwrap(),
+        tari_bor::encode(&execute_result).unwrap()
+    );
 
-    served.result = None;
-    let err = committee.verify_result(transaction_id, &served).unwrap_err();
+    let err = committee.verify_result(transaction_id, proven, None).unwrap_err();
     assert!(
         matches!(err, LightClientError::MissingTransactionResult { .. }),
         "{err}"

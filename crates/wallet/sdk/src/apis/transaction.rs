@@ -5,7 +5,8 @@ use std::collections::{HashMap, HashSet};
 
 use log::*;
 use tari_engine_types::{
-    commit_result::{ExecuteResult, FinalizeResult},
+    commit_result::ExecuteResult,
+    encoded::Encoded,
     indexed_value::{IndexedValueError, IndexedWellKnownTypes},
     substate::{SubstateDiff, SubstateId},
 };
@@ -311,14 +312,16 @@ where
                 let mut execution_result = execution_result;
                 if self.indexer_trust.is_verify() && !transaction.is_dry_run && final_decision.is_commit() {
                     let Some(verified) = self
-                        .verify_committed_result(transaction_id, execution_result.as_deref(), resp.receipt.as_ref())
+                        .verify_committed_result(
+                            transaction_id,
+                            resp.encoded_execution_result.as_ref(),
+                            resp.receipt.as_ref(),
+                        )
                         .await?
                     else {
                         return Ok(None);
                     };
-                    if let Some(execution_result) = execution_result.as_mut() {
-                        execution_result.finalize = verified;
-                    }
+                    execution_result = Some(Box::new(verified));
                 }
 
                 if let Some(diff) = execution_result.as_ref().and_then(|e| e.finalize.result.any_accept()) {
@@ -451,16 +454,15 @@ where
         Ok(Some(self.network_interface.get_current_epoch().await?))
     }
 
-    /// Verifies the result the network committed for `transaction_id` and returns it: the indexer's proof of the
-    /// committed receipt verifies against a validator set the wallet trusts, and the committed result `proven` carries
-    /// is the one that receipt commits. The caller uses the returned result in place of the one in `execution_result`.
-    /// Returns `None` while there is no proof to verify yet.
+    /// Verifies the result the network committed for `transaction_id` and returns it decoded: the indexer's proof of
+    /// the committed receipt verifies against a validator set the wallet trusts, and `execution_result` is the result
+    /// that receipt commits. Returns `None` while there is no proof to verify yet.
     async fn verify_committed_result(
         &self,
         transaction_id: TransactionId,
-        execution_result: Option<&ExecuteResult>,
+        execution_result: Option<&Encoded<ExecuteResult>>,
         proven: Option<&ProvenTransactionReceipt>,
-    ) -> Result<Option<FinalizeResult>, TransactionApiError> {
+    ) -> Result<Option<ExecuteResult>, TransactionApiError> {
         let Some((proven, proof)) = proven.and_then(|proven| proven.proof.as_ref().map(|proof| (proven, proof))) else {
             info!(
                 target: LOG_TARGET,
@@ -488,7 +490,9 @@ where
             });
         }
         let unverified = |source| TransactionApiError::FinalizationUnverified { transaction_id, source };
-        let (_, result) = committee.verify_result(transaction_id, proven).map_err(unverified)?;
+        let (_, result) = committee
+            .verify_result(transaction_id, proven, execution_result)
+            .map_err(unverified)?;
         Ok(Some(result))
     }
 

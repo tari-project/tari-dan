@@ -183,6 +183,7 @@ impl WalletNetworkInterface for ScriptedNetwork {
             transaction_id,
             result,
             receipt: None,
+            encoded_execution_result: None,
         })
     }
 

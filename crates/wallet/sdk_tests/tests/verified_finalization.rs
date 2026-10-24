@@ -12,6 +12,7 @@ use tari_consensus_types::Decision;
 use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, TransactionResult},
+    encoded::Encoded,
     fees::FeeReceipt,
     substate::{Substate, SubstateDiff, SubstateId, SubstateValue},
     transaction_receipt::{DiffSummary, FinalizeOutcome, TransactionReceipt},
@@ -105,28 +106,28 @@ fn committed_result(transaction_id: TransactionId, set: &ValidatorSetFixture) ->
         SubstateVersion::ZERO,
         &SubstateValue::from(receipt.clone()),
     );
-    let committed = tari_bor::encode(&finalize).unwrap();
+    let execute_result = ExecuteResult {
+        finalize,
+        execution_time: Duration::from_secs(1),
+        execute_epoch: None,
+        wasm_execution_points: 0,
+        native_execution_points: 0,
+    };
 
     TransactionQueryResult {
         transaction_id,
+        encoded_execution_result: Some(Encoded::encode(&execute_result).unwrap()),
         result: TransactionFinalizedResult::Finalized {
             final_decision: Decision::Commit,
-            execution_result: Some(Box::new(ExecuteResult {
-                finalize,
-                execution_time: Duration::from_secs(1),
-                execute_epoch: None,
-                wasm_execution_points: 0,
-                native_execution_points: 0,
-            })),
+            execution_result: Some(Box::new(execute_result)),
             execution_time: Duration::from_secs(1),
             finalized_time: now(),
             abort_details: None,
         },
         receipt: Some(ProvenTransactionReceipt {
             version: SubstateVersion::ZERO,
-            receipt,
+            value: Encoded::encode(&SubstateValue::from(receipt)).unwrap(),
             proof: Some(proof),
-            result: Some(committed),
         }),
     }
 }
@@ -209,6 +210,7 @@ async fn a_transaction_with_no_outcome_expires_by_the_epoch_of_the_trusted_valid
             transaction_id,
             result: TransactionFinalizedResult::Pending,
             receipt: None,
+            encoded_execution_result: None,
         });
         let test = wallet(network, &transaction);
         let trusted = test.sdk().validator_set_api().sync().await.unwrap();
@@ -267,9 +269,9 @@ async fn a_result_other_than_its_proven_receipt_commits_is_refused() {
     let TransactionFinalizedResult::Finalized { execution_result, .. } = &result.result else {
         unreachable!()
     };
-    let mut other = execution_result.as_ref().unwrap().finalize.clone();
-    other.fee_receipt = FeeReceipt::builder().with_total_fees_paid(1).build();
-    result.receipt.as_mut().unwrap().result = Some(tari_bor::encode(&other).unwrap());
+    let mut other = execution_result.as_deref().unwrap().clone();
+    other.finalize.fee_receipt = FeeReceipt::builder().with_total_fees_paid(1).build();
+    result.encoded_execution_result = Some(Encoded::encode(&other).unwrap());
     network.set_result(result);
     let test = wallet(network, &transaction);
 
@@ -698,6 +700,7 @@ async fn the_transaction_service_submits_a_held_back_transaction_once_the_wallet
         result: TransactionFinalizedResult::Pending,
         transaction_id: transaction.calculate_id(),
         receipt: None,
+        encoded_execution_result: None,
     });
     let transaction_id = handle.submit_transaction(transaction).await.unwrap();
     assert_eq!(network.submissions(), 0);
@@ -738,6 +741,7 @@ async fn a_held_back_transaction_is_announced_with_the_context_it_was_submitted_
         result: TransactionFinalizedResult::Pending,
         transaction_id: transaction.calculate_id(),
         receipt: None,
+        encoded_execution_result: None,
     });
     let context = TransactionContext::default().with_kind(TransactionContextKind::ClaimBurn {
         file_name: "burn.json".to_string(),

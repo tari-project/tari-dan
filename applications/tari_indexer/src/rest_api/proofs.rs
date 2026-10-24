@@ -1,7 +1,6 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_engine_types::substate::SubstateValue;
 use tari_epoch_manager::{EpochManagerReader, service::EpochManagerHandle};
 use tari_indexer_client::types::{
     EpochCheckpointEntry,
@@ -30,16 +29,8 @@ pub fn require_proof_verification(verifies_substates: bool) -> Result<(), ErrorR
     ))
 }
 
-/// The client form of a proof the indexer has verified, with the anchor read out of its commit proof and `value`, the
-/// value it proves when the substate is up, in its committed encoding.
-pub fn to_substate_proof(
-    proof: SubstateProofData,
-    value: Option<&SubstateValue>,
-) -> Result<SubstateProof, ErrorResponse> {
-    let value = value
-        .map(tari_bor::encode)
-        .transpose()
-        .map_err(|e| ErrorResponse::internal_error(format!("Verified substate value failed to encode: {e}")))?;
+/// The client form of a proof the indexer has verified, with the anchor read out of its commit proof.
+pub fn to_substate_proof(proof: SubstateProofData) -> Result<SubstateProof, ErrorResponse> {
     let commit_proof = CommittedBlockProof::from_bytes(&proof.commit_proof)
         .map_err(|e| ErrorResponse::internal_error(format!("Verified commit proof failed to decode: {e}")))?;
     let shard_group = commit_proof
@@ -58,7 +49,6 @@ pub fn to_substate_proof(
         value_proof: proof.substate_value_proof,
         value_hash_epoch: Epoch(proof.proof_epoch),
         down_proof: proof.substate_down_proof,
-        value,
     })
 }
 
@@ -163,7 +153,6 @@ pub fn to_checkpoint_entry(
 pub(crate) mod tests {
     use tari_common_types::types::CompressedPublicKey;
     use tari_crypto::ristretto::RistrettoSecretKey;
-    use tari_engine_types::non_fungible::NonFungibleContainer;
     use tari_ootle_common_types::ShardGroup;
     use tari_sidechain::{FixedHash, SidechainBlockCommitProof, SidechainBlockHeader, ValidatorBlockSignature};
 
@@ -198,20 +187,13 @@ pub(crate) mod tests {
     #[test]
     fn the_anchor_is_read_from_the_commit_proof_and_the_proof_bytes_pass_through() {
         let commit_proof = commit_proof();
-        let value = SubstateValue::NonFungible(NonFungibleContainer::new(
-            tari_bor::Value::Float(f64::NAN),
-            tari_bor::Value::Null,
-        ));
-        let proof = to_substate_proof(
-            SubstateProofData {
-                substate_value_proof: vec![1, 2, 3],
-                commit_proof: commit_proof.to_bytes(),
-                proof_epoch: 2,
-                substate_down_proof: None,
-                destroyed_at_state_version: None,
-            },
-            Some(&value),
-        )
+        let proof = to_substate_proof(SubstateProofData {
+            substate_value_proof: vec![1, 2, 3],
+            commit_proof: commit_proof.to_bytes(),
+            proof_epoch: 2,
+            substate_down_proof: None,
+            destroyed_at_state_version: None,
+        })
         .unwrap();
 
         assert_eq!(proof.anchor.epoch, Epoch(3));
@@ -226,26 +208,21 @@ pub(crate) mod tests {
         assert_eq!(proof.value_proof, vec![1, 2, 3]);
         assert_eq!(proof.value_hash_epoch, Epoch(2));
         assert_eq!(proof.down_proof, None);
-        assert_eq!(proof.value, Some(tari_bor::encode(&value).unwrap()));
     }
 
     #[test]
     fn a_down_proof_passes_through() {
-        let proof = to_substate_proof(
-            SubstateProofData {
-                substate_value_proof: vec![1, 2, 3],
-                commit_proof: commit_proof().to_bytes(),
-                proof_epoch: 2,
-                substate_down_proof: Some(vec![4, 5, 6]),
-                destroyed_at_state_version: Some(9),
-            },
-            None,
-        )
+        let proof = to_substate_proof(SubstateProofData {
+            substate_value_proof: vec![1, 2, 3],
+            commit_proof: commit_proof().to_bytes(),
+            proof_epoch: 2,
+            substate_down_proof: Some(vec![4, 5, 6]),
+            destroyed_at_state_version: Some(9),
+        })
         .unwrap();
 
         assert_eq!(proof.down_proof, Some(vec![4, 5, 6]));
         assert_eq!(proof.value_proof, vec![1, 2, 3]);
-        assert_eq!(proof.value, None);
     }
 
     #[test]

@@ -24,6 +24,7 @@ pub(crate) mod error;
 
 use std::sync::{Arc, Mutex};
 
+use anyhow::anyhow;
 use indexmap::IndexSet;
 use log::*;
 use tari_epoch_manager::EpochManagerReader;
@@ -219,8 +220,15 @@ where
                 // The committee answered ahead of this indexer's own transition stream. A caller
                 // holding this result will read what it committed next, so the cache must not
                 // answer that from before the commit. A fee-only accept commits its diff too.
-                if let Some(diff) = finalized.execute_result.as_ref().and_then(|r| r.finalize.any_accept()) &&
-                    !self.is_result_retired(&transaction_id)
+                if finalized.final_decision.is_commit() &&
+                    !self.is_result_retired(&transaction_id) &&
+                    let Some(execute_result) = finalized
+                        .execute_result
+                        .as_ref()
+                        .map(|r| r.decode())
+                        .transpose()
+                        .map_err(|e| anyhow!("Agreed execution result of {transaction_id} does not decode: {e}"))? &&
+                    let Some(diff) = execute_result.finalize.any_accept()
                 {
                     match self.substate_cache.retire_committed(diff).await {
                         Ok(()) => self.mark_result_retired(transaction_id),
@@ -233,7 +241,7 @@ where
 
                 Ok(IndexerTransactionFinalizedResult::Finalized {
                     final_decision: finalized.final_decision,
-                    execution_result: finalized.execute_result.map(Box::new),
+                    execution_result: finalized.execute_result,
                     execution_time: finalized.execution_time,
                     finalized_time: finalized.finalized_time,
                     abort_details: finalized.abort_details,

@@ -7,6 +7,7 @@ pub mod component;
 pub mod confidential;
 pub mod confidential_output;
 pub mod crypto;
+pub mod encoded;
 pub mod events;
 pub mod fees;
 pub mod hashing;

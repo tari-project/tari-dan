@@ -51,6 +51,7 @@ import CopyToClipboard from "../../Components/CopyToClipboard";
 import PageHeading from "../../Components/PageHeading";
 import { CodeBlock, StyledPaper } from "../../Components/StyledComponents";
 import { useGetSubstate } from "../../api/hooks/useSubstates";
+import { decodeSubstateValue, encodedByteLength } from "../../utils/encoded";
 import { renderJson } from "../../utils/helpers";
 
 const SUBSTATE_PREFIXES = [
@@ -100,6 +101,36 @@ function VerifiedChip({ verified }: { verified: boolean }) {
         size="small"
       />
     </Tooltip>
+  );
+}
+
+function EncodedSubstateDetails({
+  encoded,
+  version,
+  verified,
+}: {
+  encoded: string;
+  version: number;
+  verified: boolean;
+}) {
+  const substate = decodeSubstateValue(encoded);
+  if (substate) {
+    return <SubstateDetails substate={substate} version={version} verified={verified} />;
+  }
+  return (
+    <Stack spacing={2}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+        <Chip label="CBOR" color="primary" />
+        <Typography variant="body2" color="text.secondary">
+          Version {version}, {encodedByteLength(encoded)} bytes
+        </Typography>
+        <Box sx={{ flexGrow: 1 }} />
+        <VerifiedChip verified={verified} />
+        <CopyToClipboard copy={encoded} />
+      </Box>
+      <Divider />
+      <CodeBlock>{encoded}</CodeBlock>
+    </Stack>
   );
 }
 
@@ -422,7 +453,11 @@ function SubstatesLayout() {
             {data && "up" in data.state && (
               <>
                 <Divider />
-                <SubstateDetails substate={data.state.up.substate} version={data.version} verified={data.verified} />
+                <EncodedSubstateDetails
+                  encoded={data.state.up.substate}
+                  version={data.version}
+                  verified={data.verified}
+                />
               </>
             )}
           </Stack>

@@ -15,6 +15,7 @@ use tari_engine_types::{
     Epoch,
     commit_result::{ExecuteResult, FinalizeResult, TransactionResult},
     component::{Component, ComponentBody, ComponentHeader},
+    encoded::Encoded,
     fees::FeeReceipt,
     resource_container::ResourceContainer,
     substate::{Substate, SubstateDiff, SubstateId, SubstateValue},
@@ -122,6 +123,7 @@ fn committed_result(transaction_id: TransactionId, diff: SubstateDiff) -> Transa
             abort_details: None,
         },
         receipt: None,
+        encoded_execution_result: None,
     }
 }
 
@@ -212,7 +214,7 @@ impl WalletNetworkInterface for FixedSubstateNetwork {
         Ok(SubstateQueryResult {
             version: SubstateVersion::new(1),
             state: SubstateState::Up {
-                substate: Box::new(self.substate.clone()),
+                substate: Encoded::encode(&self.substate).unwrap(),
             },
             proof: None,
         })

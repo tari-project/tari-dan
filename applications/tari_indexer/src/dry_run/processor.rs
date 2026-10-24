@@ -47,7 +47,7 @@ use crate::{
     },
     exhaust_burn_rate::resolve_exhaust_burn_rate_for_epoch,
     network_state_sync::ConsensusEpoch,
-    substate_manager::SubstateManager,
+    substate_manager::{SubstateManager, SubstateManagerError, decode_substate},
 };
 
 const LOG_TARGET: &str = "tari::indexer::dry_run_transaction_processor";
@@ -184,10 +184,14 @@ impl DryRunTransactionProcessor {
                     .map(|req| req.as_ref().to_substate_requirement_ref()),
             )
             .await?;
-        Ok(substates
+        let substates = substates
             .into_iter()
-            .map(|(id, fetched)| (id, fetched.substate))
-            .collect())
+            .map(|(id, fetched)| {
+                let substate = decode_substate(&id, &fetched.substate)?;
+                Ok((id, substate))
+            })
+            .collect::<Result<_, SubstateManagerError>>()?;
+        Ok(substates)
     }
 
     /// [`Transaction::input_fanout`] under `epoch`'s shard layout.

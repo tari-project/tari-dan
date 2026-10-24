@@ -95,7 +95,7 @@ impl SubstateCacheEntry {
         if version == head {
             return Some(self);
         }
-        (version < head).then(|| Self {
+        (version < head).then_some(Self {
             version: Some(version),
             substate_result: SubstateResult::Down { version },
             ..self

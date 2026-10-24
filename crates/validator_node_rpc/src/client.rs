@@ -12,12 +12,11 @@ use std::{
 use anyhow::anyhow;
 use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
-use tari_bor::decode_with_max_depth;
 use tari_consensus_types::Decision;
 use tari_engine_types::{
     commit_result::ExecuteResult,
-    limits::MAX_CBOR_NESTING_DEPTH,
-    substate::{Substate, SubstateId, SubstateValue},
+    encoded::Encoded,
+    substate::{EncodedSubstate, SubstateId},
 };
 use tari_networking::{MessageSpec, NetworkingHandle, PeerId};
 use tari_ootle_common_types::{NodeAddressable, SubstateRequirementRef, SubstateVersion};
@@ -114,7 +113,8 @@ pub enum TransactionResultStatus {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct FinalizedResult {
-    pub execute_result: Option<ExecuteResult>,
+    /// The result as the responder encoded it, undecoded.
+    pub execute_result: Option<Encoded<ExecuteResult>>,
     pub final_decision: Decision,
     pub execution_time: Duration,
     pub finalized_time: PrimitiveDateTime,
@@ -125,10 +125,11 @@ pub struct FinalizedResult {
 pub enum SubstateResult {
     #[n(0)]
     DoesNotExist,
+    /// A live version, its value as the responder encoded it.
     #[n(1)]
     Up {
         #[n(0)]
-        substate: Box<Substate>,
+        substate: EncodedSubstate,
     },
     #[n(2)]
     Down {
@@ -146,16 +147,16 @@ impl SubstateResult {
         }
     }
 
-    pub fn up(&self) -> Option<&Substate> {
+    pub fn up(&self) -> Option<&EncodedSubstate> {
         match self {
             SubstateResult::Up { substate, .. } => Some(substate),
             _ => None,
         }
     }
 
-    pub fn into_up(self) -> Option<Substate> {
+    pub fn into_up(self) -> Option<EncodedSubstate> {
         match self {
-            SubstateResult::Up { substate } => Some(*substate),
+            SubstateResult::Up { substate } => Some(substate),
             _ => None,
         }
     }
@@ -245,14 +246,7 @@ impl<TAddr: NodeAddressable + ToPeerId, TMsg: MessageSpec> ValidatorNodeRpcClien
                     .map_err(ValidatorNodeRpcClientError::InvalidResponse)?;
                 let execution_result = Some(response.execution_result)
                     .filter(|r| !r.is_empty())
-                    // A peer's bytes, decoded before any content validation runs over them.
-                    .map(|r| decode_with_max_depth(&r, MAX_CBOR_NESTING_DEPTH))
-                    .transpose()
-                    .map_err(|_| {
-                        ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
-                            "Node returned an invalid or empty execution result"
-                        ))
-                    })?;
+                    .map(Encoded::from_bytes);
 
                 let execution_time = Duration::from_micros(response.execution_time_us);
                 let finalized_time = UtcDateTime::from_unix_timestamp(response.finalized_timestamp).map_err(|e| {
@@ -302,13 +296,9 @@ impl<TAddr: NodeAddressable + ToPeerId, TMsg: MessageSpec> ValidatorNodeRpcClien
         // }
 
         match status {
-            SubstateStatus::Up => {
-                let substate = SubstateValue::from_bytes(&resp.substate)
-                    .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!(e)))?;
-                Ok(SubstateResult::Up {
-                    substate: Box::new(Substate::new(SubstateVersion::new(resp.version), substate)),
-                })
-            },
+            SubstateStatus::Up => Ok(SubstateResult::Up {
+                substate: EncodedSubstate::new(resp.version, Encoded::from_bytes(resp.substate)),
+            }),
             SubstateStatus::Down => Ok(SubstateResult::Down {
                 version: SubstateVersion::new(resp.version),
             }),
@@ -338,12 +328,8 @@ impl<TAddr: NodeAddressable + ToPeerId, TMsg: MessageSpec> ValidatorNodeRpcClien
         let proof = decode_substate_proof(status, &mut resp);
 
         let result = match status {
-            SubstateStatus::Up => {
-                let substate = SubstateValue::from_bytes(&resp.substate)
-                    .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!(e)))?;
-                SubstateResult::Up {
-                    substate: Box::new(Substate::new(SubstateVersion::new(resp.version), substate)),
-                }
+            SubstateStatus::Up => SubstateResult::Up {
+                substate: EncodedSubstate::new(resp.version, Encoded::from_bytes(std::mem::take(&mut resp.substate))),
             },
             SubstateStatus::Down => SubstateResult::Down {
                 version: SubstateVersion::new(resp.version),
@@ -501,10 +487,8 @@ fn decode_batched_substate(proven: proto::rpc::ProvenSubstate) -> Result<Batched
             version: SubstateVersion::new(substate.version),
         }
     } else {
-        let value = SubstateValue::from_bytes(&substate.substate)
-            .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("{}", e)))?;
         SubstateResult::Up {
-            substate: Box::new(Substate::new(SubstateVersion::new(substate.version), value)),
+            substate: EncodedSubstate::new(substate.version, Encoded::from_bytes(substate.substate)),
         }
     };
 

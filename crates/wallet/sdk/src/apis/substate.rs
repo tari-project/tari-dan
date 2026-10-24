@@ -6,9 +6,10 @@ use std::collections::{HashMap, HashSet};
 use log::*;
 use tari_engine_types::{
     SubstateVersion,
+    encoded::Encoded,
     indexed_value::{IndexedValueError, IndexedWellKnownTypes},
     resource::Resource,
-    substate::{Substate, SubstateId, SubstateValue},
+    substate::{EncodedSubstate, Substate, SubstateId, SubstateValue},
 };
 use tari_indexer_client::types::{SubstateProof, SubstateState};
 use tari_ootle_common_types::{
@@ -100,18 +101,17 @@ where
         }
 
         let verify = self.indexer_trust.is_verify();
-        let FetchedSubstates { mut substates, proofs } = self
+        let FetchedSubstates { substates, proofs } = self
             .network_interface
             .get_substates(ids, verify)
             .await
             .map_err(|e| SubstateApiError::NetworkInterfaceError(e.into()))?;
-        if verify {
-            for (id, substate) in &mut substates {
-                let value = self.verify_read(id, substate.version(), proofs.get(id)).await?;
-                *substate = Substate::new(substate.version(), value);
-            }
+        let mut read = HashMap::with_capacity(substates.len());
+        for (id, substate) in substates {
+            let substate = self.read_served(&id, &substate, verify, proofs.get(&id)).await?;
+            read.insert(id, substate);
         }
-        Ok(substates)
+        Ok(read)
     }
 
     /// Fetches the latest version of each of `ids` in one fetch, and returns each one's result on its own: a
@@ -127,10 +127,7 @@ where
         }
 
         let verify = self.indexer_trust.is_verify();
-        let FetchedSubstates {
-            mut substates,
-            mut proofs,
-        } = self
+        let FetchedSubstates { mut substates, proofs } = self
             .network_interface
             .get_substates(ids.clone(), verify)
             .await
@@ -141,13 +138,7 @@ where
                 results.push((id.clone(), Err(SubstateApiError::SubstateDoesNotExist { address: id })));
                 continue;
             };
-            let result = if verify {
-                self.verify_read(&id, substate.version(), proofs.remove(&id).as_ref())
-                    .await
-                    .map(|value| Substate::new(substate.version(), value))
-            } else {
-                Ok(substate)
-            };
+            let result = self.read_served(&id, &substate, verify, proofs.get(&id)).await;
             results.push((id, result));
         }
         Ok(results)
@@ -409,11 +400,15 @@ where
                 address: address.clone(),
             });
         };
-        let substate = if verify {
-            self.verify_read(address, resp.version, resp.proof.as_ref()).await?
-        } else {
-            *substate
-        };
+        let substate = self
+            .read_served(
+                address,
+                &EncodedSubstate::new(resp.version, substate),
+                verify,
+                resp.proof.as_ref(),
+            )
+            .await?
+            .into_substate_value();
 
         debug!(
             target: LOG_TARGET,
@@ -491,9 +486,33 @@ where
         }
     }
 
-    /// Verifies that `substate_id` at `version` held the value `proof` carries at the block `proof` is anchored at, and
-    /// that the block is recent: no more than [`MAX_PROOF_AGE_EPOCHS`] before the latest validator set the wallet
-    /// trusts. Returns that value, which the caller uses in place of the substate the indexer served beside the proof.
+    /// The substate the indexer served for `substate_id`: verified against `proof` as [`Self::verify_read`] describes
+    /// when `verify` is set, and otherwise decoded as served.
+    async fn read_served(
+        &self,
+        substate_id: &SubstateId,
+        served: &EncodedSubstate,
+        verify: bool,
+        proof: Option<&SubstateProof>,
+    ) -> Result<Substate, SubstateApiError> {
+        let value = if verify {
+            self.verify_read(substate_id, served.version(), served.value(), proof)
+                .await?
+        } else {
+            served
+                .value()
+                .decode()
+                .map_err(|e| SubstateApiError::UndecodableSubstate {
+                    substate_id: substate_id.clone(),
+                    details: e.to_string(),
+                })?
+        };
+        Ok(Substate::new(served.version(), value))
+    }
+
+    /// Verifies that `substate_id` at `version` held `value` at the block `proof` is anchored at, and that the block is
+    /// recent: no more than [`MAX_PROOF_AGE_EPOCHS`] before the latest validator set the wallet trusts. Returns `value`
+    /// decoded.
     ///
     /// The latest trusted set advances only as far as the checkpoints the indexer serves. An indexer that stops serving
     /// newer checkpoints can therefore keep the wallet on state proven up to the last one it served; no proof shows its
@@ -502,6 +521,7 @@ where
         &self,
         substate_id: &SubstateId,
         version: SubstateVersion,
+        value: &Encoded<SubstateValue>,
         proof: Option<&SubstateProof>,
     ) -> Result<SubstateValue, SubstateApiError> {
         let proof = proof.ok_or_else(|| SubstateApiError::SubstateUnproven {
@@ -515,7 +535,7 @@ where
             .trusted_committee(substate_id, anchor_epoch, proof.anchor.shard_group)
             .await?;
         let (_, value) = committee
-            .verify_substate(substate_id, version, proof)
+            .verify_substate(substate_id, version, value, proof)
             .map_err(|source| SubstateApiError::SubstateUnverified {
                 substate_id: substate_id.clone(),
                 source,
@@ -631,6 +651,8 @@ pub enum SubstateApiError {
     SubstateDoesNotExist { address: SubstateId },
     #[error("ValueVisitorError: {0}")]
     ValueVisitorError(#[from] IndexedValueError),
+    #[error("The indexer served substate {substate_id} as a value that does not decode: {details}")]
+    UndecodableSubstate { substate_id: SubstateId, details: String },
     #[error("The indexer served substate {substate_id} without a proof. Retry, or use another indexer.")]
     SubstateUnproven { substate_id: SubstateId },
     #[error("The indexer served substate {substate_id} as live at v{version}, not as gone down")]

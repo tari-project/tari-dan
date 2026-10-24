@@ -15,9 +15,10 @@ use tari_engine_types::{
     SubstateVersion,
     Utxo,
     commit_result::ExecuteResult,
+    encoded::Encoded,
     events::Event,
     resource::Resource,
-    substate::{Substate, SubstateId, SubstateValue},
+    substate::{EncodedSubstate, SubstateId, SubstateValue},
     transaction_receipt::{FinalizeOutcome, TransactionReceipt},
 };
 use tari_ootle_common_types::{Epoch, NumPreshards, ShardGroup, StateVersion, ValidatorSetHash, shard::Shard};
@@ -95,10 +96,10 @@ pub struct GetSubstateResponse {
 }
 
 impl GetSubstateResponse {
-    /// The substate's value, or `None` when `version` is down.
-    pub fn into_substate_value(self) -> Option<SubstateValue> {
+    /// The substate's encoded value, or `None` when `version` is down.
+    pub fn into_substate_value(self) -> Option<Encoded<SubstateValue>> {
         match self.state {
-            SubstateState::Up { substate } => Some(*substate),
+            SubstateState::Up { substate } => Some(substate),
             SubstateState::Down {} => None,
         }
     }
@@ -112,8 +113,11 @@ impl GetSubstateResponse {
 pub enum SubstateState {
     /// The version is live, holding `substate`.
     Up {
-        #[cfg_attr(feature = "utoipa", schema(value_type = Object))]
-        substate: Box<SubstateValue>,
+        /// The CBOR-encoded `SubstateValue`, as the validator that answered the indexer served it. A proof's value
+        /// hash is checked against these bytes.
+        #[cfg_attr(feature = "ts", ts(type = "string"))]
+        #[cfg_attr(feature = "utoipa", schema(value_type = String, format = Byte))]
+        substate: Encoded<SubstateValue>,
     },
     /// The version was live and has been spent. The proof's `down_proof` shows both.
     Down {},
@@ -160,18 +164,6 @@ pub struct SubstateProof {
     #[cfg_attr(feature = "ts", ts(optional, type = "string"))]
     #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>, format = Byte))]
     pub down_proof: Option<Vec<u8>>,
-    /// CBOR-encoded `SubstateValue` the proof is for, as its shard group committed it. Present when the substate
-    /// version is up. A verifier hashes and uses the value decoded from these bytes: the substate's JSON form does not
-    /// decode back to the committed value for every value, e.g. a non-finite float or metadata whose CBOR is not
-    /// canonical.
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "ootle_serde::base64::option"
-    )]
-    #[cfg_attr(feature = "ts", ts(optional, type = "string"))]
-    #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>, format = Byte))]
-    pub value: Option<Vec<u8>>,
 }
 
 /// The committed block a [`SubstateProof`] is anchored at.
@@ -217,8 +209,9 @@ pub struct GetSubstatesRequest {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 pub struct GetSubstatesResponse {
+    /// Each live substate's version and CBOR-encoded value, as in [`SubstateState::Up`].
     #[cfg_attr(feature = "utoipa", schema(value_type = HashMap<String, Object>))]
-    pub substates: HashMap<SubstateId, Substate>,
+    pub substates: HashMap<SubstateId, EncodedSubstate>,
     /// The proof each substate was verified with, when `include_proofs` was set, less the commit proof of the block
     /// it is anchored at, which is in `commit_proofs`. A substate no committee member could prove has no entry.
     #[serde(default)]
@@ -235,7 +228,7 @@ pub struct GetSubstatesResponse {
 impl GetSubstatesResponse {
     /// A response serving `substates` with `proofs`, each anchor block's commit proof served once.
     pub fn new(
-        substates: HashMap<SubstateId, Substate>,
+        substates: HashMap<SubstateId, EncodedSubstate>,
         proofs: impl IntoIterator<Item = (SubstateId, SubstateProof)>,
     ) -> Self {
         let mut commit_proofs = HashMap::new();
@@ -250,7 +243,6 @@ impl GetSubstatesResponse {
                     value_proof: proof.value_proof,
                     value_hash_epoch: proof.value_hash_epoch,
                     down_proof: proof.down_proof,
-                    value: proof.value,
                 })
             })
             .collect();
@@ -263,7 +255,7 @@ impl GetSubstatesResponse {
 
     /// The substates, and each proof whole with the commit proof of its anchor block. A proof whose anchor block has
     /// no commit proof in the response is left out, so its substate reads as unproven.
-    pub fn into_proven(self) -> (HashMap<SubstateId, Substate>, HashMap<SubstateId, SubstateProof>) {
+    pub fn into_proven(self) -> (HashMap<SubstateId, EncodedSubstate>, HashMap<SubstateId, SubstateProof>) {
         let Self {
             substates,
             proofs,
@@ -279,7 +271,6 @@ impl GetSubstatesResponse {
                     value_proof: proof.value_proof,
                     value_hash_epoch: proof.value_hash_epoch,
                     down_proof: proof.down_proof,
-                    value: proof.value,
                 }))
             })
             .collect();
@@ -312,15 +303,6 @@ pub struct BatchedSubstateProof {
     #[cfg_attr(feature = "ts", ts(optional, type = "string"))]
     #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>, format = Byte))]
     pub down_proof: Option<Vec<u8>>,
-    /// CBOR-encoded `SubstateValue`, as in [`SubstateProof::value`].
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "ootle_serde::base64::option"
-    )]
-    #[cfg_attr(feature = "ts", ts(optional, type = "string"))]
-    #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>, format = Byte))]
-    pub value: Option<Vec<u8>>,
 }
 
 /// CBOR-encoded `SidechainBlockCommitProof`: a block's header and the chain of quorum certificates that committed it.
@@ -504,23 +486,14 @@ pub struct GetTransactionResultQuery {
 pub struct ProvenTransactionReceipt {
     #[cfg_attr(feature = "utoipa", schema(value_type = u64))]
     pub version: SubstateVersion,
-    #[cfg_attr(feature = "utoipa", schema(value_type = Object))]
-    pub receipt: TransactionReceipt,
+    /// The receipt substate's CBOR-encoded `SubstateValue`, as in [`SubstateState::Up`]. It decodes to
+    /// `SubstateValue::TransactionReceipt`.
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = String, format = Byte))]
+    pub value: Encoded<SubstateValue>,
     /// `None` when no committee member could prove the receipt, e.g. when nothing has been committed
     /// since an epoch change.
     pub proof: Option<SubstateProof>,
-    /// CBOR-encoded `FinalizeResult` of the transaction, as its committee returned it. A verifier checks the result
-    /// decoded from these bytes against the proven receipt and uses it: the result's JSON form does not decode back
-    /// to the committed result for every result, e.g. one holding a non-finite float or metadata whose CBOR is not
-    /// canonical.
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "ootle_serde::base64::option"
-    )]
-    #[cfg_attr(feature = "ts", ts(optional, type = "string"))]
-    #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>, format = Byte))]
-    pub result: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -707,8 +680,10 @@ pub enum IndexerTransactionFinalizedResult {
     Finalized {
         #[cfg_attr(feature = "utoipa", schema(value_type = String))]
         final_decision: Decision,
-        #[cfg_attr(feature = "utoipa", schema(value_type = Option<Object>))]
-        execution_result: Option<Box<ExecuteResult>>,
+        /// The CBOR-encoded `ExecuteResult`, as the committee member that answered served it.
+        #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+        #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>, format = Byte))]
+        execution_result: Option<Encoded<ExecuteResult>>,
         #[cfg_attr(feature = "ts", ts(type = "{secs: number, nanos: number}"))]
         execution_time: Duration,
         #[cfg_attr(feature = "ts", ts(type = "string"))]
@@ -1470,7 +1445,10 @@ pub struct WatchedTemplateItem {
 
 #[cfg(test)]
 mod tests {
-    use tari_engine_types::{confidential::ClaimedOutputTombstone, substate::SubstateValue};
+    use tari_engine_types::{
+        confidential::ClaimedOutputTombstone,
+        substate::{Substate, SubstateValue},
+    };
     use tari_template_lib_types::ClaimedOutputTombstoneAddress;
 
     use super::*;
@@ -1479,11 +1457,12 @@ mod tests {
         SubstateId::ClaimedOutputTombstone(ClaimedOutputTombstoneAddress::from_bytes(&[seed; 32]).unwrap())
     }
 
-    fn substate() -> Substate {
-        Substate::new(
+    fn substate() -> EncodedSubstate {
+        EncodedSubstate::encode(&Substate::new(
             0,
             SubstateValue::ClaimedOutputTombstone(ClaimedOutputTombstone { value: 1 }),
-        )
+        ))
+        .unwrap()
     }
 
     fn proof(block: u8, seed: u8) -> SubstateProof {
@@ -1499,7 +1478,6 @@ mod tests {
             value_proof: vec![seed; 8],
             value_hash_epoch: Epoch(2),
             down_proof: seed.is_multiple_of(2).then(|| vec![seed; 4]),
-            value: (!seed.is_multiple_of(2)).then(|| vec![seed; 6]),
         }
     }
 
@@ -1529,7 +1507,6 @@ mod tests {
             assert_eq!(served.value_proof, proof.value_proof);
             assert_eq!(served.value_hash_epoch, proof.value_hash_epoch);
             assert_eq!(served.down_proof, proof.down_proof);
-            assert_eq!(served.value, proof.value);
         }
     }
 

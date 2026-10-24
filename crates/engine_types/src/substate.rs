@@ -61,6 +61,7 @@ use crate::{
     component::Component,
     confidential::ClaimedOutputTombstone,
     confidential_output::ConfidentialOutput,
+    encoded::Encoded,
     hashing::{EngineHashDomainLabel, hasher32, substate_value_hasher32},
     limits,
     non_fungible::NonFungibleContainer,
@@ -119,6 +120,52 @@ impl Substate {
 
     pub fn previous_version(&self) -> Option<SubstateVersion> {
         self.version.previous()
+    }
+}
+
+/// A substate version with its value held in its CBOR encoding. See [`Encoded`].
+#[derive(
+    Debug, Clone, PartialEq, Eq, minicbor::Encode, minicbor::Decode, minicbor::CborLen, Serialize, Deserialize,
+)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct EncodedSubstate {
+    #[n(0)]
+    version: SubstateVersion,
+    /// The CBOR-encoded `SubstateValue`, base64 in JSON.
+    #[n(1)]
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    value: Encoded<SubstateValue>,
+}
+
+impl EncodedSubstate {
+    pub fn new<V: Into<SubstateVersion>>(version: V, value: Encoded<SubstateValue>) -> Self {
+        Self {
+            version: version.into(),
+            value,
+        }
+    }
+
+    pub fn encode(substate: &Substate) -> Result<Self, BorError> {
+        Ok(Self::new(
+            substate.version(),
+            Encoded::encode(substate.substate_value())?,
+        ))
+    }
+
+    pub fn version(&self) -> SubstateVersion {
+        self.version
+    }
+
+    pub fn value(&self) -> &Encoded<SubstateValue> {
+        &self.value
+    }
+
+    pub fn into_value(self) -> Encoded<SubstateValue> {
+        self.value
+    }
+
+    pub fn decode(&self) -> Result<Substate, BorError> {
+        Ok(Substate::new(self.version, self.value.decode()?))
     }
 }
 

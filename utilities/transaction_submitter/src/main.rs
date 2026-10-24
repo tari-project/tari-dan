@@ -227,6 +227,10 @@ async fn fetch_result_summary(
                                 },
                             ..
                         })) => {
+                            let execution_result = execution_result
+                                .map(|r| r.decode())
+                                .transpose()
+                                .expect("indexer served an execution result that does not decode");
                             let result = match execution_result {
                                 // Full accept: fee and main intents both committed.
                                 Some(exec_result) if exec_result.finalize.is_full_accept() => {

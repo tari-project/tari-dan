@@ -42,10 +42,10 @@ match plan_walk(&trusted, latest_checkpoint_epoch, DEFAULT_MAX_WALK_EPOCHS) {
     },
 }
 
-// Verify a substate the indexer served, with the committee of the block its proof is anchored at. The value comes
-// from the proof's committed encoding; use it in place of the substate served beside the proof.
+// Verify a substate the indexer served, with the committee of the block its proof is anchored at. The indexer serves
+// the value in its committed CBOR encoding; `verify_substate` checks those bytes and returns the value they decode to.
 let committee = trusted.verify_committee(&served.committee)?;
-let (tip, value) = committee.verify_substate(&substate_id, version, &served.proof)?;
+let (tip, value) = committee.verify_substate(&substate_id, version, &served.value, &served.proof)?;
 ```
 
 A failed `advance` leaves the trusted set as it was. Proofs anchored in an earlier epoch verify with a committee of
