@@ -10,7 +10,7 @@ use tari_ootle_storage::{
     StateStore,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
-    consensus_models::{Block, BlockCommands, Command},
+    consensus_models::{Block, BlockCommands, Command, ProposalOrigin},
 };
 use tari_ootle_transaction::Network;
 use tari_sidechain::FixedHash;
@@ -59,19 +59,27 @@ fn missing_transactions_operations(db: impl StateStore) {
 
     // missing_transactions_insert
     let missing_transaction_ids = vec![&atom1.id, &atom2.id];
-    tx.parked_block_insert(&block1, &[], missing_transaction_ids).unwrap();
+    tx.parked_block_insert(&block1, &[], ProposalOrigin::Live, missing_transaction_ids.clone())
+        .unwrap();
+    // The block arrives again through catch-up, which marks it as certified
+    tx.parked_block_insert(&block1, &[], ProposalOrigin::CatchUp, missing_transaction_ids.clone())
+        .unwrap();
+    // and a later live delivery leaves it so
+    tx.parked_block_insert(&block1, &[], ProposalOrigin::Live, missing_transaction_ids)
+        .unwrap();
 
     // The block stays parked while it is still waiting on atom2
     let unparked = tx.parked_block_remove_missing_transaction(atom1.id()).unwrap();
     assert!(unparked.is_none());
 
     // The last missing transaction unparks the block
-    let (unparked, foreign_proposals) = tx
+    let (unparked, foreign_proposals, origin) = tx
         .parked_block_remove_missing_transaction(atom2.id())
         .unwrap()
         .expect("block should be unparked once no transactions are missing");
     assert_eq!(unparked.id(), block1.id());
     assert!(foreign_proposals.is_empty());
+    assert_eq!(origin, ProposalOrigin::CatchUp);
 
     tx.rollback().unwrap();
 }
@@ -118,7 +126,8 @@ fn parked_blocks_are_removed_up_to_a_height() {
                 NodeHeight(height),
                 Command::LocalPrepare(atom.clone()),
             );
-            tx.parked_block_insert(&block, &[], [&atom.id]).unwrap();
+            tx.parked_block_insert(&block, &[], ProposalOrigin::Live, [&atom.id])
+                .unwrap();
             block
         })
         .collect::<Vec<_>>();
@@ -144,7 +153,7 @@ fn parked_blocks_are_removed_up_to_a_height() {
     }
 
     // Unparking a block releases its proposer's slot at that height
-    let (unparked, _) = tx
+    let (unparked, _, _) = tx
         .parked_block_remove_missing_transaction(atoms[2].id())
         .unwrap()
         .expect("block should be unparked once no transactions are missing");

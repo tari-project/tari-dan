@@ -42,6 +42,7 @@ use tari_ootle_storage::{
         EpochCheckpoint,
         ForeignProposalRecord,
         NoVoteReason,
+        ProposalOrigin,
         SubstateRecord,
         TransactionPool,
         TransactionRecord,
@@ -793,8 +794,8 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             }
         }
 
-        for msg in local_proposals {
-            if let Err(e) = self.on_proposal_message(epoch_state, current_height, msg).await {
+        for (msg, origin) in local_proposals {
+            if let Err(e) = self.on_proposal_message(epoch_state, current_height, msg, origin).await {
                 self.on_failure("check_if_block_can_be_unparked -> on_proposal_message", &e)
                     .await;
                 return Err(e);
@@ -1601,7 +1602,8 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             ),
             HotstuffMessage::Proposal(msg) => log_err(
                 "on_receive_local_proposal",
-                self.on_proposal_message(epoch_state, current_height, *msg).await,
+                self.on_proposal_message(epoch_state, current_height, *msg, ProposalOrigin::Live)
+                    .await,
             ),
             HotstuffMessage::ForeignProposal(msg) => log_err(
                 "on_receive_foreign_proposal (received)",
@@ -1644,11 +1646,12 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 Ok(())
             },
             // Catch-up blocks reach here already past the view filter (see `msg_relative_view`) and
-            // are processed by the same block-import path as live proposals; `on_proposal_message`
-            // also drives the catch-up re-request loop.
+            // are processed by the same block-import path as live proposals, without a vote;
+            // `on_proposal_message` also drives the catch-up re-request loop.
             HotstuffMessage::CatchUpSyncResponse(msg) => log_err(
                 "on_receive_catch_up_sync_response",
-                self.on_proposal_message(epoch_state, current_height, *msg).await,
+                self.on_proposal_message(epoch_state, current_height, *msg, ProposalOrigin::CatchUp)
+                    .await,
             ),
         }
     }
@@ -1658,11 +1661,12 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         epoch_state: &EpochState<TConsensusSpec::Addr>,
         current_height: NodeHeight,
         msg: ProposalMessage,
+        origin: ProposalOrigin,
     ) -> Result<(), HotStuffError> {
         let proposed_by = *msg.block.proposed_by();
         match log_err(
             "on_receive_local_proposal",
-            self.on_receive_local_proposal.handle(epoch_state, msg).await,
+            self.on_receive_local_proposal.handle(epoch_state, msg, origin).await,
         ) {
             Ok(no_vote) => {
                 if let Some(mut catch_up) = self.worker_state.catch_up.take() {

@@ -73,6 +73,7 @@ use crate::{
         NoVoteReason,
         PendingShardStateTreeDiff,
         ProposalFilter,
+        ProposalOrigin,
         StateVersionProof,
         StateVersionTransitions,
         SubstateChange,
@@ -691,17 +692,20 @@ pub trait StateStoreWriteTransaction {
 
     // -------------------------------- Parked blocks / Missing Transactions -------------------------------- //
 
+    /// Parks a block until its missing transactions arrive. Parking a block that is already parked keeps the first
+    /// record, except that a `CatchUp` origin replaces a `Live` one.
     fn parked_block_insert<'a, IMissing: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
         park_block: &Block,
         foreign_proposals: &[ForeignProposal],
+        origin: ProposalOrigin,
         missing_transaction_ids: IMissing,
     ) -> Result<(), StorageError>;
 
     fn parked_block_remove_missing_transaction(
         &mut self,
         transaction_id: &TransactionId,
-    ) -> Result<Option<(Block, Vec<ForeignProposal>)>, StorageError>;
+    ) -> Result<Option<(Block, Vec<ForeignProposal>, ProposalOrigin)>, StorageError>;
 
     /// Removes every parked block, with its missing-transaction records, from earlier epochs and from `epoch` up to and
     /// including `height`. Returns the number of blocks removed.

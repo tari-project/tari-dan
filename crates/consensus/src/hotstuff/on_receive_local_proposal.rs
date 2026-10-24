@@ -33,6 +33,7 @@ use tari_ootle_storage::{
         ForeignProposalRecord,
         ForeignProposalStatus,
         NoVoteReason,
+        ProposalOrigin,
         TransactionPool,
         ValidBlock,
     },
@@ -162,6 +163,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         &mut self,
         epoch_state: &EpochState<TConsensusSpec::Addr>,
         msg: ProposalMessage,
+        origin: ProposalOrigin,
     ) -> Result<Option<NoVoteReason>, HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "OnReceiveLocalProposalHandler");
 
@@ -287,7 +289,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         // If a leader failure occurs while we are processing the block, ignore it
         self.pacemaker.suspend_leader_timeout().await?;
 
-        let result = self.process_valid_block(epoch_state, valid_block).await;
+        let result = self.process_valid_block(epoch_state, valid_block, origin).await;
 
         // Ensure leader failure is resumed
         // If the result was successful, the leader timeout was reset, and no leader failure will occur. Otherwise,
@@ -338,6 +340,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         &mut self,
         epoch_state: &EpochState<TConsensusSpec::Addr>,
         valid_block: ValidBlock,
+        origin: ProposalOrigin,
     ) -> Result<Option<NoVoteReason>, HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "process_valid_block");
 
@@ -352,6 +355,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
             epoch_state.local_committee(),
             proposer_vn.fee_claim_public_key,
             valid_block,
+            origin,
         )
         .await
     }
@@ -363,6 +367,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         local_committee: &Committee<TConsensusSpec::Addr>,
         proposer_claim_public_key_bytes: RistrettoPublicKeyBytes,
         valid_block: ValidBlock,
+        origin: ProposalOrigin,
     ) -> Result<Option<NoVoteReason>, HotStuffError> {
         debug!(target: LOG_TARGET, "process_block: [{}] processing block: {}", current_epoch, valid_block);
 
@@ -469,7 +474,13 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         self.change_set = Some(change_set);
 
         let no_vote = self
-            .process_block_decision(local_committee_info, local_committee, process_result, is_epoch_end)
+            .process_block_decision(
+                local_committee_info,
+                local_committee,
+                process_result,
+                is_epoch_end,
+                origin,
+            )
             .await?;
 
         Ok(no_vote)
@@ -481,6 +492,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         local_committee: &Committee<TConsensusSpec::Addr>,
         process_block_result: ProcessBlockResult,
         is_epoch_end: bool,
+        origin: ProposalOrigin,
     ) -> Result<Option<NoVoteReason>, HotStuffError> {
         let _timer = TraceTimer::debug(LOG_TARGET, "process-block-decision")
             .with_excessive_threshold(Duration::from_millis(200));
@@ -505,35 +517,14 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 )
                 .await?;
 
-            // Get the leader that will collect votes for this block to justify moving onto the next view.
-            // That leader's proposal carries a certificate for this block, so its liveness anchor is
-            // this block's height.
-            let skip_set = self.store.with_read_tx(|tx| {
-                LeaderSkipSet::load_for_justify(
-                    tx,
-                    valid_block.epoch(),
-                    valid_block.height(),
-                    local_committee,
-                    &self.config.consensus_constants.liveness_thresholds(),
-                )
-            })?;
-            let (next_leader, _) =
-                skip_set.effective_leader(&self.leader_strategy, local_committee, valid_block.height());
-
-            // And vote to move onto the next view, unless this node has caught the proposer
-            // equivocating. Withholding the signature is all it does: the block is processed, locked
-            // and committed as usual, and leader selection is untouched. Evidence is what this node
-            // happened to see - only the leader of a view receives the votes for it, and nothing
-            // shares what it found - so it may not decide anything the committee has to agree on.
-            if self.holds_equivocation_evidence_against(valid_block.block())? {
-                warn!(
+            if origin.is_catch_up() {
+                debug!(
                     target: LOG_TARGET,
-                    "🚨 Withholding our vote on {}: its proposer {} equivocated in this epoch",
+                    "🌐 Not voting on {}: it arrived through catch-up, so the committee has already certified it",
                     valid_block.block(),
-                    valid_block.block().proposed_by(),
                 );
             } else {
-                self.send_vote_to_leader(next_leader, valid_block.block(), decision)
+                self.vote_on_block(local_committee, valid_block.block(), decision)
                     .await?;
             }
         }
@@ -812,6 +803,43 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         if let Some(sender) = self.tx_events.upgrade() {
             let _ignore = sender.send(event);
         }
+    }
+
+    async fn vote_on_block(
+        &mut self,
+        local_committee: &Committee<TConsensusSpec::Addr>,
+        block: &Block,
+        decision: QuorumDecision,
+    ) -> Result<(), HotStuffError> {
+        // Get the leader that will collect votes for this block to justify moving onto the next view.
+        // That leader's proposal carries a certificate for this block, so its liveness anchor is
+        // this block's height.
+        let skip_set = self.store.with_read_tx(|tx| {
+            LeaderSkipSet::load_for_justify(
+                tx,
+                block.epoch(),
+                block.height(),
+                local_committee,
+                &self.config.consensus_constants.liveness_thresholds(),
+            )
+        })?;
+        let (next_leader, _) = skip_set.effective_leader(&self.leader_strategy, local_committee, block.height());
+
+        // And vote to move onto the next view, unless this node has caught the proposer
+        // equivocating. Withholding the signature is all it does: the block is processed, locked
+        // and committed as usual, and leader selection is untouched. Evidence is what this node
+        // happened to see - only the leader of a view receives the votes for it, and nothing
+        // shares what it found - so it may not decide anything the committee has to agree on.
+        if self.holds_equivocation_evidence_against(block)? {
+            warn!(
+                target: LOG_TARGET,
+                "🚨 Withholding our vote on {}: its proposer {} equivocated in this epoch",
+                block,
+                block.proposed_by(),
+            );
+            return Ok(());
+        }
+        self.send_vote_to_leader(next_leader, block, decision).await
     }
 
     async fn send_vote_to_leader(

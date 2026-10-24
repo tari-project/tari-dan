@@ -24,7 +24,7 @@ use minicbor::{CborLen, Decode, Encode};
 use serde::{Deserialize, Serialize};
 use tari_consensus_types::BlockId;
 use tari_ootle_common_types::{Epoch, NodeHeight};
-use tari_ootle_storage::consensus_models::{Block, ForeignProposal};
+use tari_ootle_storage::consensus_models::{Block, ForeignProposal, ProposalOrigin};
 use tari_template_lib_types::crypto::RistrettoPublicKeyBytes;
 
 use crate::{
@@ -40,6 +40,11 @@ pub struct ParkedBlockData {
     pub block: Block,
     #[n(1)]
     pub foreign_proposals: Vec<ForeignProposal>,
+    /// A record without an origin decodes as a live proposal.
+    #[n(2)]
+    #[cbor(default)]
+    #[serde(default)]
+    pub origin: ProposalOrigin,
 }
 
 prefixed!(ParkedBlockPrefix, KeyPrefix::ParkedBlocks);
@@ -102,4 +107,6 @@ pub struct ParkedBlockDataRef<'a> {
     pub block: &'a Block,
     #[b(1)]
     pub foreign_proposals: &'a [ForeignProposal],
+    #[n(2)]
+    pub origin: ProposalOrigin,
 }
