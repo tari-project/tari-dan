@@ -154,9 +154,10 @@ where TSpec: WalletSdkSpec
             let is_known_version = maybe_vault_version
                 .is_some_and(|vault_version| versioned_vault_substate_id.version() <= vault_version) &&
                 accounts_api.has_vault(vault_id)?;
-            // A known vault version is only up to date once every confidential output it names is recorded.
+            // A known vault version is only up to date once every confidential output and non-fungible it names is
+            // recorded.
             let unrecorded_outputs = if is_known_version {
-                self.count_unrecorded_confidential_outputs(account_address, *vault_id, latest_vault)?
+                self.count_unrecorded_vault_contents(account_address, *vault_id, latest_vault)?
             } else {
                 0
             };
@@ -185,10 +186,9 @@ where TSpec: WalletSdkSpec
                 versioned_vault_substate_id.as_versioned_ref(),
                 [SubstateId::from(*latest_vault.resource_address())],
             )?;
-            // At a known version only newly recorded outputs can change the vault.
+            // At a known version only newly recorded outputs and non-fungibles can change the vault.
             if is_known_version &&
-                self.count_unrecorded_confidential_outputs(account_address, *vault_id, latest_vault)? ==
-                    unrecorded_outputs
+                self.count_unrecorded_vault_contents(account_address, *vault_id, latest_vault)? == unrecorded_outputs
             {
                 continue;
             }
@@ -409,6 +409,31 @@ where TSpec: WalletSdkSpec
     /// The number of confidential outputs `vault` names that have no local record. An output the indexer did not
     /// return when a vault version was scanned keeps that version out of date, so it is fetched again on the next
     /// refresh.
+    /// The confidential outputs and non-fungibles `vault` names that the wallet holds no record of.
+    fn count_unrecorded_vault_contents(
+        &self,
+        account_address: ComponentAddress,
+        vault_id: VaultId,
+        vault: &Vault,
+    ) -> Result<usize, AccountMonitorError> {
+        Ok(
+            self.count_unrecorded_confidential_outputs(account_address, vault_id, vault)? +
+                self.count_unrecorded_non_fungibles(vault_id, vault)?,
+        )
+    }
+
+    fn count_unrecorded_non_fungibles(&self, vault_id: VaultId, vault: &Vault) -> Result<usize, AccountMonitorError> {
+        let nft_ids = vault.get_non_fungible_ids();
+        if nft_ids.is_empty() {
+            return Ok(0);
+        }
+        let stored = self
+            .wallet_sdk
+            .non_fungible_api()
+            .get_nft_ids_by_vault_id(&vault_id, 1_000_000, 0)?;
+        Ok(nft_ids.iter().filter(|id| !stored.contains(*id)).count())
+    }
+
     fn count_unrecorded_confidential_outputs(
         &self,
         account_address: ComponentAddress,
@@ -575,7 +600,9 @@ where TSpec: WalletSdkSpec
                         .fetch_substate(&NonFungibleAddress::new(*latest_vault.resource_address(), id.clone()).into())
                         .await
                     {
-                        // A token the indexer cannot prove costs only its own entry; the next scan fetches it again.
+                        // A token the indexer cannot prove costs only its own entry. While it is unstored,
+                        // `count_unrecorded_non_fungibles` keeps the vault version out of date, so the next account
+                        // refresh fetches it again.
                         Err(AccountMonitorError::Substate(err @ SubstateApiError::SubstateUnverified { .. })) => {
                             warn!(target: LOG_TARGET, "Non-fungible {} for vault {} is not stored: {}", id, vault_id, err);
                             continue;
