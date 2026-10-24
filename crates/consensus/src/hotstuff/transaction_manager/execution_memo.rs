@@ -50,8 +50,8 @@ impl SpeculatedInputs {
             .map(Self)
     }
 
-    /// Whether `inputs` are exactly these. Equal substates encode alike, so a substate whose encoding differs is a
-    /// different substate.
+    /// Whether `inputs` are exactly these. Two substates with the same encoding are the same substate, so a match means
+    /// the execution read exactly `inputs`. A substate that encodes differently from an equal one only misses.
     fn matches(&self, inputs: &HashMap<SubstateRequirement, Substate>) -> bool {
         self.0.len() == inputs.len() &&
             inputs.iter().all(|(req, substate)| {
