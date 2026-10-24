@@ -90,6 +90,33 @@ impl VerifiedCommittee {
             })?;
         Ok((tip, receipt))
     }
+
+    /// Verifies that `transaction_id` committed the result `proven` carries: its receipt verifies as
+    /// [`Self::verify_receipt`] checks, and the result decoded from `proven.result` is the one that receipt commits, as
+    /// [`check_result_matches_receipt`] checks. Returns the receipt and the result, which the caller uses in place of
+    /// the ones served beside the proof.
+    pub fn verify_result(
+        &self,
+        transaction_id: TransactionId,
+        proven: &ProvenTransactionReceipt,
+    ) -> Result<(TransactionReceipt, FinalizeResult), LightClientError> {
+        let (_, receipt) = self.verify_receipt(transaction_id, proven)?;
+        let encoded = proven
+            .result
+            .as_deref()
+            .ok_or_else(|| LightClientError::MissingTransactionResult {
+                transaction_id: transaction_id.to_string(),
+            })?;
+        let result =
+            tari_bor::decode_exact_with_max_depth::<FinalizeResult>(encoded, MAX_CBOR_NESTING_DEPTH).map_err(|e| {
+                LightClientError::Decode {
+                    what: "committed transaction result",
+                    details: e.to_string(),
+                }
+            })?;
+        check_result_matches_receipt(self.network(), transaction_id, &receipt, &result)?;
+        Ok((receipt, result))
+    }
 }
 
 /// The epoch and shard group of the block a down proof's inclusion half is anchored at, which select the committee to

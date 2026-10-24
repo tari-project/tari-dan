@@ -425,24 +425,22 @@ impl PendingTransaction {
             let outcome = self.abort_outcome(execution_result.as_deref(), abort_details)?;
             return Ok(Some(Finalized { outcome, receipt: None }));
         }
-        let execution_result = execution_result.ok_or_else(|| {
-            PendingTransactionError::IndexerClientError(IndexerRestClientError::InvalidResponse {
-                message: format!("Transaction {} committed, but the indexer served no result", self.tx_id),
-            })
-        })?;
-        if !self
-            .verifier
-            .verify_committed_result(self.tx_id, &execution_result.finalize, resp.receipt.as_ref())
-            .await?
-        {
-            return Ok(None);
+        if execution_result.is_none() {
+            return Err(PendingTransactionError::IndexerClientError(
+                IndexerRestClientError::InvalidResponse {
+                    message: format!("Transaction {} committed, but the indexer served no result", self.tx_id),
+                },
+            ));
         }
-        let receipt = resp
-            .receipt
-            .map(|proven| proven.receipt)
-            .ok_or(PendingTransactionError::ReceiptNotFound { tx_id: self.tx_id })?;
+        let Some((receipt, result)) = self
+            .verifier
+            .verify_committed_result(self.tx_id, resp.receipt.as_ref())
+            .await?
+        else {
+            return Ok(None);
+        };
         Ok(Some(Finalized {
-            outcome: committed_outcome(execution_result.finalize.result),
+            outcome: committed_outcome(result.result),
             receipt: Some(receipt),
         }))
     }
@@ -689,7 +687,10 @@ mod tests {
     use tari_indexer_client::types::GetTransactionResultResponse;
     use tari_ootle_common_types::{
         Epoch,
-        engine_types::{commit_result::AbortReason, fees::FeeReceipt},
+        engine_types::{
+            commit_result::{AbortReason, ExecutionFailureCode, RejectReason, TransactionResult},
+            fees::FeeReceipt,
+        },
     };
     use tari_ootle_light_client::test_fixtures::{NETWORK, ValidatorSetFixture};
 
@@ -776,11 +777,13 @@ mod tests {
             let IndexerTransactionFinalizedResult::Finalized {
                 execution_result: Some(execution_result),
                 ..
-            } = &mut result.result
+            } = &result.result
             else {
                 panic!("not a committed result");
             };
-            execution_result.finalize.fee_receipt = FeeReceipt::builder().with_total_fees_paid(1).build();
+            let mut other = execution_result.finalize.clone();
+            other.fee_receipt = FeeReceipt::builder().with_total_fees_paid(1).build();
+            result.receipt.as_mut().unwrap().result = Some(tari_bor::encode(&other).unwrap());
         })
         .await;
         let (_client, pending) = pending(&indexer, IndexerTrust::Verify);
@@ -793,6 +796,27 @@ mod tests {
             ),
             "{err}"
         );
+    }
+
+    #[tokio::test]
+    async fn a_verified_commit_reports_the_committed_result_not_the_served_one() {
+        let indexer = indexer_that_committed(|result| {
+            let IndexerTransactionFinalizedResult::Finalized {
+                execution_result: Some(execution_result),
+                ..
+            } = &mut result.result
+            else {
+                panic!("not a committed result");
+            };
+            execution_result.finalize.result = TransactionResult::Reject(RejectReason::ExecutionFailure {
+                code: ExecutionFailureCode::TemplateError,
+                message: "served".to_string(),
+            });
+        })
+        .await;
+        let (_client, pending) = pending(&indexer, IndexerTrust::Verify);
+
+        assert!(pending.watch().await.unwrap().is_commit());
     }
 
     #[tokio::test]

@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use log::*;
 use tari_engine_types::{
-    commit_result::ExecuteResult,
+    commit_result::{ExecuteResult, FinalizeResult},
     indexed_value::{IndexedValueError, IndexedWellKnownTypes},
     substate::{SubstateDiff, SubstateId},
 };
@@ -17,7 +17,7 @@ use tari_ootle_common_types::{
     response_status::{ResponseErrorStatus, TransactionStatusResponseError},
     substate_type::check_diff_substate_types,
 };
-use tari_ootle_light_client::{LightClientError, check_result_matches_receipt};
+use tari_ootle_light_client::LightClientError;
 use tari_ootle_transaction::{Transaction, TransactionId};
 use tari_template_lib::types::{ComponentAddress, constants::TARI_TOKEN};
 
@@ -313,12 +313,16 @@ where
                         .map_err(|e| TransactionApiError::InvalidTransactionQueryResponse { details: e.to_string() })?;
                 }
 
+                let mut execution_result = execution_result;
                 if self.indexer_trust.is_verify() && !transaction.is_dry_run && final_decision.is_commit() {
-                    let verified = self
+                    let Some(verified) = self
                         .verify_committed_result(transaction_id, execution_result.as_deref(), resp.receipt.as_ref())
-                        .await?;
-                    if !verified {
+                        .await?
+                    else {
                         return Ok(None);
+                    };
+                    if let Some(execution_result) = execution_result.as_mut() {
+                        execution_result.finalize = verified;
                     }
                 }
 
@@ -447,22 +451,23 @@ where
         Ok(Some(self.network_interface.get_current_epoch().await?))
     }
 
-    /// Verifies that the network committed `execution_result` as the result of `transaction_id`: the indexer's proof of
-    /// the committed receipt verifies against a validator set the wallet trusts, and the result is the one that
-    /// receipt commits. Returns `false` while there is no proof to verify yet.
+    /// Verifies the result the network committed for `transaction_id` and returns it: the indexer's proof of the
+    /// committed receipt verifies against a validator set the wallet trusts, and the committed result `proven` carries
+    /// is the one that receipt commits. The caller uses the returned result in place of the one in `execution_result`.
+    /// Returns `None` while there is no proof to verify yet.
     async fn verify_committed_result(
         &self,
         transaction_id: TransactionId,
         execution_result: Option<&ExecuteResult>,
         proven: Option<&ProvenTransactionReceipt>,
-    ) -> Result<bool, TransactionApiError> {
+    ) -> Result<Option<FinalizeResult>, TransactionApiError> {
         let Some((proven, proof)) = proven.and_then(|proven| proven.proof.as_ref().map(|proof| (proven, proof))) else {
             info!(
                 target: LOG_TARGET,
                 "Transaction {} committed, but the indexer served no proof of its receipt yet. Will check again later.",
                 transaction_id
             );
-            return Ok(false);
+            return Ok(None);
         };
         let Some(committee) = self
             .validator_set_api
@@ -475,22 +480,16 @@ where
                 transaction_id,
                 proof.anchor.epoch
             );
-            return Ok(false);
+            return Ok(None);
         };
-        let unverified = |source| TransactionApiError::FinalizationUnverified { transaction_id, source };
-        let (_, receipt) = committee.verify_receipt(transaction_id, proven).map_err(unverified)?;
-        let execution_result =
-            execution_result.ok_or_else(|| TransactionApiError::InvalidTransactionQueryResponse {
+        if execution_result.is_none() {
+            return Err(TransactionApiError::InvalidTransactionQueryResponse {
                 details: format!("Transaction {transaction_id} committed, but the indexer served no result"),
-            })?;
-        check_result_matches_receipt(
-            committee.network(),
-            transaction_id,
-            &receipt,
-            &execution_result.finalize,
-        )
-        .map_err(unverified)?;
-        Ok(true)
+            });
+        }
+        let unverified = |source| TransactionApiError::FinalizationUnverified { transaction_id, source };
+        let (_, result) = committee.verify_result(transaction_id, proven).map_err(unverified)?;
+        Ok(Some(result))
     }
 
     pub fn release_all_locks_for_transaction(&self, transaction_id: TransactionId) -> Result<(), TransactionApiError> {

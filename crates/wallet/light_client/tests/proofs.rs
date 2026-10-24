@@ -198,6 +198,7 @@ fn it_verifies_a_committed_receipt() {
         version: SubstateVersion::ZERO,
         receipt,
         proof: Some(proof),
+        result: None,
     };
     committee.verify_receipt(transaction_id, &proven).unwrap();
 
@@ -500,4 +501,74 @@ fn a_proof_served_as_json_verifies_and_yields_the_committed_value() {
             "{id}"
         );
     }
+}
+
+/// A committed transaction whose diff ups each value [`values_json_does_not_carry_exactly`] lists and whose event
+/// carries metadata whose CBOR is not canonical, with the receipt it committed and its result.
+fn committed_with_values_json_does_not_carry_exactly(
+    transaction_id: TransactionId,
+) -> (TransactionReceipt, FinalizeResult) {
+    let mut diff = SubstateDiff::new();
+    for (seed, (id, value)) in values_json_does_not_carry_exactly().into_iter().enumerate() {
+        let id = match id {
+            SubstateId::NonFungible(address) => SubstateId::NonFungible(NonFungibleAddress::new(
+                *address.resource_address(),
+                NonFungibleId::from_u64(seed as u64),
+            )),
+            SubstateId::Resource(_) => {
+                SubstateId::Resource(ResourceAddress::from_hex(&format!("{seed:02x}").repeat(32)).unwrap())
+            },
+            id => id,
+        };
+        diff.up(id, Substate::new(SubstateVersion::ZERO, value));
+    }
+    let mut receipt = receipt(DiffSummary::from_diff(NETWORK, &diff, EPOCH));
+    let mut metadata = Metadata::new();
+    metadata.insert_raw("k", tari_bor::decode_exact(&[0x18, 0x05]).unwrap());
+    receipt.events = Box::new([Event::new(
+        None,
+        Hash32::from_array([3; 32]),
+        "topic".to_string(),
+        metadata,
+    )]);
+    let result = FinalizeResult::new(
+        Hash32::from_array(transaction_id.into_array()),
+        vec![],
+        receipt.events.to_vec(),
+        TransactionResult::Accept(diff),
+        receipt.fee_receipt.clone(),
+    );
+    (receipt, result)
+}
+
+#[test]
+fn a_result_served_as_json_verifies_and_yields_the_committed_result() {
+    let (set, trusted) = trusted_set();
+    let transaction_id = TransactionId::new([9; 32]);
+    let (receipt, result) = committed_with_values_json_does_not_carry_exactly(transaction_id);
+    let receipt_id = SubstateId::TransactionReceipt(transaction_id.into_receipt_address());
+    let proof = substate_proof(
+        &set,
+        &receipt_id,
+        SubstateVersion::ZERO,
+        &SubstateValue::from(receipt.clone()),
+    );
+    let committee = committee_for(&trusted, &set, &proof);
+    let proven = ProvenTransactionReceipt {
+        version: SubstateVersion::ZERO,
+        receipt,
+        proof: Some(proof),
+        result: Some(tari_bor::encode(&result).unwrap()),
+    };
+    let mut served: ProvenTransactionReceipt = serde_json::from_str(&serde_json::to_string(&proven).unwrap()).unwrap();
+
+    let (_, verified) = committee.verify_result(transaction_id, &served).unwrap();
+    assert_eq!(tari_bor::encode(&verified).unwrap(), tari_bor::encode(&result).unwrap());
+
+    served.result = None;
+    let err = committee.verify_result(transaction_id, &served).unwrap_err();
+    assert!(
+        matches!(err, LightClientError::MissingTransactionResult { .. }),
+        "{err}"
+    );
 }

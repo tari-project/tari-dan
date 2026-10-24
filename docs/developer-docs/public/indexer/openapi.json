@@ -2363,6 +2363,14 @@
           "receipt": {
             "type": "object"
           },
+          "result": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "byte",
+            "description": "CBOR-encoded `FinalizeResult` of the transaction, as its committee returned it. A verifier checks the result\ndecoded from these bytes against the proven receipt and uses it: the result's JSON form does not decode back\nto the committed result for every result, e.g. one holding a non-finite float or metadata whose CBOR is not\ncanonical."
+          },
           "version": {
             "type": "integer",
             "format": "int64",

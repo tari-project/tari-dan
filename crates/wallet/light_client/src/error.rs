@@ -66,6 +66,8 @@ pub enum LightClientError {
         "The indexer served a proof of transaction {transaction_id}'s receipt that carries another kind of substate"
     )]
     ProvenReceiptNotAReceipt { transaction_id: String },
+    #[error("The indexer served the proven receipt of transaction {transaction_id} without the committed result")]
+    MissingTransactionResult { transaction_id: String },
     #[error("The transaction result does not match the proven receipt: {details}")]
     ResultDoesNotMatchReceipt { details: String },
     #[error("The substate diff does not match the proven receipt: {details}")]
