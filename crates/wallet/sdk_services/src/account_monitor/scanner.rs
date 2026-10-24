@@ -406,9 +406,6 @@ where TSpec: WalletSdkSpec
         Ok(commitments)
     }
 
-    /// The number of confidential outputs `vault` names that have no local record. An output the indexer did not
-    /// return when a vault version was scanned keeps that version out of date, so it is fetched again on the next
-    /// refresh.
     /// The confidential outputs and non-fungibles `vault` names that the wallet holds no record of.
     fn count_unrecorded_vault_contents(
         &self,
@@ -434,6 +431,9 @@ where TSpec: WalletSdkSpec
         Ok(nft_ids.iter().filter(|id| !stored.contains(*id)).count())
     }
 
+    /// The number of confidential outputs `vault` names that have no local record. An output the indexer did not
+    /// return when a vault version was scanned keeps that version out of date, so it is fetched again on the next
+    /// refresh.
     fn count_unrecorded_confidential_outputs(
         &self,
         account_address: ComponentAddress,
