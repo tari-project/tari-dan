@@ -2192,10 +2192,44 @@ impl Drop for ReadTransaction<'_> {
 
 #[cfg(test)]
 mod tests {
-    use tari_ootle_wallet_sdk::storage::ReadableWalletStore;
+    use tari_ootle_wallet_sdk::storage::{
+        CommittableStore,
+        ReadableWalletStore,
+        WalletStoreWriter,
+        WriteableWalletStore,
+    };
+    use webauthn_rs::prelude::Passkey;
 
     use super::*;
     use crate::SqliteWalletStore;
+
+    fn sample_passkey() -> Passkey {
+        serde_json::from_value(serde_json::json!({
+            "cred": {
+                "cred_id": "AAECAwQFBgcICQoLDA0ODw",
+                "cred": {
+                    "type_": "ES256",
+                    "key": {
+                        "EC_EC2": {
+                            "curve": "SECP256R1",
+                            "x": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+                            "y": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+                        }
+                    }
+                },
+                "counter": 0,
+                "transports": null,
+                "user_verified": true,
+                "backup_eligible": false,
+                "backup_state": false,
+                "registration_policy": "required",
+                "extensions": {},
+                "attestation": { "data": "None", "metadata": "None" },
+                "attestation_format": "none"
+            }
+        }))
+        .unwrap()
+    }
 
     #[test]
     fn an_undecodable_passkey_is_an_error() {
@@ -2212,5 +2246,43 @@ mod tests {
         assert!(tx.webauthn_has_any_registration().unwrap());
         let err = tx.webauthn_reg_fetch_all_passkeys().unwrap_err();
         assert!(matches!(err, WalletStorageError::DecodingError { .. }), "{err}");
+    }
+
+    #[test]
+    fn webauthn_reg_clear_all_removes_all_passkeys_and_preserves_api_keys() {
+        let store = SqliteWalletStore::try_open(":memory:").unwrap();
+        store.run_migrations().unwrap();
+
+        {
+            let mut tx = store.create_write_tx().unwrap();
+            tx.webauthn_reg_insert("owner".to_string(), sample_passkey()).unwrap();
+            tx.api_key_insert("automation", "deadbeef", "admin", None).unwrap();
+            tx.commit().unwrap();
+        }
+
+        {
+            let mut tx = store.create_read_tx().unwrap();
+            assert!(tx.webauthn_has_any_registration().unwrap());
+            assert_eq!(tx.webauthn_reg_fetch_all_passkeys().unwrap().len(), 1);
+            assert!(tx.api_key_find_active_by_hash("deadbeef").unwrap().is_some());
+        }
+
+        let deleted = store.with_write_tx(|tx| tx.webauthn_reg_clear_all()).unwrap();
+        assert_eq!(deleted, 1);
+
+        {
+            let mut tx = store.create_read_tx().unwrap();
+            assert!(!tx.webauthn_has_any_registration().unwrap());
+            assert!(tx.webauthn_reg_fetch_all_passkeys().unwrap().is_empty());
+            // API keys are preserved across passkey resets.
+            assert!(tx.api_key_find_active_by_hash("deadbeef").unwrap().is_some());
+        }
+
+        // After reset, a new initial registration under the same username succeeds.
+        store
+            .with_write_tx(|tx| tx.webauthn_reg_insert("owner".to_string(), sample_passkey()))
+            .unwrap();
+        let mut tx = store.create_read_tx().unwrap();
+        assert!(tx.webauthn_has_any_registration().unwrap());
     }
 }

@@ -2699,6 +2699,20 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         Ok(())
     }
 
+    fn webauthn_reg_clear_all(&mut self) -> Result<usize, WalletStorageError> {
+        use crate::schema::{webauthn_registration_passkeys, webauthn_registrations};
+
+        let deleted = diesel::delete(webauthn_registration_passkeys::table)
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("webauthn_reg_clear_all", e))?;
+
+        diesel::delete(webauthn_registrations::table)
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("webauthn_reg_clear_all", e))?;
+
+        Ok(deleted)
+    }
+
     /// Inserting a new authored template.
     fn authored_templates_insert(&mut self, model: AuthoredTemplateModel) -> Result<(), WalletStorageError> {
         use crate::schema::authored_templates;

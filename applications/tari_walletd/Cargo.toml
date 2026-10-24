@@ -81,6 +81,7 @@ uuid = { workspace = true }
 wasm-opt = "0.116.1"
 tempfile.workspace = true
 sha2 = { workspace = true }
+subtle = { workspace = true }
 time = { workspace = true }
 zeroize = { workspace = true, features = ["derive"] }
 

@@ -8,10 +8,11 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Grid from "@mui/material/Grid";
 import { useTheme } from "@mui/material/styles";
+import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { getClientInstance, webauthnFinishRegistration, webauthnStartRegistration } from "@utils/json_rpc";
 import { Buffer } from "buffer";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Form } from "react-router-dom";
 
 const WEBAUTHN_RP_ID = import.meta.env.VITE_DAEMON_WEBAUTHN_RP_ID || window.location.hostname;
@@ -69,16 +70,37 @@ function WebauthnRegistration(props: WebauthnProps) {
   const theme = useTheme();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [setupToken, setSetupToken] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("token")?.trim() || "";
+  });
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const tokenFromQuery = url.searchParams.get("token")?.trim();
+    if (tokenFromQuery) {
+      setSetupToken(tokenFromQuery);
+      url.searchParams.delete("token");
+      window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+    }
+  }, []);
 
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
+    const trimmedToken = setupToken.trim();
+    if (!trimmedToken) {
+      setError("A one-time setup token is required to register the first passkey.");
+      return;
+    }
 
     setLoading(true);
+    setError("");
 
     try {
       // start registration by getting challenge
       const startRegisterResponse = await webauthnStartRegistration({
         username: APP_NAME,
+        setup_token: trimmedToken,
       });
 
       if (!startRegisterResponse) {
@@ -109,6 +131,7 @@ function WebauthnRegistration(props: WebauthnProps) {
       const { token } = await webauthnFinishRegistration({
         credential,
         session_id: regSessionId,
+        setup_token: trimmedToken,
       });
 
       let client = await getClientInstance();
@@ -167,10 +190,21 @@ function WebauthnRegistration(props: WebauthnProps) {
               className="flex-container"
               style={{
                 flexDirection: "column",
+                gap: theme.spacing(2),
                 marginTop: theme.spacing(3),
               }}
             >
-              <Button variant="contained" type="submit" disabled={loading}>
+              <TextField
+                label="One-time setup token"
+                placeholder="Paste setup token from wallet daemon log or setup_token file"
+                value={setupToken}
+                onChange={(e) => setSetupToken(e.target.value)}
+                required
+                fullWidth
+                size="small"
+                disabled={loading}
+              />
+              <Button variant="contained" type="submit" disabled={loading || !setupToken.trim()}>
                 Register
               </Button>
               {loadingBar}

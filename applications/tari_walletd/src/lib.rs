@@ -153,6 +153,7 @@ pub async fn run_tari_ootle_walletd(
         );
     }
     let authenticator = create_authenticator(&config.ootle_wallet_daemon, wallet_store.clone())?;
+    let webauthn_service = authenticator.webauthn_service().cloned();
     if config.ootle_wallet_daemon.enable_webrtc {
         info!(
             target: LOG_TARGET,
@@ -172,7 +173,37 @@ pub async fn run_tari_ootle_walletd(
         jwt_secret,
         shutdown_signal,
     );
-    let (_jrpc_address, listen_fut) = server::spawn_listener(jrpc_address, signaling_server_address, handlers).await?;
+    let (jrpc_address, listen_fut) = server::spawn_listener(jrpc_address, signaling_server_address, handlers).await?;
+
+    if let Some(webauthn_service) = webauthn_service {
+        if !webauthn_service.is_enrolled()? {
+            let (_setup_token, setup_token_path) =
+                webauthn_service.issue_setup_token_to_file(config.common.base_path())?;
+            let ui_origin = config
+                .ootle_wallet_daemon
+                .webauthn
+                .rp_origin
+                .as_ref()
+                .cloned()
+                .unwrap_or_else(|| {
+                    Url::parse(format!("http://localhost:{}", jrpc_address.port()).as_str())
+                        .expect("url cannot be invalid")
+                });
+            let register_url = format!("{}/register", ui_origin.as_str().trim_end_matches('/'));
+            info!(
+                target: LOG_TARGET,
+                "🔑 No WebAuthn passkey is enrolled. Register your first passkey at {register_url} using the one-time setup token in {}",
+                setup_token_path.display()
+            );
+        } else if let Err(err) = services::remove_setup_token_file(config.common.base_path()) {
+            warn!(
+                target: LOG_TARGET,
+                "Failed to remove stale setup token file in {}: {}",
+                config.common.base_path().display(),
+                err
+            );
+        }
+    }
 
     #[cfg(not(feature = "web_ui"))]
     info!(
@@ -248,6 +279,20 @@ pub fn init_wallet_store(config: &ApplicationConfig) -> anyhow::Result<SqliteWal
     let store = SqliteWalletStore::try_open(config.to_data_dir().join("wallet.sqlite"))?;
     store.run_migrations()?;
     Ok(store)
+}
+
+/// Removes all enrolled WebAuthn passkeys from the wallet database and deletes
+/// `<base_path>/setup_token` if present.
+///
+/// Stop or restart the wallet daemon when running this: restarting the daemon rotates its
+/// in-memory JWT signing secret (invalidating any active sessions) and issues a fresh one-time
+/// setup token for passkey enrollment.
+pub fn reset_wallet_passkeys(config: &ApplicationConfig) -> anyhow::Result<usize> {
+    use tari_ootle_wallet_sdk::storage::{WalletStore, WalletStoreWriter};
+    let store = init_wallet_store(config)?;
+    let deleted = store.with_write_tx(|tx| tx.webauthn_reg_clear_all())?;
+    services::remove_setup_token_file(config.common.base_path())?;
+    Ok(deleted)
 }
 
 pub fn initialize_wallet_sdk(config: &ApplicationConfig, store: SqliteWalletStore) -> anyhow::Result<WalletSdk> {
