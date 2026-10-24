@@ -42,10 +42,11 @@ pub enum OotleWasmError {
     )]
     TransactionSignatureInvalid,
     #[error(
-        "An authorization signature on the transaction was made for a different seal signer; each authorizer must \
-         sign the hash from hashUnsignedTransaction for this seal signer's public key"
+        "An authorization signature on the transaction does not verify for this seal signer and transaction body; \
+         each authorizer must sign the hash from hashUnsignedTransaction for this seal signer's public key, and the \
+         body must not change after signing"
     )]
-    AuthorizationForOtherSealSigner,
+    AuthorizationSignatureInvalid,
     #[error("Stealth crypto error: {0}")]
     Stealth(String),
     #[error("Stealth transfer validation failed: {0}")]

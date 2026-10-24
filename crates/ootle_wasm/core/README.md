@@ -16,7 +16,7 @@ Encodes `Transaction` values using `tari_bor` and returns base64 strings matchin
 Produces the 64-byte signing messages. Delegates to `TransactionSignature::create_message_v1` (authorization) and `TransactionSealSignature::create_message_v1` (seal) to guarantee byte-identical output with the rest of the Tari codebase.
 
 - `hash_unsigned_transaction(&UnsignedTransactionV1, seal_signer_hex: &str) → Result<Vec<u8>>`
-- `hash_unsigned_transaction_json(json: &str, seal_signer_hex: &str) → Result<Vec<u8>>`
+- `hash_unsigned_transaction_json(json: &str, seal_signer_hex: &str) → Result<Vec<u8>>`: accepts unsigned or unsealed JSON
 - `hash_unsealed_transaction(&UnsealedTransactionV1) → Vec<u8>`: seal message; covers every authorization signature, so attach them first
 - `hash_unsealed_transaction_json(json: &str) → Result<Vec<u8>>`: accepts unsigned or unsealed JSON
 
@@ -29,7 +29,7 @@ Each function accepts unsigned or unsealed transaction JSON.
 - `attach_seal_signature_json(json, seal_signer_public_key, signature) → Result<String>`: seals with an externally produced 64-byte `R ‖ s` signature over the seal message
 - `attach_transaction_signature_json(json, signer_public_key, signature, seal_signer_public_key) → Result<String>`: appends an externally produced authorization signature
 
-The `attach_*` functions verify the signature before returning, so a signature over the wrong message or by the wrong key fails at attach time.
+Externally produced signatures are Ristretto255 Schnorr (`tari_crypto::RistrettoSchnorr`); see `NPM_README.md` for the challenge construction. The `attach_*` functions verify the signature before returning, so a signature over the wrong message or by the wrong key fails at attach time.
 
 ### `sign` — Schnorr signing and key management
 

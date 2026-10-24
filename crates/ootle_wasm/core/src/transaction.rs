@@ -39,6 +39,11 @@ pub(crate) fn parse_unsealed_transaction_json(tx_json: &str) -> Result<UnsealedT
 }
 
 /// Converts a raw 64-byte signature (`R ‖ s`) into the signature type a transaction carries.
+///
+/// The scheme is Ristretto255 Schnorr as in `tari_crypto::RistrettoSchnorr`: `s = k + e·x` with
+/// `R = k·G`, where `e` is the 64-byte Blake2b digest of the length-prefixed (u64 LE) chain
+/// `"com.tari.schnorr_signature.v1.challenge" ‖ R ‖ P ‖ message`, reduced mod ℓ. `R` is a compressed
+/// Ristretto point and `s` a canonical little-endian scalar.
 fn signature_from_bytes(bytes: &[u8]) -> Result<SchnorrSignatureBytes, OotleWasmError> {
     SchnorrSignatureBytes::from_bytes(bytes).map_err(|_| OotleWasmError::InvalidByteLength {
         field: "signature",
@@ -75,8 +80,8 @@ pub fn add_transaction_signer_json(
 /// Seal a transaction (accepts unsigned or unsealed JSON) with a signature produced outside this crate,
 /// e.g. by an HSM or MPC signer, over the message from `hash_unsealed_transaction_json`.
 ///
-/// `signature` is the raw 64-byte `R ‖ s` encoding. The seal and every authorization signature already on
-/// the transaction are verified, so a mismatch fails at attach time.
+/// `signature` is the raw 64-byte `R ‖ s` encoding described on `signature_from_bytes`. The seal and every
+/// authorization signature already on the transaction are verified, so a mismatch fails at attach time.
 ///
 /// Returns the sealed `Transaction` as a JSON string.
 pub fn attach_seal_signature_json(
@@ -91,7 +96,7 @@ pub fn attach_seal_signature_json(
         return Err(OotleWasmError::SealSignatureInvalid);
     }
     if !unsealed.verify_all_signatures(&seal_signer) {
-        return Err(OotleWasmError::AuthorizationForOtherSealSigner);
+        return Err(OotleWasmError::AuthorizationSignatureInvalid);
     }
     Ok(serde_json::to_string(&unsealed.seal_with_signature(seal_signature))?)
 }
@@ -99,7 +104,8 @@ pub fn attach_seal_signature_json(
 /// Append an authorization signature produced outside this crate, e.g. by an HSM or MPC signer, over the
 /// message from `hash_unsigned_transaction_json` for `seal_signer_public_key`.
 ///
-/// `signature` is the raw 64-byte `R ‖ s` encoding, verified before it is appended.
+/// `signature` is the raw 64-byte `R ‖ s` encoding described on `signature_from_bytes`, verified before it
+/// is appended.
 ///
 /// Returns the unsealed transaction (with the new signature appended) as a JSON string.
 pub fn attach_transaction_signature_json(
@@ -261,6 +267,28 @@ mod tests {
     }
 
     #[test]
+    fn two_external_authorizers_in_sequence() {
+        let (seal_secret, seal_pk) = random_keypair();
+        let mut tx_json = serde_json::to_string(&make_unsigned_tx()).unwrap();
+
+        for _ in 0..2 {
+            let (signer_secret, signer_pk) = random_keypair();
+            let hash = hash_unsigned_transaction_json(&tx_json, seal_pk.as_bytes()).unwrap();
+            let signature = external_sign(&signer_secret, &hash);
+            tx_json = attach_transaction_signature_json(&tx_json, signer_pk.as_bytes(), &signature, seal_pk.as_bytes())
+                .unwrap();
+        }
+
+        let seal_hash = hash_unsealed_transaction_json(&tx_json).unwrap();
+        let seal_signature = external_sign(&seal_secret, &seal_hash);
+        let sealed_json = attach_seal_signature_json(&tx_json, seal_pk.as_bytes(), &seal_signature).unwrap();
+
+        let sealed: Transaction = serde_json::from_str(&sealed_json).unwrap();
+        assert!(sealed.verify_all_signatures());
+        assert_eq!(sealed.signatures().len(), 2);
+    }
+
+    #[test]
     fn attach_seal_signature_rejects_wrong_length() {
         let (seal_secret, seal_pk) = random_keypair();
         let unsigned_json = serde_json::to_string(&make_unsigned_tx()).unwrap();
@@ -324,7 +352,7 @@ mod tests {
         let hash = hash_unsealed_transaction_json(&unsealed_json).unwrap();
         let signature = external_sign(&seal_secret, &hash);
         let err = attach_seal_signature_json(&unsealed_json, seal_pk.as_bytes(), &signature).unwrap_err();
-        assert!(matches!(err, OotleWasmError::AuthorizationForOtherSealSigner));
+        assert!(matches!(err, OotleWasmError::AuthorizationSignatureInvalid));
     }
 
     #[test]

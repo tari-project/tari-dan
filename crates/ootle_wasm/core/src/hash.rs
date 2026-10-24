@@ -28,13 +28,13 @@ pub fn hash_unsigned_transaction(
     Ok(hash.to_vec())
 }
 
-/// Hash an UnsignedTransactionV1 from a JSON string for signing.
-pub fn hash_unsigned_transaction_json(
-    unsigned_tx_json: &str,
-    seal_signer_public_key: &[u8],
-) -> Result<Vec<u8>, OotleWasmError> {
-    let tx: UnsignedTransactionV1 = serde_json::from_str(unsigned_tx_json)?;
-    hash_unsigned_transaction(&tx, seal_signer_public_key)
+/// Hash a transaction (accepts unsigned or unsealed JSON) for an authorization signature.
+///
+/// The authorization message excludes attached signatures, so unsigned and unsealed JSON of the same
+/// transaction hash identically.
+pub fn hash_unsigned_transaction_json(tx_json: &str, seal_signer_public_key: &[u8]) -> Result<Vec<u8>, OotleWasmError> {
+    let tx = parse_unsealed_transaction_json(tx_json)?;
+    hash_unsigned_transaction(tx.unsigned_transaction(), seal_signer_public_key)
 }
 
 /// Hash an UnsealedTransactionV1 for sealing, producing the 64-byte message the seal signer commits to.
