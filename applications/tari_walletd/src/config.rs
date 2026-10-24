@@ -35,6 +35,7 @@ use tari_common::{ConfigurationError, DefaultConfigLoader, SubConfigPath, config
 use tari_crypto::tari_utilities::SafePassword;
 use tari_ootle_address::Network;
 use tari_ootle_wallet_sdk::IndexerTrust;
+use tari_ootle_walletd_client::permissions::Permissions;
 use url::Url;
 
 #[derive(Debug, Clone)]
@@ -142,9 +143,34 @@ pub struct WalletDaemonConfig {
     /// exempt. Set to `18446744073709551615` (u64::MAX) to disable.
     #[serde(default = "return_default_max_fee_limit")]
     pub max_fee_limit: u64,
+    /// If true (default), the wallet daemon writes a fresh random cookie token (`tc_...`) to
+    /// `<base_path>/.cookie` (mode `0600`) on startup and deletes it on clean shutdown, allowing
+    /// local OS-user clients (`tari_wallet_cli`, `wallet_daemon_client`) to authenticate without
+    /// setting `authentication = "none"`.
+    #[serde(default = "return_default_cookie_auth")]
+    pub cookie_auth: bool,
+    /// Permission scopes granted to callers presenting the local `.cookie` bearer token. Defaults
+    /// to `["admin"]` (while still excluding interactive user-only endpoints such as key export,
+    /// API-key management, and transaction/signing request approvals). Accepts a list or a
+    /// comma-separated string.
+    #[serde(
+        default = "return_default_cookie_scopes",
+        deserialize_with = "deserialize_string_list"
+    )]
+    pub cookie_scopes: Vec<String>,
 }
 
 impl WalletDaemonConfig {
+    /// Parses `cookie_scopes` into a [`Permissions`] set.
+    pub fn parsed_cookie_scopes(&self) -> Result<Permissions, anyhow::Error> {
+        if self.cookie_scopes.is_empty() {
+            return Err(anyhow::anyhow!(
+                "cookie_scopes must name at least one permission scope when cookie_auth is enabled"
+            ));
+        }
+        Permissions::from_str(&self.cookie_scopes.join(",")).map_err(|e| anyhow::anyhow!("invalid cookie_scopes: {e}"))
+    }
+
     /// Rejects a configuration that cannot build a usable transaction.
     ///
     /// A zero window stamps `max_epoch == current_epoch`, so every transaction the daemon builds
@@ -176,6 +202,9 @@ impl WalletDaemonConfig {
                 "max_fee_limit must be at least 1: every transaction pays a fee, so a zero limit refuses them all"
             ));
         }
+        if self.cookie_auth {
+            self.parsed_cookie_scopes()?;
+        }
         if self.default_transaction_validity_epochs > IMPLAUSIBLE_TRANSACTION_VALIDITY_EPOCHS {
             log::warn!(
                 target: LOG_TARGET,
@@ -198,6 +227,14 @@ impl WalletDaemonConfig {
 
 fn return_default_auto_claim_burns() -> bool {
     true
+}
+
+fn return_default_cookie_auth() -> bool {
+    true
+}
+
+fn return_default_cookie_scopes() -> Vec<String> {
+    vec!["admin".to_string()]
 }
 
 /// Three epochs is roughly an hour at the ~20 minute epoch target: long enough for an interactive
@@ -297,6 +334,8 @@ impl Default for WalletDaemonConfig {
             auto_claim_burns: true,
             default_transaction_validity_epochs: return_default_transaction_validity_epochs(),
             max_fee_limit: return_default_max_fee_limit(),
+            cookie_auth: return_default_cookie_auth(),
+            cookie_scopes: return_default_cookie_scopes(),
         }
     }
 }
@@ -492,5 +531,60 @@ mod tests {
             ..Default::default()
         };
         config.validate().unwrap();
+    }
+
+    #[test]
+    fn cookie_auth_and_scopes_load_with_defaults_and_overrides() {
+        let default_cfg = load("[ootle_wallet_daemon]\nindexer_api_url = \"http://a.example/\"").unwrap();
+        assert!(default_cfg.cookie_auth);
+        assert_eq!(default_cfg.cookie_scopes, vec!["admin".to_string()]);
+        default_cfg.validate().unwrap();
+
+        let list_cfg = load(
+            "[ootle_wallet_daemon]\nindexer_api_url = \"http://a.example/\"\ncookie_auth = false\ncookie_scopes = \
+             [\"account_info\", \"transactions:read\"]",
+        )
+        .unwrap();
+        assert!(!list_cfg.cookie_auth);
+        assert_eq!(list_cfg.cookie_scopes, vec![
+            "account_info".to_string(),
+            "transactions:read".to_string()
+        ]);
+
+        let csv_cfg = load(
+            "[ootle_wallet_daemon]\nindexer_api_url = \"http://a.example/\"\ncookie_scopes = \"account_info, \
+             transactions:read\"",
+        )
+        .unwrap();
+        assert_eq!(csv_cfg.cookie_scopes, vec![
+            "account_info".to_string(),
+            "transactions:read".to_string()
+        ]);
+        csv_cfg.validate().unwrap();
+    }
+
+    #[test]
+    fn invalid_or_empty_cookie_scopes_are_rejected_when_cookie_auth_is_enabled() {
+        let empty_scopes = WalletDaemonConfig {
+            cookie_auth: true,
+            cookie_scopes: vec![],
+            ..Default::default()
+        };
+        assert!(empty_scopes.validate().is_err());
+
+        let invalid_scopes = WalletDaemonConfig {
+            cookie_auth: true,
+            cookie_scopes: vec!["not_a_real_permission_scope".to_string()],
+            ..Default::default()
+        };
+        assert!(invalid_scopes.validate().is_err());
+
+        // When cookie_auth is disabled, cookie_scopes is unused.
+        let disabled = WalletDaemonConfig {
+            cookie_auth: false,
+            cookie_scopes: vec![],
+            ..Default::default()
+        };
+        disabled.validate().unwrap();
     }
 }

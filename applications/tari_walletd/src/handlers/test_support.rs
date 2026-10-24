@@ -32,7 +32,7 @@ use crate::{
     config::{WalletDaemonAuth, WalletDaemonConfig},
     handlers::{
         HandlerContext,
-        auth::{api_keys, create_authenticator},
+        auth::{api_keys, cookie, create_authenticator},
     },
 };
 
@@ -40,6 +40,8 @@ pub(crate) struct TestDaemon {
     pub context: HandlerContext,
     /// The wallet's own interactive session, holding `admin`.
     pub session: Bearer,
+    /// The daemon's local `.cookie` bearer token (`tc_...`).
+    pub cookie: Bearer,
     _temp: tempfile::TempDir,
 }
 
@@ -74,6 +76,10 @@ impl TestDaemon {
         let mut config = WalletDaemonConfig::default();
         config.network = Network::LocalNet;
         config.authentication = WalletDaemonAuth::None;
+        let cookie_token = cookie::mint_cookie_token();
+        let cookie_permissions = config.parsed_cookie_scopes().unwrap();
+        let cookie_str = std::str::from_utf8(cookie_token.reveal()).expect("ASCII cookie token");
+        let cookie = Authorization::<Bearer>::bearer(cookie_str).unwrap().0;
         let context = HandlerContext::new(
             sdk,
             notify,
@@ -83,7 +89,8 @@ impl TestDaemon {
             create_authenticator(&config, store).unwrap(),
             SafePassword::from_str("test jwt secret").unwrap(),
             shutdown.to_signal(),
-        );
+        )
+        .with_cookie_token(Some((cookie_token, cookie_permissions)));
 
         // Handlers need only the context, so the background workers shut down now.
         shutdown.trigger();
@@ -96,6 +103,7 @@ impl TestDaemon {
         Self {
             context,
             session,
+            cookie,
             _temp: temp,
         }
     }

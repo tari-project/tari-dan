@@ -128,13 +128,14 @@ pub async fn handle_create(
             tx.locks_extend_timeout(*lock_id, ttl + LOCK_GRACE)?;
         }
 
+        let requested_by = auth.requested_by();
         let model = tx.transaction_request_insert(
             &unsigned,
             req.seal_signer,
             &req.other_signers,
             &req.signatures,
             &req.lock_ids,
-            auth.api_key_name.as_deref(),
+            requested_by.as_deref(),
             ttl,
         )?;
         tx.commit()?;
@@ -145,7 +146,7 @@ pub async fn handle_create(
         target: LOG_TARGET,
         "Transaction request {} created by {} ({} lock(s), expires {})",
         model.id,
-        auth.api_key_name.as_deref().unwrap_or("a wallet session"),
+        auth.signing_requester(),
         req.lock_ids.len(),
         model.expires_at,
     );
@@ -154,7 +155,7 @@ pub async fn handle_create(
         .notifier()
         .notify(WalletEvent::TransactionRequestCreated(TransactionRequestCreatedEvent {
             request_id: model.id,
-            requested_by: auth.api_key_name.clone(),
+            requested_by: auth.requested_by(),
         }));
 
     Ok(TransactionRequestCreateResponse {
@@ -676,9 +677,44 @@ mod tests {
         let app = daemon.delegated_session("transaction_requests:create");
         let foreign = [
             lock_for(&daemon, LockOwner::Wallet),
+            lock_for(&daemon, owner_of(&daemon, &daemon.cookie)),
             lock_for(&daemon, owner_of(&daemon, &other_tool)),
             lock_for(&daemon, owner_of(&daemon, &app)),
         ];
+
+        // A cookie caller's locks are distinct from the interactive wallet session's locks.
+        let wallet_lock = lock_for(&daemon, LockOwner::Wallet);
+        let err = handle_create(
+            &daemon.context,
+            Some(&daemon.cookie),
+            create_request(vec![wallet_lock], 60 * 60),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.to_string().contains("lock_ids"), "{err}");
+
+        let cookie_lock = lock_for(&daemon, owner_of(&daemon, &daemon.cookie));
+        let err = handle_create(
+            &daemon.context,
+            Some(&daemon.session),
+            create_request(vec![cookie_lock], 60 * 60),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.to_string().contains("lock_ids"), "{err}");
+
+        let cookie_req_id = handle_create(
+            &daemon.context,
+            Some(&daemon.cookie),
+            create_request(vec![cookie_lock], 60 * 60),
+        )
+        .await
+        .unwrap()
+        .request_id;
+        assert_eq!(
+            request_info(&daemon, cookie_req_id).await.requested_by.as_deref(),
+            Some("local-cookie")
+        );
 
         for lock_id in foreign {
             let deadline = get_lock(&daemon, lock_id).timeout_at;

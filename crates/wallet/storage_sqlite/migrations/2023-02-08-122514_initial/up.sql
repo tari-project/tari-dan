@@ -441,8 +441,9 @@ CREATE UNIQUE INDEX account_balance_changes_vault_version_uniq
 --     at submit from the `lock_ids` below, so a caller cannot ask the wallet
 --     to sign with a key of its choosing.
 --   * `requested_by` is the admin-assigned name of the API key that created
---     the request, or NULL for a wallet session. Display and audit only --
---     nothing authorises on it, and no creator check gates approval.
+--     the request, `'local-cookie'` for a local `.cookie` bearer, or NULL for a
+--     wallet session. Display and audit only -- nothing authorises on it, and
+--     no creator check gates approval.
 --   * `expires_at` bounds the approval window. Expiry is *derived* on read
 --     rather than written by a reaper: a row still marked Pending past this
 --     timestamp is expired. The locks referenced by `lock_ids` are extended

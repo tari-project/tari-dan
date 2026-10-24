@@ -260,8 +260,9 @@ pub struct TransactionRequestInfo {
     pub transaction: UnsignedTransaction,
     pub seal_signer: KeyId,
     pub other_signers: Vec<KeyId>,
-    /// Admin-assigned name of the API key that created this request, or `None`
-    /// for a wallet session. Display only -- nothing authorises on it.
+    /// Admin-assigned name of the API key that created this request, `"local-cookie"`
+    /// for a local `.cookie` bearer, or `None` for a wallet session. Display only --
+    /// nothing authorises on it.
     pub requested_by: Option<String>,
     pub status: EffectiveStatus,
     pub transaction_id: Option<TransactionId>,

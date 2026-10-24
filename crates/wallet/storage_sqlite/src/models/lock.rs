@@ -32,12 +32,14 @@ impl Lock {
     }
 }
 
+const LOCAL_COOKIE_OWNER: &str = "local_cookie";
 const DELEGATED_PREFIX: &str = "delegated:";
 const API_KEY_PREFIX: &str = "api_key:";
 
 pub fn encode_lock_owner(owner: LockOwner) -> Option<String> {
     match owner {
         LockOwner::Wallet => None,
+        LockOwner::LocalCookie => Some(LOCAL_COOKIE_OWNER.to_string()),
         LockOwner::Delegated(id) => Some(format!("{DELEGATED_PREFIX}{id}")),
         LockOwner::ApiKey(id) => Some(format!("{API_KEY_PREFIX}{id}")),
     }
@@ -47,7 +49,9 @@ fn decode_lock_owner(owner: Option<&str>) -> Result<LockOwner, WalletStorageErro
     let Some(owner) = owner else {
         return Ok(LockOwner::Wallet);
     };
-    let decoded = if let Some(id) = owner.strip_prefix(DELEGATED_PREFIX) {
+    let decoded = if owner == LOCAL_COOKIE_OWNER {
+        Some(LockOwner::LocalCookie)
+    } else if let Some(id) = owner.strip_prefix(DELEGATED_PREFIX) {
         id.parse().ok().map(LockOwner::Delegated)
     } else {
         owner

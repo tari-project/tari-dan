@@ -55,8 +55,11 @@ use tari_utilities::{SafePassword, hex::Hex};
 use url::Url;
 
 use crate::{
-    config::ApplicationConfig,
-    handlers::{HandlerContext, auth::create_authenticator},
+    config::{ApplicationConfig, WalletDaemonAuth},
+    handlers::{
+        HandlerContext,
+        auth::{cookie::CookieFileGuard, create_authenticator},
+    },
     services::spawn_services,
 };
 
@@ -162,6 +165,26 @@ pub async fn run_tari_ootle_walletd(
 
     // Generate a new secret each time the daemon starts. This means that all JWT tokens will be invalidated on restart.
     let jwt_secret = create_secret_password();
+    let (cookie, _cookie_guard) = if config.ootle_wallet_daemon.cookie_auth {
+        let permissions = config.ootle_wallet_daemon.parsed_cookie_scopes()?;
+        let (token, guard) = CookieFileGuard::create(&config.common.base_path)?;
+        let ceremony_note = match config.ootle_wallet_daemon.authentication {
+            WalletDaemonAuth::WebAuthn => " without a WebAuthn ceremony",
+            WalletDaemonAuth::None => "",
+        };
+        warn!(
+            target: LOG_TARGET,
+            "🍪 Local cookie authentication is enabled ({}, scopes: [{}]). Any process running as this OS user can read \
+             the cookie and authenticate{ceremony_note}. Set ootle_wallet_daemon.cookie_auth=false (or pass \
+             --cookie-auth=false) to disable it, or narrow ootle_wallet_daemon.cookie_scopes.",
+            guard.path().display(),
+            config.ootle_wallet_daemon.cookie_scopes.join(", "),
+        );
+        (Some((token, permissions)), Some(guard))
+    } else {
+        CookieFileGuard::remove_stale(&config.common.base_path);
+        (None, None)
+    };
     let handlers = HandlerContext::new(
         wallet_sdk.clone(),
         notify,
@@ -171,7 +194,8 @@ pub async fn run_tari_ootle_walletd(
         authenticator,
         jwt_secret,
         shutdown_signal,
-    );
+    )
+    .with_cookie_token(cookie);
     let (_jrpc_address, listen_fut) = server::spawn_listener(jrpc_address, signaling_server_address, handlers).await?;
 
     #[cfg(not(feature = "web_ui"))]

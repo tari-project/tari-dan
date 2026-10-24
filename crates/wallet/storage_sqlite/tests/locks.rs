@@ -128,6 +128,7 @@ fn a_lock_records_its_owner() {
 
     for owner in [
         LockOwner::Wallet,
+        LockOwner::LocalCookie,
         LockOwner::Delegated(u64::MAX),
         LockOwner::Delegated(3),
         LockOwner::ApiKey(7),

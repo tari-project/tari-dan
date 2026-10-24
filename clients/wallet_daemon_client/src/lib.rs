@@ -26,7 +26,12 @@ pub mod permissions;
 pub mod serialize;
 pub mod types;
 
-use std::borrow::Borrow;
+use std::{
+    borrow::Borrow,
+    fs,
+    io::ErrorKind,
+    path::{Path, PathBuf},
+};
 
 use json::Value;
 use reqwest::{
@@ -226,6 +231,66 @@ use crate::{
     },
 };
 
+/// Default file name for the local cookie-auth token written inside the wallet daemon's base path.
+pub const COOKIE_FILE_NAME: &str = ".cookie";
+
+/// Prefix distinguishing a local cookie-auth bearer token (`tc_<urlsafe_b64(32 random bytes)>`)
+/// from a JWT (`eyJ...`) or long-lived API key (`tw_...`).
+pub const COOKIE_TOKEN_PREFIX: &str = "tc_";
+
+/// Returns the default cookie file path (`<base_path>/.cookie`) for the given wallet daemon base directory.
+pub fn cookie_file_path(base_path: impl AsRef<Path>) -> PathBuf {
+    base_path.as_ref().join(COOKIE_FILE_NAME)
+}
+
+fn parse_cookie(path: &Path, raw: &str) -> Result<EncodedJwtString, WalletDaemonClientError> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(WalletDaemonClientError::CookieFileError {
+            path: path.to_path_buf(),
+            details: "cookie file is empty".to_string(),
+        });
+    }
+    if !trimmed.starts_with(COOKIE_TOKEN_PREFIX) {
+        return Err(WalletDaemonClientError::CookieFileError {
+            path: path.to_path_buf(),
+            details: format!("cookie token does not start with expected prefix '{COOKIE_TOKEN_PREFIX}'"),
+        });
+    }
+    Ok(EncodedJwtString::from(trimmed.to_string()))
+}
+
+/// Reads and validates a local cookie-auth token from `path`.
+pub fn read_cookie_file(path: impl AsRef<Path>) -> Result<EncodedJwtString, WalletDaemonClientError> {
+    let path = path.as_ref();
+    let raw = fs::read_to_string(path).map_err(|err| WalletDaemonClientError::CookieFileError {
+        path: path.to_path_buf(),
+        details: err.to_string(),
+    })?;
+    parse_cookie(path, &raw)
+}
+
+/// Reads and validates a local cookie-auth token from `<base_path>/.cookie`.
+pub fn read_cookie_from_base_path(base_path: impl AsRef<Path>) -> Result<EncodedJwtString, WalletDaemonClientError> {
+    read_cookie_file(cookie_file_path(base_path))
+}
+
+/// Attempts to read a local cookie-auth token from `<base_path>/.cookie`, returning `Ok(None)` if the cookie file
+/// does not exist.
+pub fn try_read_cookie_from_base_path(
+    base_path: impl AsRef<Path>,
+) -> Result<Option<EncodedJwtString>, WalletDaemonClientError> {
+    let path = cookie_file_path(base_path);
+    match fs::read_to_string(&path) {
+        Ok(raw) => parse_cookie(&path, &raw).map(Some),
+        Err(err) if err.kind() == ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(WalletDaemonClientError::CookieFileError {
+            path,
+            details: err.to_string(),
+        }),
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct WalletDaemonClient {
     client: reqwest::Client,
@@ -255,8 +320,30 @@ impl WalletDaemonClient {
         })
     }
 
+    /// Connects to the wallet daemon authenticating with the cookie file at `cookie_file`.
+    pub fn connect_with_cookie_file<T: IntoUrl>(
+        endpoint: T,
+        cookie_file: impl AsRef<Path>,
+    ) -> Result<Self, WalletDaemonClientError> {
+        let token = read_cookie_file(cookie_file)?;
+        Self::connect(endpoint, Some(token))
+    }
+
+    /// Connects to the wallet daemon, automatically loading `<base_path>/.cookie` if it exists.
+    pub fn connect_with_base_path<T: IntoUrl>(
+        endpoint: T,
+        base_path: impl AsRef<Path>,
+    ) -> Result<Self, WalletDaemonClientError> {
+        let token = try_read_cookie_from_base_path(base_path)?;
+        Self::connect(endpoint, token)
+    }
+
     pub fn endpoint(&self) -> &Url {
         &self.endpoint
+    }
+
+    pub fn auth_token(&self) -> Option<&EncodedJwtString> {
+        self.token.as_ref()
     }
 
     pub fn set_auth_token(&mut self, token: EncodedJwtString) -> &mut Self {
@@ -1099,4 +1186,74 @@ fn jsonrpc_result(val: json::Value) -> Result<json::Value, WalletDaemonClientErr
             message: "Missing result field".to_string(),
         })?;
     Ok(result.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::*;
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock after epoch")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "tari_ootle_walletd_client_{label}_{}_{}",
+            std::process::id(),
+            nanos
+        ));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    #[test]
+    fn read_cookie_file_trims_whitespace_and_validates_prefix() {
+        let dir = unique_temp_dir("valid_cookie");
+        let path = cookie_file_path(&dir);
+        fs::write(&path, "  tc_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG\n").unwrap();
+
+        let token = read_cookie_file(&path).unwrap();
+        assert_eq!(token.as_str(), "tc_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG");
+
+        let client = WalletDaemonClient::connect_with_base_path("http://127.0.0.1:5100", &dir).unwrap();
+        assert_eq!(
+            client.auth_token().map(|t| t.as_str()),
+            Some("tc_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG")
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_cookie_file_rejects_empty_and_wrong_prefix() {
+        let dir = unique_temp_dir("invalid_cookie");
+        let path = cookie_file_path(&dir);
+
+        fs::write(&path, "   \n").unwrap();
+        assert!(matches!(
+            read_cookie_file(&path),
+            Err(WalletDaemonClientError::CookieFileError { .. })
+        ));
+
+        fs::write(&path, "tw_not_a_cookie_token").unwrap();
+        assert!(matches!(
+            read_cookie_file(&path),
+            Err(WalletDaemonClientError::CookieFileError { .. })
+        ));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn try_read_cookie_from_base_path_returns_none_when_missing() {
+        let dir = unique_temp_dir("missing_cookie");
+        assert!(try_read_cookie_from_base_path(&dir).unwrap().is_none());
+
+        let client = WalletDaemonClient::connect_with_base_path("http://127.0.0.1:5100", &dir).unwrap();
+        assert!(client.auth_token().is_none());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

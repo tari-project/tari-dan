@@ -112,10 +112,13 @@ pub enum AuthError {
     #[error("Access denied. API key is invalid or revoked")]
     ApiKeyInvalidOrRevoked,
     // The endpoint requires an interactive user session (WebAuthn) — API
-    // keys are deliberately excluded so a leaked Admin key cannot mint or
-    // revoke further keys, limiting blast radius of a compromise to the
-    // lifetime of that single key.
-    #[error("Access denied. This endpoint requires an interactive user session, not an API key or a delegated token")]
+    // keys, delegated tokens, and the local cookie are deliberately excluded so
+    // a leaked Admin key or local `.cookie` cannot mint or revoke further keys,
+    // export secret keys, or approve requests.
+    #[error(
+        "Access denied. This endpoint requires an interactive user session, not an API key, delegated token, or local \
+         cookie"
+    )]
     UserAuthOnly,
     #[error("Insufficient permissions. Required '{required:?}'")]
     InsufficientPermissions { required: Permission },

@@ -87,6 +87,18 @@ pub struct Cli {
     /// The largest max_fee, in microtari, that this wallet submits a transaction with.
     #[clap(long, env = "OOTLE_WALLETD_MAX_FEE_LIMIT")]
     pub max_fee_limit: Option<u64>,
+    /// Whether to write a local authentication cookie (`<base_path>/.cookie`) on startup (`true` or `false`).
+    #[clap(long, env = "OOTLE_WALLETD_COOKIE_AUTH")]
+    pub cookie_auth: Option<bool>,
+    /// Permission scopes granted to local clients authenticating with `<base_path>/.cookie`. Repeat it, or separate
+    /// scopes with commas. Defaults to `admin`.
+    #[clap(
+        long = "cookie-scopes",
+        alias = "cookie-scope",
+        value_delimiter = ',',
+        env = "OOTLE_WALLETD_COOKIE_SCOPES"
+    )]
+    pub cookie_scopes: Vec<String>,
     /// The path to the value lookup table binary file used for brute force value lookups. This setting
     /// is only used when attempting to view confidential balances in confidential resources that use a view key
     /// controlled by this wallet. The binary file can be generated using the generate_ristretto_value_lookup
@@ -172,6 +184,18 @@ impl ConfigOverrideProvider for Cli {
             overrides.push((
                 format!("{}.ootle_wallet_daemon.max_fee_limit", network),
                 max_fee_limit.to_string(),
+            ));
+        }
+        if let Some(cookie_auth) = self.cookie_auth {
+            overrides.push((
+                format!("{}.ootle_wallet_daemon.cookie_auth", network),
+                cookie_auth.to_string(),
+            ));
+        }
+        if !self.cookie_scopes.is_empty() {
+            overrides.push((
+                format!("{}.ootle_wallet_daemon.cookie_scopes", network),
+                self.cookie_scopes.join(","),
             ));
         }
         if let Some(port) = self.enable_vite_dev_port {
@@ -271,6 +295,10 @@ mod tests {
             "false",
             "--max-fee-limit",
             "5000000",
+            "--cookie-auth",
+            "false",
+            "--cookie-scopes",
+            "account_info,transactions:read",
             "--override-keyring-password",
             "secret",
         ])
@@ -286,6 +314,11 @@ mod tests {
         assert!(config.authentication.is_none());
         assert!(!config.auto_claim_burns);
         assert_eq!(config.max_fee_limit, 5_000_000);
+        assert!(!config.cookie_auth);
+        assert_eq!(config.cookie_scopes, vec![
+            "account_info".to_string(),
+            "transactions:read".to_string()
+        ]);
     }
 
     /// Every setting the container image documents must be settable from the environment.
@@ -309,6 +342,8 @@ mod tests {
             ("authentication", "OOTLE_WALLETD_AUTHENTICATION"),
             ("auto-claim-burns", "OOTLE_WALLETD_AUTO_CLAIM_BURNS"),
             ("max-fee-limit", "OOTLE_WALLETD_MAX_FEE_LIMIT"),
+            ("cookie-auth", "OOTLE_WALLETD_COOKIE_AUTH"),
+            ("cookie-scopes", "OOTLE_WALLETD_COOKIE_SCOPES"),
             ("allowed-host", "OOTLE_WALLETD_ALLOWED_HOSTS"),
         ];
         for (long, env) in expected {

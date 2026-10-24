@@ -3,4 +3,4 @@
 /**
  * Who created a signing request, as the wallet authenticated it.
  */
-export type SigningRequester = "WalletSession" | { ApiKey: { name: string } } | "ConnectedApp";
+export type SigningRequester = "WalletSession" | "LocalClient" | { ApiKey: { name: string } } | "ConnectedApp";

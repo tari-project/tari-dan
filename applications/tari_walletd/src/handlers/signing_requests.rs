@@ -335,11 +335,7 @@ fn get_pending(context: &HandlerContext, request_id: SigningRequestId) -> Result
 }
 
 fn requester_of(auth: AuthIdentity) -> SigningRequester {
-    match (auth.api_key_name, auth.delegated) {
-        (Some(name), _) => SigningRequester::ApiKey { name },
-        (None, true) => SigningRequester::ConnectedApp,
-        (None, false) => SigningRequester::WalletSession,
-    }
+    auth.signing_requester()
 }
 
 /// Keys a signing request may name. A nonce key signs only as the throw-away
@@ -550,6 +546,7 @@ mod tests {
 
         assert_eq!(requester(&delegated), SigningRequester::ConnectedApp);
         assert_eq!(requester(&test.session), SigningRequester::WalletSession);
+        assert_eq!(requester(&test.daemon.cookie), SigningRequester::LocalClient);
         assert_eq!(requester(&test.api_key), SigningRequester::ApiKey {
             name: "governance-signer".to_string()
         });

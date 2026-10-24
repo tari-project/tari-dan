@@ -17,8 +17,9 @@ export type TransactionRequestInfo = {
   seal_signer: KeyId;
   other_signers: Array<KeyId>;
   /**
-   * Admin-assigned name of the API key that created this request, or `None`
-   * for a wallet session. Display only -- nothing authorises on it.
+   * Admin-assigned name of the API key that created this request, `"local-cookie"`
+   * for a local `.cookie` bearer, or `None` for a wallet session. Display only --
+   * nothing authorises on it.
    */
   requested_by: string | null;
   status: EffectiveStatus;
