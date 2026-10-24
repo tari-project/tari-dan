@@ -1,0 +1,108 @@
+{
+  "name": "generic_build/publish_template_with_metadata",
+  "schema_version": 1,
+  "provenance": {
+    "core_version": "0.47.0",
+    "git_rev": "3d45f0cdb53cc207e1d64f443294708642ed7db7",
+    "generated_by": "ootle_sdk_core golden-vector generator"
+  },
+  "operation": "build_and_encode_instructions",
+  "compare": "semantic",
+  "input": {
+    "network": "esmeralda",
+    "keys": {
+      "account_secret": "4a00000000000000000000000000000000000000000000000000000000000000"
+    },
+    "fetched": [],
+    "generic_intent": {
+      "fee": 2000,
+      "fee_payment": {
+        "FromAccount": "component_7171717171717171717171717171717171717171717171717171717171717171"
+      },
+      "fee_instructions": [],
+      "instructions": [
+        {
+          "PublishTemplate": {
+            "blob_index": 0,
+            "metadata_hash": "1220abababababababababababababababababababababababababababababababab"
+          }
+        }
+      ],
+      "blobs": [
+        {
+          "bytes": "0061736d01000000"
+        }
+      ],
+      "inputs": [
+        {
+          "substate_id": "component_7171717171717171717171717171717171717171717171717171717171717171",
+          "version": 0,
+          "is_write": true
+        }
+      ],
+      "extra_inputs": [],
+      "min_epoch": null,
+      "max_epoch": 1,
+      "dry_run": false
+    }
+  },
+  "expected": {
+    "sealed_transaction_semantic": {
+      "V1": {
+        "body": {
+          "signatures": [
+            {
+              "public_key": "f4ee399d01d7dc49c19b9ca94e7a948c43428257d5a7c4c9c810fa489ebf6017",
+              "signature": null
+            }
+          ],
+          "transaction": {
+            "blobs": [
+              "AGFzbQEAAAA="
+            ],
+            "dry_run": false,
+            "fee_instructions": [
+              {
+                "CallMethod": {
+                  "args": [
+                    {
+                      "Literal": "1907d0"
+                    }
+                  ],
+                  "call": {
+                    "Address": "component_7171717171717171717171717171717171717171717171717171717171717171"
+                  },
+                  "method": "pay_fee"
+                }
+              }
+            ],
+            "inputs": [
+              {
+                "is_write": true,
+                "substate_id": "component_7171717171717171717171717171717171717171717171717171717171717171",
+                "version": 0
+              }
+            ],
+            "instructions": [
+              {
+                "PublishTemplate": {
+                  "binary": 0,
+                  "metadata_hash": "1220abababababababababababababababababababababababababababababababab"
+                }
+              }
+            ],
+            "main_signer": "SealSigner",
+            "max_epoch": 1,
+            "min_epoch": null,
+            "network": 38,
+            "nonce": 0
+          }
+        },
+        "seal_signature": {
+          "public_key": "f4ee399d01d7dc49c19b9ca94e7a948c43428257d5a7c4c9c810fa489ebf6017",
+          "signature": null
+        }
+      }
+    }
+  }
+}

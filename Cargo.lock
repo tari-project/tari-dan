@@ -8020,7 +8020,6 @@ dependencies = [
  "tari_ootle_address",
  "tari_ootle_common_types",
  "tari_ootle_light_client",
- "tari_ootle_template_metadata",
  "tari_ootle_transaction",
  "tari_ootle_wallet_crypto",
  "tari_template_builtin",
