@@ -219,6 +219,12 @@ use crate::{
         WebauthnAlreadyRegisteredResponse,
         WebauthnFinishRegisterRequest,
         WebauthnFinishRegisterResponse,
+        WebauthnListPasskeysRequest,
+        WebauthnListPasskeysResponse,
+        WebauthnRemovePasskeyRequest,
+        WebauthnRemovePasskeyResponse,
+        WebauthnRenamePasskeyRequest,
+        WebauthnRenamePasskeyResponse,
         WebauthnStartAuthRequest,
         WebauthnStartAuthResponse,
         WebauthnStartRegisterRequest,
@@ -997,6 +1003,30 @@ impl WalletDaemonClient {
         req: T,
     ) -> Result<WebauthnStartAuthResponse, WalletDaemonClientError> {
         self.send_request("webauthn.auth_start", req.borrow()).await
+    }
+
+    /// Lists all WebAuthn passkeys registered in this wallet (requires `Admin` scope).
+    pub async fn webauthn_list_passkeys<T: Borrow<WebauthnListPasskeysRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<WebauthnListPasskeysResponse, WalletDaemonClientError> {
+        self.send_request("webauthn.list_passkeys", req.borrow()).await
+    }
+
+    /// Renames a registered WebAuthn passkey (requires `Admin` scope).
+    pub async fn webauthn_rename_passkey<T: Borrow<WebauthnRenamePasskeyRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<WebauthnRenamePasskeyResponse, WalletDaemonClientError> {
+        self.send_request("webauthn.rename_passkey", req.borrow()).await
+    }
+
+    /// Removes a registered WebAuthn passkey (requires `Admin` scope). Refuses to remove the last passkey.
+    pub async fn webauthn_remove_passkey<T: Borrow<WebauthnRemovePasskeyRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<WebauthnRemovePasskeyResponse, WalletDaemonClientError> {
+        self.send_request("webauthn.remove_passkey", req.borrow()).await
     }
 
     // Address book

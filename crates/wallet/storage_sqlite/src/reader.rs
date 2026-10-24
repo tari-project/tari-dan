@@ -1763,29 +1763,36 @@ impl WalletStoreReader for ReadTransaction<'_> {
     }
 
     fn webauthn_has_any_registration(&mut self) -> Result<bool, WalletStorageError> {
-        use crate::schema::webauthn_registrations;
+        use crate::schema::webauthn_registration_passkeys;
         diesel::select(diesel::dsl::exists(
-            webauthn_registrations::table.select(webauthn_registrations::id),
+            webauthn_registration_passkeys::table.select(webauthn_registration_passkeys::id),
         ))
         .get_result(self.connection())
         .map_err(|e| WalletStorageError::general("webauthn_has_any_registration", e))
     }
 
     fn webauthn_reg_fetch_all_passkeys(&mut self) -> Result<Vec<Passkey>, WalletStorageError> {
+        Ok(self
+            .webauthn_reg_list_passkeys()?
+            .into_iter()
+            .map(|value| value.passkey)
+            .collect())
+    }
+
+    fn webauthn_reg_list_passkeys(&mut self) -> Result<Vec<WebauthnRegistrationPasskeyModel>, WalletStorageError> {
         use crate::schema::webauthn_registration_passkeys;
         webauthn_registration_passkeys::table
+            .order(webauthn_registration_passkeys::id.asc())
             .select(WebauthnRegistrationPasskey::as_select())
             .load::<WebauthnRegistrationPasskey>(self.connection())
-            .map_err(|e| WalletStorageError::general("webauthn_reg_fetch_all_passkeys", e))?
+            .map_err(|e| WalletStorageError::general("webauthn_reg_list_passkeys", e))?
             .iter()
             .map(|model| {
-                WebauthnRegistrationPasskeyModel::try_from(model)
-                    .map(|value| value.passkey)
-                    .map_err(|e| WalletStorageError::DecodingError {
-                        operation: "webauthn_reg_fetch_all_passkeys",
-                        item: "webauthn passkey",
-                        details: e.to_string(),
-                    })
+                WebauthnRegistrationPasskeyModel::try_from(model).map_err(|e| WalletStorageError::DecodingError {
+                    operation: "webauthn_reg_fetch_all_passkeys",
+                    item: "webauthn passkey",
+                    details: e.to_string(),
+                })
             })
             .collect()
     }
@@ -2192,10 +2199,43 @@ impl Drop for ReadTransaction<'_> {
 
 #[cfg(test)]
 mod tests {
-    use tari_ootle_wallet_sdk::storage::ReadableWalletStore;
+    use tari_ootle_wallet_sdk::storage::{
+        CommittableStore,
+        ReadableWalletStore,
+        WalletStoreWriter,
+        WriteableWalletStore,
+    };
 
     use super::*;
     use crate::SqliteWalletStore;
+
+    fn sample_passkey(cred_id_b64: &str) -> Passkey {
+        serde_json::from_value(serde_json::json!({
+            "cred": {
+                "cred_id": cred_id_b64,
+                "cred": {
+                    "type_": "ES256",
+                    "key": {
+                        "EC_EC2": {
+                            "curve": "SECP256R1",
+                            "x": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+                            "y": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+                        }
+                    }
+                },
+                "counter": 0,
+                "transports": null,
+                "user_verified": true,
+                "backup_eligible": false,
+                "backup_state": false,
+                "registration_policy": "required",
+                "extensions": {},
+                "attestation": { "data": "None", "metadata": "None" },
+                "attestation_format": "none"
+            }
+        }))
+        .unwrap()
+    }
 
     #[test]
     fn an_undecodable_passkey_is_an_error() {
@@ -2212,5 +2252,55 @@ mod tests {
         assert!(tx.webauthn_has_any_registration().unwrap());
         let err = tx.webauthn_reg_fetch_all_passkeys().unwrap_err();
         assert!(matches!(err, WalletStorageError::DecodingError { .. }), "{err}");
+    }
+
+    #[test]
+    fn multiple_passkeys_under_same_username_round_trip() {
+        let store = SqliteWalletStore::try_open(":memory:").unwrap();
+        store.run_migrations().unwrap();
+
+        let pk1 = sample_passkey("AAECAwQFBgcICQoLDA0ODw");
+        let pk2 = sample_passkey("EBESExQVFhcYGRobHB0eHw");
+
+        let (id1, id2) = {
+            let mut tx = store.create_write_tx().unwrap();
+            let id1 = tx
+                .webauthn_reg_insert("tari-wallet-webui".to_string(), "Laptop".to_string(), pk1.clone())
+                .unwrap();
+            let id2 = tx
+                .webauthn_reg_insert("tari-wallet-webui".to_string(), "YubiKey".to_string(), pk2.clone())
+                .unwrap();
+            tx.commit().unwrap();
+            (id1, id2)
+        };
+
+        {
+            let mut tx = store.create_read_tx().unwrap();
+            assert!(tx.webauthn_has_any_registration().unwrap());
+            let list = tx.webauthn_reg_list_passkeys().unwrap();
+            assert_eq!(list.len(), 2);
+            assert_eq!(list[0].id, id1);
+            assert_eq!(list[0].label, "Laptop");
+            assert!(list[0].last_used_at.is_none());
+            assert_eq!(list[1].id, id2);
+            assert_eq!(list[1].label, "YubiKey");
+            assert!(list[1].last_used_at.is_none());
+        }
+
+        {
+            let mut tx = store.create_write_tx().unwrap();
+            tx.webauthn_reg_update_passkey(&pk1).unwrap();
+            tx.webauthn_reg_rename_passkey(id2, "YubiKey 5C").unwrap();
+            tx.webauthn_reg_delete_passkey(id1).unwrap();
+            tx.commit().unwrap();
+        }
+
+        {
+            let mut tx = store.create_read_tx().unwrap();
+            let list = tx.webauthn_reg_list_passkeys().unwrap();
+            assert_eq!(list.len(), 1);
+            assert_eq!(list[0].id, id2);
+            assert_eq!(list[0].label, "YubiKey 5C");
+        }
     }
 }

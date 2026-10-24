@@ -1725,6 +1725,8 @@ pub struct WebauthnAlreadyRegisteredResponse {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
 pub struct WebauthnStartRegisterRequest {
     pub username: String,
+    #[serde(default)]
+    pub label: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1750,9 +1752,53 @@ pub struct WebauthnFinishRegisterRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
 pub struct WebauthnFinishRegisterResponse {
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
-    pub token: EncodedJwtString,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(type = "string | null", optional))]
+    pub token: Option<EncodedJwtString>,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
+pub struct WebauthnPasskeyInfo {
+    pub id: u32,
+    pub label: String,
+    pub counter: u32,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub created_at: i64,
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+    pub last_used_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
+pub struct WebauthnListPasskeysRequest {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
+pub struct WebauthnListPasskeysResponse {
+    pub passkeys: Vec<WebauthnPasskeyInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
+pub struct WebauthnRenamePasskeyRequest {
+    pub id: u32,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
+pub struct WebauthnRenamePasskeyResponse {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
+pub struct WebauthnRemovePasskeyRequest {
+    pub id: u32,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
+pub struct WebauthnRemovePasskeyResponse {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
@@ -2460,5 +2506,79 @@ mod tests {
             Some(UtxoInputSelection::ConfidentialOnly)
         ));
         assert!(parsed.as_specific().is_none());
+    }
+
+    #[test]
+    fn webauthn_passkey_management_types_round_trip_and_preserve_backward_compat() {
+        // Legacy start_register requests without `label` still deserialize cleanly.
+        let legacy_start: WebauthnStartRegisterRequest = serde_json::from_value(serde_json::json!({
+            "username": "tari-wallet-webui",
+        }))
+        .unwrap();
+        assert_eq!(legacy_start.username, "tari-wallet-webui");
+        assert_eq!(legacy_start.label, None);
+
+        let labeled_start: WebauthnStartRegisterRequest = serde_json::from_value(serde_json::json!({
+            "username": "tari-wallet-webui",
+            "label": "Hardware Security Key",
+        }))
+        .unwrap();
+        assert_eq!(labeled_start.label.as_deref(), Some("Hardware Security Key"));
+
+        let list_response = WebauthnListPasskeysResponse {
+            passkeys: vec![
+                WebauthnPasskeyInfo {
+                    id: 1,
+                    label: "Primary Passkey".to_string(),
+                    counter: 3,
+                    created_at: 1_700_000_000,
+                    last_used_at: Some(1_700_000_500),
+                },
+                WebauthnPasskeyInfo {
+                    id: 2,
+                    label: "Backup YubiKey".to_string(),
+                    counter: 0,
+                    created_at: 1_700_000_100,
+                    last_used_at: None,
+                },
+            ],
+        };
+        let list_json = serde_json::to_value(&list_response).unwrap();
+        let parsed_list: WebauthnListPasskeysResponse = serde_json::from_value(list_json).unwrap();
+        assert_eq!(parsed_list.passkeys.len(), 2);
+        assert_eq!(parsed_list.passkeys[0].id, 1);
+        assert_eq!(parsed_list.passkeys[0].label, "Primary Passkey");
+        assert_eq!(parsed_list.passkeys[0].counter, 3);
+        assert_eq!(parsed_list.passkeys[0].last_used_at, Some(1_700_000_500));
+        assert_eq!(parsed_list.passkeys[1].id, 2);
+        assert_eq!(parsed_list.passkeys[1].last_used_at, None);
+
+        let rename_req: WebauthnRenamePasskeyRequest = serde_json::from_value(serde_json::json!({
+            "id": 2,
+            "label": "Renamed Backup Key",
+        }))
+        .unwrap();
+        assert_eq!(rename_req.id, 2);
+        assert_eq!(rename_req.label, "Renamed Backup Key");
+
+        let remove_req: WebauthnRemovePasskeyRequest = serde_json::from_value(serde_json::json!({
+            "id": 2,
+        }))
+        .unwrap();
+        assert_eq!(remove_req.id, 2);
+
+        let finish_bootstrap = WebauthnFinishRegisterResponse {
+            token: Some("jwt-token".to_string().into()),
+        };
+        let finish_bootstrap_json = serde_json::to_value(&finish_bootstrap).unwrap();
+        assert_eq!(finish_bootstrap_json, serde_json::json!({ "token": "jwt-token" }));
+        let parsed_bootstrap: WebauthnFinishRegisterResponse = serde_json::from_value(finish_bootstrap_json).unwrap();
+        assert_eq!(parsed_bootstrap.token.as_ref().map(|t| t.as_str()), Some("jwt-token"));
+
+        let finish_additional = WebauthnFinishRegisterResponse { token: None };
+        let finish_additional_json = serde_json::to_value(&finish_additional).unwrap();
+        assert_eq!(finish_additional_json, serde_json::json!({}));
+        let parsed_additional: WebauthnFinishRegisterResponse = serde_json::from_value(finish_additional_json).unwrap();
+        assert!(parsed_additional.token.is_none());
     }
 }

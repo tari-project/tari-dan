@@ -337,9 +337,19 @@ pub trait WalletStoreWriter: CommittableStore {
     ) -> Result<(), WalletStorageError>;
 
     // Webauthn registrations
-    fn webauthn_reg_insert(&mut self, username: String, passkey: Passkey) -> Result<(), WalletStorageError>;
-    /// Replaces the stored passkey with the same credential ID as `passkey`.
+    /// Insert a passkey under `username` with an explicit human-readable `label`, returning its row id.
+    fn webauthn_reg_insert(
+        &mut self,
+        username: String,
+        label: String,
+        passkey: Passkey,
+    ) -> Result<u32, WalletStorageError>;
+    /// Replaces the stored passkey with the same credential ID as `passkey` and updates its `last_used_at` timestamp.
     fn webauthn_reg_update_passkey(&mut self, passkey: &Passkey) -> Result<(), WalletStorageError>;
+    /// Rename an existing passkey by id. Returns `NotFound` if `id` does not exist.
+    fn webauthn_reg_rename_passkey(&mut self, id: u32, label: &str) -> Result<(), WalletStorageError>;
+    /// Delete a passkey by id. Returns `NotFound` if `id` does not exist.
+    fn webauthn_reg_delete_passkey(&mut self, id: u32) -> Result<(), WalletStorageError>;
 
     // Authored templates
     fn authored_templates_insert(&mut self, model: AuthoredTemplateModel) -> Result<(), WalletStorageError>;

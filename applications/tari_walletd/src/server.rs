@@ -177,6 +177,9 @@ async fn handler(
                 call_handler_any_response(context, value, token, webauthn::handle_finish_registration).await
             },
             "auth_start" => call_handler(context, value, token, webauthn::handle_start_auth).await,
+            "list_passkeys" => call_handler(context, value, token, webauthn::handle_list_passkeys).await,
+            "rename_passkey" => call_handler(context, value, token, webauthn::handle_rename_passkey).await,
+            "remove_passkey" => call_handler(context, value, token, webauthn::handle_remove_passkey).await,
             _ => value.method_not_found(&value.method).into_response(),
         },
         Some(("settings", method)) => match method {
