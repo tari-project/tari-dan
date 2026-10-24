@@ -67,6 +67,8 @@ pub enum SigningRequestEffectiveStatus {
 pub enum SigningRequester {
     /// The wallet's own interactive session.
     WalletSession,
+    /// A local process authenticating with the daemon's `.cookie` token.
+    LocalClient,
     /// An API key, by the name an Admin gave it when minting it.
     ApiKey { name: String },
     /// An app connected over WebRTC, holding a token delegated by the wallet.
@@ -78,6 +80,7 @@ impl fmt::Display for SigningRequester {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::WalletSession => write!(f, "a wallet session"),
+            Self::LocalClient => write!(f, "a local client"),
             Self::ApiKey { name } => write!(f, "API key \"{name}\""),
             Self::ConnectedApp => write!(f, "a connected app"),
         }

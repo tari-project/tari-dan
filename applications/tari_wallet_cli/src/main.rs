@@ -30,13 +30,15 @@ use tari_ootle_walletd_client::WalletDaemonClient;
 async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::init();
 
+    let token = cli.resolve_auth_token()?;
+
     let endpoint = cli
         .daemon_jrpc_endpoint
         .unwrap_or_else(|| "/ip4/127.0.0.1/tcp/5100".parse().unwrap());
     let endpoint = multiaddr_to_http_url(endpoint)?;
 
     log::info!("🌍️ Connecting to {}", endpoint);
-    let client = WalletDaemonClient::connect(endpoint, cli.token.map(Into::into))?;
+    let client = WalletDaemonClient::connect(endpoint, token)?;
 
     if let Err(err) = handle_command(cli.command, client).await {
         eprintln!("👮 Command failed with error \"{}\"", err);

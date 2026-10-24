@@ -167,8 +167,8 @@ pub struct UtxoSpentEvent {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct TransactionRequestCreatedEvent {
     pub request_id: TransactionRequestId,
-    /// Admin-assigned name of the API key that asked, or `None` for a wallet
-    /// session. Display only.
+    /// Admin-assigned name of the API key that asked, `"local-cookie"` for a
+    /// local `.cookie` bearer, or `None` for a wallet session. Display only.
     pub requested_by: Option<String>,
 }
 

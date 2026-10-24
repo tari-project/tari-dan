@@ -17,6 +17,8 @@ pub enum LockOwner {
     /// The wallet's own interactive session, or the wallet itself for a lock
     /// it takes and links internally.
     Wallet,
+    /// A local process authenticating with the daemon's `.cookie` token.
+    LocalCookie,
     /// A connected app, by the id of the `webrtc.start` call that minted its
     /// token.
     Delegated(u64),

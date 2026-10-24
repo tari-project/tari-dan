@@ -141,7 +141,12 @@ function RequestCard({ request }: { request: TransactionRequestInfo }) {
     <StyledPaper sx={{ mb: 2 }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }} flexWrap="wrap" gap={1}>
         <Typography variant="h5">
-          {request.requested_by ? `"${request.requested_by}"` : "A wallet session"} requests approval
+          {request.requested_by === "local-cookie"
+            ? "A local client"
+            : request.requested_by
+              ? `"${request.requested_by}"`
+              : "A wallet session"}{" "}
+          requests approval
         </Typography>
         <Stack direction="row" spacing={1} alignItems="center">
           {isActionable && <Countdown expiresAt={request.expires_at} />}

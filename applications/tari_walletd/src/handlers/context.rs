@@ -10,7 +10,7 @@ use axum_extra::headers::authorization::Bearer;
 use dashmap::DashMap;
 use tari_ootle_transaction::{Epoch, Transaction, TransactionBuilder, UnsignedTransaction};
 use tari_ootle_wallet_sdk::{
-    models::{LockOwner, WalletEvent},
+    models::{LockOwner, SigningRequester, WalletEvent},
     network::WalletNetworkInterface,
 };
 use tari_ootle_wallet_sdk_services::{
@@ -32,6 +32,7 @@ use crate::{
         auth::{
             WalletAuthenticator,
             api_keys,
+            cookie,
             jwt::{AuthError, JwtApi, enforce_scopes},
         },
         helpers::invalid_params,
@@ -40,8 +41,9 @@ use crate::{
 };
 
 /// An authenticated caller: what it may do, (for an API key) what an Admin
-/// named it, and whether it holds a delegated token. Neither the name nor the
-/// delegation affects scope checks here.
+/// named it, whether it holds a delegated token, or whether it presented the
+/// local `.cookie` token. Neither the name, delegation, nor cookie origin
+/// affects scope checks here.
 #[derive(Debug, Clone)]
 pub struct AuthIdentity {
     pub permissions: Permissions,
@@ -51,7 +53,14 @@ pub struct AuthIdentity {
     pub delegated: bool,
     /// Which `webrtc.start` call minted the delegated token.
     pub delegation_id: Option<u64>,
+    /// The caller presented the daemon's local `.cookie` token.
+    pub local_cookie: bool,
 }
+
+/// Reserved `requested_by` sentinel recorded when a transaction request is
+/// created by a local `.cookie` bearer. `handle_create_api_key` refuses to mint
+/// an API key with this name so the two cannot collide.
+pub const LOCAL_COOKIE_REQUESTER: &str = "local-cookie";
 
 impl AuthIdentity {
     /// Who a lock handed back to this caller belongs to.
@@ -59,7 +68,27 @@ impl AuthIdentity {
         match self.api_key_id {
             Some(id) => LockOwner::ApiKey(id),
             None if self.delegated => LockOwner::Delegated(self.delegation_id.unwrap_or_default()),
+            None if self.local_cookie => LockOwner::LocalCookie,
             None => LockOwner::Wallet,
+        }
+    }
+
+    /// Typed requester identity for signing and transaction requests.
+    pub fn signing_requester(&self) -> SigningRequester {
+        match (&self.api_key_name, self.delegated, self.local_cookie) {
+            (Some(name), _, _) => SigningRequester::ApiKey { name: name.clone() },
+            (None, true, _) => SigningRequester::ConnectedApp,
+            (None, false, true) => SigningRequester::LocalClient,
+            (None, false, false) => SigningRequester::WalletSession,
+        }
+    }
+
+    /// Label recorded on a transaction request (`requested_by`) when this caller creates one.
+    pub fn requested_by(&self) -> Option<String> {
+        match self.signing_requester() {
+            SigningRequester::ApiKey { name } => Some(name),
+            SigningRequester::LocalClient => Some(LOCAL_COOKIE_REQUESTER.to_string()),
+            SigningRequester::ConnectedApp | SigningRequester::WalletSession => None,
         }
     }
 }
@@ -79,6 +108,7 @@ pub struct HandlerContext {
     account_monitor: AccountMonitorHandle,
     config: WalletDaemonConfig,
     jwt_secret: SafePassword,
+    cookie: Option<(SafePassword, Permissions)>,
     authenticator: WalletAuthenticator,
     refresh_token_store: RefreshTokenStore,
     shutdown_signal: ShutdownSignal,
@@ -120,10 +150,16 @@ impl HandlerContext {
             authenticator,
             refresh_token_store: RefreshTokenStore::new(Duration::from_secs(60 * 60)),
             jwt_secret,
+            cookie: None,
             shutdown_signal,
             api_key_last_used_bumps: Arc::new(DashMap::new()),
             cached_epoch: Arc::new(Mutex::new(None)),
         }
+    }
+
+    pub fn with_cookie_token(mut self, cookie: Option<(SafePassword, Permissions)>) -> Self {
+        self.cookie = cookie;
+        self
     }
 
     pub fn notifier(&self) -> &Notify<WalletEvent> {
@@ -132,6 +168,14 @@ impl HandlerContext {
 
     pub fn wallet_sdk(&self) -> &WalletSdk {
         &self.wallet_sdk
+    }
+
+    fn check_cookie_auth(&self, raw_token: &str) -> Result<Permissions, AuthError> {
+        let (expected, permissions) = self.cookie.as_ref().ok_or(AuthError::AccessDeniedInvalidBearerToken)?;
+        if !cookie::verify_cookie_token(expected, raw_token) {
+            return Err(AuthError::AccessDeniedInvalidBearerToken);
+        }
+        Ok(permissions.clone())
     }
 
     /// Resolve an incoming bearer token and return its granted permissions
@@ -145,6 +189,8 @@ impl HandlerContext {
     /// Bearer tokens prefixed with the API key marker (`tw_…`) are
     /// resolved directly against the `api_keys` table — there is no
     /// `auth.request` round-trip or JWT exchange for agent credentials.
+    /// Bearer tokens prefixed with the cookie marker (`tc_…`) are verified
+    /// in constant time against the daemon's ephemeral cookie token.
     /// Every other bearer is treated as a JWT.
     ///
     /// The `tw_` prefix is a routing hint, not a security boundary. A
@@ -171,6 +217,9 @@ impl HandlerContext {
             })?;
             self.maybe_spawn_last_used_bump(row.id);
             return Ok(granted);
+        }
+        if bearer.token().starts_with(cookie::COOKIE_TOKEN_PREFIX) {
+            return self.check_cookie_auth(bearer.token());
         }
         self.jwt_api().check_auth(Some(bearer))
     }
@@ -225,6 +274,17 @@ impl HandlerContext {
                 api_key_id: Some(row.id),
                 delegated: false,
                 delegation_id: None,
+                local_cookie: false,
+            }
+        } else if bearer.token().starts_with(cookie::COOKIE_TOKEN_PREFIX) {
+            let granted = self.check_cookie_auth(bearer.token())?;
+            AuthIdentity {
+                permissions: granted,
+                api_key_name: None,
+                api_key_id: None,
+                delegated: false,
+                delegation_id: None,
+                local_cookie: true,
             }
         } else {
             let claims = self.jwt_api().check_auth_claims(Some(bearer))?;
@@ -234,22 +294,26 @@ impl HandlerContext {
                 api_key_id: None,
                 delegated: claims.delegated,
                 delegation_id: claims.delegation_id,
+                local_cookie: false,
             }
         };
 
         Ok(identity)
     }
 
-    /// Like [`check_auth`], but rejects API-key bearers and delegated tokens
-    /// (those `webrtc.start` mints for a peer). Use for endpoints that must
-    /// NOT be reachable with a programmatically minted credential — the
-    /// API-key management endpoints (create / list / revoke) and signing-request
-    /// decisions. Restricting them to an interactive session means a leaked
-    /// Admin API key cannot mint further keys to survive a revoke, and a tool
-    /// cannot release a signature it asked for.
+    /// Like [`check_auth`], but rejects API-key bearers, cookie tokens, and
+    /// delegated tokens (those `webrtc.start` mints for a peer). Use for
+    /// endpoints that must NOT be reachable with a programmatically minted or
+    /// ambient local credential — key export, API-key management endpoints
+    /// (create / list / revoke) and transaction/signing-request decisions.
+    /// Restricting them to an interactive session means a leaked Admin API key
+    /// or local `.cookie` cannot export keys, mint further keys to survive a
+    /// revoke/restart, or approve a signature/transaction request.
     pub fn check_auth_user_only(&self, token: Option<&Bearer>) -> Result<Permissions, AuthError> {
         let bearer = token.ok_or(AuthError::AccessDeniedNoBearerToken)?;
-        if bearer.token().starts_with(api_keys::API_KEY_PREFIX) {
+        if bearer.token().starts_with(api_keys::API_KEY_PREFIX) ||
+            bearer.token().starts_with(cookie::COOKIE_TOKEN_PREFIX)
+        {
             return Err(AuthError::UserAuthOnly);
         }
         self.jwt_api().check_user_auth(Some(bearer))
@@ -625,5 +689,154 @@ mod max_fee_limit_tests {
             .await
             .expect_err("the absent proof file fails the request after the limit");
         assert!(!is_over_the_limit(&err), "claim_burn: {err}");
+    }
+}
+
+#[cfg(test)]
+mod cookie_auth_tests {
+    use axum_extra::headers::Authorization;
+    use tari_ootle_walletd_client::{
+        ComponentAddressOrName,
+        permissions::Crud,
+        types::{
+            AccountsExportViewKeyRequest,
+            AuthCreateApiKeyRequest,
+            AuthListApiKeysRequest,
+            AuthRevokeApiKeyRequest,
+            SigningRequestDecisionRequest,
+            TransactionRequestDecisionRequest,
+        },
+    };
+
+    use super::*;
+    use crate::handlers::{
+        accounts::handle_export_view_key,
+        auth::{handle_create_api_key, handle_list_api_keys, handle_revoke_api_key},
+        signing_requests::handle_approve as handle_approve_signing_request,
+        test_support::TestDaemon,
+        transaction_requests::handle_approve as handle_approve_transaction_request,
+    };
+
+    #[tokio::test]
+    async fn cookie_bearer_authenticates_and_rejects_wrong_cookie() {
+        let daemon = TestDaemon::start().await;
+
+        let granted = daemon
+            .context
+            .check_auth(Some(&daemon.cookie))
+            .expect("valid cookie must authenticate");
+        assert!(granted.has_permission(&Permission::Admin));
+
+        let identity = daemon
+            .context
+            .check_auth_with_identity(Some(&daemon.cookie))
+            .expect("valid cookie must resolve identity");
+        assert_eq!(identity.lock_owner(), LockOwner::LocalCookie);
+        assert_eq!(identity.signing_requester(), SigningRequester::LocalClient);
+        assert_eq!(identity.requested_by().as_deref(), Some(LOCAL_COOKIE_REQUESTER));
+        assert!(identity.api_key_name.is_none());
+        assert!(!identity.delegated);
+        assert!(identity.local_cookie);
+
+        // Minting an API key with the reserved `local-cookie` sentinel name is refused.
+        let err = handle_create_api_key(&daemon.context, Some(&daemon.session), AuthCreateApiKeyRequest {
+            name: LOCAL_COOKIE_REQUESTER.to_string(),
+            permissions: vec!["accounts:read".to_string()],
+            expires_at: None,
+            confirm_admin: false,
+        })
+        .await
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("reserved"),
+            "expected reserved-name error, got: {err}"
+        );
+
+        let wrong_cookie = Authorization::<Bearer>::bearer("tc_wrong_token_value_0123456789abcdef012345")
+            .unwrap()
+            .0;
+        assert!(matches!(
+            daemon.context.check_auth(Some(&wrong_cookie)),
+            Err(AuthError::AccessDeniedInvalidBearerToken)
+        ));
+    }
+
+    #[tokio::test]
+    async fn cookie_bearer_is_rejected_by_user_only_endpoints() {
+        let daemon = TestDaemon::start().await;
+        let cookie = Some(&daemon.cookie);
+
+        assert!(matches!(
+            daemon.context.check_auth_user_only(cookie),
+            Err(AuthError::UserAuthOnly)
+        ));
+
+        let err = handle_export_view_key(&daemon.context, cookie, AccountsExportViewKeyRequest {
+            account: ComponentAddressOrName::Name("default".to_string()),
+        })
+        .await
+        .unwrap_err();
+        assert!(matches!(err.downcast_ref::<AuthError>(), Some(AuthError::UserAuthOnly)));
+
+        let err = handle_create_api_key(&daemon.context, cookie, AuthCreateApiKeyRequest {
+            name: "from-cookie".to_string(),
+            permissions: vec!["accounts:read".to_string()],
+            expires_at: None,
+            confirm_admin: false,
+        })
+        .await
+        .unwrap_err();
+        assert!(matches!(err.downcast_ref::<AuthError>(), Some(AuthError::UserAuthOnly)));
+
+        let err = handle_list_api_keys(&daemon.context, cookie, AuthListApiKeysRequest {
+            include_revoked: false,
+        })
+        .await
+        .unwrap_err();
+        assert!(matches!(err.downcast_ref::<AuthError>(), Some(AuthError::UserAuthOnly)));
+
+        let err = handle_revoke_api_key(&daemon.context, cookie, AuthRevokeApiKeyRequest { id: 1 })
+            .await
+            .unwrap_err();
+        assert!(matches!(err.downcast_ref::<AuthError>(), Some(AuthError::UserAuthOnly)));
+
+        let err = handle_approve_transaction_request(&daemon.context, cookie, TransactionRequestDecisionRequest {
+            request_id: 1,
+        })
+        .await
+        .unwrap_err();
+        assert!(matches!(err.downcast_ref::<AuthError>(), Some(AuthError::UserAuthOnly)));
+
+        let err =
+            handle_approve_signing_request(&daemon.context, cookie, SigningRequestDecisionRequest { request_id: 1 })
+                .await
+                .unwrap_err();
+        assert!(matches!(err.downcast_ref::<AuthError>(), Some(AuthError::UserAuthOnly)));
+    }
+
+    #[tokio::test]
+    async fn cookie_scopes_and_cookie_auth_flag_are_enforced() {
+        use std::str::FromStr;
+
+        let daemon = TestDaemon::start().await;
+        let scoped_context = daemon.context.clone().with_cookie_token(Some((
+            SafePassword::from_str(daemon.cookie.token()).unwrap(),
+            Permissions::from_str("accounts:read").unwrap(),
+        )));
+
+        scoped_context
+            .authorize(Some(&daemon.cookie), &[Permission::Accounts(Crud::Read, None)])
+            .expect("in-scope cookie permission must pass");
+
+        let err = scoped_context
+            .authorize(Some(&daemon.cookie), &[Permission::Transactions(Crud::Create)])
+            .expect_err("out-of-scope cookie permission must be rejected");
+        assert!(matches!(err, AuthError::InsufficientPermissions { .. }));
+
+        let disabled_context = daemon.context.clone().with_cookie_token(None);
+        assert!(matches!(
+            disabled_context.check_auth(Some(&daemon.cookie)),
+            Err(AuthError::AccessDeniedInvalidBearerToken)
+        ));
     }
 }

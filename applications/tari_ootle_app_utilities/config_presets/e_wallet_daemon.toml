@@ -29,6 +29,16 @@
 # indexer at its word, for development only. (default = "verify")
 # indexer_trust = "verify"
 
+# Write a fresh random local authentication token (`tc_...`) to `<base_path>/.cookie` (mode 0600) on startup and
+# delete it on clean shutdown so local clients (`tari_wallet_cli`, `wallet_daemon_client`) can authenticate without
+# setting `authentication = "none"`. Also settable with --cookie-auth. (default = true)
+# cookie_auth = true
+
+# Permission scopes granted to local clients authenticating with `<base_path>/.cookie`. Interactive user-only
+# endpoints (key export, API-key management, transaction/signing request approvals) remain blocked for cookie tokens.
+# Also settable with --cookie-scopes. (default = ["admin"])
+# cookie_scopes = ["admin"]
+
 [localnet.ootle_wallet_daemon]
 # Indexer API URLs. The wallet picks one at random at startup and moves to the next if it stops responding.
 # (default: ["http://127.0.0.1:18300"])

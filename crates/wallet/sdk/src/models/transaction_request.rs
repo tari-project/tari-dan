@@ -100,8 +100,8 @@ pub struct TransactionRequestModel {
     /// Locks holding this request's inputs. The stealth spend keys are derived
     /// from these at submit rather than named by the caller.
     pub lock_ids: Vec<WalletLockId>,
-    /// Admin-assigned name of the API key that created this request, or `None`
-    /// for a wallet session. Display and audit only.
+    /// Admin-assigned name of the API key that created this request, `"local-cookie"`
+    /// for a local `.cookie` bearer, or `None` for a wallet session. Display and audit only.
     pub requested_by: Option<String>,
     pub status: TransactionRequestStatus,
     /// The transaction this became. Set only on the move to `Submitted`.

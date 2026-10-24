@@ -41,6 +41,9 @@ function requesterLabel(requester: SigningRequester): string {
   if (requester === "WalletSession") {
     return "This wallet's session";
   }
+  if (requester === "LocalClient") {
+    return "A local client";
+  }
   if (requester === "ConnectedApp") {
     return "A connected app";
   }

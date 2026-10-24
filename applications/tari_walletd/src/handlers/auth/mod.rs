@@ -4,6 +4,7 @@
 pub mod anonym;
 pub mod api_keys;
 mod authenticator;
+pub mod cookie;
 mod handlers;
 pub mod jwt;
 pub mod webauthn;

@@ -173,6 +173,16 @@ pub async fn handle_create_api_key(
     if request.name.trim().is_empty() {
         return Err(anyhow!("API key name must not be empty"));
     }
+    if request
+        .name
+        .trim()
+        .eq_ignore_ascii_case(crate::handlers::context::LOCAL_COOKIE_REQUESTER)
+    {
+        return Err(anyhow!(
+            "API key name '{}' is reserved for the daemon's local cookie",
+            crate::handlers::context::LOCAL_COOKIE_REQUESTER
+        ));
+    }
 
     let permissions = Permissions::try_from(request.permissions.as_slice())
         .map_err(|e| anyhow!("Invalid permissions in API key request: {e}"))?;

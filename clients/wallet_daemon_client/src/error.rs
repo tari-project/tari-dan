@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::error::Error as StdError;
+use std::{error::Error as StdError, path::PathBuf};
 
 use tari_ootle_common_types::optional::IsNotFoundError;
 
@@ -41,6 +41,8 @@ pub enum WalletDaemonClientError {
     RequestFailedWithStatus { code: i64, message: String },
     #[error("Invalid response: {message}")]
     InvalidResponse { message: String },
+    #[error("Failed to read cookie file '{}': {details}", .path.display())]
+    CookieFileError { path: PathBuf, details: String },
 }
 
 impl WalletDaemonClientError {
