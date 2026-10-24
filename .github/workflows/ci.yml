@@ -102,7 +102,7 @@ jobs:
       - name: install workspace dependencies
         run: pnpm install --frozen-lockfile
 
-      # The indexer web UI builds the workspace's ootle-wasm crate to decode the values the indexer serves.
+      # The indexer web UI builds the workspace's ootle-wasm-bor crate to decode the values the indexer serves.
       - name: toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8  # master (no version tag)
         with:
@@ -266,7 +266,9 @@ jobs:
           tool: wasm-pack@0.15.0
 
       - name: wasm-pack test
-        run: wasm-pack test --node crates/ootle_wasm/wasm
+        run: |
+          wasm-pack test --node crates/ootle_wasm/wasm
+          wasm-pack test --node crates/ootle_wasm/bor
 
   licenses:
     name: file licenses

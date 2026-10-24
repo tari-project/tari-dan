@@ -156,18 +156,6 @@ pub fn bor_encode_transaction(transaction_json: &str) -> Result<String, JsError>
     ootle_wasm_core::bor::bor_encode_transaction_json(transaction_json).map_err(|e| JsError::new(&e.to_string()))
 }
 
-/// Decode a `SubstateValue` as the indexer serves it (its CBOR encoding, base64) → JSON string.
-#[wasm_bindgen(js_name = "decodeSubstateValue")]
-pub fn decode_substate_value(encoded: &str) -> Result<String, JsError> {
-    ootle_wasm_core::encoded::decode_substate_value_json(encoded).map_err(|e| JsError::new(&e.to_string()))
-}
-
-/// Decode an `ExecuteResult` as the indexer serves it (its CBOR encoding, base64) → JSON string.
-#[wasm_bindgen(js_name = "decodeExecuteResult")]
-pub fn decode_execute_result(encoded: &str) -> Result<String, JsError> {
-    ootle_wasm_core::encoded::decode_execute_result_json(encoded).map_err(|e| JsError::new(&e.to_string()))
-}
-
 /// Schnorr-sign a message with a secret key.
 /// Returns { public_nonce: Uint8Array, signature: Uint8Array }.
 #[wasm_bindgen(js_name = "schnorrSign")]

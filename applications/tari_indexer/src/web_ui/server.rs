@@ -25,7 +25,12 @@ use std::{net::SocketAddr, sync::Arc};
 use axum::{
     Router,
     body::Body,
-    http::{Response, StatusCode, Uri, header::CONTENT_TYPE},
+    http::{
+        Response,
+        StatusCode,
+        Uri,
+        header::{CACHE_CONTROL, CONTENT_TYPE},
+    },
     response::IntoResponse,
     routing::get,
 };
@@ -59,6 +64,11 @@ async fn handler(uri: Uri) -> impl IntoResponse {
     serve_file(&PROJECT_DIR, uri.path())
 }
 
+/// Vite names everything under `assets/` by its content hash, so a cached copy is valid for as long as its name is
+/// requested. Every other file, index.html above all, names those assets and must be revalidated.
+const HASHED_ASSET_CACHE_CONTROL: &str = "public, max-age=31536000, immutable";
+const REVALIDATE_CACHE_CONTROL: &str = "no-cache";
+
 /// The file at `path` in `dir`, or `dir`'s index.html for any other path so the SPA router can resolve it.
 fn serve_file(dir: &'static Dir<'static>, path: &str) -> Response<Body> {
     let path = path.strip_prefix('/').unwrap_or(path);
@@ -67,9 +77,15 @@ fn serve_file(dir: &'static Dir<'static>, path: &str) -> Response<Body> {
         None => (dir.get_file("index.html").unwrap(), "index.html"),
     };
     let content_type = mime_guess::from_path(path).first_raw().unwrap_or("text/html");
+    let cache_control = if path.starts_with("assets/") {
+        HASHED_ASSET_CACHE_CONTROL
+    } else {
+        REVALIDATE_CACHE_CONTROL
+    };
     Response::builder()
         .status(StatusCode::OK)
         .header(CONTENT_TYPE, content_type)
+        .header(CACHE_CONTROL, cache_control)
         .body(Body::from(file.contents()))
         .unwrap()
 }
@@ -101,6 +117,7 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers()[CONTENT_TYPE], "application/wasm");
+        assert_eq!(response.headers()[CACHE_CONTROL], HASHED_ASSET_CACHE_CONTROL);
         assert_eq!(body(response).await, WASM);
     }
 
@@ -110,6 +127,14 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers()[CONTENT_TYPE], "text/html");
+        assert_eq!(response.headers()[CACHE_CONTROL], REVALIDATE_CACHE_CONTROL);
         assert_eq!(body(response).await, b"<html></html>");
+    }
+
+    #[tokio::test]
+    async fn the_index_is_revalidated() {
+        let response = serve_file(&DIR, "/index.html");
+
+        assert_eq!(response.headers()[CACHE_CONTROL], REVALIDATE_CACHE_CONTROL);
     }
 }

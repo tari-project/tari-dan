@@ -1,7 +1,7 @@
 //  Copyright 2026 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-// Builds the workspace's ootle-wasm crate into ./ootle-wasm, where src/utils/encoded.ts imports it from.
+// Builds the workspace's ootle-wasm-bor crate into ./ootle-wasm-bor, where src/utils/encoded.ts imports it from.
 //
 // The indexer's build.rs runs this UI's build while cargo holds the lock on the workspace target directory, so the
 // wasm build gets a target directory of its own. Cargo hands build scripts the host's rustflags, which would reach
@@ -26,8 +26,8 @@ const result = spawnSync(
     "web",
     "--release",
     "--out-dir",
-    join(webUi, "ootle-wasm"),
-    join(repo, "crates", "ootle_wasm", "wasm"),
+    join(webUi, "ootle-wasm-bor"),
+    join(repo, "crates", "ootle_wasm", "bor"),
   ],
   { env, stdio: "inherit", shell: process.platform === "win32" },
 );

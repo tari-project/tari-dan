@@ -115,29 +115,6 @@ import { borEncodeTransaction } from "@tari-project/ootle-wasm";
 const envelope = borEncodeTransaction(JSON.stringify(transaction));
 ```
 
-## Reading indexer values
-
-The indexer serves substate values and execution results in their CBOR encoding, as base64 strings. These decode
-one into its JSON, in the shape of the `SubstateValue` and `ExecuteResult` types in `@tari-project/ootle-ts-bindings`.
-
-### `decodeSubstateValue(encoded)`
-
-```typescript
-import { decodeSubstateValue } from "@tari-project/ootle-wasm";
-
-const value = JSON.parse(decodeSubstateValue(response.state.up.substate));
-```
-
-### `decodeExecuteResult(encoded)`
-
-```typescript
-import { decodeExecuteResult } from "@tari-project/ootle-wasm";
-
-const result = JSON.parse(decodeExecuteResult(finalized.execution_result));
-```
-
-Both throw if `encoded` is not base64 or its bytes are not a complete encoding of the value.
-
 ## Working with keys
 
 Keys and signatures are raw `Uint8Array` bytes. Convert to and from hex strings using the built-in methods (Node 22+, modern browsers):

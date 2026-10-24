@@ -63,6 +63,7 @@ CRATES = [
     ("tari_ootle_light_client", "crates/wallet/light_client", 4),
     ("ootle-wasm-core", "crates/ootle_wasm/core", 3),
     ("ootle-wasm", "crates/ootle_wasm/wasm", 3),
+    ("ootle-wasm-bor", "crates/ootle_wasm/bor", 3),
     ("tari_template_test_tooling", "crates/template_test_tooling", 3),
     ("ootle_ledger_common", "crates/wallet/ledger/common", 4),
     ("ootle_ledger_client", "crates/wallet/ledger/client", 4),

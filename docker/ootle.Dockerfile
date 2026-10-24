@@ -126,7 +126,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # cargo-chef for Rust dependency prewarming.
 RUN cargo install cargo-chef --locked
 
-# The indexer web UI builds the workspace's ootle-wasm crate with wasm-pack, to
+# The indexer web UI builds the workspace's ootle-wasm-bor crate with wasm-pack, to
 # decode the values the indexer serves.
 RUN cargo install wasm-pack --version 0.15.0 --locked
 

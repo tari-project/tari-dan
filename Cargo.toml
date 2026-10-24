@@ -59,6 +59,7 @@ members = [
     "crates/wallet/ledger/client",
     "crates/wallet/ledger/common",
     "crates/ootle_network",
+    "crates/ootle_wasm/bor",
     "crates/ootle_wasm/core",
     "crates/ootle_wasm/wasm",
     "crates/ootle_address",

@@ -17,6 +17,12 @@ permissions:
 jobs:
   publish-ootle-wasm:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - { crate: wasm, pkg: pkg }
+          - { crate: bor, pkg: pkg-bor }
     defaults:
       run:
         working-directory: crates/ootle_wasm
@@ -51,10 +57,10 @@ jobs:
           node-version-file: .nvmrc
 
       - name: Build WASM package
-        run: bash build.sh bundler release
+        run: bash build.sh bundler release ${{ matrix.package.crate }}
 
       - name: Publish to NPM
-        working-directory: crates/ootle_wasm/pkg
+        working-directory: crates/ootle_wasm/${{ matrix.package.pkg }}
         run: |
           echo "== Local package.json =="
           node -e "const p=require('./package.json'); console.log({name:p.name, version:p.version})"

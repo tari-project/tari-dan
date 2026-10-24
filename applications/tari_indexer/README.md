@@ -147,8 +147,8 @@ The indexer uses SQLite for local storage, automatically creating and migrating 
 ### Web UI Development
 
 The web UI is a React application located in the `web_ui/` directory. The indexer serves substate values and
-execution results in their CBOR encoding, and the UI decodes them with the workspace's `ootle-wasm` crate, which
-`dev` and `build` compile first with `wasm-pack` (into `web_ui/ootle-wasm/`):
+execution results in their CBOR encoding, and the UI decodes them with the workspace's `ootle-wasm-bor` crate, which
+`dev` and `build` compile first with `wasm-pack` (into `web_ui/ootle-wasm-bor/`):
 
 ```bash
 cd web_ui/

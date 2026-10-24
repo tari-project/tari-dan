@@ -6,9 +6,9 @@ import { useSyncExternalStore } from "react";
 import initOotleWasm, {
   decodeExecuteResult as decodeExecuteResultJson,
   decodeSubstateValue as decodeSubstateValueJson,
-} from "../../ootle-wasm/ootle_wasm.js";
+} from "../../ootle-wasm-bor/ootle_wasm_bor.js";
 
-// The indexer serves engine values in their CBOR encoding, base64 in JSON, and ootle-wasm decodes them. A value that
+// The indexer serves engine values in their CBOR encoding, base64 in JSON, and ootle-wasm-bor decodes them. A value that
 // cannot be decoded, because the module has not loaded (or failed to) or the bytes are not a value, decodes to
 // `undefined`, and callers show it encoded.
 
@@ -37,7 +37,7 @@ export async function loadDecoder(): Promise<void> {
     loaded = true;
     listeners.forEach((listener) => listener());
   } catch (error) {
-    console.error("Could not load ootle-wasm; values are shown in their CBOR encoding", error);
+    console.error("Could not load ootle-wasm-bor; values are shown in their CBOR encoding", error);
   }
 }
 
