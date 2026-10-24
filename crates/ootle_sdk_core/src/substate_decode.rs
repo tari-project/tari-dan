@@ -5,7 +5,8 @@
 //! landed. Three pure, RNG-free, bytes-in → typed-out entry points (the host does the fetch; the
 //! core never touches the network):
 //!
-//! - [`decode_substate`] — any fetched [`SubstateValue`] JSON → a typed, kind-tagged [`DecodedSubstate`].
+//! - [`decode_substate`] — any fetched substate value (the indexer's base64 CBOR string) → a typed, kind-tagged
+//!   [`DecodedSubstate`].
 //! - [`account_balances`] — an account component substate + its already-fetched vault substates → the **revealed**
 //!   balance per resource ([`ResourceBalance`]). Vault ids are discovered from the CBOR `ComponentBody.state` (vault
 //!   refs are not a direct field), then matched against the supplied vaults.
@@ -31,7 +32,10 @@
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-use tari_engine_types::substate::{SubstateId, SubstateValue};
+use tari_engine_types::{
+    encoded::Encoded,
+    substate::{SubstateId, SubstateValue},
+};
 
 use crate::{
     FetchedSubstate,
@@ -128,12 +132,26 @@ fn amount_to_u64(amount: tari_template_lib_types::Amount, context: &str) -> Resu
     })
 }
 
-/// Deserializes the indexer's JSON into the engine [`SubstateValue`].
+/// Decodes a substate value as the indexer serves it: a JSON string holding the value's CBOR encoding in base64.
+pub(crate) fn decode_indexer_substate_value(value: &serde_json::Value) -> Result<SubstateValue, String> {
+    Encoded::<SubstateValue>::deserialize(value)
+        .map_err(|e| format!("not a base64 CBOR substate value: {e}"))?
+        .decode()
+        .map_err(|e| e.to_string())
+}
+
+/// `value` as the indexer serves it, for [`decode_indexer_substate_value`].
+#[cfg(test)]
+pub(crate) fn indexer_substate_json(value: &SubstateValue) -> serde_json::Value {
+    serde_json::to_value(Encoded::encode(value).expect("substate value encodes")).expect("base64 serializes")
+}
+
+/// Decodes the indexer's substate value into the engine [`SubstateValue`].
 ///
-/// A malformed/unknown substate JSON surfaces as `Parse` (host-supplied input, not an internal
+/// A malformed/unknown substate value surfaces as `Parse` (host-supplied input, not an internal
 /// encoding fault).
 fn parse_substate_value(value: &serde_json::Value, context: &str) -> Result<SubstateValue, OotleSdkError> {
-    serde_json::from_value(value.clone())
+    decode_indexer_substate_value(value)
         .map_err(|e| OotleSdkError::Parse(format!("undecodable substate value for {context}: {e}")))
 }
 
@@ -157,9 +175,9 @@ fn component_vault_id_strings(
         .collect())
 }
 
-/// Decodes any fetched substate JSON into a typed, kind-tagged [`DecodedSubstate`].
+/// Decodes any fetched substate value into a typed, kind-tagged [`DecodedSubstate`].
 ///
-/// `substate_value` is the [`SubstateValue`] JSON the indexer returned, passed verbatim — the same
+/// `substate_value` is the substate value the indexer returned (its base64 CBOR string), passed verbatim — the same
 /// neutral carrier [`FetchedSubstate`](crate::FetchedSubstate) uses. The decode is a pure parse +
 /// field map (no RNG), so it is byte-stable.
 ///
@@ -247,8 +265,8 @@ fn substate_variant_name(value: &SubstateValue) -> &'static str {
 /// `fetch_ids` so the host can fetch them and feed them back. The host does the fetch; the core only
 /// names the ids.
 ///
-/// `account_substate` must be a `Component` substate JSON; anything else (or a malformed value)
-/// surfaces as `Validation` / `Parse`.
+/// `account_substate` must be a `Component` substate value as the indexer serves it; anything else (or a malformed
+/// value) surfaces as `Validation` / `Parse`.
 pub fn account_balance_wants(account_substate: &serde_json::Value) -> Result<Vec<String>, OotleSdkError> {
     let value = parse_substate_value(account_substate, "account_balance_wants")?;
     let component = value
@@ -259,8 +277,8 @@ pub fn account_balance_wants(account_substate: &serde_json::Value) -> Result<Vec
 
 /// Computes the revealed balance per resource for an account, summed across its vaults.
 ///
-/// `account_substate` is the account `Component` substate JSON; `vault_substates` are the vault
-/// substates the host already fetched, each carrying its **substate id** (the neutral
+/// `account_substate` is the account `Component` substate value as the indexer serves it; `vault_substates` are the
+/// vault substates the host already fetched, each carrying its **substate id** (the neutral
 /// [`FetchedSubstate`] carrier — a [`Vault`](tari_engine_types::vault::Vault) value does not embed its
 /// own id, so the id must travel alongside it). The account's vault ids are rediscovered from its CBOR
 /// state and matched by id against `vault_substates`: each referenced vault must be present (a missing
@@ -393,11 +411,11 @@ mod tests {
             },
             body: ComponentBody::from_cbor_value(state),
         };
-        serde_json::to_value(SubstateValue::Component(component)).expect("component serializes")
+        crate::substate_decode::indexer_substate_json(&SubstateValue::Component(component))
     }
 
     fn vault_substate_json(vault: &Vault) -> serde_json::Value {
-        serde_json::to_value(SubstateValue::Vault(vault.clone())).expect("vault serializes")
+        crate::substate_decode::indexer_substate_json(&SubstateValue::Vault(vault.clone()))
     }
 
     fn fetched_vault(id: VaultId, vault: &Vault) -> FetchedSubstate {

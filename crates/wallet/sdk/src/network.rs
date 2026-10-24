@@ -10,7 +10,8 @@ use tari_engine_types::{
     SubstateVersion,
     Utxo,
     commit_result::ExecuteResult,
-    substate::{Substate, SubstateId},
+    encoded::Encoded,
+    substate::{EncodedSubstate, SubstateId},
     transaction_receipt::FinalizeOutcome,
 };
 use tari_indexer_client::types::{
@@ -187,7 +188,8 @@ pub struct SubstateQueryResult {
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct FetchedSubstates {
-    pub substates: HashMap<SubstateId, Substate>,
+    /// Each substate as the indexer served it, its value undecoded.
+    pub substates: HashMap<SubstateId, EncodedSubstate>,
     /// The proof of each substate in `substates` that was asked for and served.
     #[serde(default)]
     pub proofs: HashMap<SubstateId, SubstateProof>,
@@ -209,6 +211,10 @@ pub struct TransactionQueryResult {
     /// The committed receipt and its proof, when the query asked for a proof and the transaction committed.
     #[serde(default)]
     pub receipt: Option<ProvenTransactionReceipt>,
+    /// The execution result as the indexer served it, which `result` holds decoded. A verifier checks these bytes
+    /// against `receipt`.
+    #[serde(default)]
+    pub encoded_execution_result: Option<Encoded<ExecuteResult>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

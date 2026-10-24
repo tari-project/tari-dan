@@ -582,8 +582,8 @@ OotleResult ootle_scan_stealth_output(uint8_t network,
  *
  * - `substate_id_json` — the UTXO's canonical address string (`utxo_<resource>_<commitment>`), carrying the on-chain
  *   commitment + resource address the value body omits. A JSON string.
- * - `substate_value_json` — the `SubstateValue` JSON the indexer returned, verbatim (the same shape the resolver
- *   already consumes).
+ * - `substate_value_json` — the substate value the indexer returned (a JSON base64 CBOR string), verbatim (the same
+ *   shape the resolver already consumes).
  *
  * On success `data_json` is the decoded [`InboundStealthOutput`] (a JSON object with hex byte
  * fields). A non-UTXO / frozen / burnt substate or a malformed nonce yields `"INVALID"` / `"KEY"`;
@@ -608,7 +608,7 @@ OotleResult ootle_decode_stealth_utxo(const char *substate_id_json,
  * - `scan_keys_json` — `{view_secret, account_public_key, skip_memo?}` (the same bundle [`ootle_scan_stealth_output`]
  *   takes; lowercase hex; `skip_memo` defaults to `false`).
  * - `substate_id_json` — the UTXO's canonical address string. A JSON string.
- * - `substate_value_json` — the `SubstateValue` JSON the indexer returned, verbatim.
+ * - `substate_value_json` — the substate value the indexer returned (a JSON base64 CBOR string), verbatim.
  *
  * `data_json` on success is **always** a JSON object: the `DecryptedOutput`
  * (`{is_mine:true, value, mask, memo}`) when addressed to the scanner, or `{"is_mine":false}` when
@@ -703,10 +703,10 @@ OotleResult ootle_build_stealth_outputs_statement_with_seed(uint8_t network,
 void ootle_stealth_partial_transaction_free(OotleStealthPartialTransaction *handle);
 
 /**
- * Decodes any fetched substate JSON into the kind-tagged
+ * Decodes any fetched substate value into the kind-tagged
  * [`DecodedSubstate`](ootle_sdk_core::DecodedSubstate). **Stateless — returns no handle.**
  *
- * `substate_value_json` is the indexer's `SubstateValue` JSON, passed verbatim. On success
+ * `substate_value_json` is the indexer's substate value (a JSON base64 CBOR string), passed verbatim. On success
  * `data_json` is `{ "kind": "component|vault|resource|other", "value": { … } }`. For a vault the
  * `value.revealed_balance` is the revealed/unlocked amount only — the confidential side is surfaced
  * as `value.confidential_commitment_count` + `value.kind`, never a silent zero. Balances are native
@@ -724,8 +724,8 @@ OotleResult ootle_decode_substate(const char *substate_value_json);
 /**
  * Computes the **revealed** balance per resource for an account. **Stateless — returns no handle.**
  *
- * `account_substate_json` is the account `Component` substate JSON; `vault_substates_json` is a JSON
- * array of [`FetchedSubstate`](ootle_sdk_core::FetchedSubstate) records (`{substate_id, version,
+ * `account_substate_json` is the account `Component` substate value as the indexer serves it; `vault_substates_json`
+ * is a JSON array of [`FetchedSubstate`](ootle_sdk_core::FetchedSubstate) records (`{substate_id, version,
  * substate_value}`) — the vaults the host already fetched (the ids
  * [`ootle_account_balance_wants`] named). The core rediscovers the account's vault ids from its CBOR
  * state and matches them by id: a referenced vault not supplied is a `"RESOLUTION"` error, never a
@@ -751,8 +751,8 @@ OotleResult ootle_account_balances(const char *account_substate_json,
  * Names the `vault_<hex>` ids a host should fetch to satisfy [`ootle_account_balances`] for an
  * account. **Stateless — returns no handle.**
  *
- * `account_substate_json` is the account `Component` substate JSON. On success `data_json` is
- * `{ "fetch_ids": [ "vault_<hex>", … ] }` — the same component-vault discovery
+ * `account_substate_json` is the account `Component` substate value as the indexer serves it. On success `data_json`
+ * is `{ "fetch_ids": [ "vault_<hex>", … ] }` — the same component-vault discovery
  * [`ootle_account_balances`] does, surfaced as opaque ids. The host fetches them and feeds them back
  * as `vault_substates_json`.
  *

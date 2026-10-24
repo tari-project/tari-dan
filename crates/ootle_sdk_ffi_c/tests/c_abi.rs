@@ -1262,22 +1262,33 @@ fn stealth_send_args(fx: &serde_json::Value) -> StealthSendArgs {
     }
 }
 
-/// The from-account component + its vault, as the indexer returns them. The two-phase live driver
+/// The from-account component + its vault, each value in its engine JSON form. The two-phase live driver
 /// declares both as wants (the fee + any revealed input draw on the account), so a test must serve
 /// them before a transfer resolves. The addresses match the stealth fixtures (`component_aa..` /
 /// `resource_01..`, vault `vault_cc..`); the JSON was captured from the core's looped-resolution helpers.
-const ACCOUNT_SUBSTATES: &str = r#"[{"substate_id":"component_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","substate_value":{"Component":{"body":{"state":[{"@cbor":"tag","tag":132,"value":{"@cbor":"bytes","hex":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}}]},"header":{"access_rules":{"default":"DenyAll","method_access":{}},"entity_id":"00","owner_rule":"None","template_address":"0000000000000000000000000000000000000000000000000000000000000000"}}},"version":0},{"substate_id":"vault_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","substate_value":{"Vault":{"freeze_flags":0,"resource_container":{"Fungible":{"address":"resource_0101010101010101010101010101010101010101010101010101010101010101","amount":"1000000","locked_amount":"0"}}}},"version":0}]"#;
+const ACCOUNT_SUBSTATES_JSON: &str = r#"[{"substate_id":"component_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","substate_value":{"Component":{"body":{"state":[{"@cbor":"tag","tag":132,"value":{"@cbor":"bytes","hex":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}}]},"header":{"access_rules":{"default":"DenyAll","method_access":{}},"entity_id":"00","owner_rule":"None","template_address":"0000000000000000000000000000000000000000000000000000000000000000"}}},"version":0},{"substate_id":"vault_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","substate_value":{"Vault":{"freeze_flags":0,"resource_container":{"Fungible":{"address":"resource_0101010101010101010101010101010101010101010101010101010101010101","amount":"1000000","locked_amount":"0"}}}},"version":0}]"#;
 
 /// The from-account component + vault batch alone (no stealth UTXO) — resolves the account wants while
 /// any required stealth UTXO stays unsupplied (drives the missing-UTXO error path).
 fn account_substates_batch() -> CArg {
-    CArg::new(ACCOUNT_SUBSTATES)
+    CArg::new(&serde_json::to_string(&account_substates()).unwrap())
+}
+
+/// [`ACCOUNT_SUBSTATES_JSON`] as the indexer serves it: each value in its CBOR encoding, base64.
+fn account_substates() -> Vec<serde_json::Value> {
+    use tari_engine_types::{encoded::Encoded, substate::SubstateValue};
+    let mut batch: Vec<serde_json::Value> = serde_json::from_str(ACCOUNT_SUBSTATES_JSON).unwrap();
+    for fetched in &mut batch {
+        let value: SubstateValue = serde_json::from_value(fetched["substate_value"].take()).unwrap();
+        fetched["substate_value"] = serde_json::to_value(Encoded::encode(&value).unwrap()).unwrap();
+    }
+    batch
 }
 
 /// The from-account component + vault PLUS the fixture's own fetched substates (the stealth input
 /// UTXO, if any) — everything the live two-phase driver needs to resolve the transfer.
 fn account_plus_fixture_batch(fx: &serde_json::Value) -> CArg {
-    let mut batch: Vec<serde_json::Value> = serde_json::from_str(ACCOUNT_SUBSTATES).unwrap();
+    let mut batch = account_substates();
     if let Some(arr) = fx["input"].get("fetched").and_then(|v| v.as_array()) {
         batch.extend(arr.iter().cloned());
     }

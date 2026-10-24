@@ -18,8 +18,12 @@ pub enum IndexerError {
     ValidatorNodeClientError(String),
     #[error("Committee members did not agree on the substate's state, and none could prove it")]
     InvalidSubstateState,
-    #[error("Invalid substate value")]
-    InvalidSubstateValue,
+    #[error("{vn} served a value for {substate_id} that does not decode: {details}")]
+    UndecodableSubstateValue {
+        vn: String,
+        substate_id: SubstateId,
+        details: String,
+    },
     #[error("{vn} served a template for {requested} whose author and binary hash derive {derived}")]
     TemplateAddressMismatch {
         vn: String,

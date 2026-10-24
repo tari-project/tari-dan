@@ -2,24 +2,13 @@
   "name": "substate_decode/fungible_vault",
   "schema_version": 1,
   "provenance": {
-    "core_version": "0.41.2",
-    "git_rev": "f1de8633ae83fa2801be7c31c8a53a46cc0cb921",
+    "core_version": "0.47.0",
+    "git_rev": "712409abd0ae8aa7ebd1e3d92829581b7ffc9084",
     "generated_by": "ootle_sdk_core golden-vector generator"
   },
   "operation": "decode_substate",
   "input": {
-    "substate_value": {
-      "Vault": {
-        "freeze_flags": 0,
-        "resource_container": {
-          "Fungible": {
-            "address": "resource_2222222222222222222222222222222222222222222222222222222222222222",
-            "amount": "9577588913",
-            "locked_amount": "0"
-          }
-        }
-      }
-    }
+    "substate_value": "ggKBgoIAg9iDWCAiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIhsAAAACOt5osQAA"
   },
   "expected": {
     "decoded_substate": {

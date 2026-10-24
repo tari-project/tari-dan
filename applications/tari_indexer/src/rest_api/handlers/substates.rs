@@ -59,7 +59,7 @@ pub(super) fn substate_lookup_error(e: SubstateManagerError) -> ErrorResponse {
 #[utoipa::path(
     get,
     path = "/substates/{substate_id}",
-    description = "Fetches a substate by ID",
+    description = "Fetches a substate by ID. The value is served in its CBOR encoding, base64 in the JSON body.",
     params(
         ("substate_id" = String, Path, description = "The substate ID to fetch"),
         ("local_search_only" = bool, Query, description = "If true, only search local storage for the substate"),
@@ -161,14 +161,11 @@ pub async fn get_substate(
 fn to_get_substate_response(lookup: ProvenLookup) -> Result<GetSubstateResponse, ErrorResponse> {
     match lookup {
         ProvenLookup::Up(fetched) => {
-            let proof = fetched
-                .proof
-                .map(|proof| to_substate_proof(proof, Some(fetched.substate.substate_value())))
-                .transpose()?;
+            let proof = fetched.proof.map(to_substate_proof).transpose()?;
             Ok(GetSubstateResponse {
                 version: fetched.substate.version(),
                 state: SubstateState::Up {
-                    substate: Box::new(fetched.substate.into_substate_value()),
+                    substate: fetched.substate.into_value(),
                 },
                 // True when this value was checked against the committee before being accepted. False
                 // for local-only lookups, when verification is disabled, or when no committee member
@@ -181,7 +178,7 @@ fn to_get_substate_response(lookup: ProvenLookup) -> Result<GetSubstateResponse,
             version,
             state: SubstateState::Down {},
             verified: true,
-            proof: Some(to_substate_proof(proof, None)?),
+            proof: Some(to_substate_proof(proof)?),
         }),
     }
 }
@@ -189,7 +186,8 @@ fn to_get_substate_response(lookup: ProvenLookup) -> Result<GetSubstateResponse,
 #[utoipa::path(
     post,
     path = "/substates/fetch",
-    description = "Fetches several substates by their IDs",
+    description = "Fetches several substates by their IDs. Each value is served in its CBOR encoding, base64 in the \
+                   JSON body.",
     responses(
         (status = 200, description = "Substates details", body = GetSubstatesResponse),
         (
@@ -252,7 +250,7 @@ pub async fn fetch_substates(
     let mut proofs = Vec::new();
     for (id, ProvenSubstate { substate, proof }) in fetched {
         if include_proofs && let Some(proof) = proof {
-            proofs.push((id.clone(), to_substate_proof(proof, Some(substate.substate_value()))?));
+            proofs.push((id.clone(), to_substate_proof(proof)?));
         }
         substates.insert(id, substate);
     }
@@ -264,8 +262,9 @@ pub async fn fetch_substates(
 mod tests {
     use axum::http::StatusCode;
     use tari_engine_types::{
+        encoded::Encoded,
         non_fungible::NonFungibleContainer,
-        substate::{Substate, SubstateValue},
+        substate::{EncodedSubstate, Substate, SubstateValue},
     };
     use tari_ootle_common_types::SubstateVersion;
     use tari_ootle_storage::StorageError;
@@ -320,7 +319,11 @@ mod tests {
     #[test]
     fn a_live_substate_is_served_up_without_a_down_proof() {
         let resp = to_get_substate_response(ProvenLookup::Up(Box::new(FetchedSubstate {
-            substate: Substate::new(2, SubstateValue::NonFungible(NonFungibleContainer::no_data())),
+            substate: EncodedSubstate::encode(&Substate::new(
+                2,
+                SubstateValue::NonFungible(NonFungibleContainer::no_data()),
+            ))
+            .unwrap(),
             verified: true,
             proof: Some(SubstateProofData {
                 substate_value_proof: vec![1],
@@ -336,7 +339,16 @@ mod tests {
         assert!(matches!(resp.state, SubstateState::Up { .. }));
 
         let json = serde_json::to_value(&resp).unwrap();
-        assert!(json["state"]["up"]["substate"].is_object(), "{json}");
+        let served = json["state"]["up"]["substate"]
+            .as_str()
+            .expect("the value is served as base64");
+        let SubstateState::Up { substate } = &resp.state else {
+            unreachable!()
+        };
+        assert_eq!(
+            serde_json::from_value::<Encoded<SubstateValue>>(served.into()).unwrap(),
+            *substate
+        );
         assert!(json["proof"].get("down_proof").is_none(), "{json}");
     }
 

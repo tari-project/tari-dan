@@ -52,6 +52,7 @@ import FetchStatusCheck from "../../../Components/FetchStatusCheck";
 import StatusChip from "../../../Components/StatusChip";
 import { DataTableCell } from "../../../Components/StyledComponents";
 import { CURRENCY } from "../../../utils/constants";
+import { decodeExecuteResult } from "../../../utils/encoded";
 import { formatCurrency, isNotFoundError, validateHash } from "../../../utils/helpers";
 import SubstateChanges from "../../TransactionReceipts/components/SubstateChanges";
 import EventsContent from "./EventsContent";
@@ -130,7 +131,8 @@ function Result({ transaction_id }: Pick<IndexerGetTransactionResultRequest, "tr
   const finalized = result.data?.result && isFinalized(result.data.result) ? result.data.result.Finalized : undefined;
   const rejected = result.data?.result && isRejected(result.data.result) ? result.data.result.Rejected : undefined;
   const receipt = receiptQuery.data?.receipt;
-  const finalize = finalized?.execution_result?.finalize;
+  const executionResult = finalized?.execution_result ? decodeExecuteResult(finalized.execution_result) : undefined;
+  const finalize = executionResult?.finalize;
   const execResult: any = finalize?.result;
   const feeOnly = finalized ? isFeeOnlyResult(execResult) : receipt?.outcome === "FeeIntentCommit";
   const feeReceipt = finalize?.fee_receipt ?? receipt?.fee_receipt;
@@ -244,9 +246,9 @@ function Result({ transaction_id }: Pick<IndexerGetTransactionResultRequest, "tr
                   <TableRow>
                     <TableCell>Execution Time</TableCell>
                     <DataTableCell>
-                      {finalized.execution_result?.execution_time
-                        ? `${finalized.execution_result.execution_time.secs}s ${Math.round(
-                            finalized.execution_result.execution_time.nanos / 1_000_000,
+                      {executionResult?.execution_time
+                        ? `${executionResult.execution_time.secs}s ${Math.round(
+                            executionResult.execution_time.nanos / 1_000_000,
                           )}ms`
                         : "N/A"}
                     </DataTableCell>

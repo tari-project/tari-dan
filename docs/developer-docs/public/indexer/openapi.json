@@ -580,7 +580,7 @@
         "tags": [
           "handlers::substates"
         ],
-        "description": "Fetches several substates by their IDs",
+        "description": "Fetches several substates by their IDs. Each value is served in its CBOR encoding, base64 in the JSON body.",
         "operationId": "fetch_substates",
         "responses": {
           "200": {
@@ -631,7 +631,7 @@
         "tags": [
           "handlers::substates"
         ],
-        "description": "Fetches a substate by ID",
+        "description": "Fetches a substate by ID. The value is served in its CBOR encoding, base64 in the JSON body.",
         "operationId": "get_substate",
         "parameters": [
           {
@@ -1220,7 +1220,7 @@
         "tags": [
           "handlers::transactions"
         ],
-        "description": "Get the result of a submitted transaction (by transaction ID)",
+        "description": "Get the result of a submitted transaction (by transaction ID). The execution result, and the receipt when a proof is requested, are served in their CBOR encoding, base64 in the JSON body.",
         "operationId": "get_transaction_result",
         "parameters": [
           {
@@ -1519,14 +1519,6 @@
             ],
             "format": "byte",
             "description": "CBOR-encoded `SubstateDownProof`, as in [`SubstateProof::down_proof`]."
-          },
-          "value": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "byte",
-            "description": "CBOR-encoded `SubstateValue`, as in [`SubstateProof::value`]."
           },
           "value_hash_epoch": {
             "type": "integer",
@@ -2006,6 +1998,7 @@
           },
           "substates": {
             "type": "object",
+            "description": "Each live substate's version and CBOR-encoded value, as in [`SubstateState::Up`].",
             "additionalProperties": {
               "type": "object"
             },
@@ -2346,7 +2339,7 @@
         "description": "A committed transaction's receipt substate, with the proof it was verified with.",
         "required": [
           "version",
-          "receipt"
+          "value"
         ],
         "properties": {
           "proof": {
@@ -2360,16 +2353,10 @@
               }
             ]
           },
-          "receipt": {
-            "type": "object"
-          },
-          "result": {
-            "type": [
-              "string",
-              "null"
-            ],
+          "value": {
+            "type": "string",
             "format": "byte",
-            "description": "CBOR-encoded `FinalizeResult` of the transaction, as its committee returned it. A verifier checks the result\ndecoded from these bytes against the proven receipt and uses it: the result's JSON form does not decode back\nto the committed result for every result, e.g. one holding a non-finite float or metadata whose CBOR is not\ncanonical."
+            "description": "The receipt substate's CBOR-encoded `SubstateValue`, as in [`SubstateState::Up`]. It decodes to\n`SubstateValue::TransactionReceipt`."
           },
           "version": {
             "type": "integer",
@@ -2454,14 +2441,6 @@
             "format": "byte",
             "description": "CBOR-encoded `SubstateDownProof`, present when the substate version is down: an inclusion proof that the\nversion was committed, anchored at a block of its own, and an exclusion proof under `anchor.state_merkle_root`\nthat it is no longer in the state tree. `value_proof` is that exclusion proof."
           },
-          "value": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "byte",
-            "description": "CBOR-encoded `SubstateValue` the proof is for, as its shard group committed it. Present when the substate\nversion is up. A verifier hashes and uses the value decoded from these bytes: the substate's JSON form does not\ndecode back to the committed value for every value, e.g. a non-finite float or metadata whose CBOR is not\ncanonical."
-          },
           "value_hash_epoch": {
             "type": "integer",
             "format": "int64",
@@ -2525,7 +2504,9 @@
                 ],
                 "properties": {
                   "substate": {
-                    "type": "object"
+                    "type": "string",
+                    "format": "byte",
+                    "description": "The CBOR-encoded `SubstateValue`, as the validator that answered the indexer served it. A proof is checked\nagainst the value these bytes decode to."
                   }
                 }
               }

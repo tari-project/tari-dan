@@ -30,7 +30,7 @@ use async_trait::async_trait;
 use futures::{FutureExt, StreamExt, TryStreamExt, stream};
 use log::*;
 use ootle_network::Network;
-use tari_engine_types::substate::{Substate, SubstateId, SubstateValue};
+use tari_engine_types::substate::{EncodedSubstate, SubstateId, SubstateValue};
 use tari_epoch_manager::EpochManagerReader;
 use tari_ootle_common_types::{
     Epoch,
@@ -162,7 +162,7 @@ pub struct SubstateLookupResult {
 /// A live substate and the proof it was verified with, if it was.
 #[derive(Debug, Clone)]
 pub struct ProvenSubstate {
-    pub substate: Substate,
+    pub substate: EncodedSubstate,
     pub proof: Option<SubstateProofData>,
 }
 
@@ -845,9 +845,11 @@ where
     /// [`BatchTrust::Unanchored`] or [`BatchTrust::Stale`] for the caller to weigh against what other
     /// members offer.
     async fn verify_substate_batch(&self, batch: &SubstateBatch, vn_addr: &TAddr) -> Result<BatchTrust, IndexerError> {
-        for substate in &batch.substates {
-            self.validate_substate_result_address(&substate.result, &substate.substate_id, vn_addr)?;
-        }
+        let values = batch
+            .substates
+            .iter()
+            .map(|substate| Self::validate_substate_result(&substate.result, &substate.substate_id, vn_addr))
+            .collect::<Result<Vec<_>, _>>()?;
         if !self.verify_substate_proofs {
             return Ok(BatchTrust::NotRequired);
         }
@@ -858,7 +860,7 @@ where
         let Some(trusted_root) = self.trusted_root_from_commit_proof(commit_proof).await? else {
             return Ok(BatchTrust::Stale);
         };
-        for substate in &batch.substates {
+        for (substate, value) in batch.substates.iter().zip(&values) {
             let Some(value_proof) = &substate.value_proof else {
                 return Err(IndexerError::SubstateProofVerificationFailed {
                     details: format!(
@@ -867,9 +869,9 @@ where
                     ),
                 });
             };
-            let (version, value) = match &substate.result {
-                SubstateResult::Up { substate } => (substate.version(), Some(substate.substate_value())),
-                SubstateResult::Down { version } => (*version, None),
+            let version = match &substate.result {
+                SubstateResult::Up { substate: up } => up.version(),
+                SubstateResult::Down { version } => *version,
                 // A batch returns only substates it holds a record of; the ids it holds none for come
                 // back as `missing`, which no proof can settle. Anything else here would be cached as
                 // verified without a proof having been checked.
@@ -883,7 +885,7 @@ where
                 value_proof,
                 &substate.substate_id,
                 version,
-                value,
+                value.as_ref(),
                 self.network,
                 self.num_preshards,
                 Epoch(substate.proof_epoch),
@@ -978,7 +980,7 @@ where
                 .get_substate(substate_requirement)
                 .await
                 .map_err(|e| IndexerError::ValidatorNodeClientError(e.to_string()))?;
-            self.validate_substate_result_address(&result, substate_requirement.substate_id(), vn_addr)?;
+            Self::validate_substate_result(&result, substate_requirement.substate_id(), vn_addr)?;
             return Ok((result, None));
         }
 
@@ -987,7 +989,7 @@ where
             .await
             .map_err(|e| IndexerError::ValidatorNodeClientError(e.to_string()))?;
 
-        self.validate_substate_result_address(&result, substate_requirement.substate_id(), vn_addr)?;
+        let value = Self::validate_substate_result(&result, substate_requirement.substate_id(), vn_addr)?;
 
         // The validator has nothing committed to anchor a proof against yet (e.g. immediately after
         // an epoch change). Return the result unverified and let the caller decide.
@@ -1004,7 +1006,7 @@ where
                     .verify_substate_proof(
                         substate_requirement.substate_id(),
                         substate.version(),
-                        Some(substate.substate_value()),
+                        value.as_ref(),
                         &proof,
                     )
                     .await?;
@@ -1040,15 +1042,19 @@ where
         Ok((result, Some(proof)))
     }
 
-    fn validate_substate_result_address(
-        &self,
+    /// The value of `result` decoded, or `None` when it is not up. A member whose value does not decode, or that serves
+    /// a template whose content derives another address than `substate_id`, is disqualified.
+    fn validate_substate_result(
         result: &SubstateResult,
         substate_id: &SubstateId,
         vn_addr: &TAddr,
-    ) -> Result<(), IndexerError> {
-        if let SubstateResult::Up { substate } = result &&
-            let Some(expected_addr) = substate_id.as_template() &&
-            let Some(template) = substate.substate_value().published_template()
+    ) -> Result<Option<SubstateValue>, IndexerError> {
+        let SubstateResult::Up { substate } = result else {
+            return Ok(None);
+        };
+        let value = Self::decode_value(substate, substate_id, vn_addr)?;
+        if let Some(expected_addr) = substate_id.as_template() &&
+            let Some(template) = value.published_template()
         {
             let derived = template.to_template_address();
             if derived != expected_addr {
@@ -1059,7 +1065,22 @@ where
                 });
             }
         }
-        Ok(())
+        Ok(Some(value))
+    }
+
+    fn decode_value(
+        substate: &EncodedSubstate,
+        substate_id: &SubstateId,
+        vn_addr: &TAddr,
+    ) -> Result<SubstateValue, IndexerError> {
+        substate
+            .value()
+            .decode()
+            .map_err(|e| IndexerError::UndecodableSubstateValue {
+                vn: vn_addr.to_string(),
+                substate_id: substate_id.clone(),
+                details: e.to_string(),
+            })
     }
 
     /// Verifies the down proof of `(substate_id, version)` whose exclusion half is anchored at the root of
@@ -1367,9 +1388,10 @@ mod tests {
     };
 
     use tari_engine_types::{
+        encoded::Encoded,
         non_fungible::NonFungibleContainer,
         published_template::PublishedTemplate,
-        substate::SubstateValue,
+        substate::{Substate, SubstateValue},
     };
     use tari_epoch_manager::{EpochManagerError, EpochManagerEvent};
     use tari_ootle_common_types::{
@@ -1389,6 +1411,10 @@ mod tests {
     const ZERO_ACC: tari_state_tree::TransitionAccumulator = tari_state_tree::TransitionAccumulator::zero();
 
     type Addr = String;
+
+    fn encoded(substate: Substate) -> EncodedSubstate {
+        EncodedSubstate::encode(&substate).unwrap()
+    }
 
     /// A single-member network holding `live` and answering batches for all of it except `omitted_from_batches`,
     /// and with a down head for `down_in_batches`. Every answer is unproven.
@@ -1410,7 +1436,7 @@ mod tests {
         /// Members whose proven reads fail at once, so that a read can only settle on another member's answer.
         failing_members: HashSet<Addr>,
         /// Answered on a proven read as up, with the given proof.
-        up_with_proof: HashMap<SubstateId, (Substate, SubstateProofData)>,
+        up_with_proof: HashMap<SubstateId, (EncodedSubstate, SubstateProofData)>,
         /// Member-specific responses: if (member, substate_id) matches, return this response.
         member_responses: HashMap<(Addr, SubstateId), SubstateResult>,
     }
@@ -1460,7 +1486,7 @@ mod tests {
             }
             Ok(match self.0.live.get(substate_req.substate_id()) {
                 Some(substate) => SubstateResult::Up {
-                    substate: Box::new(substate.clone()),
+                    substate: encoded(substate.clone()),
                 },
                 None => SubstateResult::DoesNotExist,
             })
@@ -1486,7 +1512,7 @@ mod tests {
             if let Some((substate, proof)) = self.0.up_with_proof.get(substate_req.substate_id()) {
                 return Ok((
                     SubstateResult::Up {
-                        substate: Box::new(substate.clone()),
+                        substate: substate.clone(),
                     },
                     Some(proof.clone()),
                 ));
@@ -1540,7 +1566,7 @@ mod tests {
                         batch.substates.push(tari_validator_node_rpc::client::BatchedSubstate {
                             substate_id: id.clone(),
                             result: SubstateResult::Up {
-                                substate: Box::new(substate.clone()),
+                                substate: encoded(substate.clone()),
                             },
                             value_proof: None,
                             proof_epoch: 0,
@@ -2318,7 +2344,7 @@ mod tests {
             .collect::<Vec<_>>();
         let (id, manager) = signed_down_proof_setup(&keys, HashSet::new());
         let head = SubstateResult::Up {
-            substate: Box::new(Substate::new(
+            substate: encoded(Substate::new(
                 1,
                 SubstateValue::NonFungible(NonFungibleContainer::no_data()),
             )),
@@ -2635,7 +2661,7 @@ mod tests {
                 .insert(id.clone(), SubstateCacheEntry {
                     version: Some(version),
                     substate_result: SubstateResult::Up {
-                        substate: Box::new(substate),
+                        substate: encoded(substate),
                     },
                     cached_at: now,
                     verified: true,
@@ -2807,7 +2833,7 @@ mod tests {
             ..Default::default()
         });
         let result = SubstateResult::Up {
-            substate: Box::new(live(&ids).remove(&ids[0]).unwrap()),
+            substate: encoded(live(&ids).remove(&ids[0]).unwrap()),
         };
         let proof = cached_proof();
         manager
@@ -3045,6 +3071,19 @@ mod tests {
         SubstateId,
         CachedSubstateManager<FakeEpochManager, FakeClient, FakeCache>,
     ) {
+        anchored_up_setup_serving(current_epoch, anchor_height, recorded, |substate| substate)
+    }
+
+    /// As [`anchored_up_setup`], the member serving `serve` of the proven substate in its place.
+    fn anchored_up_setup_serving(
+        current_epoch: Epoch,
+        anchor_height: u64,
+        recorded: impl FnOnce(FixedHash) -> Vec<(Epoch, ShardGroup, u64, FixedHash)>,
+        serve: impl FnOnce(EncodedSubstate) -> EncodedSubstate,
+    ) -> (
+        SubstateId,
+        CachedSubstateManager<FakeEpochManager, FakeClient, FakeCache>,
+    ) {
         use tari_crypto::tari_utilities::ByteArray;
 
         let keys = (1..=4)
@@ -3068,7 +3107,7 @@ mod tests {
         let (mut manager, _) = manager(FakeNetwork {
             up_with_proof: [(
                 id.clone(),
-                (substate, SubstateProofData {
+                (serve(encoded(substate)), SubstateProofData {
                     substate_value_proof: value_proof,
                     commit_proof,
                     proof_epoch: PROOF_EPOCH.as_u64(),
@@ -3102,6 +3141,83 @@ mod tests {
     }
 
     const NEWER_ROOT: FixedHash = FixedHash::new([0xee; 32]);
+
+    /// A proven read answers with exactly the bytes the member served.
+    #[tokio::test]
+    async fn a_proven_value_is_kept_as_the_bytes_its_member_served() {
+        let mut served = None;
+        let (id, manager) = anchored_up_setup_serving(
+            PROOF_EPOCH,
+            4,
+            |_| vec![],
+            |substate| {
+                served = Some(substate.clone());
+                substate
+            },
+        );
+
+        let lookup = manager.get_substate(&id, None).await.unwrap();
+
+        assert!(lookup.verified);
+        assert_eq!(lookup.result.into_up(), served);
+    }
+
+    /// Without proofs to check, a member serving a value that does not decode is still disqualified, on a single read
+    /// and in a batch, and the read settles on a member whose value does.
+    #[tokio::test]
+    async fn an_unverified_read_skips_a_member_whose_value_does_not_decode() {
+        let id = component_id(1);
+        let honest = encoded(live(std::slice::from_ref(&id)).remove(&id).unwrap());
+        let undecodable = EncodedSubstate::new(honest.version(), Encoded::from_bytes(vec![0xff]));
+        // Members are asked in random order, so repeat to put the undecodable one first.
+        for _ in 0..8 {
+            let member_responses = HashMap::from([
+                (("vn_bad".to_string(), id.clone()), SubstateResult::Up {
+                    substate: undecodable.clone(),
+                }),
+                (("vn_honest".to_string(), id.clone()), SubstateResult::Up {
+                    substate: honest.clone(),
+                }),
+            ]);
+            let (manager, _) = manager_with_members(
+                FakeNetwork {
+                    member_responses,
+                    ..Default::default()
+                },
+                vec!["vn_bad".to_string(), "vn_honest".to_string()],
+            );
+
+            let single = manager.get_substate(&id, None).await.unwrap();
+            assert_eq!(single.result.into_up(), Some(honest.clone()));
+
+            let batched = manager
+                .fetch_and_cache_substates(std::slice::from_ref(&id))
+                .await
+                .unwrap();
+            assert_eq!(batched[&id].substate, honest);
+        }
+    }
+
+    /// A member serving a value that does not decode is disqualified, as one whose proof does not verify is.
+    #[tokio::test]
+    async fn a_value_that_does_not_decode_disqualifies_its_member() {
+        let (id, manager) = anchored_up_setup_serving(
+            PROOF_EPOCH,
+            4,
+            |_| vec![],
+            |substate| EncodedSubstate::new(substate.version(), Encoded::from_bytes(vec![0xff])),
+        );
+
+        let err = manager
+            .get_substate_from_vn(&"vn0".to_string(), SubstateRequirementRef::new(&id, None))
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(err, IndexerError::UndecodableSubstateValue { ref vn, .. } if vn == "vn0"),
+            "{err}"
+        );
+    }
 
     /// A root signed for a block well behind the latest tip the indexer has validated for its shard group proves
     /// nothing, however validly it is signed; one a few blocks behind still does.
@@ -3139,7 +3255,7 @@ mod tests {
                     substates: vec![tari_validator_node_rpc::client::BatchedSubstate {
                         substate_id: id.clone(),
                         result: SubstateResult::Up {
-                            substate: Box::new(substate),
+                            substate: encoded(substate),
                         },
                         value_proof: Some(value_proof),
                         proof_epoch: PROOF_EPOCH.as_u64(),
@@ -3219,7 +3335,7 @@ mod tests {
         for verify_proofs in [false, true] {
             let mut member_responses = HashMap::new();
             member_responses.insert(("vn_malicious".to_string(), template_id.clone()), SubstateResult::Up {
-                substate: Box::new(Substate::new(0, SubstateValue::Template(spoofed_template.clone()))),
+                substate: encoded(Substate::new(0, SubstateValue::Template(spoofed_template.clone()))),
             });
 
             let (manager, _) = manager_with_members(
@@ -3249,10 +3365,10 @@ mod tests {
 
         let mut member_responses = HashMap::new();
         member_responses.insert(("vn_malicious".to_string(), template_id.clone()), SubstateResult::Up {
-            substate: Box::new(Substate::new(0, SubstateValue::Template(spoofed_template))),
+            substate: encoded(Substate::new(0, SubstateValue::Template(spoofed_template))),
         });
         member_responses.insert(("vn_honest".to_string(), template_id.clone()), SubstateResult::Up {
-            substate: Box::new(Substate::new(0, SubstateValue::Template(legit_template))),
+            substate: encoded(Substate::new(0, SubstateValue::Template(legit_template))),
         });
 
         let (manager, _) = manager_with_members(
@@ -3269,10 +3385,8 @@ mod tests {
         let SubstateResult::Up { substate } = res.result else {
             panic!("expected SubstateResult::Up, got {:?}", res.result);
         };
-        let template = substate
-            .substate_value()
-            .published_template()
-            .expect("published template value");
+        let value = substate.value().decode().unwrap();
+        let template = value.published_template().expect("published template value");
         assert_eq!(template.to_template_address(), legitimate_address);
         assert_eq!(template.template_name.as_ref(), "Legit");
     }
@@ -3286,7 +3400,7 @@ mod tests {
             // Single malicious member: batch fails closed and single-read fallback also fails closed.
             let mut malicious_only = HashMap::new();
             malicious_only.insert(("vn_malicious".to_string(), template_id.clone()), SubstateResult::Up {
-                substate: Box::new(Substate::new(0, SubstateValue::Template(spoofed_template.clone()))),
+                substate: encoded(Substate::new(0, SubstateValue::Template(spoofed_template.clone()))),
             });
             let (manager_single, _) = manager_with_members(
                 FakeNetwork {
@@ -3310,10 +3424,10 @@ mod tests {
             // and race_substate_batch resolves from vn_honest.
             let mut member_responses = HashMap::new();
             member_responses.insert(("vn_malicious".to_string(), template_id.clone()), SubstateResult::Up {
-                substate: Box::new(Substate::new(0, SubstateValue::Template(spoofed_template.clone()))),
+                substate: encoded(Substate::new(0, SubstateValue::Template(spoofed_template.clone()))),
             });
             member_responses.insert(("vn_honest".to_string(), template_id.clone()), SubstateResult::Up {
-                substate: Box::new(Substate::new(0, SubstateValue::Template(legit_template.clone()))),
+                substate: encoded(Substate::new(0, SubstateValue::Template(legit_template.clone()))),
             });
 
             let (manager, _) = manager_with_members(
@@ -3330,11 +3444,8 @@ mod tests {
                 .await
                 .unwrap();
             let proven = results.get(&template_id).expect("expected template in batch result");
-            let template = proven
-                .substate
-                .substate_value()
-                .published_template()
-                .expect("published template value");
+            let value = proven.substate.value().decode().unwrap();
+            let template = value.published_template().expect("published template value");
             assert_eq!(template.to_template_address(), legitimate_address);
             assert_eq!(template.template_name.as_ref(), "Legit");
         }

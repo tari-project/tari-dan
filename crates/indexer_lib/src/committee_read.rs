@@ -246,10 +246,14 @@ mod tests {
     use futures::future::{BoxFuture, FutureExt};
     use tari_engine_types::{
         non_fungible::NonFungibleContainer,
-        substate::{Substate, SubstateValue},
+        substate::{EncodedSubstate, Substate, SubstateValue},
     };
 
     use super::*;
+
+    fn encoded(substate: Substate) -> EncodedSubstate {
+        EncodedSubstate::encode(&substate).unwrap()
+    }
 
     fn down(version: u64) -> SubstateResult {
         SubstateResult::Down {
@@ -259,7 +263,7 @@ mod tests {
 
     fn up(version: u64) -> SubstateResult {
         SubstateResult::Up {
-            substate: Box::new(Substate::new(
+            substate: encoded(Substate::new(
                 version,
                 SubstateValue::NonFungible(NonFungibleContainer::no_data()),
             )),

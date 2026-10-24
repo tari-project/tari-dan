@@ -6,8 +6,8 @@ use std::collections::{BTreeSet, HashSet};
 use ootle_network::Network;
 use tari_engine_types::{
     SubstateVersion,
-    commit_result::{FinalizeResult, TransactionResult},
-    limits::MAX_CBOR_NESTING_DEPTH,
+    commit_result::{ExecuteResult, FinalizeResult, TransactionResult},
+    encoded::Encoded,
     substate::{SubstateDiff, SubstateId, SubstateValue, hash_substate},
     transaction_receipt::{FinalizeOutcome, TransactionReceipt},
 };
@@ -26,11 +26,8 @@ use tari_ootle_transaction::TransactionId;
 use crate::{LightClientError, VerifiedCommittee};
 
 impl VerifiedCommittee {
-    /// Verifies that `substate_id` at `version` held the value `proof` carries when the block `proof` is anchored at
-    /// committed, and returns that value. This committee must be the anchor block's: of its epoch and shard group.
-    ///
-    /// The value is decoded from the proof's committed encoding, so a caller uses it in place of the substate served
-    /// beside the proof.
+    /// Verifies that `substate_id` at `version` held `value` when the block `proof` is anchored at committed, and
+    /// returns `value` decoded. This committee must be the anchor block's: of its epoch and shard group.
     ///
     /// Also returns the anchor block's quorum-signed header fields. The proof says nothing about later blocks, so the
     /// caller judges freshness by the returned epoch and height.
@@ -38,21 +35,13 @@ impl VerifiedCommittee {
         &self,
         substate_id: &SubstateId,
         version: SubstateVersion,
+        value: &Encoded<SubstateValue>,
         proof: &SubstateProof,
     ) -> Result<(VerifiedBlockTip, SubstateValue), LightClientError> {
-        let encoded = proof
-            .value
-            .as_deref()
-            .ok_or_else(|| LightClientError::MissingSubstateValue {
-                substate_id: substate_id.to_string(),
-            })?;
-        let value =
-            tari_bor::decode_exact_with_max_depth::<SubstateValue>(encoded, MAX_CBOR_NESTING_DEPTH).map_err(|e| {
-                LightClientError::Decode {
-                    what: "proven substate value",
-                    details: e.to_string(),
-                }
-            })?;
+        let value = value.decode().map_err(|e| LightClientError::Decode {
+            what: "proven substate value",
+            details: e.to_string(),
+        })?;
         let tip = self.verify_commit_proof(&proof.commit_proof)?;
         verify_substate_value_proof_against_root(
             &proof.value_proof,
@@ -67,8 +56,8 @@ impl VerifiedCommittee {
         Ok((tip, value))
     }
 
-    /// Verifies that `transaction_id` committed with a receipt, and returns that receipt as `proven`'s proof carries
-    /// it. A transaction commits only once, so a proven receipt stays proven however old its anchor block is, given a
+    /// Verifies that `transaction_id` committed with the receipt `proven` carries, and returns that receipt. A
+    /// transaction commits only once, so a proven receipt stays proven however old its anchor block is, given a
     /// committee of that block's epoch.
     pub fn verify_receipt(
         &self,
@@ -82,7 +71,7 @@ impl VerifiedCommittee {
                 transaction_id: transaction_id.to_string(),
             })?;
         let substate_id = SubstateId::TransactionReceipt(transaction_id.into_receipt_address());
-        let (tip, value) = self.verify_substate(&substate_id, proven.version, proof)?;
+        let (tip, value) = self.verify_substate(&substate_id, proven.version, &proven.value, proof)?;
         let receipt = value
             .into_transaction_receipt()
             .ok_or_else(|| LightClientError::ProvenReceiptNotAReceipt {
@@ -91,30 +80,29 @@ impl VerifiedCommittee {
         Ok((tip, receipt))
     }
 
-    /// Verifies that `transaction_id` committed the result `proven` carries: its receipt verifies as
-    /// [`Self::verify_receipt`] checks, and the result decoded from `proven.result` is the one that receipt commits, as
-    /// [`check_result_matches_receipt`] checks. Returns the receipt and the result, which the caller uses in place of
-    /// the ones served beside the proof.
+    /// Verifies that `transaction_id` committed `result`'s `finalize`: the receipt `proven` carries verifies as
+    /// [`Self::verify_receipt`] checks, and `finalize` is the result that receipt commits, as
+    /// [`check_result_matches_receipt`] checks. Returns the receipt and `result` decoded.
+    ///
+    /// Only `finalize` is proven. The rest of `result` (execution time, epoch and metering points) is as the indexer
+    /// served it.
     pub fn verify_result(
         &self,
         transaction_id: TransactionId,
         proven: &ProvenTransactionReceipt,
-    ) -> Result<(TransactionReceipt, FinalizeResult), LightClientError> {
+        result: Option<&Encoded<ExecuteResult>>,
+    ) -> Result<(TransactionReceipt, ExecuteResult), LightClientError> {
         let (_, receipt) = self.verify_receipt(transaction_id, proven)?;
-        let encoded = proven
-            .result
-            .as_deref()
+        let result = result
             .ok_or_else(|| LightClientError::MissingTransactionResult {
                 transaction_id: transaction_id.to_string(),
+            })?
+            .decode()
+            .map_err(|e| LightClientError::Decode {
+                what: "committed transaction result",
+                details: e.to_string(),
             })?;
-        let result =
-            tari_bor::decode_exact_with_max_depth::<FinalizeResult>(encoded, MAX_CBOR_NESTING_DEPTH).map_err(|e| {
-                LightClientError::Decode {
-                    what: "committed transaction result",
-                    details: e.to_string(),
-                }
-            })?;
-        check_result_matches_receipt(self.network(), transaction_id, &receipt, &result)?;
+        check_result_matches_receipt(self.network(), transaction_id, &receipt, &result.finalize)?;
         Ok((receipt, result))
     }
 }

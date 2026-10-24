@@ -389,7 +389,7 @@ mod tests {
         use tari_engine_types::{
             non_fungible::NonFungibleContainer,
             resource::Resource,
-            substate::{Substate, SubstateValue, hash_substate},
+            substate::{EncodedSubstate, Substate, SubstateValue, hash_substate},
         };
         use tari_ootle_common_types::Epoch;
         use tari_template_lib_types::{Metadata, ResourceType, SubstateOwnerRule};
@@ -417,8 +417,9 @@ mod tests {
         for value in values {
             let version = SubstateVersion::new(7);
             let committed = hash_substate(Network::LocalNet, &value, version, Epoch(1));
+            let served = EncodedSubstate::encode(&Substate::new(version, value)).unwrap();
             let result = SubstateResult::Up {
-                substate: Box::new(Substate::new(version, value)),
+                substate: served.clone(),
             };
             cache
                 .write(
@@ -443,8 +444,9 @@ mod tests {
                 .substate_result
                 .into_up()
                 .unwrap();
+            assert_eq!(cached, served);
             assert_eq!(
-                hash_substate(Network::LocalNet, cached.substate_value(), version, Epoch(1)),
+                hash_substate(Network::LocalNet, &cached.value().decode().unwrap(), version, Epoch(1)),
                 committed
             );
         }
@@ -543,14 +545,15 @@ mod tests {
     async fn write_live_head(cache: &SqliteSubstateCache, id: &SubstateId, version: SubstateVersion, watermark: u64) {
         use tari_engine_types::{
             non_fungible::NonFungibleContainer,
-            substate::{Substate, SubstateValue},
+            substate::{EncodedSubstate, Substate, SubstateValue},
         };
 
         let result = SubstateResult::Up {
-            substate: Box::new(Substate::new(
+            substate: EncodedSubstate::encode(&Substate::new(
                 version,
                 SubstateValue::NonFungible(NonFungibleContainer::no_data()),
-            )),
+            ))
+            .unwrap(),
         };
         cache
             .write(

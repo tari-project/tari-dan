@@ -84,6 +84,7 @@ use tari_crypto::{
 };
 use tari_engine_types::{
     component::{Component, ComponentBody, ComponentHeader},
+    encoded::Encoded,
     resource_container::ResourceContainer,
     substate::{SubstateId, SubstateValue},
     vault::Vault,
@@ -316,7 +317,7 @@ fn resolve_component_json(vault_ids: &[VaultId]) -> serde_json::Value {
         },
         body: ComponentBody::from_cbor_value(state),
     };
-    serde_json::to_value(SubstateValue::Component(component)).expect("component json")
+    indexer_substate_json(&SubstateValue::Component(component))
 }
 
 /// A `SubstateValue::Vault` JSON holding `resolve_resource()`.
@@ -325,7 +326,7 @@ fn resolve_vault_json() -> serde_json::Value {
         resolve_resource(),
         Amount::new(1_000_000),
     ));
-    serde_json::to_value(SubstateValue::Vault(vault)).expect("vault json")
+    indexer_substate_json(&SubstateValue::Vault(vault))
 }
 
 /// The single-round fetched batch that resolves the want set: the from-component (revealing its
@@ -525,6 +526,11 @@ fn parse_execute_result(
     }
 }
 
+/// `value` as the indexer serves it: its CBOR encoding, base64.
+fn indexer_substate_json(value: &SubstateValue) -> serde_json::Value {
+    serde_json::to_value(Encoded::encode(value).expect("substate value encodes")).expect("base64 serializes")
+}
+
 /// Wraps an `ExecuteResult` in the indexer `Finalized` envelope JSON (exactly the indexer REST shape).
 fn parse_finalized_wire_json(result: tari_engine_types::commit_result::ExecuteResult) -> serde_json::Value {
     use tari_consensus_types::Decision;
@@ -532,7 +538,7 @@ fn parse_finalized_wire_json(result: tari_engine_types::commit_result::ExecuteRe
     serde_json::json!({
         "Finalized": {
             "final_decision": decision,
-            "execution_result": result,
+            "execution_result": Encoded::encode(&result).expect("execution result encodes"),
             "execution_time": { "secs": 1, "nanos": 0 },
             "finalized_time": "2026-06-12 00:00:00.0",
             "abort_details": serde_json::Value::Null,
@@ -892,7 +898,7 @@ fn stealth_send_stealth_seal_seed() -> Fixture {
     let fetched = vec![FetchedSubstate {
         substate_id: substate_id.to_string(),
         version: 0,
-        substate_value: serde_json::to_value(SubstateValue::Utxo(utxo)).expect("utxo json"),
+        substate_value: indexer_substate_json(&SubstateValue::Utxo(utxo)),
     }];
 
     let intent = StealthTransferIntent {
@@ -1227,7 +1233,7 @@ fn stealth_decode_utxo_seed() -> Fixture {
     let substate_id = ootle_sdk_core::stealth::stealth_utxo_substate_id(resource.as_str(), &commitment_hex)
         .expect("utxo substate id")
         .to_string();
-    let substate_value = serde_json::to_value(SubstateValue::Utxo(utxo)).expect("SubstateValue serializes");
+    let substate_value = indexer_substate_json(&SubstateValue::Utxo(utxo));
 
     Fixture {
         name: "stealth_scan/decode_utxo".to_string(),
@@ -1293,13 +1299,13 @@ fn balance_account_substate(vault_ids: &[VaultId]) -> serde_json::Value {
         },
         body: ComponentBody::from_cbor_value(state),
     };
-    serde_json::to_value(SubstateValue::Component(component)).expect("component serializes")
+    indexer_substate_json(&SubstateValue::Component(component))
 }
 
 /// A fungible vault substate JSON holding `amount` revealed for `resource`.
 fn balance_vault_substate(resource: ResourceAddress, amount: u128) -> serde_json::Value {
     let vault = Vault::new(ResourceContainer::public_fungible(resource, Amount::new(amount)));
-    serde_json::to_value(SubstateValue::Vault(vault)).expect("vault serializes")
+    indexer_substate_json(&SubstateValue::Vault(vault))
 }
 
 /// Vector — `decode_substate/component`: an account component decodes to a kind-tagged Component with
@@ -2154,7 +2160,7 @@ fn faucet_claim_seed() -> Fixture {
         FetchedSubstate {
             substate_id: SubstateId::Vault(XTR_FAUCET_VAULT_ADDRESS).to_string(),
             version: 0,
-            substate_value: serde_json::to_value(SubstateValue::Vault(faucet_vault)).expect("vault json"),
+            substate_value: indexer_substate_json(&SubstateValue::Vault(faucet_vault)),
         },
     ];
 

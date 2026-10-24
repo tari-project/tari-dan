@@ -174,9 +174,9 @@ pub const OP_FORMAT_IDENTITY_ADDRESS: &str = "format_identity_address";
 /// uses), so a parse vector cross-checks a wallet-shaped `otl_…` string round-trips its fields.
 pub const OP_PARSE_ADDRESS: &str = "parse_address";
 
-/// The canonical operation id for **typed substate decode**: turn a fetched [`SubstateValue`] JSON
-/// into the kind-tagged [`ootle_sdk_core::DecodedSubstate`]. Its `input.substate_value` carries the
-/// indexer's substate JSON verbatim; `expected.decoded_substate` carries the decoded record.
+/// The canonical operation id for **typed substate decode**: turn a fetched substate value into the
+/// kind-tagged [`ootle_sdk_core::DecodedSubstate`]. Its `input.substate_value` carries the indexer's
+/// base64 CBOR substate value verbatim; `expected.decoded_substate` carries the decoded record.
 ///
 /// **Default `"bytes"` comparison mode.** The decode is a pure parse + field map (no RNG), so the
 /// produced record is byte-stable; the embedded `u64` balances are native JSON numbers.
@@ -349,7 +349,7 @@ pub struct VectorInput {
     /// Present only for `decode_stealth_utxo` vectors.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub substate_id: Option<String>,
-    /// The fetched `SubstateValue` JSON, committed verbatim (the indexer's shape). Feeds
+    /// The fetched substate value, committed verbatim as the indexer serves it (base64 CBOR). Feeds
     /// `decode_stealth_utxo` (the UTXO), `decode_substate` (any substate), and `account_balances` (the
     /// account component).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -866,7 +866,7 @@ pub fn run_operation(fixture: &Fixture) -> ExpectedOutput {
                     fixture.name
                 )
             });
-            // The host hands the core the indexer's SubstateValue JSON verbatim; mirror that exactly.
+            // The host hands the core the indexer's substate value verbatim; mirror that exactly.
             let inbound = decode_stealth_utxo(substate_id, substate_value)
                 .unwrap_or_else(|e| panic!("fixture `{}`: decode_stealth_utxo failed: {e}", fixture.name));
             let json = serde_json::to_value(&inbound).expect("InboundStealthOutput serializes");

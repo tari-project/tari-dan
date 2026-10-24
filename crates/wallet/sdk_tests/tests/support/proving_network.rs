@@ -9,7 +9,8 @@ use std::{
 use futures::StreamExt;
 use tari_engine_types::{
     Utxo,
-    substate::{Substate, SubstateId, SubstateValue},
+    encoded::Encoded,
+    substate::{EncodedSubstate, Substate, SubstateId, SubstateValue},
 };
 use tari_indexer_client::types::{
     EpochCheckpointEntry,
@@ -309,7 +310,7 @@ impl WalletNetworkInterface for ProvingNetwork {
             .expect("ProvingNetwork serves no such substate");
         let state = match &served.value {
             Some(value) => SubstateState::Up {
-                substate: Box::new(value.clone()),
+                substate: Encoded::encode(value).unwrap(),
             },
             None if include_proof && version == Some(served.version) => SubstateState::Down {},
             None => return Err(ProvingNetworkError::NotFound),
@@ -340,9 +341,10 @@ impl WalletNetworkInterface for ProvingNetwork {
             let Some(value) = &served.value else {
                 continue;
             };
-            fetched
-                .substates
-                .insert(id.clone(), Substate::new(served.version, value.clone()));
+            fetched.substates.insert(
+                id.clone(),
+                EncodedSubstate::new(served.version, Encoded::encode(value).unwrap()),
+            );
             if let Some(proof) = served.proof.clone().filter(|_| include_proofs) {
                 fetched.proofs.insert(id, proof);
             }

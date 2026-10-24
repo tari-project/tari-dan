@@ -51,8 +51,9 @@ use tari_ootle_common_types::{
     SubstateVersion,
     engine_types::{
         commit_result::{ExecuteResult, FinalizeResult, TransactionResult},
+        encoded::Encoded,
         fees::FeeReceipt,
-        substate::{Substate, SubstateDiff, SubstateId, SubstateValue},
+        substate::{EncodedSubstate, Substate, SubstateDiff, SubstateId, SubstateValue},
         transaction_receipt::{DiffSummary, FinalizeOutcome, TransactionReceipt},
     },
 };
@@ -341,7 +342,7 @@ async fn substate(State(state): Shared, Path(id): Path<String>, Query(req): Quer
     Json(GetSubstateResponse {
         version: served.version,
         state: SubstateState::Up {
-            substate: Box::new(served.value.clone()),
+            substate: Encoded::encode(&served.value).unwrap(),
         },
         verified: true,
         proof: served.proof.clone().filter(|_| req.include_proof),
@@ -358,7 +359,10 @@ async fn fetch_substates(State(state): Shared, Json(req): Json<GetSubstatesReque
         let Some(served) = state.substates.get(id) else {
             continue;
         };
-        substates.insert(id.clone(), Substate::new(served.version, served.value.clone()));
+        substates.insert(
+            id.clone(),
+            EncodedSubstate::new(served.version, Encoded::encode(&served.value).unwrap()),
+        );
         if let Some(proof) = served.proof.clone().filter(|_| req.include_proofs) {
             proofs.push((id.clone(), proof));
         }
@@ -444,26 +448,25 @@ pub(crate) fn committed_result(
         SubstateVersion::ZERO,
         &SubstateValue::from(receipt.clone()),
     );
-    let committed_result = tari_bor::encode(&finalize).unwrap();
+    let execute_result = ExecuteResult {
+        finalize,
+        execution_time: Duration::from_secs(1),
+        execute_epoch: None,
+        wasm_execution_points: 0,
+        native_execution_points: 0,
+    };
     GetTransactionResultResponse {
         result: IndexerTransactionFinalizedResult::Finalized {
             final_decision: Decision::Commit,
-            execution_result: Some(Box::new(ExecuteResult {
-                finalize,
-                execution_time: Duration::from_secs(1),
-                execute_epoch: None,
-                wasm_execution_points: 0,
-                native_execution_points: 0,
-            })),
+            execution_result: Some(Encoded::encode(&execute_result).unwrap()),
             execution_time: Duration::from_secs(1),
             finalized_time: time::macros::datetime!(2026-10-17 12:00),
             abort_details: None,
         },
         receipt: Some(ProvenTransactionReceipt {
             version: SubstateVersion::ZERO,
-            receipt,
+            value: Encoded::encode(&SubstateValue::from(receipt)).unwrap(),
             proof: Some(proof),
-            result: Some(committed_result),
         }),
     }
 }

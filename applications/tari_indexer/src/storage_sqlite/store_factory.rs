@@ -2061,14 +2061,15 @@ pub(crate) mod tests {
     async fn put_up(store: &SqliteIndexerStore, id: &SubstateId, version: SubstateVersion, watermark: u64) -> bool {
         use tari_engine_types::{
             non_fungible::NonFungibleContainer,
-            substate::{Substate, SubstateValue},
+            substate::{EncodedSubstate, Substate, SubstateValue},
         };
 
         let result = SubstateResult::Up {
-            substate: Box::new(Substate::new(
+            substate: EncodedSubstate::encode(&Substate::new(
                 version,
                 SubstateValue::NonFungible(NonFungibleContainer::no_data()),
-            )),
+            ))
+            .unwrap(),
         };
         let id = id.clone();
         store

@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provenance": {
     "core_version": "0.47.0",
-    "git_rev": "4096f43913407b2ffe5ef8e44d821683bcf8b58b",
+    "git_rev": "712409abd0ae8aa7ebd1e3d92829581b7ffc9084",
     "generated_by": "ootle_sdk_core golden-vector generator"
   },
   "operation": "build_and_encode_stealth_transfer",
@@ -14,23 +14,7 @@
       {
         "substate_id": "utxo_0101010101010101010101010101010101010101010101010101010101010101_52a870b38bce1ca5254dfef4ea498b57c1327bc651a0f1afd280f54fed937a60",
         "version": 0,
-        "substate_value": {
-          "Utxo": {
-            "is_frozen": false,
-            "output": {
-              "auth": {
-                "Script": "80f99f89e23d732ee3df15970372cfd021af656bcad8ef51887f5cb4e796b9ab"
-              },
-              "output": {
-                "encrypted_data": "73ae2069453fd3ee46ecd243ca54924dfe4d5b2ba0bb179df57cd9cd906ff2f2cd4f76241c6959b531ec34fe052584b094652527de3106a7cbbdc2ea253db7206d1d20af46bb06a8547bcb0c212d7809",
-                "minimum_value_promise": 0,
-                "public_nonce": "f2cce6415ff090eea8d0f041e356f28f3be3aa53ccc69867288e7432028fca23",
-                "viewable_balance": null
-              },
-              "tag": 0
-            }
-          }
-        }
+        "substate_value": "ggiBgoODWCDyzOZBX/CQ7qjQ8EHjVvKPO+OqU8zGmGcojnQyAo/KI1hQsVkPTZLpX1RLpqTQbkJj2Qh+oteU0O6aydSxQB6rSbLTLYXOlf5AJo0EmxCEQvf2mz+rj3xs3/Km3ztXkbyvX67KWDJzkCppYRfJq/Bt3LoAggGBWCCA+Z+J4j1zLuPfFZcDcs/QIa9la8rY71GIf1y055a5qwD0"
       }
     ],
     "stealth_intent": {

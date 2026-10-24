@@ -82,6 +82,7 @@ fn finalized_result(transaction_id: TransactionId, fee_receipt: FeeReceipt) -> T
             abort_details: None,
         },
         receipt: None,
+        encoded_execution_result: None,
     }
 }
 
@@ -214,6 +215,7 @@ fn pending_result(transaction_id: TransactionId) -> TransactionQueryResult {
         transaction_id,
         result: TransactionFinalizedResult::Pending,
         receipt: None,
+        encoded_execution_result: None,
     }
 }
 

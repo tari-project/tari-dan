@@ -215,16 +215,18 @@ fn resolve_account_vaults(indexer_url: &Url, seed: u64, count: u64) -> anyhow::R
             .map_err(|e| anyhow!("Could not read the accounts of seed {seed} from indexer {indexer_url}: {e}"))?;
 
         for (&index, address) in chunk.iter().zip(&addresses) {
-            let component = response
+            let value = response
                 .substates
                 .get(&SubstateId::Component(*address))
-                .and_then(|substate| substate.substate_value().component())
-                .ok_or_else(|| {
-                    anyhow!(
-                        "Account {index} of seed {seed} ({address}) does not exist. Fund the accounts first with \
-                         `--account-seed {seed}` and at least {count} faucet transactions."
-                    )
-                })?;
+                .map(|substate| substate.value().decode())
+                .transpose()
+                .map_err(|e| anyhow!("Could not decode account {index} of seed {seed} ({address}): {e}"))?;
+            let component = value.as_ref().and_then(|value| value.component()).ok_or_else(|| {
+                anyhow!(
+                    "Account {index} of seed {seed} ({address}) does not exist. Fund the accounts first with \
+                     `--account-seed {seed}` and at least {count} faucet transactions."
+                )
+            })?;
             let indexed = component
                 .body
                 .to_indexed_well_known_types()

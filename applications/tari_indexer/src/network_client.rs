@@ -332,7 +332,16 @@ impl ResultAnswer {
 
         // A member derives its decision from its execution result, so an answer where the two
         // disagree cannot have come from an honest member.
-        let execute_result = finalized.execute_result.as_ref();
+        let execute_result = finalized
+            .execute_result
+            .as_ref()
+            .map(|r| r.decode())
+            .transpose()
+            .map_err(|e| {
+                ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
+                    "Node returned an undecodable execution result: {e}"
+                ))
+            })?;
         let is_commit = finalized.final_decision.is_commit();
         match execute_result {
             Some(r) if r.finalize.result.is_any_accept() != is_commit => {
@@ -352,7 +361,7 @@ impl ResultAnswer {
         let mut hasher = TariHasher32::new_with_label("IndexerFinalizedResult");
         hasher.update(&finalized.final_decision);
         hasher.update(&finalized.abort_details);
-        if let Some(r) = execute_result {
+        if let Some(r) = &execute_result {
             let finalize =
                 tari_bor::encode(&r.finalize).map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!(e)))?;
             hasher.update(&finalize);
@@ -526,6 +535,7 @@ mod tests {
 
     use tari_engine_types::{
         commit_result::{ExecuteResult, RejectReason, TransactionResult},
+        encoded::Encoded,
         substate::SubstateId,
     };
     use tari_epoch_manager::EpochManagerEvent;
@@ -754,7 +764,7 @@ mod tests {
         execute_result.finalize.total_fees_required = total_fees_required;
         Answer::Finalized(Box::new(FinalizedResult {
             final_decision: (&execute_result.finalize.result).into(),
-            execute_result: Some(execute_result),
+            execute_result: Some(Encoded::encode(&execute_result).unwrap()),
             execution_time: Default::default(),
             finalized_time: PrimitiveDateTime::MIN,
             abort_details: None,
@@ -824,9 +834,15 @@ mod tests {
     /// The tag of a committed answer.
     fn commit_tag(status: &TransactionResultStatus) -> Option<u64> {
         match status {
-            TransactionResultStatus::Finalized(result) if result.final_decision.is_commit() => {
-                Some(result.execute_result.as_ref()?.finalize.total_fees_required)
-            },
+            TransactionResultStatus::Finalized(result) if result.final_decision.is_commit() => Some(
+                result
+                    .execute_result
+                    .as_ref()?
+                    .decode()
+                    .unwrap()
+                    .finalize
+                    .total_fees_required,
+            ),
             _ => None,
         }
     }

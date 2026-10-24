@@ -30,8 +30,9 @@ use tari_ootle_common_types::{
     ShardGroup,
     SubstateVersion,
     engine_types::{
-        commit_result::FinalizeResult,
-        substate::{Substate, SubstateId, SubstateValue},
+        commit_result::ExecuteResult,
+        encoded::Encoded,
+        substate::{EncodedSubstate, Substate, SubstateId, SubstateValue},
         transaction_receipt::TransactionReceipt,
     },
     optional::{IsNotFoundError, Optional},
@@ -507,9 +508,8 @@ impl IndexerVerifier {
         Ok(versions)
     }
 
-    /// Verifies that `substate_id` at `version` holds the value `proof` carries at a block recent enough to show its
-    /// current state: one of the latest trusted validator set's epoch, or of the epoch before. Returns that value,
-    /// which the caller uses in place of the substate the indexer served beside the proof.
+    /// Verifies that `substate_id` at `version` holds `value` at a block recent enough to show its current state: one
+    /// of the latest trusted validator set's epoch, or of the epoch before. Returns `value` decoded.
     ///
     /// The latest trusted set advances only as far as the checkpoints the indexer serves, so an indexer that withholds
     /// newer checkpoints can still serve state from before them.
@@ -517,6 +517,7 @@ impl IndexerVerifier {
         &self,
         substate_id: &SubstateId,
         version: SubstateVersion,
+        value: &Encoded<SubstateValue>,
         proof: Option<&SubstateProof>,
     ) -> Result<SubstateValue, VerifyError> {
         let proof = proof.ok_or_else(|| VerifyError::SubstateUnproven {
@@ -549,7 +550,7 @@ impl IndexerVerifier {
             committee
         };
         let (_, value) = committee
-            .verify_substate(substate_id, version, proof)
+            .verify_substate(substate_id, version, value, proof)
             .map_err(|source| VerifyError::SubstateUnverified {
                 substate_id: substate_id.clone(),
                 source,
@@ -557,16 +558,16 @@ impl IndexerVerifier {
         Ok(value)
     }
 
-    /// Verifies the receipt and result the network committed for `transaction_id` and returns them: the indexer's proof
-    /// of the committed receipt verifies against a validator set the provider trusts, and the committed result `proven`
-    /// carries is the one that receipt commits. The caller uses them in place of the receipt and result the indexer
-    /// served beside the proof. Returns `None` while there is no proof to verify yet, and fails for a proof anchored
-    /// before the provider's anchor, which no later sync makes verifiable.
+    /// Verifies the receipt and result the network committed for `transaction_id` and returns them decoded: the
+    /// indexer's proof of the committed receipt verifies against a validator set the provider trusts, and
+    /// `execution_result` is the result that receipt commits. Returns `None` while there is no proof to verify yet, and
+    /// fails for a proof anchored before the provider's anchor, which no later sync makes verifiable.
     pub(crate) async fn verify_committed_result(
         &self,
         transaction_id: TransactionId,
         proven: Option<&ProvenTransactionReceipt>,
-    ) -> Result<Option<(TransactionReceipt, FinalizeResult)>, VerifyError> {
+        execution_result: Option<&Encoded<ExecuteResult>>,
+    ) -> Result<Option<(TransactionReceipt, ExecuteResult)>, VerifyError> {
         let Some((proven, proof)) = proven.and_then(|proven| proven.proof.as_ref().map(|proof| (proven, proof))) else {
             info!(target: LOG_TARGET, "Transaction {transaction_id} committed, but the indexer served no proof of its receipt yet");
             return Ok(None);
@@ -597,7 +598,9 @@ impl IndexerVerifier {
             return Ok(None);
         };
         let unverified = |source| VerifyError::FinalizationUnverified { transaction_id, source };
-        let verified = committee.verify_result(transaction_id, proven).map_err(unverified)?;
+        let verified = committee
+            .verify_result(transaction_id, proven, execution_result)
+            .map_err(unverified)?;
         Ok(Some(verified))
     }
 
@@ -620,14 +623,9 @@ impl IndexerVerifier {
                 },
             ));
         };
-        check_substate_type(substate_id, &value)?;
-        let value = if self.is_verifying() {
-            let verified = self.verify_substate(substate_id, version, resp.proof.as_ref()).await?;
-            check_substate_type(substate_id, &verified)?;
-            verified
-        } else {
-            *value
-        };
+        let value = self
+            .read_served(substate_id, &EncodedSubstate::new(version, value), resp.proof.as_ref())
+            .await?;
         Ok(Substate::new(version, value))
     }
 
@@ -667,23 +665,39 @@ impl IndexerVerifier {
                 include_proofs: self.is_verifying(),
             })
             .await?;
-        let (mut substates, proofs) = resp.into_proven();
-        for (substate_id, substate) in &mut substates {
-            if !substate_ids.contains(substate_id) {
-                return Err(VerifyError::UnrequestedSubstate {
-                    substate_id: substate_id.clone(),
-                });
+        let (served, proofs) = resp.into_proven();
+        let mut substates = HashMap::with_capacity(served.len());
+        for (substate_id, substate) in served {
+            if !substate_ids.contains(&substate_id) {
+                return Err(VerifyError::UnrequestedSubstate { substate_id });
             }
-            check_substate_type(substate_id, substate.substate_value())?;
-            if self.is_verifying() {
-                let verified = self
-                    .verify_substate(substate_id, substate.version(), proofs.get(substate_id))
-                    .await?;
-                check_substate_type(substate_id, &verified)?;
-                *substate = Substate::new(substate.version(), verified);
-            }
+            let value = self
+                .read_served(&substate_id, &substate, proofs.get(&substate_id))
+                .await?;
+            substates.insert(substate_id, Substate::new(substate.version(), value));
         }
         Ok(substates)
+    }
+
+    /// The value the indexer served for `substate_id`: verified against `proof` as [`Self::verify_substate`] describes
+    /// when verifying, and otherwise decoded as served. Either way it is of the type `substate_id` addresses.
+    async fn read_served(
+        &self,
+        substate_id: &SubstateId,
+        served: &EncodedSubstate,
+        proof: Option<&SubstateProof>,
+    ) -> Result<SubstateValue, VerifyError> {
+        let value = if self.is_verifying() {
+            self.verify_substate(substate_id, served.version(), served.value(), proof)
+                .await?
+        } else {
+            served.value().decode().map_err(|e| VerifyError::UndecodableSubstate {
+                substate_id: substate_id.clone(),
+                details: e.to_string(),
+            })?
+        };
+        check_substate_type(substate_id, &value)?;
+        Ok(value)
     }
 }
 
@@ -722,6 +736,8 @@ pub enum VerifyError {
     UnrequestedSubstate { substate_id: SubstateId },
     #[error("The indexer served a substate of the wrong type: {0}")]
     SubstateOfAnotherType(#[from] SubstateTypeMismatch),
+    #[error("The indexer served {substate_id} as a value that does not decode: {details}")]
+    UndecodableSubstate { substate_id: SubstateId, details: String },
     #[error("The indexer's validator set data does not verify: {0}")]
     ValidatorSetUnverified(#[from] LightClientError),
     #[error(
@@ -1033,28 +1049,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_substate_whose_proof_carries_another_value_is_refused() {
-        let (sets, indexer, provider) = walked_provider(IndexerTrust::Verify).await;
-        let (id, value) = substate(1);
-        let (_, other_value) = substate(2);
-        let mut proof = substate_proof(&sets[4], &id, VERSION, &value);
-        proof.value = Some(tari_bor::encode(&other_value).unwrap());
-        indexer.serve_substate(id.clone(), VERSION, value, Some(proof));
-
-        let err = read_error(&provider, &id).await;
-        assert!(matches!(err, VerifyError::SubstateUnverified { .. }), "{err}");
-    }
-
-    #[tokio::test]
-    async fn a_verified_read_yields_the_proven_value_not_the_served_one() {
+    async fn a_substate_served_with_another_value_than_its_proof_is_refused() {
         let (sets, indexer, provider) = walked_provider(IndexerTrust::Verify).await;
         let (id, served_value) = substate(1);
         let (_, proven_value) = substate(2);
         let proof = substate_proof(&sets[4], &id, VERSION, &proven_value);
         indexer.serve_substate(id.clone(), VERSION, served_value, Some(proof));
 
-        let read = provider.fetch_substate(id).await.unwrap();
-        assert_eq!(tombstone_value(read.substate_value()), tombstone_value(&proven_value));
+        let err = read_error(&provider, &id).await;
+        assert!(matches!(err, VerifyError::SubstateUnverified { .. }), "{err}");
     }
 
     #[tokio::test]

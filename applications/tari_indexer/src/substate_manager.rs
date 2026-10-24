@@ -31,7 +31,7 @@ use ootle_network::Network;
 use serde::{Deserialize, Serialize};
 use tari_engine_types::{
     Utxo,
-    substate::{Substate, SubstateId, SubstateValue},
+    substate::{EncodedSubstate, Substate, SubstateId, SubstateValue},
 };
 use tari_epoch_manager::service::EpochManagerHandle;
 use tari_indexer_client::types::UtxoStateUpdateSet;
@@ -84,7 +84,7 @@ pub struct SubstateResponse {
 /// (e.g. nothing has been committed since an epoch change).
 #[derive(Debug, Clone)]
 pub struct FetchedSubstate {
-    pub substate: Substate,
+    pub substate: EncodedSubstate,
     pub verified: bool,
     /// The proof `substate` was verified with, when it was fetched from the committee and proven.
     pub proof: Option<SubstateProofData>,
@@ -281,7 +281,7 @@ impl SubstateManager {
             .get_substate(req.substate_id(), req.version())
             .await?;
         match lookup_result.result {
-            SubstateResult::Up { substate } => Ok(*substate),
+            SubstateResult::Up { substate } => Ok(decode_substate(req.substate_id(), &substate)?),
             SubstateResult::Down { version } => Err(SubstateManagerError::InputSubstateIsDown {
                 substate_id: req.substate_id().clone(),
                 version,
@@ -349,7 +349,7 @@ impl SubstateManager {
         match lookup_result.result {
             SubstateResult::DoesNotExist => Ok(None),
             SubstateResult::Up { substate } => Ok(Some(FetchedSubstate {
-                substate: Substate::new(substate.version(), substate.into_substate_value()),
+                substate,
                 verified: lookup_result.verified,
                 proof: lookup_result.proof,
             })),
@@ -386,7 +386,7 @@ impl SubstateManager {
                         continue;
                     };
                     results.insert(id, FetchedSubstate {
-                        substate: Substate::new(substate.version(), substate.into_substate_value()),
+                        substate,
                         verified: lookup_result.verified,
                         proof: lookup_result.proof,
                     });
@@ -414,7 +414,7 @@ impl SubstateManager {
             return Ok(None);
         };
         Ok(Some(FetchedSubstate {
-            substate: Substate::new(substate.version, substate.substate),
+            substate: encode_substate(&Substate::new(substate.version, substate.substate))?,
             // Locally-stored substates were verified when ingested iff verification is on.
             verified: self.cache_manager.verifies_substates(),
             proof: None,
@@ -424,14 +424,17 @@ impl SubstateManager {
     pub async fn get_cached_substates(
         &self,
         substates: &[SubstateId],
-    ) -> Result<HashMap<SubstateId, Substate>, SubstateManagerError> {
+    ) -> Result<HashMap<SubstateId, EncodedSubstate>, SubstateManagerError> {
         let mut substate_set = substates.iter().collect::<HashSet<_>>();
 
         let substates_arg = substates.to_vec();
         let mut substates = self
             .substate_store
             .with_read_tx(move |tx| tx.get_substates(&substates_arg))
-            .await?;
+            .await?
+            .into_iter()
+            .map(|(id, substate)| Ok((id, encode_substate(&substate)?)))
+            .collect::<Result<HashMap<_, _>, SubstateManagerError>>()?;
 
         for k in substates.keys() {
             substate_set.remove(k);
@@ -479,6 +482,22 @@ impl SubstateManager {
     }
 }
 
+/// The substates table holds values as JSON, so a substate served from it is encoded on the way out.
+fn encode_substate(substate: &Substate) -> Result<EncodedSubstate, SubstateManagerError> {
+    EncodedSubstate::encode(substate)
+        .map_err(|e| SubstateManagerError::StoredSubstateEncodingError { details: e.to_string() })
+}
+
+pub fn decode_substate(substate_id: &SubstateId, substate: &EncodedSubstate) -> Result<Substate, SubstateManagerError> {
+    substate
+        .decode()
+        .map_err(|e| SubstateManagerError::UndecodableSubstate {
+            substate_id: substate_id.clone(),
+            version: substate.version(),
+            details: e.to_string(),
+        })
+}
+
 #[derive(thiserror::Error, Debug)]
 pub enum SubstateManagerError {
     #[error("Indexer error: {0}")]
@@ -492,6 +511,14 @@ pub enum SubstateManagerError {
     },
     #[error("Input substate {substate_id} does not exist")]
     InputSubstateDoesNotExist { substate_id: SubstateId },
+    #[error("The value served for {substate_id} v{version} does not decode: {details}")]
+    UndecodableSubstate {
+        substate_id: SubstateId,
+        version: SubstateVersion,
+        details: String,
+    },
+    #[error("A substate read from the substates table failed to encode: {details}")]
+    StoredSubstateEncodingError { details: String },
 }
 
 impl IsNotFoundError for SubstateManagerError {
