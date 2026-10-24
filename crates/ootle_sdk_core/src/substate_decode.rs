@@ -31,7 +31,10 @@
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-use tari_engine_types::substate::{SubstateId, SubstateValue};
+use tari_engine_types::{
+    encoded::Encoded,
+    substate::{SubstateId, SubstateValue},
+};
 
 use crate::{
     FetchedSubstate,
@@ -128,12 +131,26 @@ fn amount_to_u64(amount: tari_template_lib_types::Amount, context: &str) -> Resu
     })
 }
 
-/// Deserializes the indexer's JSON into the engine [`SubstateValue`].
+/// Decodes a substate value as the indexer serves it: a JSON string holding the value's CBOR encoding in base64.
+pub(crate) fn decode_indexer_substate_value(value: &serde_json::Value) -> Result<SubstateValue, String> {
+    Encoded::<SubstateValue>::deserialize(value)
+        .map_err(|e| format!("not a base64 CBOR substate value: {e}"))?
+        .decode()
+        .map_err(|e| e.to_string())
+}
+
+/// `value` as the indexer serves it, for [`decode_indexer_substate_value`].
+#[cfg(test)]
+pub(crate) fn indexer_substate_json(value: &SubstateValue) -> serde_json::Value {
+    serde_json::to_value(Encoded::encode(value).expect("substate value encodes")).expect("base64 serializes")
+}
+
+/// Decodes the indexer's substate value into the engine [`SubstateValue`].
 ///
-/// A malformed/unknown substate JSON surfaces as `Parse` (host-supplied input, not an internal
+/// A malformed/unknown substate value surfaces as `Parse` (host-supplied input, not an internal
 /// encoding fault).
 fn parse_substate_value(value: &serde_json::Value, context: &str) -> Result<SubstateValue, OotleSdkError> {
-    serde_json::from_value(value.clone())
+    decode_indexer_substate_value(value)
         .map_err(|e| OotleSdkError::Parse(format!("undecodable substate value for {context}: {e}")))
 }
 
@@ -159,7 +176,7 @@ fn component_vault_id_strings(
 
 /// Decodes any fetched substate JSON into a typed, kind-tagged [`DecodedSubstate`].
 ///
-/// `substate_value` is the [`SubstateValue`] JSON the indexer returned, passed verbatim — the same
+/// `substate_value` is the substate value the indexer returned (its base64 CBOR string), passed verbatim — the same
 /// neutral carrier [`FetchedSubstate`](crate::FetchedSubstate) uses. The decode is a pure parse +
 /// field map (no RNG), so it is byte-stable.
 ///
@@ -393,11 +410,11 @@ mod tests {
             },
             body: ComponentBody::from_cbor_value(state),
         };
-        serde_json::to_value(SubstateValue::Component(component)).expect("component serializes")
+        crate::substate_decode::indexer_substate_json(&SubstateValue::Component(component))
     }
 
     fn vault_substate_json(vault: &Vault) -> serde_json::Value {
-        serde_json::to_value(SubstateValue::Vault(vault.clone())).expect("vault serializes")
+        crate::substate_decode::indexer_substate_json(&SubstateValue::Vault(vault.clone()))
     }
 
     fn fetched_vault(id: VaultId, vault: &Vault) -> FetchedSubstate {

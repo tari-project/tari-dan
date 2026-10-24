@@ -3,34 +3,18 @@
   "schema_version": 1,
   "provenance": {
     "core_version": "0.47.0",
-    "git_rev": "4096f43913407b2ffe5ef8e44d821683bcf8b58b",
+    "git_rev": "712409abd0ae8aa7ebd1e3d92829581b7ffc9084",
     "generated_by": "ootle_sdk_core golden-vector generator"
   },
   "operation": "decode_stealth_utxo",
   "input": {
     "substate_id": "utxo_0101010101010101010101010101010101010101010101010101010101010101_6438fe484f0cdbf98d56021c2506ad583370a68c0ecda45f28e7182f3180e76e",
-    "substate_value": {
-      "Utxo": {
-        "is_frozen": false,
-        "output": {
-          "auth": {
-            "Key": "42830d43ddefdc28878544ea3591c46745a09e3c15ba036768767ead0cb33770"
-          },
-          "output": {
-            "encrypted_data": "e6c793457e58587c715124f63b3408770d6be3fc757a9e25355561913026bfc60c8b72f2c49ab7119f7738d49f9f3e65e41d4ae32eb8a4ab0b5518c22cd706b5da2e76265db359f882254b75f956cfac",
-            "minimum_value_promise": 0,
-            "public_nonce": "a4a5adac6d68d700b188603360e5a705ee6e1022847799b1ed1923955dbcc911",
-            "viewable_balance": null
-          },
-          "tag": 4024513185
-        }
-      }
-    }
+    "substate_value": "ggiBgoODWCCkpa2sbWjXALGIYDNg5acF7m4QIoR3mbHtGSOVXbzJEVhQz9y5Ykz4/ZfVuyrjyy3MGRfpEzXYinhM6zykbzbwLAoxGYscZE6CGZBgttTvTeYrCbyfZ8/ZU4bEv0ckhcMdOQiML9CY8GjhOmoWNgOCxBUAggCBWCBCgw1D3e/cKIeFROo1kcRnRaCePBW6A2dodn6tDLM3cBrv4TKh9A=="
   },
   "expected": {
     "inbound_output": {
       "commitment": "6438fe484f0cdbf98d56021c2506ad583370a68c0ecda45f28e7182f3180e76e",
-      "encrypted_data": "e6c793457e58587c715124f63b3408770d6be3fc757a9e25355561913026bfc60c8b72f2c49ab7119f7738d49f9f3e65e41d4ae32eb8a4ab0b5518c22cd706b5da2e76265db359f882254b75f956cfac",
+      "encrypted_data": "cfdcb9624cf8fd97d5bb2ae3cb2dcc1917e91335d88a784ceb3ca46f36f02c0a31198b1c644e82199060b6d4ef4de62b09bc9f67cfd95386c4bf472485c31d39088c2fd098f068e13a6a16360382c415",
       "pay_to": "StealthPublicKey",
       "resource_address": "resource_0101010101010101010101010101010101010101010101010101010101010101",
       "sender_public_nonce": "a4a5adac6d68d700b188603360e5a705ee6e1022847799b1ed1923955dbcc911",

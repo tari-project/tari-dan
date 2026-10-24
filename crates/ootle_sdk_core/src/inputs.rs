@@ -141,10 +141,9 @@ impl WantList {
 
 /// One substate the host fetched from the indexer and is handing back to the core.
 ///
-/// `substate_value` is the **neutral carrier**: the host passes the indexer's substate JSON straight
-/// through (`serde_json::Value`), and the core parses it into the internal `SubstateValue`. A parse
-/// failure ⇒ [`OotleSdkError::Parse`]. (`serde_json::Value` is the simplest carrier — it avoids a
-/// second string-escaping layer and round-trips the indexer shape exactly.)
+/// `substate_value` is the **neutral carrier**: the host passes the indexer's substate value straight
+/// through (`serde_json::Value`, the base64 CBOR string the indexer serves), and the core decodes it into the
+/// internal `SubstateValue`. A decode failure ⇒ [`OotleSdkError::Parse`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FetchedSubstate {
     /// The canonical substate id this value is for.
@@ -152,7 +151,7 @@ pub struct FetchedSubstate {
     /// The substate version the indexer returned (carried for the host; the resolver folds
     /// unversioned inputs).
     pub version: u64,
-    /// The indexer's `SubstateValue` JSON, passed through verbatim.
+    /// The indexer's substate value (a base64 CBOR string), passed through verbatim.
     pub substate_value: serde_json::Value,
 }
 
@@ -542,7 +541,7 @@ pub fn apply_fetched_substates_with_secrets(
     // 1. Parse + cache the fetched batch (host's I/O result → internal types).
     for f in fetched {
         let id = SubstateId::from_str_checked(&f.substate_id)?;
-        let value: SubstateValue = serde_json::from_value(f.substate_value.clone())
+        let value = crate::substate_decode::decode_indexer_substate_value(&f.substate_value)
             .map_err(|e| OotleSdkError::Parse(format!("invalid substate value for '{}': {e}", f.substate_id)))?;
         partial.cache.insert(id, Some(value));
     }
@@ -1006,12 +1005,12 @@ mod tests {
             },
             body: ComponentBody::from_cbor_value(state),
         };
-        serde_json::to_value(SubstateValue::Component(component)).unwrap()
+        crate::substate_decode::indexer_substate_json(&SubstateValue::Component(component))
     }
 
     fn vault_substate_json(resource: ResourceAddress) -> serde_json::Value {
         let vault = Vault::new(ResourceContainer::public_fungible(resource, Amount::new(1_000_000)));
-        serde_json::to_value(SubstateValue::Vault(vault)).unwrap()
+        crate::substate_decode::indexer_substate_json(&SubstateValue::Vault(vault))
     }
 
     fn fetched(id: impl ToString, value: serde_json::Value) -> FetchedSubstate {

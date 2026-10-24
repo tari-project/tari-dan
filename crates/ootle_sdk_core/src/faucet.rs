@@ -174,12 +174,12 @@ mod tests {
             },
             body: ComponentBody::from_cbor_value(state),
         };
-        serde_json::to_value(SubstateValue::Component(component)).unwrap()
+        crate::substate_decode::indexer_substate_json(&SubstateValue::Component(component))
     }
 
     fn vault_json(res: ResourceAddress) -> serde_json::Value {
         let vault = Vault::new(ResourceContainer::public_fungible(res, Amount::new(1_000_000_000)));
-        serde_json::to_value(SubstateValue::Vault(vault)).unwrap()
+        crate::substate_decode::indexer_substate_json(&SubstateValue::Vault(vault))
     }
 
     fn fetched(id: impl ToString, value: serde_json::Value) -> FetchedSubstate {

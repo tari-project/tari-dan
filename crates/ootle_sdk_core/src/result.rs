@@ -15,8 +15,8 @@
 //! [`tari_indexer_client::types::IndexerTransactionFinalizedResult`] is the canonical wire type, but
 //! that crate pulls `reqwest`/`tokio` into its tree, which the pure core forbids. So we deserialize
 //! into a local serde mirror ([`WireFinalizedResult`]) whose variant names and fields match the
-//! indexer enum byte-for-byte on the wire, embedding the engine's serde-derived [`ExecuteResult`] and
-//! the canonical [`Decision`]. The timestamp / duration fields are accepted as opaque
+//! indexer enum byte-for-byte on the wire, embedding the engine's [`ExecuteResult`] in its base64 CBOR encoding
+//! and the canonical [`Decision`]. The timestamp / duration fields are accepted as opaque
 //! `serde_json::Value` (we never read them), so we avoid a dependency on the `time` crate.
 //!
 //! ## Indexer vs wallet-daemon wrapper
@@ -40,6 +40,7 @@ use serde::Deserialize;
 use tari_consensus_types::Decision;
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, TransactionResult},
+    encoded::Encoded,
     fees::FeeSource,
     substate::SubstateDiff,
 };
@@ -75,7 +76,7 @@ enum WireFinalizedResult {
     /// The transaction was finalized (committed or aborted) by the network.
     Finalized {
         final_decision: Decision,
-        execution_result: Option<Box<ExecuteResult>>,
+        execution_result: Option<Encoded<ExecuteResult>>,
         #[serde(default)]
         execution_time: serde_json::Value,
         #[serde(default)]
@@ -144,7 +145,10 @@ pub fn parse_finalized_result(raw: &str) -> Result<FinalizedResult, OotleSdkErro
             abort_details,
             ..
         } => match execution_result {
-            Some(result) => {
+            Some(encoded) => {
+                let result = encoded
+                    .decode()
+                    .map_err(|e| OotleSdkError::Parse(format!("indexer execution_result CBOR: {e}")))?;
                 // Defensive cross-check: the envelope's `final_decision` is redundant with
                 // `finalize.result`. If they disagree (a version-skewed / buggy indexer), refuse to
                 // silently return a wrong outcome.
@@ -430,13 +434,13 @@ mod tests {
     }
 
     /// Serializes an `ExecuteResult` into the indexer `Finalized` wrapper JSON, exactly as the indexer
-    /// REST API hands it back (the `execution_result` is plain serde JSON).
+    /// REST API hands it back (the `execution_result` is its base64 CBOR encoding).
     fn finalized_wire_json(result: ExecuteResult) -> String {
         let decision = Decision::from(&result.finalize.result);
         serde_json::json!({
             "Finalized": {
                 "final_decision": decision,
-                "execution_result": result,
+                "execution_result": Encoded::encode(&result).unwrap(),
                 "execution_time": { "secs": 1, "nanos": 0 },
                 "finalized_time": "2026-06-12 00:00:00.0",
                 "abort_details": null,
@@ -600,7 +604,7 @@ mod tests {
         let json = serde_json::json!({
             "Finalized": {
                 "final_decision": { "Abort": "EpochExpired" },
-                "execution_result": exec,
+                "execution_result": Encoded::encode(&exec).unwrap(),
                 "execution_time": { "secs": 1, "nanos": 0 },
                 "finalized_time": "2026-06-12 00:00:00.0",
                 "abort_details": null,
@@ -609,5 +613,6 @@ mod tests {
         .to_string();
         let err = parse_finalized_result(&json).unwrap_err();
         assert_eq!(err.code(), "PARSE");
+        assert!(err.to_string().contains("disagrees"), "{err}");
     }
 }

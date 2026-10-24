@@ -845,9 +845,11 @@ where
     /// [`BatchTrust::Unanchored`] or [`BatchTrust::Stale`] for the caller to weigh against what other
     /// members offer.
     async fn verify_substate_batch(&self, batch: &SubstateBatch, vn_addr: &TAddr) -> Result<BatchTrust, IndexerError> {
-        for substate in &batch.substates {
-            self.validate_substate_result_address(&substate.result, &substate.substate_id, vn_addr)?;
-        }
+        let values = batch
+            .substates
+            .iter()
+            .map(|substate| Self::validate_substate_result(&substate.result, &substate.substate_id, vn_addr))
+            .collect::<Result<Vec<_>, _>>()?;
         if !self.verify_substate_proofs {
             return Ok(BatchTrust::NotRequired);
         }
@@ -858,7 +860,7 @@ where
         let Some(trusted_root) = self.trusted_root_from_commit_proof(commit_proof).await? else {
             return Ok(BatchTrust::Stale);
         };
-        for substate in &batch.substates {
+        for (substate, value) in batch.substates.iter().zip(&values) {
             let Some(value_proof) = &substate.value_proof else {
                 return Err(IndexerError::SubstateProofVerificationFailed {
                     details: format!(
@@ -867,12 +869,9 @@ where
                     ),
                 });
             };
-            let (version, value) = match &substate.result {
-                SubstateResult::Up { substate: up } => (
-                    up.version(),
-                    Some(Self::decode_value(up, &substate.substate_id, vn_addr)?),
-                ),
-                SubstateResult::Down { version } => (*version, None),
+            let version = match &substate.result {
+                SubstateResult::Up { substate: up } => up.version(),
+                SubstateResult::Down { version } => *version,
                 // A batch returns only substates it holds a record of; the ids it holds none for come
                 // back as `missing`, which no proof can settle. Anything else here would be cached as
                 // verified without a proof having been checked.
@@ -981,7 +980,7 @@ where
                 .get_substate(substate_requirement)
                 .await
                 .map_err(|e| IndexerError::ValidatorNodeClientError(e.to_string()))?;
-            self.validate_substate_result_address(&result, substate_requirement.substate_id(), vn_addr)?;
+            Self::validate_substate_result(&result, substate_requirement.substate_id(), vn_addr)?;
             return Ok((result, None));
         }
 
@@ -990,7 +989,7 @@ where
             .await
             .map_err(|e| IndexerError::ValidatorNodeClientError(e.to_string()))?;
 
-        self.validate_substate_result_address(&result, substate_requirement.substate_id(), vn_addr)?;
+        let value = Self::validate_substate_result(&result, substate_requirement.substate_id(), vn_addr)?;
 
         // The validator has nothing committed to anchor a proof against yet (e.g. immediately after
         // an epoch change). Return the result unverified and let the caller decide.
@@ -1003,12 +1002,11 @@ where
         // not provable and is left to the existing f+1 agreement.
         match &result {
             SubstateResult::Up { substate } => {
-                let value = Self::decode_value(substate, substate_requirement.substate_id(), vn_addr)?;
                 let proven = self
                     .verify_substate_proof(
                         substate_requirement.substate_id(),
                         substate.version(),
-                        Some(&value),
+                        value.as_ref(),
                         &proof,
                     )
                     .await?;
@@ -1044,8 +1042,32 @@ where
         Ok((result, Some(proof)))
     }
 
-    /// The value `vn_addr` served for `substate_id`, decoded. A value that does not decode disqualifies the member
-    /// that served it.
+    /// The value of `result` decoded, or `None` when it is not up. A member whose value does not decode, or that serves
+    /// a template whose content derives another address than `substate_id`, is disqualified.
+    fn validate_substate_result(
+        result: &SubstateResult,
+        substate_id: &SubstateId,
+        vn_addr: &TAddr,
+    ) -> Result<Option<SubstateValue>, IndexerError> {
+        let SubstateResult::Up { substate } = result else {
+            return Ok(None);
+        };
+        let value = Self::decode_value(substate, substate_id, vn_addr)?;
+        if let Some(expected_addr) = substate_id.as_template() &&
+            let Some(template) = value.published_template()
+        {
+            let derived = template.to_template_address();
+            if derived != expected_addr {
+                return Err(IndexerError::TemplateAddressMismatch {
+                    vn: vn_addr.to_string(),
+                    requested: expected_addr,
+                    derived,
+                });
+            }
+        }
+        Ok(Some(value))
+    }
+
     fn decode_value(
         substate: &EncodedSubstate,
         substate_id: &SubstateId,
@@ -1059,28 +1081,6 @@ where
                 substate_id: substate_id.clone(),
                 details: e.to_string(),
             })
-    }
-
-    fn validate_substate_result_address(
-        &self,
-        result: &SubstateResult,
-        substate_id: &SubstateId,
-        vn_addr: &TAddr,
-    ) -> Result<(), IndexerError> {
-        if let SubstateResult::Up { substate } = result &&
-            let Some(expected_addr) = substate_id.as_template() &&
-            let Some(template) = Self::decode_value(substate, substate_id, vn_addr)?.published_template()
-        {
-            let derived = template.to_template_address();
-            if derived != expected_addr {
-                return Err(IndexerError::TemplateAddressMismatch {
-                    vn: vn_addr.to_string(),
-                    requested: expected_addr,
-                    derived,
-                });
-            }
-        }
-        Ok(())
     }
 
     /// Verifies the down proof of `(substate_id, version)` whose exclusion half is anchored at the root of
@@ -3160,6 +3160,42 @@ mod tests {
 
         assert!(lookup.verified);
         assert_eq!(lookup.result.into_up(), served);
+    }
+
+    /// Without proofs to check, a member serving a value that does not decode is still disqualified, on a single read
+    /// and in a batch, and the read settles on a member whose value does.
+    #[tokio::test]
+    async fn an_unverified_read_skips_a_member_whose_value_does_not_decode() {
+        let id = component_id(1);
+        let honest = encoded(live(std::slice::from_ref(&id)).remove(&id).unwrap());
+        let undecodable = EncodedSubstate::new(honest.version(), Encoded::from_bytes(vec![0xff]));
+        // Members are asked in random order, so repeat to put the undecodable one first.
+        for _ in 0..8 {
+            let member_responses = HashMap::from([
+                (("vn_bad".to_string(), id.clone()), SubstateResult::Up {
+                    substate: undecodable.clone(),
+                }),
+                (("vn_honest".to_string(), id.clone()), SubstateResult::Up {
+                    substate: honest.clone(),
+                }),
+            ]);
+            let (manager, _) = manager_with_members(
+                FakeNetwork {
+                    member_responses,
+                    ..Default::default()
+                },
+                vec!["vn_bad".to_string(), "vn_honest".to_string()],
+            );
+
+            let single = manager.get_substate(&id, None).await.unwrap();
+            assert_eq!(single.result.into_up(), Some(honest.clone()));
+
+            let batched = manager
+                .fetch_and_cache_substates(std::slice::from_ref(&id))
+                .await
+                .unwrap();
+            assert_eq!(batched[&id].substate, honest);
+        }
     }
 
     /// A member serving a value that does not decode is disqualified, as one whose proof does not verify is.

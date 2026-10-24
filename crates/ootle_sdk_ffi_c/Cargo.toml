@@ -19,6 +19,9 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 hex = { workspace = true }
 
+[dev-dependencies]
+tari_engine_types = { workspace = true }
+
 [build-dependencies]
 # cbindgen generates `include/ootle_sdk.h` from the `extern "C"` surface at build time. New to the
 # workspace (no prior C-FFI). Pinned to the latest known-good release.

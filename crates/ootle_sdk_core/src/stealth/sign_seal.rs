@@ -539,7 +539,7 @@ mod tests {
         let fetched = vec![FetchedSubstate {
             substate_id: substate_id.to_string(),
             version: 0,
-            substate_value: serde_json::to_value(SubstateValue::Utxo(utxo)).unwrap(),
+            substate_value: crate::substate_decode::indexer_substate_json(&SubstateValue::Utxo(utxo)),
         }];
 
         let intent = StealthTransferIntent {

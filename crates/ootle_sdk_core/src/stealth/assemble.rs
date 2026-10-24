@@ -661,7 +661,7 @@ mod tests {
             },
             body: ComponentBody::from_cbor_value(state),
         };
-        serde_json::to_value(SubstateValue::Component(component)).unwrap()
+        crate::substate_decode::indexer_substate_json(&SubstateValue::Component(component))
     }
 
     /// The from-account's vault substate (JSON), holding the tari resource the transfer pays in.
@@ -671,7 +671,7 @@ mod tests {
 
         let resource = tari_resource().as_str().parse().unwrap();
         let vault = Vault::new(ResourceContainer::public_fungible(resource, Amount::new(1_000_000)));
-        serde_json::to_value(SubstateValue::Vault(vault)).unwrap()
+        crate::substate_decode::indexer_substate_json(&SubstateValue::Vault(vault))
     }
 
     /// Serves a fetch request for `id` from the from-account substate store (component + vault), or
@@ -1065,7 +1065,7 @@ mod tests {
         let fetched = vec![FetchedSubstate {
             substate_id: substate_id.to_string(),
             version: 0,
-            substate_value: serde_json::to_value(SubstateValue::Utxo(utxo)).unwrap(),
+            substate_value: crate::substate_decode::indexer_substate_json(&SubstateValue::Utxo(utxo)),
         }];
 
         let intent = StealthTransferIntent {
@@ -1180,7 +1180,7 @@ mod tests {
         let fetched = vec![FetchedSubstate {
             substate_id: substate_id.to_string(),
             version: 0,
-            substate_value: serde_json::to_value(SubstateValue::Utxo(utxo)).unwrap(),
+            substate_value: crate::substate_decode::indexer_substate_json(&SubstateValue::Utxo(utxo)),
         }];
 
         // Even-balance confidential spend (input == output), no revealed bucket, pay_fee_from_revealed on.
@@ -1277,7 +1277,7 @@ mod tests {
         let fetched = vec![FetchedSubstate {
             substate_id: substate_id.to_string(),
             version: 0,
-            substate_value: serde_json::to_value(SubstateValue::Utxo(utxo)).unwrap(),
+            substate_value: crate::substate_decode::indexer_substate_json(&SubstateValue::Utxo(utxo)),
         }];
 
         let intent = StealthTransferIntent {

@@ -8120,6 +8120,7 @@ dependencies = [
  "tari_consensus_types",
  "tari_crypto",
  "tari_engine_types",
+ "tari_indexer_client",
  "tari_ootle_address",
  "tari_ootle_common_types",
  "tari_ootle_template_metadata",
@@ -8128,6 +8129,7 @@ dependencies = [
  "tari_template_builtin",
  "tari_template_lib_types",
  "thiserror 2.0.18",
+ "time",
  "zeroize",
 ]
 
@@ -8140,6 +8142,7 @@ dependencies = [
  "ootle_sdk_core",
  "serde",
  "serde_json",
+ "tari_engine_types",
 ]
 
 [[package]]

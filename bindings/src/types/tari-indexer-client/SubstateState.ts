@@ -7,8 +7,8 @@ export type SubstateState =
   | {
       up: {
         /**
-         * The CBOR-encoded `SubstateValue`, as the validator that answered the indexer served it. A proof's value
-         * hash is checked against these bytes.
+         * The CBOR-encoded `SubstateValue`, as the validator that answered the indexer served it. A proof is checked
+         * against the value these bytes decode to.
          */
         substate: string;
       };

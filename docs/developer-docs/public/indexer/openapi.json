@@ -2506,7 +2506,7 @@
                   "substate": {
                     "type": "string",
                     "format": "byte",
-                    "description": "The CBOR-encoded `SubstateValue`, as the validator that answered the indexer served it. A proof's value\nhash is checked against these bytes."
+                    "description": "The CBOR-encoded `SubstateValue`, as the validator that answered the indexer served it. A proof is checked\nagainst the value these bytes decode to."
                   }
                 }
               }

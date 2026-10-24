@@ -25,7 +25,7 @@ use crate::c_abi::{OotleResult, flatten, guarded, output_json, parse_json, requi
 /// Decodes any fetched substate JSON into the kind-tagged
 /// [`DecodedSubstate`](ootle_sdk_core::DecodedSubstate). **Stateless — returns no handle.**
 ///
-/// `substate_value_json` is the indexer's `SubstateValue` JSON, passed verbatim. On success
+/// `substate_value_json` is the indexer's substate value (a JSON base64 CBOR string), passed verbatim. On success
 /// `data_json` is `{ "kind": "component|vault|resource|other", "value": { … } }`. For a vault the
 /// `value.revealed_balance` is the revealed/unlocked amount only — the confidential side is surfaced
 /// as `value.confidential_commitment_count` + `value.kind`, never a silent zero. Balances are native

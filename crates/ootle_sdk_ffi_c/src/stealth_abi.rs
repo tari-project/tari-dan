@@ -579,8 +579,8 @@ pub unsafe extern "C" fn ootle_scan_stealth_output(
 ///
 /// - `substate_id_json` — the UTXO's canonical address string (`utxo_<resource>_<commitment>`), carrying the on-chain
 ///   commitment + resource address the value body omits. A JSON string.
-/// - `substate_value_json` — the `SubstateValue` JSON the indexer returned, verbatim (the same shape the resolver
-///   already consumes).
+/// - `substate_value_json` — the substate value the indexer returned (a JSON base64 CBOR string), verbatim (the same
+///   shape the resolver already consumes).
 ///
 /// On success `data_json` is the decoded [`InboundStealthOutput`] (a JSON object with hex byte
 /// fields). A non-UTXO / frozen / burnt substate or a malformed nonce yields `"INVALID"` / `"KEY"`;
@@ -621,7 +621,7 @@ pub unsafe extern "C" fn ootle_decode_stealth_utxo(
 /// - `scan_keys_json` — `{view_secret, account_public_key, skip_memo?}` (the same bundle [`ootle_scan_stealth_output`]
 ///   takes; lowercase hex; `skip_memo` defaults to `false`).
 /// - `substate_id_json` — the UTXO's canonical address string. A JSON string.
-/// - `substate_value_json` — the `SubstateValue` JSON the indexer returned, verbatim.
+/// - `substate_value_json` — the substate value the indexer returned (a JSON base64 CBOR string), verbatim.
 ///
 /// `data_json` on success is **always** a JSON object: the `DecryptedOutput`
 /// (`{is_mine:true, value, mask, memo}`) when addressed to the scanner, or `{"is_mine":false}` when

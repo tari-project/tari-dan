@@ -80,9 +80,12 @@ impl VerifiedCommittee {
         Ok((tip, receipt))
     }
 
-    /// Verifies that `transaction_id` committed `result`: the receipt `proven` carries verifies as
-    /// [`Self::verify_receipt`] checks, and `result` is the one that receipt commits, as
+    /// Verifies that `transaction_id` committed `result`'s `finalize`: the receipt `proven` carries verifies as
+    /// [`Self::verify_receipt`] checks, and `finalize` is the result that receipt commits, as
     /// [`check_result_matches_receipt`] checks. Returns the receipt and `result` decoded.
+    ///
+    /// Only `finalize` is proven. The rest of `result` (execution time, epoch and metering points) is as the indexer
+    /// served it.
     pub fn verify_result(
         &self,
         transaction_id: TransactionId,

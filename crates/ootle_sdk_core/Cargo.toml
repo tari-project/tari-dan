@@ -33,3 +33,5 @@ zeroize = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+tari_indexer_client = { workspace = true }
+time = { workspace = true }

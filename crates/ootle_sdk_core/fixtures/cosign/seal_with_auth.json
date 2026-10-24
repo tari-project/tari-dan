@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provenance": {
     "core_version": "0.47.0",
-    "git_rev": "a25b2ca804a1ae75cb3f1fc1c3860e7cb5073b90",
+    "git_rev": "712409abd0ae8aa7ebd1e3d92829581b7ffc9084",
     "generated_by": "ootle_sdk_core golden-vector generator"
   },
   "operation": "cosign_seal_with_auth",
@@ -30,52 +30,16 @@
       {
         "substate_id": "component_3131313131313131313131313131313131313131313131313131313131313131",
         "version": 0,
-        "substate_value": {
-          "Component": {
-            "body": {
-              "state": [
-                {
-                  "@cbor": "tag",
-                  "tag": 132,
-                  "value": {
-                    "@cbor": "bytes",
-                    "hex": "3333333333333333333333333333333333333333333333333333333333333333"
-                  }
-                }
-              ]
-            },
-            "header": {
-              "access_rules": {
-                "default": "DenyAll",
-                "method_access": {}
-              },
-              "entity_id": "00",
-              "owner_rule": "None",
-              "template_address": "0000000000000000000000000000000000000000000000000000000000000000"
-            }
-          }
-        }
+        "substate_value": "ggCBgoRYIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAggCAgqCCAYBBAIGB2IRYIDMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMz"
       },
       {
         "substate_id": "vault_3333333333333333333333333333333333333333333333333333333333333333",
         "version": 0,
-        "substate_value": {
-          "Vault": {
-            "freeze_flags": 0,
-            "resource_container": {
-              "Fungible": {
-                "address": "resource_3232323232323232323232323232323232323232323232323232323232323232",
-                "amount": "1000000",
-                "locked_amount": "0"
-              }
-            }
-          }
-        }
+        "substate_value": "ggKBgoIAg9iDWCAyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMhoAD0JAAAA="
       }
     ],
     "cosign_seal_pk": "e2bf41576c1f0fcb1b7fdd5980f8f1f57f6d3f132fd44ec03c75e42360a42029",
-    "cosign_signer_secret": "7b00000000000000000000000000000000000000000000000000000000000000",
-    "cosign_signer_seed": "7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c"
+    "cosign_signer_secret": "7b00000000000000000000000000000000000000000000000000000000000000"
   },
   "expected": {
     "sealed_transaction_semantic": {

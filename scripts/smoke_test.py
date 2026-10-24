@@ -401,7 +401,11 @@ class SmokeTest:
     # ---- transaction plumbing
 
     def indexer_check(self, tx_id, op):
-        """The indexer must report the transaction committed and serve the substates it wrote."""
+        """The indexer must report the transaction committed and serve the substates it wrote.
+
+        The indexer serves the execution result CBOR-encoded, so its fields are read from the wallet's
+        decoded result.
+        """
         deadline = time.monotonic() + 60
         while True:
             status, body = http_get(f"{self.indexer_url}/transactions/{tx_id}/result")
@@ -413,7 +417,7 @@ class SmokeTest:
             time.sleep(1)
         if finalized.get("final_decision") != "Commit":
             raise StageFailed(f"indexer reports {short(tx_id)} as {finalized.get('final_decision')}")
-        finalize = finalized["execution_result"]["finalize"]
+        finalize = self.wallet.wait(tx_id)["result"]
         accept = finalize.get("result", {}).get("Accept")
         if accept is None:
             raise StageFailed(f"indexer reports {short(tx_id)} not accepted: {reject_reason(finalize)}")
