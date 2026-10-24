@@ -1921,7 +1921,9 @@
         ],
         "properties": {
           "resource": {
-            "type": "object"
+            "type": "string",
+            "format": "byte",
+            "description": "The CBOR-encoded `Resource`."
           },
           "total_supply": {
             "type": [
@@ -2035,7 +2037,9 @@
         ],
         "properties": {
           "receipt": {
-            "type": "object"
+            "type": "string",
+            "format": "byte",
+            "description": "The CBOR-encoded `TransactionReceipt`."
           }
         }
       },
@@ -2180,11 +2184,11 @@
                   "type": "string"
                 },
                 {
-                  "type": "object"
+                  "type": "string"
                 }
               ]
             },
-            "description": "The unspent UTXOs matching a requested tag and nonce pair."
+            "description": "The unspent UTXOs matching a requested tag and nonce pair, each a CBOR-encoded `Utxo`."
           }
         }
       },
@@ -2247,10 +2251,11 @@
                   "type": "string"
                 },
                 {
-                  "type": "object"
+                  "type": "string"
                 }
               ]
-            }
+            },
+            "description": "Each receipt's address and its CBOR-encoded `TransactionReceipt`."
           }
         }
       },
@@ -2270,10 +2275,11 @@
                   "type": "string"
                 },
                 {
-                  "type": "object"
+                  "type": "string"
                 }
               ]
-            }
+            },
+            "description": "Each UTXO's id and its CBOR-encoded `Utxo`."
           }
         }
       },
@@ -2393,8 +2399,9 @@
         ],
         "properties": {
           "result": {
-            "type": "object",
-            "description": "The result of the dry-run execution, including any emitted events and state changes, but without a final\ndecision or commitment to the ledger"
+            "type": "string",
+            "format": "byte",
+            "description": "The CBOR-encoded `ExecuteResult` of the dry run, including any emitted events and state changes, but without\na final decision or commitment to the ledger."
           },
           "transaction_id": {
             "type": "string",

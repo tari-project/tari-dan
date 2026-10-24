@@ -23,6 +23,7 @@ import { Accordion, AccordionDetails, AccordionSummary } from "../../../Componen
 import FetchStatusCheck from "../../../Components/FetchStatusCheck";
 import { DataTableCell } from "../../../Components/StyledComponents";
 import { CURRENCY } from "../../../utils/constants";
+import { encodedByteLength, useDecoder } from "../../../utils/encoded";
 import { formatCurrency } from "../../../utils/helpers";
 import EventsContent from "../../Transaction/components/EventsContent";
 import FeeReceipt from "../../Transaction/components/FeeReceipt";
@@ -31,6 +32,7 @@ import SubstateChanges from "./SubstateChanges";
 function TransactionReceiptDetails({ address }: { address: string }) {
   const [expandedPanels, setExpandedPanels] = useState<string[]>([]);
   const { data, isLoading, error, isError } = useGetTransactionReceipt(address);
+  const { decodeTransactionReceipt } = useDecoder();
 
   if (!address) {
     return <Alert severity="error">No receipt address provided</Alert>;
@@ -43,7 +45,7 @@ function TransactionReceiptDetails({ address }: { address: string }) {
   const expandAll = () => setExpandedPanels(["p1", "p3", "p4", "p5"]);
   const collapseAll = () => setExpandedPanels([]);
 
-  const receipt = data?.receipt;
+  const receipt = data && decodeTransactionReceipt(data.receipt);
 
   return (
     <FetchStatusCheck
@@ -174,6 +176,8 @@ function TransactionReceiptDetails({ address }: { address: string }) {
                 </Accordion>
               )}
             </>
+          ) : data ? (
+            <Alert severity="info">The receipt is not decoded: CBOR, {encodedByteLength(data.receipt)} bytes</Alert>
           ) : (
             <Alert severity="info">No receipt found</Alert>
           )}

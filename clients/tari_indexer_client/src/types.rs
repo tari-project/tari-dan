@@ -371,7 +371,7 @@ pub struct SubmitTransactionResponse {
     ts(
         export,
         export_to = "tari-indexer-client/",
-        rename = "IndexerSubmitTransactionResponse"
+        rename = "IndexerSubmitTransactionDryRunResponse"
     )
 )]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
@@ -379,10 +379,11 @@ pub struct SubmitTransactionDryRunResponse {
     #[cfg_attr(feature = "utoipa", schema(value_type = String))]
     /// The ID of the transaction that was dry-run
     pub transaction_id: TransactionId,
-    #[cfg_attr(feature = "utoipa", schema(value_type = Object))]
-    /// The result of the dry-run execution, including any emitted events and state changes, but without a final
-    /// decision or commitment to the ledger
-    pub result: ExecuteResult,
+    /// The CBOR-encoded `ExecuteResult` of the dry run, including any emitted events and state changes, but without
+    /// a final decision or commitment to the ledger.
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = String, format = Byte))]
+    pub result: Encoded<ExecuteResult>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -535,8 +536,10 @@ pub struct QueryTransactionEventsRequest {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 pub struct QueryTransactionEventsResponse {
-    #[cfg_attr(feature = "utoipa", schema(value_type = Vec<(String, Object)>))]
-    pub events: Vec<(TransactionId, Event)>,
+    /// Each event's transaction and its CBOR-encoded `Event`.
+    #[cfg_attr(feature = "ts", ts(type = "Array<[string, string]>"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = Vec<(String, String)>))]
+    pub events: Vec<(TransactionId, Encoded<Event>)>,
     /// The `before_id` for the next page, or `None` once no older event can match. A wildcard
     /// topic query examines a bounded number of events per request, so a page can be short, or
     /// empty, and still carry a cursor.
@@ -900,9 +903,10 @@ pub struct GetUtxosRequest {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 pub struct GetUtxosResponse {
-    /// The unspent UTXOs matching a requested tag and nonce pair.
-    #[cfg_attr(feature = "utoipa", schema(value_type = Vec<(String, Object)>))]
-    pub utxos: Vec<(UtxoId, Utxo)>,
+    /// The unspent UTXOs matching a requested tag and nonce pair, each a CBOR-encoded `Utxo`.
+    #[cfg_attr(feature = "ts", ts(type = "Array<[string, string]>"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = Vec<(String, String)>))]
+    pub utxos: Vec<(UtxoId, Encoded<Utxo>)>,
     /// The requested tag and nonce pairs this indexer holds as spent or burnt. A requested pair in neither list is
     /// unknown to this indexer, which may not yet have indexed it.
     #[serde(default)]
@@ -925,8 +929,10 @@ pub struct ListUtxosRequest {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 pub struct ListUtxosResponse {
-    #[cfg_attr(feature = "utoipa", schema(value_type = Vec<(String, Object)>))]
-    pub utxos: Vec<(UtxoId, Utxo)>,
+    /// Each UTXO's id and its CBOR-encoded `Utxo`.
+    #[cfg_attr(feature = "ts", ts(type = "Array<[string, string]>"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = Vec<(String, String)>))]
+    pub utxos: Vec<(UtxoId, Encoded<Utxo>)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1177,24 +1183,30 @@ pub enum Ordering {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 pub struct ListTransactionReceiptsResponse {
-    #[cfg_attr(feature = "utoipa", schema(value_type = Vec<(String, Object)>))]
-    pub receipts: Vec<(TransactionReceiptAddress, TransactionReceipt)>,
+    /// Each receipt's address and its CBOR-encoded `TransactionReceipt`.
+    #[cfg_attr(feature = "ts", ts(type = "Array<[string, string]>"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = Vec<(String, String)>))]
+    pub receipts: Vec<(TransactionReceiptAddress, Encoded<TransactionReceipt>)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 pub struct GetTransactionReceiptResponse {
-    #[cfg_attr(feature = "utoipa", schema(value_type = Object))]
-    pub receipt: TransactionReceipt,
+    /// The CBOR-encoded `TransactionReceipt`.
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = String, format = Byte))]
+    pub receipt: Encoded<TransactionReceipt>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "tari-indexer-client/"))]
 #[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 pub struct GetResourceResponse {
-    #[cfg_attr(feature = "utoipa", schema(value_type = Object))]
-    pub resource: Resource,
+    /// The CBOR-encoded `Resource`.
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = String, format = Byte))]
+    pub resource: Encoded<Resource>,
     #[cfg_attr(feature = "utoipa", schema(value_type = u64))]
     pub version: SubstateVersion,
     #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>))]

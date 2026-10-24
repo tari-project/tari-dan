@@ -3,7 +3,8 @@ create table substates
     id               integer   not NULL primary key AUTOINCREMENT,
     address          text      not NULL,
     version          bigint    not NULL,
-    data             text      not NULL,
+    -- The CBOR-encoded `SubstateValue`.
+    data             blob      not NULL,
     template_address text      NULL,
     module_name      text      NULL,
     updated_at       timestamp not null default current_timestamp,
@@ -19,7 +20,8 @@ create table events
     template_address text      not NULL,
     tx_hash          text      not NULL,
     topic            text      not NULL,
-    payload          text      not NULL,
+    -- The CBOR-encoded `Event`, served as stored.
+    event            blob      not NULL,
     substate_id      text      NULL,
     -- The resource this event's substate_id names, set for the `std.resource.*` family only, so SSE
     -- consumers can filter a stream down to a single token's activity server-side.
@@ -42,7 +44,8 @@ create table transaction_receipts
 (
     id              integer   not NULL primary key AUTOINCREMENT,
     address         text      not NULL,
-    data            text      not NULL,
+    -- The CBOR-encoded `TransactionReceipt`, served as stored.
+    data            blob      not NULL,
     created_at      timestamp not null default current_timestamp,
     outcome         text      not null default 'Commit',
     total_fees_paid bigint    not null default 0,
@@ -114,12 +117,12 @@ create table utxos
     resource_address text      not NULL,
     shard            int       not NULL,
     state_version    bigint    not NULL,
-    output           blob      NULL,
+    -- The CBOR-encoded `Utxo` while unspent, served as stored. NULL once spent.
+    utxo             blob      NULL,
     utxo_tag         int       not NULL,
     epoch            bigint    not NULL,
     is_spent         boolean   not NULL,
     is_burnt         boolean   not NULL,
-    is_frozen        boolean   not NULL,
     created_at       timestamp not null default current_timestamp
 );
 

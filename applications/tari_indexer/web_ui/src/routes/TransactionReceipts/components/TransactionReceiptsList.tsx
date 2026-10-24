@@ -20,6 +20,7 @@ import { useListTransactionReceipts } from "../../../api/hooks/useTransactionRec
 import FetchStatusCheck from "../../../Components/FetchStatusCheck";
 import { DataTableCell } from "../../../Components/StyledComponents";
 import { CURRENCY } from "../../../utils/constants";
+import { encodedByteLength, useDecoder } from "../../../utils/encoded";
 import { formatCurrency } from "../../../utils/helpers";
 import TransactionFilter from "../../RecentTransactions/components/SearchFilter";
 import { shortenString } from "../../VN/Components/helpers";
@@ -27,7 +28,9 @@ import { shortenString } from "../../VN/Components/helpers";
 type ReceiptEntry = {
   id: string;
   address: TransactionReceiptAddress;
-  receipt: TransactionReceipt;
+  /** The receipt, or undefined while it is not decoded. */
+  receipt?: TransactionReceipt;
+  encoded: string;
   show?: boolean;
 };
 
@@ -39,7 +42,7 @@ function OutcomeChip({ outcome }: { outcome: string }) {
 }
 
 function ReceiptRow({ entry }: { entry: ReceiptEntry }) {
-  const { address, receipt } = entry;
+  const { address, receipt, encoded } = entry;
   const theme = useTheme();
   const isSm = useMediaQuery(theme.breakpoints.down("sm"));
   const shortLen = isSm ? 4 : 8;
@@ -54,14 +57,20 @@ function ReceiptRow({ entry }: { entry: ReceiptEntry }) {
           {shortenString(address, shortLen, shortLen)}
         </Link>
       </DataTableCell>
-      <DataTableCell>
-        <OutcomeChip outcome={receipt.outcome} />
-      </DataTableCell>
-      <DataTableCell>
-        {formatCurrency(receipt.fee_receipt.total_fees_paid, CURRENCY.DECIMALS, CURRENCY.SYMBOL)}
-      </DataTableCell>
-      <DataTableCell>{receipt.events.length}</DataTableCell>
-      <DataTableCell>{String(receipt.epoch)}</DataTableCell>
+      {receipt ? (
+        <>
+          <DataTableCell>
+            <OutcomeChip outcome={receipt.outcome} />
+          </DataTableCell>
+          <DataTableCell>
+            {formatCurrency(receipt.fee_receipt.total_fees_paid, CURRENCY.DECIMALS, CURRENCY.SYMBOL)}
+          </DataTableCell>
+          <DataTableCell>{receipt.events.length}</DataTableCell>
+          <DataTableCell>{String(receipt.epoch)}</DataTableCell>
+        </>
+      ) : (
+        <DataTableCell colSpan={4}>CBOR, {encodedByteLength(encoded)} bytes</DataTableCell>
+      )}
       <DataTableCell>
         <IconButton
           component={Link}
@@ -81,15 +90,17 @@ function TransactionReceiptsList() {
   const [filteredReceipts, setFilteredReceipts] = useState<ReceiptEntry[]>([]);
 
   const { data, isLoading, isError, error } = useListTransactionReceipts(100);
+  const { decodeTransactionReceipt } = useDecoder();
 
   const receipts = useMemo(
     () =>
-      (data?.receipts || []).map(([address, receipt]) => ({
+      (data?.receipts || []).map(([address, encoded]) => ({
         id: address,
         address,
-        receipt,
+        receipt: decodeTransactionReceipt(encoded),
+        encoded,
       })),
-    [data?.receipts],
+    [data?.receipts, decodeTransactionReceipt],
   );
 
   const visibleReceipts = filteredReceipts.filter((r) => r.show !== false);

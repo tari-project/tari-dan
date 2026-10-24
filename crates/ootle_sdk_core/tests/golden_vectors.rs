@@ -614,12 +614,13 @@ fn parse_reject_access_denied_fixture_seed() -> Fixture {
 }
 
 /// Wraps an `ExecuteResult` in the indexer **dry-run** response JSON
-/// (`SubmitTransactionDryRunResponse { transaction_id, result }`) — the `POST /transactions/dry-run`
-/// shape. The parser shape-dispatches on the top-level `result` key and fills `estimated_fee`.
+/// (`SubmitTransactionDryRunResponse { transaction_id, result }`, `result` its base64 CBOR encoding) — the
+/// `POST /transactions/dry-run` shape. The parser shape-dispatches on the top-level `result` key and fills
+/// `estimated_fee`.
 fn parse_dry_run_wire_json(result: tari_engine_types::commit_result::ExecuteResult) -> serde_json::Value {
     serde_json::json!({
         "transaction_id": result.finalize.transaction_hash,
-        "result": result,
+        "result": Encoded::encode(&result).unwrap(),
     })
 }
 

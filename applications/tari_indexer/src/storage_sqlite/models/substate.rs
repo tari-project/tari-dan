@@ -23,15 +23,12 @@
 
 use std::convert::TryFrom;
 
+use tari_engine_types::encoded::Encoded;
 use tari_ootle_common_types::SubstateVersion;
 use tari_ootle_storage::{StorageError, time::PrimitiveDateTime};
 
 use crate::{
-    storage_sqlite::{
-        models::substate::SubstateRecord as SubstateRow,
-        schema::substates,
-        serialization::deserialize_json,
-    },
+    storage_sqlite::{models::substate::SubstateRecord as SubstateRow, schema::substates},
     substate_manager::SubstateResponse,
 };
 
@@ -41,7 +38,7 @@ pub struct SubstateRecord {
     pub id: i64,
     pub address: String,
     pub version: i64,
-    pub data: String,
+    pub data: Vec<u8>,
     pub template_address: Option<String>,
     pub module_name: Option<String>,
     pub updated_at: PrimitiveDateTime,
@@ -59,7 +56,7 @@ impl TryFrom<SubstateRecord> for SubstateResponse {
                 details: format!("Invalid substate address {}: {}", row.address, e),
             })?,
             version: SubstateVersion::new(row.version as u64),
-            substate: deserialize_json(&row.data)?,
+            substate: Encoded::from_bytes(row.data),
         })
     }
 }
@@ -69,7 +66,7 @@ impl TryFrom<SubstateRecord> for SubstateResponse {
 pub struct NewSubstate {
     pub address: String,
     pub version: i64,
-    pub data: String,
+    pub data: Vec<u8>,
     pub template_address: Option<String>,
     pub module_name: Option<String>,
 }

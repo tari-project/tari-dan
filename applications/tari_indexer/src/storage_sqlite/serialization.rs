@@ -7,25 +7,8 @@ use serde::Serialize;
 use tari_engine_types::limits::MAX_CBOR_NESTING_DEPTH;
 use tari_ootle_storage::StorageError;
 
-// Blob columns are CBOR so values containing `tari_bor::Value` round-trip, which needs `deserialize_any`.
-pub fn serialize_cbor<T: Serialize + ?Sized>(t: &T) -> Result<Vec<u8>, StorageError> {
-    tari_bor::serde_codec::to_vec(t).map_err(|e| StorageError::EncodingError {
-        operation: "serialize_cbor",
-        item: type_name::<T>(),
-        details: e.to_string(),
-    })
-}
-
-pub fn deserialize_cbor<T: serde::de::DeserializeOwned, S: AsRef<[u8]>>(s: S) -> Result<T, StorageError> {
-    tari_bor::serde_codec::from_slice(s.as_ref()).map_err(|e| StorageError::DecodingError {
-        operation: "deserialize_cbor",
-        item: type_name::<T>(),
-        details: e.to_string(),
-    })
-}
-
-// Columns holding a committed value a client verifies against its hash keep the value's own CBOR encoding: the serde
-// codec rebuilds `RawCbor` items canonically, which changes the bytes the hash commits to.
+// Blob columns hold a value's own CBOR encoding, which the REST API serves as stored. The serde codec would rebuild
+// `RawCbor` items canonically, changing the bytes a value's hash commits to.
 pub fn encode_committed<T: tari_bor::Encode<()>>(t: &T) -> Result<Vec<u8>, StorageError> {
     tari_bor::encode(t).map_err(|e| StorageError::EncodingError {
         operation: "encode_committed",

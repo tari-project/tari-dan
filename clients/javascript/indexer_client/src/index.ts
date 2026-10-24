@@ -4,7 +4,6 @@
  */
 
 import type {
-  Event,
   GetEpochManagerStatsResponse,
   GetNetworkEconomicsResponse,
   GetNetworkInfoResponse,
@@ -59,7 +58,8 @@ export { rejectReasonToString, stringToSubstateId, substateIdToString };
 export interface TransactionEvent {
   id: number;
   transaction_id: TransactionId;
-  event: Event;
+  /** The CBOR-encoded `Event`, base64. Its topic is also the SSE event type. */
+  event: string;
 }
 
 export interface TransactionEventStreamOptions {

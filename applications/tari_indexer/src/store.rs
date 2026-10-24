@@ -12,10 +12,11 @@ use async_trait::async_trait;
 use serde::{Serialize, de::DeserializeOwned};
 use tari_engine_types::{
     Utxo,
+    encoded::Encoded,
     events::Event,
     fees::FeeReceipt,
     published_template::PublishedTemplateMetadata,
-    substate::{Substate, SubstateId},
+    substate::{EncodedSubstate, SubstateId},
     transaction_receipt::{FinalizeOutcome, TransactionReceipt},
 };
 use tari_indexer_client::types::{TransactionEntry, TransactionSource, UtxoStateUpdateSet};
@@ -96,7 +97,7 @@ pub trait IndexerStoreReadTransaction {
         version: Option<SubstateVersion>,
     ) -> Result<Option<SubstateRecord>, StorageError>;
 
-    fn get_substates(&mut self, ids: &[SubstateId]) -> Result<HashMap<SubstateId, Substate>, StorageError>;
+    fn get_substates(&mut self, ids: &[SubstateId]) -> Result<HashMap<SubstateId, EncodedSubstate>, StorageError>;
 
     /// Returns the events matching `query` with id below `before_id` (or from the newest when
     /// `None`), newest first, skipping the first `offset` matches.
@@ -145,12 +146,12 @@ pub trait IndexerStoreReadTransaction {
         last_id: Option<TransactionReceiptAddress>,
         limit: u64,
         ordering: Ordering,
-    ) -> Result<Vec<(TransactionReceiptAddress, TransactionReceipt)>, StorageError>;
+    ) -> Result<Vec<(TransactionReceiptAddress, Encoded<TransactionReceipt>)>, StorageError>;
 
     fn get_transaction_receipt(
         &mut self,
         address: &TransactionReceiptAddress,
-    ) -> Result<TransactionReceipt, StorageError>;
+    ) -> Result<Encoded<TransactionReceipt>, StorageError>;
 
     /// The sum of every validator fee pool balance: the leader fees validators have earned and not yet claimed.
     fn sum_validator_fee_pool_balances(&mut self) -> Result<Amount, StorageError>;
@@ -192,13 +193,13 @@ pub trait IndexerStoreReadTransaction {
         resource_address: &ResourceAddress,
         from_id: Option<UtxoId>,
         limit: u32,
-    ) -> Result<Vec<(UtxoId, Utxo)>, StorageError>;
+    ) -> Result<Vec<(UtxoId, Encoded<Utxo>)>, StorageError>;
 
     fn utxos_get_unspent_by_public_nonce_and_tag(
         &mut self,
         resource_address: &ResourceAddress,
         public_nonce_and_tag: &[(UtxoTag, RistrettoPublicKeyBytes)],
-    ) -> Result<Vec<(UtxoId, Utxo)>, StorageError>;
+    ) -> Result<Vec<(UtxoId, Encoded<Utxo>)>, StorageError>;
 
     /// The pairs of `public_nonce_and_tag` whose UTXO is spent or burnt.
     fn utxos_get_spent_public_nonce_and_tag(
@@ -446,11 +447,20 @@ impl EventQuery {
 
 #[derive(Debug, Clone, Default)]
 pub struct EventsPage {
-    pub events: Vec<(i64, TransactionId, Event)>,
+    pub events: Vec<StoredEvent>,
     /// The id to resume from (`before_id` or `after_id`, matching the query's direction), or
     /// `None` once no further rows can match. A page can be shorter than the limit, or empty,
     /// and still carry a cursor when a wildcard scan stopped at its limit.
     pub next_cursor: Option<i64>,
+}
+
+/// An indexed event as stored: its CBOR encoding, with the columns it is queried by.
+#[derive(Debug, Clone)]
+pub struct StoredEvent {
+    pub id: i64,
+    pub transaction_id: TransactionId,
+    pub topic: String,
+    pub event: Encoded<Event>,
 }
 
 /// What [`IndexerStoreWriteTransaction::batch_insert_transaction_receipts`] wrote.
@@ -478,6 +488,8 @@ pub struct InsertedEvent {
     pub id: i64,
     pub transaction_id: TransactionId,
     pub event: Arc<Event>,
+    /// `event` as stored.
+    pub encoded: Encoded<Event>,
 }
 
 pub struct ReadOnlyStore<T: IndexerStoreReader> {
@@ -519,7 +531,7 @@ impl<T: IndexerStoreReader> ReadOnlyStore<T> {
         last_id: Option<TransactionReceiptAddress>,
         limit: u64,
         ordering: Ordering,
-    ) -> Result<Vec<(TransactionReceiptAddress, TransactionReceipt)>, StorageError> {
+    ) -> Result<Vec<(TransactionReceiptAddress, Encoded<TransactionReceipt>)>, StorageError> {
         self.inner
             .with_read_tx(move |tx| tx.list_transaction_receipts(last_id, limit, ordering))
             .await
@@ -528,7 +540,7 @@ impl<T: IndexerStoreReader> ReadOnlyStore<T> {
     pub async fn get_transaction_receipt(
         &self,
         address: &TransactionReceiptAddress,
-    ) -> Result<TransactionReceipt, StorageError> {
+    ) -> Result<Encoded<TransactionReceipt>, StorageError> {
         let address = *address;
         self.inner
             .with_read_tx(move |tx| tx.get_transaction_receipt(&address))

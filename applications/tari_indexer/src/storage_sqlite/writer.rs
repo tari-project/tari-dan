@@ -11,6 +11,8 @@ use diesel::{OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection};
 use log::{debug, info, warn};
 use serde::Serialize;
 use tari_engine_types::{
+    Utxo,
+    encoded::Encoded,
     published_template::PublishedTemplateMetadata,
     substate::SubstateId,
     transaction_receipt::TransactionReceipt,
@@ -49,7 +51,7 @@ use crate::{
             encode_retention_epoch,
         },
         reader::SqliteStoreReadTransaction,
-        serialization::{encode_committed, serialize_cbor, serialize_hex, serialize_json},
+        serialization::{encode_committed, serialize_hex, serialize_json},
     },
     store::{
         IndexerStoreReadTransaction,
@@ -131,7 +133,10 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
                         commitment,
                         public_nonce: serialize_hex(unspent.utxo_output.output.public_nonce),
                         version: unspent.version.as_u64() as i64,
-                        output: Some(serialize_cbor(&unspent.utxo_output)?),
+                        utxo: Some(encode_committed(&Utxo {
+                            output: Some(unspent.utxo_output.clone()),
+                            is_frozen: unspent.is_frozen,
+                        })?),
                         shard: unspent.shard.as_u32() as i32,
                         resource_address,
                         state_version: unspent.state_version.as_u64() as i64,
@@ -139,7 +144,6 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
                         epoch: epoch.as_u64() as i64,
                         is_spent: false,
                         is_burnt: false,
-                        is_frozen: unspent.is_frozen,
                     };
                     // batch insert results in "cannot start a transaction within a transaction" error
                     let num_inserted = diesel::insert_into(utxos::table)
@@ -158,7 +162,7 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
                         epoch: Some(epoch.as_u64() as i64),
                         version: Some(spent.version.as_u64() as i64),
                         // Prune the UTXO data for spent outputs
-                        output: Some(None),
+                        utxo: Some(None),
                         // Update to deleted state version
                         state_version: Some(spent.state_version.as_u64() as i64),
                         is_spent: Some(true),
@@ -191,7 +195,7 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
             data: substate
                 .value
                 .value()
-                .map(serialize_json)
+                .map(encode_committed)
                 .transpose()?
                 .unwrap_or_default(),
             template_address,
@@ -256,7 +260,7 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
             let num_inserted = diesel::insert_into(transaction_receipts::table)
                 .values((
                     transaction_receipts::address.eq(&receipt_addr_hex),
-                    transaction_receipts::data.eq(serialize_json(&receipt)?),
+                    transaction_receipts::data.eq(encode_committed(&receipt)?),
                     transaction_receipts::outcome.eq(receipt.outcome.to_string()),
                     transaction_receipts::total_fees_paid.eq(receipt.fee_receipt.total_fees_paid() as i64),
                     transaction_receipts::epoch.eq(encode_retention_epoch(receipt.epoch)),
@@ -287,11 +291,12 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
                 .collect();
 
             for event in filtered_events {
+                let encoded = encode_committed(&event)?;
                 let new_event = NewEvent {
                     template_address: event.template_address().to_string(),
                     tx_hash: &receipt_addr_hex,
                     topic: event.topic(),
-                    payload: serialize_json(event.payload())?,
+                    event: encoded.clone(),
                     substate_id: event.substate_id().map(|s| s.to_string()),
                     resource_address: EventFilter::event_resource_address(&event).map(|r| r.to_string()),
                     epoch: encode_retention_epoch(receipt.epoch),
@@ -309,6 +314,7 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
                     id,
                     transaction_id,
                     event: Arc::new(event),
+                    encoded: Encoded::from_bytes(encoded),
                 });
             }
 

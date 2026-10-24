@@ -1090,6 +1090,7 @@ impl NetworkWideStateSync {
                     id: inserted.id,
                     transaction_id: inserted.transaction_id,
                     event: inserted.event,
+                    encoded: inserted.encoded,
                 });
             }
         }
@@ -1872,7 +1873,7 @@ mod tests {
                 .with_read_tx(|tx| tx.get_transaction_receipt(&receipt_address(1)))
                 .await
                 .unwrap();
-            assert!(stored.outcome.is_fee_intent_commit());
+            assert!(stored.decode().unwrap().outcome.is_fee_intent_commit());
         }
 
         #[tokio::test]

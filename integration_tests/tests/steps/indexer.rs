@@ -180,9 +180,12 @@ async fn indexer_scans_network_events(
             })
             .await
             .expect("Failed to query transaction events")
-            .events;
+            .events
+            .into_iter()
+            .map(|(_, e)| e.decode().expect("Failed to decode transaction event"))
+            .collect::<Vec<_>>();
 
-        let topics_for_component = events.iter().map(|(_, e)| e.topic()).collect::<HashSet<_>>();
+        let topics_for_component = events.iter().map(|e| e.topic()).collect::<HashSet<_>>();
 
         let is_all_topics_found = expected_topics
             .iter()

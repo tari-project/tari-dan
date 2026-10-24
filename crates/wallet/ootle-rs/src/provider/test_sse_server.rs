@@ -7,9 +7,15 @@ use tokio::{
     sync::mpsc,
 };
 
-/// A minimal stand-in for an indexer's SSE endpoints. Every connection, whatever its path, receives
-/// `initial_event` (if any) and is then held open. Each accepted connection is reported on the returned channel.
+/// A minimal stand-in for an indexer's SSE endpoints. Every connection, whatever its path, receives an
+/// `initial_event` (if any) with empty JSON data and is then held open. Each accepted connection is reported on the
+/// returned channel.
 pub(crate) async fn spawn_sse_server(initial_event: Option<&'static str>) -> (String, mpsc::UnboundedReceiver<()>) {
+    spawn_sse_server_sending(initial_event.map(|name| format!("event: {name}\ndata: {{}}\n\n"))).await
+}
+
+/// As [`spawn_sse_server`], sending `initial_sse` (raw SSE text, if any) on each connection.
+pub(crate) async fn spawn_sse_server_sending(initial_sse: Option<String>) -> (String, mpsc::UnboundedReceiver<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}/", listener.local_addr().unwrap());
     let (connected_tx, connected_rx) = mpsc::unbounded_channel();
@@ -30,11 +36,8 @@ pub(crate) async fn spawn_sse_server(initial_event: Option<&'static str>) -> (St
                 .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n")
                 .await
                 .unwrap();
-            if let Some(name) = initial_event {
-                socket
-                    .write_all(format!("event: {name}\ndata: {{}}\n\n").as_bytes())
-                    .await
-                    .unwrap();
+            if let Some(sse) = &initial_sse {
+                socket.write_all(sse.as_bytes()).await.unwrap();
             }
             let _ignore = connected_tx.send(());
             open.push(socket);

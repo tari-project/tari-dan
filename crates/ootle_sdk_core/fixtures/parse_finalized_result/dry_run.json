@@ -3,97 +3,13 @@
   "schema_version": 1,
   "provenance": {
     "core_version": "0.47.0",
-    "git_rev": "878a15236a6e908e3a9e0a8d2d74e1d0ef627e3b",
+    "git_rev": "cc4b9bac0c4231abfcdd63d52b44191dec1aa5f6",
     "generated_by": "ootle_sdk_core golden-vector generator"
   },
   "operation": "parse_finalized_result",
   "input": {
     "raw_result": {
-      "result": {
-        "execute_epoch": 11,
-        "execution_time": {
-          "nanos": 0,
-          "secs": 1
-        },
-        "finalize": {
-          "events": [
-            {
-              "payload": {
-                "amount": "1000000"
-              },
-              "substate_id": "component_4141414141414141414141414141414141414141414141414141414141414141",
-              "template_address": "0000000000000000000000000000000000000000000000000000000000000000",
-              "topic": "std.deposit"
-            }
-          ],
-          "fee_receipt": {
-            "cost_breakdown": {
-              "breakdown": {
-                "Initial": 1000,
-                "Storage": 9007199254740999
-              }
-            },
-            "exhaust_burn": 0,
-            "total_fee_overcharge": 0,
-            "total_fee_payment": 9007199254742992,
-            "total_fees_paid": 9007199254742492
-          },
-          "logs": [
-            {
-              "level": "Info",
-              "message": "transfer executed"
-            }
-          ],
-          "result": {
-            "Accept": {
-              "down_substates": [
-                [
-                  "vault_4242424242424242424242424242424242424242424242424242424242424242",
-                  1
-                ]
-              ],
-              "fee_withdrawals": [],
-              "up_substates": [
-                [
-                  "component_4141414141414141414141414141414141414141414141414141414141414141",
-                  {
-                    "substate": {
-                      "Component": {
-                        "body": {
-                          "state": [
-                            {
-                              "@cbor": "tag",
-                              "tag": 132,
-                              "value": {
-                                "@cbor": "bytes",
-                                "hex": "4343434343434343434343434343434343434343434343434343434343434343"
-                              }
-                            }
-                          ]
-                        },
-                        "header": {
-                          "access_rules": {
-                            "default": "DenyAll",
-                            "method_access": {}
-                          },
-                          "entity_id": "00",
-                          "owner_rule": "None",
-                          "template_address": "0000000000000000000000000000000000000000000000000000000000000000"
-                        }
-                      }
-                    },
-                    "version": 0
-                  }
-                ]
-              ]
-            }
-          },
-          "total_fees_required": 9007199254741999,
-          "transaction_hash": "5151515151515151515151515151515151515151515151515151515151515151"
-        },
-        "native_execution_points": 0,
-        "wasm_execution_points": 0
-      },
+      "result": "hYZYIFFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRgYSCAIHYgFggQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFYIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa3N0ZC5kZXBvc2l02IGhZmFtb3VudGcxMDAwMDAwgYJxdHJhbnNmZXIgZXhlY3V0ZWSCAoCCAIGDgYKCAIHYgFggQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUGCggCBgoRYIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAggCAgqCCAYBBAIGB2IRYIENDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDAIGCggKB2IRYIEJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCAYCFGwAgAAAAAAfQGwAgAAAAAAXcAIGiggCAGQPoggKAGwAgAAAAAAAHABsAIAAAAAAD76Jkc2VjcwFlbmFub3MACwAA",
       "transaction_id": "5151515151515151515151515151515151515151515151515151515151515151"
     }
   },

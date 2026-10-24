@@ -4,29 +4,58 @@
 //! Decoders for the engine values the indexer serves in their CBOR encoding, base64 in JSON.
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use tari_engine_types::{commit_result::ExecuteResult, encoded::Encoded, substate::SubstateValue};
+use serde::Serialize;
+use tari_engine_types::{
+    Utxo,
+    commit_result::ExecuteResult,
+    encoded::Encoded,
+    events::Event,
+    resource::Resource,
+    substate::SubstateValue,
+    transaction_receipt::TransactionReceipt,
+};
 
 use crate::error::OotleWasmError;
 
 /// The `SubstateValue` that `encoded` holds, as JSON.
 pub fn decode_substate_value_json(encoded: &str) -> Result<String, OotleWasmError> {
-    let value = Encoded::<SubstateValue>::from_bytes(base64_bytes(encoded)?)
-        .decode()
-        .map_err(|e| OotleWasmError::UndecodableValue {
-            what: "substate value",
-            details: e.to_string(),
-        })?;
-    serde_json::to_string(&value).map_err(OotleWasmError::JsonSerialize)
+    decode_json::<SubstateValue>(encoded, "substate value")
 }
 
 /// The `ExecuteResult` that `encoded` holds, as JSON.
 pub fn decode_execute_result_json(encoded: &str) -> Result<String, OotleWasmError> {
-    let value = Encoded::<ExecuteResult>::from_bytes(base64_bytes(encoded)?)
-        .decode()
-        .map_err(|e| OotleWasmError::UndecodableValue {
-            what: "execute result",
-            details: e.to_string(),
-        })?;
+    decode_json::<ExecuteResult>(encoded, "execute result")
+}
+
+/// The `TransactionReceipt` that `encoded` holds, as JSON.
+pub fn decode_transaction_receipt_json(encoded: &str) -> Result<String, OotleWasmError> {
+    decode_json::<TransactionReceipt>(encoded, "transaction receipt")
+}
+
+/// The `Event` that `encoded` holds, as JSON.
+pub fn decode_event_json(encoded: &str) -> Result<String, OotleWasmError> {
+    decode_json::<Event>(encoded, "event")
+}
+
+/// The `Resource` that `encoded` holds, as JSON.
+pub fn decode_resource_json(encoded: &str) -> Result<String, OotleWasmError> {
+    decode_json::<Resource>(encoded, "resource")
+}
+
+/// The `Utxo` that `encoded` holds, as JSON.
+pub fn decode_utxo_json(encoded: &str) -> Result<String, OotleWasmError> {
+    decode_json::<Utxo>(encoded, "UTXO")
+}
+
+fn decode_json<T>(encoded: &str, what: &'static str) -> Result<String, OotleWasmError>
+where T: for<'b> tari_bor::Decode<'b, ()> + Serialize {
+    let value =
+        Encoded::<T>::from_bytes(base64_bytes(encoded)?)
+            .decode()
+            .map_err(|e| OotleWasmError::UndecodableValue {
+                what,
+                details: e.to_string(),
+            })?;
     serde_json::to_string(&value).map_err(OotleWasmError::JsonSerialize)
 }
 
@@ -84,6 +113,23 @@ mod tests {
         };
 
         let json = decode_execute_result_json(&served(Encoded::encode(&value).unwrap())).unwrap();
+
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&json).unwrap(),
+            serde_json::to_value(&value).unwrap()
+        );
+    }
+
+    #[test]
+    fn a_served_event_decodes_to_its_serde_json() {
+        let value = Event::new(
+            None,
+            Default::default(),
+            "std.vault.deposit".to_string(),
+            [("amount", "100".to_string())].into_iter().collect(),
+        );
+
+        let json = decode_event_json(&served(Encoded::encode(&value).unwrap())).unwrap();
 
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&json).unwrap(),

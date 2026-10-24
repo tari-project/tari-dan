@@ -595,7 +595,15 @@ impl PendingTransaction {
             .await
             .optional()?
         {
-            return Ok(Some(receipt.receipt));
+            let receipt = receipt.receipt.decode().map_err(|e| {
+                PendingTransactionError::IndexerClientError(IndexerRestClientError::InvalidResponse {
+                    message: format!(
+                        "The indexer served a receipt of transaction {} that does not decode: {e}",
+                        self.tx_id
+                    ),
+                })
+            })?;
+            return Ok(Some(receipt));
         }
         Ok(None)
     }

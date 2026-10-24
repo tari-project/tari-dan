@@ -9,6 +9,7 @@ use axum::{
 };
 use log::*;
 use tari_engine_types::{
+    encoded::Encoded,
     limits::{MAX_NATIVE_POINTS_PER_TRANSACTION, MAX_WASM_POINTS_PER_TRANSACTION},
     substate::SubstateId,
 };
@@ -187,7 +188,8 @@ pub async fn submit_transaction_dry_run(
     Ok((
         Extension(cost),
         Json(SubmitTransactionDryRunResponse {
-            result: exec_result,
+            result: Encoded::encode(&exec_result)
+                .map_err(|e| ErrorResponse::internal_error(format!("Error encoding the dry-run result: {e}")))?,
             transaction_id,
         }),
     ))
@@ -410,7 +412,7 @@ pub async fn query_transaction_events(
     let events = page
         .events
         .into_iter()
-        .map(|(_, transaction_id, event)| (transaction_id, event))
+        .map(|stored| (stored.transaction_id, stored.event))
         .collect();
     let next_before_id = page.next_cursor.and_then(|id| u64::try_from(id).ok());
     Ok(Json(QueryTransactionEventsResponse { events, next_before_id }))

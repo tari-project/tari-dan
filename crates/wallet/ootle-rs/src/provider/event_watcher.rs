@@ -1,12 +1,12 @@
 //   Copyright 2026 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
 
 use futures::{Stream, StreamExt};
 use tari_indexer_client::{
     error::IndexerRestClientError,
-    event::TransactionEvent,
+    event::{StreamedTransactionEvent, TransactionEvent},
     rest_api_client::IndexerRestApiClient,
     sse::SseStreamError,
     types::StreamTransactionEventsRequest,
@@ -57,6 +57,8 @@ pub enum EventWatcherError {
     StreamError(#[from] SseStreamError),
     #[error("Failed to parse transaction event: {0}")]
     ParseError(#[from] serde_json::Error),
+    #[error("The indexer served a transaction event that does not decode: {0}")]
+    UndecodableEvent(tari_bor::BorError),
     /// The provider was switched to another indexer. Event ids are assigned by each indexer, so the last id
     /// received cannot resume on the new one; open a new stream and choose its starting point afresh.
     #[error(
@@ -111,14 +113,25 @@ impl TransactionEventStream {
                 };
                 match event {
                     Some(Ok(evt)) => {
-                        match evt.try_parse_event::<TransactionEvent>() {
-                            Ok(mut tx_event) => {
+                        match evt.try_parse_event::<StreamedTransactionEvent>() {
+                            Ok(streamed) => {
+                                let event = match streamed.event.decode() {
+                                    Ok(event) => event,
+                                    Err(err) => {
+                                        error!(%err, "Failed to decode transaction event");
+                                        yield Err(EventWatcherError::UndecodableEvent(err));
+                                        return;
+                                    },
+                                };
                                 // The event ID is transmitted via the SSE `id:` field,
                                 // not in the JSON payload.
-                                if let Some(Ok(id)) = evt.last_event_id.as_deref().map(str::parse::<i64>) {
-                                    tx_event.id = id;
-                                }
-                                yield Ok(tx_event);
+                                let id = evt.last_event_id.as_deref().and_then(|id| id.parse().ok()).unwrap_or_default();
+                                yield Ok(TransactionEvent {
+                                    id,
+                                    transaction_id: streamed.transaction_id,
+                                    event: Arc::new(event),
+                                    encoded: streamed.event,
+                                });
                             },
                             Err(err) => {
                                 error!(%err, "Failed to parse transaction event");
@@ -146,9 +159,43 @@ mod tests {
     use std::{sync::Arc, time::Duration};
 
     use futures::{StreamExt, pin_mut};
+    use tari_ootle_common_types::engine_types::{encoded::Encoded, events::Event};
+    use tari_ootle_transaction::TransactionId;
+    use tari_template_lib_types::Metadata;
 
     use super::*;
-    use crate::provider::test_sse_server::spawn_sse_server;
+    use crate::provider::test_sse_server::{spawn_sse_server, spawn_sse_server_sending};
+
+    #[tokio::test]
+    async fn a_streamed_event_is_yielded_decoded_with_its_sse_id() {
+        let event = Event::new(
+            None,
+            TemplateAddress::default(),
+            "std.vault.deposit".to_string(),
+            Metadata::from_iter([("amount", "100".to_string())]),
+        );
+        let data = serde_json::to_string(&StreamedTransactionEvent {
+            transaction_id: TransactionId::new([1; 32]),
+            event: Encoded::encode(&event).unwrap(),
+        })
+        .unwrap();
+        let (url, _) =
+            spawn_sse_server_sending(Some(format!("event: {}\nid: 7\ndata: {data}\n\n", event.topic()))).await;
+        let client = Arc::new(IndexerRestApiClient::connect(url).unwrap());
+
+        let stream =
+            TransactionEventStream::new(Arc::downgrade(&client), TransactionEventFilter::default()).into_stream();
+        pin_mut!(stream);
+        let streamed = tokio::time::timeout(Duration::from_secs(5), stream.next())
+            .await
+            .expect("no event was streamed")
+            .expect("the stream ended")
+            .unwrap();
+
+        assert_eq!(streamed.id, 7);
+        assert_eq!(streamed.transaction_id, TransactionId::new([1; 32]));
+        assert_eq!(*streamed.event, event);
+    }
 
     #[tokio::test]
     async fn switching_endpoint_ends_the_stream() {

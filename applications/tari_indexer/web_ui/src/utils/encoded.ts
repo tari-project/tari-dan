@@ -1,11 +1,13 @@
 //  Copyright 2026 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-import type { ExecuteResult, SubstateValue } from "@tari-project/ootle-ts-bindings";
+import type { Event, ExecuteResult, SubstateValue, TransactionReceipt } from "@tari-project/ootle-ts-bindings";
 import { useSyncExternalStore } from "react";
 import initOotleWasm, {
+  decodeEvent as decodeEventJson,
   decodeExecuteResult as decodeExecuteResultJson,
   decodeSubstateValue as decodeSubstateValueJson,
+  decodeTransactionReceipt as decodeTransactionReceiptJson,
 } from "../../ootle-wasm-bor/ootle_wasm_bor.js";
 
 // The indexer serves engine values in their CBOR encoding, base64 in JSON, and ootle-wasm-bor decodes them. A value that
@@ -15,16 +17,22 @@ import initOotleWasm, {
 export interface Decoder {
   decodeSubstateValue(encoded: string): SubstateValue | undefined;
   decodeExecuteResult(encoded: string): ExecuteResult | undefined;
+  decodeTransactionReceipt(encoded: string): TransactionReceipt | undefined;
+  decodeEvent(encoded: string): Event | undefined;
 }
 
 const LOADED: Decoder = {
   decodeSubstateValue: (encoded) => decode(encoded, decodeSubstateValueJson),
   decodeExecuteResult: (encoded) => decode(encoded, decodeExecuteResultJson),
+  decodeTransactionReceipt: (encoded) => decode(encoded, decodeTransactionReceiptJson),
+  decodeEvent: (encoded) => decode(encoded, decodeEventJson),
 };
 
 const UNLOADED: Decoder = {
   decodeSubstateValue: () => undefined,
   decodeExecuteResult: () => undefined,
+  decodeTransactionReceipt: () => undefined,
+  decodeEvent: () => undefined,
 };
 
 let loaded = false;

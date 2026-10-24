@@ -256,7 +256,12 @@ impl<Wallet> IndexerProvider<Wallet> {
                     tag_and_nonce_pairs: chunk.to_vec(),
                 })
                 .await?;
-            utxos.extend(resp.utxos);
+            for (id, utxo) in resp.utxos {
+                let utxo = utxo.decode().map_err(|e| IndexerRestClientError::InvalidResponse {
+                    message: format!("The indexer served UTXO {id} that does not decode: {e}"),
+                })?;
+                utxos.push((id, utxo));
+            }
         }
         Ok(utxos)
     }
@@ -285,7 +290,16 @@ impl<Wallet: NetworkWallet + Send + Sync> IndexerProvider<Wallet> {
                 transaction: TransactionEnvelope::encode(tx)?,
             })
             .await?;
-        Ok(resp.result)
+        let result = resp
+            .result
+            .decode()
+            .map_err(|e| IndexerRestClientError::InvalidResponse {
+                message: format!(
+                    "The indexer served a dry-run result of transaction {} that does not decode: {e}",
+                    resp.transaction_id
+                ),
+            })?;
+        Ok(result)
     }
 
     pub async fn send_transaction(&mut self, transaction: Transaction) -> ProviderResult<PendingTransaction> {

@@ -11,10 +11,12 @@ use axum::{
 };
 use futures::Stream;
 use log::*;
-use tari_engine_types::substate::SubstateId;
-use tari_indexer_client::{event::TransactionEvent, types::StreamTransactionEventsRequest};
+use tari_engine_types::{encoded::Encoded, events::Event};
+use tari_indexer_client::{
+    event::{StreamedTransactionEvent, TransactionEvent},
+    types::StreamTransactionEventsRequest,
+};
 use tari_ootle_transaction::TransactionId;
-use tari_template_lib_types::{Metadata, TemplateAddress};
 use tokio_stream::StreamExt;
 
 use crate::{
@@ -22,7 +24,7 @@ use crate::{
     network_state_sync::EventFilter,
     rest_api::{context::HandlerContext, handlers::HandlerResult, streaming::disable_proxy_buffering},
     storage_sqlite::SqliteIndexerStore,
-    store::{EventQuery, ReadOnlyStore},
+    store::{EventQuery, ReadOnlyStore, StoredEvent},
 };
 
 const LOG_TARGET: &str = "tari::indexer::rest_api::handlers::transaction_events";
@@ -229,9 +231,9 @@ async fn replay_stored(
     for _ in 0..max_pages {
         let page = store.get_events_after_id(query.clone(), highest_id, page_size).await?;
 
-        for (id, transaction_id, event) in &page.events {
-            highest_id = *id;
-            let sse_event = encode_replay_event(*id, transaction_id, event);
+        for stored in &page.events {
+            highest_id = stored.id;
+            let sse_event = encode_replay_event(stored);
             if tx.send(sse_event).await.is_err() {
                 return Ok(None);
             }
@@ -256,85 +258,84 @@ fn replay_query(filter: &EventFilter, wildcard_scan_limit: u32) -> EventQuery {
 }
 
 /// Encode a live TransactionEvent (which already carries its DB id) as an SSE event.
-/// The SSE event type is set to the event topic (e.g. "std.vault.withdraw").
 fn encode_transaction_event(event: &TransactionEvent) -> Result<sse::Event, axum::Error> {
-    sse::Event::default()
-        .event(event.event.topic())
-        .id(event.id.to_string())
-        .json_data(TransactionEventMinimal::from(event))
+    to_sse_event(
+        event.id,
+        event.event.topic(),
+        event.transaction_id,
+        event.encoded.clone(),
+    )
 }
 
 /// Encode a replayed event from the DB as an SSE event.
-fn encode_replay_event(
+fn encode_replay_event(stored: &StoredEvent) -> Result<sse::Event, axum::Error> {
+    to_sse_event(stored.id, &stored.topic, stored.transaction_id, stored.event.clone())
+}
+
+/// The SSE event type is the event topic (e.g. "std.vault.withdraw").
+fn to_sse_event(
     id: i64,
-    transaction_id: &TransactionId,
-    event: &tari_engine_types::events::Event,
+    topic: &str,
+    transaction_id: TransactionId,
+    event: Encoded<Event>,
 ) -> Result<sse::Event, axum::Error> {
-    let tx_event = TransactionEventMinimal {
-        transaction_id,
-        event: event.into(),
-    };
     sse::Event::default()
-        .event(event.topic())
+        .event(topic)
         .id(id.to_string())
-        .json_data(&tx_event)
-}
-
-#[derive(serde::Serialize)]
-struct TransactionEventMinimal<'a> {
-    pub transaction_id: &'a TransactionId,
-    pub event: EventMinimal<'a>,
-}
-
-impl<'a> From<&'a TransactionEvent> for TransactionEventMinimal<'a> {
-    fn from(tx_event: &'a TransactionEvent) -> Self {
-        let event = &*tx_event.event;
-        Self {
-            transaction_id: &tx_event.transaction_id,
-            event: event.into(),
-        }
-    }
-}
-
-#[derive(serde::Serialize)]
-struct EventMinimal<'a> {
-    substate_id: Option<&'a SubstateId>,
-    template_address: &'a TemplateAddress,
-    payload: &'a Metadata,
-    // no topic since it is already emitted in the SSE event
-}
-
-impl<'a> From<&'a tari_engine_types::events::Event> for EventMinimal<'a> {
-    fn from(event: &'a tari_engine_types::events::Event) -> Self {
-        Self {
-            substate_id: event.substate_id(),
-            template_address: event.template_address(),
-            payload: event.payload(),
-        }
-    }
+        .json_data(StreamedTransactionEvent { transaction_id, event })
 }
 
 #[cfg(test)]
 mod tests {
     use std::{sync::Arc, time::Duration};
 
-    use tari_engine_types::events::Event;
+    use tari_template_lib_types::{Metadata, TemplateAddress};
     use tokio::sync::{broadcast, mpsc};
 
     use super::*;
     use crate::storage_sqlite::insert_test_events;
 
     fn live_event(id: i64, topic: &str) -> TransactionEvent {
+        let event = Event::new(None, TemplateAddress::default(), topic.to_string(), Metadata::new());
         TransactionEvent {
             id,
             transaction_id: TransactionId::default(),
-            event: Arc::new(Event::new(
-                None,
-                TemplateAddress::default(),
-                topic.to_string(),
-                Metadata::new(),
-            )),
+            encoded: Encoded::encode(&event).unwrap(),
+            event: Arc::new(event),
         }
+    }
+
+    /// The JSON `data` of `event` as a client receives it.
+    async fn sent_data(event: sse::Event) -> StreamedTransactionEvent {
+        let stream = futures::stream::iter([Ok::<_, std::convert::Infallible>(event)]);
+        let body = Sse::new(stream).into_response().into_body();
+        let text = String::from_utf8(axum::body::to_bytes(body, usize::MAX).await.unwrap().to_vec()).unwrap();
+        let data = text
+            .lines()
+            .find_map(|line| line.strip_prefix("data: "))
+            .unwrap_or_else(|| panic!("no data line in {text:?}"));
+        serde_json::from_str(data).unwrap()
+    }
+
+    #[tokio::test]
+    async fn live_and_replayed_events_are_sent_as_the_same_streamed_event() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("indexer.db");
+        let store = ReadOnlyStore::new(SqliteIndexerStore::try_create(db_path.clone()).unwrap());
+        insert_test_events(&db_path, &["std.vault.deposit"]);
+        let live = live_event(1, "std.vault.deposit");
+
+        let page = store
+            .get_events_after_id(replay_query(&EventFilter::default(), 10), 0, 10)
+            .await
+            .unwrap();
+        let replayed = sent_data(encode_replay_event(&page.events[0]).unwrap()).await;
+        let sent_live = sent_data(encode_transaction_event(&live).unwrap()).await;
+
+        assert_eq!(sent_live.transaction_id, live.transaction_id);
+        assert_eq!(sent_live.event.decode().unwrap(), *live.event);
+        assert_eq!(replayed.transaction_id, live.transaction_id);
+        assert_eq!(replayed.event, sent_live.event);
     }
 
     async fn next_event_id(rx: &mut mpsc::Receiver<Result<sse::Event, axum::Error>>) -> Option<String> {

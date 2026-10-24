@@ -28,8 +28,8 @@
 //! ## Dry-run results
 //!
 //! A **dry run** (the indexer `POST /transactions/dry-run`, response
-//! `SubmitTransactionDryRunResponse { transaction_id, result: ExecuteResult }`) executes the
-//! transaction without committing and meters the fee. Its wire shape is a different object — an
+//! `SubmitTransactionDryRunResponse { transaction_id, result }`, `result` the base64 CBOR `ExecuteResult`) executes
+//! the transaction without committing and meters the fee. Its wire shape is a different object — an
 //! unwrapped `ExecuteResult` under a `result` key rather than the `Finalized`/`Rejected`/`Pending`
 //! enum envelope — so [`parse_finalized_result`] shape-dispatches: a top-level `result` key routes to
 //! [`parse_dry_run_result`], which fills the additive `estimated_fee` (the engine's
@@ -188,9 +188,9 @@ pub fn parse_finalized_result(raw: &str) -> Result<FinalizedResult, OotleSdkErro
 /// surfaces), and we never need the wrapper's `transaction_id`.
 #[derive(Debug, Deserialize)]
 struct WireDryRunResult {
-    /// The full engine execution result (same `ExecuteResult` shape a committed transaction yields),
+    /// The CBOR-encoded engine execution result (same `ExecuteResult` a committed transaction yields),
     /// metered for fees but never written to the ledger.
-    result: Box<ExecuteResult>,
+    result: Encoded<ExecuteResult>,
 }
 
 /// Parses a raw **indexer dry-run** result JSON (`SubmitTransactionDryRunResponse`) into the typed
@@ -211,8 +211,12 @@ pub fn parse_dry_run_result(raw: &str) -> Result<FinalizedResult, OotleSdkError>
 fn parse_dry_run_result_value(value: serde_json::Value) -> Result<FinalizedResult, OotleSdkError> {
     let wire: WireDryRunResult =
         serde_json::from_value(value).map_err(|e| OotleSdkError::Parse(format!("indexer dry-run result JSON: {e}")))?;
-    let mut finalized = finalized_from_execute_result(&wire.result);
-    finalized.estimated_fee = Some(wire.result.finalize.required_fees());
+    let result = wire
+        .result
+        .decode()
+        .map_err(|e| OotleSdkError::Parse(format!("indexer dry-run result CBOR: {e}")))?;
+    let mut finalized = finalized_from_execute_result(&result);
+    finalized.estimated_fee = Some(result.finalize.required_fees());
     Ok(finalized)
 }
 
@@ -424,11 +428,11 @@ mod tests {
 
     /// Serializes an `ExecuteResult` into the indexer **dry-run** response JSON
     /// (`SubmitTransactionDryRunResponse { transaction_id, result }`), exactly as `POST
-    /// /transactions/dry-run` hands it back.
+    /// /transactions/dry-run` hands it back (the `result` is its base64 CBOR encoding).
     fn dry_run_wire_json(result: ExecuteResult) -> String {
         serde_json::json!({
             "transaction_id": result.finalize.transaction_hash,
-            "result": result,
+            "result": Encoded::encode(&result).unwrap(),
         })
         .to_string()
     }

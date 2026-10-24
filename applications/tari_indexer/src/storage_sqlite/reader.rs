@@ -19,8 +19,8 @@ use diesel::{
 use serde::de::DeserializeOwned;
 use tari_engine_types::{
     Utxo,
-    events::Event,
-    substate::{Substate, SubstateId},
+    encoded::Encoded,
+    substate::{EncodedSubstate, SubstateId, SubstateValue},
     transaction_receipt::TransactionReceipt,
 };
 use tari_indexer_client::types::{TransactionEntry, TransactionResultSummary, TransactionSource, UtxoStateUpdateSet};
@@ -31,7 +31,6 @@ use tari_ootle_common_types::{
     ShardGroup,
     StateVersion,
     SubstateVersion,
-    displayable::Displayable,
     shard::Shard,
     substate_type::SubstateType,
 };
@@ -68,7 +67,7 @@ use crate::{
         },
         serialization::{decode_committed, deserialize_hex_try_from, deserialize_json, serialize_hex},
     },
-    store::{EventQuery, EventsPage, IndexerStoreReadTransaction, TransactionRejectionStatus},
+    store::{EventQuery, EventsPage, IndexerStoreReadTransaction, StoredEvent, TransactionRejectionStatus},
     substate_manager::SubstateResponse,
 };
 
@@ -311,34 +310,16 @@ fn tag_and_nonce_in(
     dsl::sql::<sql_types::Bool>(&tag_and_nonce_query)
 }
 
-fn decode_event_row(row: EventRecord) -> Result<(i64, TransactionId, Event), StorageError> {
-    let substate_id = row
-        .substate_id
-        .as_deref()
-        .map(SubstateId::from_str)
-        .transpose()
-        .map_err(|e| StorageError::DataInconsistency {
-            details: format!(
-                "Invalid substate_id {} in events table: {}",
-                row.substate_id.display(),
-                e
-            ),
-        })?;
-    let template_address = Hash32::from_hex(&row.template_address).map_err(|e| StorageError::DataInconsistency {
-        details: format!(
-            "Invalid template_address {} in events table: {}",
-            row.template_address, e
-        ),
-    })?;
+fn decode_event_row(row: EventRecord) -> Result<StoredEvent, StorageError> {
     let tx_hash = Hash32::from_hex(&row.tx_hash).map_err(|e| StorageError::DataInconsistency {
         details: format!("Invalid tx_hash {} in events table: {}", row.tx_hash, e),
     })?;
-    let payload = deserialize_json(&row.payload)?;
-    Ok((
-        row.id,
-        TransactionId::from(tx_hash),
-        Event::new(substate_id, template_address, row.topic, payload),
-    ))
+    Ok(StoredEvent {
+        id: row.id,
+        transaction_id: TransactionId::from(tx_hash),
+        topic: row.topic,
+        event: Encoded::from_bytes(row.event),
+    })
 }
 
 impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
@@ -367,7 +348,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
             })
     }
 
-    fn get_substates(&mut self, ids: &[SubstateId]) -> Result<HashMap<SubstateId, Substate>, StorageError> {
+    fn get_substates(&mut self, ids: &[SubstateId]) -> Result<HashMap<SubstateId, EncodedSubstate>, StorageError> {
         use crate::storage_sqlite::schema::substates;
 
         let str_ids = ids.iter().map(|id| id.to_string());
@@ -391,7 +372,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
                 res.map(|substate_resp| {
                     (
                         substate_resp.id,
-                        Substate::new(substate_resp.version, substate_resp.substate),
+                        EncodedSubstate::new(substate_resp.version, substate_resp.substate),
                     )
                 })
             })
@@ -571,7 +552,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         last_id: Option<TransactionReceiptAddress>,
         limit: u64,
         ordering: Ordering,
-    ) -> Result<Vec<(TransactionReceiptAddress, TransactionReceipt)>, StorageError> {
+    ) -> Result<Vec<(TransactionReceiptAddress, Encoded<TransactionReceipt>)>, StorageError> {
         const OPERATION: &str = "list_transaction_receipts";
         use crate::storage_sqlite::schema::transaction_receipts;
 
@@ -607,7 +588,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
 
         let rows = query
             .limit(limit as i64)
-            .load_iter::<(String, String), _>(self.connection())
+            .load_iter::<(String, Vec<u8>), _>(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("{OPERATION}: {}", e),
             })?;
@@ -622,7 +603,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
                         TransactionReceiptAddress::from_str(&addr).map_err(|e| StorageError::DataInconsistency {
                             details: format!("Invalid transaction receipt address {}: {}", addr, e),
                         })?,
-                        deserialize_json(data)?,
+                        Encoded::from_bytes(data),
                     ))
                 })
             })
@@ -632,7 +613,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
     fn get_transaction_receipt(
         &mut self,
         address: &TransactionReceiptAddress,
-    ) -> Result<TransactionReceipt, StorageError> {
+    ) -> Result<Encoded<TransactionReceipt>, StorageError> {
         const OPERATION: &str = "get_transaction_receipt";
         use crate::storage_sqlite::schema::transaction_receipts;
 
@@ -641,7 +622,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         let receipt_entry = transaction_receipts::table
             .select(transaction_receipts::data)
             .filter(transaction_receipts::address.eq(receipt_addr_hex))
-            .first::<String>(self.connection())
+            .first::<Vec<u8>>(self.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {
                 reason: format!("{OPERATION}: {}", e),
@@ -651,28 +632,37 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
                 key: address.to_string(),
             })?;
 
-        deserialize_json(&receipt_entry)
+        Ok(Encoded::from_bytes(receipt_entry))
     }
 
     fn sum_validator_fee_pool_balances(&mut self) -> Result<Amount, StorageError> {
         const OPERATION: &str = "sum_validator_fee_pool_balances";
         use crate::storage_sqlite::schema::substates;
 
-        let total = substates::table
-            .select(dsl::sql::<sql_types::Nullable<sql_types::BigInt>>(
-                "SUM(json_extract(data, '$.ValidatorFeePool.amount'))",
-            ))
+        let rows = substates::table
+            .select((substates::address, substates::data))
             .filter(substates::address.like(format!("{}_%", SubstateType::ValidatorFeePool.as_prefix_str())))
-            .get_result::<Option<i64>>(self.connection())
+            .load_iter::<(String, Vec<u8>), _>(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("{OPERATION}: {}", e),
-            })?
-            .unwrap_or(0);
-        u64::try_from(total)
-            .map(Amount::from)
-            .map_err(|_| StorageError::DataInconsistency {
-                details: format!("{OPERATION}: negative fee pool balance {total}"),
-            })
+            })?;
+        let mut total = 0u64;
+        for row in rows {
+            let (address, data) = row.map_err(|e| StorageError::QueryError {
+                reason: format!("{OPERATION}: {}", e),
+            })?;
+            let pool = decode_committed::<SubstateValue>(&data)?
+                .into_validator_fee_pool()
+                .ok_or_else(|| StorageError::DataInconsistency {
+                    details: format!("{OPERATION}: {address} does not hold a validator fee pool"),
+                })?;
+            total = total
+                .checked_add(pool.amount)
+                .ok_or_else(|| StorageError::DataInconsistency {
+                    details: format!("{OPERATION}: fee pool balances overflow"),
+                })?;
+        }
+        Ok(Amount::from(total))
     }
 
     // -------------------------------- KeyValues -------------------------------- //
@@ -887,7 +877,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         resource_address: &ResourceAddress,
         from_id: Option<UtxoId>,
         limit: u32,
-    ) -> Result<Vec<(UtxoId, Utxo)>, StorageError> {
+    ) -> Result<Vec<(UtxoId, Encoded<Utxo>)>, StorageError> {
         const OPERATION: &str = "utxos_list";
 
         let rows = utxos_list_query(resource_address, from_id, limit)
@@ -912,7 +902,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         &mut self,
         resource_address: &ResourceAddress,
         tag_and_nonce_pairs: &[(UtxoTag, RistrettoPublicKeyBytes)],
-    ) -> Result<Vec<(UtxoId, Utxo)>, StorageError> {
+    ) -> Result<Vec<(UtxoId, Encoded<Utxo>)>, StorageError> {
         const OPERATION: &str = "utxos_get_unspent_by_public_nonce_and_tag";
 
         let rows = unspent_utxos_by_tag_and_nonce_query(resource_address, tag_and_nonce_pairs)

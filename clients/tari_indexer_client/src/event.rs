@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use tari_engine_types::transaction_receipt::FinalizeOutcome;
+use tari_engine_types::{encoded::Encoded, events::Event, transaction_receipt::FinalizeOutcome};
 use tari_ootle_common_types::Epoch;
 use tari_ootle_transaction::TransactionId;
 
@@ -51,13 +51,21 @@ pub struct TransactionFinalizedEvent {
 }
 
 /// A template-emitted event with its originating transaction ID.
-/// Streamed via the /transactions/events/stream SSE endpoint.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TransactionEvent {
     /// The database auto-increment ID for this event, used as the SSE event ID for catch-up/replay.
-    /// Excluded from the JSON payload — it is transmitted via the SSE `id:` field instead.
-    #[serde(skip)]
     pub id: i64,
     pub transaction_id: TransactionId,
-    pub event: Arc<tari_engine_types::events::Event>,
+    pub event: Arc<Event>,
+    /// The CBOR encoding of `event`, as the indexer stores and serves it.
+    pub encoded: Encoded<Event>,
+}
+
+/// The JSON data of a /transactions/events/stream SSE event. The event's id is the SSE `id:` field and its topic the
+/// SSE `event:` field.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct StreamedTransactionEvent {
+    pub transaction_id: TransactionId,
+    /// The CBOR-encoded `Event`.
+    pub event: Encoded<Event>,
 }

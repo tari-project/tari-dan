@@ -33,6 +33,7 @@ export * from "./types/tari-indexer-client/IndexerGetTransactionResponse";
 export * from "./types/tari-indexer-client/IndexerGetTransactionResultRequest";
 export * from "./types/tari-indexer-client/IndexerGetTransactionResultResponse";
 export * from "./types/tari-indexer-client/IndexerReadyResponse";
+export * from "./types/tari-indexer-client/IndexerSubmitTransactionDryRunResponse";
 export * from "./types/tari-indexer-client/IndexerSubmitTransactionRequest";
 export * from "./types/tari-indexer-client/IndexerSubmitTransactionResponse";
 export * from "./types/tari-indexer-client/IndexerTransactionFinalizedResult";
