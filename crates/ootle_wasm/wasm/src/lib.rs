@@ -111,6 +111,45 @@ pub fn add_transaction_signer(
         .map_err(|e| JsError::new(&e.to_string()))
 }
 
+/// Seal a transaction (unsigned or unsealed JSON) with a signature from an external signer (HSM, MPC).
+///
+/// `signature` is the raw 64-byte `R ‖ s` Ristretto255 Schnorr signature (scheme in the NPM README) over
+/// the hash from `hashUnsealedTransaction`, made by the key for `seal_signer_public_key`. The seal and any
+/// authorization signatures are verified.
+/// Returns the sealed `Transaction` as a JSON string.
+#[wasm_bindgen(js_name = "attachSealSignature")]
+pub fn attach_seal_signature(
+    tx_json: &str,
+    seal_signer_public_key: &[u8],
+    signature: &[u8],
+) -> Result<String, JsError> {
+    ootle_wasm_core::transaction::attach_seal_signature_json(tx_json, seal_signer_public_key, signature)
+        .map_err(|e| JsError::new(&e.to_string()))
+}
+
+/// Add an authorization signature from an external signer (HSM, MPC) to a transaction (unsigned or
+/// unsealed JSON).
+///
+/// `signature` is the raw 64-byte `R ‖ s` Ristretto255 Schnorr signature (scheme in the NPM README) over
+/// the hash from `hashUnsignedTransaction` for `seal_signer_public_key`, made by the key for
+/// `signer_public_key`. It is verified before it is appended.
+/// Returns the `UnsealedTransactionV1` (with the new signature appended) as a JSON string.
+#[wasm_bindgen(js_name = "attachTransactionSignature")]
+pub fn attach_transaction_signature(
+    tx_json: &str,
+    signer_public_key: &[u8],
+    signature: &[u8],
+    seal_signer_public_key: &[u8],
+) -> Result<String, JsError> {
+    ootle_wasm_core::transaction::attach_transaction_signature_json(
+        tx_json,
+        signer_public_key,
+        signature,
+        seal_signer_public_key,
+    )
+    .map_err(|e| JsError::new(&e.to_string()))
+}
+
 /// BOR-encode a Transaction (JSON string) → base64 string (TransactionEnvelope format).
 #[wasm_bindgen(js_name = "borEncodeTransaction")]
 pub fn bor_encode_transaction(transaction_json: &str) -> Result<String, JsError> {
@@ -145,14 +184,25 @@ pub fn generate_keypair() -> KeypairResult {
     }
 }
 
-/// Hash an UnsignedTransactionV1 (JSON string) for signing.
+/// Hash a transaction (unsigned or unsealed JSON) for an authorization signature.
 /// Returns the 64-byte signing message that must be Schnorr-signed.
+///
+/// The message excludes attached signatures, so it is the same before and after `attachTransactionSignature`.
 ///
 /// `seal_signer_public_key` is the raw bytes of the seal signer's public key (account owner).
 #[wasm_bindgen(js_name = "hashUnsignedTransaction")]
 pub fn hash_unsigned_transaction(unsigned_tx_json: &str, seal_signer_public_key: &[u8]) -> Result<Vec<u8>, JsError> {
     ootle_wasm_core::hash::hash_unsigned_transaction_json(unsigned_tx_json, seal_signer_public_key)
         .map_err(|e| JsError::new(&e.to_string()))
+}
+
+/// Hash a transaction (unsigned or unsealed JSON) for sealing.
+/// Returns the 64-byte seal message that the seal signer must sign.
+///
+/// The seal message covers every authorization signature, so attach all of them before hashing.
+#[wasm_bindgen(js_name = "hashUnsealedTransaction")]
+pub fn hash_unsealed_transaction(tx_json: &str) -> Result<Vec<u8>, JsError> {
+    ootle_wasm_core::hash::hash_unsealed_transaction_json(tx_json).map_err(|e| JsError::new(&e.to_string()))
 }
 
 /// Generate a new random pair of Ootle secret keys (owner + view).

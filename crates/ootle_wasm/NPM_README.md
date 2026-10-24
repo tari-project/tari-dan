@@ -37,9 +37,9 @@ const publicKey = publicKeyFromSecretKey(secretKey);
 
 ### `hashUnsignedTransaction(unsignedTxJson, sealSignerPublicKey)`
 
-Hash an `UnsignedTransactionV1` for signing. Returns a 64-byte `Uint8Array` that should be passed to `schnorrSign`.
+Hash a transaction for an authorization signature. Returns a 64-byte `Uint8Array` that should be passed to `schnorrSign`. The hash excludes attached signatures, so it is the same before and after `attachTransactionSignature`.
 
-- `unsignedTxJson` — JSON-serialised `UnsignedTransactionV1`
+- `unsignedTxJson` — JSON-serialised `UnsignedTransactionV1` or `UnsealedTransactionV1`
 - `sealSignerPublicKey` — raw public key bytes of the account owner (seal signer)
 
 ```typescript
@@ -61,6 +61,48 @@ import { schnorrSign } from "@tari-project/ootle-wasm";
 const { public_nonce, signature } = schnorrSign(secretKey, hash);
 // public_nonce: Uint8Array (32 bytes)
 // signature:    Uint8Array (32 bytes)
+```
+
+## External signers (HSM, MPC)
+
+These functions sign a transaction without passing a secret key to the binding. The external signer signs a 64-byte hash and returns a raw 64-byte signature (`R ‖ s`); the binding verifies it and attaches it.
+
+The signature must be Ristretto255 Schnorr as produced by `tari_crypto`'s `RistrettoSchnorr`: `R = k·G`, `s = k + e·x`, where `e` is the 64-byte Blake2b digest of the chain `"com.tari.schnorr_signature.v1.challenge" ‖ R ‖ P ‖ hash` (each item prefixed with its length as a little-endian u64), reduced mod ℓ. `R` is a compressed Ristretto point and `s` a canonical little-endian scalar. Ed25519 or sr25519 signatures have the same length but do not verify.
+
+### `hashUnsealedTransaction(txJson)`
+
+Hash a transaction for sealing. Returns the 64-byte seal message for the seal signer (the account owner). Accepts unsigned or unsealed transaction JSON. The seal message covers every authorization signature, so attach them all before hashing.
+
+### `attachSealSignature(txJson, sealSignerPublicKey, signature)`
+
+Seal a transaction with the seal signer's signature over the `hashUnsealedTransaction` hash. Returns the sealed `Transaction` JSON. Throws if the seal signature, or any authorization signature already attached, does not verify.
+
+### `attachTransactionSignature(txJson, signerPublicKey, signature, sealSignerPublicKey)`
+
+Append an authorization signature from an additional authorizer key. The signature is over the `hashUnsignedTransaction` hash for `sealSignerPublicKey`. Returns the unsealed transaction JSON. Throws if the signature does not verify.
+
+```typescript
+import {
+  hashUnsignedTransaction,
+  hashUnsealedTransaction,
+  attachTransactionSignature,
+  attachSealSignature,
+  borEncodeTransaction,
+} from "@tari-project/ootle-wasm";
+
+let txJson = JSON.stringify(unsignedTransaction);
+
+// Optional: authorizations from other keys (repeat per authorizer)
+const authHash = hashUnsignedTransaction(txJson, sealSignerPublicKey);
+const authSig = await externalSigner.sign(authorizerKeyId, authHash);
+txJson = attachTransactionSignature(txJson, authorizerPublicKey, authSig, sealSignerPublicKey);
+
+// Seal last
+const sealHash = hashUnsealedTransaction(txJson);
+const sealSig = await externalSigner.sign(sealSignerKeyId, sealHash);
+const transactionJson = attachSealSignature(txJson, sealSignerPublicKey, sealSig);
+
+const envelope = borEncodeTransaction(transactionJson);
 ```
 
 ### `borEncodeTransaction(transactionJson)`
