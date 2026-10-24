@@ -49,6 +49,7 @@ use crate::{
         WalletLock,
         WalletLockId,
         WalletTransaction,
+        WebauthnRegistrationPasskeyModel,
     },
     storage::{TagAndPublicNoncePair, WalletStorageError},
 };
@@ -287,6 +288,8 @@ pub trait WalletStoreReader {
     fn webauthn_has_any_registration(&mut self) -> Result<bool, WalletStorageError>;
     /// Every passkey this wallet holds, whatever username it was enrolled under.
     fn webauthn_reg_fetch_all_passkeys(&mut self) -> Result<Vec<Passkey>, WalletStorageError>;
+    /// Every passkey row this wallet holds, ordered by id ascending, including label and timestamps.
+    fn webauthn_reg_list_passkeys(&mut self) -> Result<Vec<WebauthnRegistrationPasskeyModel>, WalletStorageError>;
 
     // Authored templates
     fn authored_templates_exists_by_address(&mut self, address: &TemplateAddress) -> Result<bool, WalletStorageError>;

@@ -355,8 +355,10 @@ diesel::table! {
     webauthn_registration_passkeys (id) {
         id -> Integer,
         registration_id -> Integer,
+        label -> Text,
         passkey -> Binary,
         created_at -> Timestamp,
+        last_used_at -> Nullable<Timestamp>,
         updated_at -> Timestamp,
     }
 }

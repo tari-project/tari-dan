@@ -143,6 +143,12 @@ import type {
   WebauthnAlreadyRegisteredResponse,
   WebauthnFinishRegisterRequest,
   WebauthnFinishRegisterResponse,
+  WebauthnListPasskeysRequest,
+  WebauthnListPasskeysResponse,
+  WebauthnRemovePasskeyRequest,
+  WebauthnRemovePasskeyResponse,
+  WebauthnRenamePasskeyRequest,
+  WebauthnRenamePasskeyResponse,
   WebauthnStartAuthResponse,
   WebauthnStartRegisterRequest,
   WebauthnStartRegisterResponse,
@@ -204,6 +210,18 @@ export const webauthnFinishRegistration = (
 
 export const webauthnStartAuth = (): Promise<WebauthnStartAuthResponse> =>
   client().then((c) => c.webauthnAuthStart({}));
+
+export const webauthnListPasskeys = (
+  request: WebauthnListPasskeysRequest = {},
+): Promise<WebauthnListPasskeysResponse> => client().then((c) => c.webauthnListPasskeys(request));
+
+export const webauthnRenamePasskey = (
+  request: WebauthnRenamePasskeyRequest,
+): Promise<WebauthnRenamePasskeyResponse> => client().then((c) => c.webauthnRenamePasskey(request));
+
+export const webauthnRemovePasskey = (
+  request: WebauthnRemovePasskeyRequest,
+): Promise<WebauthnRemovePasskeyResponse> => client().then((c) => c.webauthnRemovePasskey(request));
 
 export const authRevoke = (request: AuthRevokeTokenRequest): Promise<AuthRevokeTokenResponse> =>
   client().then((c) => c.authRevoke(request));

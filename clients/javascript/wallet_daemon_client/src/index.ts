@@ -177,6 +177,12 @@ import type {
   WebauthnAlreadyRegisteredResponse,
   WebauthnFinishRegisterRequest,
   WebauthnFinishRegisterResponse,
+  WebauthnListPasskeysRequest,
+  WebauthnListPasskeysResponse,
+  WebauthnRemovePasskeyRequest,
+  WebauthnRemovePasskeyResponse,
+  WebauthnRenamePasskeyRequest,
+  WebauthnRenamePasskeyResponse,
   WebauthnStartAuthRequest,
   WebauthnStartAuthResponse,
   WebauthnStartRegisterRequest,
@@ -662,6 +668,18 @@ export class WalletDaemonClient<T extends RpcTransport = FetchRpcTransport> {
 
   public webauthnAuthStart(params: WebauthnStartAuthRequest): Promise<WebauthnStartAuthResponse> {
     return this.sendRequest("webauthn.auth_start", params);
+  }
+
+  public webauthnListPasskeys(params: WebauthnListPasskeysRequest = {}): Promise<WebauthnListPasskeysResponse> {
+    return this.sendRequest("webauthn.list_passkeys", params);
+  }
+
+  public webauthnRenamePasskey(params: WebauthnRenamePasskeyRequest): Promise<WebauthnRenamePasskeyResponse> {
+    return this.sendRequest("webauthn.rename_passkey", params);
+  }
+
+  public webauthnRemovePasskey(params: WebauthnRemovePasskeyRequest): Promise<WebauthnRemovePasskeyResponse> {
+    return this.sendRequest("webauthn.remove_passkey", params);
   }
 
   public stealthUtxosList(params: StealthUtxosListRequest): Promise<StealthUtxosListResponse> {

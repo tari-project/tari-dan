@@ -30,8 +30,10 @@ impl From<WebauthnRegistration> for WebauthnRegistrationModel {
 pub struct WebauthnRegistrationPasskey {
     pub id: i32,
     pub registration_id: i32,
+    pub label: String,
     pub passkey: Vec<u8>,
     pub created_at: PrimitiveDateTime,
+    pub last_used_at: Option<PrimitiveDateTime>,
     pub updated_at: PrimitiveDateTime,
 }
 
@@ -40,6 +42,13 @@ impl TryFrom<&WebauthnRegistrationPasskey> for WebauthnRegistrationPasskeyModel 
 
     fn try_from(value: &WebauthnRegistrationPasskey) -> Result<Self, Self::Error> {
         let passkey: Passkey = serde_json::from_slice(&value.passkey)?;
-        Ok(WebauthnRegistrationPasskeyModel { passkey })
+        Ok(WebauthnRegistrationPasskeyModel {
+            id: value.id as u32,
+            label: value.label.clone(),
+            passkey,
+            created_at: value.created_at,
+            last_used_at: value.last_used_at,
+            updated_at: value.updated_at,
+        })
     }
 }

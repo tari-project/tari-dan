@@ -2630,17 +2630,34 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         Ok(())
     }
 
-    fn webauthn_reg_insert(&mut self, username: String, passkey: Passkey) -> Result<(), WalletStorageError> {
+    fn webauthn_reg_insert(
+        &mut self,
+        username: String,
+        label: String,
+        passkey: Passkey,
+    ) -> Result<u32, WalletStorageError> {
         use crate::schema::{webauthn_registration_passkeys, webauthn_registrations};
-        diesel::insert_into(webauthn_registrations::table)
-            .values(webauthn_registrations::username.eq(username))
-            .execute(self.connection())
+
+        let existing_registration_id = webauthn_registrations::table
+            .select(webauthn_registrations::id)
+            .filter(webauthn_registrations::username.eq(&username))
+            .first::<i32>(self.connection())
+            .optional()
             .map_err(|e| WalletStorageError::general("webauthn_reg_insert", e))?;
 
-        let registration_id: i32 =
-            diesel::select(diesel::dsl::sql::<diesel::sql_types::Integer>("last_insert_rowid()"))
-                .get_result(self.connection())
-                .map_err(|e| WalletStorageError::general("webauthn_reg_insert", e))?;
+        let registration_id = match existing_registration_id {
+            Some(id) => id,
+            None => {
+                diesel::insert_into(webauthn_registrations::table)
+                    .values(webauthn_registrations::username.eq(username))
+                    .execute(self.connection())
+                    .map_err(|e| WalletStorageError::general("webauthn_reg_insert", e))?;
+
+                diesel::select(diesel::dsl::sql::<diesel::sql_types::Integer>("last_insert_rowid()"))
+                    .get_result(self.connection())
+                    .map_err(|e| WalletStorageError::general("webauthn_reg_insert", e))?
+            },
+        };
 
         let passkey_json = serde_json::to_string(&passkey).map_err(|e| WalletStorageError::DecodingError {
             operation: "webauthn_reg_insert",
@@ -2651,12 +2668,17 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         diesel::insert_into(webauthn_registration_passkeys::table)
             .values((
                 webauthn_registration_passkeys::registration_id.eq(registration_id),
+                webauthn_registration_passkeys::label.eq(label),
                 webauthn_registration_passkeys::passkey.eq(passkey_json.as_bytes()),
             ))
             .execute(self.connection())
             .map_err(|e| WalletStorageError::general("webauthn_reg_passkeys_insert", e))?;
 
-        Ok(())
+        let passkey_id: i32 = diesel::select(diesel::dsl::sql::<diesel::sql_types::Integer>("last_insert_rowid()"))
+            .get_result(self.connection())
+            .map_err(|e| WalletStorageError::general("webauthn_reg_passkeys_insert", e))?;
+
+        Ok(passkey_id as u32)
     }
 
     fn webauthn_reg_update_passkey(&mut self, passkey: &Passkey) -> Result<(), WalletStorageError> {
@@ -2691,10 +2713,55 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             .filter(webauthn_registration_passkeys::id.eq(row_id))
             .set((
                 webauthn_registration_passkeys::passkey.eq(passkey_json.as_bytes()),
+                webauthn_registration_passkeys::last_used_at.eq(diesel::dsl::now),
                 webauthn_registration_passkeys::updated_at.eq(diesel::dsl::now),
             ))
             .execute(self.connection())
             .map_err(|e| WalletStorageError::general("webauthn_reg_update_passkey", e))?;
+
+        Ok(())
+    }
+
+    fn webauthn_reg_rename_passkey(&mut self, id: u32, label: &str) -> Result<(), WalletStorageError> {
+        const OPERATION: &str = "webauthn_reg_rename_passkey";
+        use crate::schema::webauthn_registration_passkeys;
+
+        let num_rows = diesel::update(webauthn_registration_passkeys::table)
+            .filter(webauthn_registration_passkeys::id.eq(id as i32))
+            .set((
+                webauthn_registration_passkeys::label.eq(label),
+                webauthn_registration_passkeys::updated_at.eq(diesel::dsl::now),
+            ))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general(OPERATION, e))?;
+
+        if num_rows == 0 {
+            return Err(WalletStorageError::NotFound {
+                operation: OPERATION,
+                entity: "passkey".to_string(),
+                key: id.to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
+    fn webauthn_reg_delete_passkey(&mut self, id: u32) -> Result<(), WalletStorageError> {
+        const OPERATION: &str = "webauthn_reg_delete_passkey";
+        use crate::schema::webauthn_registration_passkeys;
+
+        let num_rows = diesel::delete(webauthn_registration_passkeys::table)
+            .filter(webauthn_registration_passkeys::id.eq(id as i32))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general(OPERATION, e))?;
+
+        if num_rows == 0 {
+            return Err(WalletStorageError::NotFound {
+                operation: OPERATION,
+                entity: "passkey".to_string(),
+                key: id.to_string(),
+            });
+        }
 
         Ok(())
     }

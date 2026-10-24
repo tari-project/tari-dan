@@ -235,8 +235,10 @@ CREATE TABLE webauthn_registration_passkeys
 (
     id              INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
     registration_id INTEGER  NOT NULL REFERENCES webauthn_registrations (id),
+    label           TEXT     NOT NULL DEFAULT '',
     passkey         BLOB     NOT NULL,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_used_at    DATETIME NULL,
     updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

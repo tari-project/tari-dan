@@ -20,12 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import { useAuthMethod } from "@api/hooks/useAuth";
 import PageHeading from "@components/PageHeading";
 import { StyledPaper } from "@components/StyledComponents";
 import Grid from "@mui/material/Grid";
 import AdvancedFeatures from "@routes/Settings/Components/AdvancedFeatures";
 import DecryptUtxoBalance from "@routes/Settings/Components/DecryptUtxoBalance";
 import GeneralSettings from "@routes/Settings/Components/GeneralSettings";
+import Passkeys from "@routes/Settings/Components/Passkeys";
 import SettingsTabs from "@routes/Settings/Components/SettingsTabs";
 import ViewVaultBalance from "@routes/Settings/Components/ViewVaultBalance";
 import AccessTokens from "@routes/Wallet/Components/AccessTokens";
@@ -39,7 +41,10 @@ export interface ISettingsMenu {
 }
 
 function SettingsPage() {
-  const menuItems = [
+  const { data: authMethod } = useAuthMethod();
+  const isWebAuthn = authMethod?.method === "webauthn";
+
+  const menuItems: ISettingsMenu[] = [
     {
       label: "General",
       title: "General Settings",
@@ -60,6 +65,15 @@ function SettingsPage() {
       title: "Manage Access Tokens",
       content: <AccessTokens />,
     },
+    ...(isWebAuthn
+      ? [
+          {
+            label: "Passkeys",
+            title: "Manage Passkeys",
+            content: <Passkeys />,
+          },
+        ]
+      : []),
     {
       label: "View Vault Balance",
       title: "View Vault Balance",
