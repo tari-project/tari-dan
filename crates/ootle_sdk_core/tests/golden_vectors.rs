@@ -1905,6 +1905,10 @@ const GENERIC_BUILD_VECTORS: &[VectorCase] = &[
     ("generic_build/create_account.json", generic_create_account_seed),
     ("generic_build/call_function.json", generic_call_function_seed),
     ("generic_build/publish_template.json", generic_publish_template_seed),
+    (
+        "generic_build/publish_template_with_metadata.json",
+        generic_publish_template_with_metadata_seed,
+    ),
     ("generic_build/workspace_pipe.json", generic_workspace_pipe_seed),
     (
         "generic_build/self_funding_faucet.json",
@@ -2068,6 +2072,28 @@ fn generic_publish_template_seed() -> Fixture {
         dry_run: false,
     };
     generic_build_fixture("generic_build/publish_template", intent)
+}
+
+/// A publish carrying a SHA-256 multihash metadata reference (code `0x12`, length `0x20`, 32-byte digest).
+fn generic_publish_template_with_metadata_seed() -> Fixture {
+    let intent = GenericTransactionIntent {
+        fee: BoundaryAmount::new(2000),
+        fee_payment: generic_fee_from_account(),
+        fee_instructions: vec![],
+        instructions: vec![InstructionSpec::PublishTemplate {
+            blob_index: 0,
+            metadata_hash: Some(format!("1220{}", "ab".repeat(32))),
+        }],
+        blobs: vec![BlobSpec {
+            bytes: vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00],
+        }],
+        inputs: generic_explicit_inputs(),
+        extra_inputs: vec![],
+        min_epoch: None,
+        max_epoch: 1,
+        dry_run: false,
+    };
+    generic_build_fixture("generic_build/publish_template_with_metadata", intent)
 }
 
 fn generic_workspace_pipe_seed() -> Fixture {

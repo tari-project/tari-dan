@@ -4,9 +4,8 @@
 use std::collections::HashSet;
 
 use tari_ootle_common_types::{Epoch, InputDeclaration};
-use tari_ootle_template_metadata::MetadataHash;
 use tari_ootle_transaction::{Blob, TransactionBuilder, UnsignedTransaction, args};
-use tari_template_lib_types::{Amount, ResourceAddress, constants::TARI_TOKEN};
+use tari_template_lib_types::{Amount, ResourceAddress, TemplateMetadataHash, constants::TARI_TOKEN};
 
 use crate::{
     Address,
@@ -134,7 +133,11 @@ impl<'a, P: Provider> AccountInvokeBuilder<'a, P> {
     }
 
     /// Publish a WASM template with an off-chain metadata hash.
-    pub fn publish_template_with_metadata<T: Into<Blob>>(mut self, template: T, metadata_hash: MetadataHash) -> Self {
+    pub fn publish_template_with_metadata<T: Into<Blob>, H: Into<TemplateMetadataHash>>(
+        mut self,
+        template: T,
+        metadata_hash: H,
+    ) -> Self {
         self.builder = self.builder.publish_template_with_metadata(template, metadata_hash);
         self
     }

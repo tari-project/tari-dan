@@ -561,4 +561,24 @@ mod tests {
         let decoded: Instruction = tari_bor::decode(&encoded).unwrap();
         assert_eq!(instruction, decoded);
     }
+
+    /// Pins the borsh bytes that a publish instruction contributes to the signing preimage: the variant's declaration
+    /// index (9, distinct from its CBOR tag 10), the blob index, the `Some` tag, then the metadata hash as a
+    /// little-endian `u32` length and its bytes. Hardware and host-SDK signers reproduce this byte for byte.
+    #[test]
+    fn publish_template_borsh_preimage() {
+        let instruction = Instruction::PublishTemplate {
+            binary: 7,
+            metadata_hash: TemplateMetadataHash::from_bytes(vec![0xaa, 0xbb, 0xcc]),
+        };
+        assert_eq!(borsh::to_vec(&instruction).unwrap(), [
+            9, 7, 1, 3, 0, 0, 0, 0xaa, 0xbb, 0xcc
+        ]);
+
+        let instruction = Instruction::PublishTemplate {
+            binary: 7,
+            metadata_hash: None,
+        };
+        assert_eq!(borsh::to_vec(&instruction).unwrap(), [9, 7, 0]);
+    }
 }

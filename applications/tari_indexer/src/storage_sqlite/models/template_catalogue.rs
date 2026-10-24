@@ -68,9 +68,15 @@ impl TryFrom<TemplateCatalogueRow> for TemplateCatalogueEntry {
             at_epoch: row.at_epoch as u64,
             metadata_hash: row
                 .metadata_hash
-                .map(|h| h.parse::<TemplateMetadataHash>())
-                .transpose()
-                .map_err(|_| anyhow::anyhow!("Invalid metadata_hash hex"))?,
+                .map(|h| {
+                    h.parse::<TemplateMetadataHash>().map_err(|_| {
+                        anyhow::anyhow!(
+                            "Invalid metadata_hash {h:?}: expected hex of 1 to {} bytes",
+                            TemplateMetadataHash::MAX_LEN
+                        )
+                    })
+                })
+                .transpose()?,
         })
     }
 }
