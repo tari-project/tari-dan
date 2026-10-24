@@ -703,7 +703,7 @@ OotleResult ootle_build_stealth_outputs_statement_with_seed(uint8_t network,
 void ootle_stealth_partial_transaction_free(OotleStealthPartialTransaction *handle);
 
 /**
- * Decodes any fetched substate JSON into the kind-tagged
+ * Decodes any fetched substate value into the kind-tagged
  * [`DecodedSubstate`](ootle_sdk_core::DecodedSubstate). **Stateless — returns no handle.**
  *
  * `substate_value_json` is the indexer's substate value (a JSON base64 CBOR string), passed verbatim. On success
@@ -724,8 +724,8 @@ OotleResult ootle_decode_substate(const char *substate_value_json);
 /**
  * Computes the **revealed** balance per resource for an account. **Stateless — returns no handle.**
  *
- * `account_substate_json` is the account `Component` substate JSON; `vault_substates_json` is a JSON
- * array of [`FetchedSubstate`](ootle_sdk_core::FetchedSubstate) records (`{substate_id, version,
+ * `account_substate_json` is the account `Component` substate value as the indexer serves it; `vault_substates_json`
+ * is a JSON array of [`FetchedSubstate`](ootle_sdk_core::FetchedSubstate) records (`{substate_id, version,
  * substate_value}`) — the vaults the host already fetched (the ids
  * [`ootle_account_balance_wants`] named). The core rediscovers the account's vault ids from its CBOR
  * state and matches them by id: a referenced vault not supplied is a `"RESOLUTION"` error, never a
@@ -751,8 +751,8 @@ OotleResult ootle_account_balances(const char *account_substate_json,
  * Names the `vault_<hex>` ids a host should fetch to satisfy [`ootle_account_balances`] for an
  * account. **Stateless — returns no handle.**
  *
- * `account_substate_json` is the account `Component` substate JSON. On success `data_json` is
- * `{ "fetch_ids": [ "vault_<hex>", … ] }` — the same component-vault discovery
+ * `account_substate_json` is the account `Component` substate value as the indexer serves it. On success `data_json`
+ * is `{ "fetch_ids": [ "vault_<hex>", … ] }` — the same component-vault discovery
  * [`ootle_account_balances`] does, surfaced as opaque ids. The host fetches them and feeds them back
  * as `vault_substates_json`.
  *

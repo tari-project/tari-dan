@@ -206,7 +206,7 @@ pub fn scan_stealth_output(
 ///
 /// - `substate_id` — the UTXO's canonical address (`utxo_<resource>_<commitment>`), carrying the commitment + resource
 ///   address the value body omits.
-/// - `substate_value` — the [`SubstateValue`] the indexer returned, verbatim.
+/// - `substate_value` — the substate value the indexer returned (its base64 CBOR string), verbatim.
 ///
 /// Returns `Ok(None)` for a "not mine" output exactly like [`scan_stealth_output`] (a decrypt-miss is
 /// normal, never an error). A malformed substate id ⇒ `Parse`; a non-UTXO / frozen / burnt substate

@@ -5,7 +5,8 @@
 //! landed. Three pure, RNG-free, bytes-in → typed-out entry points (the host does the fetch; the
 //! core never touches the network):
 //!
-//! - [`decode_substate`] — any fetched [`SubstateValue`] JSON → a typed, kind-tagged [`DecodedSubstate`].
+//! - [`decode_substate`] — any fetched substate value (the indexer's base64 CBOR string) → a typed, kind-tagged
+//!   [`DecodedSubstate`].
 //! - [`account_balances`] — an account component substate + its already-fetched vault substates → the **revealed**
 //!   balance per resource ([`ResourceBalance`]). Vault ids are discovered from the CBOR `ComponentBody.state` (vault
 //!   refs are not a direct field), then matched against the supplied vaults.
@@ -174,7 +175,7 @@ fn component_vault_id_strings(
         .collect())
 }
 
-/// Decodes any fetched substate JSON into a typed, kind-tagged [`DecodedSubstate`].
+/// Decodes any fetched substate value into a typed, kind-tagged [`DecodedSubstate`].
 ///
 /// `substate_value` is the substate value the indexer returned (its base64 CBOR string), passed verbatim — the same
 /// neutral carrier [`FetchedSubstate`](crate::FetchedSubstate) uses. The decode is a pure parse +
@@ -264,8 +265,8 @@ fn substate_variant_name(value: &SubstateValue) -> &'static str {
 /// `fetch_ids` so the host can fetch them and feed them back. The host does the fetch; the core only
 /// names the ids.
 ///
-/// `account_substate` must be a `Component` substate JSON; anything else (or a malformed value)
-/// surfaces as `Validation` / `Parse`.
+/// `account_substate` must be a `Component` substate value as the indexer serves it; anything else (or a malformed
+/// value) surfaces as `Validation` / `Parse`.
 pub fn account_balance_wants(account_substate: &serde_json::Value) -> Result<Vec<String>, OotleSdkError> {
     let value = parse_substate_value(account_substate, "account_balance_wants")?;
     let component = value
@@ -276,8 +277,8 @@ pub fn account_balance_wants(account_substate: &serde_json::Value) -> Result<Vec
 
 /// Computes the revealed balance per resource for an account, summed across its vaults.
 ///
-/// `account_substate` is the account `Component` substate JSON; `vault_substates` are the vault
-/// substates the host already fetched, each carrying its **substate id** (the neutral
+/// `account_substate` is the account `Component` substate value as the indexer serves it; `vault_substates` are the
+/// vault substates the host already fetched, each carrying its **substate id** (the neutral
 /// [`FetchedSubstate`] carrier — a [`Vault`](tari_engine_types::vault::Vault) value does not embed its
 /// own id, so the id must travel alongside it). The account's vault ids are rediscovered from its CBOR
 /// state and matched by id against `vault_substates`: each referenced vault must be present (a missing

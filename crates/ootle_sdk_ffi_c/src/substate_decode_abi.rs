@@ -7,7 +7,7 @@
 //! Three stateless, handle-free fns mirroring the rest of the facade (same [`OotleResult`] envelope,
 //! same [`guarded`]/[`flatten`] panic guard, same JSON-string marshalling, same stable error codes):
 //!
-//! - [`ootle_decode_substate`] — any fetched substate JSON → the kind-tagged
+//! - [`ootle_decode_substate`] — any fetched substate value (the indexer's base64 CBOR string) → the kind-tagged
 //!   [`DecodedSubstate`](ootle_sdk_core::DecodedSubstate).
 //! - [`ootle_account_balances`] — an account component + its fetched vault substates → the revealed balance per
 //!   resource (never a confidential total; see the core docs).
@@ -22,7 +22,7 @@ use ootle_sdk_core::{FetchedSubstate, account_balance_wants, account_balances, d
 
 use crate::c_abi::{OotleResult, flatten, guarded, output_json, parse_json, required_str};
 
-/// Decodes any fetched substate JSON into the kind-tagged
+/// Decodes any fetched substate value into the kind-tagged
 /// [`DecodedSubstate`](ootle_sdk_core::DecodedSubstate). **Stateless — returns no handle.**
 ///
 /// `substate_value_json` is the indexer's substate value (a JSON base64 CBOR string), passed verbatim. On success
@@ -54,8 +54,8 @@ pub unsafe extern "C" fn ootle_decode_substate(substate_value_json: *const c_cha
 
 /// Computes the **revealed** balance per resource for an account. **Stateless — returns no handle.**
 ///
-/// `account_substate_json` is the account `Component` substate JSON; `vault_substates_json` is a JSON
-/// array of [`FetchedSubstate`](ootle_sdk_core::FetchedSubstate) records (`{substate_id, version,
+/// `account_substate_json` is the account `Component` substate value as the indexer serves it; `vault_substates_json`
+/// is a JSON array of [`FetchedSubstate`](ootle_sdk_core::FetchedSubstate) records (`{substate_id, version,
 /// substate_value}`) — the vaults the host already fetched (the ids
 /// [`ootle_account_balance_wants`] named). The core rediscovers the account's vault ids from its CBOR
 /// state and matches them by id: a referenced vault not supplied is a `"RESOLUTION"` error, never a
@@ -101,8 +101,8 @@ pub unsafe extern "C" fn ootle_account_balances(
 /// Names the `vault_<hex>` ids a host should fetch to satisfy [`ootle_account_balances`] for an
 /// account. **Stateless — returns no handle.**
 ///
-/// `account_substate_json` is the account `Component` substate JSON. On success `data_json` is
-/// `{ "fetch_ids": [ "vault_<hex>", … ] }` — the same component-vault discovery
+/// `account_substate_json` is the account `Component` substate value as the indexer serves it. On success `data_json`
+/// is `{ "fetch_ids": [ "vault_<hex>", … ] }` — the same component-vault discovery
 /// [`ootle_account_balances`] does, surfaced as opaque ids. The host fetches them and feeds them back
 /// as `vault_substates_json`.
 ///
