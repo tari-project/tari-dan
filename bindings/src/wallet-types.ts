@@ -19,12 +19,16 @@ export * from "./types/wallet-types/AccountsCreateStealthTransferStatementReques
 export * from "./types/wallet-types/AccountsCreateStealthTransferStatementResponse";
 export * from "./types/wallet-types/AccountSetDefaultRequest";
 export * from "./types/wallet-types/AccountSetDefaultResponse";
+export * from "./types/wallet-types/AccountsExportViewKeyRequest";
+export * from "./types/wallet-types/AccountsExportViewKeyResponse";
 export * from "./types/wallet-types/AccountsGetBalanceChangesRequest";
 export * from "./types/wallet-types/AccountsGetBalanceChangesResponse";
 export * from "./types/wallet-types/AccountsGetBalancesRequest";
 export * from "./types/wallet-types/AccountsGetBalancesResponse";
 export * from "./types/wallet-types/AccountsGetFaucetBalanceRequest";
 export * from "./types/wallet-types/AccountsGetFaucetBalanceResponse";
+export * from "./types/wallet-types/AccountsImportViewOnlyRequest";
+export * from "./types/wallet-types/AccountsImportViewOnlyResponse";
 export * from "./types/wallet-types/AccountsListRequest";
 export * from "./types/wallet-types/AccountsListResponse";
 export * from "./types/wallet-types/AccountsRenameRequest";

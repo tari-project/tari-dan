@@ -43,7 +43,9 @@ use tari_ootle_wallet_crypto::{
 };
 use tari_ootle_wallet_sdk::{
     apis::{
+        accounts::AccountsApiError,
         confidential_transfer::ConfidentialTransferParams,
+        key_manager::KeyManagerApiError,
         stealth_outputs::{StealthOutputsApiError, TransferStatementParams},
         stealth_transfer::{InputsToSpend, StealthTransferParams, TransferOutput},
         substate::{SubstateApiError, ValidatorScanResult},
@@ -81,12 +83,16 @@ use tari_ootle_walletd_client::{
         AccountsCreateResponse,
         AccountsCreateStealthTransferStatementRequest,
         AccountsCreateStealthTransferStatementResponse,
+        AccountsExportViewKeyRequest,
+        AccountsExportViewKeyResponse,
         AccountsGetBalanceChangesRequest,
         AccountsGetBalanceChangesResponse,
         AccountsGetBalancesRequest,
         AccountsGetBalancesResponse,
         AccountsGetFaucetBalanceRequest,
         AccountsGetFaucetBalanceResponse,
+        AccountsImportViewOnlyRequest,
+        AccountsImportViewOnlyResponse,
         AccountsListRequest,
         AccountsListResponse,
         AccountsRenameRequest,
@@ -160,7 +166,7 @@ pub async fn handle_create(
     let set_as_default = req
         .is_default
         .map(Ok)
-        .unwrap_or_else(|| accounts_api.any_accounts_exist().map(|b| !b))?;
+        .unwrap_or_else(|| accounts_api.has_default_account().map(|b| !b))?;
 
     ensure_seed_recovery_finished(sdk)?;
     let owner_address = match req.key_index {
@@ -232,7 +238,7 @@ pub async fn handle_create_or_get(
     let set_as_default = req
         .is_default
         .map(Ok)
-        .unwrap_or_else(|| accounts_api.any_accounts_exist().map(|b| !b))?;
+        .unwrap_or_else(|| accounts_api.has_default_account().map(|b| !b))?;
 
     ensure_seed_recovery_finished(sdk)?;
     let wallet_keys = match req.key_index {
@@ -262,6 +268,78 @@ pub async fn handle_create_or_get(
     })
 }
 
+pub async fn handle_import_view_only(
+    context: &HandlerContext,
+    token: Option<&Bearer>,
+    req: AccountsImportViewOnlyRequest,
+) -> Result<AccountsImportViewOnlyResponse, anyhow::Error> {
+    context.authorize_user_only(token, &[Permission::Admin])?;
+    if req.is_default == Some(true) {
+        return Err(invalid_request(
+            "a view-only account cannot be the default account, which pays fees and signs transactions",
+        ));
+    }
+    let sdk = context.wallet_sdk();
+    ensure_seed_recovery_finished(sdk)?;
+    let accounts_api = sdk.accounts_api();
+
+    let acc = accounts_api
+        .add_view_only_account(
+            Some(&req.account_name),
+            &req.account_public_key,
+            &req.view_secret_key,
+            req.birthday_epoch,
+        )
+        .map_err(|e| {
+            if e.is_name_exists_error() ||
+                e.is_account_exists_error() ||
+                e.is_invalid_view_only_account_error() ||
+                e.is_view_key_used_error() ||
+                matches!(
+                    e,
+                    AccountsApiError::KeyManagerApiError(
+                        KeyManagerApiError::KeyAlreadyImportedWithDifferentType { .. }
+                    )
+                )
+            {
+                invalid_request(e)
+            } else {
+                general_error(e)
+            }
+        })?;
+
+    info!(
+        target: LOG_TARGET,
+        "Imported view-only account: {acc}."
+    );
+
+    Ok(AccountsImportViewOnlyResponse {
+        account_address: *acc.component_address(),
+    })
+}
+
+pub async fn handle_export_view_key(
+    context: &HandlerContext,
+    token: Option<&Bearer>,
+    req: AccountsExportViewKeyRequest,
+) -> Result<AccountsExportViewKeyResponse, anyhow::Error> {
+    context.authorize_user_only(token, &[Permission::Admin])?;
+    let sdk = context.wallet_sdk();
+    let account = get_account(&req.account, &sdk.accounts_api())?;
+    let view_key = sdk.key_manager_api().get_key(account.view_only_key_id())?;
+    warn!(
+        target: LOG_TARGET,
+        "Exported the view key of account {}.",
+        account.component_address()
+    );
+
+    Ok(AccountsExportViewKeyResponse {
+        account_public_key: *account.owner_public_key(),
+        view_secret_key: view_key.secret,
+        birthday_epoch: account.birthday_epoch(),
+    })
+}
+
 pub async fn handle_set_default(
     context: &HandlerContext,
     token: Option<&Bearer>,
@@ -270,7 +348,12 @@ pub async fn handle_set_default(
     context.authorize(token, &[Permission::Accounts(Crud::Update, None)])?;
     let sdk = context.wallet_sdk();
     let account = get_account(&req.account, &sdk.accounts_api())?;
-    sdk.accounts_api().set_default_account(account.component_address())?;
+    sdk.accounts_api()
+        .set_default_account(account.component_address())
+        .map_err(|e| match e {
+            AccountsApiError::ViewOnlyAccountCannotBeDefault => invalid_request(e),
+            e => e.into(),
+        })?;
     Ok(AccountSetDefaultResponse {})
 }
 
@@ -1067,7 +1150,7 @@ pub async fn handle_transfer(
 
     let account_owner_key_id = account
         .owner_key_id()
-        .ok_or_else(|| invalid_params("account", Some("cannot transfer from an account without an owner key")))?;
+        .ok_or_else(|| invalid_params("account", Some("cannot transfer from a view-only account")))?;
 
     // get the source account component address
     let source_account_address = *account.component_address();
@@ -1356,7 +1439,7 @@ pub async fn handle_stealth_transfer(
     if owner_account.owner_key_id().is_none() {
         return Err(invalid_params(
             "owner_account",
-            Some("cannot transfer from an account without an owner key"),
+            Some("cannot transfer from a view-only account"),
         ));
     };
 
@@ -1886,7 +1969,7 @@ pub async fn handle_create_stealth_transfer_statement(
         let Some(sender_key_id) = sender_account.owner_key_id() else {
             return Err(invalid_params(
                 "owner_account",
-                Some("cannot transfer from an account without an owner key"),
+                Some("cannot transfer from a view-only account"),
             ));
         };
 
@@ -2481,6 +2564,7 @@ mod create_stealth_transfer_statement_handler_tests {
             HandlerContext,
             auth::{create_authenticator, jwt::AuthError},
         },
+        server::ApplicationErrorCode,
     };
 
     /// A ready-to-use handler context for `account`, with a stealth resource cached locally so `fetch_resource`
@@ -3153,6 +3237,310 @@ mod create_stealth_transfer_statement_handler_tests {
         request.requests[0].outputs[0].revealed_amount = Amount::from(100u64);
 
         assert_rejected_without_locking(&test, &input, request, "pay_to").await;
+    }
+
+    fn assert_invalid_request(err: &anyhow::Error, message: &str) {
+        let rpc = err
+            .downcast_ref::<JsonRpcError>()
+            .unwrap_or_else(|| panic!("expected a JsonRpcError, got: {err}"));
+        assert!(
+            matches!(
+                rpc.error_reason(),
+                JsonRpcErrorReason::ApplicationError(code) if code == ApplicationErrorCode::InvalidRequest as i32
+            ),
+            "{:?}",
+            rpc.error_reason()
+        );
+        assert!(rpc.to_string().contains(message), "{rpc}");
+    }
+
+    #[tokio::test]
+    async fn view_only_import_rejects_bad_requests() {
+        let test = setup().await;
+        let admin = test.bearer("admin");
+        let valid = AccountsImportViewOnlyRequest {
+            account_name: "watch".to_string(),
+            account_public_key: RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::random(&mut rand::rng()))
+                .to_byte_type(),
+            view_secret_key: RistrettoSecretKey::random(&mut rand::rng()),
+            birthday_epoch: None,
+            is_default: None,
+        };
+        let import = |req: AccountsImportViewOnlyRequest| handle_import_view_only(&test.context, Some(&admin), req);
+
+        let creator = test.bearer("accounts:create");
+        let err = handle_import_view_only(&test.context, Some(&creator), valid.clone())
+            .await
+            .expect_err("importing requires admin");
+        assert!(err.downcast_ref::<AuthError>().is_some(), "{err}");
+
+        let mut req = valid.clone();
+        req.is_default = Some(true);
+        let err = import(req)
+            .await
+            .expect_err("a view-only account cannot be the default");
+        assert_invalid_request(&err, "cannot be the default account");
+
+        let mut req = valid.clone();
+        req.account_public_key = RistrettoPublicKeyBytes::from_bytes(&[0xff; 32]).unwrap();
+        let err = import(req)
+            .await
+            .expect_err("an invalid account public key is rejected");
+        assert_invalid_request(&err, "Invalid view-only account");
+
+        let mut req = valid.clone();
+        req.birthday_epoch = Some(Epoch(7));
+        let err = import(req)
+            .await
+            .expect_err("a birthday after the current epoch is rejected");
+        assert_invalid_request(&err, "birthday epoch is after the current epoch");
+
+        let exported = handle_export_view_key(&test.context, Some(&admin), AccountsExportViewKeyRequest {
+            account: test.account.into(),
+        })
+        .await
+        .unwrap();
+        let mut req = valid.clone();
+        req.view_secret_key = exported.view_secret_key;
+        let err = import(req)
+            .await
+            .expect_err("a view key that another account uses is rejected");
+        assert_invalid_request(&err, "already used by account");
+
+        let mut req = valid;
+        req.account_name = "stealth".to_string();
+        let err = import(req).await.expect_err("a taken name is rejected");
+        assert_invalid_request(&err, "Account name already exists");
+
+        let listed = handle_list(&test.context, Some(&admin), AccountsListRequest {
+            offset: 0,
+            limit: 10,
+        })
+        .await
+        .unwrap();
+        assert_eq!(listed.accounts.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn imported_keys_keep_their_type() {
+        use tari_ootle_wallet_sdk::models::KeyType;
+        use tari_ootle_walletd_client::types::KeysImportRequest;
+
+        use crate::handlers::keys::handle_import;
+
+        let test = setup().await;
+        let admin = test.bearer("admin");
+        let secret_key = RistrettoSecretKey::random(&mut rand::rng());
+        let import_key = |key_type| {
+            handle_import(&test.context, Some(&admin), KeysImportRequest {
+                secret_key: secret_key.clone(),
+                key_type,
+            })
+        };
+        let imported = import_key(KeyType::GeneralPurpose).await.unwrap();
+        assert_eq!(
+            import_key(KeyType::GeneralPurpose).await.unwrap().key_id,
+            imported.key_id
+        );
+
+        let err = import_key(KeyType::ViewOnly)
+            .await
+            .expect_err("re-importing a key as another type is rejected");
+        assert_invalid_request(&err, "already imported as GeneralPurpose");
+
+        let err = handle_import_view_only(&test.context, Some(&admin), AccountsImportViewOnlyRequest {
+            account_name: "watch".to_string(),
+            account_public_key: RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::random(&mut rand::rng()))
+                .to_byte_type(),
+            view_secret_key: secret_key.clone(),
+            birthday_epoch: None,
+            is_default: None,
+        })
+        .await
+        .expect_err("a view-only import of an imported key is rejected");
+        assert_invalid_request(&err, "already an imported key");
+
+        let key_manager = test.context.wallet_sdk().key_manager_api();
+        assert!(key_manager.is_signing_key(imported.key_id).unwrap());
+        assert_eq!(key_manager.get_key(imported.key_id).unwrap().secret, secret_key);
+    }
+
+    #[tokio::test]
+    async fn an_account_created_after_a_view_only_import_becomes_the_default() {
+        use crate::handlers::test_support::TestDaemon;
+
+        let daemon = TestDaemon::start().await;
+        handle_import_view_only(&daemon.context, Some(&daemon.session), AccountsImportViewOnlyRequest {
+            account_name: "watch".to_string(),
+            account_public_key: RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::random(&mut rand::rng()))
+                .to_byte_type(),
+            view_secret_key: RistrettoSecretKey::random(&mut rand::rng()),
+            birthday_epoch: None,
+            is_default: None,
+        })
+        .await
+        .unwrap();
+        let accounts = daemon.context.wallet_sdk().accounts_api();
+        assert!(!accounts.has_default_account().unwrap());
+
+        let created = handle_create(&daemon.context, Some(&daemon.session), AccountsCreateRequest {
+            account_name: Some("spending".to_string()),
+            is_default: None,
+            key_index: None,
+        })
+        .await
+        .unwrap();
+        assert!(created.account.is_default);
+        assert_eq!(
+            accounts.get_default().unwrap().component_address(),
+            created.account.component_address()
+        );
+    }
+
+    #[tokio::test]
+    async fn view_only_import_reuses_an_unlinked_imported_view_key() {
+        use tari_ootle_wallet_sdk::models::KeyType;
+        use tari_ootle_walletd_client::types::KeysImportRequest;
+
+        use crate::handlers::keys::handle_import;
+
+        let test = setup().await;
+        let admin = test.bearer("admin");
+        let view_secret_key = RistrettoSecretKey::random(&mut rand::rng());
+        let imported = handle_import(&test.context, Some(&admin), KeysImportRequest {
+            secret_key: view_secret_key.clone(),
+            key_type: KeyType::ViewOnly,
+        })
+        .await
+        .unwrap();
+        let request = |name: &str| AccountsImportViewOnlyRequest {
+            account_name: name.to_string(),
+            account_public_key: RistrettoPublicKey::from_secret_key(&RistrettoSecretKey::random(&mut rand::rng()))
+                .to_byte_type(),
+            view_secret_key: view_secret_key.clone(),
+            birthday_epoch: None,
+            is_default: None,
+        };
+
+        handle_import_view_only(&test.context, Some(&admin), request("watch"))
+            .await
+            .unwrap();
+        let watch = ComponentAddressOrName::Name("watch".to_string());
+        let account = get_account(&watch, &test.context.wallet_sdk().accounts_api()).unwrap();
+        assert_eq!(account.view_only_key_id(), imported.key_id);
+
+        let err = handle_import_view_only(&test.context, Some(&admin), request("watch2"))
+            .await
+            .expect_err("a view key linked to an account is not reused");
+        assert_invalid_request(&err, "already an imported key");
+    }
+
+    #[tokio::test]
+    async fn view_only_account_is_imported_exported_and_cannot_transfer() {
+        use tari_ootle_wallet_sdk::apis::{
+            confidential_transfer::UtxoInputSelection,
+            stealth_transfer::{BadgeUsage, TransferFeeParams},
+        };
+
+        let test = setup().await;
+        let admin = test.bearer("admin");
+        let account_secret = RistrettoSecretKey::random(&mut rand::rng());
+        let account_public_key = RistrettoPublicKey::from_secret_key(&account_secret).to_byte_type();
+        let view_secret_key = RistrettoSecretKey::random(&mut rand::rng());
+        let import_request = AccountsImportViewOnlyRequest {
+            account_name: "watch".to_string(),
+            account_public_key,
+            view_secret_key: view_secret_key.clone(),
+            birthday_epoch: Some(Epoch::zero()),
+            is_default: None,
+        };
+
+        let imported = handle_import_view_only(&test.context, Some(&admin), import_request.clone())
+            .await
+            .unwrap();
+        assert_eq!(
+            imported.account_address,
+            derive_component_address_from_public_key(&ACCOUNT_TEMPLATE_ADDRESS, &account_public_key)
+        );
+
+        let watch = ComponentAddressOrName::Name("watch".to_string());
+        let account = get_account(&watch, &test.context.wallet_sdk().accounts_api()).unwrap();
+        assert_eq!(account.owner_key_id(), None);
+        assert_eq!(*account.owner_public_key(), account_public_key);
+        assert_eq!(account.birthday_epoch(), Epoch::zero());
+        assert_eq!(
+            *account.address().view_only_key(),
+            RistrettoPublicKey::from_secret_key(&view_secret_key).to_byte_type()
+        );
+
+        // The default account pays fees, so an import never becomes the default
+        let default_account = test.context.wallet_sdk().accounts_api().get_default().unwrap();
+        assert_eq!(*default_account.component_address(), test.account);
+        let err = handle_set_default(&test.context, Some(&admin), AccountSetDefaultRequest {
+            account: watch.clone(),
+        })
+        .await
+        .expect_err("a view-only account cannot be made the default");
+        assert_invalid_request(&err, "A view-only account cannot be the default account");
+        let default_account = test.context.wallet_sdk().accounts_api().get_default().unwrap();
+        assert_eq!(*default_account.component_address(), test.account);
+
+        let mut duplicate = import_request;
+        duplicate.account_name = "watch2".to_string();
+        let err = handle_import_view_only(&test.context, Some(&admin), duplicate)
+            .await
+            .expect_err("importing an existing account must be rejected");
+        assert!(err.to_string().contains("Account already exists"), "{err}");
+
+        let reader = test.bearer("accounts:read");
+        let err = handle_export_view_key(&test.context, Some(&reader), AccountsExportViewKeyRequest {
+            account: watch.clone(),
+        })
+        .await
+        .expect_err("exporting a view key requires admin");
+        assert!(err.downcast_ref::<AuthError>().is_some(), "{err}");
+
+        let exported = handle_export_view_key(&test.context, Some(&admin), AccountsExportViewKeyRequest {
+            account: watch.clone(),
+        })
+        .await
+        .unwrap();
+        assert_eq!(exported.account_public_key, account_public_key);
+        assert_eq!(exported.view_secret_key, view_secret_key);
+        assert_eq!(exported.birthday_epoch, Epoch::zero());
+
+        let err = handle_stealth_transfer(&test.context, Some(&admin), StealthTransferRequest {
+            owner_account: watch.clone(),
+            fee_params: TransferFeeParams::new(UtxoInputSelection::PreferRevealed),
+            input_selection: UtxoInputSelection::PreferRevealed,
+            resource_address: test.stealth_resource,
+            badge_usage: BadgeUsage::None,
+            transfers: vec![],
+            max_fee: 1000,
+            dry_run: false,
+        })
+        .await
+        .expect_err("stealth transfer from a view-only account must be rejected");
+        assert!(
+            assert_invalid_params(&err).to_string().contains("view-only account"),
+            "{err}"
+        );
+
+        let err = handle_transfer(&test.context, Some(&admin), AccountsTransferRequest {
+            account: Some(watch),
+            amount: Amount::from(1u64),
+            resource_address: test.stealth_resource,
+            destination_public_key: RistrettoPublicKeyBytes::default(),
+            max_fee: 1000,
+            proof_from_badge_resource: None,
+            dry_run: false,
+        })
+        .await
+        .expect_err("transfer from a view-only account must be rejected");
+        assert!(
+            assert_invalid_params(&err).to_string().contains("view-only account"),
+            "{err}"
+        );
     }
 }
 

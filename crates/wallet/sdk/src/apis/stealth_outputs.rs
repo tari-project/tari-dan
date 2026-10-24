@@ -718,12 +718,8 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
         Ok(outputs)
     }
 
-    #[allow(clippy::too_many_lines)]
-    pub fn verify_and_update_outputs<'i, I: IntoIterator<Item = (UtxoAddress, &'i Utxo)>>(
-        &self,
-        outputs: I,
-    ) -> Result<HashSet<(ComponentAddress, ResourceAddress)>, StealthOutputsApiError> {
-        let all_used_view_only_keys = self
+    fn all_used_view_only_keys(&self) -> Result<Vec<AccountAndViewKeys>, StealthOutputsApiError> {
+        let mut keys = self
             .key_manager_api
             .get_all_derived_keys(KeyBranch::ViewOnlyKey)?
             .into_iter()
@@ -741,6 +737,49 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
+        // View-only accounts use an imported view key, which is not in the derived key branch above
+        let accounts = self.store.with_read_tx(|tx| {
+            let count = tx.accounts_count()?;
+            tx.accounts_get_many(0, count as usize)
+        })?;
+        for account in accounts {
+            if !matches!(account.view_only_key_id, KeyId::Imported { .. }) {
+                continue;
+            }
+            let loaded = account
+                .owner_key_id
+                .map(|key_id| self.key_manager_api.get_key(key_id))
+                .transpose()
+                .and_then(|account_key| Ok((account_key, self.key_manager_api.get_key(account.view_only_key_id)?)));
+            // One unreadable key must not stop outputs being checked for every other account
+            let (account_key, view_only_key) = match loaded {
+                Ok(keys) => keys,
+                Err(e) => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "⚠️ Skipping account {} when checking outputs: its keys could not be loaded: {}",
+                        account.component_address,
+                        e
+                    );
+                    continue;
+                },
+            };
+            keys.push(AccountAndViewKeys {
+                account_public_key: account.owner_public_key,
+                account_key,
+                view_only_key,
+            });
+        }
+        Ok(keys)
+    }
+
+    #[allow(clippy::too_many_lines)]
+    pub fn verify_and_update_outputs<'i, I: IntoIterator<Item = (UtxoAddress, &'i Utxo)>>(
+        &self,
+        outputs: I,
+    ) -> Result<HashSet<(ComponentAddress, ResourceAddress)>, StealthOutputsApiError> {
+        // The keys are only loaded once an output needs validating
+        let mut all_used_view_only_keys = None;
         let network = self.config_api.get_network()?;
 
         let mut found_utxos_count = 0usize;
@@ -756,77 +795,86 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
                 addr,
             );
 
-            let mut tx = self.store.create_write_tx()?;
-            match tx
-                .stealth_outputs_get_by_commitment(resource_address, &commitment)
-                .optional()?
-            {
-                Some(_) => {
+            // The keys are read through the store, so they are loaded outside the write transaction and the
+            // output is checked again
+            let (mut tx, exists) = loop {
+                let mut tx = self.store.create_write_tx()?;
+                let exists = tx
+                    .stealth_outputs_get_by_commitment(resource_address, &commitment)
+                    .optional()?
+                    .is_some();
+                if exists || utxo.output().is_none() || all_used_view_only_keys.is_some() {
+                    break (tx, exists);
+                }
+                drop(tx);
+                all_used_view_only_keys = Some(self.all_used_view_only_keys()?);
+            };
+            if exists {
+                info!(
+                    target: LOG_TARGET,
+                    "Output already exists in the wallet. Updating. (commitment: {})",
+                    commitment
+                );
+                if utxo.is_burnt() {
                     info!(
                         target: LOG_TARGET,
-                        "Output already exists in the wallet. Updating. (commitment: {})",
+                        "🔥 Owned output is burnt with commitment: {}.",
                         commitment
                     );
-                    if utxo.is_burnt() {
-                        info!(
-                            target: LOG_TARGET,
-                            "🔥 Owned output is burnt with commitment: {}.",
-                            commitment
-                        );
-                    }
-                    if utxo.is_frozen() {
-                        info!(
-                            target: LOG_TARGET,
-                            "❄️ Owned output is frozen with commitment: {}.",
-                            commitment
-                        );
-                    }
+                }
+                if utxo.is_frozen() {
+                    info!(
+                        target: LOG_TARGET,
+                        "❄️ Owned output is frozen with commitment: {}.",
+                        commitment
+                    );
+                }
 
-                    // Update is_burnt and is_frozen status to false->true or true->false
-                    tx.stealth_outputs_update(&addr, Some(utxo.is_burnt()), None, Some(utxo.is_frozen()))?;
-                },
-                None => {
-                    let is_frozen = utxo.is_frozen();
-                    let Some(output) = utxo.output() else {
+                // Update is_burnt and is_frozen status to false->true or true->false
+                tx.stealth_outputs_update(&addr, Some(utxo.is_burnt()), None, Some(utxo.is_frozen()))?;
+            } else {
+                let is_frozen = utxo.is_frozen();
+                let Some(output) = utxo.output() else {
+                    debug!(
+                        target: LOG_TARGET,
+                        "Unknown Utxo output is burnt for commitment: {}. Skipping.",
+                        commitment
+                    );
+                    continue;
+                };
+
+                // Output does not exist. Validate it and add it to the store
+                match self.validate_utxo(
+                    all_used_view_only_keys
+                        .as_deref()
+                        .expect("keys are loaded for an output that is not stored"),
+                    network,
+                    *resource_address,
+                    commitment,
+                    output,
+                    is_frozen,
+                ) {
+                    Ok(Some(output)) => {
+                        found_utxos_count += 1;
+                        touched_balances.insert((output.owner_account, output.resource_address));
+                        tx.stealth_outputs_insert(&output)?;
+                    },
+                    Ok(None) => {
                         debug!(
                             target: LOG_TARGET,
-                            "Unknown Utxo output is burnt for commitment: {}. Skipping.",
+                            "🚮 wallet could not extract the value and mask for this output. Assuming it is not owned. (commitment: {})",
                             commitment
                         );
-                        continue;
-                    };
-
-                    // Output does not exist. Validate it and add it to the store
-                    match self.validate_utxo(
-                        &all_used_view_only_keys,
-                        network,
-                        *resource_address,
-                        commitment,
-                        output,
-                        is_frozen,
-                    ) {
-                        Ok(Some(output)) => {
-                            found_utxos_count += 1;
-                            touched_balances.insert((output.owner_account, output.resource_address));
-                            tx.stealth_outputs_insert(&output)?;
-                        },
-                        Ok(None) => {
-                            debug!(
-                                target: LOG_TARGET,
-                                "🚮 wallet could not extract the value and mask for this output. Assuming it is not owned. (commitment: {})",
-                                commitment
-                            );
-                        },
-                        Err(e) => {
-                            warn!(
-                                target: LOG_TARGET,
-                                "Output validation failed. Skipping. (commitment: {}, error: {})",
-                                commitment,
-                                e
-                            );
-                        },
-                    }
-                },
+                    },
+                    Err(e) => {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Output validation failed. Skipping. (commitment: {}, error: {})",
+                            commitment,
+                            e
+                        );
+                    },
+                }
             }
             tx.commit()?;
         }
@@ -881,6 +929,7 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
             output_stealth_public_nonce,
         );
 
+        let mut invalid_output = None;
         for keys in all_used_account_view_only_keys {
             trace!(
                 target: LOG_TARGET,
@@ -914,7 +963,16 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
                         .to_byte_type();
                     // A key-path output is owned only if its spend_key is our derived stealth address. A
                     // condition-tree output (no spend_key) is recognised as viewable but not key-spendable here.
-                    if output.auth.spend_key().is_none_or(|pk| *pk == stealth_address) {
+                    if keys.account_key.is_none() && output.auth.condition_root().is_some() {
+                        // A condition tree lets whoever satisfies it spend the output, which a view key cannot rule
+                        // out, so for a view-only account it never counts as balance
+                        warn!(
+                            target: LOG_TARGET,
+                            "⚠️ Output with a condition tree for view-only key {} cannot be confirmed as owned and will be stored as invalid.",
+                            keys.view_only_key.key_id,
+                        );
+                        (decrypted.value(), decrypted.memo, OutputStatus::Invalid)
+                    } else if output.auth.spend_key().is_none_or(|pk| *pk == stealth_address) {
                         if keys.account_key.is_none() {
                             info!(
                                 target: LOG_TARGET,
@@ -955,7 +1013,7 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
                 value,
             );
 
-            return Ok(Some(StealthOutputModel {
+            let model = StealthOutputModel {
                 owner_account,
                 // Note that this is not validated and depends on the caller ensuring the resource address belongs to
                 // the stealth output.
@@ -976,10 +1034,16 @@ impl<'a, TSpec: WalletSdkSpec> StealthOutputsApi<'a, TSpec> {
                 is_on_chain: true,
                 is_condition_spendable: self.is_spendable_auth(&output.auth),
                 lock_id: None,
-            }));
+            };
+            // Another key may still own the output, so an invalid result is only returned if none does
+            if matches!(model.status, OutputStatus::Invalid) {
+                invalid_output.get_or_insert(model);
+                continue;
+            }
+            return Ok(Some(model));
         }
 
-        Ok(None)
+        Ok(invalid_output)
     }
 
     pub fn create_output_witness(

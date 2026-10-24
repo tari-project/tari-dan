@@ -771,6 +771,45 @@ pub struct AccountsCreateOrGetResponse {
     pub created: bool,
 }
 
+/// Adds an account that can view but not spend incoming stealth outputs. The `view_secret_key` is transmitted as hex.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
+pub struct AccountsImportViewOnlyRequest {
+    pub account_name: String,
+    pub account_public_key: RistrettoPublicKeyBytes,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub view_secret_key: RistrettoSecretKey,
+    /// The epoch to start scanning for outputs from. Defaults to the current epoch.
+    pub birthday_epoch: Option<Epoch>,
+    /// Must be omitted or false: the default account pays fees and signs transactions, which a view-only account
+    /// cannot do.
+    pub is_default: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
+pub struct AccountsImportViewOnlyResponse {
+    pub account_address: ComponentAddress,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
+pub struct AccountsExportViewKeyRequest {
+    #[serde(deserialize_with = "string_or_struct")]
+    pub account: ComponentAddressOrName,
+}
+
+/// The values needed to import the account into another wallet with `accounts.import_view_only`. The
+/// `view_secret_key` is transmitted as hex.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
+pub struct AccountsExportViewKeyResponse {
+    pub account_public_key: RistrettoPublicKeyBytes,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub view_secret_key: RistrettoSecretKey,
+    pub birthday_epoch: Epoch,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
 pub struct AccountsListRequest {

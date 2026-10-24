@@ -20,12 +20,16 @@ import type {
   AccountsCreateStealthTransferStatementResponse,
   AccountSetDefaultRequest,
   AccountSetDefaultResponse,
+  AccountsExportViewKeyRequest,
+  AccountsExportViewKeyResponse,
   AccountsGetBalanceChangesRequest,
   AccountsGetBalanceChangesResponse,
   AccountsGetBalancesRequest,
   AccountsGetBalancesResponse,
   AccountsGetFaucetBalanceRequest,
   AccountsGetFaucetBalanceResponse,
+  AccountsImportViewOnlyRequest,
+  AccountsImportViewOnlyResponse,
   AccountsListRequest,
   AccountsListResponse,
   AccountsRenameRequest,
@@ -406,6 +410,14 @@ export class WalletDaemonClient<T extends RpcTransport = FetchRpcTransport> {
 
   public accountsCreate(params: AccountsCreateRequest): Promise<AccountsCreateResponse> {
     return this.sendRequest("accounts.create", params);
+  }
+
+  public accountsImportViewOnly(params: AccountsImportViewOnlyRequest): Promise<AccountsImportViewOnlyResponse> {
+    return this.sendRequest("accounts.import_view_only", params);
+  }
+
+  public accountsExportViewKey(params: AccountsExportViewKeyRequest): Promise<AccountsExportViewKeyResponse> {
+    return this.sendRequest("accounts.export_view_key", params);
   }
 
   public accountsRename(params: AccountsRenameRequest): Promise<AccountsRenameResponse> {

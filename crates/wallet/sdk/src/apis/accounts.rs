@@ -3,7 +3,12 @@
 
 use std::collections::HashSet;
 
-use ootle_byte_type::{FromByteType, ToByteType};
+use ootle_byte_type::{ConvertFromByteType, FromByteType, ToByteType};
+use tari_crypto::{
+    keys::PublicKey as _,
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
+    tari_utilities::hex::Hex,
+};
 use tari_engine_types::{
     SubstateVersion,
     component::derive_component_address_from_public_key,
@@ -45,6 +50,7 @@ use crate::{
         EpochBirthday,
         KeyId,
         KeyIdOrPublicKey,
+        KeyType,
         VaultBalance,
         VaultModel,
         WalletOotleAddressWithKeyIds,
@@ -147,6 +153,107 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
         })
     }
 
+    /// Adds an account that can be scanned and viewed but not spent from. The view secret key is stored as an
+    /// imported key and the account has no owner key, so it is never the default account. Outputs are scanned from
+    /// `birthday_epoch`, or the current epoch if not given. The view key must not be the view key of another
+    /// account or an already imported key. The key and the account are stored together, or not at all.
+    pub fn add_view_only_account(
+        &self,
+        account_name: Option<&str>,
+        account_public_key: &RistrettoPublicKeyBytes,
+        view_secret_key: &RistrettoSecretKey,
+        birthday_epoch: Option<Epoch>,
+    ) -> Result<AccountWithAddress, AccountsApiError> {
+        let invalid = |reason: &str| AccountsApiError::InvalidViewOnlyAccount {
+            reason: reason.to_string(),
+        };
+        let account_key = RistrettoPublicKey::convert_from_byte_type(account_public_key)
+            .map_err(|_| invalid("account public key is not a valid public key"))?;
+        if account_public_key.is_zero() {
+            return Err(invalid("account public key is the identity point"));
+        }
+        if *view_secret_key == RistrettoSecretKey::default() {
+            return Err(invalid("view secret key is zero"));
+        }
+        let view_public_key = RistrettoPublicKey::from_secret_key(view_secret_key);
+        if view_public_key == account_key {
+            return Err(invalid("view key is the account key"));
+        }
+        let current_epoch = self.epoch_birthday.calculate_current_epoch();
+        if birthday_epoch.is_some_and(|epoch| epoch > current_epoch) {
+            return Err(invalid("birthday epoch is after the current epoch"));
+        }
+
+        let account_address = self.derive_account_address_from_public_key(account_public_key);
+        let birthday_epoch = birthday_epoch.unwrap_or(current_epoch);
+        // Key store work happens before the write transaction, which holds the store's only connection
+        let mut derived_view_keys = Vec::new();
+        for account in self.store.with_read_tx(|tx| {
+            let count = tx.accounts_count()?;
+            tx.accounts_get_many(0, count as usize)
+        })? {
+            if let KeyId::Derived { key_branch, index } = account.view_only_key_id {
+                let view_key = self.key_manager_api.derive_key(key_branch, index)?.to_public_key();
+                derived_view_keys.push((account.component_address, view_key));
+            }
+        }
+        let encrypted_view_key = self.key_manager_api.encrypt_imported_key(view_secret_key)?;
+
+        // The checks, the key and the account are written in one transaction, so a failure leaves no imported key
+        let view_key_id = self.store.with_write_tx(|tx| {
+            if tx.accounts_get(&account_address).optional()?.is_some() {
+                return Err(AccountsApiError::AccountAlreadyExists {
+                    address: account_address,
+                });
+            }
+            if let Some((address, _)) = derived_view_keys.iter().find(|(_, key)| *key == view_public_key) {
+                return Err(AccountsApiError::ViewKeyAlreadyUsed { address: *address });
+            }
+
+            // A view key that was imported on its own (keys.import) and is not linked to an account is reused
+            let existing = tx
+                .key_manager_get_imported_key_by_public_key(&view_public_key.to_hex())
+                .optional()?;
+            let view_key_id = match existing {
+                Some((id, KeyType::ViewOnly)) => {
+                    let count = tx.accounts_count()?;
+                    let is_linked = tx.accounts_get_many(0, count as usize)?.iter().any(|account| {
+                        account.view_only_key_id == KeyId::imported(id) ||
+                            account.owner_key_id == Some(KeyId::imported(id))
+                    });
+                    if is_linked {
+                        return Err(AccountsApiError::ViewKeyAlreadyImported);
+                    }
+                    id
+                },
+                Some(_) => return Err(AccountsApiError::ViewKeyAlreadyImported),
+                None => self.key_manager_api.insert_imported_key(
+                    tx,
+                    &view_public_key.to_hex(),
+                    view_secret_key,
+                    &encrypted_view_key,
+                    KeyType::ViewOnly,
+                )?,
+            };
+            Self::insert_account(
+                tx,
+                account_name,
+                &account_address,
+                KeyId::imported(view_key_id),
+                None,
+                account_public_key,
+                birthday_epoch,
+                false,
+                false,
+            )?;
+            Ok(view_key_id)
+        })?;
+        self.key_manager_api
+            .cache_imported_key(view_key_id, view_secret_key, KeyType::ViewOnly);
+
+        self.get_account_by_address(&account_address)
+    }
+
     pub fn add_account<K: Into<KeyIdOrPublicKey>>(
         &self,
         account_name: Option<&str>,
@@ -165,28 +272,55 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
             KeyIdOrPublicKey::PublicKey(pk) => (pk, None),
         };
         self.store.with_write_tx(|tx| {
-            if let Some(name) = account_name &&
-                tx.accounts_get_by_name(name).optional()?.is_some()
-            {
-                return Err(AccountsApiError::AccountNameAlreadyExists { name: name.to_string() });
-            }
-
-            let mut associated_stealth_resources = HashSet::new();
-            associated_stealth_resources.insert(TARI_TOKEN);
-
-            tx.accounts_insert(
+            Self::insert_account(
+                tx,
                 account_name,
                 account_address,
                 view_only_key_id,
                 owner_key_id,
                 &owner_pk,
-                &associated_stealth_resources,
                 birthday_epoch,
                 is_confirmed_on_chain,
                 is_default,
-            )?;
-            Ok(())
+            )
         })
+    }
+
+    fn insert_account(
+        tx: &mut <TSpec::Store as WriteableWalletStore>::WriteTransaction<'_>,
+        account_name: Option<&str>,
+        account_address: &ComponentAddress,
+        view_only_key_id: KeyId,
+        owner_key_id: Option<KeyId>,
+        owner_pk: &RistrettoPublicKeyBytes,
+        birthday_epoch: Epoch,
+        is_confirmed_on_chain: bool,
+        is_default: bool,
+    ) -> Result<(), AccountsApiError> {
+        if is_default && owner_key_id.is_none() {
+            return Err(AccountsApiError::ViewOnlyAccountCannotBeDefault);
+        }
+        if let Some(name) = account_name &&
+            tx.accounts_get_by_name(name).optional()?.is_some()
+        {
+            return Err(AccountsApiError::AccountNameAlreadyExists { name: name.to_string() });
+        }
+
+        let mut associated_stealth_resources = HashSet::new();
+        associated_stealth_resources.insert(TARI_TOKEN);
+
+        tx.accounts_insert(
+            account_name,
+            account_address,
+            view_only_key_id,
+            owner_key_id,
+            owner_pk,
+            &associated_stealth_resources,
+            birthday_epoch,
+            is_confirmed_on_chain,
+            is_default,
+        )?;
+        Ok(())
     }
 
     pub fn update_account(
@@ -208,6 +342,11 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
     pub fn count(&self) -> Result<u64, AccountsApiError> {
         let count = self.store.with_read_tx(|tx| tx.accounts_count())?;
         Ok(count)
+    }
+
+    pub fn has_default_account(&self) -> Result<bool, AccountsApiError> {
+        let default_account = self.store.with_read_tx(|tx| tx.accounts_get_default().optional())?;
+        Ok(default_account.is_some())
     }
 
     pub fn any_accounts_exist(&self) -> Result<bool, AccountsApiError> {
@@ -394,16 +533,10 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
     }
 
     pub fn get_address_for_account(&self, account: &Account) -> Result<RistrettoOotleAddress, AccountsApiError> {
-        let view_only_key = match account.view_only_key_id {
-            KeyId::Derived { key_branch, index } => {
-                let view_only_key = self.key_manager_api.derive_key(key_branch, index)?;
-                view_only_key.to_public_key()
-            },
-            KeyId::Imported { local_key_id } => {
-                let imported = self.key_manager_api.get_imported_key(local_key_id)?;
-                imported.to_public_key()
-            },
-        };
+        let view_only_key = self
+            .key_manager_api
+            .get_public_key(account.view_only_key_id)?
+            .public_key;
         let address = RistrettoOotleAddress::new(
             self.network,
             view_only_key,
@@ -443,10 +576,15 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
                 return Ok(false);
             }
             tx.accounts_delete(address)?;
-            if account.is_default &&
-                let Some(next_default) = tx.accounts_get_many(0, 1)?.first()
-            {
-                tx.accounts_set_default(next_default.component_address())?;
+            if account.is_default {
+                let count = tx.accounts_count()?;
+                let next_default = tx
+                    .accounts_get_many(0, count as usize)?
+                    .into_iter()
+                    .find(|account| account.owner_key_id.is_some());
+                if let Some(next_default) = next_default {
+                    tx.accounts_set_default(next_default.component_address())?;
+                }
             }
             Ok(true)
         })
@@ -531,11 +669,15 @@ impl<'a, TSpec: WalletSdkSpec> AccountsApi<'a, TSpec> {
         Ok(())
     }
 
+    /// Makes the account the default account, which pays fees and signs, so it must have an owner key.
     pub fn set_default_account(&self, account_addr: &ComponentAddress) -> Result<(), AccountsApiError> {
-        let mut tx = self.store.create_write_tx()?;
-        tx.accounts_set_default(account_addr)?;
-        tx.commit()?;
-        Ok(())
+        self.store.with_write_tx(|tx| {
+            if tx.accounts_get(account_addr)?.owner_key_id.is_none() {
+                return Err(AccountsApiError::ViewOnlyAccountCannotBeDefault);
+            }
+            tx.accounts_set_default(account_addr)?;
+            Ok(())
+        })
     }
 
     pub fn add_vault(
@@ -660,6 +802,16 @@ pub enum AccountsApiError {
     KeyManagerApiError(#[from] KeyManagerApiError),
     #[error("Account name already exists: {name}")]
     AccountNameAlreadyExists { name: String },
+    #[error("Account already exists: {address}")]
+    AccountAlreadyExists { address: ComponentAddress },
+    #[error("Invalid view-only account: {reason}")]
+    InvalidViewOnlyAccount { reason: String },
+    #[error("The view key is already used by account {address}")]
+    ViewKeyAlreadyUsed { address: ComponentAddress },
+    #[error("The view key is already an imported key of another type or account")]
+    ViewKeyAlreadyImported,
+    #[error("A view-only account cannot be the default account")]
+    ViewOnlyAccountCannotBeDefault,
     #[error("Config API error: {0}")]
     ConfigApiError(#[from] ConfigApiError),
 }
@@ -667,6 +819,18 @@ pub enum AccountsApiError {
 impl AccountsApiError {
     pub fn is_name_exists_error(&self) -> bool {
         matches!(self, Self::AccountNameAlreadyExists { .. })
+    }
+
+    pub fn is_account_exists_error(&self) -> bool {
+        matches!(self, Self::AccountAlreadyExists { .. })
+    }
+
+    pub fn is_invalid_view_only_account_error(&self) -> bool {
+        matches!(self, Self::InvalidViewOnlyAccount { .. })
+    }
+
+    pub fn is_view_key_used_error(&self) -> bool {
+        matches!(self, Self::ViewKeyAlreadyUsed { .. } | Self::ViewKeyAlreadyImported)
     }
 }
 

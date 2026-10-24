@@ -186,24 +186,33 @@ pub(super) fn invalid_params<T: Display>(field: &str, details: Option<T>) -> any
 
 /// Refuses a caller-named key unless it may sign (see [`KeyId::is_signing_key`]). The key manager
 /// refuses the same keys when signing; checking here names the offending request field.
-pub(super) fn ensure_signing_key(field: &str, key_id: &KeyId) -> Result<(), anyhow::Error> {
-    if key_id.is_signing_key() {
+pub(super) fn ensure_signing_key<TSpec: WalletSdkSpec>(
+    sdk: &WalletSdk<TSpec>,
+    field: &str,
+    key_id: &KeyId,
+) -> Result<(), anyhow::Error> {
+    if sdk.key_manager_api().is_signing_key(*key_id)? {
         return Ok(());
     }
     Err(invalid_params(
         field,
         Some(format!(
-            "{key_id} is not a signing key: only account, transaction, nonce and imported keys sign"
+            "{key_id} is not a signing key: only account, transaction, nonce and imported keys other than view keys \
+             sign"
         )),
     ))
 }
 
 /// [`ensure_signing_key`] for a transaction's `seal_signer` and each of its `other_signers`.
-pub(super) fn ensure_transaction_signers(seal_signer: &KeyId, other_signers: &[KeyId]) -> Result<(), anyhow::Error> {
-    ensure_signing_key("seal_signer", seal_signer)?;
+pub(super) fn ensure_transaction_signers<TSpec: WalletSdkSpec>(
+    sdk: &WalletSdk<TSpec>,
+    seal_signer: &KeyId,
+    other_signers: &[KeyId],
+) -> Result<(), anyhow::Error> {
+    ensure_signing_key(sdk, "seal_signer", seal_signer)?;
     other_signers
         .iter()
-        .try_for_each(|key_id| ensure_signing_key("other_signers", key_id))
+        .try_for_each(|key_id| ensure_signing_key(sdk, "other_signers", key_id))
 }
 
 pub(super) fn application_error<T: Display>(code: ApplicationErrorCode, details: T) -> anyhow::Error {

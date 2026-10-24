@@ -226,6 +226,8 @@ async fn handler(
             "claim_burn" => call_handler(context, value, token, accounts::handle_claim_burn).await,
             "create" => call_handler(context, value, token, accounts::handle_create).await,
             "create_or_get" => call_handler(context, value, token, accounts::handle_create_or_get).await,
+            "import_view_only" => call_handler(context, value, token, accounts::handle_import_view_only).await,
+            "export_view_key" => call_handler(context, value, token, accounts::handle_export_view_key).await,
             "list" => call_handler(context, value, token, accounts::handle_list).await,
             "get_balance_changes" => call_handler(context, value, token, accounts::handle_get_balance_changes).await,
             "get_balances" => call_handler(context, value, token, accounts::handle_get_balances).await,

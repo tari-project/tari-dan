@@ -162,7 +162,7 @@ async fn submit_inner(
     req.transaction
         .validate_blob_references()
         .map_err(|e| invalid_params("transaction.blobs", Some(e.to_string())))?;
-    ensure_transaction_signers(&req.seal_signer, &req.other_signers)?;
+    ensure_transaction_signers(sdk, &req.seal_signer, &req.other_signers)?;
     reject_detect_inputs_with_signatures(req.detect_inputs, &req.signatures)?;
     let detected_inputs = if req.detect_inputs {
         // If we are not overriding inputs, we will use inputs that we know about in the local substate id db
@@ -435,7 +435,7 @@ async fn submit_dry_run_inner(
     req.transaction
         .validate_blob_references()
         .map_err(|e| invalid_params("transaction.blobs", Some(e.to_string())))?;
-    ensure_transaction_signers(&req.seal_signer, &req.other_signers)?;
+    ensure_transaction_signers(sdk, &req.seal_signer, &req.other_signers)?;
     reject_detect_inputs_with_signatures(req.detect_inputs, &req.signatures)?;
 
     let detected_inputs = if req.detect_inputs {
@@ -530,10 +530,10 @@ pub async fn handle_submit_manifest(
     })?;
 
     let seal_signer_key_id = req.seal_signer_key_id.unwrap_or(default_owner_key_id);
-    ensure_signing_key("seal_signer_key_id", &seal_signer_key_id)?;
+    ensure_signing_key(sdk, "seal_signer_key_id", &seal_signer_key_id)?;
     req.signing_key_ids
         .iter()
-        .try_for_each(|key_id| ensure_signing_key("signing_key_ids", key_id))?;
+        .try_for_each(|key_id| ensure_signing_key(sdk, "signing_key_ids", key_id))?;
 
     // Fee of zero is never valid
     let fee_amount = req.max_fee.max(1);

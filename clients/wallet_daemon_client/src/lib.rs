@@ -93,10 +93,14 @@ use crate::{
         AccountsCreateResponse,
         AccountsCreateStealthTransferStatementRequest,
         AccountsCreateStealthTransferStatementResponse,
+        AccountsExportViewKeyRequest,
+        AccountsExportViewKeyResponse,
         AccountsGetBalanceChangesRequest,
         AccountsGetBalanceChangesResponse,
         AccountsGetBalancesRequest,
         AccountsGetBalancesResponse,
+        AccountsImportViewOnlyRequest,
+        AccountsImportViewOnlyResponse,
         AccountsListRequest,
         AccountsListResponse,
         AccountsRenameRequest,
@@ -480,6 +484,25 @@ impl WalletDaemonClient {
         request: T,
     ) -> Result<AccountsCreateResponse, WalletDaemonClientError> {
         self.send_request("accounts.create", request.borrow()).await
+    }
+
+    /// Adds an account from its public key and view secret key. The account can receive and view stealth outputs but
+    /// cannot spend them.
+    pub async fn accounts_import_view_only<T: Borrow<AccountsImportViewOnlyRequest>>(
+        &mut self,
+        request: T,
+    ) -> Result<AccountsImportViewOnlyResponse, WalletDaemonClientError> {
+        self.send_request("accounts.import_view_only", request.borrow()).await
+    }
+
+    /// Returns the account public key, view secret key and birthday epoch needed to import the account as view-only
+    /// into another wallet.
+    pub async fn accounts_export_view_key(
+        &mut self,
+        account: ComponentAddressOrName,
+    ) -> Result<AccountsExportViewKeyResponse, WalletDaemonClientError> {
+        self.send_request("accounts.export_view_key", &AccountsExportViewKeyRequest { account })
+            .await
     }
 
     /// Returns an existing account by name, or creates it if it does not exist.

@@ -94,7 +94,7 @@ async fn main() -> Result<(), anyhow::Error> {
             let public_key = account_address.address.account_key().to_byte_type();
             let view_only_public_key = account_address.address.view_only_key().to_byte_type();
             let account_addr = sdk.accounts_api().derive_account_address_from_public_key(&public_key);
-            let is_default = !sdk.accounts_api().any_accounts_exist()?;
+            let is_default = !sdk.accounts_api().has_default_account()?;
             let birthday_epoch = sdk.calculate_birthday_epoch();
             sdk.accounts_api().add_account(
                 name.as_deref(),

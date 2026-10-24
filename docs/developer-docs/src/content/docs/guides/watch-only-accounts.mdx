@@ -1,0 +1,112 @@
+---
+title: Watch-only Accounts
+description: Track incoming stealth TARI payments on an online wallet daemon while the spend key stays on an offline machine.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+A watch-only (view-only) account lets a wallet daemon find and decrypt incoming stealth outputs for an account without
+holding the account's spend key. The daemon sees each output's value, memo, payment reference and (when the sender
+attached it) the sender's address, but it cannot spend anything.
+
+A typical setup has two wallet daemons:
+
+- a **cold** daemon on an offline machine that holds the seed and owns the account, and
+- an **online** daemon that imports the account as watch-only and reports deposits.
+
+### 1. Export the view key on the cold machine
+
+Call `accounts.export_view_key` on the cold daemon. This requires the `admin` permission from an interactive session:
+API keys and delegated (WebRTC) tokens are refused, even with `admin`.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "accounts.export_view_key",
+  "params": { "account": "deposits" }
+}
+```
+
+The response contains everything the online daemon needs:
+
+```json
+{
+  "account_public_key": "a2f1…",
+  "view_secret_key": "5c0e…",
+  "birthday_epoch": 1234
+}
+```
+
+<Aside type="caution">
+The view secret key reveals the value, memo and sender of every payment to this account. Move it to the online
+machine over a channel you trust and do not log it.
+</Aside>
+
+### 2. Import the account on the online daemon
+
+Call `accounts.import_view_only` on the online daemon with the exported values. Like the export, this requires the
+`admin` permission from an interactive session.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "accounts.import_view_only",
+  "params": {
+    "account_name": "deposits",
+    "account_public_key": "a2f1…",
+    "view_secret_key": "5c0e…",
+    "birthday_epoch": 1234
+  }
+}
+```
+
+The response is the account's component address: `{ "account_address": "component_…" }`.
+
+- `birthday_epoch` is the epoch to start scanning from. Pass the exported value so earlier deposits are found. If it is
+  omitted, scanning starts at the current epoch. A birthday after the current epoch is rejected.
+- The import never makes the account the wallet's default account, which pays fees and signs transactions. Omit
+  `is_default` or set it to `false`; `true` is rejected.
+- The import is rejected if the wallet already has an account with this public key or name, if another account already
+  uses this view key, or if the keys are invalid (an invalid or identity account public key, a zero view secret key, or a
+  view key equal to the account key).
+
+The account's Ootle address (from `accounts.get`) should be the same as on the cold daemon. Compare the two before you
+hand the address out: a mismatch means the wrong keys were imported, and payments to the online daemon's address would
+not reach the cold account.
+
+### 3. Read deposits
+
+The online daemon scans for the account like any other account. These calls work as usual:
+
+- `accounts.get_balances` — the stealth TARI balance.
+- `stealth_utxos.list` — each output with its `value`, `memo` and `sender_address`. A payment reference is carried in
+  the memo, and in `sender_address` when the sender attached their address.
+- `accounts.get_balance_changes` — the balance history.
+
+The daemon also checks that each output pays the account. A stealth output's one-time spend key is derived from the
+account public key and the view key, so the watch-only daemon recomputes it from the view secret key and the account
+public key. An output that decrypts with the view key but carries a different spend key is stored with status
+`Invalid` and is not counted in the balance.
+
+An output with a condition tree (an access rule or script, with or without a spend key) can be spent by whoever
+satisfies the condition, which the view key cannot rule out. A watch-only daemon stores such an output as `Invalid`
+too, so it never counts toward the balance.
+
+<Aside type="caution">
+The sender writes the memo, so its payment reference and sender address are whatever the sender chose. Nothing proves
+who sent a payment. Give each payer an unguessable, single-use payment reference and credit deposits by that reference,
+not by the sender address.
+</Aside>
+
+<Aside type="caution">
+The daemon gets UTXO data from its indexer without a proof that it is on chain. Run an indexer you trust, or confirm
+each deposit on chain, before you credit it.
+</Aside>
+
+### Payments cannot be sent
+
+The online daemon has no spend key for a watch-only account. `accounts.transfer`, `accounts.stealth_transfer` and
+`accounts.create_stealth_transfer_statement` from the account fail with
+`cannot transfer from a view-only account`. Spend the funds from the cold daemon.
