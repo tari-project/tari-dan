@@ -654,6 +654,8 @@ impl TrafficSim {
             })
             .await?
             .into_substate_value()
+            .map(|value| value.decode())
+            .transpose()?
             .and_then(|substate| substate.into_resource());
 
         let divisibility = resource.as_ref().map(|r| r.divisibility()).unwrap_or(6);
