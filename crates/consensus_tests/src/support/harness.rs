@@ -552,18 +552,23 @@ impl Test {
     }
 
     async fn wait_all_for_predicate<T: Display, P: FnMut(&Validator) -> bool>(&self, description: T, mut predicate: P) {
+        // A loaded CI runner can take several seconds per block, so the wait must cover a few 3-chains. It only bounds
+        // how long a stalled test takes to fail.
+        const MAX_WAIT: Duration = Duration::from_secs(60);
+        let deadline = Instant::now() + MAX_WAIT;
         let mut complete = vec![];
-        let mut remaining_loops = 100usize; // ~10 seconds
         loop {
+            let timed_out = Instant::now() >= deadline;
             self.with_all_validators(|v| {
                 if complete.contains(&v.address) {
                     return;
                 }
                 if predicate(v) {
                     complete.push(v.address.clone());
-                } else if remaining_loops == 0 {
+                } else if timed_out {
                     panic!(
-                        "Timed out waiting for {} ({} of {} validators passed)",
+                        "Timed out after {:?} waiting for {} ({} of {} validators passed)",
+                        MAX_WAIT,
                         description,
                         complete.len(),
                         self.validators.len()
@@ -572,8 +577,6 @@ impl Test {
                     // 📎
                 }
             });
-
-            remaining_loops -= 1;
 
             if complete.len() == self.validators.len() {
                 break;
