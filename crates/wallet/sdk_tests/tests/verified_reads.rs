@@ -142,15 +142,33 @@ async fn a_substate_served_without_a_proof_is_refused() {
 }
 
 #[tokio::test]
-async fn a_substate_whose_proof_shows_another_value_is_refused() {
+async fn a_substate_whose_proof_carries_another_value_is_refused() {
     let (sets, network, test) = walked_wallet(IndexerTrust::Verify).await;
     let (id, value) = substate(1);
-    let (_, proven_value) = substate(2);
-    let proof = substate_proof(&sets[4], &id, VERSION, &proven_value);
+    let (_, other_value) = substate(2);
+    let mut proof = substate_proof(&sets[4], &id, VERSION, &value);
+    proof.value = Some(tari_bor::encode(&other_value).unwrap());
     network.serve_substate(id.clone(), VERSION, value, Some(proof));
 
     let err = read_error(&test, &id).await;
     assert!(matches!(err, SubstateApiError::SubstateUnverified { .. }), "{err}");
+}
+
+#[tokio::test]
+async fn a_verified_read_yields_the_proven_value_not_the_served_one() {
+    let (sets, network, test) = walked_wallet(IndexerTrust::Verify).await;
+    let (id, served_value) = substate(1);
+    let (_, proven_value) = substate(2);
+    let proof = substate_proof(&sets[4], &id, VERSION, &proven_value);
+    network.serve_substate(id.clone(), VERSION, served_value, Some(proof));
+
+    let read = test
+        .sdk()
+        .substate_api()
+        .fetch_substate_from_network(&id, None)
+        .await
+        .unwrap();
+    assert_eq!(tombstone_value(&read.substate), tombstone_value(&proven_value));
 }
 
 #[tokio::test]
