@@ -114,8 +114,8 @@ pub fn add_transaction_signer(
 /// Seal a transaction (unsigned or unsealed JSON) with a signature from an external signer (HSM, MPC).
 ///
 /// `signature` is the raw 64-byte `R ‖ s` Ristretto255 Schnorr signature (scheme in the NPM README) over
-/// the hash from `hashUnsealedTransaction`, made
-/// by the key for `seal_signer_public_key`. The seal and any authorization signatures are verified.
+/// the hash from `hashUnsealedTransaction`, made by the key for `seal_signer_public_key`. The seal and any
+/// authorization signatures are verified.
 /// Returns the sealed `Transaction` as a JSON string.
 #[wasm_bindgen(js_name = "attachSealSignature")]
 pub fn attach_seal_signature(
@@ -131,8 +131,8 @@ pub fn attach_seal_signature(
 /// unsealed JSON).
 ///
 /// `signature` is the raw 64-byte `R ‖ s` Ristretto255 Schnorr signature (scheme in the NPM README) over
-/// the hash from `hashUnsignedTransaction` for
-/// `seal_signer_public_key`, made by the key for `signer_public_key`. It is verified before it is appended.
+/// the hash from `hashUnsignedTransaction` for `seal_signer_public_key`, made by the key for
+/// `signer_public_key`. It is verified before it is appended.
 /// Returns the `UnsealedTransactionV1` (with the new signature appended) as a JSON string.
 #[wasm_bindgen(js_name = "attachTransactionSignature")]
 pub fn attach_transaction_signature(
