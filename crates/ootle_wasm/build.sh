@@ -39,8 +39,10 @@ WASM_PACK_ARGS=(build "$WASM_CRATE" --target "$TARGET" --out-dir "$OUT_DIR" --sc
 
 if [ "$PROFILE" = "release" ]; then
     WASM_PACK_ARGS+=(--release)
-elif [ "$PROFILE" = "dev" ]; then
+elif [ "$PROFILE" = "dev" ] && [ "$CRATE" = "wasm" ]; then
     WASM_PACK_ARGS+=(--dev -- --features debug)
+elif [ "$PROFILE" = "dev" ]; then
+    WASM_PACK_ARGS+=(--dev)
 else
     echo "Unknown profile: $PROFILE (expected release or dev)"
     exit 1
