@@ -105,6 +105,7 @@ fn committed_result(transaction_id: TransactionId, set: &ValidatorSetFixture) ->
         SubstateVersion::ZERO,
         &SubstateValue::from(receipt.clone()),
     );
+    let committed = tari_bor::encode(&finalize).unwrap();
 
     TransactionQueryResult {
         transaction_id,
@@ -125,6 +126,7 @@ fn committed_result(transaction_id: TransactionId, set: &ValidatorSetFixture) ->
             version: SubstateVersion::ZERO,
             receipt,
             proof: Some(proof),
+            result: Some(committed),
         }),
     }
 }
@@ -262,10 +264,12 @@ async fn a_result_other_than_its_proven_receipt_commits_is_refused() {
     let transaction = build_transaction();
     let transaction_id = transaction.calculate_id();
     let mut result = committed_result(transaction_id, &sets[2]);
-    let TransactionFinalizedResult::Finalized { execution_result, .. } = &mut result.result else {
+    let TransactionFinalizedResult::Finalized { execution_result, .. } = &result.result else {
         unreachable!()
     };
-    execution_result.as_mut().unwrap().finalize.fee_receipt = FeeReceipt::builder().with_total_fees_paid(1).build();
+    let mut other = execution_result.as_ref().unwrap().finalize.clone();
+    other.fee_receipt = FeeReceipt::builder().with_total_fees_paid(1).build();
+    result.receipt.as_mut().unwrap().result = Some(tari_bor::encode(&other).unwrap());
     network.set_result(result);
     let test = wallet(network, &transaction);
 
@@ -281,6 +285,30 @@ async fn a_result_other_than_its_proven_receipt_commits_is_refused() {
     );
     let stored = test.sdk().transaction_api().get(transaction_id).unwrap();
     assert!(stored.finalize.is_none());
+}
+
+#[tokio::test]
+async fn the_committed_result_is_stored_in_place_of_the_served_one() {
+    let sets = sets();
+    let network = ProvingNetwork::new(&sets, 1);
+    let transaction = build_transaction();
+    let transaction_id = transaction.calculate_id();
+    let mut result = committed_result(transaction_id, &sets[2]);
+    let TransactionFinalizedResult::Finalized { execution_result, .. } = &mut result.result else {
+        unreachable!()
+    };
+    execution_result.as_mut().unwrap().finalize.fee_receipt = FeeReceipt::builder().with_total_fees_paid(1).build();
+    network.set_result(result);
+    let test = wallet(network, &transaction);
+
+    test.sdk()
+        .transaction_api()
+        .check_and_store_finalized_transaction(transaction_id)
+        .await
+        .unwrap()
+        .unwrap();
+    let stored = test.sdk().transaction_api().get(transaction_id).unwrap();
+    assert_eq!(stored.finalize.unwrap().fee_receipt.total_fees_paid(), 800);
 }
 
 #[tokio::test]

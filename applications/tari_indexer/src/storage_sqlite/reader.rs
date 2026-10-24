@@ -66,7 +66,7 @@ use crate::{
             WatchedSubstateEntry,
             WatchedSubstateRow,
         },
-        serialization::{deserialize_cbor, deserialize_hex_try_from, deserialize_json, serialize_hex},
+        serialization::{decode_committed, deserialize_hex_try_from, deserialize_json, serialize_hex},
     },
     store::{EventQuery, EventsPage, IndexerStoreReadTransaction, TransactionRejectionStatus},
     substate_manager::SubstateResponse,
@@ -1183,7 +1183,7 @@ impl IndexerStoreReadTransaction for SqliteStoreReadTransaction<'_> {
         row.map(|row| {
             Ok(SubstateCacheEntry {
                 version: row.version.map(|v| SubstateVersion::new(v as u64)),
-                substate_result: deserialize_cbor(&row.substate_result)?,
+                substate_result: decode_committed(&row.substate_result)?,
                 cached_at: row.cached_at as u64,
                 verified: row.verified,
             })

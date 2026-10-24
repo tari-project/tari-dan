@@ -9,6 +9,7 @@ use axum::{
 };
 use log::*;
 use tari_engine_types::{
+    commit_result::FinalizeResult,
     limits::{MAX_NATIVE_POINTS_PER_TRANSACTION, MAX_WASM_POINTS_PER_TRANSACTION},
     substate::SubstateId,
 };
@@ -312,24 +313,34 @@ pub async fn get_transaction_result(
         .map_err(ErrorResponse::anyhow)?
         .ok_or_else(|| ErrorResponse::not_found(format!("Transaction {transaction_id} not found")))?;
 
-    let is_committed = matches!(
-        &result,
-        IndexerTransactionFinalizedResult::Finalized { final_decision, .. } if final_decision.is_commit()
-    );
-    let receipt = if query.include_proof && is_committed {
-        get_proven_receipt(&context, transaction_id).await?
-    } else {
-        None
+    let receipt = match &result {
+        IndexerTransactionFinalizedResult::Finalized {
+            final_decision,
+            execution_result,
+            ..
+        } if query.include_proof && final_decision.is_commit() => {
+            let finalize = execution_result
+                .as_ref()
+                .map(|execution_result| &execution_result.finalize);
+            get_proven_receipt(&context, transaction_id, finalize).await?
+        },
+        _ => None,
     };
 
     Ok(Json(GetTransactionResultResponse { result, receipt }))
 }
 
-/// The committed receipt of `transaction_id` and its proof, fetched from the receipt's committee.
+/// The committed receipt of `transaction_id` and its proof, fetched from the receipt's committee, served with `result`
+/// in its committed encoding.
 async fn get_proven_receipt(
     context: &HandlerContext,
     transaction_id: TransactionId,
+    result: Option<&FinalizeResult>,
 ) -> HandlerResult<Option<ProvenTransactionReceipt>> {
+    let result = result
+        .map(tari_bor::encode)
+        .transpose()
+        .map_err(|e| ErrorResponse::internal_error(format!("Transaction result failed to encode: {e}")))?;
     let receipt_id = SubstateId::TransactionReceipt(transaction_id.into_receipt_address());
     let fetched = match context
         .substate_manager()
@@ -347,6 +358,10 @@ async fn get_proven_receipt(
         None => return Ok(None),
     };
     let version = fetched.substate.version();
+    let proof = fetched
+        .proof
+        .map(|proof| to_substate_proof(proof, Some(fetched.substate.substate_value())))
+        .transpose()?;
     let receipt = fetched
         .substate
         .into_substate_value()
@@ -355,7 +370,8 @@ async fn get_proven_receipt(
     Ok(Some(ProvenTransactionReceipt {
         version,
         receipt,
-        proof: fetched.proof.map(to_substate_proof).transpose()?,
+        proof,
+        result,
     }))
 }
 

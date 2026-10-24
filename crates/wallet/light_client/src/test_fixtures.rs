@@ -427,6 +427,7 @@ pub fn substate_proof(
         value_proof: tari_bor::serde_codec::to_vec(&value_proof).unwrap(),
         value_hash_epoch: set.epoch,
         down_proof: None,
+        value: Some(tari_bor::encode(value).unwrap()),
     }
 }
 
@@ -509,6 +510,7 @@ pub fn substate_down_proof(
         value_proof: tari_bor::serde_codec::to_vec(&down).unwrap(),
         value_hash_epoch: up_set.epoch,
         down_proof: Some(tari_bor::serde_codec::to_vec(&down_proof).unwrap()),
+        value: None,
     }
 }
 

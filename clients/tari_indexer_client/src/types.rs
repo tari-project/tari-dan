@@ -160,6 +160,18 @@ pub struct SubstateProof {
     #[cfg_attr(feature = "ts", ts(optional, type = "string"))]
     #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>, format = Byte))]
     pub down_proof: Option<Vec<u8>>,
+    /// CBOR-encoded `SubstateValue` the proof is for, as its shard group committed it. Present when the substate
+    /// version is up. A verifier hashes and uses the value decoded from these bytes: the substate's JSON form does not
+    /// decode back to the committed value for every value, e.g. a non-finite float or metadata whose CBOR is not
+    /// canonical.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "ootle_serde::base64::option"
+    )]
+    #[cfg_attr(feature = "ts", ts(optional, type = "string"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>, format = Byte))]
+    pub value: Option<Vec<u8>>,
 }
 
 /// The committed block a [`SubstateProof`] is anchored at.
@@ -238,6 +250,7 @@ impl GetSubstatesResponse {
                     value_proof: proof.value_proof,
                     value_hash_epoch: proof.value_hash_epoch,
                     down_proof: proof.down_proof,
+                    value: proof.value,
                 })
             })
             .collect();
@@ -266,6 +279,7 @@ impl GetSubstatesResponse {
                     value_proof: proof.value_proof,
                     value_hash_epoch: proof.value_hash_epoch,
                     down_proof: proof.down_proof,
+                    value: proof.value,
                 }))
             })
             .collect();
@@ -298,6 +312,15 @@ pub struct BatchedSubstateProof {
     #[cfg_attr(feature = "ts", ts(optional, type = "string"))]
     #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>, format = Byte))]
     pub down_proof: Option<Vec<u8>>,
+    /// CBOR-encoded `SubstateValue`, as in [`SubstateProof::value`].
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "ootle_serde::base64::option"
+    )]
+    #[cfg_attr(feature = "ts", ts(optional, type = "string"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>, format = Byte))]
+    pub value: Option<Vec<u8>>,
 }
 
 /// CBOR-encoded `SidechainBlockCommitProof`: a block's header and the chain of quorum certificates that committed it.
@@ -486,6 +509,18 @@ pub struct ProvenTransactionReceipt {
     /// `None` when no committee member could prove the receipt, e.g. when nothing has been committed
     /// since an epoch change.
     pub proof: Option<SubstateProof>,
+    /// CBOR-encoded `FinalizeResult` of the transaction, as its committee returned it. A verifier checks the result
+    /// decoded from these bytes against the proven receipt and uses it: the result's JSON form does not decode back
+    /// to the committed result for every result, e.g. one holding a non-finite float or metadata whose CBOR is not
+    /// canonical.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "ootle_serde::base64::option"
+    )]
+    #[cfg_attr(feature = "ts", ts(optional, type = "string"))]
+    #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>, format = Byte))]
+    pub result: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1464,6 +1499,7 @@ mod tests {
             value_proof: vec![seed; 8],
             value_hash_epoch: Epoch(2),
             down_proof: seed.is_multiple_of(2).then(|| vec![seed; 4]),
+            value: (!seed.is_multiple_of(2)).then(|| vec![seed; 6]),
         }
     }
 
@@ -1493,6 +1529,7 @@ mod tests {
             assert_eq!(served.value_proof, proof.value_proof);
             assert_eq!(served.value_hash_epoch, proof.value_hash_epoch);
             assert_eq!(served.down_proof, proof.down_proof);
+            assert_eq!(served.value, proof.value);
         }
     }
 

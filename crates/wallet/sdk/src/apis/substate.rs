@@ -100,15 +100,15 @@ where
         }
 
         let verify = self.indexer_trust.is_verify();
-        let FetchedSubstates { substates, proofs } = self
+        let FetchedSubstates { mut substates, proofs } = self
             .network_interface
             .get_substates(ids, verify)
             .await
             .map_err(|e| SubstateApiError::NetworkInterfaceError(e.into()))?;
         if verify {
-            for (id, substate) in &substates {
-                self.verify_read(id, substate.version(), substate.substate_value(), proofs.get(id))
-                    .await?;
+            for (id, substate) in &mut substates {
+                let value = self.verify_read(id, substate.version(), proofs.get(id)).await?;
+                *substate = Substate::new(substate.version(), value);
             }
         }
         Ok(substates)
@@ -142,14 +142,9 @@ where
                 continue;
             };
             let result = if verify {
-                self.verify_read(
-                    &id,
-                    substate.version(),
-                    substate.substate_value(),
-                    proofs.remove(&id).as_ref(),
-                )
-                .await
-                .map(|()| substate)
+                self.verify_read(&id, substate.version(), proofs.remove(&id).as_ref())
+                    .await
+                    .map(|value| Substate::new(substate.version(), value))
             } else {
                 Ok(substate)
             };
@@ -414,10 +409,11 @@ where
                 address: address.clone(),
             });
         };
-        if verify {
-            self.verify_read(address, resp.version, &substate, resp.proof.as_ref())
-                .await?;
-        }
+        let substate = if verify {
+            self.verify_read(address, resp.version, resp.proof.as_ref()).await?
+        } else {
+            *substate
+        };
 
         debug!(
             target: LOG_TARGET,
@@ -425,7 +421,7 @@ where
         );
         Ok(ValidatorScanResult {
             id: VersionedSubstateId::new(address.clone(), resp.version),
-            substate: *substate,
+            substate,
         })
     }
 
@@ -495,8 +491,9 @@ where
         }
     }
 
-    /// Verifies that `substate_id` at `version` held `value` at the block `proof` is anchored at, and that the block
-    /// is recent: no more than [`MAX_PROOF_AGE_EPOCHS`] before the latest validator set the wallet trusts.
+    /// Verifies that `substate_id` at `version` held the value `proof` carries at the block `proof` is anchored at, and
+    /// that the block is recent: no more than [`MAX_PROOF_AGE_EPOCHS`] before the latest validator set the wallet
+    /// trusts. Returns that value, which the caller uses in place of the substate the indexer served beside the proof.
     ///
     /// The latest trusted set advances only as far as the checkpoints the indexer serves. An indexer that stops serving
     /// newer checkpoints can therefore keep the wallet on state proven up to the last one it served; no proof shows its
@@ -505,9 +502,8 @@ where
         &self,
         substate_id: &SubstateId,
         version: SubstateVersion,
-        value: &SubstateValue,
         proof: Option<&SubstateProof>,
-    ) -> Result<(), SubstateApiError> {
+    ) -> Result<SubstateValue, SubstateApiError> {
         let proof = proof.ok_or_else(|| SubstateApiError::SubstateUnproven {
             substate_id: substate_id.clone(),
         })?;
@@ -518,15 +514,16 @@ where
         let committee = self
             .trusted_committee(substate_id, anchor_epoch, proof.anchor.shard_group)
             .await?;
-        committee
-            .verify_substate(substate_id, version, Some(value), proof)
+        let (_, value) = committee
+            .verify_substate(substate_id, version, proof)
             .map_err(|source| SubstateApiError::SubstateUnverified {
                 substate_id: substate_id.clone(),
                 source,
             })?;
         // Verifying the committee walks to the set of the anchor's epoch when that is past the latest trusted set, and
         // the walk can go further.
-        self.check_fresh(substate_id, anchor_epoch)
+        self.check_fresh(substate_id, anchor_epoch)?;
+        Ok(value)
     }
 
     /// The error for a proof anchored at `anchor_epoch`, for which the wallet trusts no validator set even after

@@ -380,6 +380,76 @@ mod tests {
         assert!(cache.read(&id).await.unwrap().is_none());
     }
 
+    /// A cached value is served with the proof it was verified with, so it must hash as it did when it was committed,
+    /// including values the serde form rebuilds differently: a non-finite float, and metadata whose CBOR is valid but
+    /// not canonical.
+    #[tokio::test]
+    async fn a_cached_value_keeps_its_committed_hash() {
+        use ootle_network::Network;
+        use tari_engine_types::{
+            non_fungible::NonFungibleContainer,
+            resource::Resource,
+            substate::{Substate, SubstateValue, hash_substate},
+        };
+        use tari_ootle_common_types::Epoch;
+        use tari_template_lib_types::{Metadata, ResourceType, SubstateOwnerRule};
+
+        let mut metadata = Metadata::new();
+        metadata.insert_raw("k", tari_bor::decode_exact(&[0x18, 0x05]).unwrap());
+        let values = [
+            SubstateValue::NonFungible(NonFungibleContainer::new(
+                tari_bor::Value::Float(f64::NAN),
+                tari_bor::Value::Float(f64::NEG_INFINITY),
+            )),
+            SubstateValue::Resource(Box::new(Resource::new(
+                ResourceType::Fungible,
+                SubstateOwnerRule::None,
+                Default::default(),
+                metadata,
+                None,
+                None,
+                6,
+                true,
+            ))),
+        ];
+
+        let (_d, cache, id) = cache_with_head(SubstateVersion::new(6), true).await;
+        for value in values {
+            let version = SubstateVersion::new(7);
+            let committed = hash_substate(Network::LocalNet, &value, version, Epoch(1));
+            let result = SubstateResult::Up {
+                substate: Box::new(Substate::new(version, value)),
+            };
+            cache
+                .write(
+                    &id,
+                    SubstateCacheEntryRef {
+                        version: Some(version),
+                        substate_result: &result,
+                        cached_at: now_unix_secs().unwrap(),
+                        verified: true,
+                        proof: None,
+                    },
+                    FetchWatermark::new(100),
+                )
+                .await
+                .unwrap();
+
+            let cached = cache
+                .read(&id)
+                .await
+                .unwrap()
+                .unwrap()
+                .substate_result
+                .into_up()
+                .unwrap();
+            assert_eq!(
+                hash_substate(Network::LocalNet, cached.substate_value(), version, Epoch(1)),
+                committed
+            );
+        }
+    }
+
     async fn cache_with_nonexistence(confirm_shard: bool) -> (tempfile::TempDir, SqliteSubstateCache, SubstateId) {
         cache_with_nonexistence_at(confirm_shard, NEGATIVE_SERVE_LAG).await
     }

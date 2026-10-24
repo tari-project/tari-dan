@@ -14,4 +14,11 @@ export type ProvenTransactionReceipt = {
    * since an epoch change.
    */
   proof: SubstateProof | null;
+  /**
+   * CBOR-encoded `FinalizeResult` of the transaction, as its committee returned it. A verifier checks the result
+   * decoded from these bytes against the proven receipt and uses it: the result's JSON form does not decode back
+   * to the committed result for every result, e.g. one holding a non-finite float or metadata whose CBOR is not
+   * canonical.
+   */
+  result?: string;
 };

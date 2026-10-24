@@ -49,7 +49,7 @@ use crate::{
             encode_retention_epoch,
         },
         reader::SqliteStoreReadTransaction,
-        serialization::{serialize_cbor, serialize_hex, serialize_json},
+        serialization::{encode_committed, serialize_cbor, serialize_hex, serialize_json},
     },
     store::{
         IndexerStoreReadTransaction,
@@ -697,7 +697,7 @@ impl IndexerStoreWriteTransaction for SqliteStoreWriteTransaction<'_> {
             }
         }
 
-        let encoded = serialize_cbor(entry.substate_result)?;
+        let encoded = encode_committed(entry.substate_result)?;
 
         diesel::insert_into(substate_cache::table)
             .values((

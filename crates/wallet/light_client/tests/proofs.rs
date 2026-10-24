@@ -8,7 +8,9 @@ use tari_engine_types::{
     confidential::ClaimedOutputTombstone,
     events::Event,
     fees::FeeReceipt,
-    substate::{Substate, SubstateDiff, SubstateId, SubstateValue},
+    non_fungible::NonFungibleContainer,
+    resource::Resource,
+    substate::{Substate, SubstateDiff, SubstateId, SubstateValue, hash_substate},
     transaction_receipt::{DiffSummary, FinalizeOutcome, TransactionReceipt},
 };
 use tari_indexer_client::types::{ProvenTransactionReceipt, SubstateProof};
@@ -25,7 +27,16 @@ use tari_ootle_light_client::{
 };
 use tari_ootle_transaction::TransactionId;
 use tari_state_tree::SPARSE_MERKLE_PLACEHOLDER_HASH;
-use tari_template_lib_types::{ClaimedOutputTombstoneAddress, Hash32, Metadata};
+use tari_template_lib_types::{
+    ClaimedOutputTombstoneAddress,
+    Hash32,
+    Metadata,
+    NonFungibleAddress,
+    NonFungibleId,
+    ResourceAddress,
+    ResourceType,
+    SubstateOwnerRule,
+};
 
 const EPOCH: Epoch = Epoch(2);
 
@@ -68,25 +79,45 @@ fn it_verifies_a_substate_against_its_shard_groups_committee() {
     let proof = substate_proof(&set, &id, SubstateVersion::ZERO, &value);
     let committee = committee_for(&trusted, &set, &proof);
 
-    let tip = committee
-        .verify_substate(&id, SubstateVersion::ZERO, Some(&value), &proof)
-        .unwrap();
+    let (tip, verified) = committee.verify_substate(&id, SubstateVersion::ZERO, &proof).unwrap();
     assert_eq!(tip.epoch, EPOCH);
     assert_eq!(tip.height.as_u64(), 5);
+    assert_eq!(tari_bor::encode(&verified).unwrap(), tari_bor::encode(&value).unwrap());
 }
 
 #[test]
 fn a_substate_with_another_value_is_rejected() {
     let (set, trusted) = trusted_set();
     let (id, value) = tombstone(1);
-    let proof = substate_proof(&set, &id, SubstateVersion::ZERO, &value);
+    let mut proof = substate_proof(&set, &id, SubstateVersion::ZERO, &value);
     let committee = committee_for(&trusted, &set, &proof);
 
     let (_, other_value) = tombstone(2);
+    proof.value = Some(tari_bor::encode(&other_value).unwrap());
     let err = committee
-        .verify_substate(&id, SubstateVersion::ZERO, Some(&other_value), &proof)
+        .verify_substate(&id, SubstateVersion::ZERO, &proof)
         .unwrap_err();
     assert!(matches!(err, LightClientError::InvalidSubstateProof(_)), "{err}");
+}
+
+#[test]
+fn a_substate_proof_without_its_value_is_rejected() {
+    let (set, trusted) = trusted_set();
+    let (id, value) = tombstone(1);
+    let mut proof = substate_proof(&set, &id, SubstateVersion::ZERO, &value);
+    let committee = committee_for(&trusted, &set, &proof);
+
+    proof.value = None;
+    let err = committee
+        .verify_substate(&id, SubstateVersion::ZERO, &proof)
+        .unwrap_err();
+    assert!(matches!(err, LightClientError::MissingSubstateValue { .. }), "{err}");
+
+    proof.value = Some(vec![0xff]);
+    let err = committee
+        .verify_substate(&id, SubstateVersion::ZERO, &proof)
+        .unwrap_err();
+    assert!(matches!(err, LightClientError::Decode { .. }), "{err}");
 }
 
 #[test]
@@ -102,7 +133,7 @@ fn a_substate_proof_checked_against_another_shard_groups_committee_is_rejected()
     let committee = trusted.verify_committee(&set.committee(other_group)).unwrap();
 
     let err = committee
-        .verify_substate(&id, SubstateVersion::ZERO, Some(&value), &proof)
+        .verify_substate(&id, SubstateVersion::ZERO, &proof)
         .unwrap_err();
     assert!(
         matches!(err, LightClientError::CommitProofShardGroupMismatch { .. }),
@@ -167,6 +198,7 @@ fn it_verifies_a_committed_receipt() {
         version: SubstateVersion::ZERO,
         receipt,
         proof: Some(proof),
+        result: None,
     };
     committee.verify_receipt(transaction_id, &proven).unwrap();
 
@@ -406,4 +438,137 @@ fn it_verifies_a_down_proof_across_a_handover_with_the_set_kept_for_each_epoch()
         &down_commit_proof,
     )
     .unwrap();
+}
+
+fn resource_address() -> ResourceAddress {
+    ResourceAddress::from_hex(&"09".repeat(32)).unwrap()
+}
+
+fn nft_with_data(data: tari_bor::Value) -> (SubstateId, SubstateValue) {
+    (
+        SubstateId::NonFungible(NonFungibleAddress::new(resource_address(), NonFungibleId::from_u64(1))),
+        SubstateValue::NonFungible(NonFungibleContainer::new(data, tari_bor::Value::Null)),
+    )
+}
+
+fn resource_with_metadata_bytes(bytes: &[u8]) -> (SubstateId, SubstateValue) {
+    let mut metadata = Metadata::new();
+    metadata.insert_raw("k", tari_bor::decode_exact(bytes).unwrap());
+    let resource = Resource::new(
+        ResourceType::Fungible,
+        SubstateOwnerRule::None,
+        Default::default(),
+        metadata,
+        None,
+        None,
+        6,
+        true,
+    );
+    (
+        SubstateId::Resource(resource_address()),
+        SubstateValue::Resource(Box::new(resource)),
+    )
+}
+
+/// Committed values whose JSON form does not decode back to the same value: non-finite floats, and metadata whose CBOR
+/// is valid but not canonical.
+fn values_json_does_not_carry_exactly() -> Vec<(SubstateId, SubstateValue)> {
+    vec![
+        nft_with_data(tari_bor::Value::Float(f64::NAN)),
+        nft_with_data(tari_bor::Value::Float(f64::INFINITY)),
+        nft_with_data(tari_bor::Value::Float(f64::NEG_INFINITY)),
+        // A non-minimal integer, an f32 and an indefinite-length text string.
+        resource_with_metadata_bytes(&[0x18, 0x05]),
+        resource_with_metadata_bytes(&[0xfa, 0x3f, 0xc0, 0x00, 0x00]),
+        resource_with_metadata_bytes(&[0x7f, 0x61, 0x61, 0xff]),
+    ]
+}
+
+#[test]
+fn a_proof_served_as_json_verifies_and_yields_the_committed_value() {
+    let (set, trusted) = trusted_set();
+    for (id, value) in values_json_does_not_carry_exactly() {
+        let proof = substate_proof(&set, &id, SubstateVersion::ZERO, &value);
+        let committee = committee_for(&trusted, &set, &proof);
+        let served: SubstateProof = serde_json::from_str(&serde_json::to_string(&proof).unwrap()).unwrap();
+
+        let (_, verified) = committee
+            .verify_substate(&id, SubstateVersion::ZERO, &served)
+            .unwrap_or_else(|e| panic!("{id}: {e}"));
+        assert_eq!(
+            hash_substate(NETWORK, &verified, SubstateVersion::ZERO, EPOCH),
+            hash_substate(NETWORK, &value, SubstateVersion::ZERO, EPOCH),
+            "{id}"
+        );
+    }
+}
+
+/// A committed transaction whose diff ups each value [`values_json_does_not_carry_exactly`] lists and whose event
+/// carries metadata whose CBOR is not canonical, with the receipt it committed and its result.
+fn committed_with_values_json_does_not_carry_exactly(
+    transaction_id: TransactionId,
+) -> (TransactionReceipt, FinalizeResult) {
+    let mut diff = SubstateDiff::new();
+    for (seed, (id, value)) in values_json_does_not_carry_exactly().into_iter().enumerate() {
+        let id = match id {
+            SubstateId::NonFungible(address) => SubstateId::NonFungible(NonFungibleAddress::new(
+                *address.resource_address(),
+                NonFungibleId::from_u64(seed as u64),
+            )),
+            SubstateId::Resource(_) => {
+                SubstateId::Resource(ResourceAddress::from_hex(&format!("{seed:02x}").repeat(32)).unwrap())
+            },
+            id => id,
+        };
+        diff.up(id, Substate::new(SubstateVersion::ZERO, value));
+    }
+    let mut receipt = receipt(DiffSummary::from_diff(NETWORK, &diff, EPOCH));
+    let mut metadata = Metadata::new();
+    metadata.insert_raw("k", tari_bor::decode_exact(&[0x18, 0x05]).unwrap());
+    receipt.events = Box::new([Event::new(
+        None,
+        Hash32::from_array([3; 32]),
+        "topic".to_string(),
+        metadata,
+    )]);
+    let result = FinalizeResult::new(
+        Hash32::from_array(transaction_id.into_array()),
+        vec![],
+        receipt.events.to_vec(),
+        TransactionResult::Accept(diff),
+        receipt.fee_receipt.clone(),
+    );
+    (receipt, result)
+}
+
+#[test]
+fn a_result_served_as_json_verifies_and_yields_the_committed_result() {
+    let (set, trusted) = trusted_set();
+    let transaction_id = TransactionId::new([9; 32]);
+    let (receipt, result) = committed_with_values_json_does_not_carry_exactly(transaction_id);
+    let receipt_id = SubstateId::TransactionReceipt(transaction_id.into_receipt_address());
+    let proof = substate_proof(
+        &set,
+        &receipt_id,
+        SubstateVersion::ZERO,
+        &SubstateValue::from(receipt.clone()),
+    );
+    let committee = committee_for(&trusted, &set, &proof);
+    let proven = ProvenTransactionReceipt {
+        version: SubstateVersion::ZERO,
+        receipt,
+        proof: Some(proof),
+        result: Some(tari_bor::encode(&result).unwrap()),
+    };
+    let mut served: ProvenTransactionReceipt = serde_json::from_str(&serde_json::to_string(&proven).unwrap()).unwrap();
+
+    let (_, verified) = committee.verify_result(transaction_id, &served).unwrap();
+    assert_eq!(tari_bor::encode(&verified).unwrap(), tari_bor::encode(&result).unwrap());
+
+    served.result = None;
+    let err = committee.verify_result(transaction_id, &served).unwrap_err();
+    assert!(
+        matches!(err, LightClientError::MissingTransactionResult { .. }),
+        "{err}"
+    );
 }

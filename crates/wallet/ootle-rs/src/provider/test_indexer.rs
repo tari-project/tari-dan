@@ -444,6 +444,7 @@ pub(crate) fn committed_result(
         SubstateVersion::ZERO,
         &SubstateValue::from(receipt.clone()),
     );
+    let committed_result = tari_bor::encode(&finalize).unwrap();
     GetTransactionResultResponse {
         result: IndexerTransactionFinalizedResult::Finalized {
             final_decision: Decision::Commit,
@@ -462,6 +463,7 @@ pub(crate) fn committed_result(
             version: SubstateVersion::ZERO,
             receipt,
             proof: Some(proof),
+            result: Some(committed_result),
         }),
     }
 }

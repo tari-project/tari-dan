@@ -160,22 +160,28 @@ pub async fn get_substate(
 
 fn to_get_substate_response(lookup: ProvenLookup) -> Result<GetSubstateResponse, ErrorResponse> {
     match lookup {
-        ProvenLookup::Up(fetched) => Ok(GetSubstateResponse {
-            version: fetched.substate.version(),
-            state: SubstateState::Up {
-                substate: Box::new(fetched.substate.into_substate_value()),
-            },
-            // True when this value was checked against the committee before being accepted. False
-            // for local-only lookups, when verification is disabled, or when no committee member
-            // could supply a proof yet (e.g. nothing committed since an epoch change).
-            verified: fetched.verified,
-            proof: fetched.proof.map(to_substate_proof).transpose()?,
-        }),
+        ProvenLookup::Up(fetched) => {
+            let proof = fetched
+                .proof
+                .map(|proof| to_substate_proof(proof, Some(fetched.substate.substate_value())))
+                .transpose()?;
+            Ok(GetSubstateResponse {
+                version: fetched.substate.version(),
+                state: SubstateState::Up {
+                    substate: Box::new(fetched.substate.into_substate_value()),
+                },
+                // True when this value was checked against the committee before being accepted. False
+                // for local-only lookups, when verification is disabled, or when no committee member
+                // could supply a proof yet (e.g. nothing committed since an epoch change).
+                verified: fetched.verified,
+                proof,
+            })
+        },
         ProvenLookup::Down { version, proof } => Ok(GetSubstateResponse {
             version,
             state: SubstateState::Down {},
             verified: true,
-            proof: Some(to_substate_proof(proof)?),
+            proof: Some(to_substate_proof(proof, None)?),
         }),
     }
 }
@@ -246,7 +252,7 @@ pub async fn fetch_substates(
     let mut proofs = Vec::new();
     for (id, ProvenSubstate { substate, proof }) in fetched {
         if include_proofs && let Some(proof) = proof {
-            proofs.push((id.clone(), to_substate_proof(proof)?));
+            proofs.push((id.clone(), to_substate_proof(proof, Some(substate.substate_value()))?));
         }
         substates.insert(id, substate);
     }
