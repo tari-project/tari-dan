@@ -52,7 +52,7 @@ import FetchStatusCheck from "../../../Components/FetchStatusCheck";
 import StatusChip from "../../../Components/StatusChip";
 import { DataTableCell } from "../../../Components/StyledComponents";
 import { CURRENCY } from "../../../utils/constants";
-import { decodeExecuteResult } from "../../../utils/encoded";
+import { useDecoder } from "../../../utils/encoded";
 import { formatCurrency, isNotFoundError, validateHash } from "../../../utils/helpers";
 import SubstateChanges from "../../TransactionReceipts/components/SubstateChanges";
 import EventsContent from "./EventsContent";
@@ -99,6 +99,7 @@ const Empty = ({ message }: { message: string }) => (
 
 function Result({ transaction_id }: Pick<IndexerGetTransactionResultRequest, "transaction_id">) {
   const [expandedPanels, setExpandedPanels] = useState<string[]>([]);
+  const { decodeExecuteResult } = useDecoder();
   const normalizedId = transaction_id.toLowerCase();
   const isValidHash = validateHash(normalizedId);
   const result = useGetTransactionResult(normalizedId);

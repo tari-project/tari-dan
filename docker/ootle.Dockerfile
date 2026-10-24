@@ -109,7 +109,7 @@ WORKDIR /base
 
 
 # ---------------------------------------------------------------------------
-# chef: sysdeps plus the JS toolchain and cargo-chef, for the binary build
+# chef: sysdeps plus the JS toolchain, cargo-chef and wasm-pack, for the binary build
 # ---------------------------------------------------------------------------
 FROM sysdeps AS chef
 
@@ -125,6 +125,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # cargo-chef for Rust dependency prewarming.
 RUN cargo install cargo-chef --locked
+
+# The indexer web UI builds the workspace's ootle-wasm-bor crate with wasm-pack, to
+# decode the values the indexer serves.
+RUN cargo install wasm-pack --version 0.15.0 --locked
 
 WORKDIR /base
 

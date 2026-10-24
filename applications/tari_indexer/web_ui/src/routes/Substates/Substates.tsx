@@ -51,7 +51,7 @@ import CopyToClipboard from "../../Components/CopyToClipboard";
 import PageHeading from "../../Components/PageHeading";
 import { CodeBlock, StyledPaper } from "../../Components/StyledComponents";
 import { useGetSubstate } from "../../api/hooks/useSubstates";
-import { decodeSubstateValue, encodedByteLength } from "../../utils/encoded";
+import { encodedByteLength, useDecoder } from "../../utils/encoded";
 import { renderJson } from "../../utils/helpers";
 
 const SUBSTATE_PREFIXES = [
@@ -113,6 +113,7 @@ function EncodedSubstateDetails({
   version: number;
   verified: boolean;
 }) {
+  const { decodeSubstateValue } = useDecoder();
   const substate = decodeSubstateValue(encoded);
   if (substate) {
     return <SubstateDetails substate={substate} version={version} verified={verified} />;

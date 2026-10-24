@@ -25,6 +25,11 @@ use std::{env, fs, process::Command};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=./web_ui/src");
     println!("cargo:rerun-if-changed=./web_ui/public");
+    println!("cargo:rerun-if-changed=./web_ui/scripts");
+    // The UI embeds a decoder for the engine's types, so it is rebuilt with the crates that define them.
+    println!("cargo:rerun-if-changed=../../crates/ootle_wasm");
+    println!("cargo:rerun-if-changed=../../crates/engine_types/src");
+    println!("cargo:rerun-if-changed=../../crates/template_lib_types/src");
 
     fs::create_dir_all("./web_ui/dist")?;
 

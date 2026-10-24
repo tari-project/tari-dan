@@ -27,11 +27,12 @@ import { useParams } from "react-router-dom";
 import { useGetSubstate } from "../../../api/hooks/useSubstates";
 import CopyToClipboard from "../../../Components/CopyToClipboard";
 import FetchStatusCheck from "../../../Components/FetchStatusCheck";
-import { decodeSubstateValue } from "../../../utils/encoded";
+import { useDecoder } from "../../../utils/encoded";
 import { formatCurrency } from "../../../utils/helpers";
 
 function Resources() {
   const { resourceAddress } = useParams();
+  const { decodeSubstateValue } = useDecoder();
 
   const {
     data: substateData,
@@ -52,7 +53,7 @@ function Resources() {
       return null;
     }
     return substate.Resource;
-  }, [substateData]);
+  }, [substateData, decodeSubstateValue]);
 
   return (
     <FetchStatusCheck

@@ -4,6 +4,7 @@ dist/
 build/
 coverage/
 target/
+applications/tari_indexer/web_ui/ootle-wasm-bor/
 
 # Other Claude sessions' worktrees are full copies of this repo; formatting them here
 # would rewrite files that belong to a different branch.

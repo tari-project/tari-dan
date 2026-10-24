@@ -2,16 +2,62 @@
 //  SPDX-License-Identifier: BSD-3-Clause
 
 import type { ExecuteResult, SubstateValue } from "@tari-project/ootle-ts-bindings";
+import { useSyncExternalStore } from "react";
+import initOotleWasm, {
+  decodeExecuteResult as decodeExecuteResultJson,
+  decodeSubstateValue as decodeSubstateValueJson,
+} from "../../ootle-wasm-bor/ootle_wasm_bor.js";
 
-// The indexer serves engine values in their CBOR encoding, base64 in JSON. Reading one needs a decoder that knows the
-// engine's CBOR schema. This UI has none, so each decoder returns `undefined` and callers show the encoded value.
+// The indexer serves engine values in their CBOR encoding, base64 in JSON, and ootle-wasm-bor decodes them. A value that
+// cannot be decoded, because the module has not loaded (or failed to) or the bytes are not a value, decodes to
+// `undefined`, and callers show it encoded.
 
-export function decodeSubstateValue(_encoded: string): SubstateValue | undefined {
-  return undefined;
+export interface Decoder {
+  decodeSubstateValue(encoded: string): SubstateValue | undefined;
+  decodeExecuteResult(encoded: string): ExecuteResult | undefined;
 }
 
-export function decodeExecuteResult(_encoded: string): ExecuteResult | undefined {
-  return undefined;
+const LOADED: Decoder = {
+  decodeSubstateValue: (encoded) => decode(encoded, decodeSubstateValueJson),
+  decodeExecuteResult: (encoded) => decode(encoded, decodeExecuteResultJson),
+};
+
+const UNLOADED: Decoder = {
+  decodeSubstateValue: () => undefined,
+  decodeExecuteResult: () => undefined,
+};
+
+let loaded = false;
+const listeners = new Set<() => void>();
+
+/** Loads the decoder. Resolves whether or not it loads. */
+export async function loadDecoder(): Promise<void> {
+  try {
+    await initOotleWasm();
+    loaded = true;
+    listeners.forEach((listener) => listener());
+  } catch (error) {
+    console.error("Could not load ootle-wasm-bor; values are shown in their CBOR encoding", error);
+  }
+}
+
+/** The decoder. The caller re-renders, with a new `Decoder`, once the module loads. */
+export function useDecoder(): Decoder {
+  return useSyncExternalStore(subscribe, () => (loaded ? LOADED : UNLOADED));
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function decode<T>(encoded: string, decoder: (encoded: string) => string): T | undefined {
+  try {
+    return JSON.parse(decoder(encoded)) as T;
+  } catch (error) {
+    console.warn("Could not decode a value the indexer served", error);
+    return undefined;
+  }
 }
 
 /** The number of bytes `encoded` (base64) holds. */

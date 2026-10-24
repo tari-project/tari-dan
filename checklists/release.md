@@ -26,6 +26,11 @@ Shared reference — what a tag sets off, the command index, recovery: [README.m
       Apply only the bumps it prints. A tier-3 (core) break moves `[workspace.package].version` and
       every tier-3 pin in `[workspace.dependencies]`; independent crates move on their own.
 - [ ] **`[workspace.package].version` is the version you are about to tag.**
+- [ ] **Every npm package the tag publishes already exists on npm.** The npm jobs authenticate only
+      through trusted publishing (OIDC), which npm configures per existing package, so a package's
+      first version is published by hand: build it, `npm publish --access public --tag bootstrap`
+      a `0.0.0-bootstrap.0` version, then add this repo and its publish workflow as the package's
+      trusted publisher on npmjs.com. **(human)**
 - [ ] `cargo +nightly-2025-12-05 fmt --all` and `cargo metadata` both clean (metadata catches a pin
       left behind outside the root manifest).
 - [ ] **Version bump PR merged**, titled `chore: release vX.Y.Z`.

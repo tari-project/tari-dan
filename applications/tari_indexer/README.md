@@ -38,7 +38,8 @@ cargo build --release
 
 ### Features
 
-- `web_ui` (default): Includes the web-based user interface
+- `web_ui` (default): Includes the web-based user interface. A release build compiles it, which needs `pnpm`,
+  [`wasm-pack`](https://github.com/drager/wasm-pack) and the `wasm32-unknown-unknown` target.
 - Without web UI: `cargo build --release --no-default-features`
 
 ## Configuration
@@ -145,13 +146,15 @@ The indexer uses SQLite for local storage, automatically creating and migrating 
 
 ### Web UI Development
 
-The web UI is a React application located in the `web_ui/` directory:
+The web UI is a React application located in the `web_ui/` directory. The indexer serves substate values and
+execution results in their CBOR encoding, and the UI decodes them with the workspace's `ootle-wasm-bor` crate, which
+`dev` and `build` compile first with `wasm-pack` (into `web_ui/ootle-wasm-bor/`):
 
 ```bash
 cd web_ui/
-npm install
-npm run dev  # Development server
-npm run build  # Production build
+pnpm install
+pnpm run dev  # Development server
+pnpm run build  # Production build
 ```
 
 ### Testing

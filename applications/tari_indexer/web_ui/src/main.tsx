@@ -29,6 +29,8 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import queryClient from "./api/queryClient";
 import App from "./App";
 import ErrorPage from "./routes/ErrorPage";
+import { loadDecoder } from "./utils/encoded";
+
 const router = createBrowserRouter([
   {
     path: "*",
@@ -46,3 +48,4 @@ root.render(
     </QueryClientProvider>
   </React.StrictMode>,
 );
+void loadDecoder();
