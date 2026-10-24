@@ -4,11 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "dev": "pnpm run build:wasm && vite",
+    "build:wasm": "node scripts/build-wasm.mjs",
+    "build": "pnpm run build:wasm && tsc && vite build",
     "preview": "vite preview",
     "fmt": "pnpm npx prettier --write \"./**/*.{ts,tsx,css,json}\" --log-level=warn",
-    "clean-dist": "rm -rf dist/* && rm -f tsconfig.tsbuildinfo"
+    "clean-dist": "rm -rf dist/* ootle-wasm && rm -f tsconfig.tsbuildinfo"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

@@ -25,6 +25,8 @@ use std::{env, fs, process::Command};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=./web_ui/src");
     println!("cargo:rerun-if-changed=./web_ui/public");
+    println!("cargo:rerun-if-changed=./web_ui/scripts");
+    println!("cargo:rerun-if-changed=../../crates/ootle_wasm");
 
     fs::create_dir_all("./web_ui/dist")?;
 

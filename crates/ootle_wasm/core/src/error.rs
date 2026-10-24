@@ -5,8 +5,14 @@
 pub enum OotleWasmError {
     #[error("JSON deserialization failed: {0}")]
     JsonDeserialize(#[from] serde_json::Error),
+    #[error("JSON serialization failed: {0}")]
+    JsonSerialize(serde_json::Error),
     #[error("BOR encoding failed: {0}")]
     BorEncode(#[from] tari_bor::BorError),
+    #[error("Invalid base64: {0}")]
+    InvalidBase64(String),
+    #[error("The {what} does not decode: {details}")]
+    UndecodableValue { what: &'static str, details: String },
     #[error("Invalid secret key: {0}")]
     InvalidSecretKey(String),
     #[error("Invalid public key: {0}")]

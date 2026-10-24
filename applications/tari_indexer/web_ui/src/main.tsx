@@ -29,6 +29,8 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import queryClient from "./api/queryClient";
 import App from "./App";
 import ErrorPage from "./routes/ErrorPage";
+import { loadDecoder } from "./utils/encoded";
+
 const router = createBrowserRouter([
   {
     path: "*",
@@ -38,11 +40,14 @@ const router = createBrowserRouter([
 ]);
 
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
-root.render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-      <ReactQueryDevtools initialIsOpen={false} />
-    </QueryClientProvider>
-  </React.StrictMode>,
+// Values decode only once the decoder has loaded, so the first render waits for it.
+loadDecoder().then(() =>
+  root.render(
+    <React.StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+        <ReactQueryDevtools initialIsOpen={false} />
+      </QueryClientProvider>
+    </React.StrictMode>,
+  ),
 );

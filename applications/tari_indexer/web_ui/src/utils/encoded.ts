@@ -2,16 +2,45 @@
 //  SPDX-License-Identifier: BSD-3-Clause
 
 import type { ExecuteResult, SubstateValue } from "@tari-project/ootle-ts-bindings";
+import initOotleWasm, {
+  decodeExecuteResult as decodeExecuteResultJson,
+  decodeSubstateValue as decodeSubstateValueJson,
+} from "../../ootle-wasm/ootle_wasm.js";
 
-// The indexer serves engine values in their CBOR encoding, base64 in JSON. Reading one needs a decoder that knows the
-// engine's CBOR schema. This UI has none, so each decoder returns `undefined` and callers show the encoded value.
+// The indexer serves engine values in their CBOR encoding, base64 in JSON, and ootle-wasm decodes them. A value that
+// cannot be decoded, because the module failed to load or the bytes are not a value, decodes to `undefined`, and
+// callers show it encoded.
 
-export function decodeSubstateValue(_encoded: string): SubstateValue | undefined {
-  return undefined;
+let loaded = false;
+
+/** Loads the decoder. Resolves whether or not it loads. */
+export async function loadDecoder(): Promise<void> {
+  try {
+    await initOotleWasm();
+    loaded = true;
+  } catch (error) {
+    console.error("Could not load ootle-wasm; values are shown in their CBOR encoding", error);
+  }
 }
 
-export function decodeExecuteResult(_encoded: string): ExecuteResult | undefined {
-  return undefined;
+export function decodeSubstateValue(encoded: string): SubstateValue | undefined {
+  return decode(encoded, decodeSubstateValueJson);
+}
+
+export function decodeExecuteResult(encoded: string): ExecuteResult | undefined {
+  return decode(encoded, decodeExecuteResultJson);
+}
+
+function decode<T>(encoded: string, decoder: (encoded: string) => string): T | undefined {
+  if (!loaded) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(decoder(encoded)) as T;
+  } catch (error) {
+    console.warn("Could not decode a value the indexer served", error);
+    return undefined;
+  }
 }
 
 /** The number of bytes `encoded` (base64) holds. */
