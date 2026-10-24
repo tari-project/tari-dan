@@ -36,6 +36,7 @@ use tari_ootle_walletd::{
     init_os_keyring_store,
     init_wallet_store,
     initialize_wallet_sdk,
+    reset_wallet_passkeys,
     run_tari_ootle_walletd,
 };
 use tari_shutdown::Shutdown;
@@ -69,6 +70,14 @@ async fn main() -> Result<(), anyhow::Error> {
 
     match &cli.command {
         Some(Subcommand::Run) | None => run(cli, config).await?,
+        Some(Subcommand::ResetPasskeys) => {
+            let deleted = reset_wallet_passkeys(&config)?;
+            println!(
+                "Removed {deleted} WebAuthn passkey(s). Restart the wallet daemon to invalidate any active sessions \
+                 and generate a new setup token."
+            );
+            return Ok(());
+        },
         Some(Subcommand::CreateAccount {
             name,
             key_index,

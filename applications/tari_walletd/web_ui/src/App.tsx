@@ -249,6 +249,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<GuardedRoute component={MyAssets} />} />
+          <Route path="register" element={<GuardedRoute component={MyAssets} />} />
           <Route path="onboarding" element={<GuardedRoute component={Onboarding} />} />
           <Route path="accounts" element={<GuardedRoute redirect="/accounts" component={Accounts} />} />
           <Route path="accounts/:id" element={<GuardedRoute redirect="/accounts" component={AccountDetails} />} />

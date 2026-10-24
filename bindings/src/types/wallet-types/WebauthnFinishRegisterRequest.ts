@@ -9,4 +9,8 @@ export type WebauthnFinishRegisterRequest = {
    * [`RegisterPublicKeyCredential`]
    */
   credential: object;
+  /**
+   * One-time setup token required for initial passkey enrollment.
+   */
+  setup_token?: string | null;
 };

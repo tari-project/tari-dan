@@ -77,13 +77,26 @@ pub async fn handle_already_registered(
     Ok(WebauthnAlreadyRegisteredResponse { registered })
 }
 
+fn map_registration_error(err: WebauthnServiceError) -> anyhow::Error {
+    match err {
+        WebauthnServiceError::AlreadyEnrolled |
+        WebauthnServiceError::InvalidSetupToken |
+        WebauthnServiceError::SetupTokenExpired => invalid_request(err),
+        other => other.into(),
+    }
+}
+
 pub async fn handle_start_registration(
     context: &HandlerContext,
     _token: Option<&Bearer>,
     request: WebauthnStartRegisterRequest,
 ) -> Result<WebauthnStartRegisterResponse, anyhow::Error> {
     let webauthn = webauthn(context)?;
+    let service = webauthn_service(context)?;
     assert_not_enrolled(context)?;
+    service
+        .verify_setup_token(request.setup_token.as_deref())
+        .map_err(map_registration_error)?;
     let (response, passkey_reg) = webauthn.start_passkey_registration(
         Uuid::new_v4(),
         request.username.as_str(),
@@ -91,9 +104,7 @@ pub async fn handle_start_registration(
         None,
     )?;
 
-    let session_id = webauthn_service(context)?
-        .start_registration(request.username, passkey_reg)
-        .await?;
+    let session_id = service.start_registration(request.username, passkey_reg).await?;
 
     Ok(WebauthnStartRegisterResponse {
         session_id,
@@ -109,16 +120,16 @@ pub async fn handle_finish_registration(
     let (answer_id, request) = request;
     let webauthn = webauthn(context)?;
     let webauthn_service = webauthn_service(context)?;
-    let session_data = webauthn_service.get_session(&request.session_id).await?;
     assert_not_enrolled(context)?;
+    webauthn_service
+        .verify_setup_token(request.setup_token.as_deref())
+        .map_err(map_registration_error)?;
+    let session_data = webauthn_service.get_session(&request.session_id).await?;
     let passkey = webauthn.finish_passkey_registration(&request.credential, session_data.passkey_reg())?;
     webauthn_service
-        .finish_registration(request.session_id, passkey)
+        .finish_registration(request.session_id, passkey, request.setup_token.as_deref())
         .await
-        .map_err(|e| match e {
-            WebauthnServiceError::AlreadyEnrolled => invalid_request(e),
-            e => e.into(),
-        })?;
+        .map_err(map_registration_error)?;
 
     let jwt = context.jwt_api();
     let claims = jwt.generate_auth_claims(Permissions::from(BOOTSTRAP_PERMISSIONS.to_vec()))?;

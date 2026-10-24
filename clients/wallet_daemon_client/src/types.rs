@@ -1721,10 +1721,22 @@ pub struct WebauthnAlreadyRegisteredResponse {
     pub registered: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
 pub struct WebauthnStartRegisterRequest {
     pub username: String,
+    /// One-time setup token required for initial passkey enrollment.
+    #[serde(default)]
+    pub setup_token: Option<String>,
+}
+
+impl std::fmt::Debug for WebauthnStartRegisterRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebauthnStartRegisterRequest")
+            .field("username", &self.username)
+            .field("setup_token", &self.setup_token.as_ref().map(|_| "<redacted>"))
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1737,7 +1749,7 @@ pub struct WebauthnStartRegisterResponse {
     pub public_key: PublicKeyCredentialCreationOptions,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export, export_to = "wallet-types/"))]
 pub struct WebauthnFinishRegisterRequest {
     /// Session ID received from [`WebauthnStartRegisterResponse`].
@@ -1745,6 +1757,19 @@ pub struct WebauthnFinishRegisterRequest {
     /// [`RegisterPublicKeyCredential`]
     #[cfg_attr(feature = "ts", ts(type = "object"))]
     pub credential: RegisterPublicKeyCredential,
+    /// One-time setup token required for initial passkey enrollment.
+    #[serde(default)]
+    pub setup_token: Option<String>,
+}
+
+impl std::fmt::Debug for WebauthnFinishRegisterRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebauthnFinishRegisterRequest")
+            .field("session_id", &self.session_id)
+            .field("credential", &self.credential)
+            .field("setup_token", &self.setup_token.as_ref().map(|_| "<redacted>"))
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -2460,5 +2485,26 @@ mod tests {
             Some(UtxoInputSelection::ConfidentialOnly)
         ));
         assert!(parsed.as_specific().is_none());
+    }
+
+    #[test]
+    fn webauthn_start_register_request_accepts_setup_token_and_redacts_debug() {
+        let without_token: WebauthnStartRegisterRequest = serde_json::from_value(serde_json::json!({
+            "username": "tari-wallet-webui",
+        }))
+        .unwrap();
+        assert_eq!(without_token.username, "tari-wallet-webui");
+        assert_eq!(without_token.setup_token, None);
+
+        let secret = "super-secret-setup-token-12345";
+        let with_token: WebauthnStartRegisterRequest = serde_json::from_value(serde_json::json!({
+            "username": "tari-wallet-webui",
+            "setup_token": secret,
+        }))
+        .unwrap();
+        assert_eq!(with_token.setup_token.as_deref(), Some(secret));
+        let debug_str = format!("{with_token:?}");
+        assert!(!debug_str.contains(secret), "Debug output must not leak setup_token");
+        assert!(debug_str.contains("<redacted>"));
     }
 }
