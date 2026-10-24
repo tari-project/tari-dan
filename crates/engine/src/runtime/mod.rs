@@ -65,7 +65,6 @@ use tari_engine_types::{
     lock::LockFlag,
     published_template::TemplateBlob,
 };
-use tari_ootle_template_metadata::MetadataHash;
 use tari_ootle_transaction::{
     AllocatableAddressType,
     ComponentReference,
@@ -105,6 +104,7 @@ use tari_template_lib::{
         Metadata,
         NonFungibleAddress,
         TemplateAddress,
+        TemplateMetadataHash,
         ValidatorFeePoolAddress,
         crypto::RistrettoPublicKeyBytes,
         engine_args::IntrinsicId,
@@ -245,7 +245,7 @@ pub trait RuntimeInterface {
     fn publish_template(
         &self,
         template: TemplateBlob,
-        metadata_hash: Option<MetadataHash>,
+        metadata_hash: Option<TemplateMetadataHash>,
         template_def: TemplateDef,
     ) -> Result<(), RuntimeError>;
     fn put_on_workspace(&self, id: WorkspaceId, value: IndexedValue) -> Result<(), RuntimeError>;

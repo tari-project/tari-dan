@@ -6,6 +6,7 @@ use std::{fmt, io};
 use multihash::Multihash;
 use serde::{Deserialize, Serialize, de};
 use sha2::{Digest, Sha256, digest::Update};
+use tari_template_lib_types::TemplateMetadataHash;
 
 /// Multihash function code for SHA-256 (IPFS CIDv1 default).
 const SHA2_256_CODE: u64 = 0x12;
@@ -79,6 +80,17 @@ impl MetadataHash {
 impl From<Multihash<MAX_DIGEST_SIZE>> for MetadataHash {
     fn from(mh: Multihash<MAX_DIGEST_SIZE>) -> Self {
         Self(mh)
+    }
+}
+
+/// The longest multihash encoding: a varint code (at most 10 bytes for a `u64`), a one-byte varint digest length (at
+/// most [`MAX_DIGEST_SIZE`]) and the digest.
+const MAX_ENCODED_LEN: usize = 10 + 1 + MAX_DIGEST_SIZE;
+const _: () = assert!(MAX_ENCODED_LEN <= TemplateMetadataHash::MAX_LEN);
+
+impl From<MetadataHash> for TemplateMetadataHash {
+    fn from(hash: MetadataHash) -> Self {
+        TemplateMetadataHash::from_bytes(hash.to_bytes()).expect("a multihash encoding fits in TemplateMetadataHash")
     }
 }
 
@@ -283,6 +295,14 @@ mod tests {
     fn cbor_len_matches_the_encoding() {
         let hash = hash_data(b"test");
         assert_eq!(minicbor::len(&hash), tari_bor::encode(&hash).unwrap().len());
+    }
+
+    #[test]
+    fn converts_to_the_same_template_metadata_hash_bytes() {
+        let hash = hash_data(b"test");
+        let protocol = TemplateMetadataHash::from(hash.clone());
+        assert_eq!(protocol.as_bytes(), hash.to_bytes().as_slice());
+        assert_eq!(protocol.to_string(), hash.to_hex());
     }
 
     #[test]

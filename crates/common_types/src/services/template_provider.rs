@@ -1,8 +1,7 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use tari_ootle_template_metadata::MetadataHash;
-use tari_template_lib_types::{Hash32, TemplateAddress, crypto::RistrettoPublicKeyBytes};
+use tari_template_lib_types::{Hash32, TemplateAddress, TemplateMetadataHash, crypto::RistrettoPublicKeyBytes};
 
 use crate::Epoch;
 
@@ -25,5 +24,5 @@ pub struct TemplateProviderMetadata {
     pub author: RistrettoPublicKeyBytes,
     pub binary_hash: Hash32,
     pub epoch: Epoch,
-    pub metadata_hash: Option<MetadataHash>,
+    pub metadata_hash: Option<TemplateMetadataHash>,
 }

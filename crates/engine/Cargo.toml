@@ -11,7 +11,6 @@ license.workspace = true
 tari_bor = { workspace = true, default-features = true, features = ["std"] }
 tari_crypto = { workspace = true, features = ["serde", "borsh"] }
 tari_ootle_common_types = { workspace = true }
-tari_ootle_template_metadata = { workspace = true }
 ootle-network = { workspace = true }
 tari_engine_types = { workspace = true }
 tari_template_abi = { workspace = true, features = ["std", "func-hasher"] }

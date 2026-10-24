@@ -5,7 +5,8 @@
 //!
 //! This crate provides:
 //! - [`TemplateMetadata`] — the standard off-chain metadata structure
-//! - [`MetadataHash`] — a multihash of the CBOR-encoded metadata
+//! - [`MetadataHash`] — a multihash of the CBOR-encoded metadata, which converts into the opaque `TemplateMetadataHash`
+//!   that the protocol carries
 //! - Cargo.toml parsing to extract metadata fields
 //! - CBOR and JSON serialization/deserialization
 
