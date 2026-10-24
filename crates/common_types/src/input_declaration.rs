@@ -174,51 +174,25 @@ impl From<InputDeclaration> for SubstateRequirement {
     }
 }
 
-/// `read` and `write` suffix the `<id>[:<version>]` form that [`SubstateRequirement`] parses, and a
-/// `?` version parses as unversioned so that [`Display`] round-trips.
+/// Parses `<id>[:<version>|:?][:read|:write]` with the intent and version suffixes taken from the
+/// right, and a `?` version parses as unversioned so that [`Display`] round-trips.
+///
+/// Because suffixes are split from the right, a string NFT id containing `:` whose last segment is
+/// `read`, `write`, `?`, or a version number needs an explicit `:?` or `:<version>` suffix (for
+/// example `nft_<resource>_str_a:7:?` or `nft_<resource>_str_x:read:?:read`).
 impl FromStr for InputDeclaration {
     type Err = InputDeclarationParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let err = || InputDeclarationParseError(s.to_string());
-        let mut parts = s.split(':');
+        let (rest, is_write) = match s.rsplit_once(':') {
+            Some((prefix, "read")) => (prefix, false),
+            Some((prefix, "write")) => (prefix, true),
+            _ => (s, true),
+        };
 
-        let address = parts.next().ok_or_else(err)?;
-        let substate_id = SubstateId::from_str(address).map_err(|_| err())?;
-
-        let mut version = None;
-        let mut is_write = true;
-        let mut has_version_part = false;
-
-        if let Some(part) = parts.next() {
-            match part {
-                "read" => is_write = false,
-                "write" => {},
-                "?" => has_version_part = true,
-                v => {
-                    version = Some(v.parse().map_err(|_| err())?);
-                    has_version_part = true;
-                },
-            }
-
-            // An intent only follows a version, so a second part after an intent is malformed.
-            if let Some(part) = parts.next() {
-                if !has_version_part {
-                    return Err(err());
-                }
-                match part {
-                    "read" => is_write = false,
-                    "write" => {},
-                    _ => return Err(err()),
-                }
-            }
-        }
-
-        if parts.next().is_some() {
-            return Err(err());
-        }
-
-        Ok(Self::new(substate_id, version, is_write))
+        let req = SubstateRequirement::from_str(rest).map_err(|_| err())?;
+        Ok(Self::new(req.substate_id, req.version, is_write))
     }
 }
 
@@ -433,7 +407,7 @@ pub struct InputDeclarationParseError(String);
 
 #[cfg(test)]
 mod tests {
-    use tari_template_lib_types::ComponentAddress;
+    use tari_template_lib_types::{ComponentAddress, NonFungibleAddress, NonFungibleId, ObjectKey, ResourceAddress};
 
     use super::*;
 
@@ -482,18 +456,43 @@ mod tests {
 
     #[test]
     fn it_round_trips_through_display() {
-        let id = component();
-        for decl in [
-            InputDeclaration::read(id.clone()),
-            InputDeclaration::write(id.clone()),
-            InputDeclaration::read_versioned(id.clone(), SubstateVersion::new(3)),
-            InputDeclaration::write_versioned(id, SubstateVersion::new(3)),
-        ] {
-            let parsed = InputDeclaration::from_str(&decl.to_string()).unwrap();
-            assert_eq!(parsed.substate_id(), decl.substate_id());
-            assert_eq!(parsed.version(), decl.version());
-            assert_eq!(parsed.is_write(), decl.is_write());
+        let nft_with_colon = SubstateId::NonFungible(NonFungibleAddress::new(
+            ResourceAddress::new(ObjectKey::from_array([2u8; 32])),
+            NonFungibleId::try_from_string("a:7").unwrap(),
+        ));
+
+        for id in [component(), nft_with_colon.clone()] {
+            for decl in [
+                InputDeclaration::read(id.clone()),
+                InputDeclaration::write(id.clone()),
+                InputDeclaration::read_versioned(id.clone(), SubstateVersion::new(3)),
+                InputDeclaration::write_versioned(id, SubstateVersion::new(3)),
+            ] {
+                let parsed = InputDeclaration::from_str(&decl.to_string()).unwrap();
+                assert_eq!(parsed.substate_id(), decl.substate_id());
+                assert_eq!(parsed.version(), decl.version());
+                assert_eq!(parsed.is_write(), decl.is_write());
+            }
         }
+
+        let explicit_write = InputDeclaration::from_str(&format!("{nft_with_colon}:?:write")).unwrap();
+        assert_eq!(explicit_write.substate_id(), &nft_with_colon);
+        assert_eq!(explicit_write.version(), None);
+        assert!(explicit_write.is_write());
+
+        let nft_non_numeric_colon = SubstateId::NonFungible(NonFungibleAddress::new(
+            ResourceAddress::new(ObjectKey::from_array([2u8; 32])),
+            NonFungibleId::try_from_string("ns:item").unwrap(),
+        ));
+        let bare = InputDeclaration::from_str(&nft_non_numeric_colon.to_string()).unwrap();
+        assert_eq!(bare.substate_id(), &nft_non_numeric_colon);
+        assert_eq!(bare.version(), None);
+        assert!(bare.is_write());
+
+        let bare_read = InputDeclaration::from_str(&format!("{nft_non_numeric_colon}:read")).unwrap();
+        assert_eq!(bare_read.substate_id(), &nft_non_numeric_colon);
+        assert_eq!(bare_read.version(), None);
+        assert!(bare_read.is_read());
     }
 
     #[test]
