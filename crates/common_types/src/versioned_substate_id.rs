@@ -111,31 +111,28 @@ impl SubstateRequirement {
     }
 }
 
+/// Parses `<id>[:<version>|:?]` with the version suffix taken from the right.
+///
+/// Because suffixes are split from the right, a bare (unversioned) string NFT id whose last `:`
+/// segment is numeric or `?` (for example `nft_<resource>_str_a:7`) is parsed as having a version
+/// suffix; include an explicit `:?` or `:<version>` (as [`Display`] always emits) to disambiguate
+/// string NFT ids that contain `:`.
 impl FromStr for SubstateRequirement {
     type Err = SubstateRequirementParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut parts = s.split(':');
-
-        // parse the substate id
-        let address = parts
-            .next()
-            .ok_or_else(|| SubstateRequirementParseError(s.to_string()))?;
-        let address = SubstateId::from_str(address).map_err(|_| SubstateRequirementParseError(s.to_string()))?;
-
-        // parse the version (optional)
-        let version = match parts.next() {
-            Some(v) => {
-                let parse_version = v.parse().map_err(|_| SubstateRequirementParseError(s.to_string()))?;
-                Some(parse_version)
+        let err = || SubstateRequirementParseError(s.to_string());
+        let (address, version) = match s.rsplit_once(':') {
+            Some((addr, "?")) => (addr, None),
+            Some((addr, v)) => match v.parse() {
+                Ok(version) => (addr, Some(version)),
+                Err(_) => (s, None),
             },
-            None => None,
+            None => (s, None),
         };
+        let substate_id = SubstateId::from_str(address).map_err(|_| err())?;
 
-        Ok(Self {
-            substate_id: address,
-            version,
-        })
+        Ok(Self { substate_id, version })
     }
 }
 
@@ -392,24 +389,12 @@ impl FromStr for VersionedSubstateId {
     type Err = SubstateRequirementParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut parts = s.split(':');
+        let err = || SubstateRequirementParseError(s.to_string());
+        let (address, version) = s.rsplit_once(':').ok_or_else(err)?;
+        let substate_id = SubstateId::from_str(address).map_err(|_| err())?;
+        let version = version.parse().map_err(|_| err())?;
 
-        // parse the substate id
-        let address = parts
-            .next()
-            .ok_or_else(|| SubstateRequirementParseError(s.to_string()))?;
-        let address = SubstateId::from_str(address).map_err(|_| SubstateRequirementParseError(s.to_string()))?;
-
-        // parse the version
-        let version = parts
-            .next()
-            .ok_or_else(|| SubstateRequirementParseError(s.to_string()))
-            .and_then(|v| v.parse().map_err(|_| SubstateRequirementParseError(s.to_string())))?;
-
-        Ok(Self {
-            substate_id: address,
-            version,
-        })
+        Ok(Self { substate_id, version })
     }
 }
 
@@ -535,7 +520,7 @@ mod tests {
     use std::hash::{DefaultHasher, Hash, Hasher};
 
     use indexmap::IndexSet;
-    use tari_template_lib_types::{ComponentAddress, ObjectKey};
+    use tari_template_lib_types::{ComponentAddress, NonFungibleAddress, NonFungibleId, ObjectKey, ResourceAddress};
 
     use super::*;
 
@@ -569,5 +554,39 @@ mod tests {
         let mut set = IndexSet::new();
         set.extend([SubstateRequirement::versioned(s1.clone(), SubstateVersion::ZERO)]);
         assert!(set.contains(&s1));
+    }
+
+    #[test]
+    fn it_round_trips_string_nft_ids_containing_colons() {
+        let nft = SubstateId::NonFungible(NonFungibleAddress::new(
+            ResourceAddress::new(ObjectKey::from_array([7; 32])),
+            NonFungibleId::try_from_string("a:7").unwrap(),
+        ));
+
+        for req in [
+            SubstateRequirement::unversioned(nft.clone()),
+            SubstateRequirement::versioned(nft.clone(), SubstateVersion::new(3)),
+        ] {
+            let parsed = SubstateRequirement::from_str(&req.to_string()).unwrap();
+            assert_eq!(parsed.substate_id(), req.substate_id());
+            assert_eq!(parsed.version(), req.version());
+        }
+
+        let versioned = VersionedSubstateId::new(nft, SubstateVersion::new(3));
+        let parsed = VersionedSubstateId::from_str(&versioned.to_string()).unwrap();
+        assert_eq!(parsed, versioned);
+    }
+
+    #[test]
+    fn it_rejects_trailing_segments_and_missing_versions() {
+        let id = SubstateId::Component(ComponentAddress::new(ObjectKey::from_array([1; 32])));
+
+        for invalid in [format!("{id}:3:junk"), format!("{id}:junk")] {
+            assert!(SubstateRequirement::from_str(&invalid).is_err(), "{invalid} parsed");
+            assert!(VersionedSubstateId::from_str(&invalid).is_err(), "{invalid} parsed");
+        }
+
+        assert!(VersionedSubstateId::from_str(&id.to_string()).is_err());
+        assert!(VersionedSubstateId::from_str(&format!("{id}:?")).is_err());
     }
 }

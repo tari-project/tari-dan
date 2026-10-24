@@ -102,10 +102,9 @@ pub struct CommonSubmitArgs {
     /// Timeout in seconds
     #[clap(long, short = 't', alias = "wait-timeout")]
     pub wait_for_result_timeout_secs: Option<u64>,
-    /// Substates to declare as transaction inputs. May be repeated. Accepts an unversioned id like
-    /// `component_<hex>`, a versioned `component_<hex>:<version>`, and either form with a `:read` or
-    /// `:write` suffix declaring the access intended (`component_<hex>:?:read`); the default is
-    /// `write`.
+    /// Substates to declare as transaction inputs (`<id>[:<version>|:?][:read|:write]`). May be
+    /// repeated. Suffixes are parsed from the right (`write` by default), so a string NFT id
+    /// containing `:` requires an explicit `:?` or `:<version>` (e.g. `nft_<res>_str_a:7:?`).
     #[clap(long, short = 'i')]
     pub inputs: Vec<InputDeclaration>,
     #[clap(long, alias = "autofill")]
