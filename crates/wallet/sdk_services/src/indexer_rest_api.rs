@@ -451,21 +451,31 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
 
         let transaction = TransactionEnvelope::encode(transaction)?;
         let client = self.tracked_client();
-        let resp = self
-            .observe_checked(
+        let (transaction_id, result) = self
+            .observe_read(
                 &client,
                 client.submit_transaction_dry_run(SubmitTransactionRequest { transaction }),
-                |resp| check_execute_result_substate_types(&resp.result),
+                |resp| {
+                    let result =
+                        resp.result
+                            .decode()
+                            .map_err(|e| IndexerRestApiNetworkInterfaceError::UndecodableValue {
+                                what: "dry-run result",
+                                details: e.to_string(),
+                            })?;
+                    check_execute_result_substate_types(&result)?;
+                    Ok::<_, IndexerRestApiNetworkInterfaceError>((resp.transaction_id, result))
+                },
             )
             .await?;
 
         Ok(TransactionQueryResult {
-            transaction_id: resp.transaction_id,
+            transaction_id,
             // TODO: clean this up
             result: TransactionFinalizedResult::Finalized {
-                final_decision: (&resp.result.finalize.result).into(),
-                execution_time: resp.result.execution_time,
-                execution_result: Some(Box::new(resp.result)),
+                final_decision: (&result.finalize.result).into(),
+                execution_time: result.execution_time,
+                execution_result: Some(Box::new(result)),
                 finalized_time: now(),
                 abort_details: None,
             },
@@ -639,19 +649,33 @@ impl WalletNetworkInterface for IndexerRestApiNetworkInterface {
         let client = self.tracked_client();
         // TODO: Given the potential size of substates protobuf, json + hex encoding may be too inefficient. Consider
         // supporting the application/x-protobuf content type in the indexer REST API.
-        let resp = self
-            .observe(
-                &client,
-                client.get_utxos(GetUtxosRequest {
-                    resource_address,
-                    tag_and_nonce_pairs,
-                }),
-            )
-            .await?;
-        Ok(FetchedUtxos {
-            unspent: resp.utxos,
-            spent: resp.spent,
-        })
+        self.observe_read(
+            &client,
+            client.get_utxos(GetUtxosRequest {
+                resource_address,
+                tag_and_nonce_pairs,
+            }),
+            |resp| {
+                let unspent = resp
+                    .utxos
+                    .into_iter()
+                    .map(|(id, utxo)| {
+                        let utxo =
+                            utxo.decode()
+                                .map_err(|e| IndexerRestApiNetworkInterfaceError::UndecodableValue {
+                                    what: "UTXO",
+                                    details: e.to_string(),
+                                })?;
+                        Ok((id, utxo))
+                    })
+                    .collect::<Result<_, IndexerRestApiNetworkInterfaceError>>()?;
+                Ok::<_, IndexerRestApiNetworkInterfaceError>(FetchedUtxos {
+                    unspent,
+                    spent: resp.spent,
+                })
+            },
+        )
+        .await
     }
 
     async fn list_watched_substates(
@@ -1332,7 +1356,7 @@ mod tests {
         let transaction_id = transaction.calculate_id();
         let body = serde_json::to_string(&SubmitTransactionDryRunResponse {
             transaction_id,
-            result: mistyped_execute_result(transaction_id),
+            result: Encoded::encode(&mistyped_execute_result(transaction_id)).unwrap(),
         })
         .unwrap();
         let network = network_answering_with(body).await;

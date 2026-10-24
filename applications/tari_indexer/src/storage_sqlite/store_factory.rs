@@ -282,20 +282,26 @@ fn apply_pragmas(conn: &mut SqliteConnection) -> Result<(), diesel::result::Erro
 /// Appends one event per topic to the store at `db_path`, taking the next ids in the order given.
 #[cfg(test)]
 pub(crate) fn insert_test_events(db_path: &std::path::Path, topics: &[&str]) {
+    use tari_engine_types::events::Event;
     use tari_sidechain::FixedHash;
 
-    use crate::storage_sqlite::{models::NewEvent, schema::events, serialization::serialize_json};
+    use crate::storage_sqlite::{models::NewEvent, schema::events, serialization::encode_committed};
 
     let mut conn = SqliteConnection::establish(db_path.to_str().unwrap()).unwrap();
     let tx_hash = FixedHash::zero().to_string();
-    let payload = serialize_json(&tari_template_lib_types::Metadata::new()).unwrap();
     for topic in topics {
+        let event = Event::new(
+            None,
+            Default::default(),
+            topic.to_string(),
+            tari_template_lib_types::Metadata::new(),
+        );
         diesel::insert_into(events::table)
             .values(NewEvent {
                 template_address: FixedHash::zero().to_string(),
                 tx_hash: &tx_hash,
                 topic,
-                payload: payload.clone(),
+                event: encode_committed(&event).unwrap(),
                 substate_id: None,
                 resource_address: None,
                 epoch: 0,
@@ -310,6 +316,7 @@ pub(crate) mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use tari_engine_types::{
+        encoded::Encoded,
         fees::FeeReceiptBuilder,
         substate::SubstateId,
         transaction_receipt::{FinalizeOutcome, TransactionReceipt},
@@ -1659,13 +1666,48 @@ pub(crate) mod tests {
             .with_read_tx(|tx| tx.get_transaction_receipt(&receipt_address(1)))
             .await
             .unwrap();
-        assert_eq!(stored.fee_receipt.total_fees_paid(), 123);
+        assert_eq!(stored.decode().unwrap().fee_receipt.total_fees_paid(), 123);
         assert_eq!(event_epochs(&store).await, [2]);
         let count = store
             .with_read_tx(|tx| tx.key_value_get_value::<_, u64>(Key::TransactionReceiptCount))
             .await
             .unwrap();
         assert_eq!(count, 2);
+    }
+
+    #[tokio::test]
+    async fn a_receipt_and_its_events_are_read_back_as_their_cbor_encoding() {
+        let (_dir, store) = temp_store().await;
+        let receipt = receipt_with_events_at(Epoch(2), 1);
+        insert_receipts(&store, vec![(1, receipt.clone())]).await;
+
+        let stored = store
+            .with_read_tx(|tx| tx.get_transaction_receipt(&receipt_address(1)))
+            .await
+            .unwrap();
+        assert_eq!(stored, Encoded::encode(&receipt).unwrap());
+        let listed = store
+            .with_read_tx(|tx| tx.list_transaction_receipts(None, 10, tari_ootle_storage::Ordering::Ascending))
+            .await
+            .unwrap();
+        assert_eq!(listed, [(receipt_address(1), stored)]);
+
+        let query = crate::store::EventQuery {
+            topic: None,
+            substate_id: None,
+            template_address: None,
+            resource_address: None,
+            wildcard_scan_limit: 10,
+        };
+        let page = store
+            .with_read_tx(move |tx| tx.get_events(&query, None, 0, 10))
+            .await
+            .unwrap();
+        let [event] = page.events.as_slice() else {
+            panic!("expected one event, got {:?}", page.events);
+        };
+        assert_eq!(event.topic, receipt.events[0].topic());
+        assert_eq!(event.event, Encoded::encode(&receipt.events[0]).unwrap());
     }
 
     async fn insert_transactions(store: &SqliteIndexerStore, max_epochs: &[Epoch]) -> Vec<TransactionId> {
@@ -2627,7 +2669,7 @@ pub(crate) mod tests {
     }
 
     fn page_ids(page: &crate::store::EventsPage) -> Vec<i64> {
-        page.events.iter().map(|(id, _, _)| *id).collect()
+        page.events.iter().map(|stored| stored.id).collect()
     }
 
     #[tokio::test]

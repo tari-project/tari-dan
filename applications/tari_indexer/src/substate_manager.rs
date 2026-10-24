@@ -31,6 +31,7 @@ use ootle_network::Network;
 use serde::{Deserialize, Serialize};
 use tari_engine_types::{
     Utxo,
+    encoded::Encoded,
     substate::{EncodedSubstate, Substate, SubstateId, SubstateValue},
 };
 use tari_epoch_manager::service::EpochManagerHandle;
@@ -76,7 +77,7 @@ use crate::{
 pub struct SubstateResponse {
     pub id: SubstateId,
     pub version: SubstateVersion,
-    pub substate: SubstateValue,
+    pub substate: Encoded<SubstateValue>,
 }
 
 /// A substate returned by a lookup together with whether it was committee-verified. `verified` is
@@ -247,7 +248,7 @@ impl SubstateManager {
         &self,
         resource_address: &ResourceAddress,
         public_nonce_and_tag: &[(UtxoTag, RistrettoPublicKeyBytes)],
-    ) -> Result<(Vec<(UtxoId, Utxo)>, Vec<(UtxoTag, RistrettoPublicKeyBytes)>), SubstateManagerError> {
+    ) -> Result<(Vec<(UtxoId, Encoded<Utxo>)>, Vec<(UtxoTag, RistrettoPublicKeyBytes)>), SubstateManagerError> {
         let resource_address = *resource_address;
         let public_nonce_and_tag = public_nonce_and_tag.to_vec();
         let utxos = self
@@ -266,7 +267,7 @@ impl SubstateManager {
         resource_address: &ResourceAddress,
         from_id: Option<UtxoId>,
         limit: u32,
-    ) -> Result<Vec<(UtxoId, Utxo)>, SubstateManagerError> {
+    ) -> Result<Vec<(UtxoId, Encoded<Utxo>)>, SubstateManagerError> {
         let resource_address = *resource_address;
         let utxos = self
             .substate_store
@@ -414,7 +415,7 @@ impl SubstateManager {
             return Ok(None);
         };
         Ok(Some(FetchedSubstate {
-            substate: encode_substate(&Substate::new(substate.version, substate.substate))?,
+            substate: EncodedSubstate::new(substate.version, substate.substate),
             // Locally-stored substates were verified when ingested iff verification is on.
             verified: self.cache_manager.verifies_substates(),
             proof: None,
@@ -431,10 +432,7 @@ impl SubstateManager {
         let mut substates = self
             .substate_store
             .with_read_tx(move |tx| tx.get_substates(&substates_arg))
-            .await?
-            .into_iter()
-            .map(|(id, substate)| Ok((id, encode_substate(&substate)?)))
-            .collect::<Result<HashMap<_, _>, SubstateManagerError>>()?;
+            .await?;
 
         for k in substates.keys() {
             substate_set.remove(k);
@@ -482,12 +480,6 @@ impl SubstateManager {
     }
 }
 
-/// The substates table holds values as JSON, so a substate served from it is encoded on the way out.
-fn encode_substate(substate: &Substate) -> Result<EncodedSubstate, SubstateManagerError> {
-    EncodedSubstate::encode(substate)
-        .map_err(|e| SubstateManagerError::StoredSubstateEncodingError { details: e.to_string() })
-}
-
 pub fn decode_substate(substate_id: &SubstateId, substate: &EncodedSubstate) -> Result<Substate, SubstateManagerError> {
     substate
         .decode()
@@ -517,8 +509,6 @@ pub enum SubstateManagerError {
         version: SubstateVersion,
         details: String,
     },
-    #[error("A substate read from the substates table failed to encode: {details}")]
-    StoredSubstateEncodingError { details: String },
 }
 
 impl IsNotFoundError for SubstateManagerError {

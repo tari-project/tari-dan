@@ -715,13 +715,12 @@ impl TrafficSim {
             return Ok(());
         }
 
-        let utxo_ids = resp
-            .utxos
-            .iter()
-            .filter(|(_, o)| !o.is_burnt())
-            .map(|(id, _)| id)
-            .copied()
-            .collect::<Vec<_>>();
+        let mut utxo_ids = Vec::with_capacity(resp.utxos.len());
+        for (id, utxo) in &resp.utxos {
+            if !utxo.decode()?.is_burnt() {
+                utxo_ids.push(*id);
+            }
+        }
 
         let mut csv = csv_out.map(csv::Writer::from_path).transpose()?;
         csv.as_mut()

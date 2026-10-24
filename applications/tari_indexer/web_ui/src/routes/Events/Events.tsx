@@ -38,13 +38,14 @@ import {
 import Grid from "@mui/material/Grid";
 import { Event, TransactionId } from "@tari-project/ootle-ts-bindings";
 import saveAs from "file-saver";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import CopyToClipboard from "../../Components/CopyToClipboard";
 import JsonDialog from "../../Components/JsonDialog";
 import PageHeading from "../../Components/PageHeading";
 import { StyledPaper } from "../../Components/StyledComponents";
 import { queryTransactionEvents } from "../../utils/api";
+import { encodedByteLength, useDecoder } from "../../utils/encoded";
 import { truncateText } from "../../utils/helpers";
 
 const PAGE_SIZE = 10;
@@ -52,7 +53,12 @@ const PAGE_SIZE = 10;
 type Cursor = number | bigint | string;
 
 function EventsLayout() {
-  const [events, setEvents] = useState<Array<[string, Event]>>([]);
+  const [encodedEvents, setEncodedEvents] = useState<Array<[string, string]>>([]);
+  const { decodeEvent } = useDecoder();
+  const events = useMemo(
+    () => encodedEvents.map(([txId, encoded]) => ({ txId, encoded, event: decodeEvent(encoded) })),
+    [encodedEvents, decodeEvent],
+  );
   const [page, setPage] = useState(0);
   // cursors[n] is the before_id that loads page n; page 0 starts from the newest event.
   const [cursors, setCursors] = useState<Array<Cursor | null>>([null]);
@@ -76,7 +82,7 @@ function EventsLayout() {
       offset: null,
       before_id: beforeId,
     });
-    setEvents(resp.events);
+    setEncodedEvents(resp.events);
     setNextCursor(resp.next_before_id ?? null);
   }
 
@@ -161,45 +167,53 @@ function EventsLayout() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {events.map(([txId, event], i) => (
-                <TableRow key={i} sx={{ "&:last-child td, &:last-child th": { border: 0 } }}>
-                  <TableCell>{event.topic}</TableCell>
-                  <TableCell>
-                    {truncateText(txId, 20)}
-                    <CopyToClipboard copy={txId} />
-                  </TableCell>
-                  <TableCell>
-                    {event.substate_id ? (
-                      <Link to={`/substates?address=${encodeURIComponent(event.substate_id)}`}>
-                        {truncateText(event.substate_id, 20)}
-                      </Link>
-                    ) : (
-                      truncateText(event.substate_id, 20)
-                    )}
-                    <CopyToClipboard copy={event.substate_id || ""} />
-                  </TableCell>
-                  <TableCell>
-                    {event.template_address ? (
-                      <Link to={`/templates?address=${encodeURIComponent(event.template_address)}`}>
-                        {truncateText(event.template_address, 20)}
-                      </Link>
-                    ) : (
-                      truncateText(event.template_address, 20)
-                    )}
-                    <CopyToClipboard copy={event.template_address} />
-                  </TableCell>
-                  <TableCell>
-                    <Stack direction="row" spacing={2} alignItems="left">
-                      <Button variant="outlined" onClick={() => handlePayloadView(event)}>
-                        View
-                      </Button>
-                      <Button variant="outlined" onClick={() => handlePayloadDownload(txId, event)}>
-                        Download
-                      </Button>
-                    </Stack>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {events.map(({ txId, encoded, event }, i) =>
+                event ? (
+                  <TableRow key={i} sx={{ "&:last-child td, &:last-child th": { border: 0 } }}>
+                    <TableCell>{event.topic}</TableCell>
+                    <TableCell>
+                      {truncateText(txId, 20)}
+                      <CopyToClipboard copy={txId} />
+                    </TableCell>
+                    <TableCell>
+                      {event.substate_id ? (
+                        <Link to={`/substates?address=${encodeURIComponent(event.substate_id)}`}>
+                          {truncateText(event.substate_id, 20)}
+                        </Link>
+                      ) : (
+                        truncateText(event.substate_id, 20)
+                      )}
+                      <CopyToClipboard copy={event.substate_id || ""} />
+                    </TableCell>
+                    <TableCell>
+                      {event.template_address ? (
+                        <Link to={`/templates?address=${encodeURIComponent(event.template_address)}`}>
+                          {truncateText(event.template_address, 20)}
+                        </Link>
+                      ) : (
+                        truncateText(event.template_address, 20)
+                      )}
+                      <CopyToClipboard copy={event.template_address} />
+                    </TableCell>
+                    <TableCell>
+                      <Stack direction="row" spacing={2} alignItems="left">
+                        <Button variant="outlined" onClick={() => handlePayloadView(event)}>
+                          View
+                        </Button>
+                        <Button variant="outlined" onClick={() => handlePayloadDownload(txId, event)}>
+                          Download
+                        </Button>
+                      </Stack>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  <TableRow key={i}>
+                    <TableCell colSpan={5}>
+                      {truncateText(txId, 20)}: CBOR, {encodedByteLength(encoded)} bytes
+                    </TableCell>
+                  </TableRow>
+                ),
+              )}
             </TableBody>
           </Table>
           <Stack direction="row" justifyContent="right" spacing={2} alignItems="center">
