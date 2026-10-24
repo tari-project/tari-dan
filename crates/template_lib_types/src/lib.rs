@@ -64,6 +64,7 @@ mod owner_rule;
 #[cfg(feature = "precision")]
 pub mod precision;
 pub mod stealth;
+mod template_metadata_hash;
 
 pub use access_rules::AccessRule;
 pub use amount::*;
@@ -81,3 +82,4 @@ pub use owner_rule::*;
 pub use resource_type::*;
 pub use substates::*;
 pub use tari_bor::BorError;
+pub use template_metadata_hash::*;

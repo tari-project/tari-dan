@@ -281,7 +281,7 @@ impl ManifestInstructionGenerator {
                 })?;
                 let metadata_hash = pt
                     .metadata_hash_hex
-                    .map(|hex| tari_ootle_template_metadata::MetadataHash::from_hex(&hex))
+                    .map(|hex| tari_ootle_template_metadata::MetadataHash::from_hex(&hex).map(Into::into))
                     .transpose()
                     .map_err(|e| ManifestError::InvalidInstruction {
                         reason: format!("Invalid metadata hash hex: {}", e),

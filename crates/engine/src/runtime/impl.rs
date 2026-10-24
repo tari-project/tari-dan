@@ -51,7 +51,6 @@ use tari_engine_types::{
     vault::Vault,
 };
 use tari_ootle_common_types::services::template_provider::TemplateProvider;
-use tari_ootle_template_metadata::MetadataHash;
 use tari_ootle_transaction::{
     AllocatableAddressType,
     Assertion,
@@ -129,6 +128,7 @@ use tari_template_lib::{
         ResourceType,
         SubstateOwnerRule,
         TemplateAddress,
+        TemplateMetadataHash,
         UtxoAddress,
         ValidatorFeePoolAddress,
         access_rules::{ComponentAccessRules, InvalidMOfN, ResourceAuthAction, UpdateRule},
@@ -4197,7 +4197,7 @@ where
     fn publish_template(
         &self,
         template: TemplateBlob,
-        metadata_hash: Option<MetadataHash>,
+        metadata_hash: Option<TemplateMetadataHash>,
         template_def: TemplateDef,
     ) -> Result<(), RuntimeError> {
         self.invoke_modules_on_runtime_call("publish_template")?;

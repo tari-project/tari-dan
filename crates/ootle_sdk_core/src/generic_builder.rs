@@ -34,7 +34,7 @@ use tari_ootle_transaction::{
     args::InstructionArg,
     builder::named_args::parse_workspace_key,
 };
-use tari_template_lib_types::{OwnerRule, TemplateAddress, crypto::RistrettoPublicKeyBytes};
+use tari_template_lib_types::{OwnerRule, TemplateAddress, TemplateMetadataHash, crypto::RistrettoPublicKeyBytes};
 
 use crate::{
     PartialTransaction,
@@ -343,10 +343,12 @@ fn lower_owner_rule(rule: &OwnerRuleSpec) -> OwnerRule {
     }
 }
 
-/// Parses a lowercase-hex metadata multihash into the engine `MetadataHash`.
-fn parse_metadata_hash(hex: &str) -> Result<tari_ootle_template_metadata::MetadataHash, OotleSdkError> {
+/// Parses a lowercase-hex metadata multihash into the protocol's opaque `TemplateMetadataHash`. The multihash check
+/// is the SDK's convention for what wallets publish.
+fn parse_metadata_hash(hex: &str) -> Result<TemplateMetadataHash, OotleSdkError> {
     let bytes = hex::decode(hex).map_err(|e| OotleSdkError::Parse(format!("invalid metadata_hash hex: {e}")))?;
     tari_ootle_template_metadata::MetadataHash::from_bytes(&bytes)
+        .map(Into::into)
         .ok_or_else(|| OotleSdkError::Parse("metadata_hash is not a valid multihash".to_string()))
 }
 

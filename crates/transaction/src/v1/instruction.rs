@@ -5,12 +5,12 @@ use std::fmt::{Display, Formatter};
 
 use tari_engine_types::confidential::{ClaimBurnOutputData, MinotariBurnClaimProof};
 use tari_ootle_common_types::displayable::Displayable;
-use tari_ootle_template_metadata::MetadataHash;
 use tari_template_lib_types::{
     Amount,
     FunctionName,
     OwnerRule,
     TemplateAddress,
+    TemplateMetadataHash,
     ValidatorFeePoolAddress,
     access_rules::ComponentAccessRules,
     crypto::RistrettoPublicKeyBytes,
@@ -107,10 +107,11 @@ pub enum Instruction {
         /// binary, which the engine resolves via the surrounding `Blobs` at execution time.
         #[n(0)]
         binary: BlobIndex,
-        /// Optional multihash of off-chain CBOR metadata
+        /// Optional reference to off-chain template metadata, stored on the published template without
+        /// interpretation (conventionally a multihash of the CBOR metadata)
         #[n(1)]
         #[cfg_attr(feature = "ts", ts(type = "string | null"))]
-        metadata_hash: Option<MetadataHash>,
+        metadata_hash: Option<TemplateMetadataHash>,
     },
     #[n(11)]
     AllocateAddress {

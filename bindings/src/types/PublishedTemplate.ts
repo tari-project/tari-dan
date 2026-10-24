@@ -18,7 +18,7 @@ export type PublishedTemplate = {
    */
   at_epoch: bigint;
   /**
-   * Optional multihash of off-chain CBOR metadata
+   * Optional author-provided reference to off-chain metadata (opaque to the protocol)
    */
   metadata_hash: string | null;
 };

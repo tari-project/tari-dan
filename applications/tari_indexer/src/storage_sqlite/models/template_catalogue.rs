@@ -4,8 +4,7 @@
 use tari_engine_types::published_template::PublishedTemplateMetadata;
 use tari_indexer_client::types::TemplateCatalogueItem;
 use tari_ootle_storage::time::PrimitiveDateTime;
-use tari_ootle_template_metadata::MetadataHash;
-use tari_template_lib_types::{Hash32, TemplateAddress, crypto::RistrettoPublicKeyBytes};
+use tari_template_lib_types::{Hash32, TemplateAddress, TemplateMetadataHash, crypto::RistrettoPublicKeyBytes};
 
 use crate::storage_sqlite::schema::template_catalogue;
 
@@ -47,7 +46,7 @@ pub struct TemplateCatalogueEntry {
     pub author_public_key: RistrettoPublicKeyBytes,
     pub binary_hash: Hash32,
     pub at_epoch: u64,
-    pub metadata_hash: Option<MetadataHash>,
+    pub metadata_hash: Option<TemplateMetadataHash>,
 }
 
 impl TryFrom<TemplateCatalogueRow> for TemplateCatalogueEntry {
@@ -69,9 +68,9 @@ impl TryFrom<TemplateCatalogueRow> for TemplateCatalogueEntry {
             at_epoch: row.at_epoch as u64,
             metadata_hash: row
                 .metadata_hash
-                .map(|h| MetadataHash::from_hex(&h))
+                .map(|h| h.parse::<TemplateMetadataHash>())
                 .transpose()
-                .map_err(|e| anyhow::anyhow!("Invalid metadata_hash hex: {e}"))?,
+                .map_err(|_| anyhow::anyhow!("Invalid metadata_hash hex"))?,
         })
     }
 }
@@ -97,7 +96,7 @@ impl From<(TemplateAddress, &PublishedTemplateMetadata)> for NewTemplateCatalogu
             author_public_key: hex::encode(meta.author_public_key.as_bytes()),
             binary_hash: hex::encode(meta.binary_hash.as_slice()),
             at_epoch: meta.at_epoch as i64,
-            metadata_hash: meta.metadata_hash.as_ref().map(|h| h.to_hex()),
+            metadata_hash: meta.metadata_hash.as_ref().map(|h| h.to_string()),
         }
     }
 }

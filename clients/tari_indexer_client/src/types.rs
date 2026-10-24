@@ -22,7 +22,6 @@ use tari_engine_types::{
     transaction_receipt::{FinalizeOutcome, TransactionReceipt},
 };
 use tari_ootle_common_types::{Epoch, NumPreshards, ShardGroup, StateVersion, ValidatorSetHash, shard::Shard};
-use tari_ootle_template_metadata::MetadataHash;
 use tari_ootle_transaction::{Network, PrunedTransaction, TransactionEnvelope, TransactionId};
 use tari_template_abi::TemplateDef;
 use tari_template_lib_types::{
@@ -30,6 +29,7 @@ use tari_template_lib_types::{
     Hash32,
     ResourceAddress,
     TemplateAddress,
+    TemplateMetadataHash,
     TransactionReceiptAddress,
     UtxoId,
     crypto::{RistrettoPublicKeyBytes, UtxoTag},
@@ -423,7 +423,7 @@ pub struct TemplateCatalogueItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "utoipa", schema(value_type = Option<String>))]
     #[cfg_attr(feature = "ts", ts(type = "string | null"))]
-    pub metadata_hash: Option<MetadataHash>,
+    pub metadata_hash: Option<TemplateMetadataHash>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

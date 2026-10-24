@@ -23,7 +23,7 @@ export type PublishedTemplateMetadata = {
    */
   at_epoch: bigint;
   /**
-   * The author-provided off-chain metadata hash
+   * The author-provided reference to off-chain metadata (opaque to the protocol)
    */
   metadata_hash: string | null;
 };

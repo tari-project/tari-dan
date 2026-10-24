@@ -18,13 +18,13 @@ use tari_engine_types::{
     substate::SubstateId,
 };
 use tari_ootle_common_types::{Epoch, InputDeclaration, declare_input, declare_inputs};
-use tari_ootle_template_metadata::MetadataHash;
 use tari_template_lib_types::{
     Amount,
     FunctionName,
     OwnerRule,
     ResourceAddress,
     TemplateAddress,
+    TemplateMetadataHash,
     ValidatorFeePoolAddress,
     access_rules::ComponentAccessRules,
     constants::TARI_TOKEN,
@@ -818,14 +818,18 @@ impl<D> TransactionBuilder<D> {
     /// # Panics
     ///
     /// Panics if the transaction's blob count would exceed the `BlobIndex` range.
-    pub fn publish_template_with_metadata<B: Into<Blob>>(mut self, binary: B, metadata_hash: MetadataHash) -> Self {
+    pub fn publish_template_with_metadata<B: Into<Blob>, H: Into<TemplateMetadataHash>>(
+        mut self,
+        binary: B,
+        metadata_hash: H,
+    ) -> Self {
         let idx = self
             .unsigned_transaction
             .add_blob(binary.into())
             .expect("transaction blob count exceeds BlobIndex range");
         self.add_instruction(Instruction::PublishTemplate {
             binary: idx,
-            metadata_hash: Some(metadata_hash),
+            metadata_hash: Some(metadata_hash.into()),
         })
     }
 
@@ -843,11 +847,15 @@ impl<D> TransactionBuilder<D> {
     /// # Panics
     ///
     /// Panics if no blob has been registered under `name`.
-    pub fn publish_template_from_blob_with_metadata<N: AsRef<str>>(self, name: N, metadata_hash: MetadataHash) -> Self {
-        self.publish_template_from_blob_inner(name.as_ref(), Some(metadata_hash))
+    pub fn publish_template_from_blob_with_metadata<N: AsRef<str>, H: Into<TemplateMetadataHash>>(
+        self,
+        name: N,
+        metadata_hash: H,
+    ) -> Self {
+        self.publish_template_from_blob_inner(name.as_ref(), Some(metadata_hash.into()))
     }
 
-    fn publish_template_from_blob_inner(self, name: &str, metadata_hash: Option<MetadataHash>) -> Self {
+    fn publish_template_from_blob_inner(self, name: &str, metadata_hash: Option<TemplateMetadataHash>) -> Self {
         let idx = self
             .blob_ids
             .get(name)

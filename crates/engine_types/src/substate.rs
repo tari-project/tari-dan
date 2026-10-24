@@ -1239,9 +1239,9 @@ mod tests {
     }
 
     mod encoded_len {
-        use tari_ootle_template_metadata::MetadataHashWriter;
         use tari_template_lib::types::{
             EncryptedData,
+            TemplateMetadataHash,
             crypto::{RistrettoPublicKeyBytes, UtxoTag},
             stealth::SpendAuthorization,
         };
@@ -1302,7 +1302,7 @@ mod tests {
                     author: RistrettoPublicKeyBytes::zero(),
                     binary: vec![0u8; 70_000].try_into().unwrap(),
                     at_epoch: u64::MAX,
-                    metadata_hash: Some(MetadataHashWriter::new().finalize()),
+                    metadata_hash: TemplateMetadataHash::from_bytes(vec![0xff; TemplateMetadataHash::MAX_LEN]),
                 }),
                 SubstateValue::Template(PublishedTemplate {
                     template_name: Default::default(),

@@ -19,7 +19,6 @@ tari_sidechain = { workspace = true }
 ootle_serde = { workspace = true, features = ["std", "hex"] }
 ootle_byte_type = { workspace = true, features = ["crypto"] }
 ootle-network = { workspace = true, features = ["serde"] }
-tari_ootle_template_metadata = { workspace = true }
 
 borsh = { workspace = true }
 blake2 = { workspace = true }

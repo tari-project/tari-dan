@@ -37,7 +37,6 @@ use tari_engine_types::{
     virtual_substate::VirtualSubstates,
 };
 use tari_ootle_common_types::{InputDeclaration, optional::Optional, services::template_provider::TemplateProvider};
-use tari_ootle_template_metadata::MetadataHash;
 use tari_ootle_transaction::{
     AllocatableAddressType,
     ComponentReference,
@@ -59,6 +58,7 @@ use tari_template_lib::{
         NonFungibleAddress,
         OwnerRule,
         TemplateAddress,
+        TemplateMetadataHash,
         access_rules::ComponentAccessRules,
         constants::STEALTH_TARI_RESOURCE_ADDRESS,
         crypto::RistrettoPublicKeyBytes,
@@ -680,7 +680,7 @@ where
     fn publish_template(
         runtime: &Runtime,
         binary: &[u8],
-        metadata_hash: Option<MetadataHash>,
+        metadata_hash: Option<TemplateMetadataHash>,
     ) -> Result<Option<IndexedValue>, TransactionErrorKind> {
         if binary.len() > limits::ENGINE_LIMITS.max_template_binary_size_bytes {
             return Err(TransactionErrorKind::WasmBinaryTooBig {
